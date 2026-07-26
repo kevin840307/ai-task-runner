@@ -17,7 +17,7 @@ class QwenBackend(AgentBackend):
             *self.base_command,
             *session_args,
             "-p",
-            prompt,
+            single_line_prompt(prompt),
             "--output-format",
             "json",
             *self.extra_args,
@@ -65,3 +65,8 @@ def ensure_qwen_rules(root: Path) -> Path:
 """
         path.write_text(existing.rstrip() + block, encoding="utf-8")
     return path
+
+
+def single_line_prompt(prompt: str) -> str:
+    """Avoid qwen.cmd on Windows receiving only the first prompt line."""
+    return " ".join(line.strip() for line in prompt.splitlines() if line.strip())

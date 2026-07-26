@@ -1,0 +1,1 @@
+Use the write_file tool to create sorting_algorithms.py in this project root. Implement bubble_sort, insertion_sort, merge_sort, and quick_sort. Each function accepts one list of comparable values and returns a new ascending sorted list without mutating the input. Do not use sorted() or list.sort(). Keep the module standard-library only.

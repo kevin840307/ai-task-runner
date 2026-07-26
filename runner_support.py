@@ -403,10 +403,13 @@ Progress:
 Inspect the relevant project structure and existing tests before planning. Choose task count from actual complexity; there is no limit.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
 Avoid unrelated work in one task and tiny mechanical steps.
+Planning is read-only: do not create, edit, delete, rename, or run commands that modify files.
+Do not call write, edit, shell, or notebook tools during planning.
 Do not implement, ask questions, or wait for input. Make reasonable assumptions from the project.
+Return at least one task. Never return an empty tasks array.
 
 Return only this JSON shape, without Markdown or explanation:
-{{"tasks":[{{"title":"Implement retry handling","description":"Add recoverable retry behavior without changing existing public interfaces.","acceptance_criteria":["Transient failures are retried","Existing tests still pass"]}}]}}
+{{"tasks":[{{"title":"Implement requested change","description":"Make the smallest maintainable project change needed to satisfy the goal.","acceptance_criteria":["The requested behavior is implemented","Relevant checks pass"]}}]}}
 """
 
 

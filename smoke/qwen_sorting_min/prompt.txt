@@ -1,0 +1,11 @@
+Use the write_file tool exactly once to create sorting_algorithms.py in this project root.
+
+The module must implement:
+- bubble_sort(values)
+- insertion_sort(values)
+
+Rules:
+- Return a new ascending sorted list.
+- Do not mutate the input list.
+- Do not use sorted() or list.sort().
+- Standard library only.

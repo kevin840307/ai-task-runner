@@ -344,7 +344,7 @@ class TaskRunner:
             return
 
         def plan_call() -> list[Task]:
-            output, changed = protected_ask(
+            output, protected_changed, project_changed = readonly_ask(
                 self.agent,
                 plan_prompt(
                     self.state.goal,
@@ -352,11 +352,14 @@ class TaskRunner:
                     self.state,
                     self.protected,
                 ),
+                self.root,
+                self.work,
                 self.protected,
             )
+            changed = [*protected_changed, *project_changed]
             if changed:
                 raise RunnerError(
-                    "AI modified protected files during planning: "
+                    "AI modified files during planning and they were restored: "
                     + ", ".join(changed)
                 )
             return parse_tasks(output, self.state.cycle)

@@ -6,7 +6,7 @@ import pytest
 from backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
 from backends.base import BackendError, BackendResult, split_command
 from backends.opencode import OpenCodeBackend
-from backends.qwen import QwenBackend
+from backends.qwen import QwenBackend, single_line_prompt
 from runner_support import runner_source_files
 
 
@@ -49,6 +49,11 @@ def test_windows_quoted_command_path_is_unwrapped():
     assert split_command('"C:\\Program Files\\Qwen\\qwen.cmd"', windows=True) == [
         "C:\\Program Files\\Qwen\\qwen.cmd"
     ]
+
+
+def test_qwen_prompt_is_single_line_for_windows_cmd():
+    prompt = "Hard rules:\n- Do the task\n\nReturn only JSON"
+    assert single_line_prompt(prompt) == "Hard rules: - Do the task Return only JSON"
 
 
 def test_backend_rejects_empty_success_output(tmp_path):
