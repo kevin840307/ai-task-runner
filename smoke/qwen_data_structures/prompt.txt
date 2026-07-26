@@ -1,0 +1,8 @@
+Create data_structures.py using only the Python standard library.
+
+Implement:
+- class LRUCache(capacity) with get(key) and put(key, value). get returns -1 for missing keys. Both operations must update recency. Capacity must be positive.
+- function merge_intervals(intervals) returning merged [start, end] lists sorted by start. Do not mutate the input.
+- function top_k_frequent(values, k) returning the k most frequent values, ordered by descending frequency then ascending value.
+
+Do not ask questions; implement and verify.

@@ -1,0 +1,18 @@
+- prompt: >-
+    Create sorting_algorithms.py with bubble_sort(values). It must return a new
+    ascending list, must not mutate input, and must not use sorted() or list.sort().
+    Do not ask questions; implement and verify.
+  validator: smoke/qwen_sorting_micro_pipeline/validators/bubble_validator.py
+
+- prompt: >-
+    Add insertion_sort(values) to sorting_algorithms.py. Preserve bubble_sort.
+    Both functions must return new ascending lists, must not mutate input, and
+    must not use sorted() or list.sort(). Do not ask questions; implement and verify.
+  validator: smoke/qwen_sorting_micro_pipeline/validators/insertion_validator.py
+
+- prompt: >-
+    Add selection_sort(values) to sorting_algorithms.py. Preserve bubble_sort
+    and insertion_sort. All three functions must return new ascending lists,
+    must not mutate input, and must not use sorted() or list.sort().
+    Do not ask questions; implement and verify.
+  validator: smoke/qwen_sorting_micro_pipeline/validators/selection_validator.py

@@ -48,6 +48,14 @@
 | Python Validator | 非零 exit | 保留 stdout 診斷，PASS |
 | Validator args | 額外參數 | 正確傳遞，PASS |
 | Task Review | completed=false | 重做同 Task，PASS |
+
+## Real Qwen Smoke Cases
+
+| Case | 驗證重點 | 最近結果 |
+|---|---|---|
+| `smoke/qwen_sorting_micro_pipeline` | 三段 YAML item 累積完成 bubble/insertion/selection sort；每段 execute/review/validator | 真實 Qwen PASS |
+| `smoke/qwen_markdown_scoring` | Agent 產出 `docs/sorting_guide.md`；Python validator 檢查 H1/H2/table/example/bullets 並評分 | 真實 Qwen `score=94/100` PASS |
+| `smoke/qwen_data_structures` | LRUCache、merge_intervals、top_k_frequent 固定行為驗證 | 真實 Qwen PASS |
 | Task attempts | 正數上限 | Exit code 2，PASS |
 | Validator cycles | 正數上限 | Exit code 3，PASS |
 | 無限制 | attempts/cycles = 0 | 原有 re-plan／stagnation 測試持續至 PASS |
