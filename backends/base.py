@@ -8,10 +8,10 @@ import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Sequence
+from typing import Any, Callable, ClassVar, Sequence
 
 from errors import RunnerError
-from process_control import run_process
+from process_control import ProcessResult, run_process
 
 
 class BackendError(RunnerError):
@@ -84,12 +84,30 @@ class AgentBackend(ABC):
         self.timeout = timeout
         self._validate_command(command)
 
-    def ask(self, prompt: str, session_id: str = "") -> BackendResult:
+    def ask(
+        self,
+        prompt: str,
+        session_id: str = "",
+        idle_timeout_after_change: float = 0,
+        change_detected: Callable[[], bool] | None = None,
+    ) -> BackendResult:
         input_text = self.prompt_stdin(prompt)
         command_prompt = "" if input_text is not None else prompt
         command = self.build_command(command_prompt, session_id)
-        output, return_code = self._run(command, input_text)
+        result = self._run(
+            command,
+            input_text,
+            idle_timeout_after_change,
+            change_detected,
+        )
+        output, return_code = result.output, result.return_code
         if return_code:
+            if result.idle_timed_out:
+                raise BackendError(
+                    f"{self.name} idle timed out after project changes "
+                    f"for {idle_timeout_after_change:g} seconds:\n"
+                    f"{output[-4000:]}"
+                )
             raise BackendError(
                 f"{self.name} exit {return_code}:\n{output[-4000:]}"
             )
@@ -102,17 +120,28 @@ class AgentBackend(ABC):
         self,
         command: Sequence[str],
         input_text: str | None = None,
-    ) -> tuple[str, int]:
+        idle_timeout_after_change: float = 0,
+        change_detected: Callable[[], bool] | None = None,
+    ) -> ProcessResult:
         try:
-            result = run_process(command, self.root, self.timeout, input_text)
+            result = run_process(
+                command,
+                self.root,
+                self.timeout,
+                input_text,
+                idle_timeout_after_change,
+                change_detected,
+            )
         except OSError as error:
             raise BackendError(f"{self.name} failed: {error}") from error
         if result.timed_out:
+            if result.idle_timed_out:
+                return result
             raise BackendError(
                 f"{self.name} timed out after {self.timeout} seconds:\n"
                 f"{result.output[-4000:]}"
             )
-        return result.output, result.return_code
+        return result
 
     def prepare_project(self) -> list[Path]:
         """Create optional backend-specific project files and return them."""

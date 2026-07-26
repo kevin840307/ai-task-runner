@@ -52,7 +52,8 @@ python ai_task_runner.py ^
   --goal "完成需求並通過驗證" ^
   --validator C:\validators\validator.py ^
   --agent-timeout 7200 ^
-  --planning-timeout 120 ^
+  --planning-timeout 600 ^
+  --agent-idle-after-change-timeout 900 ^
   --validator-timeout 1200 ^
   --max-attempts 0 ^
   --max-cycles 0
@@ -156,13 +157,16 @@ Final Validator PASS       → Python 才設定 completed=true
 
 ```text
 --agent-timeout 7200      每一次 AI CLI 呼叫；0 表示不限制
---planning-timeout 120    規劃階段 AI CLI 呼叫；0 表示不限制
+--planning-timeout 600    規劃階段 AI CLI 呼叫；0 表示不限制
+--agent-idle-after-change-timeout 900
+                          Execution 已有 project file 變更後，若這段秒數內沒有新變更，
+                          會提早停止該 AI CLI call 並交給 read-only review 判斷；0 表示停用
 --validator-timeout 600   Python Validator subprocess
 ```
 
 `planning_timeout` 只套用於規劃與重新規劃。`agent_timeout` 套用於 Task 實作、Review 與 AI Validator，不是整個 Task 累計時間。
 
-本地小模型 smoke test 可先用 `--agent-timeout 360`～`600`，避免正常推理被太早終止；24 小時無人值守建議維持 `7200` 或依專案大小提高。
+本地小模型 smoke test 可先用 `--agent-timeout 360`～`600`，避免正常推理被太早終止；24 小時無人值守建議維持 `7200` 或依專案大小提高。`--agent-idle-after-change-timeout` 預設開啟，只在 execution 階段使用；它不判定任務完成，只是在模型已改檔且長時間沒有新變更時，提早交給 review 判斷。
 
 Timeout 後：
 
@@ -273,11 +277,12 @@ bin build coverage dist node_modules obj target
 
 ## 測試狀態
 
-v1.1.1 目前驗證為 **101 passed, 1 skipped**，以隔離群組執行：
+v1.1.1 目前驗證為 **107 passed, 1 skipped**，以隔離群組執行：
 
 - 完整 pytest：見 `docs/TEST_MATRIX.md`
 - 文件契約、backend rule file、retry/review/validator 行為都有自動測試
 - 真實 Qwen smoke cases 覆蓋單 prompt、多 task、程式輸出、文件輸出與 validator state 檢查
+- 2026-07-26 重新實測 local Qwen：`qwen_simple`、`qwen_sorting_min`、`qwen_markdown_scoring` 均由 `ai_task_runner.py` 自動完成；其中包含 loop detection retry、validator FAIL repair、TODO 逐項 review、protected-file restore 與 `--resume`
 
 Linux 已實際驗證 POSIX process group；Windows `taskkill /T /F` 路徑有單元測試。排除斷電、OOM、OS 掛掉等外部極端因素時，Runner process 存活期間會針對 model error、timeout、loop detection、review failure、validator failure、protected-file 修改與 no-progress 自動 retry。
 
@@ -291,3 +296,5 @@ Backend project rule files are created in the target project root and protected 
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
+
+For Qwen, the runner now defaults to `--yolo` and excludes Qwen todo/subagent/skill/computer-use tools so coding tasks stay file/shell based. Custom backend args still go through `--agent-arg`.

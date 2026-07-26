@@ -21,6 +21,10 @@ The runner does not implement task-specific deliverables. The external agent wri
 
 Within one process, normal model errors, timeouts, loop detection, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
 
+Execution also has a default file-change idle watchdog. After project files change, if no further project file changes are detected for 900 seconds, the runner stops that AI CLI call early and asks read-only review to decide whether the current task is complete. This does not mark work complete by itself; review and final validation still own completion.
+
+For Qwen, the runner defaults to `--yolo` and excludes Qwen todo, subagent, skill, and computer-use tools. This keeps implementation work in normal file and shell tools and avoids desktop-control loops during long runs.
+
 ## Task Prompt Shape
 
 Each TODO execution reuses the same main agent session. The runner sends a compact prompt containing:
@@ -30,7 +34,9 @@ Each TODO execution reuses the same main agent session. The runner sends a compa
 - recent validator feedback
 - the current task title, description, and acceptance criteria
 - previous attempt output or diagnostic when present
-- validator command hint when available
+- recovery instructions when needed
+
+Task execution prompts do not expose validator file paths or validator source. Python runs final validators after review and sends only validator feedback into later cycles. This keeps agents from hardcoding to validator internals. When validator feedback is present, execution and review treat it as authoritative. Fallback planning creates a single `Repair validator failure` task instead of replaying the original full checklist.
 - recovery instructions when no progress repeats
 
 The execution prompt explicitly says to execute only the current task and not start later tasks. Review prompts are read-only. Final validator prompts run after every task is reviewed.
@@ -117,7 +123,7 @@ Exit code `0` means pass. Any non-zero exit code means fail and feeds stdout/std
 The current test suite passes on Windows with Python 3.10.0:
 
 ```text
-101 passed, 1 skipped
+107 passed, 1 skipped
 ```
 
-Real Qwen smoke cases have passed for CSV analyzer, expression evaluator, todo CLI, Markdown scoring, data structures, sorting pipeline, and single-prompt todo splitting.
+Real Qwen smoke cases have passed for CSV analyzer, expression evaluator, todo CLI, Markdown scoring, data structures, sorting pipeline, and single-prompt todo splitting. On 2026-07-26, local Qwen was also re-run through `ai_task_runner.py` for `qwen_simple`, `qwen_sorting_min`, and `qwen_markdown_scoring`; those runs covered loop detection retry, validator repair, TODO-by-TODO review, protected-file restore, and resume.

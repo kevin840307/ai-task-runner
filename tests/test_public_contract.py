@@ -134,12 +134,17 @@ def test_agent_timeout_is_part_of_public_request_contract():
     request = RunRequest(goal="x", validator="ai")
     assert request.agent_timeout == 7200
     assert request.to_namespace().agent_timeout == 7200
-    assert request.planning_timeout == 120
-    assert request.to_namespace().planning_timeout == 120
+    assert request.planning_timeout == 600
+    assert request.to_namespace().planning_timeout == 600
+    assert request.agent_idle_after_change_timeout == 900
+    assert request.to_namespace().agent_idle_after_change_timeout == 900
 
     RunRequest(goal="x", validator="ai", agent_timeout=0).validate()
     RunRequest(goal="x", validator="ai", planning_timeout=0).validate()
+    RunRequest(goal="x", validator="ai", agent_idle_after_change_timeout=0).validate()
     with pytest.raises(ValueError, match="agent_timeout"):
         RunRequest(goal="x", validator="ai", agent_timeout=-1).validate()
     with pytest.raises(ValueError, match="planning_timeout"):
         RunRequest(goal="x", validator="ai", planning_timeout=-1).validate()
+    with pytest.raises(ValueError, match="agent_idle_after_change_timeout"):
+        RunRequest(goal="x", validator="ai", agent_idle_after_change_timeout=-1).validate()

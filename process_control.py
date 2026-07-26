@@ -4,13 +4,15 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
+WATCHDOG_POLL_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -18,6 +20,7 @@ class ProcessResult:
     output: str
     return_code: int
     timed_out: bool = False
+    idle_timed_out: bool = False
 
 
 def run_process(
@@ -25,6 +28,8 @@ def run_process(
     cwd: Path,
     timeout: int,
     input_text: str | None = None,
+    idle_timeout_after_change: float = 0,
+    change_detected: Callable[[], bool] | None = None,
 ) -> ProcessResult:
     """Run one command and ensure timeout cleanup cannot wait forever."""
     options: dict[str, Any] = {
@@ -43,6 +48,15 @@ def run_process(
         options["start_new_session"] = True
 
     process = subprocess.Popen(command, **options)
+    if idle_timeout_after_change and change_detected is not None:
+        return _communicate_with_watchdog(
+            process,
+            input_text,
+            timeout,
+            idle_timeout_after_change,
+            change_detected,
+        )
+
     try:
         output, _ = process.communicate(input=input_text, timeout=timeout or None)
         return ProcessResult(output or "", process.returncode or 0)
@@ -51,6 +65,84 @@ def run_process(
         output = _drain_after_termination(process)
         partial = output or _text_output(error.output)
         return ProcessResult(partial, process.returncode or -1, timed_out=True)
+
+
+def _communicate_with_watchdog(
+    process: subprocess.Popen[str],
+    input_text: str | None,
+    timeout: int,
+    idle_timeout_after_change: float,
+    change_detected: Callable[[], bool],
+) -> ProcessResult:
+    deadline = time.monotonic() + timeout if timeout else None
+    last_change_at: float | None = None
+    pending_input = input_text
+    partial = ""
+
+    while True:
+        now = time.monotonic()
+        poll_timeout = _next_poll_timeout(
+            now,
+            deadline,
+            last_change_at,
+            idle_timeout_after_change,
+        )
+        try:
+            output, _ = process.communicate(
+                input=pending_input,
+                timeout=poll_timeout,
+            )
+            return ProcessResult(output or "", process.returncode or 0)
+        except subprocess.TimeoutExpired as error:
+            pending_input = None
+            partial = _text_output(error.output) or partial
+            now = time.monotonic()
+            if _safe_change_detected(change_detected):
+                last_change_at = now
+            if deadline is not None and now >= deadline:
+                return _terminate_timeout(process, partial, idle=False)
+            if (
+                last_change_at is not None
+                and now - last_change_at >= idle_timeout_after_change
+            ):
+                return _terminate_timeout(process, partial, idle=True)
+
+
+def _next_poll_timeout(
+    now: float,
+    deadline: float | None,
+    last_change_at: float | None,
+    idle_timeout_after_change: float,
+) -> float:
+    timeout = WATCHDOG_POLL_SECONDS
+    if deadline is not None:
+        timeout = min(timeout, max(0.01, deadline - now))
+    if last_change_at is not None:
+        idle_deadline = last_change_at + idle_timeout_after_change
+        timeout = min(timeout, max(0.01, idle_deadline - now))
+    return timeout
+
+
+def _safe_change_detected(change_detected: Callable[[], bool]) -> bool:
+    try:
+        return change_detected()
+    except OSError:
+        return False
+
+
+def _terminate_timeout(
+    process: subprocess.Popen[str],
+    partial: str,
+    idle: bool,
+) -> ProcessResult:
+    terminate_process_tree(process)
+    output = _drain_after_termination(process) or partial
+    return ProcessResult(
+        output,
+        process.returncode or -1,
+        timed_out=True,
+        idle_timed_out=idle,
+    )
 
 
 def terminate_process_tree(process: subprocess.Popen[str]) -> None:

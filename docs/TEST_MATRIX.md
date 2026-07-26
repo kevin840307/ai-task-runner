@@ -9,9 +9,9 @@
 | Python API／CLI／Events | 14 | PASS |
 | Public contract／相容性 | 6 | PASS |
 | 核心 Runner | 34 | PASS |
-| v1.1.1 韌性與異常 | 28 | PASS（1 skipped） |
+| v1.1.1 韌性與異常 | 30 | PASS（1 skipped） |
 | 文件契約 | 5 | PASS |
-| **總計** | **102** | **101 PASS／1 skipped** |
+| **總計** | **108** | **107 PASS／1 skipped** |
 
 執行環境：Windows、Python 3.10.0。測試以隔離群組執行，避免長時間 subprocess 測試互相污染。Python compile 另行通過。
 
@@ -38,7 +38,9 @@
 | Model call error | Execution 連續失敗 | 保存診斷並重進 Task attempt，PASS |
 | Planning timeout | Qwen planning timeout／loop detection | 退回通用 Task，後續仍由 Agent 實作並驗證，PASS |
 | Planned tasks | Planner 回傳兩個 Task | 依序 execute/review 每個 Task，再進 final validator，PASS |
-| Validator repair | 連續相同 FAIL output | 進入 repair mode，要求先跑 validator 並收斂，PASS |
+| Validator repair | 連續相同 FAIL output | 進入 repair mode，依 validator feedback 修復並收斂，PASS |
+| Validator repair planning | Validator FAIL 後 fallback planning | 產生單一 `Repair validator failure` task，不重跑原始完整 checklist，PASS |
+| Validator repair review | Repair task 未修改 project 但 review 回 completed | Runner 改判未完成並 retry，PASS |
 | Soak | 多輪 validator cycle | 最終 PASS，state 檔案保持有界，PASS |
 | POSIX tree | 正常 child process | process group 全部終止，PASS |
 | Detached pipe | detached child 持有 stdout | Runner 不永久卡在 communicate，PASS；測試後人工清除 child |
@@ -61,6 +63,9 @@
 | `smoke/qwen_expression_evaluator` | 單一自然語言 prompt；Agent 產生安全 expression evaluator、CLI、batch JSON/Markdown、README，validator 禁用 eval/exec | 真實 Qwen PASS |
 | `smoke/qwen_todo_cli` | 單一自然語言 prompt；Agent 產生 persistent todo CLI、JSON persistence、Markdown export、README，測到 timeout/loop 後 review fallback | 真實 Qwen PASS |
 | Backend rules | Qwen root `QWEN.md`、OpenCode root `AGENTS.md` | PASS |
+| 2026-07-26 local Qwen `qwen_simple` | 單 prompt 產生 `hello.txt`；第一次 validator FAIL 後自動 repair | 真實 Qwen PASS |
+| 2026-07-26 local Qwen `qwen_sorting_min` | 單 prompt 產生排序 module；loop detection、validator FAIL 多輪 repair | 真實 Qwen PASS |
+| 2026-07-26 local Qwen `qwen_markdown_scoring` | 單 prompt 分成多個 TODO 逐項 review，Python validator 評分，resume 後修復 | 真實 Qwen PASS |
 | Task attempts | 正數上限 | Exit code 2，PASS |
 | Validator cycles | 正數上限 | Exit code 3，PASS |
 | 無限制 | attempts/cycles = 0 | 原有 re-plan／stagnation 測試持續至 PASS |
@@ -76,6 +81,12 @@
 | Events | JSON consumer BrokenPipe | Runner 繼續，PASS |
 | State growth | output／reason／missing items | 長度與數量有界，PASS |
 | Cleanup | `.tmp`、舊 readonly backup | 清理正確，PASS |
+
+## Additional Watchdog Coverage
+
+| Case | Scenario | Result |
+|---|---|---|
+| Agent idle after change | Execution writes project files then hangs before returning | Watchdog stops early, read-only review accepts completed task, PASS |
 
 ## 不可由單元／短整合測試完全證明
 

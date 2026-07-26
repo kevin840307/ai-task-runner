@@ -50,8 +50,17 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument(
         "--planning-timeout",
         type=int,
-        default=120,
+        default=600,
         help="maximum seconds for one AI planning call; 0 disables the limit",
+    )
+    command_parser.add_argument(
+        "--agent-idle-after-change-timeout",
+        type=float,
+        default=900,
+        help=(
+            "execution-only idle seconds after project changes before "
+            "stopping the AI call and letting review decide; 0 disables it"
+        ),
     )
     command_parser.add_argument("--max-attempts", type=int, default=0)
     command_parser.add_argument("--max-cycles", type=int, default=0)

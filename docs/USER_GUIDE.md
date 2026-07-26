@@ -27,6 +27,8 @@ python ai_task_runner.py ^
   --validator ai
 ```
 
+Qwen defaults: the runner adds `--yolo` unless permission args are already passed through `--agent-arg`. It also excludes Qwen todo, subagent, skill, and computer-use tools so coding work stays in project files and shell checks.
+
 ### OpenCode
 
 ```bat
@@ -130,7 +132,8 @@ v1.1.1 會檢查：
 
 ```bat
 --agent-timeout 7200 ^
---planning-timeout 120 ^
+--planning-timeout 600 ^
+--agent-idle-after-change-timeout 900 ^
 --validator-timeout 1200 ^
 --retry-wait 5 ^
 --retry-max-wait 300 ^
@@ -188,7 +191,7 @@ Runner 不會在 Validator 未 PASS 時把整體標成完成，也不會因可�
 ### Planning
 
 ```text
---planning-timeout 120
+--planning-timeout 600
 ```
 
 每一次 Planning／Re-plan 獨立計時。`0` 表示不限制。
@@ -216,7 +219,9 @@ OpenCode 官方規則檔名稱是 `AGENTS.md`；`AGENT.md` 不是本專案採用
 - current task 的 title、description、acceptance criteria
 - recent validator feedback
 - previous attempt output／diagnostic
-- validator command hint 或 recovery instruction
+- recovery instruction；validator path/command 不會暴露給 task agent
+
+When validator feedback exists, execution and review treat it as authoritative. If Qwen planning falls back after a validator failure, the runner creates one `Repair validator failure` task instead of replaying the original checklist.
 
 Prompt 會明確要求只執行 current task，不要開始 later tasks。Review 使用 read-only prompt；Final Validator 只會在全部 tasks review 完成後執行。
 
@@ -234,7 +239,13 @@ Prompt 會明確要求只執行 current task，不要開始 later tasks。Review
 
 `0` 表示不限制。它不是整個 Task 的累計上限。
 
-本地小模型 smoke test 可先用 360～600 秒；正式 24 小時無人值守建議用 7200 秒或依專案大小提高。Planning 維持 120 秒即可，避免小模型卡在拆任務階段。
+本地小模型 smoke test 可先用 360～600 秒；正式 24 小時無人值守建議用 7200 秒或依專案大小提高。Planning 預設 600 秒，讓 local 小模型有較多時間理解與拆分。
+
+```text
+--agent-idle-after-change-timeout 900
+```
+
+只套用於 execution。模型已經修改 project files 後，如果這段秒數內沒有新的 project file 變更，Runner 會提早停止該 AI CLI call，並把目前檔案狀態交給 read-only review 判斷 task 是否完成。`0` 表示停用。這不是完成判定，只是避免「模型已做完但最後沒回傳」時等完整 `agent_timeout`。
 
 ### Python Validator
 
@@ -344,7 +355,8 @@ script.item_failed
 | `--validator-arg` | 無 | 可重複 |
 | `--protect-file` | 無 | 額外保護檔；相對路徑以啟動 cwd 解讀 |
 | `--agent-timeout` | `7200` | 單次 AI CLI；0 不限制 |
-| `--planning-timeout` | `120` | Planning／Re-plan AI CLI；0 不限制 |
+| `--planning-timeout` | `600` | Planning／Re-plan AI CLI；0 不限制 |
+| `--agent-idle-after-change-timeout` | `900` | Execution 改檔後 idle 太久就提早進 review；0 停用 |
 | `--validator-timeout` | `600` | Python Validator |
 | `--max-attempts` | `0` | Task attempts；0 不限制 |
 | `--max-cycles` | `0` | Validator cycles；0 不限制 |

@@ -171,11 +171,17 @@ def protected_ask(
     agent: AgentClient,
     prompt: str,
     protected: Sequence[Path],
+    idle_timeout_after_change: float = 0,
+    change_detected: Callable[[], bool] | None = None,
 ) -> tuple[str, list[str]]:
     file_snapshot = snapshot(protected)
     output: str | None = None
     try:
-        output = agent.ask(prompt)
+        output = agent.ask(
+            prompt,
+            idle_timeout_after_change,
+            change_detected,
+        )
     finally:
         changed = restore_changed(file_snapshot)
     return output, changed
@@ -484,14 +490,17 @@ def execution_prompt(
         if task.last_output
         else ""
     )
-    validator = f"\nValidator check:\n{validator_hint}\n" if validator_hint else ""
     return rules(root, protected) + f"""
 Execute only the current task below. Do not start later tasks.
-Use this order: inspect relevant files, make the smallest maintainable change, run the validator/checks, then fix the first failure if any.
+Use this order: inspect relevant project files, make the smallest maintainable change, run focused local checks, then fix the first failure if any.
+If Run context includes validator_feedback, treat it as authoritative and fix the reported problem before doing other work.
 Create only files that are required by the task or clearly useful for validation.
 Do not create scripts, commands, or files whose purpose is to update runner state, task status, reviews, attempts, or `.ai-task-runner`; only implement the requested project behavior.
 Prefer file edit/write tools for creating or changing files. Use shell commands mainly for checks, tests, and small local scripts.
-When a Python validator command is provided, it may be a final validator that can fail until later tasks are completed. Run focused checks for the current task first. If the final validator only complains about pending tasks, reviews, or runner state, do not edit runner state; finish the current task with the implemented files and checks.
+Do not delegate to subagents, background agents, scaffolding skills, or app-generation skills. Complete the current task directly in this session.
+Do not use computer-use, desktop, browser, or app-launch tools; this runner works through project files and shell checks.
+If a required file or command is missing, create or fix it instead of repeating the same read/check command. Do not call the same tool repeatedly with identical arguments after it returns the same result.
+Do not read, copy, or inspect external validator files. Python runs the final validator after review; use validator feedback only when the runner provides it in Run context.
 Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
 
 Run context:
@@ -500,7 +509,6 @@ Run context:
 Task:
 {json.dumps(task_spec(task), ensure_ascii=False)}
 {previous}
-{validator}
 {strategy}
 Finish with a factual summary of changed files and checks.
 """
@@ -513,15 +521,23 @@ def review_prompt(
     output: str,
 ) -> str:
     task = state.tasks[state.current]
+    feedback = state.validator_output[-2000:]
+    validator_section = (
+        f"\nLatest validator feedback to consider:\n{feedback}\n"
+        if feedback
+        else ""
+    )
     return rules(root, protected) + f"""
 Review only. Do not edit project files or ask questions.
 Inspect the project and verify every acceptance criterion. Also verify the change is scoped, maintainable, and preserves relevant existing behavior. You may run checks; generated artifacts are temporary and will be discarded.
+If validator feedback is provided, it is authoritative evidence from the final check. Do not mark the task complete unless the reported failure is fixed or clearly impossible.
 
 Task:
 {json.dumps(task_spec(task), ensure_ascii=False)}
 
 Executor report:
 {output[-5000:]}
+{validator_section}
 
 Return only JSON, without Markdown or explanation:
 {{"completed":true,"reason":"All acceptance criteria are satisfied.","missing_items":[]}}

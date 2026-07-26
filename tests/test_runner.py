@@ -100,9 +100,12 @@ def test_model_calls_have_configurable_python_timeout():
     assert '"--agent-timeout"' in cli
     assert "agent_timeout: int = 7200" in api
     assert '"--planning-timeout"' in cli
-    assert "planning_timeout: int = 120" in api
-    assert "run_process(command, self.root, self.timeout, input_text)" in backend
+    assert "planning_timeout: int = 600" in api
+    assert '"--agent-idle-after-change-timeout"' in cli
+    assert "agent_idle_after_change_timeout: float = 900" in api
+    assert "idle_timeout_after_change" in backend
     assert "timeout=timeout or None" in process_control
+    assert "idle_timed_out" in process_control
     assert "terminate_process_tree" in process_control
 
 
@@ -162,6 +165,41 @@ def test_goal_task_derivation_splits_numbered_deliverables():
     ]
 
     assert len(runner_core.derive_tasks_from_goal("Build one thing", 1)) == 1
+
+
+def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    tasks = runner_core.derive_tasks_from_goal(
+        "Create a document.\n1. ## Overview\n2. ## Complexity Table\n3. ## Worked Example",
+        5,
+        "score=75/100\nmissing exact complexity table header",
+    )
+
+    assert len(tasks) == 1
+    assert tasks[0].id == "c05-t001"
+    assert tasks[0].title == "Repair validator failure"
+    assert "missing exact complexity table header" in tasks[0].description
+
+
+def test_repair_review_requires_project_change_when_validator_failed():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    state = runner_core.RunState("run", "goal", "/project")
+    state.validator_output = "score=79/100"
+    task = runner_core.Task("id", "Repair validator failure", "fix", [])
+    review = {"completed": True, "reason": "ok", "missing_items": []}
+
+    assert runner_core.repair_review_needs_project_change(state, task, review, False)
+    assert not runner_core.repair_review_needs_project_change(state, task, review, True)
 
 
 def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
@@ -233,12 +271,24 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert all('do not invent' in prompt.lower() for prompt in prompts)
     assert '"missing_items":[]' in prompts[2]
     assert '"missing_items":[]' in prompts[3]
-    assert "Validator check" in runner.execution_prompt(
+    prompt_with_legacy_hint = runner.execution_prompt(
         state,
         root,
         protected,
         validator_hint='["python","validator.py"]',
     )
+    assert "Validator check" not in prompt_with_legacy_hint
+    assert "validator.py" not in prompt_with_legacy_hint
+    assert "Do not read, copy, or inspect external validator files" in prompt_with_legacy_hint
+    assert "Do not delegate to subagents" in prompt_with_legacy_hint
+    assert "Do not use computer-use" in prompt_with_legacy_hint
+    assert "instead of repeating the same read/check command" in prompt_with_legacy_hint
+    assert "treat it as authoritative" in prompt_with_legacy_hint
+
+    state.validator_output = "unexpected file content"
+    review_with_feedback = runner.review_prompt(state, root, protected, "report")
+    assert "Latest validator feedback to consider" in review_with_feedback
+    assert "Do not mark the task complete unless the reported failure is fixed" in review_with_feedback
 
 
 
@@ -718,30 +768,31 @@ def test_qwen_planning_args_preserve_yolo():
         "20",
     ]
 
-    assert runner_core.planning_agent_args("qwen", args) == [
-        *args,
-        "--safe-mode",
-        "--exclude-tools",
-        "read_file",
-        "--exclude-tools",
-        "read_mcp_resource",
-        "--exclude-tools",
-        "list_directory",
-        "--exclude-tools",
-        "glob",
-        "--exclude-tools",
-        "grep_search",
-        "--exclude-tools",
-        "write_file",
-        "--exclude-tools",
-        "edit",
-        "--exclude-tools",
-        "notebook_edit",
-        "--exclude-tools",
-        "run_shell_command",
-        "--exclude-tools",
-        "tool_search",
-        "--exclude-tools",
-        "todo_write",
-    ]
+    expected = [*args]
+    for tool_name in runner_core.QWEN_PLANNING_EXCLUDED_TOOLS:
+        expected.extend(["--exclude-tools", tool_name])
+    assert runner_core.planning_agent_args("qwen", args) == expected
     assert runner_core.planning_agent_args("opencode", args) == args
+
+
+def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
+    import runner_core
+
+    args = ["--approval-mode", "yolo"]
+
+    expected = [*args]
+    for tool_name in runner_core.QWEN_RUNTIME_EXCLUDED_TOOLS:
+        expected.extend(["--exclude-tools", tool_name])
+    assert runner_core.runtime_agent_args("qwen", args) == expected
+    assert runner_core.runtime_agent_args("opencode", args) == args
+
+
+def test_qwen_args_default_to_yolo():
+    import runner_core
+
+    assert runner_core.planning_agent_args("qwen", [])[0] == "--yolo"
+    assert runner_core.runtime_agent_args("qwen", [])[0] == "--yolo"
+    assert "--yolo" not in runner_core.runtime_agent_args(
+        "qwen",
+        ["--approval-mode", "yolo"],
+    )

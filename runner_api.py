@@ -30,7 +30,8 @@ class RunRequest:
     protect_files: list[str] = field(default_factory=list)
     validator_timeout: int = 600
     agent_timeout: int = 7200
-    planning_timeout: int = 120
+    planning_timeout: int = 600
+    agent_idle_after_change_timeout: float = 900
     max_attempts: int = 0
     max_cycles: int = 0
     retry_delay: float = 2
@@ -59,6 +60,7 @@ class RunRequest:
             validator_timeout=args.validator_timeout,
             agent_timeout=args.agent_timeout,
             planning_timeout=args.planning_timeout,
+            agent_idle_after_change_timeout=args.agent_idle_after_change_timeout,
             max_attempts=args.max_attempts,
             max_cycles=args.max_cycles,
             retry_delay=args.retry_delay,
@@ -99,6 +101,7 @@ class RunRequest:
             validator_timeout=self.validator_timeout,
             agent_timeout=self.agent_timeout,
             planning_timeout=self.planning_timeout,
+            agent_idle_after_change_timeout=self.agent_idle_after_change_timeout,
             max_attempts=self.max_attempts,
             max_cycles=self.max_cycles,
             retry_delay=self.retry_delay,
@@ -150,6 +153,13 @@ class RunRequest:
             raise ValueError("agent_timeout must be a non-negative integer")
         if not isinstance(self.planning_timeout, int) or self.planning_timeout < 0:
             raise ValueError("planning_timeout must be a non-negative integer")
+        if (
+            not isinstance(self.agent_idle_after_change_timeout, (int, float))
+            or self.agent_idle_after_change_timeout < 0
+        ):
+            raise ValueError(
+                "agent_idle_after_change_timeout must be a non-negative number"
+            )
         for name in ("max_attempts", "max_cycles"):
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:

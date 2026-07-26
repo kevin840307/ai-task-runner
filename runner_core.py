@@ -41,6 +41,81 @@ from runner_support import (
 )
 
 
+QWEN_COMPUTER_USE_TOOLS = (
+    "computer_use__bring_to_front",
+    "computer_use__check_for_update",
+    "computer_use__check_permissions",
+    "computer_use__launch_app",
+    "computer_use__kill_app",
+    "computer_use__hotkey",
+    "computer_use__list_apps",
+    "computer_use__list_windows",
+    "computer_use__get_accessibility_tree",
+    "computer_use__get_agent_cursor_state",
+    "computer_use__get_config",
+    "computer_use__get_cursor_position",
+    "computer_use__get_recording_state",
+    "computer_use__get_screen_size",
+    "computer_use__get_window_state",
+    "computer_use__screenshot",
+    "computer_use__click",
+    "computer_use__double_click",
+    "computer_use__right_click",
+    "computer_use__press_key",
+    "computer_use__type_text",
+    "computer_use__scroll",
+    "computer_use__move_cursor",
+    "computer_use__drag",
+    "computer_use__page",
+    "computer_use__replay_trajectory",
+    "computer_use__set_agent_cursor_enabled",
+    "computer_use__set_agent_cursor_motion",
+    "computer_use__set_agent_cursor_style",
+    "computer_use__set_config",
+    "computer_use__set_value",
+    "computer_use__start_recording",
+    "computer_use__stop_recording",
+    "computer_use__end_session",
+    "computer_use__start_session",
+    "computer_use__zoom",
+    "bring_to_front",
+    "check_for_update",
+    "check_permissions",
+    "launch_app",
+    "kill_app",
+    "hotkey",
+    "list_apps",
+    "list_windows",
+    "get_accessibility_tree",
+    "get_agent_cursor_state",
+    "get_config",
+    "get_cursor_position",
+    "get_recording_state",
+    "get_screen_size",
+    "get_window_state",
+    "screenshot",
+    "click",
+    "double_click",
+    "right_click",
+    "press_key",
+    "type_text",
+    "scroll",
+    "move_cursor",
+    "drag",
+    "page",
+    "replay_trajectory",
+    "set_agent_cursor_enabled",
+    "set_agent_cursor_motion",
+    "set_agent_cursor_style",
+    "set_config",
+    "set_value",
+    "start_recording",
+    "stop_recording",
+    "end_session",
+    "start_session",
+    "zoom",
+)
+
 QWEN_PLANNING_EXCLUDED_TOOLS = (
     "read_file",
     "read_mcp_resource",
@@ -53,6 +128,15 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "run_shell_command",
     "tool_search",
     "todo_write",
+    "skill",
+    "agent",
+    *QWEN_COMPUTER_USE_TOOLS,
+)
+QWEN_RUNTIME_EXCLUDED_TOOLS = (
+    "todo_write",
+    "skill",
+    "agent",
+    *QWEN_COMPUTER_USE_TOOLS,
 )
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
@@ -61,19 +145,44 @@ VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     """Preserve Qwen planning permissions while trimming custom context load."""
-    result = runtime_agent_args(backend, extra_args)
+    result = list(extra_args)
     if backend == "qwen":
-        for tool_name in QWEN_PLANNING_EXCLUDED_TOOLS:
-            if tool_name not in result:
-                result.extend(["--exclude-tools", tool_name])
+        ensure_qwen_yolo(result)
+        exclude_qwen_tools(result, QWEN_PLANNING_EXCLUDED_TOOLS)
     return result
 
 
 def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     result = list(extra_args)
-    if backend == "qwen" and "--safe-mode" not in result:
-        result.append("--safe-mode")
+    if backend == "qwen":
+        ensure_qwen_yolo(result)
+        exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
     return result
+
+
+def ensure_qwen_yolo(args: list[str]) -> None:
+    if "--yolo" not in args and "--approval-mode" not in args:
+        args.append("--yolo")
+
+
+def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
+    for tool_name in tool_names:
+        if tool_name not in args:
+            args.extend(["--exclude-tools", tool_name])
+
+
+def repair_review_needs_project_change(
+    state: RunState,
+    task: Task,
+    review: dict[str, Any],
+    project_changed: bool,
+) -> bool:
+    return (
+        bool(state.validator_output.strip())
+        and task.title == "Repair validator failure"
+        and review.get("completed") is True
+        and not project_changed
+    )
 
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
@@ -81,7 +190,29 @@ def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
     return work if backend == "qwen" else root
 
 
-def derive_tasks_from_goal(goal: str, cycle: int) -> list[Task]:
+def derive_tasks_from_goal(
+    goal: str,
+    cycle: int,
+    validator_feedback: str = "",
+) -> list[Task]:
+    feedback = validator_feedback.strip()
+    if feedback:
+        return [
+            Task(
+                id=f"c{cycle:02d}-t001",
+                title="Repair validator failure",
+                description=(
+                    "Make the smallest maintainable project change needed "
+                    "to satisfy the goal and address this validator feedback:\n"
+                    f"{feedback[-2000:]}"
+                ),
+                acceptance_criteria=[
+                    "The validator feedback is addressed",
+                    "The requested behavior is implemented",
+                    "Relevant validator checks pass",
+                ],
+            )
+        ]
     deliverables = numbered_goal_items(goal)
     if len(deliverables) < 2:
         deliverables = deliverable_goal_items(goal)
@@ -551,7 +682,11 @@ class TaskRunner:
                         "Qwen planning fallback",
                         "using fallback tasks from the goal after repeated planning failures",
                     )
-                    return derive_tasks_from_goal(self.state.goal, self.state.cycle)
+                    return derive_tasks_from_goal(
+                        self.state.goal,
+                        self.state.cycle,
+                        self.state.validator_output,
+                    )
                 raise
             if project_changed:
                 self.ui.set(
@@ -606,7 +741,11 @@ class TaskRunner:
                     except RunnerError as review_error:
                         error = review_error
                     else:
-                        result = self._handle_review_result(task, review)
+                        result = self._handle_review_result(
+                            task,
+                            review,
+                            project_changed=True,
+                        )
                         if result is not None:
                             return result
                         continue
@@ -628,7 +767,11 @@ class TaskRunner:
                     return result
                 continue
 
-            result = self._handle_review_result(task, review)
+            result = self._handle_review_result(
+                task,
+                review,
+                project_changed=project_fingerprint(self.root, self.work) != project_before,
+            )
             if result is not None:
                 return result
             continue
@@ -657,7 +800,22 @@ class TaskRunner:
         self,
         task: Task,
         review: dict[str, Any],
+        project_changed: bool,
     ) -> int | None:
+        if repair_review_needs_project_change(
+            self.state,
+            task,
+            review,
+            project_changed,
+        ):
+            review = {
+                "completed": False,
+                "reason": (
+                    "Validator repair task made no project changes while "
+                    "validator feedback is still present."
+                ),
+                "missing_items": ["Address validator feedback with a project change"],
+            }
         task.last_review = review
         self._save_session()
         if review["completed"] is True:
@@ -703,29 +861,16 @@ class TaskRunner:
         self.ui.set("任務完成", task.title)
         show_todo(self.state, self.ui)
 
-    def _validator_hint(self) -> str:
-        if self.ai_validation or self.validator is None:
-            return ""
-        command = [
-            sys.executable,
-            str(self.validator),
-            "--project-root",
-            str(self.root),
-            "--state-file",
-            str(self.state_file),
-            *self.args.validator_arg,
-        ]
-        return json.dumps(command, ensure_ascii=False)
-
     def _validator_repair_hint(self) -> str:
         if self.state.validator_failure_count < VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
             return ""
         return (
             "Validator repair mode: the final validator has failed with the "
             f"same diagnostic {self.state.validator_failure_count} times. "
-            "Run the validator command first, fix the first reported failure, "
-            "run it again, and do not finish until it passes or a new blocker "
-            "is clearly reported."
+            "Treat the validator feedback in Run context as authoritative. "
+            "Fix the first reported failure directly, verify the affected files "
+            "carefully, and do not dismiss the validator as a false positive "
+            "unless there is concrete evidence of an impossible requirement."
         )
 
     def _execute_current_task(self, task: Task) -> str:
@@ -737,6 +882,7 @@ class TaskRunner:
                 "and use a different implementation approach. "
                 "Do not repeat the same actions."
             )
+        change_detected = self._project_change_detector()
 
         def call() -> str:
             output, changed = protected_ask(
@@ -750,9 +896,10 @@ class TaskRunner:
                         for part in (strategy_note, self._validator_repair_hint())
                         if part
                     ),
-                    self._validator_hint(),
                 ),
                 self.protected,
+                self.args.agent_idle_after_change_timeout,
+                change_detected,
             )
             if changed:
                 raise RunnerError(
@@ -770,6 +917,19 @@ class TaskRunner:
             self.args.retry_max_wait,
             EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW,
         )
+
+    def _project_change_detector(self):
+        fingerprint = project_fingerprint(self.root, self.work)
+
+        def changed() -> bool:
+            nonlocal fingerprint
+            latest = project_fingerprint(self.root, self.work)
+            if latest == fingerprint:
+                return False
+            fingerprint = latest
+            return True
+
+        return changed
 
     def _review_current_task(
         self,

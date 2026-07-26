@@ -211,6 +211,35 @@ def test_agent_timeout_kills_normal_child_process_tree(tmp_path):
     assert not marker.exists()
 
 
+def test_process_idle_after_change_timeout_stops_before_full_timeout(tmp_path):
+    marker = tmp_path / "changed.txt"
+    code = (
+        "import pathlib,time; "
+        f"pathlib.Path({str(marker)!r}).write_text('changed'); "
+        "time.sleep(30)"
+    )
+    seen = False
+
+    def changed() -> bool:
+        nonlocal seen
+        if marker.exists() and not seen:
+            seen = True
+            return True
+        return False
+
+    started = time.monotonic()
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        timeout=20,
+        idle_timeout_after_change=0.2,
+        change_detected=changed,
+    )
+    assert result.timed_out is True
+    assert result.idle_timed_out is True
+    assert time.monotonic() - started < 5
+
+
 def test_file_validator_timeout_kills_child_tree_and_preserves_partial_output(tmp_path):
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")
@@ -261,6 +290,26 @@ def test_all_model_stages_timeout_once_then_recover(tmp_path, monkeypatch):
     assert (state_dir / "execute.count").read_text() == "1"
     for stage in ("review", "validator"):
         assert (state_dir / f"{stage}.count").read_text() == "2"
+
+
+def test_execution_idle_after_change_goes_to_review(tmp_path, monkeypatch):
+    state_dir = Path(tempfile.mkdtemp(prefix="idle-after-change-", dir=tmp_path.parent))
+    monkeypatch.setenv("IDLE_AFTER_CHANGE_STATE_DIR", str(state_dir))
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        command=_fake_command("idle_after_change_agent.py"),
+        agent_timeout=20,
+        agent_idle_after_change_timeout=0.2,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    ))
+    assert result.completed is True
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
+    assert result.states[0]["tasks"][0]["attempts"] == 1
 
 
 def test_max_attempts_stops_incomplete_task_with_exit_code_2(tmp_path, monkeypatch):

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from backends import BackendError, create_backend
 from errors import RunnerError
@@ -56,9 +56,19 @@ class AgentClient:
     def name(self) -> str:
         return self.backend
 
-    def ask(self, prompt: str) -> str:
+    def ask(
+        self,
+        prompt: str,
+        idle_timeout_after_change: float = 0,
+        change_detected: Callable[[], bool] | None = None,
+    ) -> str:
         try:
-            result = self._backend.ask(prompt, self.session_id)
+            result = self._backend.ask(
+                prompt,
+                self.session_id,
+                idle_timeout_after_change,
+                change_detected,
+            )
         except BackendError as error:
             message = str(error)
             if self.session_id and is_session_invalid_error(message):
