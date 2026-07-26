@@ -38,6 +38,60 @@ from runner_support import (
 )
 
 
+QWEN_PLANNING_EXCLUDED_TOOLS = (
+    "read_file",
+    "read_mcp_resource",
+    "list_directory",
+    "glob",
+    "grep_search",
+    "write_file",
+    "edit",
+    "notebook_edit",
+    "run_shell_command",
+    "tool_search",
+    "todo_write",
+)
+
+
+def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
+    """Preserve Qwen planning permissions while trimming custom context load."""
+    result = runtime_agent_args(backend, extra_args)
+    if backend == "qwen":
+        for tool_name in QWEN_PLANNING_EXCLUDED_TOOLS:
+            if tool_name not in result:
+                result.extend(["--exclude-tools", tool_name])
+    return result
+
+
+def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
+    result = list(extra_args)
+    if backend == "qwen" and "--safe-mode" not in result:
+        result.append("--safe-mode")
+    return result
+
+
+def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
+    """Let Qwen write planning artifacts without making source files its cwd."""
+    return work if backend == "qwen" else root
+
+
+def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
+    return [
+        Task(
+            id=f"c{cycle:02d}-t001",
+            title="Implement requested change",
+            description=(
+                "Make the smallest maintainable project change needed "
+                f"to satisfy the goal: {goal}"
+            ),
+            acceptance_criteria=[
+                "The requested behavior is implemented",
+                "Relevant validator checks pass",
+            ],
+        )
+    ]
+
+
 def run_ai_validator(
     args: argparse.Namespace,
     root: Path,
@@ -50,7 +104,7 @@ def run_ai_validator(
         backend=args.backend,
         command=args.command,
         root=root,
-        extra_args=args.agent_arg,
+        extra_args=runtime_agent_args(args.backend, args.agent_arg),
         session_id="",
         timeout=args.agent_timeout,
     )
@@ -181,7 +235,7 @@ def _script_event(
             pass
     if getattr(args, "json_events", False):
         try:
-            print(json.dumps(event, ensure_ascii=False), flush=True)
+            print(json.dumps(event), flush=True)
         except (BrokenPipeError, OSError):
             args.json_events = False
         return
@@ -247,7 +301,7 @@ class TaskRunner:
             backend=args.backend,
             command=args.command,
             root=self.root,
-            extra_args=args.agent_arg,
+            extra_args=runtime_agent_args(args.backend, args.agent_arg),
             session_id=self.state.agent_session_id,
             timeout=args.agent_timeout,
         )
@@ -343,26 +397,72 @@ class TaskRunner:
         if self.state.tasks and self.state.current < len(self.state.tasks):
             return
 
+        planning_failures = 0
+
         def plan_call() -> list[Task]:
-            output, protected_changed, project_changed = readonly_ask(
-                self.agent,
-                plan_prompt(
-                    self.state.goal,
-                    self.root,
-                    self.state,
-                    self.protected,
-                ),
+            nonlocal planning_failures
+            planner_root = planning_agent_root(
+                self.args.backend,
                 self.root,
                 self.work,
-                self.protected,
             )
-            changed = [*protected_changed, *project_changed]
-            if changed:
-                raise RunnerError(
-                    "AI modified files during planning and they were restored: "
-                    + ", ".join(changed)
+            planner = AgentClient(
+                backend=self.args.backend,
+                command=self.args.command,
+                root=planner_root,
+                extra_args=planning_agent_args(
+                    self.args.backend,
+                    self.args.agent_arg,
+                ),
+                session_id="",
+                timeout=self.args.agent_timeout,
+            )
+            planner.prepare_project()
+            try:
+                output, protected_changed, project_changed = readonly_ask(
+                    planner,
+                    plan_prompt(
+                        self.state.goal,
+                        self.root,
+                        self.state,
+                        self.protected,
+                        self.work,
+                    ),
+                    self.root,
+                    self.work,
+                    self.protected,
                 )
-            return parse_tasks(output, self.state.cycle)
+                if protected_changed:
+                    raise RunnerError(
+                        "AI modified files during planning and they were restored: "
+                        + ", ".join(protected_changed)
+                    )
+                tasks = parse_tasks(output, self.state.cycle)
+            except RunnerError as error:
+                planning_failures += 1
+                message = str(error)
+                stalled = (
+                    "timed out" in message.lower()
+                    or "loop detection" in message.lower()
+                )
+                if (
+                    self.args.backend == "qwen"
+                    and (stalled or planning_failures >= 3)
+                ):
+                    self.ui.set(
+                        "Qwen planning fallback",
+                        "using one task from the goal after repeated planning failures",
+                    )
+                    return fallback_plan_tasks(self.state.goal, self.state.cycle)
+                raise
+            if project_changed:
+                self.ui.set(
+                    "AI restored project changes made during planning",
+                    ", ".join(project_changed),
+                )
+            if planner_root == self.root:
+                self.agent.session_id = planner.session_id
+            return tasks
 
         planned = retry_model_call(
             plan_call,

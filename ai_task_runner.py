@@ -107,7 +107,6 @@ def _report_error(
                     "message": message,
                     "exit_code": exit_code,
                 },
-                ensure_ascii=False,
             ),
             flush=True,
         )

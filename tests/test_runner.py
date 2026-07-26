@@ -129,6 +129,18 @@ def test_task_schema_is_strict():
             raise AssertionError(f"schema accepted invalid value: {value}")
 
 
+def test_task_schema_accepts_common_criteria_alias():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner", ROOT / "ai_task_runner.py")
+    runner = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner
+    spec.loader.exec_module(runner)
+
+    value = '{"tasks":[{"title":"A","description":"B","accept_criteria":["C"]}]}'
+    task = runner.parse_tasks(value, 1)[0]
+    assert task.acceptance_criteria == ["C"]
+
+
 def test_prompts_forbid_questions_and_omit_runtime_fields():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_prompts", ROOT / "ai_task_runner.py")
@@ -432,3 +444,68 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
     assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
     assert "verify the change is scoped, maintainable, and preserves relevant existing behavior" in review
+
+
+def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
+    import runner_support
+    from models import State
+
+    (tmp_path / "README.md").write_text("fixture", encoding="utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('hi')", encoding="utf-8")
+    state = State("run", "goal", str(tmp_path))
+
+    prompt = runner_support.plan_prompt(
+        state.goal,
+        tmp_path,
+        state,
+        [tmp_path / ".ai-task-runner" / "state.json"],
+    )
+
+    assert "Project files:" in prompt
+    assert "README.md" in prompt
+    assert "src/app.py" in prompt
+    assert "If planning notes are written" in prompt
+    assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
+    assert ".ai-task-runner/state.json" not in prompt
+
+
+def test_qwen_planning_args_preserve_yolo():
+    import runner_core
+
+    args = [
+        "--approval-mode",
+        "yolo",
+        "--model",
+        "Qwen3.5-4B",
+        "--max-tool-calls",
+        "20",
+    ]
+
+    assert runner_core.planning_agent_args("qwen", args) == [
+        *args,
+        "--safe-mode",
+        "--exclude-tools",
+        "read_file",
+        "--exclude-tools",
+        "read_mcp_resource",
+        "--exclude-tools",
+        "list_directory",
+        "--exclude-tools",
+        "glob",
+        "--exclude-tools",
+        "grep_search",
+        "--exclude-tools",
+        "write_file",
+        "--exclude-tools",
+        "edit",
+        "--exclude-tools",
+        "notebook_edit",
+        "--exclude-tools",
+        "run_shell_command",
+        "--exclude-tools",
+        "tool_search",
+        "--exclude-tools",
+        "todo_write",
+    ]
+    assert runner_core.planning_agent_args("opencode", args) == args

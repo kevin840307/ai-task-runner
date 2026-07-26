@@ -222,6 +222,27 @@ def project_fingerprint(root: Path, work: Path) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def project_outline(root: Path, limit: int = 120) -> str:
+    """Return a compact read-only project outline for planning prompts."""
+    excluded = set(READONLY_EXCLUDE_DIRS) | {".qwen"}
+    entries: list[str] = []
+    for current, directories, files in os.walk(root, followlinks=False):
+        base = Path(current)
+        directories[:] = [
+            name for name in directories
+            if name not in excluded and not name.startswith(".")
+        ]
+        for name in sorted(files):
+            if name.startswith("."):
+                continue
+            relative = (base / name).relative_to(root).as_posix()
+            entries.append(relative)
+            if len(entries) >= limit:
+                entries.append("...")
+                return "\n".join(entries)
+    return "\n".join(entries) if entries else "(no project files)"
+
+
 def progress_key(
     root: Path,
     work: Path,
@@ -370,6 +391,21 @@ def rules(root: Path, protected: Sequence[Path]) -> str:
 """
 
 
+def planning_rules(work: Path) -> str:
+    return f"""Hard rules:
+- You may READ files anywhere when necessary.
+- During planning, write/create/delete files only inside runner work directory: {work}
+- Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
+- Python owns task order and completion state.
+- Inspect the relevant project structure, entry points, dependencies, public interfaces, conventions, and existing tests before planning.
+- Prefer the smallest maintainable change that fully satisfies the current task.
+- Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
+- Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
+- Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
+- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
+"""
+
+
 def task_spec(task: Task) -> dict[str, Any]:
     return {
         "title": task.title,
@@ -387,24 +423,36 @@ def plan_prompt(
     root: Path,
     state: RunState,
     protected: Sequence[Path],
+    work: Path | None = None,
 ) -> str:
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
         "completed_tasks": completed_titles(state),
     }
-    return rules(root, protected) + f"""
+    outline = project_outline(root)
+    work_dir = work or root / ".ai-task-runner"
+    return planning_rules(work_dir) + f"""
 Plan only the remaining work for this goal:
 {goal}
+
+Project root to inspect:
+{root}
+
+Project files:
+{outline}
 
 Progress:
 {json.dumps(progress, ensure_ascii=False)}
 
-Inspect the relevant project structure and existing tests before planning. Choose task count from actual complexity; there is no limit.
+Use the project outline and progress above for planning; do not read files during planning.
+Choose task count from actual complexity; there is no limit.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
 Avoid unrelated work in one task and tiny mechanical steps.
-Planning is read-only: do not create, edit, delete, rename, or run commands that modify files.
-Do not call write, edit, shell, or notebook tools during planning.
+If planning notes are written, they may be JSON or Markdown files only under this runner work directory: {work_dir}
+Prefer returning the final tasks JSON directly instead of writing files during planning.
+Do not create, edit, delete, or rename project implementation files during planning; implementation happens only after tasks are returned.
+Do not use Qwen todo tools during planning; Python owns task order and completion state.
 Do not implement, ask questions, or wait for input. Make reasonable assumptions from the project.
 Return at least one task. Never return an empty tasks array.
 
@@ -585,7 +633,7 @@ class LiveUI:
                 pass
         if self.json_events:
             try:
-                print(json.dumps(event, ensure_ascii=False), flush=True)
+                print(json.dumps(event), flush=True)
             except (BrokenPipeError, OSError):
                 # A disconnected UI must not stop the automation loop.
                 self.json_events = False
@@ -689,8 +737,9 @@ def parse_tasks(text: str, cycle: int) -> list[Task]:
             item.get("description"),
             f"tasks[{index}].description",
         )
+        criteria_value = item.get("acceptance_criteria", item.get("accept_criteria"))
         criteria = require_string_list(
-            item.get("acceptance_criteria"),
+            criteria_value,
             f"tasks[{index}].acceptance_criteria",
             allow_empty=False,
         )
