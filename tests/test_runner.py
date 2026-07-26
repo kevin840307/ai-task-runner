@@ -143,14 +143,14 @@ def test_task_schema_accepts_common_criteria_alias():
     assert task.acceptance_criteria == ["C"]
 
 
-def test_fallback_plan_splits_numbered_deliverables():
+def test_goal_task_derivation_splits_numbered_deliverables():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
     runner_core = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner_core
     spec.loader.exec_module(runner_core)
 
-    tasks = runner_core.fallback_plan_tasks(
+    tasks = runner_core.derive_tasks_from_goal(
         "Build release packet.\n1. Create VERSION.\n2. Create CHANGELOG.md.\n3. Create summary JSON.",
         2,
     )
@@ -161,17 +161,17 @@ def test_fallback_plan_splits_numbered_deliverables():
         "Create summary JSON",
     ]
 
-    assert len(runner_core.fallback_plan_tasks("Build one thing", 1)) == 1
+    assert len(runner_core.derive_tasks_from_goal("Build one thing", 1)) == 1
 
 
-def test_fallback_plan_splits_natural_deliverable_paragraphs():
+def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
     runner_core = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner_core
     spec.loader.exec_module(runner_core)
 
-    tasks = runner_core.fallback_plan_tasks(
+    tasks = runner_core.derive_tasks_from_goal(
         (
             "Build a small CSV sales analyzer from input/sales.csv.\n\n"
             "The finished tool should include analyze_sales.py and a CLI.\n\n"
@@ -188,14 +188,14 @@ def test_fallback_plan_splits_natural_deliverable_paragraphs():
     assert not any("Do not ask" in task.title for task in tasks)
 
 
-def test_fallback_plan_keeps_persistence_deliverables():
+def test_goal_task_derivation_keeps_persistence_deliverables():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
     runner_core = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner_core
     spec.loader.exec_module(runner_core)
 
-    tasks = runner_core.fallback_plan_tasks(
+    tasks = runner_core.derive_tasks_from_goal(
         (
             "Build a small persistent todo CLI.\n\n"
             "The finished tool should include todo_cli.py and support add/list/done.\n\n"

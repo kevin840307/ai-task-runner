@@ -1,9 +1,10 @@
 """OpenCode CLI backend."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Sequence
 
-from .base import AgentBackend, BackendResult
+from .base import AgentBackend, BackendResult, ensure_project_rules
 
 
 class OpenCodeBackend(AgentBackend):
@@ -33,6 +34,9 @@ class OpenCodeBackend(AgentBackend):
         text = self._find_last_text(values)
         return BackendResult(text if text is not None else raw, session_id)
 
+    def prepare_project(self) -> list[Path]:
+        return [ensure_opencode_rules(self.root)]
+
     @staticmethod
     def _find_last_text(values: Sequence[Any]) -> str | None:
         texts: list[str] = []
@@ -50,3 +54,8 @@ class OpenCodeBackend(AgentBackend):
         for value in values:
             visit(value)
         return texts[-1] if texts else None
+
+
+def ensure_opencode_rules(root: Path) -> Path:
+    """Create or extend the OpenCode project rule file."""
+    return ensure_project_rules(root, "AGENTS.md")

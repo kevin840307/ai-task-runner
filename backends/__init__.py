@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .base import AgentBackend, Backend, BackendError, BackendResult
-from .opencode import OpenCodeBackend
+from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules
 
 
@@ -54,5 +54,6 @@ __all__ = [
     "backend_names",
     "create_backend",
     "default_command",
+    "ensure_opencode_rules",
     "ensure_qwen_rules",
 ]

@@ -5,8 +5,8 @@ import pytest
 
 from backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
 from backends.base import BackendError, BackendResult, split_command
-from backends.opencode import OpenCodeBackend
-from backends.qwen import QwenBackend, single_line_prompt
+from backends.opencode import OpenCodeBackend, ensure_opencode_rules
+from backends.qwen import QwenBackend, ensure_qwen_rules, single_line_prompt
 from runner_support import runner_source_files
 
 
@@ -53,6 +53,17 @@ def test_windows_quoted_command_path_is_unwrapped():
 def test_qwen_prompt_is_single_line_for_windows_cmd():
     prompt = "Hard rules:\n- Do the task\n\nReturn only JSON"
     assert single_line_prompt(prompt) == "Hard rules: - Do the task Return only JSON"
+
+
+def test_backend_project_rules_use_current_root_files(tmp_path):
+    qwen_rule = ensure_qwen_rules(tmp_path)
+    opencode_rule = ensure_opencode_rules(tmp_path)
+
+    assert qwen_rule == tmp_path / "QWEN.md"
+    assert opencode_rule == tmp_path / "AGENTS.md"
+    assert not (tmp_path / ".qwen" / "QWEN.md").exists()
+    assert "AI Task Runner Rules" in qwen_rule.read_text(encoding="utf-8")
+    assert "AI Task Runner Rules" in opencode_rule.read_text(encoding="utf-8")
 
 
 def test_backend_rejects_empty_success_output(tmp_path):

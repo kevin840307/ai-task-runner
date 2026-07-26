@@ -273,10 +273,21 @@ bin build coverage dist node_modules obj target
 
 ## 測試狀態
 
-v1.1.1 共 **87 項測試通過**，以隔離群組執行：
+v1.1.1 目前驗證為 **101 passed, 1 skipped**，以隔離群組執行：
 
-- 原有核心／API／Backend／Examples：55
-- 新增異常與 24h 韌性測試：28
-- 文件契約測試：4
+- 完整 pytest：見 `docs/TEST_MATRIX.md`
+- 文件契約、backend rule file、retry/review/validator 行為都有自動測試
+- 真實 Qwen smoke cases 覆蓋單 prompt、多 task、程式輸出、文件輸出與 validator state 檢查
 
-Linux 已實際驗證 POSIX process group；Windows `taskkill /T /F` 路徑有單元測試，但仍建議在目標 Windows 主機做 Qwen／OpenCode 真實 12–24 小時 soak test。
+Linux 已實際驗證 POSIX process group；Windows `taskkill /T /F` 路徑有單元測試。排除斷電、OOM、OS 掛掉等外部極端因素時，Runner process 存活期間會針對 model error、timeout、loop detection、review failure、validator failure、protected-file 修改與 no-progress 自動 retry。
+
+## Project guide and agent rules
+
+For a clean human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md). It documents the project structure, task prompt shape, YAML resume behavior, backend rule files, and the 24h retry/review/validator loop.
+
+Backend project rule files are created in the target project root and protected during a run:
+
+- Qwen Code: `QWEN.md`
+- OpenCode: `AGENTS.md`
+
+OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.

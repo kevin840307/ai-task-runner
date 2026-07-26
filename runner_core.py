@@ -81,7 +81,7 @@ def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
     return work if backend == "qwen" else root
 
 
-def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
+def derive_tasks_from_goal(goal: str, cycle: int) -> list[Task]:
     deliverables = numbered_goal_items(goal)
     if len(deliverables) < 2:
         deliverables = deliverable_goal_items(goal)
@@ -551,7 +551,7 @@ class TaskRunner:
                         "Qwen planning fallback",
                         "using fallback tasks from the goal after repeated planning failures",
                     )
-                    return fallback_plan_tasks(self.state.goal, self.state.cycle)
+                    return derive_tasks_from_goal(self.state.goal, self.state.cycle)
                 raise
             if project_changed:
                 self.ui.set(
@@ -598,44 +598,17 @@ class TaskRunner:
                 review = self._review_current_task(task, output)
             except RunnerError as error:
                 if project_fingerprint(self.root, self.work) != project_before:
-                    output = (
-                        "Execution model call failed after changing project files; "
-                        "review the current filesystem state.\n"
-                        + str(error)[-MAX_TASK_OUTPUT_CHARS:]
-                    )
-                    task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
-                    self._save_session()
-                    self.ui.set(
-                        "模型呼叫失敗但已有專案變更",
-                        "改由 review 判定目前 task",
-                    )
                     try:
-                        self._set_stage("reviewing")
-                        review = self._review_current_task(task, output)
+                        review = self._review_failed_execution_changes(
+                            task,
+                            error,
+                        )
                     except RunnerError as review_error:
                         error = review_error
                     else:
-                        task.last_review = review
-                        self._save_session()
-                        if review["completed"] is True:
-                            self._complete_current_task(task)
-                            continue
-
-                        task.status = "pending"
-                        self._record_no_progress(task, review)
-                        self._save_state()
-                        self.ui.set(
-                            "審查指出目前任務尚未完成",
-                            review["reason"],
-                        )
-                        show_todo(self.state, self.ui)
-                        if (
-                            self.args.max_attempts
-                            and task.attempts >= self.args.max_attempts
-                        ):
-                            return 2
-                        if self.args.retry_delay:
-                            time.sleep(self.args.retry_delay)
+                        result = self._handle_review_result(task, review)
+                        if result is not None:
+                            return result
                         continue
 
                 task.last_output = (
@@ -650,41 +623,59 @@ class TaskRunner:
                     str(error)[-500:],
                 )
                 self._set_stage("task_retry_wait", str(error))
-                show_todo(self.state, self.ui)
-                if (
-                    self.args.max_attempts
-                    and task.attempts >= self.args.max_attempts
-                ):
-                    return 2
-                if self.args.retry_delay:
-                    time.sleep(self.args.retry_delay)
+                result = self._prepare_task_retry(task)
+                if result is not None:
+                    return result
                 continue
 
-            task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
-            self._save_session()
+            result = self._handle_review_result(task, review)
+            if result is not None:
+                return result
+            continue
+        return None
 
-            task.last_review = review
-            self._save_session()
+    def _review_failed_execution_changes(
+        self,
+        task: Task,
+        error: RunnerError,
+    ) -> dict[str, Any]:
+        output = (
+            "Execution model call failed after changing project files; "
+            "review the current filesystem state.\n"
+            + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+        )
+        task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
+        self._save_session()
+        self.ui.set(
+            "模型呼叫失敗但已有專案變更",
+            "改由 review 判定目前 task",
+        )
+        self._set_stage("reviewing")
+        return self._review_current_task(task, output)
 
-            if review["completed"] is True:
-                self._complete_current_task(task)
-                continue
+    def _handle_review_result(
+        self,
+        task: Task,
+        review: dict[str, Any],
+    ) -> int | None:
+        task.last_review = review
+        self._save_session()
+        if review["completed"] is True:
+            self._complete_current_task(task)
+            return None
 
-            task.status = "pending"
-            self._record_no_progress(task, review)
-            self._save_state()
-            self.ui.set(
-                "任務未完成，準備重試",
-                review["reason"],
-            )
-            show_todo(self.state, self.ui)
-            if (
-                self.args.max_attempts
-                and task.attempts >= self.args.max_attempts
-            ):
-                return 2
-            if self.args.retry_delay:
-                time.sleep(self.args.retry_delay)
+        task.status = "pending"
+        self._record_no_progress(task, review)
+        self._save_state()
+        self.ui.set("任務未完成，準備重試", review["reason"])
+        return self._prepare_task_retry(task)
+
+    def _prepare_task_retry(self, task: Task) -> int | None:
+        show_todo(self.state, self.ui)
+        if self.args.max_attempts and task.attempts >= self.args.max_attempts:
+            return 2
+        if self.args.retry_delay:
+            time.sleep(self.args.retry_delay)
         return None
 
     def _record_no_progress(

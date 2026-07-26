@@ -4,14 +4,14 @@
 
 | 類別 | 數量 | 結果 |
 |---|---:|---|
-| Backend | 9 | PASS |
+| Backend | 10 | PASS |
 | Examples | 5 | PASS |
 | Python API／CLI／Events | 14 | PASS |
 | Public contract／相容性 | 6 | PASS |
 | 核心 Runner | 34 | PASS |
 | v1.1.1 韌性與異常 | 28 | PASS（1 skipped） |
-| 文件契約 | 4 | PASS |
-| **總計** | **100** | **99 PASS／1 skipped** |
+| 文件契約 | 5 | PASS |
+| **總計** | **102** | **101 PASS／1 skipped** |
 
 執行環境：Windows、Python 3.10.0。測試以隔離群組執行，避免長時間 subprocess 測試互相污染。Python compile 另行通過。
 
@@ -60,6 +60,7 @@
 | `smoke/qwen_csv_analyzer` | 單一自然語言 prompt；Agent 產生 CSV analyzer、JSON/Markdown report、README，validator 檢查輸出與多 task review state | 真實 Qwen PASS |
 | `smoke/qwen_expression_evaluator` | 單一自然語言 prompt；Agent 產生安全 expression evaluator、CLI、batch JSON/Markdown、README，validator 禁用 eval/exec | 真實 Qwen PASS |
 | `smoke/qwen_todo_cli` | 單一自然語言 prompt；Agent 產生 persistent todo CLI、JSON persistence、Markdown export、README，測到 timeout/loop 後 review fallback | 真實 Qwen PASS |
+| Backend rules | Qwen root `QWEN.md`、OpenCode root `AGENTS.md` | PASS |
 | Task attempts | 正數上限 | Exit code 2，PASS |
 | Validator cycles | 正數上限 | Exit code 3，PASS |
 | 無限制 | attempts/cycles = 0 | 原有 re-plan／stagnation 測試持續至 PASS |

@@ -197,6 +197,29 @@ Qwen 這類小模型如果在規劃階段 timeout 或觸發循環偵測，Runner
 
 如果 execution timeout／loop 前已經寫出專案檔案，Runner 會改由 read-only review 判斷目前 task 是否完成；review 或 validator 不會被允許修改專案檔案或 runner state。
 
+### Backend project rules
+
+Runner 會在目標 project root 建立或補上 backend 專用規則檔，並在執行期間保護它們不被 task agent 改寫：
+
+- Qwen Code：`QWEN.md`
+- OpenCode：`AGENTS.md`
+
+OpenCode 官方規則檔名稱是 `AGENTS.md`；`AGENT.md` 不是本專案採用的 OpenCode project rules 檔名。
+
+### 每個 TODO 傳給模型的內容
+
+單一 Goal 或每個 YAML item 都會沿用同一個主 session。每次 task execution 不是重新丟整包需求叫模型自由發揮，而是傳一份 compact prompt：
+
+- hard rules 與 protected-file 邊界
+- original goal
+- completed task titles
+- current task 的 title、description、acceptance criteria
+- recent validator feedback
+- previous attempt output／diagnostic
+- validator command hint 或 recovery instruction
+
+Prompt 會明確要求只執行 current task，不要開始 later tasks。Review 使用 read-only prompt；Final Validator 只會在全部 tasks review 完成後執行。
+
 ### Agent
 
 ```text
@@ -264,6 +287,8 @@ python ai_task_runner.py ^
 ```
 
 YAML 必須是非空 array；每個 item 必須有 `prompt`／`goal` 與 `validator`。
+
+YAML 批次中斷後可以真正 resume：每個 item 的 state 路徑是 `.ai-task-runner/script/NNN/state.json`。重新用相同 `--script`、`--project-root`、`--work-dir` 並加上 `--resume` 後，已完成 item 會因 `completed=true` 立即返回，未完成 item 會沿用自己的 state/session、current task、validator feedback 繼續跑；尚未建立 state 的後續 item 會 fresh start。
 
 ## 9. Python API
 

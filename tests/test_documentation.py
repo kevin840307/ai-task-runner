@@ -13,6 +13,7 @@ DOCS = {
     "DESIGN": ROOT / "docs" / "DESIGN.md",
     "USER_GUIDE": ROOT / "docs" / "USER_GUIDE.md",
     "TEST_MATRIX": ROOT / "docs" / "TEST_MATRIX.md",
+    "PROJECT_GUIDE": ROOT / "docs" / "PROJECT_GUIDE.md",
 }
 
 
@@ -56,3 +57,13 @@ def test_stale_timeout_and_version_claims_are_absent():
         "1.1.0",
     )
     assert all(item not in combined for item in stale)
+
+
+def test_agent_rule_files_and_task_prompt_shape_are_documented():
+    combined = "\n".join(_text(name) for name in DOCS)
+    assert "Qwen Code: `QWEN.md`" in combined
+    assert "OpenCode: `AGENTS.md`" in combined
+    assert "OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`" in combined
+    assert "current task" in _text("PROJECT_GUIDE")
+    assert "previous attempt output or diagnostic" in _text("PROJECT_GUIDE")
+    assert "YAML batch mode is supported" in _text("PROJECT_GUIDE")

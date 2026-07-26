@@ -24,6 +24,29 @@ class BackendResult:
     session_id: str = ""
 
 
+RUNNER_RULE_MARKER = "# AI Task Runner Rules"
+
+
+def ensure_project_rules(root: Path, filename: str) -> Path:
+    """Create or extend a backend project rule file."""
+    path = root / filename
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if RUNNER_RULE_MARKER not in existing:
+        block = f"""
+
+{RUNNER_RULE_MARKER}
+- You may read files outside this project when needed.
+- You may write, create, rename, or delete files only under: {root}
+- Never modify validator files, runner state, or this rule file.
+- Python owns task order and completion state.
+- Execute only the current task supplied by the runner.
+- Complete the task with the smallest clean change possible; avoid unnecessary code, files, abstractions, dependencies, refactoring, or unrelated modifications.
+- Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
+"""
+        path.write_text(existing.rstrip() + block, encoding="utf-8")
+    return path
+
+
 def split_command(command: str, windows: bool | None = None) -> list[str]:
     """Split an executable command and remove Windows quote wrappers."""
     is_windows = os.name == "nt" if windows is None else windows
@@ -168,5 +191,6 @@ __all__ = [
     "Backend",
     "BackendError",
     "BackendResult",
+    "ensure_project_rules",
     "split_command",
 ]

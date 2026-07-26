@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Sequence
 
-from .base import AgentBackend, BackendResult
+from .base import AgentBackend, BackendResult, ensure_project_rules
 
 
 class QwenBackend(AgentBackend):
@@ -50,25 +50,7 @@ class QwenBackend(AgentBackend):
 
 def ensure_qwen_rules(root: Path) -> Path:
     """Create or extend the Qwen project rule file."""
-    path = root / ".qwen" / "QWEN.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    marker = "# AI Task Runner Rules"
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    if marker not in existing:
-        block = f"""
-
-{marker}
-- You may read files outside this project when needed.
-- You may write, create, rename, or delete files only under: {root}
-- Never modify validator files, runner state, or this rule file.
-- Python owns task order and completion state.
-- Execute only the current task supplied by the runner.
-- Complete the task with the smallest clean change possible; avoid unnecessary code, files, abstractions, dependencies, refactoring, or unrelated modifications.
-- Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
-"""
-        path.write_text(existing.rstrip() + block, encoding="utf-8")
-    return path
+    return ensure_project_rules(root, "QWEN.md")
 
 
 def single_line_prompt(prompt: str) -> str:
