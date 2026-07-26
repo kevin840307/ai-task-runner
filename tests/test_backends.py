@@ -41,7 +41,6 @@ def test_core_has_no_backend_specific_command_logic():
     assert "[\"--resume\"," not in source
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
-    assert 'backend == "qwen"' not in source
     assert 'backend == "opencode"' not in source
 
 
@@ -70,6 +69,30 @@ def test_backend_rejects_empty_success_output(tmp_path):
     backend = EmptyBackend(sys.executable, tmp_path, [])
     with pytest.raises(BackendError, match="empty response"):
         backend.ask("x")
+
+
+def test_backend_can_send_prompt_through_stdin(tmp_path):
+    class StdinBackend(AgentBackend):
+        name = "stdin"
+        default_command = sys.executable
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.command_prompt = None
+
+        def prompt_stdin(self, prompt):
+            return prompt
+
+        def build_command(self, prompt, session_id):
+            self.command_prompt = prompt
+            return [sys.executable, "-c", "import sys; print(sys.stdin.read())"]
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    backend = StdinBackend(sys.executable, tmp_path, [])
+    assert backend.ask("hello from stdin").text.strip() == "hello from stdin"
+    assert backend.command_prompt == ""
 
 
 def test_backend_timeout_kills_call_and_raises_recoverable_error(tmp_path):

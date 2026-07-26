@@ -216,12 +216,17 @@ def test_file_validator_timeout_kills_child_tree_and_preserves_partial_output(tm
     state_file.write_text("{}", encoding="utf-8")
     marker = tmp_path / "validator-child-survived.txt"
     validator = tmp_path / "validator.py"
+    child_code = (
+        "import time,pathlib; "
+        "time.sleep(2); "
+        f"pathlib.Path({str(marker)!r}).write_text('bad')"
+    )
     validator.write_text(
         "import argparse,subprocess,sys,time\n"
         "p=argparse.ArgumentParser();p.add_argument('--project-root');p.add_argument('--state-file');a=p.parse_args()\n"
         "print('validator-started', flush=True)\n"
         "open(a.state_file,'w').write('changed')\n"
-        f"code={('import time,pathlib; time.sleep(2); pathlib.Path(' + repr(str(marker)) + ').write_text(\'bad\')')!r}\n"
+        f"code={child_code!r}\n"
         "subprocess.Popen([sys.executable,'-c',code])\n"
         "time.sleep(30)\n",
         encoding="utf-8",
@@ -246,12 +251,14 @@ def test_all_model_stages_timeout_once_then_recover(tmp_path, monkeypatch):
         validator="ai",
         command=_fake_command("timeout_stage_agent.py"),
         agent_timeout=2,
+        planning_timeout=2,
         retry_delay=0,
         retry_wait=0,
         retry_max_wait=0,
     ))
     assert result.completed is True
-    for stage in ("plan", "execute", "review", "validator"):
+    assert (state_dir / "plan.count").read_text() == "1"
+    for stage in ("execute", "review", "validator"):
         assert (state_dir / f"{stage}.count").read_text() == "2"
 
 

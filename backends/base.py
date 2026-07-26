@@ -52,14 +52,20 @@ class AgentBackend(ABC):
         timeout: int = 7200,
     ) -> None:
         self.root = root
-        self.base_command = split_command(command)
+        self.base_command = (
+            [command]
+            if Path(command).is_file()
+            else split_command(command)
+        )
         self.extra_args = list(extra_args)
         self.timeout = timeout
         self._validate_command(command)
 
     def ask(self, prompt: str, session_id: str = "") -> BackendResult:
-        command = self.build_command(prompt, session_id)
-        output, return_code = self._run(command)
+        input_text = self.prompt_stdin(prompt)
+        command_prompt = "" if input_text is not None else prompt
+        command = self.build_command(command_prompt, session_id)
+        output, return_code = self._run(command, input_text)
         if return_code:
             raise BackendError(
                 f"{self.name} exit {return_code}:\n{output[-4000:]}"
@@ -69,9 +75,13 @@ class AgentBackend(ABC):
             raise BackendError(f"{self.name} returned an empty response")
         return decoded
 
-    def _run(self, command: Sequence[str]) -> tuple[str, int]:
+    def _run(
+        self,
+        command: Sequence[str],
+        input_text: str | None = None,
+    ) -> tuple[str, int]:
         try:
-            result = run_process(command, self.root, self.timeout)
+            result = run_process(command, self.root, self.timeout, input_text)
         except OSError as error:
             raise BackendError(f"{self.name} failed: {error}") from error
         if result.timed_out:
@@ -84,6 +94,10 @@ class AgentBackend(ABC):
     def prepare_project(self) -> list[Path]:
         """Create optional backend-specific project files and return them."""
         return []
+
+    def prompt_stdin(self, prompt: str) -> str | None:
+        """Return prompt text to send through stdin instead of argv."""
+        return None
 
     @abstractmethod
     def build_command(self, prompt: str, session_id: str) -> list[str]:

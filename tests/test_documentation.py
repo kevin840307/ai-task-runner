@@ -31,8 +31,10 @@ def test_timeout_defaults_match_cli_api_and_manual():
     args = parser().parse_args(["--goal", "x", "--validator", "ai"])
     guide = _text("USER_GUIDE")
     assert request.agent_timeout == args.agent_timeout == 7200
+    assert request.planning_timeout == args.planning_timeout == 120
     assert request.validator_timeout == args.validator_timeout == 600
     assert "`--agent-timeout` | `7200`" in guide
+    assert "`--planning-timeout` | `120`" in guide
     assert "`--validator-timeout` | `600`" in guide
 
 

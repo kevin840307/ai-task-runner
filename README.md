@@ -52,6 +52,7 @@ python ai_task_runner.py ^
   --goal "完成需求並通過驗證" ^
   --validator C:\validators\validator.py ^
   --agent-timeout 7200 ^
+  --planning-timeout 120 ^
   --validator-timeout 1200 ^
   --max-attempts 0 ^
   --max-cycles 0
@@ -62,6 +63,8 @@ python ai_task_runner.py ^
 - 模型非零結束、空輸出、破損 JSON、Schema 錯誤、Session 暫時失效與 Agent timeout 會自動退避 Retry。
 - Task Review 未完成時，Task 維持 `pending` 並重新執行。
 - Validator FAIL 時保留一般專案修改，將診斷結果交回主 Session 重新拆分修復工作。
+- Validator 連續回報同一個錯誤時會進入 repair mode，要求 Agent 先跑 validator、修第一個失敗點，再交回。
+- State 會記錄目前 stage、stage 開始時間、最後活動時間與最近錯誤摘要，方便 24h 監控與 resume 判斷。
 - `max_attempts=0` 與 `max_cycles=0` 代表不限制邏輯重做與修復 Cycle。
 - 單次 AI CLI 預設最多 7200 秒；超時會終止程序樹並 Retry。
 - Python Validator timeout 也會終止程序樹，不只終止最外層 Python。
@@ -153,10 +156,13 @@ Final Validator PASS       → Python 才設定 completed=true
 
 ```text
 --agent-timeout 7200      每一次 AI CLI 呼叫；0 表示不限制
+--planning-timeout 120    規劃階段 AI CLI 呼叫；0 表示不限制
 --validator-timeout 600   Python Validator subprocess
 ```
 
-`agent_timeout` 分別套用於規劃、Task 實作、Review、AI Validator 與重新規劃，不是整個 Task 累計時間。
+`planning_timeout` 只套用於規劃與重新規劃。`agent_timeout` 套用於 Task 實作、Review 與 AI Validator，不是整個 Task 累計時間。
+
+本地小模型 smoke test 可先用 `--agent-timeout 360`～`600`，避免正常推理被太早終止；24 小時無人值守建議維持 `7200` 或依專案大小提高。
 
 Timeout 後：
 
@@ -194,6 +200,7 @@ python validator.py --project-root <root> --state-file <state.json> [...validato
 - 其他：FAIL
 - stdout／stderr 會保存並交給下一輪修復
 - timeout、子程序樹與保護檔修改都會被處理
+- 相同 validator 診斷連續出現時，下一輪 execution prompt 會進入 repair mode
 
 傳遞額外參數：
 

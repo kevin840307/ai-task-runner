@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import sys
 import time
@@ -51,6 +52,8 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "tool_search",
     "todo_write",
 )
+MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
+VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 
 def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
@@ -137,6 +140,7 @@ def run_ai_validator(
         "new session",
         args.retry_wait,
         args.retry_max_wait,
+        MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
     )
     return result["passed"] is True, json.dumps(result, ensure_ascii=False)
 
@@ -336,6 +340,15 @@ class TaskRunner:
                 return validation_code
         return 0
 
+    def _set_stage(self, stage: str, detail: str = "") -> None:
+        now = time.time()
+        if self.state.stage != stage:
+            self.state.stage = stage
+            self.state.stage_started_at = now
+        self.state.last_activity_at = now
+        self.state.last_error = detail[-1000:] if detail else ""
+        self._save_state()
+
     def _validate_paths(self) -> None:
         if not self.root.is_dir():
             raise RunnerError("invalid project root or validator")
@@ -398,6 +411,7 @@ class TaskRunner:
             return
 
         planning_failures = 0
+        self._set_stage("planning")
 
         def plan_call() -> list[Task]:
             nonlocal planning_failures
@@ -415,7 +429,7 @@ class TaskRunner:
                     self.args.agent_arg,
                 ),
                 session_id="",
-                timeout=self.args.agent_timeout,
+                timeout=self.args.planning_timeout,
             )
             planner.prepare_project()
             try:
@@ -489,11 +503,40 @@ class TaskRunner:
             self._save_state()
             show_todo(self.state, self.ui)
 
-            output = self._execute_current_task(task)
+            try:
+                self._set_stage("executing")
+                output = self._execute_current_task(task)
+                task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
+                self._save_session()
+
+                self._set_stage("reviewing")
+                review = self._review_current_task(task, output)
+            except RunnerError as error:
+                task.last_output = (
+                    "Previous model call failed before task completion:\n"
+                    + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+                )
+                task.status = "pending"
+                task.stagnant_attempts += 1
+                self._save_state()
+                self.ui.set(
+                    "模型階段失敗，準備重試任務",
+                    str(error)[-500:],
+                )
+                self._set_stage("task_retry_wait", str(error))
+                show_todo(self.state, self.ui)
+                if (
+                    self.args.max_attempts
+                    and task.attempts >= self.args.max_attempts
+                ):
+                    return 2
+                if self.args.retry_delay:
+                    time.sleep(self.args.retry_delay)
+                continue
+
             task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
             self._save_session()
 
-            review = self._review_current_task(task, output)
             task.last_review = review
             self._save_session()
 
@@ -543,6 +586,31 @@ class TaskRunner:
         self.ui.set("任務完成", task.title)
         show_todo(self.state, self.ui)
 
+    def _validator_hint(self) -> str:
+        if self.ai_validation or self.validator is None:
+            return ""
+        command = [
+            sys.executable,
+            str(self.validator),
+            "--project-root",
+            str(self.root),
+            "--state-file",
+            str(self.state_file),
+            *self.args.validator_arg,
+        ]
+        return json.dumps(command, ensure_ascii=False)
+
+    def _validator_repair_hint(self) -> str:
+        if self.state.validator_failure_count < VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+            return ""
+        return (
+            "Validator repair mode: the final validator has failed with the "
+            f"same diagnostic {self.state.validator_failure_count} times. "
+            "Run the validator command first, fix the first reported failure, "
+            "run it again, and do not finish until it passes or a new blocker "
+            "is clearly reported."
+        )
+
     def _execute_current_task(self, task: Task) -> str:
         strategy_note = ""
         if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
@@ -560,7 +628,12 @@ class TaskRunner:
                     self.state,
                     self.root,
                     self.protected,
-                    strategy_note,
+                    "\n".join(
+                        part
+                        for part in (strategy_note, self._validator_repair_hint())
+                        if part
+                    ),
+                    self._validator_hint(),
                 ),
                 self.protected,
             )
@@ -578,6 +651,7 @@ class TaskRunner:
             f"{task.id} · {task.title} · attempt {task.attempts}",
             self.args.retry_wait,
             self.args.retry_max_wait,
+            MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
         )
 
     def _review_current_task(
@@ -613,6 +687,7 @@ class TaskRunner:
             task.title,
             self.args.retry_wait,
             self.args.retry_max_wait,
+            MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
         )
 
     def _validate_cycle(self) -> int | None:
@@ -621,6 +696,7 @@ class TaskRunner:
             if self.ai_validation
             else self.validator.name
         )
+        self._set_stage("validating")
         self.ui.start("正在執行最終驗證", detail)
         try:
             passed, output = self._run_validator()
@@ -631,11 +707,15 @@ class TaskRunner:
 
         self.state.validator_output = output[-MAX_VALIDATOR_OUTPUT_CHARS:]
         if passed:
+            self.state.validator_failure_key = ""
+            self.state.validator_failure_count = 0
             self.state.completed = True
+            self._set_stage("completed")
             self._save_state()
             self.ui.set("全部完成", "Validator PASS")
             return 0
 
+        self._record_validator_failure(output)
         self.state.cycle += 1
         self.state.current = len(self.state.tasks)
         self._save_state()
@@ -655,6 +735,18 @@ class TaskRunner:
         ):
             return 3
         return None
+
+    def _record_validator_failure(self, output: str) -> None:
+        key = hashlib.sha256(
+            "\n".join(line.strip() for line in output.splitlines() if line.strip())
+            .encode("utf-8")
+        ).hexdigest()
+        if key == self.state.validator_failure_key:
+            self.state.validator_failure_count += 1
+        else:
+            self.state.validator_failure_key = key
+            self.state.validator_failure_count = 1
+        self._set_stage("validator_failed", output)
 
     def _run_validator(self) -> tuple[bool, str]:
         if self.ai_validation:

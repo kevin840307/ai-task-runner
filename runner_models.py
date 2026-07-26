@@ -51,6 +51,12 @@ class RunState:
     validator_output: str = ""
     completed: bool = False
     agent_session_id: str = ""
+    stage: str = "created"
+    stage_started_at: float = 0.0
+    last_activity_at: float = 0.0
+    last_error: str = ""
+    validator_failure_key: str = ""
+    validator_failure_count: int = 0
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -66,6 +72,19 @@ class RunState:
             raise ValueError("state.current is outside the task list")
         if not isinstance(self.completed, bool):
             raise ValueError("state.completed must be boolean")
+        for name in ("stage", "last_error", "validator_failure_key"):
+            value = getattr(self, name)
+            if not isinstance(value, str):
+                raise ValueError(f"state.{name} must be a string")
+        for name in ("stage_started_at", "last_activity_at"):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or value < 0:
+                raise ValueError(f"state.{name} must be a non-negative number")
+        if (
+            not isinstance(self.validator_failure_count, int)
+            or self.validator_failure_count < 0
+        ):
+            raise ValueError("state.validator_failure_count must be non-negative")
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):

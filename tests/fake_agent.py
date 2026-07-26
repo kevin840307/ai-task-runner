@@ -4,7 +4,9 @@ from pathlib import Path
 args=sys.argv[1:]
 root=Path.cwd(); session='test-session-001'
 is_qwen='-p' in args
-prompt = args[args.index('-p')+1] if is_qwen else args[-1]
+prompt_arg = args[args.index('-p')+1] if is_qwen else args[-1]
+stdin_prompt = sys.stdin.read() if is_qwen else ""
+prompt = "\n".join(part for part in (stdin_prompt, prompt_arg) if part).strip()
 is_validator = 'fresh independent session' in prompt
 if is_validator:
     assert '--resume' not in args and '--session' not in args

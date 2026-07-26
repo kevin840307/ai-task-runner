@@ -53,7 +53,23 @@ def test_run_state_json_contract_is_unchanged():
     assert payload["run_id"] == "run-1"
     assert payload["tasks"][0]["status"] == "pending"
     assert "agent_session_id" in payload
+    assert payload["stage"] == "created"
+    assert payload["validator_failure_count"] == 0
     assert RunState.load(json.loads(json.dumps(payload))).dump() == payload
+
+    old_payload = dict(payload)
+    for key in (
+        "stage",
+        "stage_started_at",
+        "last_activity_at",
+        "last_error",
+        "validator_failure_key",
+        "validator_failure_count",
+    ):
+        old_payload.pop(key)
+    loaded = RunState.load(json.loads(json.dumps(old_payload)))
+    assert loaded.stage == "created"
+    assert loaded.validator_failure_count == 0
 
 
 def test_same_python_process_can_run_multiple_complete_jobs(tmp_path):
@@ -118,7 +134,12 @@ def test_agent_timeout_is_part_of_public_request_contract():
     request = RunRequest(goal="x", validator="ai")
     assert request.agent_timeout == 7200
     assert request.to_namespace().agent_timeout == 7200
+    assert request.planning_timeout == 120
+    assert request.to_namespace().planning_timeout == 120
 
     RunRequest(goal="x", validator="ai", agent_timeout=0).validate()
+    RunRequest(goal="x", validator="ai", planning_timeout=0).validate()
     with pytest.raises(ValueError, match="agent_timeout"):
         RunRequest(goal="x", validator="ai", agent_timeout=-1).validate()
+    with pytest.raises(ValueError, match="planning_timeout"):
+        RunRequest(goal="x", validator="ai", planning_timeout=-1).validate()

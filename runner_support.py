@@ -466,6 +466,7 @@ def execution_prompt(
     root: Path,
     protected: Sequence[Path],
     strategy_note: str = "",
+    validator_hint: str = "",
 ) -> str:
     task = state.tasks[state.current]
     context = {
@@ -474,9 +475,18 @@ def execution_prompt(
         "validator_feedback": state.validator_output[-2000:],
     }
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
+    previous = (
+        f"\nPrevious attempt output or diagnostic:\n{task.last_output[-2000:]}\n"
+        if task.last_output
+        else ""
+    )
+    validator = f"\nValidator check:\n{validator_hint}\n" if validator_hint else ""
     return rules(root, protected) + f"""
 Execute only the current task below. Do not start later tasks.
-Inspect the relevant code, make the smallest maintainable change, and run useful checks.
+Use this order: inspect relevant files, make the smallest maintainable change, run the validator/checks, then fix the first failure if any.
+Create only files that are required by the task or clearly useful for validation.
+Prefer file edit/write tools for creating or changing files. Use shell commands mainly for checks, tests, and small local scripts.
+When a Python validator command is provided, run it before finishing whenever practical; if it fails, fix the first reported failure and run it again.
 Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
 
 Run context:
@@ -484,6 +494,8 @@ Run context:
 
 Task:
 {json.dumps(task_spec(task), ensure_ascii=False)}
+{previous}
+{validator}
 {strategy}
 Finish with a factual summary of changed files and checks.
 """
@@ -679,14 +691,23 @@ def retry_model_call(
     detail: str,
     wait: float,
     max_wait: float,
+    max_errors: int = 0,
 ) -> T:
     delay = max(0.0, wait)
+    errors = 0
     while True:
         ui.start(status, detail)
         try:
             return action()
         except RunnerError as error:
+            errors += 1
             ui.stop("模型呼叫異常，將自動重試", str(error)[-500:])
+            if max_errors and errors >= max_errors:
+                raise RunnerError(
+                    f"model call failed {errors} times; "
+                    "retrying from the runner task flow: "
+                    f"{str(error)[-1000:]}"
+                ) from error
             if delay:
                 time.sleep(delay)
                 delay = min(max_wait, max(wait, delay * 2))

@@ -34,7 +34,12 @@
 | Schema | boolean 型別錯誤、空 criteria | 拒絕並 Retry，PASS |
 | Agent timeout | 單次 call | 終止並產生可恢復錯誤，PASS |
 | Agent timeout | 0 | 停用 timeout，PASS |
-| Agent timeout | Planning／Execution／Review／AI Validator 各 timeout 一次 | 全部 Retry 後完成，PASS |
+| Agent timeout | Execution／Review／AI Validator 各 timeout 一次 | 全部 Retry 後完成，PASS |
+| Model call error | Execution 連續失敗 | 保存診斷並重進 Task attempt，PASS |
+| Planning timeout | Qwen planning timeout／loop detection | 退回通用 Task，後續仍由 Agent 實作並驗證，PASS |
+| Planned tasks | Planner 回傳兩個 Task | 依序 execute/review 每個 Task，再進 final validator，PASS |
+| Validator repair | 連續相同 FAIL output | 進入 repair mode，要求先跑 validator 並收斂，PASS |
+| Soak | 多輪 validator cycle | 最終 PASS，state 檔案保持有界，PASS |
 | POSIX tree | 正常 child process | process group 全部終止，PASS |
 | Detached pipe | detached child 持有 stdout | Runner 不永久卡在 communicate，PASS；測試後人工清除 child |
 | Windows tree | `taskkill /PID /T /F` | 參數與 taskkill timeout 單元測試 PASS |

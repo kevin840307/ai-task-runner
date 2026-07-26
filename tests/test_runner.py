@@ -99,7 +99,9 @@ def test_model_calls_have_configurable_python_timeout():
 
     assert '"--agent-timeout"' in cli
     assert "agent_timeout: int = 7200" in api
-    assert "run_process(command, self.root, self.timeout)" in backend
+    assert '"--planning-timeout"' in cli
+    assert "planning_timeout: int = 120" in api
+    assert "run_process(command, self.root, self.timeout, input_text)" in backend
     assert "timeout=timeout or None" in process_control
     assert "terminate_process_tree" in process_control
 
@@ -165,6 +167,12 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert all('do not invent' in prompt.lower() for prompt in prompts)
     assert '"missing_items":[]' in prompts[2]
     assert '"missing_items":[]' in prompts[3]
+    assert "Validator check" in runner.execution_prompt(
+        state,
+        root,
+        protected,
+        validator_hint='["python","validator.py"]',
+    )
 
 
 
@@ -223,6 +231,60 @@ def test_review_incomplete_reexecutes_current_task(tmp_path):
     assert state["tasks"][0]["attempts"] == 2
 
 
+def test_planned_task_list_runs_each_task_then_review_in_order(tmp_path):
+    validator = tmp_path / "validator.py"
+    env, state_dir = _scenario_env(tmp_path, "multi_task_plan")
+    validator.write_text(
+        f"""import argparse
+from pathlib import Path
+p=argparse.ArgumentParser(); p.add_argument('--project-root'); p.add_argument('--state-file'); a=p.parse_args()
+root=Path(a.project_root)
+expected=['execute:first','review:first','execute:second','review:second']
+actual=Path({str(state_dir / "order.log")!r}).read_text(encoding='utf-8').splitlines()
+if actual != expected:
+    print(actual)
+    raise SystemExit(1)
+if not (root/'first.txt').exists() or not (root/'second.txt').exists():
+    print('missing marker')
+    raise SystemExit(1)
+print('PASS')
+""",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        _scenario_args(tmp_path, "multi_task_plan", validator=validator),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert [task["title"] for task in state["tasks"]] == [
+        "Create first marker",
+        "Create second marker",
+    ]
+    assert [task["status"] for task in state["tasks"]] == [
+        "completed",
+        "completed",
+    ]
+    assert all(task["last_review"]["completed"] for task in state["tasks"])
+
+
+def test_execution_model_errors_reenter_task_attempt_flow(tmp_path):
+    env, state_dir = _scenario_env(tmp_path, "execution_model_error")
+    result = subprocess.run(
+        _scenario_args(tmp_path, "execution_model_error"),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "4"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["tasks"][0]["attempts"] == 2
+    assert state["completed"] is True
+
+
 def test_protected_file_change_is_restored_and_retried(tmp_path):
     protected = tmp_path / "protected.txt"
     protected.write_text("original", encoding="utf-8")
@@ -265,6 +327,74 @@ raise SystemExit(0 if count >= 1 else 1)
     assert (tmp_path / ".validator.count").read_text() == "2"
 
 
+def test_repeated_validator_failure_enters_repair_mode(tmp_path):
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        """import argparse
+from pathlib import Path
+p=argparse.ArgumentParser(); p.add_argument('--project-root'); p.add_argument('--state-file'); a=p.parse_args()
+root=Path(a.project_root)
+if not (root/'repaired.txt').exists():
+    print('same validator failure')
+    raise SystemExit(1)
+print('PASS')
+""",
+        encoding="utf-8",
+    )
+    env, state_dir = _scenario_env(tmp_path, "validator_repair")
+    result = subprocess.run(
+        _scenario_args(
+            tmp_path,
+            "validator_repair",
+            validator=validator,
+            extra=["--max-cycles", "4"],
+        ),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "repaired.txt").read_text(encoding="utf-8") == "done"
+    assert (state_dir / "execute.count").read_text() == "3"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["completed"] is True
+    assert state["stage"] == "completed"
+    assert state["stage_started_at"] > 0
+    assert state["last_activity_at"] >= state["stage_started_at"]
+    assert state["validator_failure_count"] == 0
+
+
+def test_many_validator_cycles_soak_finishes_with_bounded_state(tmp_path):
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        """import argparse
+from pathlib import Path
+p=argparse.ArgumentParser(); p.add_argument('--project-root'); p.add_argument('--state-file'); a=p.parse_args()
+root=Path(a.project_root)
+counter=root/'.validator.count'
+n=int(counter.read_text()) if counter.exists() else 0
+counter.write_text(str(n+1))
+if n < 14:
+    print('soak failure')
+    raise SystemExit(1)
+print('PASS')
+""",
+        encoding="utf-8",
+    )
+    cmd = f'"{sys.executable}" "{ROOT / "tests/fake_agent.py"}"'
+    args = [sys.executable, str(ROOT / "ai_task_runner.py"), "--backend", "qwen", "--goal", "x",
+            "--project-root", str(tmp_path), "--validator", str(validator), "--command", cmd,
+            "--retry-delay", "0", "--retry-wait", "0", "--retry-max-wait", "0",
+            "--max-cycles", "20"]
+    result = subprocess.run(args, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    state_file = tmp_path / ".ai-task-runner/state.json"
+    state = json.loads(state_file.read_text())
+    assert state["completed"] is True
+    assert state["cycle"] == 15
+    assert state_file.stat().st_size < 200_000
+
+
 
 def test_ai_validator_failure_replans_and_then_passes(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "ai_replan")
@@ -294,19 +424,42 @@ def test_expired_session_is_replaced_and_work_continues(tmp_path):
     state_dir = Path(tempfile.mkdtemp(prefix=f"{tmp_path.name}-session-", dir=tmp_path.parent))
     env = {**os.environ, "SESSION_TEST_STATE_DIR": str(state_dir)}
     command = f'"{sys.executable}" "{ROOT / "tests/session_expired_agent.py"}"'
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    (work / "state.json").write_text(json.dumps({
+        "run_id": "session-test",
+        "goal": "x",
+        "project_root": str(tmp_path),
+        "cycle": 1,
+        "current": 0,
+        "tasks": [{
+            "id": "c01-t001",
+            "title": "Create marker",
+            "description": "Create done.txt",
+            "acceptance_criteria": ["done.txt exists"],
+            "status": "pending",
+            "attempts": 0,
+            "last_output": "",
+            "last_review": None,
+            "progress_key": "",
+            "stagnant_attempts": 0,
+        }],
+        "validator_output": "",
+        "completed": False,
+        "agent_session_id": "old-session",
+    }), encoding="utf-8")
     args = [
         sys.executable,
         str(ROOT / "ai_task_runner.py"),
         "--backend",
         "qwen",
-        "--goal",
-        "x",
         "--project-root",
         str(tmp_path),
         "--validator",
         "ai",
         "--command",
         command,
+        "--resume",
         "--retry-delay",
         "0",
         "--retry-wait",

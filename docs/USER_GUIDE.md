@@ -130,6 +130,7 @@ v1.1.1 會檢查：
 
 ```bat
 --agent-timeout 7200 ^
+--planning-timeout 120 ^
 --validator-timeout 1200 ^
 --retry-wait 5 ^
 --retry-max-wait 300 ^
@@ -144,12 +145,15 @@ v1.1.1 會檢查：
 | CLI 非零 exit | Backoff 後 Retry |
 | 空輸出／破損 JSON | 同階段 Retry |
 | Task／Review／AI Validator Schema 錯誤 | 同階段 Retry |
+| Execution／Review／AI Validator 連續模型錯誤 | 保存診斷，回到 Task／Validator 流程換策略 |
 | Session not found／expired／invalid | 清除 Session，建立新 Session 承接 State |
 | Task Review `completed=false` | Task 保持 pending，重做 |
 | 連續三次無進度 | Prompt 要求改變策略 |
+| Planning timeout | 重新建立簡單可執行 Task，避免卡在規劃 |
 | Agent timeout | 終止程序樹，保留一般修改，Retry |
 | Python Validator timeout | 終止程序樹，保留輸出，FAIL 後修復 |
 | Validator FAIL | 保留修改、cycle+1、重新規劃 |
+| Validator 連續同錯誤 | 進入 repair mode，要求先跑 validator 並修第一個失敗點 |
 | UI callback／JSON pipe 中斷 | Runner 繼續 |
 | Python／主機重啟 | 外部 supervisor 以 `--resume` 重啟 |
 
@@ -162,6 +166,10 @@ python ai_task_runner.py ... --resume
 ```
 
 首次執行與 Resume 命令可分成兩個 wrapper；supervisor 的 restart 命令使用 Resume。
+
+### State 監控
+
+`state.json` 會保存 `stage`、`stage_started_at`、`last_activity_at`、`last_error`、`validator_failure_count`。24 小時執行時可用這些欄位判斷目前是在 planning、execution、review、validation、等待 retry，或已進入 validator repair mode。
 
 ### 保證邊界
 
@@ -177,6 +185,16 @@ Runner 不會在 Validator 未 PASS 時把整體標成完成，也不會因可�
 
 ## 6. Timeout 語意
 
+### Planning
+
+```text
+--planning-timeout 120
+```
+
+每一次 Planning／Re-plan 獨立計時。`0` 表示不限制。
+
+Qwen 這類小模型如果在規劃階段 timeout 或觸發循環偵測，Runner 會改用需求本身建立一個通用 Task，讓實作階段繼續交給 Agent 完成；Runner 不會寫入任務專用程式碼。
+
 ### Agent
 
 ```text
@@ -185,13 +203,13 @@ Runner 不會在 Validator 未 PASS 時把整體標成完成，也不會因可�
 
 每一次模型 CLI 呼叫獨立計時：
 
-- Planning
 - Task execution
 - Task Review
 - AI Validator
-- Validator FAIL 後 Re-plan
 
 `0` 表示不限制。它不是整個 Task 的累計上限。
+
+本地小模型 smoke test 可先用 360～600 秒；正式 24 小時無人值守建議用 7200 秒或依專案大小提高。Planning 維持 120 秒即可，避免小模型卡在拆任務階段。
 
 ### Python Validator
 
@@ -299,6 +317,7 @@ script.item_failed
 | `--validator-arg` | 無 | 可重複 |
 | `--protect-file` | 無 | 額外保護檔；相對路徑以啟動 cwd 解讀 |
 | `--agent-timeout` | `7200` | 單次 AI CLI；0 不限制 |
+| `--planning-timeout` | `120` | Planning／Re-plan AI CLI；0 不限制 |
 | `--validator-timeout` | `600` | Python Validator |
 | `--max-attempts` | `0` | Task attempts；0 不限制 |
 | `--max-cycles` | `0` | Validator cycles；0 不限制 |

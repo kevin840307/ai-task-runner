@@ -261,12 +261,17 @@ Validator FAIL
 ### 8.1 Runner 已具備
 
 - 單次 Agent CLI timeout，預設 7200 秒；`0` 表示不限制
+- Planning／Re-plan CLI timeout 獨立預設 120 秒；`0` 表示不限制
+- Qwen Planning timeout 或 loop detection 會退回通用 Task，避免 24h 執行卡在規劃階段
 - Windows 使用 `taskkill /T /F`，POSIX 使用 process group 終止
 - timeout 後不把 Task 標記完成，並進入既有退避 Retry
 - 模型非零退出、空輸出、破損 JSON、Schema 錯誤自動 Retry
+- Execution／Review／AI Validator 連續模型錯誤會保存診斷並回到 Task／Validator 流程換策略
 - 明確 Session 失效後重建，承接 Goal、Task 與 Validator feedback
 - Task Review 未完成自動重做
 - Validator FAIL 保留修改並重新規劃修復
+- Validator 連續同診斷失敗會累計 `validator_failure_count`，下一輪 execution 進入 repair mode
+- State 持久化 `stage`、`stage_started_at`、`last_activity_at` 與 `last_error`，供長時間監控與 Resume 判斷
 - Python Validator timeout 會終止正常子程序樹並保留 partial output
 - `max_attempts=0`、`max_cycles=0` 可持續執行，不設邏輯上限
 - YAML item 各自持久化 state/session
@@ -603,19 +608,22 @@ v1.1.1 以六類測試驗證：
 5. **Examples**：範例結構、路徑、Validator 與 Python compile
 6. **24h 韌性**：四階段 timeout、程序樹、State 損毀、限制與異常診斷
 
-目前共有 **87 tests passed**，以隔離群組執行：
+目前共有 **95 tests passed / 1 skipped**，以隔離群組執行：
 
-- Backend：7
+- Backend：9
 - Examples：5
 - API／CLI／Events：14
 - Public contract：6
-- Core Runner：23
-- Resilience matrix：28
+- Core Runner：30
+- Resilience matrix：27 passed / 1 skipped
 - Documentation contract：4
 
 重點新增驗證：
 
-- Planning、Execution、Review、AI Validator 各 timeout 一次後全部恢復
+- Qwen Planning timeout 後 fallback；Execution、Review、AI Validator 各 timeout 一次後全部恢復
+- Planner 回傳多個 Task 時，Runner 依序 execute/review 每一項後才進 final validator
+- Validator 連續同錯誤後進入 repair mode 並收斂
+- 多輪 validator cycle soak 測試完成且 state 保持有界
 - POSIX process group 實際終止正常 child tree
 - detached child 持有 stdout 時，Runner 不永久卡在 `communicate()`
 - Windows `taskkill /PID /T /F` 參數與 timeout 單元測試

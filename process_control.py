@@ -24,6 +24,7 @@ def run_process(
     command: Sequence[str],
     cwd: Path,
     timeout: int,
+    input_text: str | None = None,
 ) -> ProcessResult:
     """Run one command and ensure timeout cleanup cannot wait forever."""
     options: dict[str, Any] = {
@@ -34,6 +35,8 @@ def run_process(
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
     }
+    if input_text is not None:
+        options["stdin"] = subprocess.PIPE
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -41,7 +44,7 @@ def run_process(
 
     process = subprocess.Popen(command, **options)
     try:
-        output, _ = process.communicate(timeout=timeout or None)
+        output, _ = process.communicate(input=input_text, timeout=timeout or None)
         return ProcessResult(output or "", process.returncode or 0)
     except subprocess.TimeoutExpired as error:
         terminate_process_tree(process)

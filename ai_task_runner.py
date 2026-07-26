@@ -47,6 +47,12 @@ def parser() -> argparse.ArgumentParser:
         default=7200,
         help="maximum seconds for one AI CLI call; 0 disables the limit",
     )
+    command_parser.add_argument(
+        "--planning-timeout",
+        type=int,
+        default=120,
+        help="maximum seconds for one AI planning call; 0 disables the limit",
+    )
     command_parser.add_argument("--max-attempts", type=int, default=0)
     command_parser.add_argument("--max-cycles", type=int, default=0)
     command_parser.add_argument(

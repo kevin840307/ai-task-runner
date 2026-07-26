@@ -23,6 +23,9 @@ class QwenBackend(AgentBackend):
             *self.extra_args,
         ]
 
+    def prompt_stdin(self, prompt: str) -> str:
+        return prompt
+
     def decode(self, raw: str) -> BackendResult:
         values = self.parse_json_events(raw)
         if not values:
