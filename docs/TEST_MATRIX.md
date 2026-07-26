@@ -8,10 +8,10 @@
 | Examples | 5 | PASS |
 | Python API／CLI／Events | 14 | PASS |
 | Public contract／相容性 | 6 | PASS |
-| 核心 Runner | 31 | PASS |
+| 核心 Runner | 34 | PASS |
 | v1.1.1 韌性與異常 | 28 | PASS（1 skipped） |
 | 文件契約 | 4 | PASS |
-| **總計** | **97** | **96 PASS／1 skipped** |
+| **總計** | **100** | **99 PASS／1 skipped** |
 
 執行環境：Windows、Python 3.10.0。測試以隔離群組執行，避免長時間 subprocess 測試互相污染。Python compile 另行通過。
 
@@ -57,6 +57,9 @@
 | `smoke/qwen_markdown_scoring` | Agent 產出 `docs/sorting_guide.md`；Python validator 檢查 H1/H2/table/example/bullets 並評分 | 真實 Qwen `score=94/100` PASS |
 | `smoke/qwen_data_structures` | LRUCache、merge_intervals、top_k_frequent 固定行為驗證 | 真實 Qwen PASS |
 | `smoke/qwen_single_prompt_todo_split` | 單一 prompt 內含編號 deliverables；fallback planning 保留為多個有序 task，逐一 execute/review 後 final validator | 真實 Qwen PASS |
+| `smoke/qwen_csv_analyzer` | 單一自然語言 prompt；Agent 產生 CSV analyzer、JSON/Markdown report、README，validator 檢查輸出與多 task review state | 真實 Qwen PASS |
+| `smoke/qwen_expression_evaluator` | 單一自然語言 prompt；Agent 產生安全 expression evaluator、CLI、batch JSON/Markdown、README，validator 禁用 eval/exec | 真實 Qwen PASS |
+| `smoke/qwen_todo_cli` | 單一自然語言 prompt；Agent 產生 persistent todo CLI、JSON persistence、Markdown export、README，測到 timeout/loop 後 review fallback | 真實 Qwen PASS |
 | Task attempts | 正數上限 | Exit code 2，PASS |
 | Validator cycles | 正數上限 | Exit code 3，PASS |
 | 無限制 | attempts/cycles = 0 | 原有 re-plan／stagnation 測試持續至 PASS |

@@ -448,6 +448,9 @@ Progress:
 Use the project outline and progress above for planning; do not read files during planning.
 Choose task count from actual complexity; there is no limit.
 If the goal lists numbered deliverables, usually create one ordered task per deliverable.
+If the goal implies multiple deliverables such as source files, CLI behavior, generated outputs, tests, validators, or documentation, split them into ordered tasks.
+Right-size the task list: trivial goals can be one task, small tools usually need a few deliverable-sized tasks, and broad goals need more tasks grouped by verifiable outcomes.
+Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, or verifying work; put those into acceptance criteria instead.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
 Avoid unrelated work in one task and tiny mechanical steps.
 If planning notes are written, they may be JSON or Markdown files only under this runner work directory: {work_dir}
@@ -486,8 +489,9 @@ def execution_prompt(
 Execute only the current task below. Do not start later tasks.
 Use this order: inspect relevant files, make the smallest maintainable change, run the validator/checks, then fix the first failure if any.
 Create only files that are required by the task or clearly useful for validation.
+Do not create scripts, commands, or files whose purpose is to update runner state, task status, reviews, attempts, or `.ai-task-runner`; only implement the requested project behavior.
 Prefer file edit/write tools for creating or changing files. Use shell commands mainly for checks, tests, and small local scripts.
-When a Python validator command is provided, run it before finishing whenever practical; if it fails, fix the first reported failure and run it again.
+When a Python validator command is provided, it may be a final validator that can fail until later tasks are completed. Run focused checks for the current task first. If the final validator only complains about pending tasks, reviews, or runner state, do not edit runner state; finish the current task with the implemented files and checks.
 Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
 
 Run context:

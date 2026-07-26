@@ -258,7 +258,8 @@ def test_all_model_stages_timeout_once_then_recover(tmp_path, monkeypatch):
     ))
     assert result.completed is True
     assert (state_dir / "plan.count").read_text() == "1"
-    for stage in ("execute", "review", "validator"):
+    assert (state_dir / "execute.count").read_text() == "1"
+    for stage in ("review", "validator"):
         assert (state_dir / f"{stage}.count").read_text() == "2"
 
 

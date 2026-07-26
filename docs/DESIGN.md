@@ -264,6 +264,8 @@ Validator FAIL
 - Planning／Re-plan CLI timeout 獨立預設 120 秒；`0` 表示不限制
 - Qwen Planning timeout 或 loop detection 會退回通用 Task，避免 24h 執行卡在規劃階段
 - 如果 goal 已列出編號 deliverables，fallback planning 會保留為有序 task，不會把整輪壓成單一大 task
+- 如果自然語言 goal 隱含 source、CLI、output、persistence、export、documentation 等可驗證 deliverables，fallback planning 會用少量有意義 task 保留粒度，並忽略純總覽或純限制句
+- Execution timeout／loop 後若專案已有非 protected 變更，Runner 會把目前檔案交給 read-only review 判定，而不是在同一個 model call 層重複消耗長 timeout
 - Windows 使用 `taskkill /T /F`，POSIX 使用 process group 終止
 - timeout 後不把 Task 標記完成，並進入既有退避 Retry
 - 模型非零退出、空輸出、破損 JSON、Schema 錯誤自動 Retry

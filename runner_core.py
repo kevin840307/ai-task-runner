@@ -28,6 +28,7 @@ from runner_support import (
     parse_review,
     parse_tasks,
     plan_prompt,
+    project_fingerprint,
     protected_ask,
     progress_key,
     readonly_ask,
@@ -54,6 +55,7 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "todo_write",
 )
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
+EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 
@@ -80,8 +82,10 @@ def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
 
 
 def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
-    numbered = numbered_goal_items(goal)
-    if len(numbered) >= 2:
+    deliverables = numbered_goal_items(goal)
+    if len(deliverables) < 2:
+        deliverables = deliverable_goal_items(goal)
+    if len(deliverables) >= 2:
         return [
             Task(
                 id=f"c{cycle:02d}-t{index:03d}",
@@ -92,7 +96,7 @@ def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
                     "Relevant validator checks pass",
                 ],
             )
-            for index, item in enumerate(numbered, 1)
+            for index, item in enumerate(deliverables, 1)
         ]
     return [
         Task(
@@ -117,6 +121,57 @@ def numbered_goal_items(goal: str) -> list[str]:
         if match:
             items.append(match.group(1))
     return items
+
+
+def deliverable_goal_items(goal: str) -> list[str]:
+    parts = [part.strip() for part in re.split(r"\n\s*\n", goal) if part.strip()]
+    items: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not looks_like_deliverable(part):
+            continue
+        normalized = " ".join(part.split())
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(normalized)
+    concrete = [item for item in items if not looks_like_overview(item)]
+    return concrete if len(concrete) >= 2 else items
+
+
+def looks_like_deliverable(text: str) -> bool:
+    lowered = text.strip().lower()
+    if lowered.startswith(("do not ask", "don't ask", "expected command")):
+        return False
+    if re.search(r"\b[\w.-]+\.(?:py|js|ts|json|md|csv|txt|ya?ml|toml|ini)\b", text):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:cli|command|tool|output|report|document|readme|validator|test|"
+            r"export|store|stored|storing|persist|persistence|generate|produce|"
+            r"support|data format|fields?)\b",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
+
+def looks_like_overview(text: str) -> bool:
+    lowered = text.strip().lower()
+    if not lowered.startswith(("build ", "create ", "implement ")):
+        return False
+    has_concrete_file = re.search(
+        r"\b[\w.-]+\.(?:py|js|ts|json|md|ya?ml|toml|ini)\b",
+        text,
+    )
+    has_verifiable_action = re.search(
+        r"\b(?:produce|generate|export|store|stored|storing|persist|persistence|"
+        r"support|document|data format|fields?)\b",
+        text,
+        re.IGNORECASE,
+    )
+    return not has_concrete_file and not has_verifiable_action
 
 
 def short_task_title(text: str, limit: int = 72) -> str:
@@ -494,7 +549,7 @@ class TaskRunner:
                 ):
                     self.ui.set(
                         "Qwen planning fallback",
-                        "using one task from the goal after repeated planning failures",
+                        "using fallback tasks from the goal after repeated planning failures",
                     )
                     return fallback_plan_tasks(self.state.goal, self.state.cycle)
                 raise
@@ -532,6 +587,7 @@ class TaskRunner:
             self._save_state()
             show_todo(self.state, self.ui)
 
+            project_before = project_fingerprint(self.root, self.work)
             try:
                 self._set_stage("executing")
                 output = self._execute_current_task(task)
@@ -541,6 +597,47 @@ class TaskRunner:
                 self._set_stage("reviewing")
                 review = self._review_current_task(task, output)
             except RunnerError as error:
+                if project_fingerprint(self.root, self.work) != project_before:
+                    output = (
+                        "Execution model call failed after changing project files; "
+                        "review the current filesystem state.\n"
+                        + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+                    )
+                    task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
+                    self._save_session()
+                    self.ui.set(
+                        "模型呼叫失敗但已有專案變更",
+                        "改由 review 判定目前 task",
+                    )
+                    try:
+                        self._set_stage("reviewing")
+                        review = self._review_current_task(task, output)
+                    except RunnerError as review_error:
+                        error = review_error
+                    else:
+                        task.last_review = review
+                        self._save_session()
+                        if review["completed"] is True:
+                            self._complete_current_task(task)
+                            continue
+
+                        task.status = "pending"
+                        self._record_no_progress(task, review)
+                        self._save_state()
+                        self.ui.set(
+                            "審查指出目前任務尚未完成",
+                            review["reason"],
+                        )
+                        show_todo(self.state, self.ui)
+                        if (
+                            self.args.max_attempts
+                            and task.attempts >= self.args.max_attempts
+                        ):
+                            return 2
+                        if self.args.retry_delay:
+                            time.sleep(self.args.retry_delay)
+                        continue
+
                 task.last_output = (
                     "Previous model call failed before task completion:\n"
                     + str(error)[-MAX_TASK_OUTPUT_CHARS:]
@@ -680,7 +777,7 @@ class TaskRunner:
             f"{task.id} · {task.title} · attempt {task.attempts}",
             self.args.retry_wait,
             self.args.retry_max_wait,
-            MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
+            EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW,
         )
 
     def _review_current_task(

@@ -1,0 +1,16 @@
+Build a small persistent todo CLI.
+
+The finished tool should include todo_cli.py and run from the project root. It should support add, list, done, delete, and export.
+
+Todos should be stored in a JSON file selected by --db. Each todo should have id, text, priority, and done fields. IDs should be stable increasing integers.
+
+Export should write a Markdown summary file with open and completed sections. README.md should document Usage, Data format, Commands, and Examples.
+
+Expected command shapes:
+python todo_cli.py --db todos.json add 'Write docs' --priority high
+python todo_cli.py --db todos.json list --format json
+python todo_cli.py --db todos.json done 1
+python todo_cli.py --db todos.json delete 2
+python todo_cli.py --db todos.json export --output summary.md
+
+Do not ask questions. Implement and verify the CLI, persistence, export, and documentation.

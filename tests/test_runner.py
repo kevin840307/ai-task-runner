@@ -164,6 +164,51 @@ def test_fallback_plan_splits_numbered_deliverables():
     assert len(runner_core.fallback_plan_tasks("Build one thing", 1)) == 1
 
 
+def test_fallback_plan_splits_natural_deliverable_paragraphs():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    tasks = runner_core.fallback_plan_tasks(
+        (
+            "Build a small CSV sales analyzer from input/sales.csv.\n\n"
+            "The finished tool should include analyze_sales.py and a CLI.\n\n"
+            "It should produce report.json with totals.\n\n"
+            "README.md should document Usage and Outputs.\n\n"
+            "Do not ask questions."
+        ),
+        3,
+    )
+    assert len(tasks) == 3
+    assert tasks[0].id == "c03-t001"
+    assert tasks[-1].title == "README.md should document Usage and Outputs"
+    assert not any(task.title.startswith("Build a small CSV") for task in tasks)
+    assert not any("Do not ask" in task.title for task in tasks)
+
+
+def test_fallback_plan_keeps_persistence_deliverables():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    tasks = runner_core.fallback_plan_tasks(
+        (
+            "Build a small persistent todo CLI.\n\n"
+            "The finished tool should include todo_cli.py and support add/list/done.\n\n"
+            "Todos should be stored in a JSON file selected by --db. "
+            "Each todo should have id, text, priority, and done fields.\n\n"
+            "Export should write a Markdown summary file. README.md should document usage."
+        ),
+        4,
+    )
+    assert len(tasks) == 3
+    assert any("stored in a JSON file" in task.title for task in tasks)
+
+
 def test_prompts_forbid_questions_and_omit_runtime_fields():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_prompts", ROOT / "ai_task_runner.py")
@@ -302,7 +347,23 @@ def test_execution_model_errors_reenter_task_attempt_flow(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert (state_dir / "execute.count").read_text() == "4"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["attempts"] == 2
+    assert state["tasks"][0]["attempts"] == 4
+    assert state["completed"] is True
+
+
+def test_execution_error_after_project_change_goes_to_review(tmp_path):
+    env, state_dir = _scenario_env(tmp_path, "execution_error_after_change")
+    result = subprocess.run(
+        _scenario_args(tmp_path, "execution_error_after_change"),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["tasks"][0]["attempts"] == 1
     assert state["completed"] is True
 
 
@@ -319,7 +380,8 @@ def test_protected_file_change_is_restored_and_retried(tmp_path):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert protected.read_text(encoding="utf-8") == "original"
-    assert (state_dir / "execute.count").read_text() == "2"
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
 
 
 def test_file_validator_failure_replans_and_then_passes(tmp_path):

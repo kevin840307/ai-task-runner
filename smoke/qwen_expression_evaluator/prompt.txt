@@ -1,0 +1,11 @@
+Build a safe arithmetic expression evaluator.
+
+The finished tool should include expression_eval.py with an evaluate(expression: str) function. It should support +, -, *, /, parentheses, whitespace, unary signs, and decimals, and it must not use eval or exec.
+
+The CLI should support:
+python expression_eval.py '1 + 2 * 3'
+python expression_eval.py --batch input/expressions.txt --json results.json --markdown results.md
+
+Batch mode should generate results.json and results.md. Invalid expressions should be reported as errors instead of crashing the whole batch. README.md should document Usage, Supported syntax, Error handling, and Examples.
+
+Do not ask questions. Implement and verify the evaluator, CLI, outputs, and documentation.
