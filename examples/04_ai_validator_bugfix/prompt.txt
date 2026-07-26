@@ -1,0 +1,11 @@
+Fix src/slugify.py and add focused automated tests.
+
+Required behavior:
+- Trim leading and trailing separators.
+- Collapse repeated separators.
+- Transliterate the common characters `é`, `ö`, and `ß` to `e`, `o`, and `ss`.
+- Return `untitled` when no usable characters remain.
+- Preserve the public function name and avoid third-party runtime dependencies.
+- Update README.md with three examples.
+
+Do not ask questions. Inspect, implement, run the tests, and summarize the result.

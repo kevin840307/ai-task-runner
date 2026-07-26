@@ -1,0 +1,23 @@
+- prompt: >-
+    Create migrate_users.py using only the Python standard library. It must read
+    input/users.csv and input/roles.csv, then write output/users.json. Normalize emails
+    to lowercase, convert Y/N to booleans, attach sorted unique roles, sort users by
+    numeric legacy_id, use indent=2, and end with a newline. Add useful tests.
+    Do not ask questions; implement and verify.
+  validator: examples/06_yaml_data_migration_pipeline/validators/data_validator.py
+
+- prompt: >-
+    Create MIGRATION.md with exactly these H2 sections in order: Input, Transformation,
+    Usage, Validation. Document both source files, every transformation rule, the exact
+    command to generate output/users.json, and how to run tests. Keep it concise.
+    Do not ask questions; create and check the document.
+  validator: examples/06_yaml_data_migration_pipeline/validators/document_validator.py
+
+- prompt: >-
+    Review the migration utility for deterministic output, malformed input handling,
+    duplicate-role handling, and consistency between code, tests, and MIGRATION.md.
+    Fix any remaining issue and rerun checks. Do not ask questions.
+  validator: ai
+  validator_prompt: >-
+    Independently inspect and test malformed active flags, duplicate roles, normalized
+    email output, deterministic ordering, and documentation accuracy.

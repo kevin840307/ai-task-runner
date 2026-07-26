@@ -1,0 +1,56 @@
+"""Documentation must stay aligned with the public v1.1.1 contract."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from ai_task_runner import parser
+from runner_api import RunRequest
+from version import __version__
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCS = {
+    "README": ROOT / "README.md",
+    "DESIGN": ROOT / "docs" / "DESIGN.md",
+    "USER_GUIDE": ROOT / "docs" / "USER_GUIDE.md",
+    "TEST_MATRIX": ROOT / "docs" / "TEST_MATRIX.md",
+}
+
+
+def _text(name: str) -> str:
+    return DOCS[name].read_text(encoding="utf-8")
+
+
+def test_required_documents_exist_and_use_current_version():
+    for path in DOCS.values():
+        assert path.is_file()
+        assert __version__ in path.read_text(encoding="utf-8")
+
+
+def test_timeout_defaults_match_cli_api_and_manual():
+    request = RunRequest(goal="x", validator="ai")
+    args = parser().parse_args(["--goal", "x", "--validator", "ai"])
+    guide = _text("USER_GUIDE")
+    assert request.agent_timeout == args.agent_timeout == 7200
+    assert request.validator_timeout == args.validator_timeout == 600
+    assert "`--agent-timeout` | `7200`" in guide
+    assert "`--validator-timeout` | `600`" in guide
+
+
+def test_canonical_api_resume_and_24h_boundaries_are_documented():
+    combined = "\n".join(_text(name) for name in DOCS)
+    assert "from runner_api import RunRequest, run" in combined
+    assert "Resume 不需要再次提供 `--goal`" in _text("USER_GUIDE")
+    assert "不能無條件保證任務一定完成" in combined
+    assert "Final Validator 未 PASS" in combined
+    assert "process_control.py" in _text("DESIGN")
+
+
+def test_stale_timeout_and_version_claims_are_absent():
+    combined = "\n".join(_text(name) for name in DOCS)
+    stale = (
+        "Runner 不會替 Qwen／OpenCode 設定單次 timeout",
+        "模型 CLI 執行中不由 Python 猜測 timeout",
+        "目前共有 **51 tests passed**",
+        "1.1.0",
+    )
+    assert all(item not in combined for item in stale)

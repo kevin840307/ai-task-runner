@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+args=sys.argv[1:]
+root=Path.cwd(); session='test-session-001'
+is_qwen='-p' in args
+prompt = args[args.index('-p')+1] if is_qwen else args[-1]
+is_validator = 'fresh independent session' in prompt
+if is_validator:
+    assert '--resume' not in args and '--session' not in args
+    session = 'validator-session-001'
+elif is_qwen and '--resume' in args:
+    assert args[args.index('--resume')+1] == session
+elif not is_qwen and '--session' in args:
+    assert args[args.index('--session')+1] == session
+if 'Plan only the remaining work' in prompt:
+    answer=json.dumps({'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]})
+elif 'Execute only the current task' in prompt:
+    (root/'done.txt').write_text('done'); answer='created done.txt'
+elif 'review only' in prompt.lower():
+    answer=json.dumps({'completed':(root/'done.txt').exists(),'reason':'checked','missing_items':[]})
+elif 'fresh independent session' in prompt:
+    answer=json.dumps({'passed':(root/'done.txt').exists(),'reason':'independent check','missing_items':[]})
+else:
+    raise SystemExit(2)
+if is_qwen:
+    print(json.dumps([{'type':'system','subtype':'session_start','session_id':session},{'type':'result','subtype':'success','session_id':session,'result':answer}]))
+else:
+    print(json.dumps({'type':'session','sessionID':session}))
+    print(json.dumps({'type':'message','part':{'type':'text','text':answer}}))

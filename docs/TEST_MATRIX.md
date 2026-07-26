@@ -1,0 +1,73 @@
+# AI Task Runner v1.1.1 異常測試矩陣
+
+## 結果摘要
+
+| 類別 | 數量 | 結果 |
+|---|---:|---|
+| Backend | 7 | PASS |
+| Examples | 5 | PASS |
+| Python API／CLI／Events | 14 | PASS |
+| Public contract／相容性 | 6 | PASS |
+| 核心 Runner | 23 | PASS |
+| v1.1.1 韌性與異常 | 28 | PASS |
+| 文件契約 | 4 | PASS |
+| **總計** | **87** | **PASS** |
+
+執行環境：Linux、Python 3.13.5。測試以隔離群組執行，避免長時間 subprocess 測試互相污染。Python compile 另行通過。
+
+## 異常矩陣
+
+| 範圍 | 已測情境 | 預期與結果 |
+|---|---|---|
+| Command | executable 不存在 | Fail-fast；不建立新 state，PASS |
+| Force New | 新初始化失敗 | 舊 state 保持不變，PASS |
+| Resume | state 不存在 | 清楚錯誤，PASS |
+| Resume | JSON 損毀 | `invalid resume state`，PASS |
+| Resume | project root 不一致 | 拒絕載入，PASS |
+| State | current 越界、非法 status | 拒絕載入，PASS |
+| 相容 State | 缺少新欄位 | 使用預設值載入，PASS |
+| Session | 6 種 invalid／expired marker | 清除 Session 並恢復，PASS |
+| Session | 一般網路錯誤 | 不誤判為 Session invalid，PASS |
+| Retry | 1000 次暫時失敗 | 使用 loop 後恢復，PASS |
+| Interrupt | KeyboardInterrupt | 不被 Retry 吞掉，PASS |
+| JSON | fenced／前後文字 | 正確抽取，PASS |
+| Schema | boolean 型別錯誤、空 criteria | 拒絕並 Retry，PASS |
+| Agent timeout | 單次 call | 終止並產生可恢復錯誤，PASS |
+| Agent timeout | 0 | 停用 timeout，PASS |
+| Agent timeout | Planning／Execution／Review／AI Validator 各 timeout 一次 | 全部 Retry 後完成，PASS |
+| POSIX tree | 正常 child process | process group 全部終止，PASS |
+| Detached pipe | detached child 持有 stdout | Runner 不永久卡在 communicate，PASS；測試後人工清除 child |
+| Windows tree | `taskkill /PID /T /F` | 參數與 taskkill timeout 單元測試 PASS |
+| Python Validator | timeout | 終止程序樹、保留 partial output，PASS |
+| Python Validator | timeout 同時修改 protected file | 還原檔案並同時回報兩種診斷，PASS |
+| Python Validator | 非零 exit | 保留 stdout 診斷，PASS |
+| Validator args | 額外參數 | 正確傳遞，PASS |
+| Task Review | completed=false | 重做同 Task，PASS |
+| Task attempts | 正數上限 | Exit code 2，PASS |
+| Validator cycles | 正數上限 | Exit code 3，PASS |
+| 無限制 | attempts/cycles = 0 | 原有 re-plan／stagnation 測試持續至 PASS |
+| No progress | 三次相同 fingerprint＋missing items | 第四次改變策略，PASS |
+| Protected file | Task 修改 | 還原並 Retry，PASS |
+| Read-only | 修改／新增／刪除／rename | 全部還原，PASS |
+| Read-only excludes | build／dependency cache | 不還原 disposable artifact，PASS |
+| AI Validator | 修改 project | 還原並 Retry，PASS |
+| Validator FAIL | Python／AI | 保留修改、重新規劃、最終 PASS |
+| YAML | 缺 validator、非 array | Fail-fast，PASS |
+| YAML Resume | 已完成／未完成 item | 跳過與續跑正確，PASS |
+| Events | callback exception | Runner 繼續，PASS |
+| Events | JSON consumer BrokenPipe | Runner 繼續，PASS |
+| State growth | output／reason／missing items | 長度與數量有界，PASS |
+| Cleanup | `.tmp`、舊 readonly backup | 清理正確，PASS |
+
+## 不可由單元／短整合測試完全證明
+
+以下需目標環境 soak test 或外部基礎設施：
+
+- 真實 Qwen／OpenCode 版本連續 12–24 小時
+- Windows 實機 `taskkill /T /F` 對實際 CLI 子程序樹
+- 主機重開後 Task Scheduler／NSSM／systemd 的 `--resume`
+- OOM、磁碟滿、檔案系統損毀
+- CLI 主動建立完全 detached daemon
+- 任務或 Validator 本身永遠不可達成
+
+這些限制不應描述成 Runner 能「無條件保證一定完成」。可保證的是：在程序與環境仍可運作時，可恢復異常會 Retry，且 Validator 未 PASS 不會誤標完成。

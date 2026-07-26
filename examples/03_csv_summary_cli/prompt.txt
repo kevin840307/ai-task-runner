@@ -1,0 +1,14 @@
+Create summarize_orders.py. It must use only the Python standard library.
+
+CLI:
+`python summarize_orders.py --input input/orders.csv --output output/summary.json`
+
+Output JSON requirements:
+- UTF-8, indent=2, final newline.
+- Keys in this order: order_count, total_amount, by_region, by_status.
+- Monetary totals are strings with exactly two decimals.
+- by_region keys are alphabetically sorted; each value has order_count and total_amount.
+- by_status keys are alphabetically sorted; each value is an integer count.
+- Reject a negative amount or malformed row with a non-zero exit code.
+
+Do not ask questions. Implement and run the CLI against the provided CSV.

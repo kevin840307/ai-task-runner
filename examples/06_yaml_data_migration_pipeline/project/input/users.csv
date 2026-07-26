@@ -1,0 +1,4 @@
+legacy_id,full_name,email,active
+1001,Alice Chen,ALICE@example.com,Y
+1002,Bob Lin,bob@example.com,N
+1003,Carol Wu,carol@example.com,Y

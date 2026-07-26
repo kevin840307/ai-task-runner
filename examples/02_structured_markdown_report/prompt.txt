@@ -1,0 +1,11 @@
+Create output/incident_report.md from input/incidents.json.
+
+The Markdown format must be exactly:
+1. `# Incident Report`
+2. `## Summary` followed by exactly three bullets: Total, High severity, Services.
+3. `## Incidents`
+4. One `### <id> — <title>` section per incident, in input order.
+5. Each incident section contains a two-column table with rows Severity, Service, Owner.
+6. `## Follow-up Actions` with one unchecked task per incident formatted `- [ ] <id>: <action> (@<owner>)`.
+
+Do not add other H1/H2 sections. Preserve source values exactly. Do not ask questions; generate and check the file.
