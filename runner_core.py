@@ -24,6 +24,7 @@ from runner_support import (
     cleanup_stale_artifacts,
     ai_validator_prompt,
     execution_prompt,
+    format_validator_feedback,
     parse_ai_validation,
     parse_review,
     parse_tasks,
@@ -197,6 +198,7 @@ def derive_tasks_from_goal(
 ) -> list[Task]:
     feedback = validator_feedback.strip()
     if feedback:
+        repair_feedback = format_validator_feedback(feedback, 2000)
         return [
             Task(
                 id=f"c{cycle:02d}-t001",
@@ -204,7 +206,7 @@ def derive_tasks_from_goal(
                 description=(
                     "Make the smallest maintainable project change needed "
                     "to satisfy the goal and address this validator feedback:\n"
-                    f"{feedback[-2000:]}"
+                    f"{repair_feedback}"
                 ),
                 acceptance_criteria=[
                     "The validator feedback is addressed",
@@ -243,6 +245,19 @@ def derive_tasks_from_goal(
             ],
         )
     ]
+
+
+def right_size_planned_tasks(
+    goal: str,
+    cycle: int,
+    planned: list[Task],
+    validator_feedback: str = "",
+) -> list[Task]:
+    """Use deterministic splitting when the planner under-splits deliverables."""
+    if validator_feedback.strip():
+        return planned
+    fallback = derive_tasks_from_goal(goal, cycle)
+    return fallback if len(fallback) > len(planned) else planned
 
 
 def numbered_goal_items(goal: str) -> list[str]:
@@ -666,7 +681,12 @@ class TaskRunner:
                         "AI modified files during planning and they were restored: "
                         + ", ".join(protected_changed)
                     )
-                tasks = parse_tasks(output, self.state.cycle)
+                tasks = right_size_planned_tasks(
+                    self.state.goal,
+                    self.state.cycle,
+                    parse_tasks(output, self.state.cycle),
+                    self.state.validator_output,
+                )
             except RunnerError as error:
                 planning_failures += 1
                 message = str(error)
@@ -739,6 +759,19 @@ class TaskRunner:
                             error,
                         )
                     except RunnerError as review_error:
+                        if not self.ai_validation:
+                            review = self._fallback_review_to_validator(
+                                task,
+                                review_error,
+                            )
+                            result = self._handle_review_result(
+                                task,
+                                review,
+                                project_changed=True,
+                            )
+                            if result is not None:
+                                return result
+                            continue
                         error = review_error
                     else:
                         result = self._handle_review_result(
@@ -756,6 +789,7 @@ class TaskRunner:
                 )
                 task.status = "pending"
                 task.stagnant_attempts += 1
+                self.state.agent_session_id = self.agent.session_id
                 self._save_state()
                 self.ui.set(
                     "模型階段失敗，準備重試任務",
@@ -862,25 +896,47 @@ class TaskRunner:
         show_todo(self.state, self.ui)
 
     def _validator_repair_hint(self) -> str:
-        if self.state.validator_failure_count < VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+        if not self.state.validator_output.strip():
             return ""
-        return (
-            "Validator repair mode: the final validator has failed with the "
-            f"same diagnostic {self.state.validator_failure_count} times. "
-            "Treat the validator feedback in Run context as authoritative. "
-            "Fix the first reported failure directly, verify the affected files "
-            "carefully, and do not dismiss the validator as a false positive "
-            "unless there is concrete evidence of an impossible requirement."
+        parts = [
+            "Validator repair task: reproduce or inspect the first reported "
+            "validator failure, then edit the project implementation, "
+            "documentation, or output generator that causes it. Do not only "
+            "summarize a fix or change runner state."
+        ]
+        if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+            parts.append(
+                "Validator repair mode: the final validator has failed with the "
+                f"same diagnostic {self.state.validator_failure_count} times. "
+                "Treat the validator feedback in Run context as authoritative. "
+                "Fix the first reported failure directly, verify the affected files "
+                "carefully, and do not dismiss the validator as a false positive "
+                "unless there is concrete evidence of an impossible requirement."
+            )
+        return "\n".join(parts)
+
+    def _fallback_review_to_validator(
+        self,
+        task: Task,
+        error: RunnerError,
+    ) -> dict:
+        reason = (
+            "AI review failed after retries, but project files changed. "
+            "Deferring completion judgment to the configured Python final "
+            f"validator. Review failure: {str(error)[-500:]}"
         )
+        return {"completed": True, "reason": reason, "missing_items": []}
 
     def _execute_current_task(self, task: Task) -> str:
         strategy_note = ""
         if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
+            self.agent.session_id = ""
             strategy_note = (
                 "Previous attempts made no effective progress. "
                 "Reinspect the project, identify the blocking assumption, "
                 "and use a different implementation approach. "
-                "Do not repeat the same actions."
+                "A fresh agent session is being used with runner state as "
+                "context. Do not repeat the same actions."
             )
         change_detected = self._project_change_detector()
 
@@ -896,6 +952,7 @@ class TaskRunner:
                         for part in (strategy_note, self._validator_repair_hint())
                         if part
                     ),
+                    str(self.validator) if self.validator else "",
                 ),
                 self.protected,
                 self.args.agent_idle_after_change_timeout,

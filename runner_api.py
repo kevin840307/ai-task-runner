@@ -8,6 +8,15 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from backends import backend_names
+from defaults import (
+    DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
+    DEFAULT_AGENT_TIMEOUT,
+    DEFAULT_BACKEND,
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_MAX_CYCLES,
+    DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_VALIDATOR_TIMEOUT,
+)
 from runner_core import execute, execute_script
 from version import __version__
 
@@ -23,17 +32,17 @@ class RunRequest:
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
-    backend: str = "qwen"
+    backend: str = DEFAULT_BACKEND
     command: str | None = None
     agent_args: list[str] = field(default_factory=list)
     validator_args: list[str] = field(default_factory=list)
     protect_files: list[str] = field(default_factory=list)
-    validator_timeout: int = 600
-    agent_timeout: int = 7200
-    planning_timeout: int = 600
-    agent_idle_after_change_timeout: float = 900
-    max_attempts: int = 0
-    max_cycles: int = 0
+    validator_timeout: int = DEFAULT_VALIDATOR_TIMEOUT
+    agent_timeout: int = DEFAULT_AGENT_TIMEOUT
+    planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
+    agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS
+    max_cycles: int = DEFAULT_MAX_CYCLES
     retry_delay: float = 2
     retry_wait: float = 5
     retry_max_wait: float = 300

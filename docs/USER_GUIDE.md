@@ -1,395 +1,90 @@
-# AI Task Runner v1.1.1 使用手冊
+# AI Task Runner User Guide v1.1.1
 
-## 1. 環境需求
-
-- Python 3.10 以上
-- Qwen CLI 或 OpenCode CLI 已安裝，且能在終端獨立執行
-- `pip install -r requirements.txt`
-- Target project 與 state 目錄可讀寫
-
-先驗證 CLI：
-
-```bat
-qwen.cmd --help
-opencode.exe --help
-```
-
-## 2. 基本執行
-
-### Qwen
+## Basic Command
 
 ```bat
 python ai_task_runner.py ^
-  --backend qwen ^
-  --command qwen.cmd ^
   --project-root C:\work\project ^
-  --goal "完成指定功能並補齊測試" ^
-  --validator ai
+  --goal "完成需求並通過驗證" ^
+  --validator C:\validators\validator.py
 ```
 
-Qwen defaults: the runner adds `--yolo` unless permission args are already passed through `--agent-arg`. It also excludes Qwen todo, subagent, skill, and computer-use tools so coding work stays in project files and shell checks.
+By default this uses Qwen Code through `qwen.cmd` and runs as an unlimited retry/cycle 24h-style loop. Add `--resume` when restarting an existing run after the Python process exited.
 
-### OpenCode
+Resume does not require repeating `--goal` if the state already exists, but passing the same goal is fine.
 
-```bat
-python ai_task_runner.py ^
-  --backend opencode ^
-  --command opencode.exe ^
-  --project-root C:\work\project ^
-  --goal "完成指定功能並補齊測試" ^
-  --validator ai
-```
+Override defaults only when needed, for example `--command qwen` on non-Windows shells or `--backend opencode --command opencode.exe` for OpenCode.
 
-模型參數：
-
-```bat
---agent-arg=--model --agent-arg=provider/model
-```
-
-含空白的 executable path：
-
-```bat
---command "C:\Program Files\Qwen\qwen.cmd"
-```
-
-## 3. Validator
-
-### Python Validator
-
-```bat
---validator C:\validators\validator.py
-```
-
-Runner 追加：
-
-```text
---project-root <project-root>
---state-file <state.json>
-```
-
-Validator 應將具體診斷寫到 stdout／stderr：
-
-```text
-FAILED: test_login_invalid_token
-Expected: HTTP 401
-Actual: HTTP 500
-Related file: src/auth/login.py
-```
-
-Exit code 0 代表 PASS，其他代表 FAIL。
-
-### AI Validator
-
-```bat
---validator ai ^
---validator-prompt "確認既有 API 相容、測試完整且文件已更新"
-```
-
-AI Validator 使用新的獨立 Session，且由 Python 強制唯讀。
-
-## 4. Resume 與 Force New
-
-Resume：
-
-```bat
-python ai_task_runner.py ^
-  --backend qwen ^
-  --command qwen.cmd ^
-  --project-root C:\work\project ^
-  --validator ai ^
-  --resume
-```
-
-Resume 不需要再次提供 `--goal`，Goal 會從 state 載入。
-
-State 路徑：
-
-```text
-單一 Goal：.ai-task-runner/state.json
-YAML：.ai-task-runner/script/001/state.json
-```
-
-需要捨棄現有進度並建立新 run：
-
-```bat
---force-new
-```
-
-`--resume` 與 `--force-new` 不可同時使用。
-
-v1.1.1 會檢查：
-
-- State 是否存在
-- JSON 是否完整
-- Task status／current／cycle 是否有效
-- State 是否屬於目前 project root
-
-初始化 command 失敗時不會留下半成品 state；Force New 初始化失敗也會保留原 state。
-
-## 5. 24 小時執行
-
-推薦：
-
-```bat
---agent-timeout 7200 ^
---planning-timeout 600 ^
---agent-idle-after-change-timeout 900 ^
---validator-timeout 1200 ^
---retry-wait 5 ^
---retry-max-wait 300 ^
---max-attempts 0 ^
---max-cycles 0
-```
-
-### 自動恢復表
-
-| 情境 | 行為 |
-|---|---|
-| CLI 非零 exit | Backoff 後 Retry |
-| 空輸出／破損 JSON | 同階段 Retry |
-| Task／Review／AI Validator Schema 錯誤 | 同階段 Retry |
-| Execution／Review／AI Validator 連續模型錯誤 | 保存診斷，回到 Task／Validator 流程換策略 |
-| Session not found／expired／invalid | 清除 Session，建立新 Session 承接 State |
-| Task Review `completed=false` | Task 保持 pending，重做 |
-| 連續三次無進度 | Prompt 要求改變策略 |
-| Planning timeout | 重新建立簡單可執行 Task，避免卡在規劃 |
-| Agent timeout | 終止程序樹，保留一般修改，Retry |
-| Python Validator timeout | 終止程序樹，保留輸出，FAIL 後修復 |
-| Validator FAIL | 保留修改、cycle+1、重新規劃 |
-| Validator 連續同錯誤 | 進入 repair mode，要求先跑 validator 並修第一個失敗點 |
-| UI callback／JSON pipe 中斷 | Runner 繼續 |
-| Python／主機重啟 | 外部 supervisor 以 `--resume` 重啟 |
-
-### Supervisor
-
-Windows Task Scheduler／NSSM 或 Linux systemd 應以固定命令重啟：
-
-```text
-python ai_task_runner.py ... --resume
-```
-
-首次執行與 Resume 命令可分成兩個 wrapper；supervisor 的 restart 命令使用 Resume。
-
-### State 監控
-
-`state.json` 會保存 `stage`、`stage_started_at`、`last_activity_at`、`last_error`、`validator_failure_count`。24 小時執行時可用這些欄位判斷目前是在 planning、execution、review、validation、等待 retry，或已進入 validator repair mode。
-
-### 保證邊界
-
-Runner 不會在 Validator 未 PASS 時把整體標成完成，也不會因可恢復的模型錯誤主動放棄。但以下仍可能停止或永遠無法完成：
-
-- OS／OOM 終止 Python
-- 主機斷電且沒有 supervisor
-- 磁碟耗盡、權限失效
-- 外部服務或憑證永久不可用
-- Goal 或 Validator 條件互相衝突
-- 模型能力不足，始終無法收斂
-- CLI 建立完全脫離原程序樹的 daemon
-
-## 6. Timeout 語意
-
-### Planning
-
-```text
---planning-timeout 600
-```
-
-每一次 Planning／Re-plan 獨立計時。`0` 表示不限制。
-
-Qwen 這類小模型如果在規劃階段 timeout 或觸發循環偵測，Runner 會改用需求本身建立 fallback task，讓實作階段繼續交給 Agent 完成；若需求本身列出 `1.`、`2.`、`3.` 這類編號 deliverables，或自然語言中隱含 source、CLI、output、persistence、export、documentation 等可驗證 deliverables，Runner 會保留為多個有序 task。Runner 不會寫入任務專用程式碼。
-
-如果 execution timeout／loop 前已經寫出專案檔案，Runner 會改由 read-only review 判斷目前 task 是否完成；review 或 validator 不會被允許修改專案檔案或 runner state。
-
-### Backend project rules
-
-Runner 會在目標 project root 建立或補上 backend 專用規則檔，並在執行期間保護它們不被 task agent 改寫：
-
-- Qwen Code：`QWEN.md`
-- OpenCode：`AGENTS.md`
-
-OpenCode 官方規則檔名稱是 `AGENTS.md`；`AGENT.md` 不是本專案採用的 OpenCode project rules 檔名。
-
-### 每個 TODO 傳給模型的內容
-
-單一 Goal 或每個 YAML item 都會沿用同一個主 session。每次 task execution 不是重新丟整包需求叫模型自由發揮，而是傳一份 compact prompt：
-
-- hard rules 與 protected-file 邊界
-- original goal
-- completed task titles
-- current task 的 title、description、acceptance criteria
-- recent validator feedback
-- previous attempt output／diagnostic
-- recovery instruction；validator path/command 不會暴露給 task agent
-
-When validator feedback exists, execution and review treat it as authoritative. If Qwen planning falls back after a validator failure, the runner creates one `Repair validator failure` task instead of replaying the original checklist.
-
-Prompt 會明確要求只執行 current task，不要開始 later tasks。Review 使用 read-only prompt；Final Validator 只會在全部 tasks review 完成後執行。
-
-### Agent
-
-```text
---agent-timeout 7200
-```
-
-每一次模型 CLI 呼叫獨立計時：
-
-- Task execution
-- Task Review
-- AI Validator
-
-`0` 表示不限制。它不是整個 Task 的累計上限。
-
-本地小模型 smoke test 可先用 360～600 秒；正式 24 小時無人值守建議用 7200 秒或依專案大小提高。Planning 預設 600 秒，讓 local 小模型有較多時間理解與拆分。
-
-```text
---agent-idle-after-change-timeout 900
-```
-
-只套用於 execution。模型已經修改 project files 後，如果這段秒數內沒有新的 project file 變更，Runner 會提早停止該 AI CLI call，並把目前檔案狀態交給 read-only review 判斷 task 是否完成。`0` 表示停用。這不是完成判定，只是避免「模型已做完但最後沒回傳」時等完整 `agent_timeout`。
-
-### Python Validator
-
-```text
---validator-timeout 600
-```
-
-必須為正整數。Timeout 後會保留 partial output，並終止 validator 與正常子程序樹。
-
-## 7. Retry 與停止條件
-
-```text
---retry-wait 5
---retry-max-wait 300
-```
-
-模型呼叫異常使用指數退避。
-
-```text
---retry-delay 2
-```
-
-只用於 Review 明確判定 Task 未完成後的邏輯重做。
-
-```text
---max-attempts 0
---max-cycles 0
-```
-
-- `0`：不限制
-- 正數：達限後分別以 exit code 2／3 停止
-
-## 8. YAML 批次
-
-```yaml
-- prompt: 修正登入功能
-  validator: validators/login.py
-
-- prompt: 更新文件
-  validator: ai
-  validator_prompt: 確認文件與實作一致
-```
-
-```bat
-python ai_task_runner.py ^
-  --backend qwen ^
-  --command qwen.cmd ^
-  --project-root C:\work\project ^
-  --script tasks.yaml
-```
-
-YAML 必須是非空 array；每個 item 必須有 `prompt`／`goal` 與 `validator`。
-
-YAML 批次中斷後可以真正 resume：每個 item 的 state 路徑是 `.ai-task-runner/script/NNN/state.json`。重新用相同 `--script`、`--project-root`、`--work-dir` 並加上 `--resume` 後，已完成 item 會因 `completed=true` 立即返回，未完成 item 會沿用自己的 state/session、current task、validator feedback 繼續跑；尚未建立 state 的後續 item 會 fresh start。
-
-## 9. Python API
+## Python API
 
 ```python
-from runner_api import RunRequest, RunResult, run
+from runner_api import RunRequest, run
 
-request = RunRequest(
-    goal="完成需求",
-    project_root=r"C:\work\project",
+result = run(RunRequest(
+    goal="Build the requested feature",
     validator="ai",
-    backend="qwen",
-    command="qwen.cmd",
-    agent_timeout=7200,
-)
-
-result: RunResult = run(request, on_event=print)
+    project_root=".",
+))
 ```
 
-`run()` 為同步函式。GUI 應在 worker thread 或獨立 subprocess 執行。
+## Timeouts
 
-## 10. JSON Events
+| Option | Default | Meaning |
+| --- | ---: | --- |
+| `--agent-timeout` | `7200` | Maximum seconds for one execution, review, or AI-validator model call. |
+| `--planning-timeout` | `600` | Maximum seconds for one planning model call. |
+| `--agent-idle-after-change-timeout` | `900` | Execution-only activity watchdog after project changes or CLI output; `0` disables it. |
+| `--validator-timeout` | `1200` | Maximum seconds for a Python validator subprocess. |
+
+For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a call that stops producing CLI output and stops changing files can be handed to review.
+
+## What Retries
+
+The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. Final Validator must PASS before the run is marked completed.
+
+## Validators
+
+Use a Python validator:
 
 ```bat
-python ai_task_runner.py ... --json-events
+python ai_task_runner.py --goal "Build X" --validator C:\validators\validator.py
 ```
 
-事件類型：
+Or use AI validation:
+
+```bat
+python ai_task_runner.py --goal "Build X" --validator ai
+```
+
+Python validators receive:
 
 ```text
-runner.progress
-runner.status
-runner.error
-runner.stopped
-script.item_started
-script.item_completed
-script.item_failed
+python validator.py --project-root <root> --state-file <state.json> [...validator args]
 ```
 
-每行是獨立 JSON，包含 `schema_version=1` 與 `runner_version=1.1.1`。
+Agents may read validator files to infer expected behavior, but they must not edit validator files, runner state, runner source, or backend rule files. Protected changes are restored and retried.
 
-## 11. CLI 參數
+## YAML Batch
 
-| 參數 | 預設 | 說明 |
-|---|---:|---|
-| `--goal` | 無 | 單一需求；Resume 可省略 |
-| `--project-root` | `.` | Target project |
-| `--script` | 無 | YAML 批次 |
-| `--validator` | 必填 | Python path 或 `ai` |
-| `--validator-prompt` | 空 | AI Validator 額外規則 |
-| `--backend` | `qwen` | `qwen`／`opencode` |
-| `--command` | Backend 預設 | CLI executable |
-| `--agent-arg` | 無 | 可重複 |
-| `--validator-arg` | 無 | 可重複 |
-| `--protect-file` | 無 | 額外保護檔；相對路徑以啟動 cwd 解讀 |
-| `--agent-timeout` | `7200` | 單次 AI CLI；0 不限制 |
-| `--planning-timeout` | `600` | Planning／Re-plan AI CLI；0 不限制 |
-| `--agent-idle-after-change-timeout` | `900` | Execution 改檔後 idle 太久就提早進 review；0 停用 |
-| `--validator-timeout` | `600` | Python Validator |
-| `--max-attempts` | `0` | Task attempts；0 不限制 |
-| `--max-cycles` | `0` | Validator cycles；0 不限制 |
-| `--retry-delay` | `2` | Task 未完成重做等待 |
-| `--retry-wait` | `5` | Model retry 初始等待 |
-| `--retry-max-wait` | `300` | Model retry 最大等待 |
-| `--work-dir` | `.ai-task-runner` | 必須在 project root 內 |
-| `--json-events` | false | JSONL event stream |
-| `--resume` | false | 從 state 繼續 |
-| `--force-new` | false | 建立新 run |
+```yaml
+- prompt: Build the first feature
+  validator: validators/first.py
+- prompt: Build the second feature
+  validator: ai
+```
 
-## 12. Troubleshooting
+YAML batch mode is supported. Each item has independent state under `.ai-task-runner/script/NNN/state.json`. With `--resume`, completed items are skipped and unfinished items continue from their saved state.
 
-### `command not found`
+## Backend Rule Files
 
-先在相同帳號與環境執行 CLI；必要時用完整路徑。此錯誤 fail-fast，不會建立新 state。
+- Qwen Code: `QWEN.md`
+- OpenCode: `AGENTS.md`
 
-### `state exists`
+OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
-使用 `--resume` 繼續，或明確使用 `--force-new`。
+## Troubleshooting
 
-### `invalid resume state`
-
-State JSON、current、cycle、status 或 project root 不合法。不要手動修改 state；從備份恢復或 Force New。
-
-### Session 一直失效
-
-確認 CLI 版本與 resume/session 參數是否仍相容。Runner 只對明確 Session invalid 訊息重建 Session。
-
-### Validator 一直 FAIL
-
-改善 validator 診斷，列出 expected／actual／test／file。確認 Validator 條件確實可達成。
-
-### Timeout 太頻繁
-
-一般專案使用 3600～7200 秒；本地大型模型或大型 repository 可提高到 14400 秒。Task 若預估超過 60～90 分鐘，優先拆小而不是無限提高 timeout。
+- If the model made files but timed out, the runner asks review to judge the saved files.
+- If review repeatedly fails for a Python-validator run after project changes, the runner can defer judgment to the final Python validator.
+- If validator feedback is ambiguous, improve the validator message with expected and actual values.
+- If a local model is very slow, raise `--agent-timeout`; do not disable final validation.

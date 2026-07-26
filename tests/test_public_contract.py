@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT))
 
 from agent import Agent, AgentClient
 from api import RunRequest as LegacyRunRequest
-from backends import AgentBackend, Backend
+from backends import AgentBackend, Backend, default_command
+from defaults import DEFAULT_QWEN_COMMAND
 from models import State as LegacyState
 from runner_api import RunRequest, __version__, run
 from runner_models import RunState, State, Task
@@ -138,6 +139,9 @@ def test_agent_timeout_is_part_of_public_request_contract():
     assert request.to_namespace().planning_timeout == 600
     assert request.agent_idle_after_change_timeout == 900
     assert request.to_namespace().agent_idle_after_change_timeout == 900
+    assert request.validator_timeout == 1200
+    assert request.to_namespace().validator_timeout == 1200
+    assert default_command("qwen") == DEFAULT_QWEN_COMMAND == "qwen.cmd"
 
     RunRequest(goal="x", validator="ai", agent_timeout=0).validate()
     RunRequest(goal="x", validator="ai", planning_timeout=0).validate()

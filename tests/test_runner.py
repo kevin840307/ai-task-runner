@@ -98,11 +98,11 @@ def test_model_calls_have_configurable_python_timeout():
     process_control = (ROOT / "process_control.py").read_text(encoding="utf-8")
 
     assert '"--agent-timeout"' in cli
-    assert "agent_timeout: int = 7200" in api
+    assert "DEFAULT_AGENT_TIMEOUT" in api
     assert '"--planning-timeout"' in cli
-    assert "planning_timeout: int = 600" in api
+    assert "DEFAULT_PLANNING_TIMEOUT" in api
     assert '"--agent-idle-after-change-timeout"' in cli
-    assert "agent_idle_after_change_timeout: float = 900" in api
+    assert "DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT" in api
     assert "idle_timeout_after_change" in backend
     assert "timeout=timeout or None" in process_control
     assert "idle_timed_out" in process_control
@@ -184,6 +184,14 @@ def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
     assert tasks[0].id == "c05-t001"
     assert tasks[0].title == "Repair validator failure"
     assert "missing exact complexity table header" in tasks[0].description
+    assert "current rejected behavior or output" in tasks[0].description
+
+    tasks = runner_core.derive_tasks_from_goal(
+        "Build a CLI",
+        6,
+        "unexpected stored JSON:\n{\"todos\": []}",
+    )
+    assert "the actual bad value to change away from" in tasks[0].description
 
 
 def test_repair_review_requires_project_change_when_validator_failed():
@@ -224,6 +232,35 @@ def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
     assert tasks[-1].title == "README.md should document Usage and Outputs"
     assert not any(task.title.startswith("Build a small CSV") for task in tasks)
     assert not any("Do not ask" in task.title for task in tasks)
+
+
+def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    planned = [
+        runner_core.Task(
+            "c01-t001",
+            "Build everything",
+            "Implement the whole request.",
+            ["Done"],
+        )
+    ]
+    goal = (
+        "Build a safe arithmetic expression evaluator.\n\n"
+        "The finished tool should include expression_eval.py with evaluate().\n\n"
+        "The CLI should support single expression and batch commands.\n\n"
+        "Batch mode should generate results.json and results.md. README.md should document Usage."
+    )
+
+    tasks = runner_core.right_size_planned_tasks(goal, 1, planned)
+
+    assert len(tasks) == 3
+    assert tasks[0].title.startswith("The finished tool should include")
+    assert runner_core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
 
 
 def test_goal_task_derivation_keeps_persistence_deliverables():
@@ -277,9 +314,10 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
         protected,
         validator_hint='["python","validator.py"]',
     )
-    assert "Validator check" not in prompt_with_legacy_hint
-    assert "validator.py" not in prompt_with_legacy_hint
-    assert "Do not read, copy, or inspect external validator files" in prompt_with_legacy_hint
+    assert "Validator reference" in prompt_with_legacy_hint
+    assert "validator.py" in prompt_with_legacy_hint
+    assert "You may read validator files" in prompt_with_legacy_hint
+    assert "never modify them or hardcode validator internals" in prompt_with_legacy_hint
     assert "Do not delegate to subagents" in prompt_with_legacy_hint
     assert "Do not use computer-use" in prompt_with_legacy_hint
     assert "instead of repeating the same read/check command" in prompt_with_legacy_hint
@@ -553,9 +591,11 @@ def test_no_progress_adds_different_strategy_instruction(tmp_path):
     assert (state_dir / "strategy_seen.txt").read_text() == "yes"
 
 
-def test_expired_session_is_replaced_and_work_continues(tmp_path):
+def _run_session_replacement_case(tmp_path, failure_message: str = ""):
     state_dir = Path(tempfile.mkdtemp(prefix=f"{tmp_path.name}-session-", dir=tmp_path.parent))
     env = {**os.environ, "SESSION_TEST_STATE_DIR": str(state_dir)}
+    if failure_message:
+        env["SESSION_FAILURE_MESSAGE"] = failure_message
     command = f'"{sys.executable}" "{ROOT / "tests/session_expired_agent.py"}"'
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
@@ -605,6 +645,17 @@ def test_expired_session_is_replaced_and_work_continues(tmp_path):
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["agent_session_id"] == "new-session"
     assert (state_dir / "execute.count").read_text() == "2"
+
+
+def test_expired_session_is_replaced_and_work_continues(tmp_path):
+    _run_session_replacement_case(tmp_path)
+
+
+def test_loop_detection_session_is_replaced_and_work_continues(tmp_path):
+    _run_session_replacement_case(
+        tmp_path,
+        "Loop detection halted the run (consecutive_identical_tool_calls)",
+    )
 
 
 def test_readonly_guard_ignores_build_and_dependency_directories(tmp_path):
@@ -716,6 +767,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
         project_root=str(tmp_path),
         tasks=[Task("t1", "Implement", "Add the feature", ["Existing behavior still works"])],
     )
+    state.validator_output = "unexpected output:\nold value"
     protected = [tmp_path / ".ai-task-runner" / "state.json"]
 
     plan = runner_support.plan_prompt(state.goal, tmp_path, state, protected)
@@ -730,6 +782,8 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
     assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
     assert "verify the change is scoped, maintainable, and preserves relevant existing behavior" in review
+    assert "the actual bad value to change away from" in execute
+    assert "fix the program behavior that produces it" in execute
 
 
 def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):

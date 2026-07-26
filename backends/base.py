@@ -102,14 +102,15 @@ class AgentBackend(ABC):
         )
         output, return_code = result.output, result.return_code
         if return_code:
+            failure_output = self.error_output(output)
             if result.idle_timed_out:
                 raise BackendError(
                     f"{self.name} idle timed out after project changes "
                     f"for {idle_timeout_after_change:g} seconds:\n"
-                    f"{output[-4000:]}"
+                    f"{failure_output[-4000:]}"
                 )
             raise BackendError(
-                f"{self.name} exit {return_code}:\n{output[-4000:]}"
+                f"{self.name} exit {return_code}:\n{failure_output[-4000:]}"
             )
         decoded = self.decode(output)
         if not decoded.text.strip():
@@ -137,9 +138,10 @@ class AgentBackend(ABC):
         if result.timed_out:
             if result.idle_timed_out:
                 return result
+            failure_output = self.error_output(result.output)
             raise BackendError(
                 f"{self.name} timed out after {self.timeout} seconds:\n"
-                f"{result.output[-4000:]}"
+                f"{failure_output[-4000:]}"
             )
         return result
 
@@ -158,6 +160,10 @@ class AgentBackend(ABC):
     @abstractmethod
     def decode(self, raw: str) -> BackendResult:
         """Decode CLI output and extract response text plus session ID."""
+
+    def error_output(self, raw: str) -> str:
+        """Summarize non-zero CLI output for retry prompts."""
+        return raw
 
     def parse_json_events(self, raw: str) -> list[Any]:
         try:

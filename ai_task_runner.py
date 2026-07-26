@@ -8,6 +8,15 @@ import sys
 import time
 from collections.abc import Sequence
 
+from defaults import (
+    DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
+    DEFAULT_AGENT_TIMEOUT,
+    DEFAULT_BACKEND,
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_MAX_CYCLES,
+    DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_VALIDATOR_TIMEOUT,
+)
 from runner_api import RunRequest, run
 from version import __version__
 from backends import backend_names
@@ -35,35 +44,51 @@ def parser() -> argparse.ArgumentParser:
         default="",
         help="extra instructions for AI validation",
     )
-    command_parser.add_argument("--backend", choices=backend_names(), default="qwen")
+    command_parser.add_argument(
+        "--backend",
+        choices=backend_names(),
+        default=DEFAULT_BACKEND,
+    )
     command_parser.add_argument("--command")
     command_parser.add_argument("--agent-arg", action="append", default=[])
     command_parser.add_argument("--validator-arg", action="append", default=[])
     command_parser.add_argument("--protect-file", action="append", default=[])
-    command_parser.add_argument("--validator-timeout", type=int, default=600)
+    command_parser.add_argument(
+        "--validator-timeout",
+        type=int,
+        default=DEFAULT_VALIDATOR_TIMEOUT,
+    )
     command_parser.add_argument(
         "--agent-timeout",
         type=int,
-        default=7200,
+        default=DEFAULT_AGENT_TIMEOUT,
         help="maximum seconds for one AI CLI call; 0 disables the limit",
     )
     command_parser.add_argument(
         "--planning-timeout",
         type=int,
-        default=600,
+        default=DEFAULT_PLANNING_TIMEOUT,
         help="maximum seconds for one AI planning call; 0 disables the limit",
     )
     command_parser.add_argument(
         "--agent-idle-after-change-timeout",
         type=float,
-        default=900,
+        default=DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
         help=(
-            "execution-only idle seconds after project changes before "
+            "execution-only idle seconds after project changes or CLI output before "
             "stopping the AI call and letting review decide; 0 disables it"
         ),
     )
-    command_parser.add_argument("--max-attempts", type=int, default=0)
-    command_parser.add_argument("--max-cycles", type=int, default=0)
+    command_parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=DEFAULT_MAX_ATTEMPTS,
+    )
+    command_parser.add_argument(
+        "--max-cycles",
+        type=int,
+        default=DEFAULT_MAX_CYCLES,
+    )
     command_parser.add_argument(
         "--retry-delay",
         type=float,

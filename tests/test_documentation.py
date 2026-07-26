@@ -38,29 +38,29 @@ def test_timeout_defaults_match_cli_api_and_manual():
         == args.agent_idle_after_change_timeout
         == 900
     )
-    assert request.validator_timeout == args.validator_timeout == 600
+    assert request.validator_timeout == args.validator_timeout == 1200
     assert "`--agent-timeout` | `7200`" in guide
     assert "`--planning-timeout` | `600`" in guide
     assert "`--agent-idle-after-change-timeout` | `900`" in guide
-    assert "`--validator-timeout` | `600`" in guide
+    assert "`--validator-timeout` | `1200`" in guide
 
 
 def test_canonical_api_resume_and_24h_boundaries_are_documented():
     combined = "\n".join(_text(name) for name in DOCS)
     assert "from runner_api import RunRequest, run" in combined
-    assert "Resume 不需要再次提供 `--goal`" in _text("USER_GUIDE")
-    assert "不能無條件保證任務一定完成" in combined
-    assert "Final Validator 未 PASS" in combined
+    assert "Resume does not require repeating `--goal`" in _text("USER_GUIDE")
+    assert "the runner owns orchestration" in combined.lower()
+    assert "Final Validator PASS" in combined
     assert "process_control.py" in _text("DESIGN")
 
 
 def test_stale_timeout_and_version_claims_are_absent():
     combined = "\n".join(_text(name) for name in DOCS)
     stale = (
-        "Runner 不會替 Qwen／OpenCode 設定單次 timeout",
-        "模型 CLI 執行中不由 Python 猜測 timeout",
-        "目前共有 **51 tests passed**",
+        "51 tests passed",
         "1.1.0",
+        "--agent-idle-after-change-timeout 300",
+        "`--validator-timeout` | `600`",
     )
     assert all(item not in combined for item in stale)
 

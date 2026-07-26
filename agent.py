@@ -15,6 +15,7 @@ SESSION_INVALID_MARKERS = (
     "cannot resume session",
     "failed to resume session",
     "unknown session",
+    "loop detection halted the run",
 )
 
 

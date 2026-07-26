@@ -22,7 +22,9 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     qwen = create_backend("qwen", sys.executable, tmp_path, [])
     opencode = create_backend("opencode", sys.executable, tmp_path, [])
 
-    assert "--resume" in qwen.build_command("prompt", "session-1")
+    qwen_command = qwen.build_command("prompt", "session-1")
+    assert "--resume" in qwen_command
+    assert qwen_command[qwen_command.index("--output-format") + 1] == "stream-json"
     assert "--session" in opencode.build_command("prompt", "session-1")
     protected_names = {path.name for path in runner_source_files()}
     assert {
@@ -53,6 +55,38 @@ def test_windows_quoted_command_path_is_unwrapped():
 def test_qwen_prompt_is_single_line_for_windows_cmd():
     prompt = "Hard rules:\n- Do the task\n\nReturn only JSON"
     assert single_line_prompt(prompt) == "Hard rules: - Do the task Return only JSON"
+
+
+def test_qwen_stream_json_uses_final_result_event(tmp_path):
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    raw = "\n".join([
+        '{"type":"system","session_id":"session-1"}',
+        '{"type":"message","result":"intermediate"}',
+        '{"type":"result","session_id":"session-1","result":"final answer"}',
+    ])
+    decoded = backend.decode(raw)
+    assert decoded.session_id == "session-1"
+    assert decoded.text == "final answer"
+
+
+def test_qwen_stream_json_summarizes_error_output(tmp_path):
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    raw = "\n".join([
+        '{"type":"system","session_id":"session-1"}',
+        '{"type":"result","session_id":"session-1","error":{"message":"Loop detection halted the run"}}',
+    ])
+
+    assert backend.error_output(raw) == "Loop detection halted the run"
+
+
+def test_qwen_stream_json_error_output_falls_back_to_assistant_text(tmp_path):
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    raw = "\n".join([
+        '{"type":"system","session_id":"session-1"}',
+        '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"last useful note"}]}}',
+    ])
+
+    assert backend.error_output(raw) == "last useful note"
 
 
 def test_backend_project_rules_use_current_root_files(tmp_path):

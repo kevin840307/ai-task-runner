@@ -240,6 +240,74 @@ def test_process_idle_after_change_timeout_stops_before_full_timeout(tmp_path):
     assert time.monotonic() - started < 5
 
 
+def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
+    code = (
+        "import time; "
+        "print('first', flush=True); "
+        "time.sleep(0.1); "
+        "print('second', flush=True)"
+    )
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        timeout=20,
+        idle_timeout_after_change=0.05,
+        change_detected=lambda: False,
+    )
+    assert result.timed_out is False
+    assert "first" in result.output
+    assert "second" in result.output
+
+
+def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
+    code = "import time; print('ready', flush=True); time.sleep(30)"
+    started = time.monotonic()
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        timeout=20,
+        idle_timeout_after_change=0.2,
+        change_detected=lambda: False,
+    )
+    assert result.timed_out is True
+    assert result.idle_timed_out is True
+    assert "ready" in result.output
+    assert time.monotonic() - started < 5
+
+
+def test_process_unexpected_error_cleans_up_process_tree(tmp_path, monkeypatch):
+    import process_control
+
+    killed = []
+
+    class FakeProcess:
+        pid = 123
+        returncode = None
+
+        def communicate(self, **kwargs):
+            raise RuntimeError("boom")
+
+        def poll(self):
+            return None
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(
+        process_control.subprocess,
+        "Popen",
+        lambda *args, **kwargs: fake_process,
+    )
+    monkeypatch.setattr(
+        process_control,
+        "terminate_process_tree",
+        lambda process: killed.append(process.pid),
+    )
+
+    with pytest.raises(RuntimeError):
+        run_process(["agent"], tmp_path, timeout=10)
+
+    assert killed == [123]
+
+
 def test_file_validator_timeout_kills_child_tree_and_preserves_partial_output(tmp_path):
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")

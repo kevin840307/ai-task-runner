@@ -390,6 +390,7 @@ def rules(root: Path, protected: Sequence[Path]) -> str:
 - Never modify runner state directly. Python owns task state.
 - Before planning or changing code, inspect the relevant project structure, entry points, dependencies, public interfaces, conventions, and existing tests.
 - Prefer the smallest maintainable change that fully satisfies the current task.
+- Prefer simple standard-library or existing project facilities over hand-written complex logic when they satisfy the goal and are safe to use.
 - Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
 - Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
 - Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
@@ -482,12 +483,20 @@ def execution_prompt(
     context = {
         "goal": state.goal,
         "completed_tasks": completed_titles(state),
-        "validator_feedback": state.validator_output[-2000:],
+        "validator_feedback": format_validator_feedback(
+            state.validator_output,
+            2000,
+        ),
     }
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
     previous = (
         f"\nPrevious attempt output or diagnostic:\n{task.last_output[-2000:]}\n"
         if task.last_output
+        else ""
+    )
+    validator_reference = (
+        f"\nValidator reference:\n{validator_hint}\n"
+        if validator_hint
         else ""
     )
     return rules(root, protected) + f"""
@@ -500,11 +509,12 @@ Prefer file edit/write tools for creating or changing files. Use shell commands 
 Do not delegate to subagents, background agents, scaffolding skills, or app-generation skills. Complete the current task directly in this session.
 Do not use computer-use, desktop, browser, or app-launch tools; this runner works through project files and shell checks.
 If a required file or command is missing, create or fix it instead of repeating the same read/check command. Do not call the same tool repeatedly with identical arguments after it returns the same result.
-Do not read, copy, or inspect external validator files. Python runs the final validator after review; use validator feedback only when the runner provides it in Run context.
+You may read validator files to understand expected behavior, but never modify them or hardcode validator internals. Python runs the final validator after review; use validator feedback and the validator reference only to guide the project implementation.
 Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
 
 Run context:
 {json.dumps(context, ensure_ascii=False)}
+{validator_reference}
 
 Task:
 {json.dumps(task_spec(task), ensure_ascii=False)}
@@ -521,7 +531,7 @@ def review_prompt(
     output: str,
 ) -> str:
     task = state.tasks[state.current]
-    feedback = state.validator_output[-2000:]
+    feedback = format_validator_feedback(state.validator_output, 2000)
     validator_section = (
         f"\nLatest validator feedback to consider:\n{feedback}\n"
         if feedback
@@ -542,6 +552,23 @@ Executor report:
 Return only JSON, without Markdown or explanation:
 {{"completed":true,"reason":"All acceptance criteria are satisfied.","missing_items":[]}}
 """
+
+
+def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
+    text = feedback.strip()
+    if not text:
+        return ""
+    return (
+        "Validator feedback below is the final validator's failure report. "
+        "It describes the current rejected behavior or output, not the desired "
+        "result. If it says 'unexpected ...' and shows a block, that block is "
+        "the actual bad value to change away from. Fix the first reported "
+        "failure, then preserve the original goal. If the bad value is in a "
+        "generated output or validator-created sample file, fix the program "
+        "behavior that produces it; do not only edit the current generated "
+        "file.\n"
+        + text[-limit:]
+    )
 
 
 def ai_validator_prompt(

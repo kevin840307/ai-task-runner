@@ -37,7 +37,7 @@ elif "Execute only the current task" in prompt:
         or (not is_qwen and "--session" in args and args[args.index("--session") + 1] == "old-session")
     )
     if attempt == 1 and has_old_session:
-        print("session not found")
+        print(os.environ.get("SESSION_FAILURE_MESSAGE", "session not found"))
         raise SystemExit(7)
     session = "new-session"
     (root / "done.txt").write_text("done", encoding="utf-8")
