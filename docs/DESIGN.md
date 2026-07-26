@@ -263,6 +263,7 @@ Validator FAIL
 - 單次 Agent CLI timeout，預設 7200 秒；`0` 表示不限制
 - Planning／Re-plan CLI timeout 獨立預設 120 秒；`0` 表示不限制
 - Qwen Planning timeout 或 loop detection 會退回通用 Task，避免 24h 執行卡在規劃階段
+- 如果 goal 已列出編號 deliverables，fallback planning 會保留為有序 task，不會把整輪壓成單一大 task
 - Windows 使用 `taskkill /T /F`，POSIX 使用 process group 終止
 - timeout 後不把 Task 標記完成，並進入既有退避 Retry
 - 模型非零退出、空輸出、破損 JSON、Schema 錯誤自動 Retry

@@ -193,7 +193,7 @@ Runner 不會在 Validator 未 PASS 時把整體標成完成，也不會因可�
 
 每一次 Planning／Re-plan 獨立計時。`0` 表示不限制。
 
-Qwen 這類小模型如果在規劃階段 timeout 或觸發循環偵測，Runner 會改用需求本身建立一個通用 Task，讓實作階段繼續交給 Agent 完成；Runner 不會寫入任務專用程式碼。
+Qwen 這類小模型如果在規劃階段 timeout 或觸發循環偵測，Runner 會改用需求本身建立 fallback task，讓實作階段繼續交給 Agent 完成；若需求本身列出 `1.`、`2.`、`3.` 這類編號 deliverables，Runner 會保留為多個有序 task。Runner 不會寫入任務專用程式碼。
 
 ### Agent
 

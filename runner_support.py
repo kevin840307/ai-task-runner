@@ -447,6 +447,7 @@ Progress:
 
 Use the project outline and progress above for planning; do not read files during planning.
 Choose task count from actual complexity; there is no limit.
+If the goal lists numbered deliverables, usually create one ordered task per deliverable.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
 Avoid unrelated work in one task and tiny mechanical steps.
 If planning notes are written, they may be JSON or Markdown files only under this runner work directory: {work_dir}

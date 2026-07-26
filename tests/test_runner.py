@@ -143,6 +143,27 @@ def test_task_schema_accepts_common_criteria_alias():
     assert task.acceptance_criteria == ["C"]
 
 
+def test_fallback_plan_splits_numbered_deliverables():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    tasks = runner_core.fallback_plan_tasks(
+        "Build release packet.\n1. Create VERSION.\n2. Create CHANGELOG.md.\n3. Create summary JSON.",
+        2,
+    )
+    assert [task.id for task in tasks] == ["c02-t001", "c02-t002", "c02-t003"]
+    assert [task.title for task in tasks] == [
+        "Create VERSION",
+        "Create CHANGELOG.md",
+        "Create summary JSON",
+    ]
+
+    assert len(runner_core.fallback_plan_tasks("Build one thing", 1)) == 1
+
+
 def test_prompts_forbid_questions_and_omit_runtime_fields():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_prompts", ROOT / "ai_task_runner.py")

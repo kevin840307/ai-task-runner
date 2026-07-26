@@ -1,0 +1,7 @@
+{
+  "name": "widget-tools",
+  "version": "2.1.0",
+  "date": "2026-07-26",
+  "added": ["batch rename command", "dry-run report"],
+  "fixed": ["case-sensitive extension filtering"]
+}

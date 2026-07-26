@@ -5,6 +5,7 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 import sys
 import time
 import uuid
@@ -79,6 +80,20 @@ def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
 
 
 def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
+    numbered = numbered_goal_items(goal)
+    if len(numbered) >= 2:
+        return [
+            Task(
+                id=f"c{cycle:02d}-t{index:03d}",
+                title=short_task_title(item),
+                description=item,
+                acceptance_criteria=[
+                    "This deliverable is implemented",
+                    "Relevant validator checks pass",
+                ],
+            )
+            for index, item in enumerate(numbered, 1)
+        ]
     return [
         Task(
             id=f"c{cycle:02d}-t001",
@@ -93,6 +108,20 @@ def fallback_plan_tasks(goal: str, cycle: int) -> list[Task]:
             ],
         )
     ]
+
+
+def numbered_goal_items(goal: str) -> list[str]:
+    items: list[str] = []
+    for line in goal.splitlines():
+        match = re.match(r"^\s*\d+[\).]\s+(.+?)\s*$", line)
+        if match:
+            items.append(match.group(1))
+    return items
+
+
+def short_task_title(text: str, limit: int = 72) -> str:
+    title = text.strip().rstrip(".")
+    return title if len(title) <= limit else title[: limit - 1].rstrip() + "..."
 
 
 def run_ai_validator(
