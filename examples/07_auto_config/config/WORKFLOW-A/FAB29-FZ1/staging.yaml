@@ -1,20 +1,22 @@
-# Workflow-specific configuration for WORKFLOW-A
-# This file overrides global settings with workflow-specific values
+# Environment-specific configuration for STAGING
+# This file overrides workflow-specific settings with environment values
 
-# Target configuration
-target:
-  family: FAB29
-  instance: FZ1
+environment:
+  name: STAGING
+  region: us-east-1
 
-# Gateway and namespace configuration
+# Override gateway configuration for STAGING
 gateway:
-  base: http://fz1.fab29-prod.com
-  domain: fab29-prod.com
+  base: http://fz1.fab29-staging.com
+  domain: fab29-staging.com
+  ssl: false
 
+# Namespace configuration for STAGING
 namespace:
   name: name-a
+  tier: staging
 
-# App deployment configuration
+# App deployment overrides for STAGING
 app-deploy:
   appB:
     test: abc
@@ -34,7 +36,7 @@ app-deploy:
           dataa: 1
           datab: 1
   appA:
-    web: fab14-prod.com.tw/name-a
+    web: fab14-staging.com.tw/name-a
     images:
       - version: 2026.04.0
         id: 2565468
@@ -108,7 +110,7 @@ app-deploy:
               dataa: 2
               datab: 2
 
-# Flow deployment configuration
+# Flow deployment overrides for STAGING
 flow-deploy:
   appAA:
     config-v604: abc

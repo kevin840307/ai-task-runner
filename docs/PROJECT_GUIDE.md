@@ -16,13 +16,15 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 6. Run the final Python or AI validator after all tasks are reviewed.
 7. If final validation fails, keep the project changes, create a `Repair validator failure` task, and continue.
 
-Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
+Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If one TODO repeatedly fails in the model stage without any project changes and a Python validator is configured, the runner defers that TODO to final validation so the whole run can keep moving. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
 
 ## Activity Watchdog
 
 Execution has a default activity idle watchdog. After project files change or the AI CLI writes output, if no further project file changes or CLI output are detected for 900 seconds, the runner stops that AI CLI call early and asks review to decide whether the current task is complete. This never marks work complete by itself; review and final validation still own completion.
 
 ## Task Prompt Shape
+
+Runner prompt templates live under `prompts/`. `runner_support.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
 
 Each TODO execution usually reuses the same main agent session. The runner sends compact context:
 
@@ -71,7 +73,7 @@ ai_task_runner.py                 CLI parser and main entry point
 defaults.py                       Shared default backend, command, timeout, and limit values
 runner_api.py                     Public Python API
 runner_core.py                    Task planning, execution, review, validation
-runner_support.py                 Prompts, parsers, validators, protection, UI
+runner_support.py                 Prompt loading, parsers, validators, protection, UI
 runner_models.py                  RunState and Task models
 agent.py                          Session-aware backend facade
 process_control.py                Subprocess timeout and activity watchdog
@@ -80,6 +82,7 @@ models.py                         Backward-compatible model alias
 version.py                        Package version used by docs and JSON events
 QWEN.md                           Qwen project rule file for this repository
 AGENTS.md                         OpenCode project rule file for this repository
+prompts/                          Editable runner prompt templates
 backends/base.py                  Backend interface and shared command handling
 backends/qwen.py                  Qwen stream-json backend
 backends/opencode.py              OpenCode backend
@@ -105,4 +108,4 @@ docs/                             Human and AI project documentation
 python -m pytest -q
 ```
 
-Latest local result: `116 passed, 1 skipped`.
+Latest local result: `124 passed, 1 skipped`.

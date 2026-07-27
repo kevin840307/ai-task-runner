@@ -26,6 +26,7 @@ from runner_support import (
     parse_json,
     parse_review,
     parse_tasks,
+    protected_ask,
     readonly_project_call,
     retry_model_call,
     run_file_validator,
@@ -44,6 +45,24 @@ def _passing_validator(path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def test_protected_ask_stops_and_restores_on_protected_change(tmp_path):
+    protected = tmp_path / "validator.py"
+    protected.write_text("original", encoding="utf-8")
+
+    class Agent:
+        def ask(self, prompt, idle_timeout_after_change=0, change_detected=None):
+            del prompt, idle_timeout_after_change
+            protected.write_text("changed", encoding="utf-8")
+            assert change_detected is not None
+            change_detected()
+            return "unreachable"
+
+    with pytest.raises(RunnerError, match="protected file modified"):
+        protected_ask(Agent(), "go", [protected], 1, lambda: False)
+
+    assert protected.read_text(encoding="utf-8") == "original"
 
 
 def test_command_not_found_does_not_leave_new_state(tmp_path):
@@ -358,6 +377,94 @@ def test_all_model_stages_timeout_once_then_recover(tmp_path, monkeypatch):
     assert (state_dir / "execute.count").read_text() == "1"
     for stage in ("review", "validator"):
         assert (state_dir / f"{stage}.count").read_text() == "2"
+
+
+def test_review_uses_planning_timeout_not_agent_timeout(tmp_path, monkeypatch):
+    state_dir = Path(tempfile.mkdtemp(prefix="review-timeout-", dir=tmp_path.parent))
+    monkeypatch.setenv("REVIEW_TIMEOUT_STATE_DIR", str(state_dir))
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        command=_fake_command("review_timeout_agent.py"),
+        agent_timeout=20,
+        planning_timeout=1,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    ))
+    assert result.completed is True
+    assert (state_dir / "review.count").read_text() == "2"
+
+
+def test_resume_restores_state_from_external_backup(tmp_path):
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        command=_fake_command(),
+        plan_only=True,
+    ))
+    assert result.exit_code == 0
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    original = json.loads(state_file.read_text(encoding="utf-8"))
+    state_file.write_text('{"completed": true, "project_root": "corrupted"}', encoding="utf-8")
+
+    resumed = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        command=_fake_command(),
+        plan_only=True,
+        resume=True,
+    ))
+    restored = json.loads(state_file.read_text(encoding="utf-8"))
+    assert resumed.exit_code == 0
+    assert restored["run_id"] == original["run_id"]
+    assert restored["completed"] is False
+
+
+def test_resume_completed_tasks_runs_validator_without_replanning(tmp_path):
+    validator = _passing_validator(tmp_path / "validator.py")
+    marker = tmp_path / "validator-ran.txt"
+    validator.write_text(
+        "import argparse\n"
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');"
+        "p.add_argument('--state-file');args=p.parse_args();"
+        f"open({str(marker)!r},'w').write('ran')\n",
+        encoding="utf-8",
+    )
+    state = RunState(
+        run_id="resume-before-validator",
+        goal="x",
+        project_root=str(tmp_path),
+        current=1,
+        tasks=[
+            Task(
+                id="t001",
+                title="Already done",
+                description="Already done",
+                acceptance_criteria=["done"],
+                status="completed",
+            )
+        ],
+        completed=False,
+        stage="reviewing",
+    )
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    (work / "state.json").write_text(json.dumps(state.dump()), encoding="utf-8")
+
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator=str(validator),
+        command=_fake_command("fail_if_called_agent.py"),
+        resume=True,
+    ))
+    assert result.exit_code == 0
+    assert marker.read_text(encoding="utf-8") == "ran"
 
 
 def test_execution_idle_after_change_goes_to_review(tmp_path, monkeypatch):

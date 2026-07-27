@@ -19,13 +19,14 @@ ai_task_runner.py      CLI parser and execute() entry
 defaults.py           Shared 24h default values
 runner_api.py         Public API and RunRequest validation
 runner_core.py        TaskRunner state machine
-runner_support.py     Prompts, parsers, validation helpers, protection
+runner_support.py     Prompt loading, parsers, validation helpers, protection
 runner_models.py      Task and RunState serialization
 agent.py              AgentClient session facade
 process_control.py    Subprocess output reader, timeout, process-tree kill
 backends/base.py      Backend interface
 backends/qwen.py      Qwen stream-json command/result/error parsing
 backends/opencode.py  OpenCode command/result parsing
+prompts/              Editable prompt templates
 ```
 
 ## State Machine
@@ -53,6 +54,8 @@ The idle watchdog starts mattering only after project changes or CLI output. If 
 The default backend is `qwen`, and its default command is `qwen.cmd`. Users can still override either value for another shell, backend, or local installation.
 
 ## Prompt Design
+
+Prompt text is stored as Markdown templates under `prompts/`. `runner_support.py` loads the templates and substitutes runtime fields; it should not be the place to tune model wording.
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 

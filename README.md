@@ -46,6 +46,8 @@ The runner does not generate code itself. The agent writes project files. The ru
 
 Within one live runner process, these failures are automatically retried: model errors, Qwen loop detection, session unavailable, timeouts, invalid review JSON, review failure, protected-file edits, validator failure, and no-progress attempts.
 
+When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
+
 For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. If activity stops after project changes or CLI output, the runner can stop the AI call and ask review/final validation to judge the saved files.
 
 The default execution idle watchdog is:
@@ -98,12 +100,13 @@ ai_task_runner.py        CLI parser and entry point
 defaults.py             Shared 24h defaults for CLI, API, and backends
 runner_api.py           Public Python API
 runner_core.py          Planning, task loop, review, validation, resume
-runner_support.py       Prompts, parsing, validators, protection, UI helpers
+runner_support.py       Prompt loading, parsing, validators, protection, UI helpers
 runner_models.py        State and task data models
 agent.py                Session-aware backend facade
 process_control.py      Process tree, timeout, and activity watchdog handling
 api.py / models.py      Backward-compatible import aliases
 QWEN.md / AGENTS.md     Project rules for Qwen Code and OpenCode
+prompts/                Editable runner prompt templates
 backends/               Qwen and OpenCode adapters
 examples/               Small reusable sample projects
 smoke/                  Real Qwen smoke cases and validators
@@ -125,6 +128,18 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `116 passed, 1 skipped`.
+Latest local result: `124 passed, 1 skipped`.
 
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
+
+## Prompt Templates
+
+Runner prompts live in `prompts/`:
+
+- `rules.md` and `planning_rules.md`: shared hard rules
+- `plan.md`: TODO planning
+- `execution.md`: current-task execution
+- `review.md`: read-only task review
+- `ai_validator.md`: AI final validation
+
+Edit these files to tune model behavior. Keep the core phase phrases such as `Plan only the remaining work`, `Execute only the current task`, `Review only`, and `fresh independent session`, because integrations and tests use them to identify stages.

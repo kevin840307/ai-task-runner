@@ -54,6 +54,9 @@ elif "Execute only the current task" in prompt:
     if scenario == "execution_model_error" and n <= 3:
         print("stable tool failure")
         raise SystemExit(7)
+    if scenario == "execution_model_error_no_change_forever":
+        print("stable tool failure without project changes")
+        raise SystemExit(7)
     if scenario == "execution_error_after_change":
         (root / "done.txt").write_text("done", encoding="utf-8")
         print("failed after writing")

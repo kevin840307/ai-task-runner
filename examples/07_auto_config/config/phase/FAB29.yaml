@@ -1,0 +1,12 @@
+# Phase-specific configuration for FAB29
+# This file provides phase-level overrides
+
+# Phase configuration
+phase:
+  name: FAB29
+  version: 1.0
+
+# Additional phase-specific settings
+phase-settings:
+  timeout: 300
+  retries: 3

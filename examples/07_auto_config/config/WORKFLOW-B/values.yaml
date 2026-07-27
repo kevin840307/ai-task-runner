@@ -1,0 +1,58 @@
+# Global render matrix and shared configuration for WORKFLOW-B
+# This file contains common values that should be centralized
+
+# Render matrix - defines output patterns and template mapping
+render_targets:
+  WORKFLOW-B:
+    name: WORKFLOW-B
+    target_family: FAB29
+    output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+    apps:
+      - appA
+      - appB
+      - appC
+      - appD
+      - appE
+    versions:
+      - v512
+      - v604
+    profiles:
+      - prod
+      - staging
+
+# Centralized shared lists (to avoid duplication)
+apps:
+  - appA
+  - appB
+  - appC
+  - appD
+  - appE
+
+versions:
+  - v512
+  - v604
+
+# Default template mapping
+template_map:
+  - output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+  - output_type: xml
+    template: output.xml.j2
+    templates:
+      - output.yaml.jinja
+      - output.yml.jinja2
+
+# Default output patterns
+output_patterns:
+  - name: default
+    format: yaml
+    template: output.yaml.j2

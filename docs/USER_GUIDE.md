@@ -51,7 +51,7 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 ## What Retries
 
-The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. Final Validator must PASS before the run is marked completed.
+The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
 ## Validators
 

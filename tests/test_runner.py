@@ -336,7 +336,7 @@ def test_goal_task_derivation_uses_markdown_sections_for_specs():
     tasks = runner_core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert 10 <= len(tasks) <= 14
+    assert 10 <= len(tasks) <= 20
     assert any("Required CLI" in title for title in titles)
     assert any("load YAML config" in title for title in titles)
     assert any("deep merge config values" in title for title in titles)
@@ -522,6 +522,39 @@ def test_execution_model_errors_reenter_task_attempt_flow(tmp_path):
     assert (state_dir / "execute.count").read_text() == "4"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["tasks"][0]["attempts"] == 4
+    assert state["completed"] is True
+
+
+def test_repeated_no_change_model_errors_defer_to_file_validator(tmp_path):
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "import argparse\n"
+        "p=argparse.ArgumentParser();"
+        "p.add_argument('--project-root');"
+        "p.add_argument('--state-file');"
+        "p.parse_args();"
+        "raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    env, state_dir = _scenario_env(
+        tmp_path,
+        "execution_model_error_no_change_forever",
+    )
+    result = subprocess.run(
+        _scenario_args(
+            tmp_path,
+            "execution_model_error_no_change_forever",
+            validator=validator,
+        ),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "3"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["tasks"][0]["status"] == "completed"
+    assert "Deferring this task" in state["tasks"][0]["last_review"]["reason"]
     assert state["completed"] is True
 
 

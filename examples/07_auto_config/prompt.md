@@ -38,6 +38,13 @@ is needed.
 
 `rander.py` must not contain app-specific, FAB-specific, env-specific, YAML-output-specific, XML-output-specific, or answer-file business logic. Output paths and template choices must come from config values.
 
+Implementation contract:
+
+- `rander.py` must not branch on specific app, workflow, target, env, version, profile, filename, or answer names.
+- `rander.py` must not contain fixed app/profile/version loops such as `if app == "..."` or `for profile in ["p1", ...]`.
+- apps, services, versions, profiles, file names, template names, and output paths must come from config values or a central render matrix.
+- templates may describe output file formats, but Python code must stay generic.
+
 If the sample names are moved to different workflow/target/env names, or if app
 names are replaced, the renderer should still work as long as the config values
 and templates define those names. Adding or removing apps should be config-driven,
@@ -54,6 +61,11 @@ Use this order. Later files override earlier files:
 5. env override from `config/{workflow}/{env}.yaml` or `config/{workflow}/{target}/{env}.yaml`
 
 If a file is missing, skip it. Do not fail only because an optional layer is absent.
+
+Config values are normally deep-merged when both old and new values are non-empty
+dictionaries. Any later value that is a list, an empty dictionary, an empty list,
+or `null`/`None` is an explicit replacement and must overwrite the earlier value
+instead of being merged recursively.
 
 ## Config Design Goal
 
@@ -73,6 +85,10 @@ Use Python Jinja2 templates under `Template/`.
 Templates should include dynamic placeholders such as `{{ value }}`. Do not put final answer files directly in `Template/` without placeholders.
 
 ## Expected Result
+
+`ans/` is read-only validation fixture data. Do not create, edit, delete, move,
+or copy files under `ans/`. Generated files must be written only under the
+`--output` directory.
 
 For every sample root under this layout:
 

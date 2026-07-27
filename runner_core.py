@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -142,6 +143,7 @@ QWEN_RUNTIME_EXCLUDED_TOOLS = (
 )
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
+REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 
@@ -627,6 +629,7 @@ class TaskRunner:
         )
         self.work = self.root / args.work_dir
         self.state_file = self.work / "state.json"
+        self.state_backup_file = self._state_backup_file()
 
         self._validate_paths()
         cleanup_stale_artifacts(self.work)
@@ -689,7 +692,9 @@ class TaskRunner:
             raise RunnerError("invalid project root or validator")
 
     def _build_protected_files(self) -> list[Path]:
+        goal_file = getattr(self.args, "goal_file", None)
         paths = [
+            *([Path(goal_file).resolve()] if goal_file else []),
             *([self.validator] if self.validator else []),
             self.state_file,
             *runner_source_files(),
@@ -700,6 +705,7 @@ class TaskRunner:
 
     def _load_or_create_state(self) -> RunState:
         if self.args.resume:
+            self._restore_state_backup()
             if not self.state_file.is_file():
                 raise RunnerError(
                     f"resume state not found: {self.state_file}"
@@ -734,13 +740,38 @@ class TaskRunner:
         )
 
     def _save_state(self) -> None:
-        write_json(self.state_file, self.state.dump())
+        data = self.state.dump()
+        write_json(self.state_file, data)
+        write_json(self.state_backup_file, data)
+
+    def _state_backup_file(self) -> Path:
+        key = hashlib.sha256(str(self.work).lower().encode("utf-8")).hexdigest()[:24]
+        return Path(tempfile.gettempdir()) / "ai-task-runner-state" / key / "state.json"
+
+    def _restore_state_backup(self) -> None:
+        if not self.state_backup_file.is_file():
+            return
+        try:
+            payload = json.loads(self.state_backup_file.read_text(encoding="utf-8"))
+            state = RunState.load(payload)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return
+        if Path(state.project_root).resolve() != self.root:
+            return
+        write_json(self.state_file, payload)
 
     def _save_session(self) -> None:
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
 
     def _plan_if_needed(self) -> None:
+        if (
+            self.state.tasks
+            and self.state.current >= len(self.state.tasks)
+            and all(task.status == "completed" for task in self.state.tasks)
+            and self.state.stage != "validator_failed"
+        ):
+            return
         if self.state.tasks and self.state.current < len(self.state.tasks):
             return
 
@@ -893,6 +924,16 @@ class TaskRunner:
                 )
                 task.status = "pending"
                 task.stagnant_attempts += 1
+                if self._should_defer_model_error_to_validator(task):
+                    review = self._defer_model_error_to_validator(task, error)
+                    result = self._handle_review_result(
+                        task,
+                        review,
+                        project_changed=False,
+                    )
+                    if result is not None:
+                        return result
+                    continue
                 self.state.agent_session_id = self.agent.session_id
                 self._save_state()
                 self.ui.set(
@@ -1031,6 +1072,26 @@ class TaskRunner:
         )
         return {"completed": True, "reason": reason, "missing_items": []}
 
+    def _should_defer_model_error_to_validator(self, task: Task) -> bool:
+        return (
+            self.validator is not None
+            and not self.ai_validation
+            and task.stagnant_attempts >= NO_PROGRESS_LIMIT
+        )
+
+    def _defer_model_error_to_validator(
+        self,
+        task: Task,
+        error: RunnerError,
+    ) -> dict:
+        reason = (
+            "Execution model call failed repeatedly without project changes. "
+            "Deferring this task to the configured Python final validator so "
+            "the run can continue instead of looping on one model failure. "
+            f"Task: {task.title}. Failure: {str(error)[-500:]}"
+        )
+        return {"completed": True, "reason": reason, "missing_items": []}
+
     def _execute_current_task(self, task: Task) -> str:
         strategy_note = ""
         if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
@@ -1109,6 +1170,7 @@ class TaskRunner:
                 self.root,
                 self.work,
                 self.protected,
+                timeout=self.args.planning_timeout,
             )
             changed = [*protected_changed, *project_changed]
             if changed:
@@ -1125,7 +1187,11 @@ class TaskRunner:
             task.title,
             self.args.retry_wait,
             self.args.retry_max_wait,
-            MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
+            (
+                MODEL_CALL_ERRORS_BEFORE_TASK_RETRY
+                if self.ai_validation
+                else REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW
+            ),
         )
 
     def _validate_cycle(self) -> int | None:

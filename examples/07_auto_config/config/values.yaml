@@ -1,0 +1,122 @@
+# Global render matrix and shared configuration
+# This file contains common values that should be centralized
+
+# Render matrix - defines output patterns and template mapping
+render_targets:
+  WORKFLOW-A:
+    name: WORKFLOW-A
+    target_family: FAB29
+    output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+    apps:
+      - appA
+      - appB
+      - appC
+      - appD
+      - appE
+    versions:
+      - v512
+      - v604
+    profiles:
+      - prod
+      - staging
+
+# Centralized shared lists (to avoid duplication)
+apps:
+  - appA
+  - appB
+  - appC
+  - appD
+  - appE
+
+versions:
+  - v512
+  - v604
+
+# Default template mapping
+template_map:
+  - output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+  - output_type: xml
+    template: output.xml.j2
+    templates:
+      - output.yaml.jinja
+      - output.yml.jinja2
+
+# Default output patterns
+output_patterns:
+  - name: default
+    format: yaml
+    template: output.yaml.j2
+
+# Special apps that use special config patterns
+special_apps:
+  - appA
+
+# P values for special apps
+p_values:
+  - p1
+  - p2
+  - p3
+
+# Shared app names
+shared_apps:
+  - appA
+  - appB
+  - appC
+  - appD
+  - appE
+
+# Shared version names
+shared_versions:
+  - v512
+  - v604
+
+# Shared profile names
+shared_profiles:
+  - prod
+  - staging
+
+# Shared gateway base
+shared_gateway_base: http://fz1.fab29-prod.com
+
+# Shared namespace name
+shared_namespace_name: name-a
+
+# Shared app names for flow-deploy
+flow_apps:
+  - appAA
+  - appBB
+  - appEE
+  - appFA
+
+# Flow version names
+flow_versions:
+  - v407
+  - v412
+
+# Output file names for app configs
+app_output_files:
+  application: application.yml
+  log: log.xml
+  application-p: application-{p}.yml
+
+# Merge probe for testing deep merge semantics
+__merge_probe__:
+  kept: global-kept
+  nested:
+    a: global-a
+    b: global-b
+  list_value: ["global-list"]
+  empty_dict_value:
+    old: must-be-replaced
+  null_value:
+    old: must-be-replaced

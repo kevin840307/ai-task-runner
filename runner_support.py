@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import time
+from string import Template as PromptTemplate
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence, TypeVar
 
@@ -21,6 +22,7 @@ from version import __version__
 
 
 T = TypeVar("T")
+PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
 
 
 READONLY_EXCLUDE_DIRS = frozenset({
@@ -121,6 +123,33 @@ def restore_changed(
     return changed
 
 
+def changed_snapshot_paths(
+    file_snapshot: dict[Path, tuple[str | None, bytes | None]],
+) -> list[str]:
+    """Return protected files that differ from a prior snapshot."""
+    return [
+        str(path)
+        for path, (old_hash, _old_data) in file_snapshot.items()
+        if digest(path) != old_hash
+    ]
+
+
+def protected_change_detector(
+    file_snapshot: dict[Path, tuple[str | None, bytes | None]],
+    change_detected: Callable[[], bool] | None,
+) -> Callable[[], bool]:
+    def changed() -> bool:
+        protected_changed = changed_snapshot_paths(file_snapshot)
+        if protected_changed:
+            raise RunnerError(
+                "protected file modified during model call: "
+                + ", ".join(protected_changed)
+            )
+        return change_detected() if change_detected is not None else False
+
+    return changed
+
+
 def parse_json(text: str) -> dict[str, Any]:
     """Extract the first valid JSON object from plain or fenced model output."""
     candidates = [
@@ -192,7 +221,7 @@ def protected_ask(
         output = agent.ask(
             prompt,
             idle_timeout_after_change,
-            change_detected,
+            protected_change_detector(file_snapshot, change_detected),
         )
     finally:
         changed = restore_changed(file_snapshot)
@@ -359,11 +388,12 @@ def readonly_ask(
     root: Path,
     work: Path,
     protected: Sequence[Path],
+    timeout: int | None = None,
 ) -> tuple[str, list[str], list[str]]:
     file_snapshot = snapshot(protected)
     try:
         output, project_changed = readonly_project_call(
-            lambda: agent.ask(prompt),
+            lambda: agent.ask(prompt, timeout=timeout),
             root,
             work,
         )
@@ -392,37 +422,27 @@ def cleanup_stale_artifacts(
             continue
 
 
+def render_prompt_template(name: str, values: Mapping[str, Any]) -> str:
+    path = PROMPT_DIR / name
+    try:
+        template = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RunnerError(f"missing prompt template: {path}") from error
+    return PromptTemplate(template).safe_substitute(
+        {key: str(value) for key, value in values.items()}
+    )
+
+
 def rules(root: Path, protected: Sequence[Path]) -> str:
     protected_names = "\n".join(f"- {path}" for path in protected)
-    return f"""Hard rules:
-- You may READ files anywhere when necessary.
-- You may WRITE/CREATE/DELETE files only inside project root: {root}
-- Never modify these protected files:
-{protected_names}
-- Never modify runner state directly. Python owns task state.
-- Before planning or changing code, inspect the relevant project structure, entry points, dependencies, public interfaces, conventions, and existing tests.
-- Prefer the smallest maintainable change that fully satisfies the current task.
-- Prefer simple standard-library or existing project facilities over hand-written complex logic when they satisfy the goal and are safe to use.
-- Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
-- Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
-- Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
-- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
-"""
+    return render_prompt_template(
+        "rules.md",
+        {"root": root, "protected_names": protected_names},
+    )
 
 
 def planning_rules(work: Path) -> str:
-    return f"""Hard rules:
-- You may READ files anywhere when necessary.
-- During planning, write/create/delete files only inside runner work directory: {work}
-- Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
-- Python owns task order and completion state.
-- Inspect the relevant project structure, entry points, dependencies, public interfaces, conventions, and existing tests before planning.
-- Prefer the smallest maintainable change that fully satisfies the current task.
-- Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
-- Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
-- Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
-- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
-"""
+    return render_prompt_template("planning_rules.md", {"work": work})
 
 
 def task_spec(task: Task) -> dict[str, Any]:
@@ -451,39 +471,17 @@ def plan_prompt(
     }
     outline = project_outline(root)
     work_dir = work or root / ".ai-task-runner"
-    return planning_rules(work_dir) + f"""
-Plan only the remaining work for this goal:
-{goal}
-
-Project root to inspect:
-{root}
-
-Project files:
-{outline}
-
-Progress:
-{json.dumps(progress, ensure_ascii=False)}
-
-Use the project outline and progress above for planning; do not read files during planning.
-Choose task count from actual complexity; there is no limit.
-If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable.
-If the goal is a dense paragraph, first identify deliverables before choosing task count.
-If the goal implies multiple deliverables such as source files, CLI behavior, generated outputs, tests, validators, persistence, data formats, or documentation, split them into ordered tasks.
-Right-size the task list: trivial goals can be one task, small tools usually need a few deliverable-sized tasks, and broad goals need more tasks grouped by verifiable outcomes.
-Do not collapse a broad or multi-file goal into one "build everything" task.
-Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, or verifying work; put those into acceptance criteria instead.
-Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
-Avoid unrelated work in one task and tiny mechanical steps.
-If planning notes are written, they may be JSON or Markdown files only under this runner work directory: {work_dir}
-Prefer returning the final tasks JSON directly instead of writing files during planning.
-Do not create, edit, delete, or rename project implementation files during planning; implementation happens only after tasks are returned.
-Do not use Qwen todo tools during planning; Python owns task order and completion state.
-Do not implement, ask questions, or wait for input. Make reasonable assumptions from the project.
-Return at least one task. Never return an empty tasks array.
-
-Return only this JSON shape, without Markdown or explanation:
-{{"tasks":[{{"title":"Implement requested change","description":"Make the smallest maintainable project change needed to satisfy the goal.","acceptance_criteria":["The requested behavior is implemented","Relevant checks pass"]}}]}}
-"""
+    return render_prompt_template(
+        "plan.md",
+        {
+            "planning_rules": planning_rules(work_dir),
+            "goal": goal,
+            "root": root,
+            "outline": outline,
+            "progress_json": json.dumps(progress, ensure_ascii=False),
+            "work_dir": work_dir,
+        },
+    )
 
 
 def execution_prompt(
@@ -513,29 +511,17 @@ def execution_prompt(
         if validator_hint
         else ""
     )
-    return rules(root, protected) + f"""
-Execute only the current task below. Do not start later tasks.
-Use this order: inspect relevant project files, make the smallest maintainable change, run focused local checks, then fix the first failure if any.
-If Run context includes validator_feedback, treat it as authoritative and fix the reported problem before doing other work.
-Create only files that are required by the task or clearly useful for validation.
-Do not create scripts, commands, or files whose purpose is to update runner state, task status, reviews, attempts, or `.ai-task-runner`; only implement the requested project behavior.
-Prefer file edit/write tools for creating or changing files. Use shell commands mainly for checks, tests, and small local scripts.
-Do not delegate to subagents, background agents, scaffolding skills, or app-generation skills. Complete the current task directly in this session.
-Do not use computer-use, desktop, browser, or app-launch tools; this runner works through project files and shell checks.
-If a required file or command is missing, create or fix it instead of repeating the same read/check command. Do not call the same tool repeatedly with identical arguments after it returns the same result.
-You may read validator files to understand expected behavior, but never modify them or hardcode validator internals. Python runs the final validator after review; use validator feedback and the validator reference only to guide the project implementation.
-Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
-
-Run context:
-{json.dumps(context, ensure_ascii=False)}
-{validator_reference}
-
-Task:
-{json.dumps(task_spec(task), ensure_ascii=False)}
-{previous}
-{strategy}
-Finish with a factual summary of changed files and checks.
-"""
+    return render_prompt_template(
+        "execution.md",
+        {
+            "rules": rules(root, protected),
+            "context_json": json.dumps(context, ensure_ascii=False),
+            "validator_reference": validator_reference,
+            "task_json": json.dumps(task_spec(task), ensure_ascii=False),
+            "previous": previous,
+            "strategy": strategy,
+        },
+    )
 
 
 def review_prompt(
@@ -551,21 +537,15 @@ def review_prompt(
         if feedback
         else ""
     )
-    return rules(root, protected) + f"""
-Review only. Do not edit project files or ask questions.
-Inspect the project and verify every acceptance criterion. Also verify the change is scoped, maintainable, and preserves relevant existing behavior. You may run checks; generated artifacts are temporary and will be discarded.
-If validator feedback is provided, it is authoritative evidence from the final check. Do not mark the task complete unless the reported failure is fixed or clearly impossible.
-
-Task:
-{json.dumps(task_spec(task), ensure_ascii=False)}
-
-Executor report:
-{output[-5000:]}
-{validator_section}
-
-Return only JSON, without Markdown or explanation:
-{{"completed":true,"reason":"All acceptance criteria are satisfied.","missing_items":[]}}
-"""
+    return render_prompt_template(
+        "review.md",
+        {
+            "rules": rules(root, protected),
+            "task_json": json.dumps(task_spec(task), ensure_ascii=False),
+            "output": output[-5000:],
+            "validator_section": validator_section,
+        },
+    )
 
 
 def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
@@ -596,15 +576,14 @@ def ai_validator_prompt(
         if custom
         else ""
     )
-    return rules(root, protected) + f"""
-Final validation in a fresh independent session. Do not edit project files.
-Goal: {goal}
-Inspect the current project and decide whether the goal is fully complete and usable.
-Check implementation completeness, consistency, likely defects, and relevant tests or build results. You may run checks; generated artifacts are temporary and will be discarded.{extra}
-Do not ask questions or wait for input. Make a verdict from available evidence.
-Return only JSON, without Markdown or explanation:
-{{"passed":true,"reason":"The goal is fully implemented and verified.","missing_items":[]}}
-"""
+    return render_prompt_template(
+        "ai_validator.md",
+        {
+            "rules": rules(root, protected),
+            "goal": goal,
+            "extra": extra,
+        },
+    )
 
 
 class LiveUI:

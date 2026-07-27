@@ -62,7 +62,13 @@ class AgentClient:
         prompt: str,
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
+        timeout: int | None = None,
     ) -> str:
+        previous_timeout = self.timeout
+        previous_backend_timeout = self._backend.timeout
+        if timeout is not None:
+            self.timeout = timeout
+            self._backend.timeout = timeout
         try:
             result = self._backend.ask(
                 prompt,
@@ -80,6 +86,9 @@ class AgentClient:
                     "a new session will continue from runner state"
                 ) from error
             raise AgentError(message) from error
+        finally:
+            self.timeout = previous_timeout
+            self._backend.timeout = previous_backend_timeout
         if result.session_id and not self.session_id:
             self.session_id = result.session_id
         return result.text

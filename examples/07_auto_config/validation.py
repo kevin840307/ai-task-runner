@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -16,6 +18,31 @@ import yaml
 
 
 GENERIC_FORBIDDEN_SOURCE_TOKENS = ("ans",)
+GENERIC_ALLOWED_SOURCE_TOKENS = {
+    "config",
+    "configs",
+    "data",
+    "default",
+    "defaults",
+    "env",
+    "environment",
+    "file",
+    "files",
+    "id",
+    "matrix",
+    "name",
+    "output",
+    "outputs",
+    "path",
+    "paths",
+    "root",
+    "target",
+    "template",
+    "templates",
+    "value",
+    "values",
+    "workflow",
+}
 CENTRAL_LIST_KEYS = (
     "apps",
     "applications",
@@ -26,6 +53,7 @@ CENTRAL_LIST_KEYS = (
     "phases",
 )
 RENDER_MATRIX_KEYS = ("render_targets", "outputs", "files")
+ANS_MANIFEST_SHA256 = "f885a260370cfab71475ade45e27ae7b1bb527be297e64affac2ec7f2ae19764"
 
 
 @dataclass(frozen=True)
@@ -44,10 +72,12 @@ def main() -> int:
     failures: list[str] = []
 
     checks = (
+        check_ans_fixture_unchanged,
         check_required_files,
         check_renderer_source,
         check_templates,
         check_config_shape,
+        check_deep_merge_semantics,
         check_rendered_output,
         check_config_mutation_changes_output,
     )
@@ -119,6 +149,48 @@ def find_samples(root: Path) -> list[Sample]:
     return samples
 
 
+def check_ans_fixture_unchanged(root: Path, samples: list[Sample]) -> None:
+    del samples
+    manifest_path = root / "ans_manifest.json"
+    assert manifest_path.is_file(), "ans_manifest.json is missing"
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    actual_manifest_hash = hashlib.sha256(
+        manifest_text.encode("utf-8")
+    ).hexdigest()
+    assert actual_manifest_hash == ANS_MANIFEST_SHA256, (
+        "ans_manifest.json was modified. The answer fixture is read-only; "
+        "restore the manifest instead of changing expected answers."
+    )
+    expected = json.loads(manifest_text)
+    assert isinstance(expected, dict), "ans_manifest.json must be a JSON object"
+
+    ans_root = root / "ans"
+    actual: dict[str, dict[str, Any]] = {}
+    for path in sorted(ans_root.rglob("*")):
+        if not path.is_file():
+            continue
+        relative_path = path.relative_to(ans_root).as_posix()
+        data = path.read_bytes()
+        actual[relative_path] = {
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "size": len(data),
+        }
+
+    expected_paths = set(expected)
+    actual_paths = set(actual)
+    missing = sorted(expected_paths - actual_paths)
+    extra = sorted(actual_paths - expected_paths)
+    changed = sorted(
+        path
+        for path in expected_paths & actual_paths
+        if expected[path] != actual[path]
+    )
+    assert not (missing or extra or changed), (
+        "ans fixture changed; ans/ is read-only validation data. "
+        f"missing={missing[:20]}, extra={extra[:20]}, changed={changed[:20]}"
+    )
+
+
 def check_required_files(root: Path, samples: list[Sample]) -> None:
     for path in (root / "rander.py", root / "config" / "values.yaml"):
         assert path.is_file(), f"missing required file: {relative(root, path)}"
@@ -165,6 +237,19 @@ def check_renderer_source(root: Path, samples: list[Sample]) -> None:
     ast.parse(source)
     assert "jinja2" in source.lower(), "rander.py must use Jinja2"
 
+    specific_tokens = {
+        token.lower()
+        for sample in samples
+        for token in forbidden_source_tokens(sample)
+    }
+    literal_hits = hardcoded_literal_hits(source, specific_tokens)
+    assert not literal_hits, (
+        "rander.py contains sample-derived literal names. Do not branch or loop "
+        "over specific app/workflow/target/env/version/profile/file names in "
+        "Python; move those names to config values or a central render matrix. "
+        "Examples: " + "; ".join(literal_hits[:12])
+    )
+
     lowered = source.lower()
     tokens = sorted(
         {token for sample in samples for token in forbidden_source_tokens(sample)},
@@ -172,9 +257,28 @@ def check_renderer_source(root: Path, samples: list[Sample]) -> None:
     )
     for token in tokens:
         assert token.lower() not in lowered, (
-            "rander.py appears to hardcode answer-specific token: "
-            f"{token!r}"
+            "rander.py appears to hardcode answer-specific token "
+            f"{token!r}. Use config-driven iteration instead of Python "
+            "branches or fixed lists for apps, versions, profiles, file names, "
+            "workflows, targets, or environments."
         )
+
+
+def hardcoded_literal_hits(source: str, forbidden_lower: set[str]) -> list[str]:
+    hits: list[str] = []
+    tree = ast.parse(source)
+    lines = source.splitlines()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            token = node.value.strip()
+            if token.lower() in forbidden_lower:
+                hits.append(format_literal_hit(token, node.lineno, lines))
+    return sorted(set(hits))
+
+
+def format_literal_hit(token: str, lineno: int, lines: list[str]) -> str:
+    line = lines[lineno - 1].strip() if 0 < lineno <= len(lines) else ""
+    return f"line {lineno}: {token!r} in {line[:120]}"
 
 
 def forbidden_source_tokens(sample: Sample) -> list[str]:
@@ -189,7 +293,10 @@ def forbidden_source_tokens(sample: Sample) -> list[str]:
             if not looks_generic_path_part(part):
                 tokens.add(part)
     tokens.update(
-        value for value in scalar_strings(values) if is_specific_scalar_token(value)
+        value
+        for value in scalar_values(values)
+        if is_specific_scalar_token(value)
+        and value.lower() not in GENERIC_ALLOWED_SOURCE_TOKENS
     )
     return sorted(tokens, key=lambda value: (len(value), value))
 
@@ -229,6 +336,80 @@ def check_config_shape(root: Path, samples: list[Sample]) -> None:
     assert not repeated, (
         "common app/version/profile tokens are repeated across too many config files: "
         + ", ".join(repeated)
+    )
+
+
+def check_deep_merge_semantics(root: Path, samples: list[Sample]) -> None:
+    sample = samples[0]
+    with tempfile.TemporaryDirectory(prefix="auto-config-merge-") as temp:
+        copied = Path(temp) / "project"
+        shutil.copytree(
+            root,
+            copied,
+            ignore=shutil.ignore_patterns(".ai-task-runner", "output", "__pycache__"),
+        )
+        copied_sample = Sample(
+            sample.workflow,
+            sample.target,
+            sample.target_family,
+            sample.env,
+            copied / sample.expected_root.relative_to(root),
+        )
+        write_merge_probe(copied / "config" / "values.yaml", {
+            "__merge_probe__": {
+                "kept": "global-kept",
+                "nested": {"a": "global-a", "b": "global-b"},
+                "list_value": ["global-list"],
+                "empty_dict_value": {"old": "must-be-replaced"},
+                "null_value": {"old": "must-be-replaced"},
+            }
+        })
+        write_merge_probe(copied / "config" / sample.workflow / "values.yaml", {
+            "__merge_probe__": {
+                "nested": {"b": "workflow-b", "c": "workflow-c"},
+                "list_value": ["workflow-list"],
+                "empty_dict_value": {},
+                "null_value": None,
+            }
+        })
+        output_root = copied / "merge-output"
+        run_renderer(copied, output_root, copied_sample)
+        rendered = load_yaml(
+            output_root / sample.workflow / sample.target / sample.env / "values.yaml"
+        )
+        probe = rendered.get("__merge_probe__") if isinstance(rendered, dict) else None
+        assert isinstance(probe, dict), (
+            "merged config values should flow into generated values.yaml, including "
+            "the neutral __merge_probe__ test key"
+        )
+        assert probe.get("kept") == "global-kept", (
+            "deep merge must preserve earlier dictionary keys when later layers "
+            "do not replace them"
+        )
+        assert probe.get("nested") == {
+            "a": "global-a",
+            "b": "workflow-b",
+            "c": "workflow-c",
+        }, "non-empty dictionaries must deep merge with later values overriding keys"
+        assert probe.get("list_value") == ["workflow-list"], (
+            "lists from later layers must replace earlier lists, not concatenate or merge"
+        )
+        assert probe.get("empty_dict_value") == {}, (
+            "an empty dictionary in a later layer is an explicit replacement"
+        )
+        assert probe.get("null_value") is None, (
+            "null/None in a later layer is an explicit replacement"
+        )
+
+
+def write_merge_probe(path: Path, values: dict[str, Any]) -> None:
+    data = load_yaml(path) if path.is_file() else {}
+    assert isinstance(data, dict), f"config file must be a YAML object: {path}"
+    data.update(values)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
     )
 
 
@@ -403,12 +584,24 @@ def scalar_strings(value: Any) -> Iterable[str]:
         yield value
 
 
+def scalar_values(value: Any) -> Iterable[str]:
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from scalar_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from scalar_values(child)
+    elif isinstance(value, str):
+        yield value
+
+
 def repeated_tokens_across_files(paths: Iterable[Path], samples: list[Sample]) -> list[str]:
     tokens = {
         value
         for sample in samples
-        for value in scalar_strings(load_yaml(sample.expected_root / "values.yaml"))
+        for value in scalar_values(load_yaml(sample.expected_root / "values.yaml"))
         if is_repetition_candidate(value)
+        and value.lower() not in GENERIC_ALLOWED_SOURCE_TOKENS
     }
     repeated: list[str] = []
     for token in tokens:

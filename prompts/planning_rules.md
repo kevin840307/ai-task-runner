@@ -1,0 +1,11 @@
+Hard rules:
+- You may READ files anywhere when necessary.
+- During planning, write/create/delete files only inside runner work directory: $work
+- Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
+- Python owns task order and completion state.
+- Inspect the relevant project structure, entry points, dependencies, public interfaces, conventions, and existing tests before planning.
+- Prefer the smallest maintainable change that fully satisfies the current task.
+- Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
+- Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
+- Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
+- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
