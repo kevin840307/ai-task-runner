@@ -72,6 +72,8 @@ Validator files are protected. Agents may read validator files to understand exp
 
 When the same task makes no project changes while validator feedback is still present, the task is not accepted. When repeated no-progress suggests a bad session, the runner clears the session and retries from saved state.
 
+Validator stdout and stderr do not need a schema. The runner stores bounded feedback, currently 20,000 characters, with head and tail preserved for long logs.
+
 ## Backend Rule Files
 
 - Qwen Code: `QWEN.md`

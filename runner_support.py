@@ -47,6 +47,18 @@ NO_PROGRESS_LIMIT = 3
 STALE_TEMP_SECONDS = 7 * 24 * 60 * 60
 
 
+def bounded_text(text: str, limit: int) -> str:
+    """Keep useful start and end context without letting state grow forever."""
+    if len(text) <= limit:
+        return text
+    if limit < 100:
+        return text[-limit:]
+    head = limit // 2
+    marker = f"\n... omitted {len(text) - limit} characters ...\n"
+    tail = max(0, limit - head - len(marker))
+    return text[:head] + marker + text[-tail:]
+
+
 def runner_source_files() -> list[Path]:
     """Return all Python files that implement the runner itself."""
     root = Path(__file__).resolve().parent
@@ -454,9 +466,11 @@ Progress:
 
 Use the project outline and progress above for planning; do not read files during planning.
 Choose task count from actual complexity; there is no limit.
-If the goal lists numbered deliverables, usually create one ordered task per deliverable.
-If the goal implies multiple deliverables such as source files, CLI behavior, generated outputs, tests, validators, or documentation, split them into ordered tasks.
+If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable.
+If the goal is a dense paragraph, first identify deliverables before choosing task count.
+If the goal implies multiple deliverables such as source files, CLI behavior, generated outputs, tests, validators, persistence, data formats, or documentation, split them into ordered tasks.
 Right-size the task list: trivial goals can be one task, small tools usually need a few deliverable-sized tasks, and broad goals need more tasks grouped by verifiable outcomes.
+Do not collapse a broad or multi-file goal into one "build everything" task.
 Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, or verifying work; put those into acceptance criteria instead.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
 Avoid unrelated work in one task and tiny mechanical steps.
@@ -567,7 +581,7 @@ def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
         "generated output or validator-created sample file, fix the program "
         "behavior that produces it; do not only edit the current generated "
         "file.\n"
-        + text[-limit:]
+        + bounded_text(text, limit)
     )
 
 

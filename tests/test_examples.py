@@ -15,6 +15,7 @@ EXPECTED = {
     "04_ai_validator_bugfix",
     "05_yaml_release_pipeline",
     "06_yaml_data_migration_pipeline",
+    "07_auto_config",
 }
 
 
@@ -23,6 +24,14 @@ def test_example_inventory_and_launchers():
     assert found == EXPECTED
     for name in EXPECTED:
         folder = EXAMPLES / name
+        if name == "07_auto_config":
+            assert (folder / "prompt.md").is_file()
+            assert (folder / "validation.py").is_file()
+            assert (folder / "rander.py").is_file()
+            assert (folder / "ans").is_dir()
+            assert (folder / "config").is_dir()
+            assert (folder / "Template").is_dir()
+            continue
         assert (folder / "project").is_dir()
         assert (folder / "run_qwen.ps1").is_file()
         assert (folder / "run_opencode.ps1").is_file()

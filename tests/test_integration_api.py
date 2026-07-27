@@ -223,10 +223,37 @@ def test_shared_run_entry_accepts_json_like_request(tmp_path):
     assert any(event["type"] == "runner.status" for event in events)
 
 
+def test_goal_file_is_loaded_by_public_request(tmp_path):
+    goal_file = tmp_path / "goal.md"
+    goal_file.write_bytes(
+        b"\xef\xbb\xbfBuild from a long goal file.\n\nCreate the marker."
+    )
+    result = run(
+        RunRequest(
+            goal_file=str(goal_file),
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+            retry_wait=0,
+            retry_max_wait=0,
+        )
+    )
+
+    assert result.completed is True
+    assert "Build from a long goal file" in result.states[0]["goal"]
+    assert not result.states[0]["goal"].startswith("\ufeff")
+
+
 @pytest.mark.parametrize(
     ("run_request", "message"),
     [
-        (RunRequest(), "goal is required"),
+        (RunRequest(), "goal or goal_file is required"),
+        (
+            RunRequest(goal="x", goal_file="goal.md", validator="ai"),
+            "either goal or goal_file",
+        ),
         (
             RunRequest(goal="x", validator="ai", resume=True, force_new=True),
             "cannot both be true",

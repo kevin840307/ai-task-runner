@@ -4,6 +4,8 @@ AI Task Runner is a small retry/review/validator loop around coding agents. The 
 
 Default CLI behavior is Qwen Code through `qwen.cmd` with unlimited task attempts and validator cycles. A normal run only needs `--project-root`, `--goal`, and `--validator`.
 
+Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing the whole prompt into one shell argument. The loaded text becomes the persisted state goal.
+
 ## Closed Loop
 
 1. Understand the project and goal.
@@ -35,6 +37,12 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
 Agents may read validator files to understand expected behavior, but they must not modify validator files or hardcode validator internals. Python owns final validator execution and runner state. Validator feedback is authoritative, and fallback planning creates a single repair task after validator failure.
+
+Planning is intentionally right-sized. If the model returns too few tasks for a broad goal, deterministic fallback can split numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, and documentation.
+
+## Validator Output
+
+File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.
 
 ## Rule Files
 

@@ -36,6 +36,10 @@ from runner_support import (
 def parser() -> argparse.ArgumentParser:
     command_parser = argparse.ArgumentParser(description="Reusable AI task runner")
     command_parser.add_argument("--goal")
+    command_parser.add_argument(
+        "--goal-file",
+        help="UTF-8 text file containing the goal; mutually exclusive with --goal",
+    )
     command_parser.add_argument("--project-root", default=".")
     command_parser.add_argument("--script", help="YAML array of prompt + validator items")
     command_parser.add_argument("--validator", help="validator.py path or literal 'ai'")
@@ -115,6 +119,11 @@ def parser() -> argparse.ArgumentParser:
     )
     command_parser.add_argument("--resume", action="store_true")
     command_parser.add_argument("--force-new", action="store_true")
+    command_parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="create or refresh the TODO plan, save state, then exit before execution",
+    )
     return command_parser
 
 

@@ -28,6 +28,7 @@ class RunRequest:
     """Serializable request shared by every integration surface."""
 
     goal: str | None = None
+    goal_file: str | None = None
     project_root: str = "."
     script: str | None = None
     validator: str | None = None
@@ -49,6 +50,7 @@ class RunRequest:
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
+    plan_only: bool = False
     human_output: bool = False
     json_events: bool = False
 
@@ -57,6 +59,7 @@ class RunRequest:
         """Convert CLI arguments into the canonical request model."""
         return cls(
             goal=args.goal,
+            goal_file=args.goal_file,
             project_root=args.project_root,
             script=args.script,
             validator=args.validator,
@@ -78,6 +81,7 @@ class RunRequest:
             work_dir=args.work_dir,
             resume=args.resume,
             force_new=args.force_new,
+            plan_only=args.plan_only,
             human_output=not args.json_events,
             json_events=args.json_events,
         )
@@ -97,7 +101,8 @@ class RunRequest:
     ) -> argparse.Namespace:
         """Adapt the public request to the existing core execution contract."""
         return argparse.Namespace(
-            goal=self.goal,
+            goal=self._effective_goal(),
+            goal_file=self.goal_file,
             project_root=self.project_root,
             script=self.script,
             validator=self.validator,
@@ -119,6 +124,7 @@ class RunRequest:
             work_dir=self.work_dir,
             resume=self.resume,
             force_new=self.force_new,
+            plan_only=self.plan_only,
             json_events=self.json_events,
             human_output=self.human_output,
             event_callback=on_event,
@@ -128,14 +134,16 @@ class RunRequest:
         """Fail fast with clear errors for every integration surface."""
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
-        if self.script and self.goal:
-            raise ValueError("use either goal or script, not both")
+        if self.goal and self.goal_file:
+            raise ValueError("use either goal or goal_file, not both")
+        if self.script and (self.goal or self.goal_file):
+            raise ValueError("use either goal/goal_file or script, not both")
         if (
             not self.script
             and not self.resume
-            and not (isinstance(self.goal, str) and self.goal.strip())
+            and not self._effective_goal().strip()
         ):
-            raise ValueError("goal is required unless script or resume is used")
+            raise ValueError("goal or goal_file is required unless script or resume is used")
         if not self.script and not (
             isinstance(self.validator, str) and self.validator.strip()
         ):
@@ -179,6 +187,16 @@ class RunRequest:
                 raise ValueError(f"{name} must be a non-negative number")
         if self.retry_max_wait < self.retry_wait:
             raise ValueError("retry_max_wait must be greater than or equal to retry_wait")
+
+    def _effective_goal(self) -> str:
+        if isinstance(self.goal, str):
+            return self.goal
+        if not self.goal_file:
+            return ""
+        path = Path(self.goal_file).expanduser()
+        if not path.is_file():
+            raise ValueError(f"goal_file not found: {self.goal_file}")
+        return path.read_text(encoding="utf-8-sig")
 
 
 # Backward-compatible name used by the previous release.

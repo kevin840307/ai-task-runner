@@ -21,6 +21,43 @@ def run_flow(tmp_path, backend):
 def test_qwen_same_session(tmp_path):
     run_flow(tmp_path,'qwen')
 
+
+def test_plan_only_stops_after_todo_creation(tmp_path):
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "import argparse\n"
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');"
+        "p.add_argument('--state-file');p.parse_args();raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    cmd = f'"{sys.executable}" "{ROOT/"tests/fake_agent.py"}"'
+    args = [
+        sys.executable,
+        str(ROOT / "ai_task_runner.py"),
+        "--backend",
+        "qwen",
+        "--goal",
+        "x",
+        "--project-root",
+        str(tmp_path),
+        "--validator",
+        str(validator),
+        "--command",
+        cmd,
+        "--plan-only",
+        "--retry-delay",
+        "0",
+        "--retry-wait",
+        "0",
+    ]
+    result = subprocess.run(args, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["tasks"][0]["title"] == "Create marker"
+    assert state["completed"] is False
+    assert not (tmp_path / "done.txt").exists()
+
+
 def test_opencode_same_session(tmp_path):
     run_flow(tmp_path,'opencode')
 
@@ -261,6 +298,55 @@ def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
     assert len(tasks) == 3
     assert tasks[0].title.startswith("The finished tool should include")
     assert runner_core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
+
+
+def test_goal_task_derivation_splits_dense_complex_prompt():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    goal = (
+        "Build a small inventory CLI with inventory.py and commands to add, list, "
+        "and remove items. Store data in inventory.json with sku, name, quantity, "
+        "and price fields. Generate report.json and report.md summaries. Also "
+        "write README.md usage docs and include focused tests."
+    )
+
+    tasks = runner_core.derive_tasks_from_goal(goal, 1)
+
+    assert len(tasks) >= 4
+    assert any("inventory.py" in task.title for task in tasks)
+    assert any("inventory.json" in task.title for task in tasks)
+    assert any("report.json" in task.title for task in tasks)
+    assert any("README.md" in task.title for task in tasks)
+
+
+def test_goal_task_derivation_uses_markdown_sections_for_specs():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    goal = (ROOT / "examples" / "07_auto_config" / "prompt.md").read_text(
+        encoding="utf-8"
+    )
+    tasks = runner_core.derive_tasks_from_goal(goal, 1)
+    titles = [task.title for task in tasks]
+
+    assert 10 <= len(tasks) <= 14
+    assert any("Required CLI" in title for title in titles)
+    assert any("load YAML config" in title for title in titles)
+    assert any("deep merge config values" in title for title in titles)
+    assert any("render Jinja2 templates" in title for title in titles)
+    assert any("shared apps, versions, profiles" in title for title in titles)
+    assert any(title == "Merge Order" for title in titles)
+    assert any(title == "Templates" for title in titles)
+    assert any(title == "Expected Result" for title in titles)
+    assert not any(title.startswith("workflow:") for title in titles)
+    assert not any(title.startswith("`config/") for title in titles)
 
 
 def test_goal_task_derivation_keeps_persistence_deliverables():
@@ -710,6 +796,7 @@ def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
 
 def test_review_and_validator_results_are_bounded():
     from runner_support import (
+        bounded_text,
         MAX_MISSING_ITEM_CHARS,
         MAX_MISSING_ITEMS,
         MAX_RESULT_REASON_CHARS,
@@ -736,6 +823,12 @@ def test_review_and_validator_results_are_bounded():
             len(item) == MAX_MISSING_ITEM_CHARS
             for item in result["missing_items"]
         )
+
+    bounded = bounded_text("FIRST" + "A" * 10000 + "LAST", 2000)
+    assert "FIRST" in bounded
+    assert "LAST" in bounded
+    assert "omitted" in bounded
+    assert len(bounded) <= 2000
 
 
 def test_old_state_without_24h_fields_still_loads():

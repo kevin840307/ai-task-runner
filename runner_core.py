@@ -38,6 +38,7 @@ from runner_support import (
     run_file_validator,
     runner_source_files,
     show_todo,
+    bounded_text,
     write_json,
 )
 
@@ -215,7 +216,9 @@ def derive_tasks_from_goal(
                 ],
             )
         ]
-    deliverables = numbered_goal_items(goal)
+    deliverables = markdown_goal_sections(goal)
+    if len(deliverables) < 2:
+        deliverables = numbered_goal_items(goal)
     if len(deliverables) < 2:
         deliverables = deliverable_goal_items(goal)
     if len(deliverables) >= 2:
@@ -269,8 +272,92 @@ def numbered_goal_items(goal: str) -> list[str]:
     return items
 
 
+def markdown_goal_sections(goal: str) -> list[str]:
+    sections: list[tuple[str, list[str]]] = []
+    current_title = ""
+    current_lines: list[str] = []
+    for line in goal.splitlines():
+        match = re.match(r"^\s*#{2,3}\s+(.+?)\s*$", line)
+        if match:
+            if current_title:
+                sections.append((current_title, current_lines))
+            current_title = match.group(1).strip()
+            current_lines = []
+            continue
+        if current_title:
+            current_lines.append(line)
+    if current_title:
+        sections.append((current_title, current_lines))
+
+    items: list[str] = []
+    for title, lines in sections:
+        body = "\n".join(lines).strip()
+        if not body or is_context_section_title(title):
+            continue
+        expanded = split_markdown_section_items(title, body)
+        items.extend(expanded or [f"{title}\n{body}"])
+    return items
+
+
+def split_markdown_section_items(title: str, body: str) -> list[str]:
+    bullets = [
+        match.group(1).strip()
+        for match in re.finditer(r"(?m)^\s*-\s+(.+?)\s*$", body)
+        if should_split_list_item(match.group(1))
+    ]
+    numbered = [
+        match.group(1).strip()
+        for match in re.finditer(r"(?m)^\s*\d+[\).]\s+(.+?)\s*$", body)
+        if should_split_ordered_item(match.group(1))
+    ]
+    if len(bullets) >= 2:
+        return [f"{title}: {item}\n{body}" for item in bullets]
+    if len(numbered) >= 2:
+        return [f"{title}: {item}\n{body}" for item in numbered]
+    return []
+
+
+def should_split_list_item(text: str) -> bool:
+    lowered = text.strip().lower()
+    if lowered.startswith(("do not ", "don't ")):
+        return False
+    return bool(lowered)
+
+
+def should_split_ordered_item(text: str) -> bool:
+    words = text.strip().lower().split()
+    if not words:
+        return False
+    return words[0].rstrip(":") in {
+        "add",
+        "build",
+        "check",
+        "compare",
+        "create",
+        "document",
+        "generate",
+        "implement",
+        "load",
+        "parse",
+        "render",
+        "run",
+        "support",
+        "test",
+        "update",
+        "validate",
+        "write",
+    }
+
+
+def is_context_section_title(title: str) -> bool:
+    lowered = title.strip().lower()
+    return any(word in lowered for word in ("sample", "example", "background"))
+
+
 def deliverable_goal_items(goal: str) -> list[str]:
     parts = [part.strip() for part in re.split(r"\n\s*\n", goal) if part.strip()]
+    if len(parts) < 2:
+        parts = split_goal_sentences(goal)
     items: list[str] = []
     seen: set[str] = set()
     for part in parts:
@@ -284,6 +371,18 @@ def deliverable_goal_items(goal: str) -> list[str]:
         items.append(normalized)
     concrete = [item for item in items if not looks_like_overview(item)]
     return concrete if len(concrete) >= 2 else items
+
+
+def split_goal_sentences(goal: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", goal).strip()
+    if not normalized:
+        return []
+    pieces = re.split(
+        r"(?<=[.!?。！？；;])\s+|\s+(?:and|then|also|plus)\s+",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return [piece.strip(" -.;:") for piece in pieces if piece.strip(" -.;:")]
 
 
 def looks_like_deliverable(text: str) -> bool:
@@ -321,7 +420,8 @@ def looks_like_overview(text: str) -> bool:
 
 
 def short_task_title(text: str, limit: int = 72) -> str:
-    title = text.strip().rstrip(".")
+    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    title = " ".join(first_line.split()).rstrip(".")
     return title if len(title) <= limit else title[: limit - 1].rstrip() + "..."
 
 
@@ -562,6 +662,9 @@ class TaskRunner:
     def run(self) -> int:
         while not self.state.completed:
             self._plan_if_needed()
+            if self.args.plan_only:
+                self.ui.set("Plan ready", "plan-only stopped before execution")
+                return 0
             task_code = self._run_pending_tasks()
             if task_code is not None:
                 return task_code
@@ -612,8 +715,9 @@ class TaskRunner:
                 raise RunnerError(
                     "resume state belongs to a different project_root"
                 )
-            state.validator_output = (
-                state.validator_output[-MAX_VALIDATOR_OUTPUT_CHARS:]
+            state.validator_output = bounded_text(
+                state.validator_output,
+                MAX_VALIDATOR_OUTPUT_CHARS,
             )
             for task in state.tasks:
                 task.last_output = task.last_output[-MAX_TASK_OUTPUT_CHARS:]
@@ -1039,7 +1143,7 @@ class TaskRunner:
         finally:
             self.ui.stop()
 
-        self.state.validator_output = output[-MAX_VALIDATOR_OUTPUT_CHARS:]
+        self.state.validator_output = bounded_text(output, MAX_VALIDATOR_OUTPUT_CHARS)
         if passed:
             self.state.validator_failure_key = ""
             self.state.validator_failure_count = 0

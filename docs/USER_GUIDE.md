@@ -15,6 +15,17 @@ Resume does not require repeating `--goal` if the state already exists, but pass
 
 Override defaults only when needed, for example `--command qwen` on non-Windows shells or `--backend opencode --command opencode.exe` for OpenCode.
 
+Use `--goal-file` for long requirements:
+
+```bat
+python ai_task_runner.py ^
+  --project-root C:\work\project ^
+  --goal-file C:\work\requirements.md ^
+  --validator C:\validators\validator.py
+```
+
+`--goal` and `--goal-file` are mutually exclusive. The file is read as UTF-8 text and stored in runner state as the goal.
+
 ## Python API
 
 ```python
@@ -56,13 +67,15 @@ Or use AI validation:
 python ai_task_runner.py --goal "Build X" --validator ai
 ```
 
-Python validators receive:
+Python validators have no required output format. They receive:
 
 ```text
 python validator.py --project-root <root> --state-file <state.json> [...validator args]
 ```
 
 Agents may read validator files to infer expected behavior, but they must not edit validator files, runner state, runner source, or backend rule files. Protected changes are restored and retried.
+
+Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 
 ## YAML Batch
 

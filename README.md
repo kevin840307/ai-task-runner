@@ -15,6 +15,15 @@ python ai_task_runner.py ^
 
 This expands to Qwen Code via `qwen.cmd`, `--agent-timeout 7200`, `--planning-timeout 600`, `--agent-idle-after-change-timeout 900`, `--validator-timeout 1200`, `--max-attempts 0`, and `--max-cycles 0`.
 
+For long requirements, put the prompt in a UTF-8 text file:
+
+```bat
+python ai_task_runner.py ^
+  --project-root C:\work\project ^
+  --goal-file C:\work\requirements.md ^
+  --validator C:\validators\validator.py
+```
+
 Use AI validation instead of a Python validator:
 
 ```bat
@@ -55,7 +64,7 @@ Python validators are called as:
 python validator.py --project-root <root> --state-file <root>/.ai-task-runner/state.json [...validator args]
 ```
 
-Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
+Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
 
 ## Rule Files
 
