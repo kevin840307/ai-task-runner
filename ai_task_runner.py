@@ -79,7 +79,7 @@ def parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
         help=(
-            "execution-only idle seconds after project changes or CLI output before "
+            "execution-only idle seconds without project changes or CLI output before "
             "stopping the AI call and letting review decide; 0 disables it"
         ),
     )

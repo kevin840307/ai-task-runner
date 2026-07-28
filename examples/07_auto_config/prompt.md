@@ -42,6 +42,8 @@ Implementation contract:
 
 - `rander.py` must not branch on specific app, workflow, target, env, version, profile, filename, or answer names.
 - `rander.py` must not contain fixed app/profile/version loops such as `if app == "..."` or `for profile in ["p1", ...]`.
+- `rander.py` must stay small: no more than 500 source lines.
+- `rander.py` must not import, call, read, or delegate to other local project Python files. Do not hide renderer or answer-specific logic in helper Python modules.
 - apps, services, versions, profiles, file names, template names, and output paths must come from config values or a central render matrix.
 - templates may describe output file formats, but Python code must stay generic.
 

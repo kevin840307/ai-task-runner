@@ -20,7 +20,7 @@ Within one process, normal model errors, timeouts, loop detection, session unava
 
 ## Activity Watchdog
 
-Execution has a default activity idle watchdog. After project files change or the AI CLI writes output, if no further project file changes or CLI output are detected for 900 seconds, the runner stops that AI CLI call early and asks review to decide whether the current task is complete. This never marks work complete by itself; review and final validation still own completion.
+Execution has a default activity idle watchdog. It starts when the AI execution call starts. Project file changes and AI CLI output both refresh activity. If neither signal appears for 900 seconds, the runner stops that AI CLI call early and asks review to decide whether the current task is complete. This never marks work complete by itself; review and final validation still own completion.
 
 ## Task Prompt Shape
 

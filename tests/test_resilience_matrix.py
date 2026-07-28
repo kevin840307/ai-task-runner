@@ -259,18 +259,32 @@ def test_process_idle_after_change_timeout_stops_before_full_timeout(tmp_path):
     assert time.monotonic() - started < 5
 
 
+def test_process_idle_without_initial_activity_stops_before_full_timeout(tmp_path):
+    started = time.monotonic()
+    result = run_process(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        tmp_path,
+        timeout=20,
+        idle_timeout_after_change=0.2,
+        change_detected=lambda: False,
+    )
+    assert result.timed_out is True
+    assert result.idle_timed_out is True
+    assert time.monotonic() - started < 5
+
+
 def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
     code = (
         "import time; "
         "print('first', flush=True); "
-        "time.sleep(0.1); "
+        "time.sleep(0.05); "
         "print('second', flush=True)"
     )
     result = run_process(
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=0.05,
+        idle_timeout_after_change=0.3,
         change_detected=lambda: False,
     )
     assert result.timed_out is False

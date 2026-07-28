@@ -1,0 +1,10 @@
+cpu: 5
+gpu: 5
+hpa:
+  dataa: 1
+  datab: 1
+app: appC
+version: v604
+workflow: WORKFLOW-A
+target: FAB29
+env: prod

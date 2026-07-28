@@ -48,7 +48,7 @@ Within one live runner process, these failures are automatically retried: model 
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
-For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. If activity stops after project changes or CLI output, the runner can stop the AI call and ask review/final validation to judge the saved files.
+For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
 
 The default execution idle watchdog is:
 

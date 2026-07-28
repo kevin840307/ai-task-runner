@@ -44,10 +44,10 @@ result = run(RunRequest(
 | --- | ---: | --- |
 | `--agent-timeout` | `7200` | Maximum seconds for one execution, review, or AI-validator model call. |
 | `--planning-timeout` | `600` | Maximum seconds for one planning model call. |
-| `--agent-idle-after-change-timeout` | `900` | Execution-only activity watchdog after project changes or CLI output; `0` disables it. |
+| `--agent-idle-after-change-timeout` | `900` | Execution-only activity watchdog; CLI output or project file changes refresh it, `0` disables it. |
 | `--validator-timeout` | `1200` | Maximum seconds for a Python validator subprocess. |
 
-For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a call that stops producing CLI output and stops changing files can be handed to review.
+For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a call that produces no CLI output and stops changing files can be handed to review.
 
 ## What Retries
 

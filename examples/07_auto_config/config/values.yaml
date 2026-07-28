@@ -60,6 +60,7 @@ output_patterns:
 # Special apps that use special config patterns
 special_apps:
   - appA
+  - appE
 
 # P values for special apps
 p_values:
@@ -90,18 +91,6 @@ shared_gateway_base: http://fz1.fab29-prod.com
 
 # Shared namespace name
 shared_namespace_name: name-a
-
-# Shared app names for flow-deploy
-flow_apps:
-  - appAA
-  - appBB
-  - appEE
-  - appFA
-
-# Flow version names
-flow_versions:
-  - v407
-  - v412
 
 # Output file names for app configs
 app_output_files:

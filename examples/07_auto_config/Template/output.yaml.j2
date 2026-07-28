@@ -6,6 +6,7 @@ gateway: {{ config.gateway.base }}
 namespace:
   name: {{ config.namespace.name }}
 app-deploy:
+{% if config.app_deploy %}
 {% for app_name, app_config in config.app_deploy.items() %}
   {{ app_name }}:
     {% if app_config is mapping %}
@@ -22,8 +23,10 @@ app-deploy:
       {% endfor %}
     {% endif %}
 {% endfor %}
+{% endif %}
 
 flow-deploy:
+{% if config.flow_deploy %}
 {% for app_name, app_config in config.flow_deploy.items() %}
   {{ app_name }}:
     {% if app_config is mapping %}
@@ -40,6 +43,7 @@ flow-deploy:
       {% endfor %}
     {% endif %}
 {% endfor %}
+{% endif %}
 
 __merge_probe__:
   kept: {{ config.__merge_probe__.kept }}

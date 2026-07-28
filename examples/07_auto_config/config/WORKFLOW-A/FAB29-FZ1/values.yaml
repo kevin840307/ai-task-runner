@@ -6,10 +6,23 @@ target:
   family: FAB29
   instance: FZ1
 
-# Gateway and namespace configuration
+# Target-specific overrides for gateway and namespace
 gateway:
-  base: http://fz1.fab29-prod.com
-  domain: fab29-prod.com
+  # Add target-specific overrides here if needed
+  # This file is merged with config/shared/gateway.yaml
 
 namespace:
-  name: name-a
+  # Add target-specific overrides here if needed
+  # This file is merged with config/shared/namespace.yaml
+
+# FAB14 specific configuration
+FAB14:
+  p1:
+    dbname: ""
+    dbpassword: ""
+  p2:
+    dbname: MMP2
+    dbpassword: xxxxxxxxxxxx
+  p3:
+    dbname: MMP3
+    dbpassword: xxxxxxxxxxxxxxxxxxx

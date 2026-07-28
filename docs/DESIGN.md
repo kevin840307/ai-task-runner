@@ -49,7 +49,7 @@ Execution has two limits:
 - hard timeout: `--agent-timeout`, default `7200`
 - activity idle watchdog: `--agent-idle-after-change-timeout`, default `900`
 
-The idle watchdog starts mattering only after project changes or CLI output. If no further activity appears, the runner stops that AI call and moves to review instead of waiting forever.
+The idle watchdog starts when the execution call starts. Project changes or CLI output refresh the activity timer. If no further activity appears, the runner stops that AI call and moves to review instead of waiting forever.
 
 The default backend is `qwen`, and its default command is `qwen.cmd`. Users can still override either value for another shell, backend, or local installation.
 

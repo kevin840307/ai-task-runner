@@ -54,6 +54,7 @@ CENTRAL_LIST_KEYS = (
 )
 RENDER_MATRIX_KEYS = ("render_targets", "outputs", "files")
 ANS_MANIFEST_SHA256 = "f885a260370cfab71475ade45e27ae7b1bb527be297e64affac2ec7f2ae19764"
+MAX_RENDERER_LINES = 500
 
 
 @dataclass(frozen=True)
@@ -232,10 +233,30 @@ def check_required_files(root: Path, samples: list[Sample]) -> None:
 
 
 def check_renderer_source(root: Path, samples: list[Sample]) -> None:
-    source = (root / "rander.py").read_text(encoding="utf-8")
+    renderer = root / "rander.py"
+    source = renderer.read_text(encoding="utf-8")
     assert source.strip(), "rander.py is empty"
-    ast.parse(source)
+    line_count = len(source.splitlines())
+    assert line_count <= MAX_RENDERER_LINES, (
+        f"rander.py is too large ({line_count} lines). Keep the generic renderer "
+        f"within {MAX_RENDERER_LINES} lines; move data to YAML/Jinja2, not Python."
+    )
+    tree = ast.parse(source)
     assert "jinja2" in source.lower(), "rander.py must use Jinja2"
+    local_imports = local_python_import_hits(root, tree)
+    assert not local_imports, (
+        "rander.py must not import local project Python modules. Keep renderer "
+        "logic in rander.py and keep data in YAML/Jinja2 so hardcoded logic "
+        "cannot be hidden in helper Python files. Imports: "
+        + ", ".join(local_imports[:20])
+    )
+    local_references = local_python_reference_hits(root, tree)
+    assert not local_references, (
+        "rander.py must not reference other local project Python files. Do not "
+        "call, read, or delegate to self-written Python to bypass the generic "
+        "renderer contract. References: "
+        + ", ".join(local_references[:20])
+    )
 
     specific_tokens = {
         token.lower()
@@ -262,6 +283,73 @@ def check_renderer_source(root: Path, samples: list[Sample]) -> None:
             "branches or fixed lists for apps, versions, profiles, file names, "
             "workflows, targets, or environments."
         )
+
+
+def local_python_import_hits(root: Path, tree: ast.AST) -> list[str]:
+    local_modules = local_python_module_names(root)
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top_level = alias.name.split(".", 1)[0]
+                if top_level in local_modules:
+                    hits.append(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                hits.append("." * node.level + (node.module or ""))
+                continue
+            top_level = (node.module or "").split(".", 1)[0]
+            if top_level in local_modules:
+                hits.append(node.module or "")
+    return sorted(set(hits))
+
+
+def local_python_reference_hits(root: Path, tree: ast.AST) -> list[str]:
+    names = local_python_file_names(root)
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        lowered = node.value.lower().replace("\\", "/")
+        for name in names:
+            if name in lowered:
+                hits.append(name)
+    return sorted(set(hits))
+
+
+def local_python_module_names(root: Path) -> set[str]:
+    modules = {
+        path.stem
+        for path in root.glob("*.py")
+        if path.name != "rander.py"
+    }
+    modules.update(
+        path.parent.name
+        for path in root.rglob("__init__.py")
+        if not ignored_python_path(root, path)
+    )
+    return modules
+
+
+def local_python_file_names(root: Path) -> set[str]:
+    return {
+        path.relative_to(root).as_posix().lower()
+        for path in root.rglob("*.py")
+        if path.name != "rander.py" and not ignored_python_path(root, path)
+    } | {
+        path.name.lower()
+        for path in root.rglob("*.py")
+        if path.name != "rander.py" and not ignored_python_path(root, path)
+    }
+
+
+def ignored_python_path(root: Path, path: Path) -> bool:
+    ignored_parts = {".ai-task-runner", "__pycache__", ".pytest_cache", "output"}
+    try:
+        parts = set(path.relative_to(root).parts)
+    except ValueError:
+        return True
+    return bool(parts & ignored_parts)
 
 
 def hardcoded_literal_hits(source: str, forbidden_lower: set[str]) -> list[str]:
@@ -332,10 +420,11 @@ def check_config_shape(root: Path, samples: list[Sample]) -> None:
         "config/values.yaml should centralize shared app/version/profile lists"
     )
 
-    repeated = repeated_tokens_across_files(config_files, samples)
+    repeated = repeated_tokens_across_files(config_root, config_files, samples)
     assert not repeated, (
-        "common app/version/profile tokens are repeated across too many config files: "
-        + ", ".join(repeated)
+        "common app/version/profile tokens are repeated across too many config files. "
+        "Move shared values into central config and keep overrides small: "
+        + format_repeated_token_locations(repeated)
     )
 
 
@@ -595,7 +684,11 @@ def scalar_values(value: Any) -> Iterable[str]:
         yield value
 
 
-def repeated_tokens_across_files(paths: Iterable[Path], samples: list[Sample]) -> list[str]:
+def repeated_tokens_across_files(
+    config_root: Path,
+    paths: Iterable[Path],
+    samples: list[Sample],
+) -> dict[str, list[str]]:
     tokens = {
         value
         for sample in samples
@@ -603,16 +696,25 @@ def repeated_tokens_across_files(paths: Iterable[Path], samples: list[Sample]) -
         if is_repetition_candidate(value)
         and value.lower() not in GENERIC_ALLOWED_SOURCE_TOKENS
     }
-    repeated: list[str] = []
+    repeated: dict[str, list[str]] = {}
     for token in tokens:
         owners = [
-            path
+            path.relative_to(config_root).as_posix()
             for path in paths
             if token.lower() in path.read_text(encoding="utf-8").lower()
         ]
         if len(owners) > 2:
-            repeated.append(token)
+            repeated[token] = owners
     return repeated
+
+
+def format_repeated_token_locations(repeated: dict[str, list[str]]) -> str:
+    parts: list[str] = []
+    for token, owners in sorted(repeated.items()):
+        shown = owners[:5]
+        suffix = "" if len(owners) <= len(shown) else f", ... (+{len(owners) - len(shown)} more)"
+        parts.append(f"{token}: {', '.join(shown)}{suffix}")
+    return "; ".join(parts)
 
 
 def looks_generic_path_part(value: str) -> bool:

@@ -81,7 +81,7 @@ def _communicate_with_watchdog(
     change_detected: Callable[[], bool],
 ) -> ProcessResult:
     deadline = time.monotonic() + timeout if timeout else None
-    last_activity_at: float | None = None
+    last_activity_at: float = time.monotonic()
     partial = ""
     output_queue: queue.Queue[str] = queue.Queue()
 
@@ -121,10 +121,7 @@ def _communicate_with_watchdog(
 
         if deadline is not None and now >= deadline:
             return _terminate_timeout(process, partial, idle=False)
-        if (
-            last_activity_at is not None
-            and now - last_activity_at >= idle_timeout_after_change
-        ):
+        if now - last_activity_at >= idle_timeout_after_change:
             return _terminate_timeout(process, partial, idle=True)
 
         time.sleep(
@@ -169,15 +166,14 @@ def _drain_output(output_queue: queue.Queue[str]) -> tuple[str, bool]:
 def _next_poll_timeout(
     now: float,
     deadline: float | None,
-    last_change_at: float | None,
+    last_activity_at: float,
     idle_timeout_after_change: float,
 ) -> float:
     timeout = WATCHDOG_POLL_SECONDS
     if deadline is not None:
         timeout = min(timeout, max(0.01, deadline - now))
-    if last_change_at is not None:
-        idle_deadline = last_change_at + idle_timeout_after_change
-        timeout = min(timeout, max(0.01, idle_deadline - now))
+    idle_deadline = last_activity_at + idle_timeout_after_change
+    timeout = min(timeout, max(0.01, idle_deadline - now))
     return timeout
 
 

@@ -1,0 +1,22 @@
+# Shared flow deployment configuration
+# This file contains common flow-deploy settings that can be overridden by workflow configs
+
+flow-deploy:
+  appAA:
+    config-v604: abc
+    config-v512: abc
+  appBB:
+    - name: v412
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1
+    - name: v407
+      resource:
+        cpu: 6
+        gpu: 4
+        hpa:
+          dataa: 1
+          datab: 1

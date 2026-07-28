@@ -1,0 +1,27 @@
+# Shared app deployment configuration
+# This file contains common app-deploy settings that can be overridden by workflow configs
+
+app-deploy:
+  appB:
+    test: abc
+  appC:
+    - name: v604
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1
+    - name: v512
+      resource:
+        cpu: 6
+        gpu: 4
+        hpa:
+          dataa: 1
+          datab: 1
+  appD:
+    application:
+      cpu: 5
+      gpu: 5
+    log:
+      log-type: standard
