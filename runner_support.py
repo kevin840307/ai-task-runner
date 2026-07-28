@@ -560,7 +560,9 @@ def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
         "failure, then preserve the original goal. If the bad value is in a "
         "generated output or validator-created sample file, fix the program "
         "behavior that produces it; do not only edit the current generated "
-        "file.\n"
+        "file. If this feedback mentions Full report, report_dir, or a "
+        ".ai-task-runner/validator-reports/ path, read the referenced report "
+        "files before editing.\n"
         + bounded_text(text, limit)
     )
 
@@ -865,6 +867,7 @@ def run_file_validator(
     protected: Sequence[Path],
 ) -> tuple[bool, str]:
     file_snapshot = snapshot(protected)
+    clear_validator_reports(root)
     command = [
         sys.executable,
         str(path),
@@ -897,3 +900,16 @@ def run_file_validator(
     if changed_message:
         return False, changed_message
     return result.return_code == 0, result.output
+
+
+def clear_validator_reports(root: Path) -> None:
+    reports = root / ".ai-task-runner" / "validator-reports"
+    if not reports.exists() and not reports.is_symlink():
+        return
+    try:
+        if reports.is_symlink() or reports.is_file():
+            reports.unlink()
+        else:
+            shutil.rmtree(reports)
+    except OSError as error:
+        raise RunnerError(f"failed to clear validator reports: {error}") from error

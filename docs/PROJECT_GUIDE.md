@@ -46,6 +46,10 @@ Planning is intentionally right-sized. If the model returns too few tasks for a 
 
 File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.
 
+Recommended validators keep stdout compact and write full evidence under `.ai-task-runner/validator-reports/`. `docs/validator_templates/` contains copy-and-edit templates, including a large folder comparison validator that checks target config files while saving full diffs to disk and reporting config value sharing as warning-only feedback.
+
+The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
+
 ## Rule Files
 
 Backend rule files live at the project root:

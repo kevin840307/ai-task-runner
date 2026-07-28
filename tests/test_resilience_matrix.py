@@ -554,6 +554,74 @@ def test_validator_arguments_are_forwarded(tmp_path):
     )[0] is True
 
 
+def test_file_validator_clears_previous_reports_before_run(tmp_path):
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{}", encoding="utf-8")
+    report_dir = tmp_path / ".ai-task-runner" / "validator-reports"
+    report_dir.mkdir(parents=True)
+    (report_dir / "old.txt").write_text("stale", encoding="utf-8")
+
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "import argparse,pathlib\n"
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');p.add_argument('--state-file');a=p.parse_args()\n"
+        "root=pathlib.Path(a.project_root)\n"
+        "reports=root/'.ai-task-runner'/'validator-reports'\n"
+        "assert not (reports/'old.txt').exists(), 'stale report was not cleared'\n"
+        "reports.mkdir(parents=True, exist_ok=True)\n"
+        "(reports/'latest.txt').write_text('new', encoding='utf-8')\n"
+        "raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+
+    passed, output = run_file_validator(
+        validator, tmp_path, state_file, 10, [], [state_file]
+    )
+
+    assert passed is True, output
+    assert not (report_dir / "old.txt").exists()
+    assert (report_dir / "latest.txt").read_text(encoding="utf-8") == "new"
+
+
+def test_file_validator_large_output_keeps_summary_and_report_reference(tmp_path):
+    from runner_support import MAX_VALIDATOR_OUTPUT_CHARS, bounded_text
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{}", encoding="utf-8")
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "import argparse,pathlib\n"
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');p.add_argument('--state-file');a=p.parse_args()\n"
+        "root=pathlib.Path(a.project_root)\n"
+        "reports=root/'.ai-task-runner'/'validator-reports'/'large-output'\n"
+        "reports.mkdir(parents=True, exist_ok=True)\n"
+        "(reports/'details.txt').write_text('full details', encoding='utf-8')\n"
+        "print('VALIDATION_FAILED')\n"
+        "print('errors: 1')\n"
+        "print('warnings: 0')\n"
+        "print('report_dir: .ai-task-runner/validator-reports/large-output')\n"
+        "print('Full report: .ai-task-runner/validator-reports/large-output/details.txt')\n"
+        "print('A' * 30000)\n"
+        "print('END_MARKER')\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+
+    passed, output = run_file_validator(
+        validator, tmp_path, state_file, 10, [], [state_file]
+    )
+    bounded = bounded_text(output, MAX_VALIDATOR_OUTPUT_CHARS)
+
+    assert passed is False
+    assert "VALIDATION_FAILED" in output
+    assert "Full report: .ai-task-runner/validator-reports/large-output/details.txt" in output
+    assert (tmp_path / ".ai-task-runner" / "validator-reports" / "large-output" / "details.txt").is_file()
+    assert len(bounded) <= MAX_VALIDATOR_OUTPUT_CHARS
+    assert "VALIDATION_FAILED" in bounded
+    assert "Full report: .ai-task-runner/validator-reports/large-output/details.txt" in bounded
+    assert "END_MARKER" in bounded
+
+
 def test_unknown_mapping_field_is_rejected_before_execution():
     with pytest.raises(ValueError, match="unknown request fields"):
         run({"goal": "x", "validator": "ai", "unexpected": True})

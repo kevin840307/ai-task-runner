@@ -77,6 +77,10 @@ Agents may read validator files to infer expected behavior, but they must not ed
 
 Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 
+For reusable validator patterns, see `docs/validator_templates/`. The folder comparison template is useful when a project generates many `.yml`, `.yaml`, `.cfg`, and `.xml` files: it prints a short summary, writes full file lists and diffs under `.ai-task-runner/validator-reports/`, and adds a warning-only config value sharing score.
+
+`<project-root>/.ai-task-runner/validator-reports/` is cleared before every Python validator run. Write detailed reports there when stdout would be too large; the next repair task will receive the validator stdout and can read the referenced latest report files.
+
 ## YAML Batch
 
 ```yaml
