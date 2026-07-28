@@ -25,18 +25,6 @@ render_targets:
       - prod
       - staging
 
-# Centralized shared lists (to avoid duplication)
-apps:
-  - appA
-  - appB
-  - appC
-  - appD
-  - appE
-
-versions:
-  - v512
-  - v604
-
 # Default template mapping
 template_map:
   - output_type: yaml

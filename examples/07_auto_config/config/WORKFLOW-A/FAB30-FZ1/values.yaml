@@ -5,11 +5,3 @@
 target:
   family: FAB30
   instance: FZ1
-
-# Gateway and namespace configuration
-gateway:
-  base: http://fz30.fab30-prod.com
-  domain: fab30-prod.com
-
-namespace:
-  name: name-a

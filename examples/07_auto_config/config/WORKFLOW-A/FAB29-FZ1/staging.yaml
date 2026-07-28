@@ -4,14 +4,3 @@
 environment:
   name: STAGING
   region: us-east-1
-
-# Override gateway configuration for STAGING
-gateway:
-  base: http://fz1.fab29-staging.com
-  domain: fab29-staging.com
-  ssl: false
-
-# Namespace configuration for STAGING
-namespace:
-  name: name-a
-  tier: staging

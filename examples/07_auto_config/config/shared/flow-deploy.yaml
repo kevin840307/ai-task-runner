@@ -3,17 +3,17 @@
 
 flow-deploy:
   appAA:
-    config-v604: abc
-    config-v512: abc
+    config-aa-v1: abc
+    config-aa-v2: abc
   appBB:
-    - name: v412
+    - name: flow-bb-v1
       resource:
         cpu: 5
         gpu: 5
         hpa:
           dataa: 1
           datab: 1
-    - name: v407
+    - name: flow-bb-v2
       resource:
         cpu: 6
         gpu: 4

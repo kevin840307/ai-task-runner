@@ -1,6 +1,14 @@
 # Global render matrix and shared configuration
 # This file contains common values that should be centralized
 
+# Global shared tokens (to avoid repetition across config files)
+shared_tokens:
+  fab29: fab29
+  prod: prod
+  staging: staging
+  v512: v512
+  v604: v604
+
 # Render matrix - defines output patterns and template mapping
 render_targets:
   WORKFLOW-A:
@@ -24,6 +32,13 @@ render_targets:
     profiles:
       - prod
       - staging
+    gateway_base: http://fz1.fab29-prod.com
+    namespace_name: name-a
+    fab: fab29
+    env_prod:
+      tier: production
+    env_staging:
+      tier: staging
 
 # Centralized shared lists (to avoid duplication)
 apps:
@@ -67,30 +82,6 @@ p_values:
   - p1
   - p2
   - p3
-
-# Shared app names
-shared_apps:
-  - appA
-  - appB
-  - appC
-  - appD
-  - appE
-
-# Shared version names
-shared_versions:
-  - v512
-  - v604
-
-# Shared profile names
-shared_profiles:
-  - prod
-  - staging
-
-# Shared gateway base
-shared_gateway_base: http://fz1.fab29-prod.com
-
-# Shared namespace name
-shared_namespace_name: name-a
 
 # Output file names for app configs
 app_output_files:

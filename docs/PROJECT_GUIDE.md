@@ -14,7 +14,7 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 4. Ask read-only review whether that task is complete.
 5. Retry the same task on model errors, invalid review JSON, no progress, or review failure.
 6. Run the final Python or AI validator after all tasks are reviewed.
-7. If final validation fails, keep the project changes, create a `Repair validator failure` task, and continue.
+7. If final validation fails, keep the project changes, create focused repair task(s), and continue.
 
 Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If one TODO repeatedly fails in the model stage without any project changes and a Python validator is configured, the runner defers that TODO to final validation so the whole run can keep moving. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
 
@@ -38,7 +38,7 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
-Agents may read validator files to understand expected behavior, but they must not modify validator files or hardcode validator internals. Python owns final validator execution and runner state. Validator feedback is authoritative, and fallback planning creates a single repair task after validator failure.
+Agents may read validator files to understand expected behavior, but they must not modify validator files or hardcode validator internals. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
 
 Planning is intentionally right-sized. If the model returns too few tasks for a broad goal, deterministic fallback can split numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, and documentation.
 
@@ -47,6 +47,8 @@ Planning is intentionally right-sized. If the model returns too few tasks for a 
 File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.
 
 Recommended validators keep stdout compact and write full evidence under `.ai-task-runner/validator-reports/`. `docs/validator_templates/` contains copy-and-edit templates, including a large folder comparison validator that checks target config files while saving full diffs to disk and reporting config value sharing as warning-only feedback.
+
+Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runner` if validators in other project directories should import `ValidatorReport` as `from ai_task_runner_validator import ValidatorReport`.
 
 The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
 

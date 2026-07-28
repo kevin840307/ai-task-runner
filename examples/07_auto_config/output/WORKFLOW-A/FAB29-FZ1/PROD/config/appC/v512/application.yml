@@ -1,8 +1,10 @@
-cpu: 6
-gpu: 4
-hpa:
-  dataa: 1
-  datab: 1
+name: app-c-v2
+resource:
+  cpu: 6
+  gpu: 4
+  hpa:
+    dataa: 1
+    datab: 1
 app: appC
 version: v512
 workflow: WORKFLOW-A

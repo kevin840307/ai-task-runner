@@ -6,15 +6,6 @@ target:
   family: FAB29
   instance: FZ1
 
-# Target-specific overrides for gateway and namespace
-gateway:
-  # Add target-specific overrides here if needed
-  # This file is merged with config/shared/gateway.yaml
-
-namespace:
-  # Add target-specific overrides here if needed
-  # This file is merged with config/shared/namespace.yaml
-
 # FAB14 specific configuration
 FAB14:
   p1:

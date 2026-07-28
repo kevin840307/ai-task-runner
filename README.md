@@ -37,7 +37,7 @@ python ai_task_runner.py --goal "Update docs" --validator ai
 2. Plan TODO tasks
 3. For each task: execute -> review -> retry if needed
 4. Run final Python or AI validator
-5. On validator failure: add a repair task and continue
+5. On validator failure: add focused repair task(s) and continue
 ```
 
 The runner does not generate code itself. The agent writes project files. The runner owns state, retries, review orchestration, protected-file restore, validator execution, and resume.
@@ -45,6 +45,8 @@ The runner does not generate code itself. The agent writes project files. The ru
 ## Reliability
 
 Within one live runner process, these failures are automatically retried: model errors, Qwen loop detection, session unavailable, timeouts, invalid review JSON, review failure, protected-file edits, validator failure, and no-progress attempts.
+
+When validator stdout contains structured error headings such as `[E001] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
@@ -69,6 +71,14 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
 
 Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`.
+
+Optional helper install:
+
+```bat
+python -m pip install -e C:\Users\kevin\ai-task-runner
+```
+
+Then any validator can use `from ai_task_runner_validator import ValidatorReport`. Without installing, copy `docs/validator_templates/validator_interface.py` next to the validator.
 
 Before each Python validator run, the runner clears `<project-root>/.ai-task-runner/validator-reports/`. Treat that directory as the latest validation report area, not a history folder.
 

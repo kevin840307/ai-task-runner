@@ -34,6 +34,7 @@ from runner_support import (
     protected_ask,
     progress_key,
     readonly_ask,
+    render_prompt_template,
     retry_model_call,
     review_prompt,
     run_file_validator,
@@ -183,9 +184,29 @@ def repair_review_needs_project_change(
 ) -> bool:
     return (
         bool(state.validator_output.strip())
-        and task.title == "Repair validator failure"
+        and is_validator_repair_task(task)
         and review.get("completed") is True
+        and review.get("defer_to_validator") is not True
         and not project_changed
+    )
+
+
+def validator_repair_should_use_file_validator(
+    state: RunState,
+    task: Task,
+    project_changed: bool,
+) -> bool:
+    return (
+        bool(state.validator_output.strip())
+        and is_validator_repair_task(task)
+        and project_changed
+    )
+
+
+def is_validator_repair_task(task: Task) -> bool:
+    return (
+        task.title == "Repair validator failure"
+        or re.match(r"^Repair E[^\s:]*:", task.title) is not None
     )
 
 
@@ -201,15 +222,16 @@ def derive_tasks_from_goal(
 ) -> list[Task]:
     feedback = validator_feedback.strip()
     if feedback:
-        repair_feedback = format_validator_feedback(feedback, 2000)
+        findings = validator_error_findings(feedback)
+        repair_items = findings if len(findings) > 1 else [feedback]
         return [
             Task(
-                id=f"c{cycle:02d}-t001",
-                title="Repair validator failure",
+                id=f"c{cycle:02d}-t{index:03d}",
+                title=validator_repair_title(item),
                 description=(
                     "Make the smallest maintainable project change needed "
                     "to satisfy the goal and address this validator feedback:\n"
-                    f"{repair_feedback}"
+                    f"{format_validator_feedback(item, 2000)}"
                 ),
                 acceptance_criteria=[
                     "The validator feedback is addressed",
@@ -217,6 +239,7 @@ def derive_tasks_from_goal(
                     "Relevant validator checks pass",
                 ],
             )
+            for index, item in enumerate(repair_items, 1)
         ]
     deliverables = markdown_goal_sections(goal)
     if len(deliverables) < 2:
@@ -250,6 +273,29 @@ def derive_tasks_from_goal(
             ],
         )
     ]
+
+
+def validator_error_findings(feedback: str) -> list[str]:
+    findings: list[list[str]] = []
+    current: list[str] = []
+    for line in feedback.splitlines():
+        if re.match(r"^\s*\[E[^\]]*\]\s+", line):
+            if current:
+                findings.append(current)
+            current = [line]
+        elif current:
+            current.append(line)
+    if current:
+        findings.append(current)
+    return ["\n".join(lines).strip() for lines in findings if lines]
+
+
+def validator_repair_title(feedback: str) -> str:
+    first = feedback.strip().splitlines()[0] if feedback.strip() else ""
+    match = re.match(r"^\s*\[(E[^\]]*)\]\s*(.+?)\s*$", first)
+    if match:
+        return short_task_title(f"Repair {match.group(1)}: {match.group(2)}")
+    return "Repair validator failure"
 
 
 def right_size_planned_tasks(
@@ -884,31 +930,30 @@ class TaskRunner:
                 task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
                 self._save_session()
 
-                self._set_stage("reviewing")
-                review = self._review_current_task(task, output)
+                project_changed = project_fingerprint(self.root, self.work) != project_before
+                if (
+                    not self.ai_validation
+                    and validator_repair_should_use_file_validator(
+                        self.state,
+                        task,
+                        project_changed,
+                    )
+                ):
+                    review = self._defer_repair_review_to_file_validator(task)
+                else:
+                    self._set_stage("reviewing")
+                    review = self._review_current_task(task, output)
             except RunnerError as error:
                 if project_fingerprint(self.root, self.work) != project_before:
-                    try:
-                        review = self._review_failed_execution_changes(
+                    if (
+                        not self.ai_validation
+                        and validator_repair_should_use_file_validator(
+                            self.state,
                             task,
-                            error,
+                            True,
                         )
-                    except RunnerError as review_error:
-                        if not self.ai_validation:
-                            review = self._fallback_review_to_validator(
-                                task,
-                                review_error,
-                            )
-                            result = self._handle_review_result(
-                                task,
-                                review,
-                                project_changed=True,
-                            )
-                            if result is not None:
-                                return result
-                            continue
-                        error = review_error
-                    else:
+                    ):
+                        review = self._defer_repair_review_to_file_validator(task)
                         result = self._handle_review_result(
                             task,
                             review,
@@ -917,6 +962,36 @@ class TaskRunner:
                         if result is not None:
                             return result
                         continue
+                    else:
+                        try:
+                            review = self._review_failed_execution_changes(
+                                task,
+                                error,
+                            )
+                        except RunnerError as review_error:
+                            if not self.ai_validation:
+                                review = self._fallback_review_to_validator(
+                                    task,
+                                    review_error,
+                                )
+                                result = self._handle_review_result(
+                                    task,
+                                    review,
+                                    project_changed=True,
+                                )
+                                if result is not None:
+                                    return result
+                                continue
+                            error = review_error
+                        else:
+                            result = self._handle_review_result(
+                                task,
+                                review,
+                                project_changed=True,
+                            )
+                            if result is not None:
+                                return result
+                            continue
 
                 task.last_output = (
                     "Previous model call failed before task completion:\n"
@@ -974,6 +1049,21 @@ class TaskRunner:
         )
         self._set_stage("reviewing")
         return self._review_current_task(task, output)
+
+    def _defer_repair_review_to_file_validator(self, task: Task) -> dict[str, Any]:
+        self.ui.set(
+            "Repair task changed files",
+            "skipping AI review; final Python validator will judge the repair",
+        )
+        return {
+            "completed": True,
+            "defer_to_validator": True,
+            "reason": (
+                "Validator repair task changed project files. Skipping AI review "
+                "because the configured Python final validator is authoritative."
+            ),
+            "missing_items": [],
+        }
 
     def _handle_review_result(
         self,
@@ -1043,22 +1133,16 @@ class TaskRunner:
     def _validator_repair_hint(self) -> str:
         if not self.state.validator_output.strip():
             return ""
-        parts = [
-            "Validator repair task: reproduce or inspect the first reported "
-            "validator failure, then edit the project implementation, "
-            "documentation, or output generator that causes it. Do not only "
-            "summarize a fix or change runner state."
-        ]
+        repeat_hint = ""
         if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
-            parts.append(
-                "Validator repair mode: the final validator has failed with the "
-                f"same diagnostic {self.state.validator_failure_count} times. "
-                "Treat the validator feedback in Run context as authoritative. "
-                "Fix the first reported failure directly, verify the affected files "
-                "carefully, and do not dismiss the validator as a false positive "
-                "unless there is concrete evidence of an impossible requirement."
+            repeat_hint = render_prompt_template(
+                "validator_repair_repeat_hint.md",
+                {"failure_count": self.state.validator_failure_count},
             )
-        return "\n".join(parts)
+        return render_prompt_template(
+            "validator_repair_hint.md",
+            {"repeat_hint": repeat_hint},
+        )
 
     def _fallback_review_to_validator(
         self,
@@ -1090,19 +1174,18 @@ class TaskRunner:
             "the run can continue instead of looping on one model failure. "
             f"Task: {task.title}. Failure: {str(error)[-500:]}"
         )
-        return {"completed": True, "reason": reason, "missing_items": []}
+        return {
+            "completed": True,
+            "defer_to_validator": True,
+            "reason": reason,
+            "missing_items": [],
+        }
 
     def _execute_current_task(self, task: Task) -> str:
         strategy_note = ""
         if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
             self.agent.session_id = ""
-            strategy_note = (
-                "Previous attempts made no effective progress. "
-                "Reinspect the project, identify the blocking assumption, "
-                "and use a different implementation approach. "
-                "A fresh agent session is being used with runner state as "
-                "context. Do not repeat the same actions."
-            )
+            strategy_note = render_prompt_template("no_progress_strategy.md", {})
         change_detected = self._project_change_detector()
 
         def call() -> str:

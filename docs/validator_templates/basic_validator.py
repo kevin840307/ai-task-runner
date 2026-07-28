@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy-and-edit Python validator template using validator_interface.py.
+"""Copy-and-edit Python validator template.
 
 Runner contract:
 - exit code 0: pass
@@ -15,7 +15,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from validator_interface import ValidatorReport
+try:
+    from ai_task_runner_validator import ValidatorReport
+except ImportError:  # Allows copying validator_interface.py next to this file.
+    from validator_interface import ValidatorReport
 
 
 def run_checks(project_root: Path, state_file: Path, result: ValidatorReport) -> None:

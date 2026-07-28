@@ -2,5 +2,5 @@
 # This file contains common gateway settings that can be overridden by workflow or target configs
 
 gateway:
-  base: http://fz1.fab29-prod.com
-  domain: fab29-prod.com
+  base: http://gateway.example.com
+  domain: gateway.example.com

@@ -1,11 +1,16 @@
-name: app-c-v2
+name: v604
+shadow: false
+replict: 1
 resource:
-  cpu: 6
-  gpu: 4
+  cpu: 5
+  gpu: 5
   hpa:
     dataa: 1
     datab: 1
-app: appC
+  res:
+    dataa: 2
+    datab: 2
+app: appA
 version: v604
 workflow: WORKFLOW-A
 target: FAB29

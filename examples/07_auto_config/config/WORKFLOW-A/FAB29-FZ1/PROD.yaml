@@ -4,14 +4,3 @@
 environment:
   name: PROD
   region: us-east-1
-
-# Override gateway configuration for PROD
-gateway:
-  base: http://fz1.fab29-prod.com
-  domain: fab29-prod.com
-  ssl: true
-
-# Namespace configuration for PROD
-namespace:
-  name: name-a
-  tier: production

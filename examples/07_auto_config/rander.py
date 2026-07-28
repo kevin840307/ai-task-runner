@@ -76,11 +76,6 @@ def convert_hyphens_to_underscores(data: Any) -> Any:
     return data
 
 
-def convert_hyphenated_keys_to_underscore(data: Any) -> Any:
-    """Recursively convert hyphenated keys to underscores (alias for compatibility)."""
-    return convert_hyphens_to_underscores(data)
-
-
 def hyphen_to_underscore(key: str) -> str:
     """Convert hyphenated key to underscore-separated."""
     return key.replace("-", "_")
@@ -119,8 +114,25 @@ def run_renderer(project_root: Path, output_root: Path, workflow: str, target: s
     env_config = env_config or load_yaml_file(project_root / "config" / workflow / target / f"{env}.yaml") or {}
     shared_app_deploy = load_yaml_file(project_root / "config" / "shared" / "app-deploy.yaml") or {}
     shared_flow_deploy = load_yaml_file(project_root / "config" / "shared" / "flow-deploy.yaml") or {}
+    shared_gateway = load_yaml_file(project_root / "config" / "shared" / "gateway.yaml") or {}
+    shared_namespace = load_yaml_file(project_root / "config" / "shared" / "namespace.yaml") or {}
 
-    merged_config = deep_merge(global_config, deep_merge(workflow_config, deep_merge(target_family_config, deep_merge(workflow_target_config, deep_merge(env_config, deep_merge(shared_app_deploy, shared_flow_deploy))))))
+    # Merge all shared configs together first
+    shared_configs = deep_merge(shared_app_deploy, deep_merge(shared_flow_deploy, deep_merge(shared_gateway, shared_namespace)))
+
+    merged_config = deep_merge(
+        global_config,
+        deep_merge(
+            workflow_config,
+            deep_merge(
+                target_family_config,
+                deep_merge(
+                    workflow_target_config,
+                    deep_merge(env_config, shared_configs)
+                )
+            )
+        )
+    )
 
     context = {"workflow": workflow, "target": target, "env": env, "target_family": target_family, "config": merged_config}
 
@@ -170,7 +182,7 @@ def generate_app_configs(project_root: Path, output_dir: Path, workflow: str, ta
 
 
 def generate_versioned_app_config(app_name: str, app_config: Any, output_path: Path, merged_config: dict, env: str, workflow: str) -> None:
-    """Generate version-specific app config files."""
+    """Generate version-specific app config files for list-based app configs."""
     render_targets = merged_config.get("render_targets", {})
     render_target_info = render_targets.get(workflow, {})
     versions = render_target_info.get("versions", []) or merged_config.get("versions", [])
@@ -202,35 +214,16 @@ def generate_versioned_app_config(app_name: str, app_config: Any, output_path: P
                         (version_dir / file_name).write_text(yaml.safe_dump(version_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
                         break
         else:
-            if isinstance(app_config, list):
-                for item in app_config:
-                    if item.get("name") == version:
-                        app_config_data = item.get("resource", {})
-                        if app_config_data:
-                            app_config_data["app"] = app_name
-                            app_config_data["version"] = version
-                            app_config_data["workflow"] = render_target_info.get("name", "")
-                            app_config_data["target"] = render_target_info.get("target_family", "")
-                            app_config_data["env"] = render_target_info.get("profiles", [env])[0]
-                            file_name = get_app_output_file_name("application", merged_config)
-                            (version_dir / file_name).write_text(yaml.safe_dump(app_config_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
-                        break
-            elif isinstance(app_config, dict):
-                fab_key = next((k for k in app_config if k.startswith("FAB")), None)
-                p_configs = app_config.get(fab_key, app_config) if fab_key else app_config
-                for p in p_values:
-                    p_config = p_configs.get(p, [])
-                    for item in p_config:
-                        if item.get("name") == version:
-                            version_data = item.copy()
-                            version_data["app"] = app_name
-                            version_data["version"] = version
-                            version_data["workflow"] = render_target_info.get("name", "")
-                            version_data["target"] = render_target_info.get("target_family", "")
-                            version_data["env"] = render_target_info.get("profiles", [env])[0]
-                            file_name = get_app_output_file_name("application-p", merged_config, p)
-                            (version_dir / file_name).write_text(yaml.safe_dump(version_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
-                            break
+            # For non-special apps with list config, generate files for each item
+            for item in app_config:
+                version_data = item.copy()
+                version_data["app"] = app_name
+                version_data["version"] = version
+                version_data["workflow"] = render_target_info.get("name", "")
+                version_data["target"] = render_target_info.get("target_family", "")
+                version_data["env"] = render_target_info.get("profiles", [env])[0]
+                file_name = get_app_output_file_name("application", merged_config)
+                (version_dir / file_name).write_text(yaml.safe_dump(version_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
 def generate_special_app_config(app_name: str, app_config: dict, output_path: Path, merged_config: dict, env: str, workflow: str) -> None:
@@ -240,10 +233,22 @@ def generate_special_app_config(app_name: str, app_config: dict, output_path: Pa
     versions = render_target_info.get("versions", []) or merged_config.get("versions", [])
     p_values = merged_config.get("p_values", [])
     fab_key = next((k for k in app_config if k.startswith("FAB")), None)
-    p_configs = app_config.get(fab_key, app_config) if fab_key else app_config
+    
+    # If app_config has a FAB key, use the config under that key for each p value
+    # Otherwise, use the entire app_config as the config for all p values
+    if fab_key:
+        p_configs = app_config.get(fab_key, {})
+    else:
+        p_configs = app_config
 
     for p in p_values:
-        p_config = p_configs.get(p, [])
+        # If p_configs is a dict, get the config for this p value
+        # If p_configs is a list, use the entire list
+        if isinstance(p_configs, dict):
+            p_config = p_configs.get(p, [])
+        else:
+            p_config = p_configs
+
         for version in versions:
             for item in p_config:
                 if item.get("name") == version:

@@ -231,6 +231,36 @@ def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
     assert "the actual bad value to change away from" in tasks[0].description
 
 
+def test_goal_task_derivation_splits_structured_validator_errors():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
+    runner_core = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner_core
+    spec.loader.exec_module(runner_core)
+
+    tasks = runner_core.derive_tasks_from_goal(
+        "Generate config outputs",
+        7,
+        (
+            "VALIDATION_FAILED\n"
+            "errors: 2\n"
+            "[E005] check_config_shape failed\n"
+            "- shared values are repeated\n"
+            "Full report: .ai-task-runner/validator-reports/x/shape.txt\n"
+            "[E007] check_rendered_output failed\n"
+            "- missing output files\n"
+            "Full report: .ai-task-runner/validator-reports/x/output.txt\n"
+        ),
+    )
+
+    assert [task.id for task in tasks] == ["c07-t001", "c07-t002"]
+    assert tasks[0].title == "Repair E005: check_config_shape failed"
+    assert tasks[1].title == "Repair E007: check_rendered_output failed"
+    assert "shared values are repeated" in tasks[0].description
+    assert "missing output files" not in tasks[0].description
+    assert "missing output files" in tasks[1].description
+
+
 def test_repair_review_requires_project_change_when_validator_failed():
     import importlib.util
     spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
@@ -245,6 +275,43 @@ def test_repair_review_requires_project_change_when_validator_failed():
 
     assert runner_core.repair_review_needs_project_change(state, task, review, False)
     assert not runner_core.repair_review_needs_project_change(state, task, review, True)
+    defer_review = {
+        "completed": True,
+        "defer_to_validator": True,
+        "reason": "use validator",
+        "missing_items": [],
+    }
+    assert not runner_core.repair_review_needs_project_change(
+        state,
+        task,
+        defer_review,
+        False,
+    )
+    assert runner_core.validator_repair_should_use_file_validator(state, task, True)
+    assert not runner_core.validator_repair_should_use_file_validator(state, task, False)
+    assert not runner_core.validator_repair_should_use_file_validator(
+        state,
+        runner_core.Task("id", "Normal task", "fix", []),
+        True,
+    )
+    split_task = runner_core.Task(
+        "id",
+        "Repair E003: check_renderer_source failed",
+        "fix",
+        [],
+    )
+    assert runner_core.is_validator_repair_task(split_task)
+    assert runner_core.repair_review_needs_project_change(
+        state,
+        split_task,
+        review,
+        False,
+    )
+    assert runner_core.validator_repair_should_use_file_validator(
+        state,
+        split_task,
+        True,
+    )
 
 
 def test_goal_task_derivation_splits_natural_deliverable_paragraphs():

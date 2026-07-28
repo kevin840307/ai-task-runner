@@ -2,4 +2,4 @@
 # This file contains common namespace settings that can be overridden by workflow or target configs
 
 namespace:
-  name: name-a
+  name: namespace-a

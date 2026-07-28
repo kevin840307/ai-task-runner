@@ -17,6 +17,7 @@ from defaults import DEFAULT_QWEN_COMMAND
 from models import State as LegacyState
 from runner_api import RunRequest, __version__, run
 from runner_models import RunState, State, Task
+from ai_task_runner_validator import ValidatorReport
 
 
 
@@ -41,6 +42,13 @@ def test_canonical_public_names_and_legacy_aliases_are_identical():
     assert State is RunState
     assert Agent is AgentClient
     assert Backend is AgentBackend
+    assert ValidatorReport.__name__ == "ValidatorReport"
+
+
+def test_validator_helper_is_installable_public_module():
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'name = "ai-task-runner"' in pyproject
+    assert 'py-modules = ["ai_task_runner_validator"]' in pyproject
 
 
 def test_run_state_json_contract_is_unchanged():

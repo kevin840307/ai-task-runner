@@ -11,7 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from validator_interface import ValidatorReport
+try:
+    from ai_task_runner_validator import ValidatorReport
+except ImportError:  # Allows copying validator_interface.py next to this file.
+    from validator_interface import ValidatorReport
 
 COMMAND: list[str] = []  # Example: [sys.executable, "main.py", "--input", "input/data.csv"]
 REQUIRED_FILES: list[str] = []

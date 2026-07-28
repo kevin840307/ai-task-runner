@@ -552,18 +552,9 @@ def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
     text = feedback.strip()
     if not text:
         return ""
-    return (
-        "Validator feedback below is the final validator's failure report. "
-        "It describes the current rejected behavior or output, not the desired "
-        "result. If it says 'unexpected ...' and shows a block, that block is "
-        "the actual bad value to change away from. Fix the first reported "
-        "failure, then preserve the original goal. If the bad value is in a "
-        "generated output or validator-created sample file, fix the program "
-        "behavior that produces it; do not only edit the current generated "
-        "file. If this feedback mentions Full report, report_dir, or a "
-        ".ai-task-runner/validator-reports/ path, read the referenced report "
-        "files before editing.\n"
-        + bounded_text(text, limit)
+    return render_prompt_template(
+        "validator_feedback.md",
+        {"feedback": bounded_text(text, limit)},
     )
 
 

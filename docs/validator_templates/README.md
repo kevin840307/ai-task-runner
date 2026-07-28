@@ -2,6 +2,20 @@
 
 These files are copy-and-edit templates for Python validators.
 
+For the reusable report helper, either install this project once:
+
+```bat
+python -m pip install -e C:\Users\kevin\ai-task-runner
+```
+
+Then validators in any project can import:
+
+```python
+from ai_task_runner_validator import ValidatorReport
+```
+
+Or copy `validator_interface.py` next to your validator and import from that local file.
+
 The runner contract stays intentionally small:
 
 - exit code `0` means validation passed
@@ -26,20 +40,20 @@ The runner clears `.ai-task-runner/validator-reports/` before each Python valida
 | File | Purpose |
 | --- | --- |
 | `validator_interface.py` | Copyable helper that handles summary stdout, errors, warnings, standard report files, `Full report` paths, and exit code. |
-| `basic_validator.py` | Minimal skeleton using `validator_interface.py`. Start here for custom checks. |
-| `command_and_files_validator.py` | Starter using `validator_interface.py` for projects that must run a command and then verify generated files. |
+| `basic_validator.py` | Minimal skeleton using `ai_task_runner_validator` or local `validator_interface.py`. Start here for custom checks. |
+| `command_and_files_validator.py` | Starter using `ai_task_runner_validator` or local `validator_interface.py` for projects that must run a command and then verify generated files. |
 | `folder_compare_validator.py` | Standalone ready-to-use comparison for two folders. It checks subfolder names plus `.yml`, `.yaml`, `.cfg`, and `.xml` file names and content. It also emits a warning-only config value sharing score. |
 
 ## Interface Example
 
-Copy `validator_interface.py` next to your `validator.py`, then write only project-specific checks:
+After installing this project, write only project-specific checks:
 
 ```python
 from pathlib import Path
 import argparse
 import sys
 
-from validator_interface import ValidatorReport
+from ai_task_runner_validator import ValidatorReport
 
 
 def main() -> int:
