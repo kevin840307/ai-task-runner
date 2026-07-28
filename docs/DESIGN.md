@@ -38,7 +38,7 @@ planning -> executing -> reviewing -> validating
                      retry task <- validator_failed
 ```
 
-Final Validator PASS sets `completed=true`. Validator FAIL stores `validator_output`, increments the cycle, and creates a focused repair task.
+Final Validator PASS sets `completed=true`. Validator FAIL stores `validator_output`, increments the cycle, and creates focused repair task(s).
 
 ## Process Control
 
