@@ -122,6 +122,8 @@ ai_task_runner.py        CLI parser and entry point
 defaults.py             Shared 24h defaults for CLI, API, and backends
 runner_api.py           Public Python API
 runner_core.py          TaskRunner state machine, retry, resume
+agent_args.py           Backend-specific planning/runtime argument policy
+script_runner.py        YAML batch orchestration and per-item resume setup
 planning.py             TODO planning, fallback splitting, repair task derivation
 validation.py           Python/AI final validation and AI failure feedback
 prompting.py            Prompt template loading and prompt builders

@@ -71,6 +71,8 @@ def runner_source_files() -> list[Path]:
         root / "models.py",
         root / "runner_core.py",
         root / "runner_support.py",
+        root / "agent_args.py",
+        root / "script_runner.py",
         root / "planning.py",
         root / "validation.py",
         root / "prompting.py",

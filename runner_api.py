@@ -17,7 +17,7 @@ from defaults import (
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
-from runner_core import execute, execute_script
+from runner_core import execute
 from version import __version__
 
 EventHandler = Callable[[dict[str, Any]], None]
@@ -226,7 +226,7 @@ def run(
 
     request.validate()
     args = request.to_namespace(on_event)
-    exit_code = execute_script(args) if request.script else execute(args)
+    exit_code = execute(args)
     state_files = _state_files(request)
     states = tuple(_read_state(path) for path in state_files if path.is_file())
     return RunResult(

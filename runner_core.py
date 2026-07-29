@@ -2,21 +2,22 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
 import re
-import sys
 import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from agent import AgentClient
+from agent_args import (
+    planning_agent_args,
+    runtime_agent_args,
+)
 from errors import RunnerError
 from runner_models import RunState, Task
-from version import __version__
 from planning import (
     derive_tasks_from_goal,
     right_size_planned_tasks,
@@ -49,137 +50,16 @@ from validation import (
     format_ai_validator_output,
     run_ai_validator,
 )
-
-
-QWEN_COMPUTER_USE_TOOLS = (
-    "computer_use__bring_to_front",
-    "computer_use__check_for_update",
-    "computer_use__check_permissions",
-    "computer_use__launch_app",
-    "computer_use__kill_app",
-    "computer_use__hotkey",
-    "computer_use__list_apps",
-    "computer_use__list_windows",
-    "computer_use__get_accessibility_tree",
-    "computer_use__get_agent_cursor_state",
-    "computer_use__get_config",
-    "computer_use__get_cursor_position",
-    "computer_use__get_recording_state",
-    "computer_use__get_screen_size",
-    "computer_use__get_window_state",
-    "computer_use__screenshot",
-    "computer_use__click",
-    "computer_use__double_click",
-    "computer_use__right_click",
-    "computer_use__press_key",
-    "computer_use__type_text",
-    "computer_use__scroll",
-    "computer_use__move_cursor",
-    "computer_use__drag",
-    "computer_use__page",
-    "computer_use__replay_trajectory",
-    "computer_use__set_agent_cursor_enabled",
-    "computer_use__set_agent_cursor_motion",
-    "computer_use__set_agent_cursor_style",
-    "computer_use__set_config",
-    "computer_use__set_value",
-    "computer_use__start_recording",
-    "computer_use__stop_recording",
-    "computer_use__end_session",
-    "computer_use__start_session",
-    "computer_use__zoom",
-    "bring_to_front",
-    "check_for_update",
-    "check_permissions",
-    "launch_app",
-    "kill_app",
-    "hotkey",
-    "list_apps",
-    "list_windows",
-    "get_accessibility_tree",
-    "get_agent_cursor_state",
-    "get_config",
-    "get_cursor_position",
-    "get_recording_state",
-    "get_screen_size",
-    "get_window_state",
-    "screenshot",
-    "click",
-    "double_click",
-    "right_click",
-    "press_key",
-    "type_text",
-    "scroll",
-    "move_cursor",
-    "drag",
-    "page",
-    "replay_trajectory",
-    "set_agent_cursor_enabled",
-    "set_agent_cursor_motion",
-    "set_agent_cursor_style",
-    "set_config",
-    "set_value",
-    "start_recording",
-    "stop_recording",
-    "end_session",
-    "start_session",
-    "zoom",
+from script_runner import (
+    execute_script as execute_yaml_script,
+    load_yaml_script,
 )
 
-QWEN_PLANNING_EXCLUDED_TOOLS = (
-    "read_file",
-    "read_mcp_resource",
-    "list_directory",
-    "glob",
-    "grep_search",
-    "write_file",
-    "edit",
-    "notebook_edit",
-    "run_shell_command",
-    "tool_search",
-    "todo_write",
-    "skill",
-    "agent",
-    *QWEN_COMPUTER_USE_TOOLS,
-)
-QWEN_RUNTIME_EXCLUDED_TOOLS = (
-    "todo_write",
-    "skill",
-    "agent",
-    *QWEN_COMPUTER_USE_TOOLS,
-)
+
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
-
-
-def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
-    """Preserve Qwen planning permissions while trimming custom context load."""
-    result = list(extra_args)
-    if backend == "qwen":
-        ensure_qwen_yolo(result)
-        exclude_qwen_tools(result, QWEN_PLANNING_EXCLUDED_TOOLS)
-    return result
-
-
-def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
-    result = list(extra_args)
-    if backend == "qwen":
-        ensure_qwen_yolo(result)
-        exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
-    return result
-
-
-def ensure_qwen_yolo(args: list[str]) -> None:
-    if "--yolo" not in args and "--approval-mode" not in args:
-        args.append("--yolo")
-
-
-def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
-    for tool_name in tool_names:
-        if tool_name not in args:
-            args.extend(["--exclude-tools", tool_name])
 
 
 def repair_review_needs_project_change(
@@ -219,141 +99,6 @@ def is_validator_repair_task(task: Task) -> bool:
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
     """Let Qwen write planning artifacts without making source files its cwd."""
     return work if backend == "qwen" else root
-
-
-def load_yaml_script(path: Path) -> list[dict[str, str]]:
-    try:
-        import yaml
-    except ImportError as error:
-        raise RunnerError(
-            "YAML script requires PyYAML: pip install PyYAML"
-        ) from error
-
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception as error:
-        raise RunnerError(f"invalid YAML script: {error}") from error
-
-    if not isinstance(data, list) or not data:
-        raise RunnerError("YAML script must be a non-empty array")
-
-    items: list[dict[str, str]] = []
-    for index, item in enumerate(data, 1):
-        if not isinstance(item, dict):
-            raise RunnerError(f"script item {index} must be an object")
-        prompt = item.get("prompt") or item.get("goal")
-        validator = item.get("validator")
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise RunnerError(f"script item {index} requires prompt")
-        if not isinstance(validator, str) or not validator.strip():
-            raise RunnerError(
-                f"script item {index} requires validator path or 'ai'"
-            )
-        items.append(
-            {
-                "prompt": prompt.strip(),
-                "validator": validator.strip(),
-                "validator_prompt": str(item.get("validator_prompt", "")),
-            }
-        )
-    return items
-
-
-def execute_script(args: argparse.Namespace) -> int:
-    script = Path(args.script).resolve()
-    if not script.is_file():
-        raise RunnerError("invalid YAML script")
-
-    items = load_yaml_script(script)
-    total = len(items)
-    for index, item in enumerate(items, 1):
-        _script_event(args, "script.item_started", index, total, item)
-        child = _script_item_args(args, item, index)
-        child.script_index = index
-        child.script_total = total
-        code = execute(child)
-        if code != 0:
-            _script_event(
-                args,
-                "script.item_failed",
-                index,
-                total,
-                item,
-                exit_code=code,
-            )
-            return code
-        _script_event(args, "script.item_completed", index, total, item)
-    return 0
-
-
-def _script_event(
-    args: argparse.Namespace,
-    event_type: str,
-    index: int,
-    total: int,
-    item: dict[str, str],
-    exit_code: int | None = None,
-) -> None:
-    event: dict[str, Any] = {
-        "schema_version": 1,
-        "runner_version": __version__,
-        "type": event_type,
-        "timestamp": time.time(),
-        "script_index": index,
-        "script_total": total,
-        "prompt_preview": item["prompt"][:500],
-    }
-    if exit_code is not None:
-        event["exit_code"] = exit_code
-
-    callback = getattr(args, "event_callback", None)
-    if callback is not None:
-        try:
-            callback(event)
-        except Exception:
-            # External UI/skill failures must not stop script execution.
-            pass
-    if getattr(args, "json_events", False):
-        try:
-            print(json.dumps(event), flush=True)
-        except (BrokenPipeError, OSError):
-            args.json_events = False
-        return
-    if not getattr(args, "human_output", True):
-        return
-
-    if event_type == "script.item_started":
-        print(f"[Script {index}/{total}] {item['prompt']}", flush=True)
-    elif event_type == "script.item_completed":
-        print(f"[Script {index}/{total}] PASS", flush=True)
-    else:
-        print(
-            f"[Script {index}/{total}] FAILED ({exit_code})",
-            file=sys.stderr,
-            flush=True,
-        )
-
-
-def _script_item_args(
-    args: argparse.Namespace,
-    item: dict[str, str],
-    index: int,
-) -> argparse.Namespace:
-    child = copy.copy(args)
-    child.script = None
-    child.goal = item["prompt"]
-    child.validator = item["validator"]
-    child.validator_prompt = item["validator_prompt"]
-    child.work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
-
-    state_file = (
-        Path(args.project_root).resolve()
-        / child.work_dir
-        / "state.json"
-    )
-    child.resume = bool(args.resume and state_file.is_file())
-    child.force_new = not child.resume
-    return child
 
 
 class TaskRunner:
@@ -509,14 +254,7 @@ class TaskRunner:
         self._save_state()
 
     def _plan_if_needed(self) -> None:
-        if (
-            self.state.tasks
-            and self.state.current >= len(self.state.tasks)
-            and all(task.status == "completed" for task in self.state.tasks)
-            and self.state.stage != "validator_failed"
-        ):
-            return
-        if self.state.tasks and self.state.current < len(self.state.tasks):
+        if not self._needs_planning():
             return
 
         planning_failures = 0
@@ -614,6 +352,17 @@ class TaskRunner:
         self._save_state()
         show_todo(self.state, self.ui)
 
+    def _needs_planning(self) -> bool:
+        if self.state.tasks and self.state.current < len(self.state.tasks):
+            return False
+        if self.state.stage == "validator_failed":
+            return True
+        return not (
+            self.state.tasks
+            and self.state.current >= len(self.state.tasks)
+            and all(task.status == "completed" for task in self.state.tasks)
+        )
+
     def _run_pending_tasks(self) -> int | None:
         while self.state.current < len(self.state.tasks):
             task = self.state.tasks[self.state.current]
@@ -628,7 +377,7 @@ class TaskRunner:
                 task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
                 self._save_session()
 
-                project_changed = project_fingerprint(self.root, self.work) != project_before
+                project_changed = self._project_changed_since(project_before)
                 if (
                     not self.ai_validation
                     and validator_repair_should_use_file_validator(
@@ -642,79 +391,11 @@ class TaskRunner:
                     self._set_stage("reviewing")
                     review = self._review_current_task(task, output)
             except RunnerError as error:
-                if project_fingerprint(self.root, self.work) != project_before:
-                    if (
-                        not self.ai_validation
-                        and validator_repair_should_use_file_validator(
-                            self.state,
-                            task,
-                            True,
-                        )
-                    ):
-                        review = self._defer_repair_review_to_file_validator(task)
-                        result = self._handle_review_result(
-                            task,
-                            review,
-                            project_changed=True,
-                        )
-                        if result is not None:
-                            return result
-                        continue
-                    else:
-                        try:
-                            review = self._review_failed_execution_changes(
-                                task,
-                                error,
-                            )
-                        except RunnerError as review_error:
-                            if not self.ai_validation:
-                                review = self._fallback_review_to_validator(
-                                    task,
-                                    review_error,
-                                )
-                                result = self._handle_review_result(
-                                    task,
-                                    review,
-                                    project_changed=True,
-                                )
-                                if result is not None:
-                                    return result
-                                continue
-                            error = review_error
-                        else:
-                            result = self._handle_review_result(
-                                task,
-                                review,
-                                project_changed=True,
-                            )
-                            if result is not None:
-                                return result
-                            continue
-
-                task.last_output = (
-                    "Previous model call failed before task completion:\n"
-                    + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+                result = self._handle_execution_error(
+                    task,
+                    error,
+                    project_before,
                 )
-                task.status = "pending"
-                task.stagnant_attempts += 1
-                if self._should_defer_model_error_to_validator(task):
-                    review = self._defer_model_error_to_validator(task, error)
-                    result = self._handle_review_result(
-                        task,
-                        review,
-                        project_changed=False,
-                    )
-                    if result is not None:
-                        return result
-                    continue
-                self.state.agent_session_id = self.agent.session_id
-                self._save_state()
-                self.ui.set(
-                    "模型階段失敗，準備重試任務",
-                    str(error)[-500:],
-                )
-                self._set_stage("task_retry_wait", str(error))
-                result = self._prepare_task_retry(task)
                 if result is not None:
                     return result
                 continue
@@ -722,12 +403,80 @@ class TaskRunner:
             result = self._handle_review_result(
                 task,
                 review,
-                project_changed=project_fingerprint(self.root, self.work) != project_before,
+                project_changed=self._project_changed_since(project_before),
             )
             if result is not None:
                 return result
             continue
         return None
+
+    def _handle_execution_error(
+        self,
+        task: Task,
+        error: RunnerError,
+        project_before: str,
+    ) -> int | None:
+        if self._project_changed_since(project_before):
+            if (
+                not self.ai_validation
+                and validator_repair_should_use_file_validator(
+                    self.state,
+                    task,
+                    True,
+                )
+            ):
+                review = self._defer_repair_review_to_file_validator(task)
+                return self._handle_review_result(
+                    task,
+                    review,
+                    project_changed=True,
+                )
+
+            try:
+                review = self._review_failed_execution_changes(task, error)
+            except RunnerError as review_error:
+                if not self.ai_validation:
+                    review = self._fallback_review_to_validator(
+                        task,
+                        review_error,
+                    )
+                    return self._handle_review_result(
+                        task,
+                        review,
+                        project_changed=True,
+                    )
+                error = review_error
+            else:
+                return self._handle_review_result(
+                    task,
+                    review,
+                    project_changed=True,
+                )
+
+        task.last_output = (
+            "Previous model call failed before task completion:\n"
+            + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+        )
+        task.status = "pending"
+        task.stagnant_attempts += 1
+        if self._should_defer_model_error_to_validator(task):
+            review = self._defer_model_error_to_validator(task, error)
+            return self._handle_review_result(
+                task,
+                review,
+                project_changed=False,
+            )
+        self.state.agent_session_id = self.agent.session_id
+        self._save_state()
+        self.ui.set(
+            "模型階段失敗，準備重試任務",
+            str(error)[-500:],
+        )
+        self._set_stage("task_retry_wait", str(error))
+        return self._prepare_task_retry(task)
+
+    def _project_changed_since(self, fingerprint: str) -> bool:
+        return project_fingerprint(self.root, self.work) != fingerprint
 
     def _review_failed_execution_changes(
         self,
@@ -1058,4 +807,11 @@ class TaskRunner:
 
 
 def execute(args: argparse.Namespace) -> int:
+    if args.script:
+        return execute_script(args)
     return TaskRunner(args).run()
+
+
+def execute_script(args: argparse.Namespace) -> int:
+    """Compatibility wrapper for callers that import script mode directly."""
+    return execute_yaml_script(args, execute)

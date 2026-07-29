@@ -1054,7 +1054,7 @@ def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
 
 
 def test_qwen_planning_args_preserve_yolo():
-    import runner_core
+    import agent_args
 
     args = [
         "--approval-mode",
@@ -1066,30 +1066,30 @@ def test_qwen_planning_args_preserve_yolo():
     ]
 
     expected = [*args]
-    for tool_name in runner_core.QWEN_PLANNING_EXCLUDED_TOOLS:
+    for tool_name in agent_args.QWEN_PLANNING_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
-    assert runner_core.planning_agent_args("qwen", args) == expected
-    assert runner_core.planning_agent_args("opencode", args) == args
+    assert agent_args.planning_agent_args("qwen", args) == expected
+    assert agent_args.planning_agent_args("opencode", args) == args
 
 
 def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
-    import runner_core
+    import agent_args
 
     args = ["--approval-mode", "yolo"]
 
     expected = [*args]
-    for tool_name in runner_core.QWEN_RUNTIME_EXCLUDED_TOOLS:
+    for tool_name in agent_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
-    assert runner_core.runtime_agent_args("qwen", args) == expected
-    assert runner_core.runtime_agent_args("opencode", args) == args
+    assert agent_args.runtime_agent_args("qwen", args) == expected
+    assert agent_args.runtime_agent_args("opencode", args) == args
 
 
 def test_qwen_args_default_to_yolo():
-    import runner_core
+    import agent_args
 
-    assert runner_core.planning_agent_args("qwen", [])[0] == "--yolo"
-    assert runner_core.runtime_agent_args("qwen", [])[0] == "--yolo"
-    assert "--yolo" not in runner_core.runtime_agent_args(
+    assert agent_args.planning_agent_args("qwen", [])[0] == "--yolo"
+    assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"
+    assert "--yolo" not in agent_args.runtime_agent_args(
         "qwen",
         ["--approval-mode", "yolo"],
     )

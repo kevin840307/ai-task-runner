@@ -19,6 +19,8 @@ ai_task_runner.py      CLI parser and execute() entry
 defaults.py           Shared 24h default values
 runner_api.py         Public API and RunRequest validation
 runner_core.py        TaskRunner state machine and retry orchestration
+agent_args.py         Backend-specific planning/runtime argument policy
+script_runner.py      YAML batch orchestration and per-item resume setup
 planning.py           TODO derivation, fallback splitting, repair task planning
 validation.py         Python/AI final validator execution and AI failure feedback
 prompting.py          Prompt template loading and prompt builders
@@ -61,7 +63,7 @@ The default backend is `qwen`, and its default command is `qwen.cmd`. Users can 
 
 Prompt text is stored as Markdown templates under `prompts/`. `prompting.py` loads the templates and substitutes runtime fields; Python files should not be the place to tune model wording.
 
-`runner_core.py` calls high-level helpers instead of owning all details: `planning.py` turns goals or validator feedback into tasks, `validation.py` runs the final validators, `prompting.py` builds prompts, and `ui.py` renders progress. These modules avoid importing `runner_core.py`, keeping dependencies one-way.
+`runner_core.py` calls high-level helpers instead of owning all details: `planning.py` turns goals or validator feedback into tasks, `validation.py` runs final validators, `prompting.py` builds prompts, `ui.py` renders progress, `agent_args.py` owns backend argument policy, and `script_runner.py` owns YAML batch item setup. These modules avoid importing `runner_core.py`, keeping dependencies one-way.
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 

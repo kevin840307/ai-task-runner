@@ -30,6 +30,12 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert {
         "runner_api.py",
         "runner_models.py",
+        "agent_args.py",
+        "script_runner.py",
+        "planning.py",
+        "prompting.py",
+        "validation.py",
+        "ui.py",
         "version.py",
         "qwen.py",
         "opencode.py",
