@@ -958,6 +958,14 @@ def parse_ai_validation(text: str) -> dict[str, Any]:
             value.get("missing_items", []),
             "validator.missing_items",
         ),
+        "checks_run": _bounded_missing_items(
+            value.get("checks_run", []),
+            "validator.checks_run",
+        ),
+        "suggested_checks": _bounded_missing_items(
+            value.get("suggested_checks", []),
+            "validator.suggested_checks",
+        ),
     }
 
 

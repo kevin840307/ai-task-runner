@@ -11,7 +11,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from agent import AgentClient
 from errors import RunnerError
@@ -520,7 +520,49 @@ def run_ai_validator(
         args.retry_max_wait,
         MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
     )
-    return result["passed"] is True, json.dumps(result, ensure_ascii=False)
+    return result["passed"] is True, format_ai_validator_output(result)
+
+
+def format_ai_validator_output(result: Mapping[str, Any]) -> str:
+    raw = json.dumps(result, ensure_ascii=False)
+    if result.get("passed") is True:
+        return raw
+
+    reason = str(result.get("reason", "")).strip() or "AI validation failed"
+    missing_items = [
+        str(item).strip()
+        for item in result.get("missing_items", [])
+        if str(item).strip()
+    ]
+    checks_run = [
+        str(item).strip()
+        for item in result.get("checks_run", [])
+        if str(item).strip()
+    ]
+    suggested_checks = [
+        str(item).strip()
+        for item in result.get("suggested_checks", [])
+        if str(item).strip()
+    ]
+
+    lines = ["AI_VALIDATION_FAILED", f"reason: {reason}"]
+    if checks_run:
+        lines.append("checks_run:")
+        lines.extend(f"- {item}" for item in checks_run)
+    if suggested_checks:
+        lines.append("suggested_checks:")
+        lines.extend(f"- {item}" for item in suggested_checks)
+    lines.append("raw_json:")
+    lines.append(raw)
+    lines.append("blocking_missing_items:")
+    if missing_items:
+        lines.extend(
+            f"[E{index:03d}] {item}"
+            for index, item in enumerate(missing_items, 1)
+        )
+    else:
+        lines.append(f"[E001] {reason}")
+    return "\n".join(lines)
 
 
 def load_yaml_script(path: Path) -> list[dict[str, str]]:

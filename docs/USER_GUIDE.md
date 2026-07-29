@@ -69,6 +69,8 @@ Or use AI validation:
 python ai_task_runner.py --goal "Build X" --validator ai
 ```
 
+AI validation is useful when there is no Python validator yet. It runs in a fresh independent agent session, asks the agent to inspect files and run reasonable local checks, and expects JSON with `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. If it fails, `missing_items` become focused repair feedback for the next cycle. This is weaker than a Python validator, but better than relying only on per-task review.
+
 Python validators have no required output format. They receive:
 
 ```text

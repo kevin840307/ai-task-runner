@@ -63,6 +63,8 @@ Planning prompts may write JSON or Markdown only under the runner work directory
 
 Review prompts are read-only. If review changes project files, the runner restores them and retries.
 
+AI validation is also read-only and runs in a fresh session. It returns `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. When it fails, the runner converts missing items into structured validator feedback so normal repair planning can continue without a Python validator.
+
 ## Validator Handling
 
 Python validators run as:

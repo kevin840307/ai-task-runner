@@ -30,6 +30,8 @@ Use AI validation instead of a Python validator:
 python ai_task_runner.py --goal "Update docs" --validator ai
 ```
 
+AI validation uses a fresh independent agent session. It asks the agent to inspect the project, run reasonable local checks when possible, and return JSON with `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. If AI validation fails, `missing_items` are converted into focused repair feedback for the next cycle. Python validators are still stronger when exact correctness matters.
+
 ## Flow
 
 ```text
@@ -51,6 +53,8 @@ When validator stdout contains structured error headings such as `[E001] ...`, f
 Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If model planning repeatedly fails, deterministic fallback still derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases in the goal.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
+
+When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
 For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
 

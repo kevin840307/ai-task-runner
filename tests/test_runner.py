@@ -461,6 +461,9 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert all('do not invent' in prompt.lower() for prompt in prompts)
     assert '"missing_items":[]' in prompts[2]
     assert '"missing_items":[]' in prompts[3]
+    assert '"checks_run"' in prompts[3]
+    assert '"suggested_checks"' in prompts[3]
+    assert "Run reasonable local checks" in prompts[3]
     prompt_with_legacy_hint = runner.execution_prompt(
         state,
         root,
@@ -764,6 +767,30 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
     assert (state_dir / "validator.count").read_text() == "2"
 
 
+def test_ai_validator_failure_output_becomes_repair_findings():
+    import runner_core
+
+    output = runner_core.format_ai_validator_output({
+        "passed": False,
+        "reason": "not ready",
+        "missing_items": ["Create app.py", "Document usage"],
+        "checks_run": ["inspected files"],
+        "suggested_checks": ["python app.py --help"],
+    })
+
+    assert "AI_VALIDATION_FAILED" in output
+    assert "[E001] Create app.py" in output
+    assert "[E002] Document usage" in output
+    assert "checks_run:" in output
+    assert "suggested_checks:" in output
+
+    tasks = runner_core.derive_tasks_from_goal("Build the app", 3, output)
+    assert [task.title for task in tasks] == [
+        "Repair E001: Create app.py",
+        "Repair E002: Document usage",
+    ]
+
+
 def test_no_progress_adds_different_strategy_instruction(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "stagnation")
     result = subprocess.run(
@@ -914,6 +941,8 @@ def test_review_and_validator_results_are_bounded():
         "passed": False,
         "reason": "r" * (MAX_RESULT_REASON_CHARS + 10),
         "missing_items": missing,
+        "checks_run": missing,
+        "suggested_checks": missing,
     }))
 
     for result in (review, validation):
@@ -923,6 +952,8 @@ def test_review_and_validator_results_are_bounded():
             len(item) == MAX_MISSING_ITEM_CHARS
             for item in result["missing_items"]
         )
+    assert len(validation["checks_run"]) == MAX_MISSING_ITEMS
+    assert len(validation["suggested_checks"]) == MAX_MISSING_ITEMS
 
     bounded = bounded_text("FIRST" + "A" * 10000 + "LAST", 2000)
     assert "FIRST" in bounded
