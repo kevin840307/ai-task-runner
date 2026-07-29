@@ -198,8 +198,8 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("runner_support.sys.stdout", stdout)
-    monkeypatch.setattr("runner_support.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("ui.sys.stdout", stdout)
+    monkeypatch.setattr("ui.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[
@@ -222,7 +222,7 @@ def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
     from runner_support import LiveUI
 
     monkeypatch.setattr(
-        "runner_support.shutil.get_terminal_size",
+        "ui.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((50, 10)),
     )
     state = RunState("run", "goal", "/project", tasks=[
@@ -264,8 +264,8 @@ def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("runner_support.sys.stdout", stdout)
-    monkeypatch.setattr("runner_support.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("ui.sys.stdout", stdout)
+    monkeypatch.setattr("ui.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[

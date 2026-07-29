@@ -24,7 +24,7 @@ Execution has a default activity idle watchdog. It starts when the AI execution 
 
 ## Task Prompt Shape
 
-Runner prompt templates live under `prompts/`. `runner_support.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
+Runner prompt templates live under `prompts/`. `prompting.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
 
 Each TODO execution usually reuses the same main agent session. The runner sends compact context:
 
@@ -80,8 +80,12 @@ Re-run the same script with `--resume`: completed items return immediately, unfi
 ai_task_runner.py                 CLI parser and main entry point
 defaults.py                       Shared default backend, command, timeout, and limit values
 runner_api.py                     Public Python API
-runner_core.py                    Task planning, execution, review, validation
-runner_support.py                 Prompt loading, parsers, validators, protection, UI
+runner_core.py                    TaskRunner state machine, retry, resume
+planning.py                       TODO planning, fallback splitting, repair task derivation
+validation.py                     Python/AI final validation and AI failure feedback
+prompting.py                      Prompt template loading and prompt builders
+ui.py                             Live terminal UI and JSON progress events
+runner_support.py                 Parsers, protection, retry, validator subprocess utilities
 runner_models.py                  RunState and Task models
 agent.py                          Session-aware backend facade
 process_control.py                Subprocess timeout and activity watchdog

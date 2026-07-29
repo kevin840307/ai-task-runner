@@ -121,8 +121,12 @@ result = run(RunRequest(
 ai_task_runner.py        CLI parser and entry point
 defaults.py             Shared 24h defaults for CLI, API, and backends
 runner_api.py           Public Python API
-runner_core.py          Planning, task loop, review, validation, resume
-runner_support.py       Prompt loading, parsing, validators, protection, UI helpers
+runner_core.py          TaskRunner state machine, retry, resume
+planning.py             TODO planning, fallback splitting, repair task derivation
+validation.py           Python/AI final validation and AI failure feedback
+prompting.py            Prompt template loading and prompt builders
+ui.py                   Live terminal UI and JSON progress events
+runner_support.py       Parsing, protection, retry, validator subprocess utilities
 runner_models.py        State and task data models
 agent.py                Session-aware backend facade
 process_control.py      Process tree, timeout, and activity watchdog handling
