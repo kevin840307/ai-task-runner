@@ -16,7 +16,7 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 6. Run the final Python or AI validator after all tasks are reviewed.
 7. If final validation fails, keep the project changes, create focused repair task(s), and continue.
 
-Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If one TODO repeatedly fails in the model stage without any project changes and a Python validator is configured, the runner defers that TODO to final validation so the whole run can keep moving. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
+Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If one TODO repeatedly fails in the model stage without any project changes and a Python validator is configured, the runner defers that TODO to final validation so the whole run can keep moving. If an AI review cannot produce valid review JSON while a Python validator is configured, the runner also defers that task's completion judgment to the final validator instead of rerunning the same task forever. When the same final validator failure repeats, repair tasks use a fresh agent session while keeping saved runner state and validator feedback. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
 
 ## Activity Watchdog
 
@@ -38,7 +38,7 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
-Agents may read validator files to understand expected behavior, but they must not modify validator files or hardcode validator internals. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
+Agents may read validator files to understand expected behavior, but they must not modify validator files, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
 
 Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback can split headings, numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, templates, configuration, and documentation.
 

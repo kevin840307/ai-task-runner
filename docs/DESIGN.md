@@ -84,9 +84,9 @@ Python validators run as:
 python validator.py --project-root <root> --state-file <state.json>
 ```
 
-Validator files are protected. Agents may read validator files to understand expected behavior, but must not edit them or hardcode validator internals.
+Validator files are protected. Agents may read validator files to understand expected behavior, but must not edit them, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths.
 
-When the same task makes no project changes while validator feedback is still present, the task is not accepted. When repeated no-progress suggests a bad session, the runner clears the session and retries from saved state. Validator stdout is treated as a compact summary; detailed evidence belongs under `.ai-task-runner/validator-reports/`, where repair prompts read `summary.txt`, `errors.txt`, and then the first relevant `Full report:` file.
+When the same task makes no project changes while validator feedback is still present, the task is not accepted unless completion is explicitly deferred to the Python validator. When repeated no-progress or repeated final validator failure suggests a bad session, the runner clears the session and retries from saved state. If AI review returns no valid review JSON and a Python validator is configured, the runner can mark the task as deferred to final validation instead of looping on review format failures. Validator stdout is treated as a compact summary; detailed evidence belongs under `.ai-task-runner/validator-reports/`, where repair prompts read `summary.txt`, `errors.txt`, and then the first relevant `Full report:` file.
 
 Validator stdout and stderr do not need a schema. The runner stores bounded feedback, currently 20,000 characters, with head and tail preserved for long logs.
 

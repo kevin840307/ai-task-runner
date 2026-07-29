@@ -38,6 +38,11 @@ def run_cli(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def command_failure(command: tuple[str, ...], result: subprocess.CompletedProcess[str]) -> str:
+    output = result.stdout.strip() or "(no stdout/stderr)"
+    return f"command failed {command} with exit code {result.returncode}:\n{output}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", required=True)
@@ -67,11 +72,11 @@ def main() -> int:
     for command in commands:
         result = run_cli(root, *command)
         if result.returncode != 0:
-            return fail(f"command failed {command}:\n{result.stdout}")
+            return fail(command_failure(command, result))
 
     listed = run_cli(root, "--db", "todos.json", "list", "--format", "json")
     if listed.returncode != 0:
-        return fail("list command failed:\n" + listed.stdout)
+        return fail(command_failure(("--db", "todos.json", "list", "--format", "json"), listed))
     try:
         todos = json.loads(listed.stdout)
     except json.JSONDecodeError as error:
@@ -89,7 +94,7 @@ def main() -> int:
 
     exported = run_cli(root, "--db", "todos.json", "export", "--output", "summary.md")
     if exported.returncode != 0:
-        return fail("export command failed:\n" + exported.stdout)
+        return fail(command_failure(("--db", "todos.json", "export", "--output", "summary.md"), exported))
     summary = (root / "summary.md").read_text(encoding="utf-8") if (root / "summary.md").is_file() else ""
     for text in ("# Todo Summary", "## Open", "Write docs", "## Completed", "Fix parser"):
         if text not in summary:

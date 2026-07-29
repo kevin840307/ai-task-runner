@@ -69,6 +69,11 @@ elif "Execute only the current task" in prompt:
     if scenario == "stagnation" and "Previous attempts made no effective progress" in prompt:
         (state_dir / "strategy_seen.txt").write_text("yes", encoding="utf-8")
     if scenario == "validator_repair" and "Validator repair mode" in prompt:
+        if "--resume" not in args:
+            (state_dir / "fresh_repair_session_seen.txt").write_text(
+                "yes",
+                encoding="utf-8",
+            )
         (root / "repaired.txt").write_text("done", encoding="utf-8")
     if scenario != "stagnation" and scenario != "multi_task_plan":
         (root / "done.txt").write_text("done", encoding="utf-8")
@@ -91,13 +96,16 @@ elif "Review only" in prompt:
     else:
         if scenario == "readonly" and n == 1:
             (root / "review_mutation.txt").write_text("should be restored", encoding="utf-8")
-        if scenario == "stagnation":
+        if scenario == "review_non_json":
+            answer = "The task is complete, but this review is not JSON."
+        elif scenario == "stagnation":
             completed = n >= 4
             missing = [] if completed else ["same missing item"]
+            answer = {"completed": completed, "reason": "checked", "missing_items": missing}
         else:
             completed = not (scenario == "review_retry" and n == 1)
             missing = [] if completed else ["retry once"]
-        answer = {"completed": completed, "reason": "checked", "missing_items": missing}
+            answer = {"completed": completed, "reason": "checked", "missing_items": missing}
 elif "fresh independent session" in prompt:
     n = count("validator")
     session = "scenario-validator-session-001"

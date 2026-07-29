@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib.util
 import json
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -50,6 +52,23 @@ def load_module(script: Path):
     return module
 
 
+def uses_forbidden_dynamic_execution(source: str) -> bool:
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in {"eval", "exec"}:
+            return True
+        if isinstance(func, ast.Attribute) and func.attr in {"eval", "exec"}:
+            return True
+    return False
+
+
+def exception_feedback(context: str) -> str:
+    return f"{context}:\n" + traceback.format_exc(limit=6)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", required=True)
@@ -65,8 +84,11 @@ def main() -> int:
     if not script.is_file():
         return fail("missing expression_eval.py")
     source = script.read_text(encoding="utf-8")
-    if "eval(" in source or "exec(" in source:
-        return fail("expression_eval.py must not use eval or exec")
+    try:
+        if uses_forbidden_dynamic_execution(source):
+            return fail("expression_eval.py must not call eval or exec")
+    except SyntaxError as error:
+        return fail(f"expression_eval.py has invalid Python syntax: {error}")
 
     try:
         module = load_module(script)
@@ -82,7 +104,7 @@ def main() -> int:
         try:
             actual = module.evaluate(expression)
         except Exception as error:
-            return fail(f"evaluate({expression!r}) raised {error}")
+            return fail(exception_feedback(f"evaluate({expression!r}) raised {error}"))
         if not close_enough(actual, expected):
             return fail(f"evaluate({expression!r}) returned {actual!r}, expected {expected!r}")
 

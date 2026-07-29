@@ -1,6 +1,7 @@
 Hard rules:
 - You may READ files anywhere when necessary.
 - You may WRITE/CREATE/DELETE files only inside project root: $root
+- Treat every path outside project root as read-only, including validators, examples, smoke cases, runner files, and their parent folders. Do not create sidecar state, log, report, or scratch files next to outside-root paths.
 - Never modify these protected files:
 $protected_names
 - Never modify runner state directly. Python owns task state.

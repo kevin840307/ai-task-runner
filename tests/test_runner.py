@@ -614,6 +614,35 @@ def test_repeated_no_change_model_errors_defer_to_file_validator(tmp_path):
     assert state["completed"] is True
 
 
+def test_file_validator_judges_task_when_review_is_not_json(tmp_path):
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "import argparse\n"
+        "from pathlib import Path\n"
+        "p=argparse.ArgumentParser();"
+        "p.add_argument('--project-root');"
+        "p.add_argument('--state-file');"
+        "args=p.parse_args();"
+        "raise SystemExit(0 if (Path(args.project_root)/'done.txt').exists() else 1)\n",
+        encoding="utf-8",
+    )
+    env, state_dir = _scenario_env(tmp_path, "review_non_json")
+    result = subprocess.run(
+        _scenario_args(tmp_path, "review_non_json", validator=validator),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    review = state["tasks"][0]["last_review"]
+    assert review["completed"] is True
+    assert review["defer_to_validator"] is True
+    assert state["completed"] is True
+
+
 def test_execution_error_after_project_change_goes_to_review(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "execution_error_after_change")
     result = subprocess.run(
@@ -702,6 +731,9 @@ print('PASS')
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "repaired.txt").read_text(encoding="utf-8") == "done"
     assert (state_dir / "execute.count").read_text() == "3"
+    assert (state_dir / "fresh_repair_session_seen.txt").read_text(
+        encoding="utf-8"
+    ) == "yes"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["completed"] is True
     assert state["stage"] == "completed"

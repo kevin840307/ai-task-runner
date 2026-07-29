@@ -389,7 +389,15 @@ class TaskRunner:
                     review = self._defer_repair_review_to_file_validator(task)
                 else:
                     self._set_stage("reviewing")
-                    review = self._review_current_task(task, output)
+                    try:
+                        review = self._review_current_task(task, output)
+                    except RunnerError as review_error:
+                        if self.ai_validation or self.validator is None:
+                            raise
+                        review = self._fallback_review_to_validator(
+                            task,
+                            review_error,
+                        )
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -597,11 +605,16 @@ class TaskRunner:
         error: RunnerError,
     ) -> dict:
         reason = (
-            "AI review failed after retries, but project files changed. "
+            "AI review failed, but a Python final validator is configured. "
             "Deferring completion judgment to the configured Python final "
             f"validator. Review failure: {str(error)[-500:]}"
         )
-        return {"completed": True, "reason": reason, "missing_items": []}
+        return {
+            "completed": True,
+            "defer_to_validator": True,
+            "reason": reason,
+            "missing_items": [],
+        }
 
     def _should_defer_model_error_to_validator(self, task: Task) -> bool:
         return (
@@ -633,6 +646,8 @@ class TaskRunner:
         if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
             self.agent.session_id = ""
             strategy_note = render_prompt_template("no_progress_strategy.md", {})
+        elif self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+            self.agent.session_id = ""
         change_detected = self._project_change_detector()
 
         def call() -> str:

@@ -48,6 +48,10 @@ The runner does not generate code itself. The agent writes project files. The ru
 
 Within one live runner process, these failures are automatically retried: model errors, Qwen loop detection, session unavailable, timeouts, invalid review JSON, review failure, protected-file edits, validator failure, and no-progress attempts.
 
+If a Python validator is configured and an AI review cannot return valid review JSON, the runner can defer that task's completion judgment to the final validator instead of rerunning the same task forever. The run still stops only after the final validator passes.
+
+When the same final validator failure repeats, repair tasks switch to a fresh agent session while still receiving the saved runner state and validator feedback. This helps a small model escape a bad prior approach without losing the 24h retry loop.
+
 When validator stdout contains structured error headings such as `[E001] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
 
 Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If model planning repeatedly fails, deterministic fallback still derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases in the goal.
