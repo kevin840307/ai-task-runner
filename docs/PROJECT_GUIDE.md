@@ -42,6 +42,8 @@ Agents may read validator files to understand expected behavior, but they must n
 
 Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback can split headings, numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, templates, configuration, and documentation.
 
+Runner code and prompt templates are task-agnostic by design. Generic concepts such as files, CLI behavior, generated outputs, validators, templates, configuration, or documentation are allowed because they help split many kinds of goals. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
+
 ## Validator Output
 
 File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.

@@ -54,6 +54,8 @@ Planning prompts ask the model to identify concrete deliverables first and to al
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
+The runner and prompt templates must stay task-agnostic. Case-specific names such as a particular app, fab, workflow, generated filename, or algorithm belong only in user goals, validators, examples, smoke cases, or test fixtures. The core runner may use generic planning heuristics, but it must not special-case one user's project.
+
 When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
 For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.

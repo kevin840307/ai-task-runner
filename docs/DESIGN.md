@@ -74,6 +74,8 @@ Review prompts are read-only. If review changes project files, the runner restor
 
 AI validation is also read-only and runs in a fresh session. It returns `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. When it fails, the runner converts missing items into structured validator feedback so normal repair planning can continue without a Python validator.
 
+Runner code and prompt templates must stay task-agnostic. They may contain generic orchestration rules and generic planning heuristics, but they must not special-case one user's app name, fab, workflow, generated filename, algorithm, or validator internals. Case-specific strings belong in user goals, validators, examples, smoke cases, or test fixtures only.
+
 ## Validator Handling
 
 Python validators run as:

@@ -170,14 +170,17 @@ def should_split_ordered_item(text: str) -> bool:
         return False
     return words[0].rstrip(":") in {
         "add",
+        "apply",
         "build",
         "check",
+        "combine",
         "compare",
         "create",
         "document",
         "generate",
         "implement",
         "load",
+        "normalize",
         "parse",
         "render",
         "run",
