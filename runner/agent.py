@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Sequence
 
-from backends import BackendError, create_backend
-from errors import RunnerError
+from runner.backends import BackendError, create_backend
+from .errors import RunnerError
 
 
 SESSION_INVALID_MARKERS = (
@@ -111,4 +111,10 @@ class AgentClient:
 # Backward-compatible alias used by releases before v1.0.
 Agent = AgentClient
 
-__all__ = ["AgentClient", "Agent", "AgentError", "is_session_invalid_error"]
+__all__ = [
+    "AgentClient",
+    "Agent",
+    "AgentError",
+    "SESSION_INVALID_MARKERS",
+    "is_session_invalid_error",
+]

@@ -15,24 +15,25 @@ The agent writes project code and documents. The runner owns orchestration:
 ## Core Modules
 
 ```text
-ai_task_runner.py      CLI parser and execute() entry
-defaults.py           Shared 24h default values
-runner_api.py         Public API and RunRequest validation
-runner_core.py        TaskRunner state machine and retry orchestration
-agent_args.py         Backend-specific planning/runtime argument policy
-script_runner.py      YAML batch orchestration and per-item resume setup
-planning.py           TODO derivation, fallback splitting, repair task planning
-validation.py         Python/AI final validator execution and AI failure feedback
-prompting.py          Prompt template loading and prompt builders
-ui.py                 Live terminal UI and JSON progress events
-runner_support.py     Parsers, protection, retry, validator subprocess utilities
-runner_models.py      Task and RunState serialization
-agent.py              AgentClient session facade
-process_control.py    Subprocess output reader, timeout, process-tree kill
-backends/base.py      Backend interface
-backends/qwen.py      Qwen stream-json command/result/error parsing
-backends/opencode.py  OpenCode command/result parsing
-prompts/              Editable prompt templates
+ai_task_runner.py        CLI parser and execute() entry
+runner/                  Main implementation package
+runner/defaults.py       Shared 24h default values
+runner/api.py            Public API and RunRequest validation
+runner/core.py           TaskRunner state machine and retry orchestration
+runner/agent_args.py     Backend-specific planning/runtime argument policy
+runner/script_runner.py  YAML batch orchestration and per-item resume setup
+runner/planning.py       TODO derivation, fallback splitting, repair task planning
+runner/validation.py     Python/AI final validator execution and AI failure feedback
+runner/prompting.py      Prompt template loading and prompt builders
+runner/ui.py             Live terminal UI and JSON progress events
+runner/support.py        Parsers, protection, retry, validator subprocess utilities
+runner/models.py         Task and RunState serialization
+runner/agent.py          AgentClient session facade
+runner/process_control.py  Subprocess output reader, timeout, process-tree kill
+runner/backends/base.py    Backend interface
+runner/backends/qwen.py    Qwen stream-json command/result/error parsing
+runner/backends/opencode.py OpenCode command/result parsing
+prompts/                   Editable prompt templates
 ```
 
 ## State Machine
@@ -63,7 +64,7 @@ The default backend is `qwen`, and its default command is `qwen.cmd`. Users can 
 
 Prompt text is stored as Markdown templates under `prompts/`. `prompting.py` loads the templates and substitutes runtime fields; Python files should not be the place to tune model wording.
 
-`runner_core.py` calls high-level helpers instead of owning all details: `planning.py` turns goals or validator feedback into tasks, `validation.py` runs final validators, `prompting.py` builds prompts, `ui.py` renders progress, `agent_args.py` owns backend argument policy, and `script_runner.py` owns YAML batch item setup. These modules avoid importing `runner_core.py`, keeping dependencies one-way.
+`runner/core.py` calls high-level helpers instead of owning all details: `runner/planning.py` turns goals or validator feedback into tasks, `runner/validation.py` runs final validators, `runner/prompting.py` builds prompts, `runner/ui.py` renders progress, `runner/agent_args.py` owns backend argument policy, and `runner/script_runner.py` owns YAML batch item setup. These modules avoid importing `runner/core.py`, keeping dependencies one-way.
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 
@@ -97,7 +98,7 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 ## Public API
 
 ```python
-from runner_api import RunRequest, run
+from runner import RunRequest, run
 
 run(RunRequest(goal="Build X", validator="ai"))
 ```

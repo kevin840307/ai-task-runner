@@ -7,8 +7,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from backends import backend_names
-from defaults import (
+from runner.backends import backend_names
+from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
     DEFAULT_BACKEND,
@@ -17,8 +17,8 @@ from defaults import (
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
-from runner_core import execute
-from version import __version__
+from .core import execute
+from .version import __version__
 
 EventHandler = Callable[[dict[str, Any]], None]
 

@@ -12,11 +12,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Sequence, TypeVar
 
-from agent import AgentClient
-from errors import RunnerError
-from runner_models import RunState, Task
-from process_control import run_process
-from prompting import (
+from .agent import AgentClient
+from .errors import RunnerError
+from .models import RunState, Task
+from .process_control import run_process
+from .prompting import (
     ai_validator_prompt,
     bounded_text,
     completed_titles,
@@ -30,7 +30,7 @@ from prompting import (
     rules,
     task_spec,
 )
-from ui import LiveUI, show_todo, supports_ansi_screen
+from .ui import LiveUI, show_todo, supports_ansi_screen
 
 
 T = TypeVar("T")
@@ -60,26 +60,16 @@ STALE_TEMP_SECONDS = 7 * 24 * 60 * 60
 
 def runner_source_files() -> list[Path]:
     """Return all Python files that implement the runner itself."""
-    root = Path(__file__).resolve().parent
+    package_root = Path(__file__).resolve().parent
+    root = package_root.parent
+    root_modules = (
+        "ai_task_runner.py",
+        "ai_task_runner_validator.py",
+    )
     files = [
-        root / "ai_task_runner.py",
-        root / "runner_api.py",
-        root / "api.py",
-        root / "agent.py",
-        root / "errors.py",
-        root / "runner_models.py",
-        root / "models.py",
-        root / "runner_core.py",
-        root / "runner_support.py",
-        root / "agent_args.py",
-        root / "script_runner.py",
-        root / "planning.py",
-        root / "validation.py",
-        root / "prompting.py",
-        root / "ui.py",
-        root / "version.py",
-        root / "process_control.py",
-        *sorted((root / "backends").glob("*.py")),
+        *(root / name for name in root_modules),
+        *sorted(package_root.glob("*.py")),
+        *sorted((package_root / "backends").glob("*.py")),
     ]
     return [path for path in files if path.is_file()]
 

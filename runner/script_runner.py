@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from errors import RunnerError
-from version import __version__
+from .errors import RunnerError
+from .version import __version__
 
 
 ExecuteOne = Callable[[argparse.Namespace], int]

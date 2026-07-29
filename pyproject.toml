@@ -13,4 +13,8 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["ai_task_runner_validator"]
+packages = ["runner", "runner.backends"]
+py-modules = [
+    "ai_task_runner",
+    "ai_task_runner_validator",
+]

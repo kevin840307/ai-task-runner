@@ -106,7 +106,7 @@ YAML batch mode runs a list of goals one by one. Each item has its own state fil
 ## Python API
 
 ```python
-from runner_api import RunRequest, run
+from runner import RunRequest, run
 
 result = run(RunRequest(
     goal="Build the requested feature",
@@ -118,28 +118,43 @@ result = run(RunRequest(
 ## Project Structure
 
 ```text
-ai_task_runner.py        CLI parser and entry point
-defaults.py             Shared 24h defaults for CLI, API, and backends
-runner_api.py           Public Python API
-runner_core.py          TaskRunner state machine, retry, resume
-agent_args.py           Backend-specific planning/runtime argument policy
-script_runner.py        YAML batch orchestration and per-item resume setup
-planning.py             TODO planning, fallback splitting, repair task derivation
-validation.py           Python/AI final validation and AI failure feedback
-prompting.py            Prompt template loading and prompt builders
-ui.py                   Live terminal UI and JSON progress events
-runner_support.py       Parsing, protection, retry, validator subprocess utilities
-runner_models.py        State and task data models
-agent.py                Session-aware backend facade
-process_control.py      Process tree, timeout, and activity watchdog handling
-api.py / models.py      Backward-compatible import aliases
-QWEN.md / AGENTS.md     Project rules for Qwen Code and OpenCode
-prompts/                Editable runner prompt templates
-backends/               Qwen and OpenCode adapters
-examples/               Small reusable sample projects
-smoke/                  Real Qwen smoke cases and validators
-tests/                  Unit, integration, resilience, and contract tests
-docs/                   Design, user guide, test matrix, project guide
+ai_task_runner.py             CLI parser and entry point
+ai_task_runner_validator.py   Installable ValidatorReport helper
+
+runner/                       Main implementation package
+  api.py                      Public Python API and request validation
+  core.py                     TaskRunner state machine, retry, review, resume
+  models.py                   RunState and Task serialization
+  support.py                  Shared parsing, protection, retry, validator helpers
+  agent.py                    Session-aware facade over backend adapters
+  agent_args.py               Backend-specific planning/runtime argument policy
+  planning.py                 TODO planning, fallback splitting, repair tasks
+  prompting.py                Prompt template loading and prompt builders
+  validation.py               AI final validation helper
+  script_runner.py            YAML batch orchestration and per-item resume setup
+  process_control.py          Process tree, timeout, and activity watchdog handling
+  ui.py                       Live terminal UI and JSON progress events
+  defaults.py                 Shared 24h defaults for CLI, API, and backends
+  errors.py                   RunnerError
+  version.py                  Package/documentation version
+  backends/
+    base.py                   Backend interface and shared command handling
+    qwen.py                   Qwen stream-json backend
+    opencode.py               OpenCode backend
+
+prompts/                      Editable runner prompt templates
+docs/                         Human and AI documentation
+  validator_templates/        Copyable validator templates and wrappers
+examples/                     Small reusable sample projects
+smoke/                        Real Qwen smoke cases and validators
+tests/                        Unit, integration, resilience, and contract tests
+
+QWEN.md / AGENTS.md           Project rules for Qwen Code and OpenCode
+pyproject.toml                Package metadata for runner and ValidatorReport helper
+requirements*.txt             Runtime and development dependencies
+.ai-task-runner/              Local run state, ignored by git
+.qwen/                        Local Qwen state, ignored by git
+.pytest_cache/                Local pytest cache, ignored by git
 ```
 
 ## Current Validation
@@ -156,7 +171,7 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `124 passed, 1 skipped`.
+Latest local result: `141 passed, 1 skipped`.
 
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
 

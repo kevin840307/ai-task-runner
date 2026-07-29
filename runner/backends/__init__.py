@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from defaults import DEFAULT_AGENT_TIMEOUT
+from runner.defaults import DEFAULT_AGENT_TIMEOUT
 from .base import AgentBackend, Backend, BackendError, BackendResult
 from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules

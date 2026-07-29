@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner_api import RunConfig, RunRequest, run
+from runner.api import RunConfig, RunRequest, run
 
 
 def _validator(path: Path) -> Path:
@@ -106,8 +106,8 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
 
 
 def test_retry_loop_survives_many_transient_failures():
-    from errors import RunnerError
-    from runner_support import LiveUI, retry_model_call
+    from runner.errors import RunnerError
+    from runner.support import LiveUI, retry_model_call
 
     attempts = 0
 
@@ -169,7 +169,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
 
 
 def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
-    from runner_support import LiveUI
+    from runner.support import LiveUI
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
@@ -181,8 +181,8 @@ def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
 
 
 def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
-    from runner_models import RunState, Task
-    from runner_support import LiveUI
+    from runner.models import RunState, Task
+    from runner.support import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -198,8 +198,8 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("ui.sys.stdout", stdout)
-    monkeypatch.setattr("ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.ui.sys.stdout", stdout)
+    monkeypatch.setattr("runner.ui.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[
@@ -218,11 +218,11 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
 def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
     import os
 
-    from runner_models import RunState, Task
-    from runner_support import LiveUI
+    from runner.models import RunState, Task
+    from runner.support import LiveUI
 
     monkeypatch.setattr(
-        "ui.shutil.get_terminal_size",
+        "runner.ui.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((50, 10)),
     )
     state = RunState("run", "goal", "/project", tasks=[
@@ -247,8 +247,8 @@ def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
 
 
 def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
-    from runner_models import RunState, Task
-    from runner_support import LiveUI
+    from runner.models import RunState, Task
+    from runner.support import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -264,8 +264,8 @@ def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("ui.sys.stdout", stdout)
-    monkeypatch.setattr("ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.ui.sys.stdout", stdout)
+    monkeypatch.setattr("runner.ui.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[
@@ -282,7 +282,7 @@ def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
 
 def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
     import ai_task_runner
-    from runner_api import RunResult
+    from runner.api import RunResult
 
     captured = []
 

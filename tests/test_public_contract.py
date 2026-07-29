@@ -10,13 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from agent import Agent, AgentClient
-from api import RunRequest as LegacyRunRequest
-from backends import AgentBackend, Backend, default_command
-from defaults import DEFAULT_QWEN_COMMAND
-from models import State as LegacyState
-from runner_api import RunRequest, __version__, run
-from runner_models import RunState, State, Task
+from runner.agent import Agent, AgentClient
+from runner.backends import AgentBackend, Backend, default_command
+from runner.defaults import DEFAULT_QWEN_COMMAND
+from runner.api import RunRequest, __version__, run
+from runner.models import RunState, State, Task
 from ai_task_runner_validator import ValidatorReport
 
 
@@ -35,10 +33,8 @@ def _validator(path: Path) -> Path:
     return path
 
 
-def test_canonical_public_names_and_legacy_aliases_are_identical():
+def test_canonical_public_names_are_stable():
     assert __version__ == "1.1.1"
-    assert LegacyRunRequest is RunRequest
-    assert LegacyState is RunState
     assert State is RunState
     assert Agent is AgentClient
     assert Backend is AgentBackend
@@ -48,7 +44,9 @@ def test_canonical_public_names_and_legacy_aliases_are_identical():
 def test_validator_helper_is_installable_public_module():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'name = "ai-task-runner"' in pyproject
-    assert 'py-modules = ["ai_task_runner_validator"]' in pyproject
+    assert 'packages = ["runner", "runner.backends"]' in pyproject
+    assert '"ai_task_runner_validator"' in pyproject
+    assert '"ai_task_runner"' in pyproject
 
 
 def test_run_state_json_contract_is_unchanged():
@@ -105,8 +103,8 @@ def test_same_python_process_can_run_multiple_complete_jobs(tmp_path):
 
 
 def test_retry_loop_is_iterative_across_one_thousand_failures():
-    from errors import RunnerError
-    from runner_support import LiveUI, retry_model_call
+    from runner.errors import RunnerError
+    from runner.support import LiveUI, retry_model_call
 
     attempts = 0
 
@@ -129,14 +127,14 @@ def test_retry_loop_is_iterative_across_one_thousand_failures():
 
 
 def test_core_uses_descriptive_canonical_names():
-    core = (ROOT / "runner_core.py").read_text(encoding="utf-8")
-    support = (ROOT / "runner_support.py").read_text(encoding="utf-8")
+    core = (ROOT / "runner" / "core.py").read_text(encoding="utf-8")
+    support = (ROOT / "runner" / "support.py").read_text(encoding="utf-8")
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
 
-    assert "from runner_models import RunState, Task" in core
-    assert "from agent import AgentClient" in core
-    assert "from runner_models import RunState, Task" in support
-    assert "from runner_api import RunRequest, run" in cli
+    assert "from .models import RunState, Task" in core
+    assert "from .agent import AgentClient" in core
+    assert "from .models import RunState, Task" in support
+    assert "from runner.api import RunRequest, run" in cli
 
 
 def test_agent_timeout_is_part_of_public_request_contract():

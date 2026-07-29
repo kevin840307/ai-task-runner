@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Sequence
 
-from defaults import DEFAULT_QWEN_COMMAND
+from runner.defaults import DEFAULT_QWEN_COMMAND
 from .base import AgentBackend, BackendResult, ensure_project_rules
 
 

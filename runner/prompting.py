@@ -7,11 +7,11 @@ from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any, Sequence
 
-from errors import RunnerError
-from runner_models import RunState, Task
+from .errors import RunnerError
+from .models import RunState, Task
 
 
-PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
+PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 PROJECT_OUTLINE_EXCLUDE_DIRS = frozenset({
     ".git",
     ".ai-task-runner",

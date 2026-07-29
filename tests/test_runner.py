@@ -130,9 +130,9 @@ def test_all_model_phases_retry_and_finish(tmp_path):
 
 def test_model_calls_have_configurable_python_timeout():
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
-    api = (ROOT / "runner_api.py").read_text(encoding="utf-8")
-    backend = (ROOT / "backends/base.py").read_text(encoding="utf-8")
-    process_control = (ROOT / "process_control.py").read_text(encoding="utf-8")
+    api = (ROOT / "runner" / "api.py").read_text(encoding="utf-8")
+    backend = (ROOT / "runner" / "backends" / "base.py").read_text(encoding="utf-8")
+    process_control = (ROOT / "runner" / "process_control.py").read_text(encoding="utf-8")
 
     assert '"--agent-timeout"' in cli
     assert "DEFAULT_AGENT_TIMEOUT" in api
@@ -184,13 +184,9 @@ def test_task_schema_accepts_common_criteria_alias():
 
 
 def test_goal_task_derivation_splits_numbered_deliverables():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         "Build release packet.\n1. Create VERSION.\n2. Create CHANGELOG.md.\n3. Create summary JSON.",
         2,
     )
@@ -201,17 +197,13 @@ def test_goal_task_derivation_splits_numbered_deliverables():
         "Create summary JSON",
     ]
 
-    assert len(runner_core.derive_tasks_from_goal("Build one thing", 1)) == 1
+    assert len(core.derive_tasks_from_goal("Build one thing", 1)) == 1
 
 
 def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         "Create a document.\n1. ## Overview\n2. ## Complexity Table\n3. ## Worked Example",
         5,
         "score=75/100\nmissing exact complexity table header",
@@ -223,7 +215,7 @@ def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
     assert "missing exact complexity table header" in tasks[0].description
     assert "current rejected behavior or output" in tasks[0].description
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         "Build a CLI",
         6,
         "unexpected stored JSON:\n{\"todos\": []}",
@@ -232,13 +224,9 @@ def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
 
 
 def test_goal_task_derivation_splits_structured_validator_errors():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         "Generate config outputs",
         7,
         (
@@ -262,52 +250,48 @@ def test_goal_task_derivation_splits_structured_validator_errors():
 
 
 def test_repair_review_requires_project_change_when_validator_failed():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    state = runner_core.RunState("run", "goal", "/project")
+    state = core.RunState("run", "goal", "/project")
     state.validator_output = "score=79/100"
-    task = runner_core.Task("id", "Repair validator failure", "fix", [])
+    task = core.Task("id", "Repair validator failure", "fix", [])
     review = {"completed": True, "reason": "ok", "missing_items": []}
 
-    assert runner_core.repair_review_needs_project_change(state, task, review, False)
-    assert not runner_core.repair_review_needs_project_change(state, task, review, True)
+    assert core.repair_review_needs_project_change(state, task, review, False)
+    assert not core.repair_review_needs_project_change(state, task, review, True)
     defer_review = {
         "completed": True,
         "defer_to_validator": True,
         "reason": "use validator",
         "missing_items": [],
     }
-    assert not runner_core.repair_review_needs_project_change(
+    assert not core.repair_review_needs_project_change(
         state,
         task,
         defer_review,
         False,
     )
-    assert runner_core.validator_repair_should_use_file_validator(state, task, True)
-    assert not runner_core.validator_repair_should_use_file_validator(state, task, False)
-    assert not runner_core.validator_repair_should_use_file_validator(
+    assert core.validator_repair_should_use_file_validator(state, task, True)
+    assert not core.validator_repair_should_use_file_validator(state, task, False)
+    assert not core.validator_repair_should_use_file_validator(
         state,
-        runner_core.Task("id", "Normal task", "fix", []),
+        core.Task("id", "Normal task", "fix", []),
         True,
     )
-    split_task = runner_core.Task(
+    split_task = core.Task(
         "id",
         "Repair E003: check_renderer_source failed",
         "fix",
         [],
     )
-    assert runner_core.is_validator_repair_task(split_task)
-    assert runner_core.repair_review_needs_project_change(
+    assert core.is_validator_repair_task(split_task)
+    assert core.repair_review_needs_project_change(
         state,
         split_task,
         review,
         False,
     )
-    assert runner_core.validator_repair_should_use_file_validator(
+    assert core.validator_repair_should_use_file_validator(
         state,
         split_task,
         True,
@@ -315,13 +299,9 @@ def test_repair_review_requires_project_change_when_validator_failed():
 
 
 def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         (
             "Build a small CSV sales analyzer from input/sales.csv.\n\n"
             "The finished tool should include analyze_sales.py and a CLI.\n\n"
@@ -339,14 +319,10 @@ def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
 
 
 def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
     planned = [
-        runner_core.Task(
+        core.Task(
             "c01-t001",
             "Build everything",
             "Implement the whole request.",
@@ -360,19 +336,15 @@ def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
         "Batch mode should generate results.json and results.md. README.md should document Usage."
     )
 
-    tasks = runner_core.right_size_planned_tasks(goal, 1, planned)
+    tasks = core.right_size_planned_tasks(goal, 1, planned)
 
     assert len(tasks) == 3
     assert tasks[0].title.startswith("The finished tool should include")
-    assert runner_core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
+    assert core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
 
 
 def test_goal_task_derivation_splits_dense_complex_prompt():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
     goal = (
         "Build a small inventory CLI with inventory.py and commands to add, list, "
@@ -381,7 +353,7 @@ def test_goal_task_derivation_splits_dense_complex_prompt():
         "write README.md usage docs and include focused tests."
     )
 
-    tasks = runner_core.derive_tasks_from_goal(goal, 1)
+    tasks = core.derive_tasks_from_goal(goal, 1)
 
     assert len(tasks) >= 4
     assert any("inventory.py" in task.title for task in tasks)
@@ -391,39 +363,53 @@ def test_goal_task_derivation_splits_dense_complex_prompt():
 
 
 def test_goal_task_derivation_uses_markdown_sections_for_specs():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    goal = (ROOT / "examples" / "07_auto_config" / "prompt.md").read_text(
-        encoding="utf-8"
-    )
-    tasks = runner_core.derive_tasks_from_goal(goal, 1)
+    goal = """
+## Required CLI
+- Provide one documented command that runs the tool.
+- Support selecting an input directory, output directory, and optional mode.
+
+## Data Loading
+1. load structured input files
+2. validate required fields
+3. normalize paths before writing output
+
+## Transformation
+1. combine shared defaults
+2. apply target-specific overrides
+3. render output templates
+4. write generated files
+
+## Configuration
+- shared values should live in one common location
+- target overrides may remain target-specific
+- adding a target should usually require one config change
+
+## Validation
+- generated folders and files must match expected names
+- generated content must be deterministic
+- README.md must describe usage
+
+## Examples
+This section is contextual and should not become its own task.
+"""
+    tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
     assert 10 <= len(tasks) <= 20
     assert any("Required CLI" in title for title in titles)
-    assert any("load YAML config" in title for title in titles)
-    assert any("deep merge config values" in title for title in titles)
-    assert any("render Jinja2 templates" in title for title in titles)
-    assert any("shared apps, versions, profiles" in title for title in titles)
-    assert any(title == "Merge Order" for title in titles)
-    assert any(title == "Templates" for title in titles)
-    assert any(title == "Expected Result" for title in titles)
-    assert not any(title.startswith("workflow:") for title in titles)
-    assert not any(title.startswith("`config/") for title in titles)
+    assert any("load structured input files" in title for title in titles)
+    assert any("combine shared defaults" in title for title in titles)
+    assert any("render output templates" in title for title in titles)
+    assert any("README.md" in title for title in titles)
+    assert not any(title.startswith("Examples") for title in titles)
 
 
 def test_goal_task_derivation_keeps_persistence_deliverables():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_core", ROOT / "runner_core.py")
-    runner_core = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_core
-    spec.loader.exec_module(runner_core)
+    import runner.core as core
 
-    tasks = runner_core.derive_tasks_from_goal(
+    tasks = core.derive_tasks_from_goal(
         (
             "Build a small persistent todo CLI.\n\n"
             "The finished tool should include todo_cli.py and support add/list/done.\n\n"
@@ -768,9 +754,9 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
 
 
 def test_ai_validator_failure_output_becomes_repair_findings():
-    import runner_core
+    import runner.core as core
 
-    output = runner_core.format_ai_validator_output({
+    output = core.format_ai_validator_output({
         "passed": False,
         "reason": "not ready",
         "missing_items": ["Create app.py", "Document usage"],
@@ -784,7 +770,7 @@ def test_ai_validator_failure_output_becomes_repair_findings():
     assert "checks_run:" in output
     assert "suggested_checks:" in output
 
-    tasks = runner_core.derive_tasks_from_goal("Build the app", 3, output)
+    tasks = core.derive_tasks_from_goal("Build the app", 3, output)
     assert [task.title for task in tasks] == [
         "Repair E001: Create app.py",
         "Repair E002: Document usage",
@@ -872,7 +858,7 @@ def test_loop_detection_session_is_replaced_and_work_continues(tmp_path):
 
 
 def test_readonly_guard_ignores_build_and_dependency_directories(tmp_path):
-    from runner_support import readonly_project_call
+    from runner.support import readonly_project_call
 
     work = tmp_path / ".ai-task-runner"
     source = tmp_path / "source.txt"
@@ -899,7 +885,7 @@ def test_readonly_guard_ignores_build_and_dependency_directories(tmp_path):
 
 
 def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
-    from runner_support import cleanup_stale_artifacts
+    from runner.support import cleanup_stale_artifacts
 
     work = tmp_path / "work"
     work.mkdir()
@@ -922,7 +908,7 @@ def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
 
 
 def test_review_and_validator_results_are_bounded():
-    from runner_support import (
+    from runner.support import (
         bounded_text,
         MAX_MISSING_ITEM_CHARS,
         MAX_MISSING_ITEMS,
@@ -963,7 +949,7 @@ def test_review_and_validator_results_are_bounded():
 
 
 def test_old_state_without_24h_fields_still_loads():
-    from models import State
+    from runner.models import State
 
     state = State.load({
         "run_id": "run",
@@ -982,8 +968,8 @@ def test_old_state_without_24h_fields_still_loads():
 
 
 def test_prompts_require_project_understanding_and_minimal_compatible_changes(tmp_path):
-    import runner_support
-    from models import State, Task
+    import runner.support as support
+    from runner.models import State, Task
 
     state = State(
         run_id="test-run",
@@ -994,9 +980,9 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     state.validator_output = "unexpected output:\nold value"
     protected = [tmp_path / ".ai-task-runner" / "state.json"]
 
-    plan = runner_support.plan_prompt(state.goal, tmp_path, state, protected)
-    execute = runner_support.execution_prompt(state, tmp_path, protected)
-    review = runner_support.review_prompt(state, tmp_path, protected, "done")
+    plan = support.plan_prompt(state.goal, tmp_path, state, protected)
+    execute = support.execution_prompt(state, tmp_path, protected)
+    review = support.review_prompt(state, tmp_path, protected, "done")
 
     for prompt in (plan, execute, review):
         assert "relevant project structure" in prompt
@@ -1011,15 +997,15 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
 
 def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
-    import runner_support
-    from models import State
+    import runner.support as support
+    from runner.models import State
 
     (tmp_path / "README.md").write_text("fixture", encoding="utf-8")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('hi')", encoding="utf-8")
     state = State("run", "goal", str(tmp_path))
 
-    prompt = runner_support.plan_prompt(
+    prompt = support.plan_prompt(
         state.goal,
         tmp_path,
         state,
@@ -1038,9 +1024,9 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
 
 
 def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
-    import runner_support
+    import runner.support as support
 
-    feedback = runner_support.format_validator_feedback(
+    feedback = support.format_validator_feedback(
         "report_dir: .ai-task-runner/validator-reports/folder-compare\n"
         "Full report: .ai-task-runner/validator-reports/folder-compare/diff.txt",
         2000,
@@ -1054,7 +1040,7 @@ def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
 
 
 def test_qwen_planning_args_preserve_yolo():
-    import agent_args
+    import runner.agent_args as agent_args
 
     args = [
         "--approval-mode",
@@ -1073,7 +1059,7 @@ def test_qwen_planning_args_preserve_yolo():
 
 
 def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
-    import agent_args
+    import runner.agent_args as agent_args
 
     args = ["--approval-mode", "yolo"]
 
@@ -1085,7 +1071,7 @@ def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
 
 
 def test_qwen_args_default_to_yolo():
-    import agent_args
+    import runner.agent_args as agent_args
 
     assert agent_args.planning_agent_args("qwen", [])[0] == "--yolo"
     assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"

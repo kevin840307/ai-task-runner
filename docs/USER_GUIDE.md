@@ -29,7 +29,7 @@ python ai_task_runner.py ^
 ## Python API
 
 ```python
-from runner_api import RunRequest, run
+from runner import RunRequest, run
 
 result = run(RunRequest(
     goal="Build the requested feature",

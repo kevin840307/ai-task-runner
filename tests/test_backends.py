@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
-from backends.base import BackendError, BackendResult, split_command
-from backends.opencode import OpenCodeBackend, ensure_opencode_rules
-from backends.qwen import QwenBackend, ensure_qwen_rules, single_line_prompt
-from runner_support import runner_source_files
+from runner.backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
+from runner.backends.base import BackendError, BackendResult, split_command
+from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
+from runner.backends.qwen import QwenBackend, ensure_qwen_rules, single_line_prompt
+from runner.support import runner_source_files
 
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
@@ -16,8 +16,8 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert BACKENDS["opencode"] is OpenCodeBackend
     assert issubclass(QwenBackend, AgentBackend)
     assert issubclass(OpenCodeBackend, AgentBackend)
-    assert QwenBackend.__module__ == "backends.qwen"
-    assert OpenCodeBackend.__module__ == "backends.opencode"
+    assert QwenBackend.__module__ == "runner.backends.qwen"
+    assert OpenCodeBackend.__module__ == "runner.backends.opencode"
 
     qwen = create_backend("qwen", sys.executable, tmp_path, [])
     opencode = create_backend("opencode", sys.executable, tmp_path, [])
@@ -28,8 +28,8 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert "--session" in opencode.build_command("prompt", "session-1")
     protected_names = {path.name for path in runner_source_files()}
     assert {
-        "runner_api.py",
-        "runner_models.py",
+        "api.py",
+        "models.py",
         "agent_args.py",
         "script_runner.py",
         "planning.py",
@@ -45,7 +45,7 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
 
 def test_core_has_no_backend_specific_command_logic():
     root = Path(__file__).resolve().parents[1]
-    source = (root / "runner_core.py").read_text(encoding="utf-8")
+    source = (root / "runner" / "core.py").read_text(encoding="utf-8")
     assert "[\"--resume\"," not in source
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
@@ -178,7 +178,7 @@ def test_zero_backend_timeout_disables_limit(tmp_path):
 
 
 def test_timeout_uses_existing_retry_loop(tmp_path):
-    from runner_support import LiveUI, retry_model_call
+    from runner.support import LiveUI, retry_model_call
 
     counter = tmp_path / "count.txt"
 

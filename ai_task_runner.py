@@ -8,7 +8,7 @@ import sys
 import time
 from collections.abc import Sequence
 
-from defaults import (
+from runner.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
     DEFAULT_BACKEND,
@@ -17,14 +17,14 @@ from defaults import (
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
-from runner_api import RunRequest, run
-from version import __version__
-from backends import backend_names
+from runner.api import RunRequest, run
+from runner.version import __version__
+from runner.backends import backend_names
 
-# Compatibility exports for existing callers; new integrations should use runner_api.run.
-from errors import RunnerError
-from runner_models import RunState, State, Task
-from runner_support import (
+# Compatibility exports for existing callers; new integrations should use runner.run.
+from runner.errors import RunnerError
+from runner.models import RunState, State, Task
+from runner.support import (
     ai_validator_prompt,
     execution_prompt,
     parse_tasks,

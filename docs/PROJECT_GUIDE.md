@@ -80,34 +80,42 @@ Re-run the same script with `--resume`: completed items return immediately, unfi
 
 ```text
 ai_task_runner.py                 CLI parser and main entry point
-defaults.py                       Shared default backend, command, timeout, and limit values
-runner_api.py                     Public Python API
-runner_core.py                    TaskRunner state machine, retry, resume
-agent_args.py                     Backend-specific planning/runtime argument policy
-script_runner.py                  YAML batch orchestration and per-item resume setup
-planning.py                       TODO planning, fallback splitting, repair task derivation
-validation.py                     Python/AI final validation and AI failure feedback
-prompting.py                      Prompt template loading and prompt builders
-ui.py                             Live terminal UI and JSON progress events
-runner_support.py                 Parsers, protection, retry, validator subprocess utilities
-runner_models.py                  RunState and Task models
-agent.py                          Session-aware backend facade
-process_control.py                Subprocess timeout and activity watchdog
-api.py                            Backward-compatible API alias
-models.py                         Backward-compatible model alias
-version.py                        Package version used by docs and JSON events
+ai_task_runner_validator.py       Installable ValidatorReport helper
+
+runner/                           Main implementation package
+runner/api.py                     Public Python API and request validation
+runner/core.py                    TaskRunner state machine, retry, review, resume
+runner/models.py                  RunState and Task serialization
+runner/support.py                 Parsers, protection, retry, validator subprocess utilities
+runner/agent.py                   Session-aware backend facade
+runner/agent_args.py              Backend-specific planning/runtime argument policy
+runner/planning.py                TODO planning, fallback splitting, repair task derivation
+runner/prompting.py               Prompt template loading and prompt builders
+runner/validation.py              AI final validation helper
+runner/script_runner.py           YAML batch orchestration and per-item resume setup
+runner/process_control.py         Subprocess timeout and activity watchdog
+runner/ui.py                      Live terminal UI and JSON progress events
+runner/defaults.py                Shared default backend, command, timeout, and limit values
+runner/errors.py                  RunnerError
+runner/version.py                 Package version used by docs and JSON events
+runner/backends/base.py           Backend interface and shared command handling
+runner/backends/qwen.py           Qwen stream-json backend
+runner/backends/opencode.py       OpenCode backend
+
+prompts/                          Editable runner prompt templates
+docs/                             Human and AI project documentation
+docs/validator_templates/         Copyable validator templates and wrappers
+examples/                         Reusable sample prompts, validators, and runners
+smoke/                            Real Qwen smoke cases and validators
+tests/                            Unit, API, resilience, and documentation tests
+
 QWEN.md                           Qwen project rule file for this repository
 AGENTS.md                         OpenCode project rule file for this repository
-prompts/                          Editable runner prompt templates
-backends/base.py                  Backend interface and shared command handling
-backends/qwen.py                  Qwen stream-json backend
-backends/opencode.py              OpenCode backend
-examples/                         Reusable sample prompts, validators, and runners
-smoke/qwen_todo_cli/              Real Qwen persistent todo CLI case
-smoke/qwen_expression_evaluator/  Real Qwen expression evaluator case
-smoke/qwen_csv_analyzer/          Real Qwen CSV analyzer case
-tests/                            Unit, API, resilience, and documentation tests
-docs/                             Human and AI project documentation
+pyproject.toml                    Package metadata for runner and ValidatorReport helper
+requirements*.txt                 Runtime and development dependencies
+.ai-task-runner/                  Local run state, ignored by git
+.qwen/                            Local Qwen state, ignored by git
+.pytest_cache/                    Local pytest cache, ignored by git
 ```
 
 ## Real Qwen Results
@@ -124,4 +132,4 @@ docs/                             Human and AI project documentation
 python -m pytest -q
 ```
 
-Latest local result: `124 passed, 1 skipped`.
+Latest local result: `140 passed, 1 skipped`.

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Sequence
 
-from errors import RunnerError
-from process_control import ProcessResult, run_process
+from runner.errors import RunnerError
+from runner.process_control import ProcessResult, run_process
 
 
 class BackendError(RunnerError):

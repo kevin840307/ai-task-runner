@@ -9,8 +9,8 @@ import threading
 import time
 from typing import Any, Callable, Mapping
 
-from runner_models import RunState, Task
-from version import __version__
+from .models import RunState, Task
+from .version import __version__
 
 
 class LiveUI:

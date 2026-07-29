@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import re
 
-from runner_models import Task
-from prompting import format_validator_feedback
+from .models import Task
+from .prompting import format_validator_feedback
 
 
 def derive_tasks_from_goal(

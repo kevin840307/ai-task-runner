@@ -4,8 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_task_runner import parser
-from runner_api import RunRequest
-from version import __version__
+from runner.api import RunRequest
+from runner.version import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = {
@@ -47,7 +47,7 @@ def test_timeout_defaults_match_cli_api_and_manual():
 
 def test_canonical_api_resume_and_24h_boundaries_are_documented():
     combined = "\n".join(_text(name) for name in DOCS)
-    assert "from runner_api import RunRequest, run" in combined
+    assert "from runner import RunRequest, run" in combined
     assert "--goal-file" in combined
     assert "Resume does not require repeating `--goal`" in _text("USER_GUIDE")
     assert "the runner owns orchestration" in combined.lower()

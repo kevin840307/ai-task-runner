@@ -14,13 +14,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from agent import SESSION_INVALID_MARKERS, is_session_invalid_error
-from backends.base import AgentBackend, BackendError, BackendResult
-from errors import RunnerError
-from process_control import run_process
-from runner_api import RunRequest, run
-from runner_models import RunState, Task
-from runner_support import (
+from runner.agent import SESSION_INVALID_MARKERS, is_session_invalid_error
+from runner.backends.base import AgentBackend, BackendError, BackendResult
+from runner.errors import RunnerError
+from runner.process_control import run_process
+from runner.api import RunRequest, run
+from runner.models import RunState, Task
+from runner.support import (
     LiveUI,
     parse_ai_validation,
     parse_json,
@@ -309,7 +309,7 @@ def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
 
 
 def test_process_unexpected_error_cleans_up_process_tree(tmp_path, monkeypatch):
-    import process_control
+    import runner.process_control as process_control
 
     killed = []
 
@@ -584,7 +584,7 @@ def test_file_validator_clears_previous_reports_before_run(tmp_path):
 
 
 def test_file_validator_large_output_keeps_summary_and_report_reference(tmp_path):
-    from runner_support import MAX_VALIDATOR_OUTPUT_CHARS, bounded_text
+    from runner.support import MAX_VALIDATOR_OUTPUT_CHARS, bounded_text
 
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")
@@ -648,7 +648,7 @@ def test_force_new_setup_failure_preserves_previous_state(tmp_path):
 
 
 def test_invalid_yaml_fails_before_item_state_is_created(tmp_path):
-    from runner_core import load_yaml_script
+    from runner.core import load_yaml_script
 
     script = tmp_path / "tasks.yaml"
     script.write_text("prompt: not-an-array\nvalidator: ai\n", encoding="utf-8")
@@ -658,7 +658,7 @@ def test_invalid_yaml_fails_before_item_state_is_created(tmp_path):
 
 
 def test_windows_process_tree_uses_taskkill_tree_flags(monkeypatch):
-    import process_control
+    import runner.process_control as process_control
     from types import SimpleNamespace
 
     calls = []
