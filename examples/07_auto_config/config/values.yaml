@@ -1,14 +1,6 @@
 # Global render matrix and shared configuration
 # This file contains common values that should be centralized
 
-# Global shared tokens (to avoid repetition across config files)
-shared_tokens:
-  fab29: fab29
-  prod: prod
-  staging: staging
-  v512: v512
-  v604: v604
-
 # Render matrix - defines output patterns and template mapping
 render_targets:
   WORKFLOW-A:

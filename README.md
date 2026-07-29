@@ -48,6 +48,8 @@ Within one live runner process, these failures are automatically retried: model 
 
 When validator stdout contains structured error headings such as `[E001] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
 
+Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If model planning repeatedly fails, deterministic fallback still derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases in the goal.
+
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
 For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
@@ -71,6 +73,8 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
 
 Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`.
+
+For large validations, stdout should be a repair summary, not the full diff. Print the status, counts, `report_dir`, and the first few actionable errors. Put large evidence in `summary.txt`, `errors.txt`, `warnings.txt`, and referenced `Full report:` files. Repair prompts tell the agent to read `summary.txt`, then `errors.txt`, then only the first relevant full report needed for the first blocking error.
 
 Optional helper install:
 

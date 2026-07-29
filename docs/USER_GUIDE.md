@@ -53,6 +53,8 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
+Planning asks the model to extract concrete deliverables before returning task JSON. Trivial requests may become one task, small tools usually become 2-5 tasks, and broad or multi-file requests often become 6-20 tasks. If planning repeatedly fails, fallback planning derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases so the run can still continue.
+
 ## Validators
 
 Use a Python validator:
@@ -88,6 +90,8 @@ python -m pip install -e C:\Users\kevin\ai-task-runner
 After that, validators in any project can use `from ai_task_runner_validator import ValidatorReport`. Without installing, copy `docs/validator_templates/validator_interface.py` next to the validator.
 
 `<project-root>/.ai-task-runner/validator-reports/` is cleared before every Python validator run. Write detailed reports there when stdout would be too large; the next repair task will receive the validator stdout and can read the referenced latest report files.
+
+For large reports, keep stdout focused on the model-facing summary: status, error/warning counts, `report_dir`, and the first few actionable errors. Put detailed diffs or long command output in files. When feedback references `report_dir` or `Full report:`, prompts instruct the agent to read `summary.txt`, then `errors.txt`, then only the first relevant detailed report before making a repair.
 
 ## YAML Batch
 

@@ -64,7 +64,38 @@
     <app>appE</app>
     
       
-      <resource>{'cpu': 5, 'gpu': 5, 'hpa': {'dataa': 1, 'datab': 1}}</resource>
+      <version>appE-v1</version>
+      <resource>
+        
+        <cpu>5</cpu>
+        
+        <gpu>5</gpu>
+        
+        <hpa>{'dataa': 1, 'datab': 1}</hpa>
+        
+      </resource>
+      
+      <version>appE-v2</version>
+      <resource>
+        
+        <cpu>5</cpu>
+        
+        <gpu>5</gpu>
+        
+        <hpa>{'dataa': 1, 'datab': 1}</hpa>
+        
+      </resource>
+      
+      <version>appE-v3</version>
+      <resource>
+        
+        <cpu>5</cpu>
+        
+        <gpu>5</gpu>
+        
+        <hpa>{'dataa': 1, 'datab': 1}</hpa>
+        
+      </resource>
       
     
     

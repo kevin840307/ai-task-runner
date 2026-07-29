@@ -1000,7 +1000,26 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
     assert "src/app.py" in prompt
     assert "If planning notes are written" in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
+    assert "Always return valid JSON" in prompt
+    assert "broad or multi-file goals often need 6-20 tasks" in prompt
+    assert "Before answering, self-check that the JSON parses" in prompt
     assert ".ai-task-runner/state.json" not in prompt
+
+
+def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
+    import runner_support
+
+    feedback = runner_support.format_validator_feedback(
+        "report_dir: .ai-task-runner/validator-reports/folder-compare\n"
+        "Full report: .ai-task-runner/validator-reports/folder-compare/diff.txt",
+        2000,
+    )
+
+    assert "stdout/stderr as a compact summary" in feedback
+    assert "Read `summary.txt` first" in feedback
+    assert "Read `errors.txt` next" in feedback
+    assert "first relevant `Full report`" in feedback
+    assert "Warnings are useful context" in feedback
 
 
 def test_qwen_planning_args_preserve_yolo():

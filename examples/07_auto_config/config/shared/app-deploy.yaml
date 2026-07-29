@@ -100,9 +100,30 @@ app-deploy:
     log:
       log-type: standard
   appE:
-    resource:
-      cpu: 5
-      gpu: 5
-      hpa:
-        dataa: 1
-        datab: 1
+    - name: appE-v1
+      dbname: RDP1
+      dbpassword: aaaaaaaaaaa
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1
+    - name: appE-v2
+      dbname: RDP2
+      dbpassword: aaaaaaaaaaa
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1
+    - name: appE-v3
+      dbname: RDP3
+      dbpassword: aaaaaaaaaaa
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1

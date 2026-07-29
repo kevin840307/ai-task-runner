@@ -101,6 +101,21 @@ app-deploy:
     log:
       log_type: standard
   appE:
+  - name: appE-v1
+    resource:
+      cpu: 5
+      gpu: 5
+      hpa:
+        dataa: 1
+        datab: 1
+  - name: appE-v2
+    resource:
+      cpu: 5
+      gpu: 5
+      hpa:
+        dataa: 1
+        datab: 1
+  - name: appE-v3
     resource:
       cpu: 5
       gpu: 5

@@ -59,7 +59,7 @@ Prompt text is stored as Markdown templates under `prompts/`. `runner_support.py
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 
-Planning prompts may write JSON or Markdown only under the runner work directory. Implementation files must not be changed during planning.
+Planning prompts may write JSON or Markdown only under the runner work directory. Implementation files must not be changed during planning. The planner is asked to extract deliverables first, return valid JSON even when uncertain, and right-size tasks from one trivial task to many verifiable tasks for broad multi-file work.
 
 Review prompts are read-only. If review changes project files, the runner restores them and retries.
 
@@ -73,7 +73,7 @@ python validator.py --project-root <root> --state-file <state.json>
 
 Validator files are protected. Agents may read validator files to understand expected behavior, but must not edit them or hardcode validator internals.
 
-When the same task makes no project changes while validator feedback is still present, the task is not accepted. When repeated no-progress suggests a bad session, the runner clears the session and retries from saved state.
+When the same task makes no project changes while validator feedback is still present, the task is not accepted. When repeated no-progress suggests a bad session, the runner clears the session and retries from saved state. Validator stdout is treated as a compact summary; detailed evidence belongs under `.ai-task-runner/validator-reports/`, where repair prompts read `summary.txt`, `errors.txt`, and then the first relevant `Full report:` file.
 
 Validator stdout and stderr do not need a schema. The runner stores bounded feedback, currently 20,000 characters, with head and tail preserved for long logs.
 

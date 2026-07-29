@@ -33,6 +33,8 @@ Recommended validator behavior:
 - fail only for issues that block completion
 - keep warnings as exit code `0` unless the project decides they are required
 
+Stdout should answer "what should the model fix next?" Keep detailed evidence in report files. Repair prompts read `summary.txt`, then `errors.txt`, then the first relevant `Full report:` path before changing project files.
+
 The runner clears `.ai-task-runner/validator-reports/` before each Python validator run. Do not store long-term history there; write only the current validation attempt's detailed evidence.
 
 ## Templates

@@ -40,13 +40,13 @@ Each TODO prompt is about the current task, completion conditions, and the last 
 
 Agents may read validator files to understand expected behavior, but they must not modify validator files or hardcode validator internals. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
 
-Planning is intentionally right-sized. If the model returns too few tasks for a broad goal, deterministic fallback can split numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, and documentation.
+Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback can split headings, numbered items, bullet items, paragraphs, or dense sentence-level deliverables such as source files, CLI behavior, generated outputs, persistence, tests, templates, configuration, and documentation.
 
 ## Validator Output
 
 File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.
 
-Recommended validators keep stdout compact and write full evidence under `.ai-task-runner/validator-reports/`. `docs/validator_templates/` contains copy-and-edit templates, including a large folder comparison validator that checks target config files while saving full diffs to disk and reporting config value sharing as warning-only feedback.
+Recommended validators keep stdout compact and write full evidence under `.ai-task-runner/validator-reports/`. Stdout should be the model-facing summary: status, counts, `report_dir`, and the first actionable blocking findings. Detailed diffs, long command output, and scoring evidence should go into `summary.txt`, `errors.txt`, `warnings.txt`, and referenced `Full report:` files. Repair prompts tell the agent to read `summary.txt`, then `errors.txt`, then only the first relevant full report needed to fix the first blocking error. `docs/validator_templates/` contains copy-and-edit templates, including a large folder comparison validator that checks target config files while saving full diffs to disk and reporting config value sharing as warning-only feedback.
 
 Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runner` if validators in other project directories should import `ValidatorReport` as `from ai_task_runner_validator import ValidatorReport`.
 
