@@ -76,7 +76,7 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 
 Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
 
-Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`.
+Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`. `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
 
 For large validations, stdout should be a repair summary, not the full diff. Print the status, counts, `report_dir`, and the first few actionable errors. Put large evidence in `summary.txt`, `errors.txt`, `warnings.txt`, and referenced `Full report:` files. Repair prompts tell the agent to read `summary.txt`, then `errors.txt`, then only the first relevant full report needed for the first blocking error.
 

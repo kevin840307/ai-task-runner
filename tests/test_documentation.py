@@ -75,3 +75,11 @@ def test_agent_rule_files_and_task_prompt_shape_are_documented():
     assert "current task" in _text("PROJECT_GUIDE")
     assert "previous attempt output or diagnostic" in _text("PROJECT_GUIDE")
     assert "YAML batch mode is supported" in _text("PROJECT_GUIDE")
+
+
+def test_external_validator_wrapper_is_documented():
+    combined = "\n".join(_text(name) for name in DOCS)
+    assert "external_command_validator.py" in combined
+    assert "exe, bat, jar" in combined
+    assert ".ai-task-runner/validator-reports/external-command/" in combined
+    assert "log folders" in combined

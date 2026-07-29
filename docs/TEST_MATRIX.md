@@ -22,6 +22,7 @@ Coverage includes:
 - validator failure repair cycles
 - task splitting and right-sizing when the planner under-splits
 - bounded state output and validator diagnostics
+- external exe/CLI validator wrapper log copying and model-facing report paths
 - long `--goal-file` input
 - documentation contract tests
 

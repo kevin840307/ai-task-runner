@@ -44,6 +44,7 @@ The runner clears `.ai-task-runner/validator-reports/` before each Python valida
 | `validator_interface.py` | Copyable helper that handles summary stdout, errors, warnings, standard report files, `Full report` paths, and exit code. |
 | `basic_validator.py` | Minimal skeleton using `ai_task_runner_validator` or local `validator_interface.py`. Start here for custom checks. |
 | `command_and_files_validator.py` | Starter using `ai_task_runner_validator` or local `validator_interface.py` for projects that must run a command and then verify generated files. |
+| `external_command_validator.py` | Wrapper for an external exe, bat, jar, or CLI. It runs the command, copies external log folders into validator reports, and prints model-friendly report paths. |
 | `folder_compare_validator.py` | Standalone ready-to-use comparison for two folders. It checks subfolder names plus `.yml`, `.yaml`, `.cfg`, and `.xml` file names and content. It also emits a warning-only config value sharing score. |
 
 ## Interface Example
@@ -121,3 +122,44 @@ Useful options:
 --config-min-value-length 4
 --no-config-score
 ```
+
+## External exe / Java Example
+
+Use `external_command_validator.py` when the real validator is an exe, bat,
+jar, or another CLI that may write logs outside stdout.
+
+```bat
+python ai_task_runner.py ^
+  --project-root C:\work\project ^
+  --goal-file C:\work\project\prompt.md ^
+  --validator C:\Users\kevin\ai-task-runner\docs\validator_templates\external_command_validator.py ^
+  --validator-arg --command --validator-arg C:\validators\check.exe ^
+  --validator-arg --log-dir --validator-arg C:\validators\logs ^
+  --validator-arg --log-glob --validator-arg **\*.log
+```
+
+Java works the same way by passing each argv part separately:
+
+```bat
+--validator-arg --command --validator-arg java ^
+--validator-arg --command --validator-arg -jar ^
+--validator-arg --command --validator-arg C:\validators\check.jar
+```
+
+The wrapper writes:
+
+```text
+.ai-task-runner/validator-reports/external-command/
+  summary.txt
+  errors.txt
+  warnings.txt
+  external-command-output.txt
+  logs-index.txt
+  external-logs/
+```
+
+Stdout stays compact and tells the agent to read `report_dir`,
+`external-command-output.txt`, and `logs-index.txt`. Exit code `0` from the
+external command passes unless this wrapper records other blocking errors.
+Any non-zero external exit code becomes a blocking validator error and causes
+the runner to retry after the agent repairs the project.

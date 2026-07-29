@@ -83,6 +83,19 @@ Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr a
 
 For reusable validator patterns, see `docs/validator_templates/`. The folder comparison template is useful when a project generates many `.yml`, `.yaml`, `.cfg`, and `.xml` files: it prints a short summary, writes full file lists and diffs under `.ai-task-runner/validator-reports/`, and adds a warning-only config value sharing score.
 
+If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_templates/external_command_validator.py` as a Python wrapper. Pass the external command with repeated `--validator-arg --command ...` values and pass any external log folders with `--validator-arg --log-dir ...`. The wrapper captures stdout/stderr, copies matching log files into `.ai-task-runner/validator-reports/external-command/`, and prints compact paths so the agent knows which reports to read.
+
+Example:
+
+```bat
+python ai_task_runner.py ^
+  --project-root C:\work\project ^
+  --goal-file C:\work\project\prompt.md ^
+  --validator C:\Users\kevin\ai-task-runner\docs\validator_templates\external_command_validator.py ^
+  --validator-arg --command --validator-arg C:\validators\check.exe ^
+  --validator-arg --log-dir --validator-arg C:\validators\logs
+```
+
 Optional helper install:
 
 ```bat
