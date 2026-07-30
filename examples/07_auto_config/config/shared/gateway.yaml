@@ -1,6 +1,0 @@
-# Shared gateway configuration
-# This file contains common gateway settings that can be overridden by workflow or target configs
-
-gateway:
-  base: http://gateway.example.com
-  domain: gateway.example.com

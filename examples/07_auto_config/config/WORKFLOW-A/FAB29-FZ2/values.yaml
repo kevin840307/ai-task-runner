@@ -1,7 +1,0 @@
-# Workflow-specific configuration for FAB29-FZ2
-# This file overrides global settings with workflow-specific values
-
-# Target family configuration
-target:
-  family: FAB29
-  instance: FZ2

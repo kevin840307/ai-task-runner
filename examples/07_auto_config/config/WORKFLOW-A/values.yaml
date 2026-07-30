@@ -1,7 +1,0 @@
-# Workflow-specific configuration for WORKFLOW-A
-# This file overrides global settings with workflow-specific values
-
-# Target configuration
-target:
-  family: FAB29
-  instance: FZ1

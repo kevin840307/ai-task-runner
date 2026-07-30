@@ -1,4 +1,0 @@
-# Environment-specific overrides for STAGING
-environment:
-  ssl: false
-  tier: staging

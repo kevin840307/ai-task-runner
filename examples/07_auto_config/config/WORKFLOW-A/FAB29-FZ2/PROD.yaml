@@ -1,4 +1,0 @@
-# Environment-specific overrides for PROD
-environment:
-  ssl: true
-  tier: production
