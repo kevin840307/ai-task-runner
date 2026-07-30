@@ -1,6 +1,0 @@
-# Environment-specific configuration for STAGING
-# This file overrides workflow-specific settings with environment values
-
-environment:
-  name: STAGING
-  region: us-east-1

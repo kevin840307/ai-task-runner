@@ -1,6 +1,0 @@
-# Environment-specific configuration for PROD
-# This file overrides workflow-specific settings with environment values
-
-environment:
-  name: PROD
-  region: us-east-1
