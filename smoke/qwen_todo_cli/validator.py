@@ -40,7 +40,16 @@ def run_cli(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def command_failure(command: tuple[str, ...], result: subprocess.CompletedProcess[str]) -> str:
     output = result.stdout.strip() or "(no stdout/stderr)"
-    return f"command failed {command} with exit code {result.returncode}:\n{output}"
+    hint = ""
+    if not result.stdout.strip():
+        hint = (
+            "\nThe CLI must not fail silently. Make this exact command return 0 "
+            "or print a clear error before exiting non-zero."
+        )
+    return (
+        f"command failed {command} with exit code {result.returncode}:\n"
+        f"{output}{hint}"
+    )
 
 
 def main() -> int:
