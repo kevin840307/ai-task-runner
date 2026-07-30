@@ -9,7 +9,7 @@ from .prompting import format_validator_feedback
 
 
 _STRUCTURED_FINDING = re.compile(r"^\s*\[([^\]\r\n]+)\]\s+(.+?)\s*$")
-_MARKDOWN_HEADING = re.compile(r"^\s*#{1,6}\s+(.+?)\s*$")
+_MARKDOWN_HEADING = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*$")
 _LIST_ITEM = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+(.+?)\s*$")
 
 
@@ -51,8 +51,6 @@ def plan_quality_issue(
         criteria = [_normalized(item) for item in task.acceptance_criteria]
         if len(set(criteria)) != len(criteria):
             return f"task '{task.title}' contains duplicate acceptance criteria"
-        if len(structured_goal_items(task.description)) > 1:
-            return f"task '{task.title}' contains multiple explicitly structured outcomes; split it"
     return ""
 
 
@@ -84,14 +82,14 @@ def derive_tasks_from_goal(
             for index, item in enumerate(repair_items, 1)
         ]
 
-    deliverables = structured_goal_items(goal)
+    deliverables = _fallback_goal_units(goal)
     if len(deliverables) >= 2:
         return [
             Task(
                 id=f"c{cycle:02d}-t{index:03d}",
-                title=short_task_title(item),
-                description=item,
-                acceptance_criteria=[
+                title=short_task_title(item[0]),
+                description=item[1],
+                acceptance_criteria=item[2] or [
                     "This explicitly requested outcome is implemented",
                     "Relevant validator checks pass",
                 ],
@@ -145,54 +143,14 @@ def right_size_planned_tasks(
     planned: list[Task],
     validator_feedback: str = "",
 ) -> list[Task]:
-    """Use syntax-derived fallback only when it preserves more explicit items."""
-    if validator_feedback.strip():
-        return planned
-    fallback = derive_tasks_from_goal(goal, cycle)
-    return fallback if len(fallback) > len(planned) else planned
+    """Keep model semantics; deterministic fallback is only for model failure."""
+    del goal, cycle, validator_feedback
+    return planned
 
 
 def structured_goal_items(goal: str) -> list[str]:
-    """Extract explicit Markdown headings and list items without semantics."""
-    segments: list[tuple[str, list[str]]] = []
-    heading = ""
-    lines: list[str] = []
-
-    def flush() -> None:
-        nonlocal heading, lines
-        if heading or lines:
-            segments.append((heading, lines))
-        heading = ""
-        lines = []
-
-    for line in goal.splitlines():
-        match = _MARKDOWN_HEADING.match(line)
-        if match:
-            flush()
-            heading = match.group(1).strip()
-        else:
-            lines.append(line)
-    flush()
-
-    items: list[str] = []
-    for section_title, section_lines in segments:
-        listed = [
-            match.group(1).strip()
-            for line in section_lines
-            if (match := _LIST_ITEM.match(line))
-        ]
-        if listed:
-            items.extend(
-                f"{section_title}: {item}" if section_title else item
-                for item in listed
-            )
-            continue
-        body = "\n".join(section_lines).strip()
-        if section_title and body:
-            items.append(f"{section_title}\n{body}")
-        elif section_title:
-            items.append(section_title)
-
+    """Return explicit fallback units using Markdown hierarchy, not semantics."""
+    items = [description for _title, description, _criteria in _fallback_goal_units(goal)]
     unique: list[str] = []
     seen: set[str] = set()
     for item in items:
@@ -202,6 +160,68 @@ def structured_goal_items(goal: str) -> list[str]:
         seen.add(key)
         unique.append(item)
     return unique
+
+
+def _fallback_goal_units(goal: str) -> list[tuple[str, str, list[str]]]:
+    """Group section bullets under their heading instead of making noisy tasks."""
+    lines = goal.splitlines()
+    headings: list[tuple[int, int, str]] = []
+    for index, line in enumerate(lines):
+        match = _MARKDOWN_HEADING.match(line)
+        if match:
+            headings.append((index, len(match.group(1)), match.group(2).strip()))
+
+    if headings:
+        minimum = min(level for _index, level, _title in headings)
+        at_minimum = [item for item in headings if item[1] == minimum]
+        deeper = [item for item in headings if item[1] > minimum]
+        task_level = (
+            min(level for _index, level, _title in deeper)
+            if len(at_minimum) == 1 and deeper
+            else minimum
+        )
+        selected = [item for item in headings if item[1] == task_level]
+        if len(selected) >= 2:
+            units: list[tuple[str, str, list[str]]] = []
+            for position, (start, _level, title) in enumerate(selected):
+                end = len(lines)
+                for next_start, next_level, _next_title in headings:
+                    if next_start > start and next_level <= task_level:
+                        end = next_start
+                        break
+                body_lines = lines[start + 1:end]
+                body = "\n".join(body_lines).strip()
+                description = title if not body else f"{title}\n{body}"
+                criteria = _list_items(body_lines)
+                units.append((title, description, criteria))
+            return _unique_units(units)
+
+    listed = _list_items(lines)
+    if len(listed) >= 2:
+        return _unique_units([(item, item, []) for item in listed])
+    return []
+
+
+def _list_items(lines: list[str]) -> list[str]:
+    return [
+        match.group(1).strip()
+        for line in lines
+        if (match := _LIST_ITEM.match(line))
+    ]
+
+
+def _unique_units(
+    units: list[tuple[str, str, list[str]]],
+) -> list[tuple[str, str, list[str]]]:
+    result: list[tuple[str, str, list[str]]] = []
+    seen: set[str] = set()
+    for title, description, criteria in units:
+        key = _normalized(description)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append((title, description, criteria))
+    return result
 
 
 def short_task_title(text: str, limit: int = 72) -> str:

@@ -1,0 +1,94 @@
+# Global render matrix and shared configuration
+# This file contains common values that should be centralized
+
+# Render matrix - defines output patterns and template mapping
+render_targets:
+  WORKFLOW-A:
+    name: WORKFLOW-A
+    target_family: FAB29
+    output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+    apps:
+      - appA
+      - appB
+      - appC
+      - appD
+      - appE
+    versions:
+      - v512
+      - v604
+    profiles:
+      - prod
+      - staging
+    gateway_base: http://fz1.fab29-prod.com
+    namespace_name: name-a
+    fab: fab29
+    env_prod:
+      tier: production
+    env_staging:
+      tier: staging
+
+# Centralized shared lists (to avoid duplication)
+apps:
+  - appA
+  - appB
+  - appC
+  - appD
+  - appE
+
+versions:
+  - v512
+  - v604
+
+# Default template mapping
+template_map:
+  - output_type: yaml
+    template: output.yaml.j2
+    templates:
+      - output.yaml.jinja
+      - output.xml.j2
+      - output.yml.jinja2
+  - output_type: xml
+    template: output.xml.j2
+    templates:
+      - output.yaml.jinja
+      - output.yml.jinja2
+
+# Default output patterns
+output_patterns:
+  - name: default
+    format: yaml
+    template: output.yaml.j2
+
+# Special apps that use special config patterns
+special_apps:
+  - appA
+  - appE
+
+# P values for special apps
+p_values:
+  - p1
+  - p2
+  - p3
+
+# Output file names for app configs
+app_output_files:
+  application: application.yml
+  log: log.xml
+  application-p: application-{p}.yml
+
+# Merge probe for testing deep merge semantics
+__merge_probe__:
+  kept: global-kept
+  nested:
+    a: global-a
+    b: global-b
+  list_value: ["global-list"]
+  empty_dict_value:
+    old: must-be-replaced
+  null_value:
+    old: must-be-replaced

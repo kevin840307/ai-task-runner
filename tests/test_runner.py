@@ -338,10 +338,13 @@ def test_planned_tasks_are_right_sized_from_explicit_structure():
 
     tasks = core.right_size_planned_tasks(goal, 1, planned)
 
-    assert len(tasks) == 3
-    assert any("α.custom" in task.title for task in tasks)
-    assert any("β.unknown" in task.title for task in tasks)
-    assert any("γ.future" in task.title for task in tasks)
+    assert tasks is planned
+    fallback = core.derive_tasks_from_goal(goal, 1)
+    assert [task.title for task in fallback] == ["第一部分", "第二部分"]
+    assert fallback[0].acceptance_criteria == [
+        "完成 α.custom",
+        "完成 β.unknown",
+    ]
     assert core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
 
 def test_goal_task_derivation_is_language_and_extension_neutral():
@@ -357,9 +360,9 @@ def test_goal_task_derivation_is_language_and_extension_neutral():
     tasks = core.derive_tasks_from_goal(goal, 1)
 
     assert [task.title for task in tasks] == [
-        "任務: 處理 alpha.future",
-        "任務: 處理 beta.vendor",
-        "任務: 處理 gamma.anything",
+        "處理 alpha.future",
+        "處理 beta.vendor",
+        "處理 gamma.anything",
     ]
 
 def test_goal_task_derivation_preserves_all_explicit_markdown_structure():
@@ -380,13 +383,9 @@ This heading is still explicit input and must not be discarded by a keyword list
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert titles == [
-        "A: one",
-        "A: two",
-        "B: three",
-        "B: four",
-        "Context-like title in any language",
-    ]
+    assert titles == ["A", "B", "Context-like title in any language"]
+    assert tasks[0].acceptance_criteria == ["one", "two"]
+    assert tasks[1].acceptance_criteria == ["three", "four"]
 
 def test_goal_task_derivation_uses_syntax_not_domain_terms():
     import runner.core as core
@@ -638,7 +637,7 @@ def test_execution_error_after_project_change_goes_to_review(tmp_path):
     assert state["completed"] is True
 
 
-def test_protected_file_change_is_restored_and_retried(tmp_path):
+def test_protected_file_change_is_restored_without_restarting_task(tmp_path):
     protected = tmp_path / "protected.txt"
     protected.write_text("original", encoding="utf-8")
     env, state_dir = _scenario_env(tmp_path, "protected_retry")
@@ -1148,17 +1147,154 @@ def test_plan_quality_gate_is_structural_and_domain_neutral():
     ]
     assert plan_quality_issue(goal, focused) == ""
 
-    overloaded = Task(
+    structured_details = Task(
         "4",
         "多結果",
         "- result a\n- result b",
         ["a", "b"],
     )
-    assert "split" in plan_quality_issue("goal", [overloaded])
+    assert plan_quality_issue("goal", [structured_details]) == ""
 
     # Long prose alone must not trigger vocabulary- or length-based guessing.
     prose = "任意內容 " * 200
     assert plan_quality_issue(prose, [Task("5", "單一", "coherent", ["done"])]) == ""
+
+
+def test_fallback_groups_nested_markdown_by_section_not_every_bullet():
+    import runner.core as core
+
+    goal = """
+# Project title
+
+## CLI
+- accept a root argument
+- return a non-zero exit code on invalid input
+
+## Merge behavior
+- merge mappings recursively
+- replace lists
+- replace null values
+
+## Validation
+- run deterministic checks
+- preserve protected fixtures
+"""
+    tasks = core.derive_tasks_from_goal(goal, 2)
+
+    assert [task.title for task in tasks] == [
+        "CLI",
+        "Merge behavior",
+        "Validation",
+    ]
+    assert tasks[1].acceptance_criteria == [
+        "merge mappings recursively",
+        "replace lists",
+        "replace null values",
+    ]
+
+
+def test_repeated_planning_failure_uses_hierarchical_fallback_and_reports_reason(tmp_path):
+    goal = tmp_path / "goal.md"
+    goal.write_text(
+        """# Project
+
+## Interface
+- accept input
+- validate input
+
+## Core behavior
+- produce output
+- preserve existing data
+
+## Verification
+- run checks
+- document usage
+""",
+        encoding="utf-8",
+    )
+    validator = tmp_path / "validator.py"
+    validator.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    env, state_dir = _scenario_env(tmp_path, "planning_failure")
+    cmd = f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "ai_task_runner.py"),
+            "--backend",
+            "qwen",
+            "--goal-file",
+            str(goal),
+            "--project-root",
+            str(tmp_path),
+            "--validator",
+            str(validator),
+            "--command",
+            cmd,
+            "--plan-only",
+            "--json-events",
+            "--retry-wait",
+            "0",
+            "--retry-max-wait",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "plan.count").read_text() == "3"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert [task["title"] for task in state["tasks"]] == [
+        "Interface",
+        "Core behavior",
+        "Verification",
+    ]
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert any(
+        "AI response has no valid JSON object" in event.get("detail", "")
+        for event in events
+    )
+
+
+def test_planning_protected_change_is_restored_without_replanning(tmp_path):
+    goal = tmp_path / "goal.md"
+    goal.write_text("Create one marker", encoding="utf-8")
+    validator = tmp_path / "validator.py"
+    validator.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    env, state_dir = _scenario_env(tmp_path, "planning_protected")
+    env["PROTECTED_PATH"] = str(goal)
+    cmd = f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "ai_task_runner.py"),
+            "--backend",
+            "qwen",
+            "--goal-file",
+            str(goal),
+            "--project-root",
+            str(tmp_path),
+            "--validator",
+            str(validator),
+            "--command",
+            cmd,
+            "--plan-only",
+            "--retry-wait",
+            "0",
+            "--retry-max-wait",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert goal.read_text(encoding="utf-8") == "Create one marker"
+    assert (state_dir / "plan.count").read_text() == "1"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert state["tasks"][0]["title"] == "Create marker"
 
 def test_project_change_stamp_does_not_hash_file_contents(tmp_path, monkeypatch):
     import runner.support as support
@@ -1224,3 +1360,176 @@ def test_project_change_detector_uses_fifteen_second_max_interval(tmp_path, monk
     assert len(calls) == 1
     assert changed() is True
     assert len(calls) == 2
+
+
+def test_project_change_detector_uses_fifteen_second_max_interval(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import runner.core as core
+
+    stamps = iter(["before", "after"])
+    calls = []
+
+    def stamp(_root, _work):
+        calls.append(True)
+        return next(stamps)
+
+    times = iter([0.0, 10.0, 15.0])
+    monkeypatch.setattr(core, "project_change_stamp", stamp)
+    monkeypatch.setattr(core.time, "monotonic", lambda: next(times))
+
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.args = SimpleNamespace(agent_idle_after_change_timeout=900)
+
+    changed = runner._project_change_detector()
+    assert changed() is False
+    assert len(calls) == 1
+    assert changed() is True
+    assert len(calls) == 2
+
+def test_fallback_does_not_flatten_specification_bullets_into_tasks():
+    import runner.core as core
+
+    goal = """# Generic Auto Config Renderer
+
+## 唯讀驗證資料
+- `ans/`
+- `ans_manifest.json`
+- `validation.py`
+
+## 已提供模板
+模板位於 `Template/`。
+
+## 必要指令
+執行通用 CLI。
+
+## 必要產物
+- `rander.py`
+- `config/`
+- `tests/`
+- `README.md`
+
+## Config Layer
+依序載入設定層。
+
+## Merge 規則
+- 非空 dictionary：遞迴合併。
+- Scalar：直接覆蓋。
+- List：完整取代。
+- 空 dictionary：完整取代。
+- 空 list：完整取代。
+- `null`：完整取代。
+
+## 通用性要求
+- workflow
+- target
+- environment
+- template
+- output path
+
+## 安全要求
+- 回傳非零 exit code。
+- 顯示清楚錯誤。
+- 不留下半完成輸出。
+
+## 測試要求
+- Config Layer 載入。
+- Merge 行為。
+- 完整渲染流程。
+
+## 完成條件
+- Validator 通過。
+- 所有 sample 一致。
+- README 完成。
+"""
+
+    tasks = core.derive_tasks_from_goal(goal, 1)
+    titles = [task.title for task in tasks]
+
+    assert titles == [
+        "唯讀驗證資料",
+        "已提供模板",
+        "必要指令",
+        "必要產物",
+        "Config Layer",
+        "Merge 規則",
+        "通用性要求",
+        "安全要求",
+        "測試要求",
+        "完成條件",
+    ]
+    assert "workflow" not in titles
+    assert "非空 dictionary：遞迴合併" not in titles
+    assert "Validator 通過" not in titles
+    assert tasks[5].acceptance_criteria == [
+        "非空 dictionary：遞迴合併。",
+        "Scalar：直接覆蓋。",
+        "List：完整取代。",
+        "空 dictionary：完整取代。",
+        "空 list：完整取代。",
+        "`null`：完整取代。",
+    ]
+
+
+def test_planning_fallback_then_protected_execution_recovers_end_to_end(tmp_path):
+    goal = tmp_path / "prompt.md"
+    original = """# Project
+
+## Interface
+- accept input
+- validate input
+
+## Core behavior
+- produce output
+- preserve existing data
+
+## Verification
+- run checks
+- document usage
+"""
+    goal.write_text(original, encoding="utf-8")
+    validator = tmp_path / "validator.py"
+    validator.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    env, state_dir = _scenario_env(
+        tmp_path,
+        "planning_failure_protected_execution",
+    )
+    env["PROTECTED_PATH"] = str(goal)
+    cmd = f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "ai_task_runner.py"),
+            "--backend",
+            "qwen",
+            "--goal-file",
+            str(goal),
+            "--project-root",
+            str(tmp_path),
+            "--validator",
+            str(validator),
+            "--command",
+            cmd,
+            "--retry-wait",
+            "0",
+            "--retry-max-wait",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert goal.read_text(encoding="utf-8") == original
+    assert (state_dir / "plan.count").read_text() == "3"
+    assert (state_dir / "execute.count").read_text() == "3"
+    assert (state_dir / "review.count").read_text() == "3"
+    state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
+    assert [task["title"] for task in state["tasks"]] == [
+        "Interface",
+        "Core behavior",
+        "Verification",
+    ]
+    assert state["completed"] is True

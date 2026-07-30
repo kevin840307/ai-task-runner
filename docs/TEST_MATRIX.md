@@ -15,16 +15,17 @@ Coverage includes:
 - Qwen `stream-json` final result and error parsing
 - stdout/stderr plus file-change activity watchdog
 - process-tree cleanup on timeout
-- protected validator, state, runner source, and backend rule files
-- review and AI-validator read-only restore
+- protected validator, goal, state, runner source, and backend rule files, including restore-without-restarting execution
+- review and AI-validator read-only restore followed by automatic retry
 - session invalid and loop-detection session reset
 - YAML batch validation and resume
 - validator failure repair cycles
-- task splitting and right-sizing when the planner under-splits
+- read-only planning, one corrective replan, hierarchical Markdown fallback, and protection against bullet-to-task explosion
 - bounded state output and validator diagnostics
 - external exe/CLI validator wrapper log copying and model-facing report paths
 - long `--goal-file` input
 - documentation contract tests
+- end-to-end recovery for repeated planning failure followed by a protected goal-file edit during execution
 
 The public contract tests also lock the short 24h command defaults: backend `qwen`, command `qwen.cmd`, agent timeout `7200`, planning timeout `600`, activity watchdog `900`, validator timeout `1200`, and unlimited attempts/cycles.
 

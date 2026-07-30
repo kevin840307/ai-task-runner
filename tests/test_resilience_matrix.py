@@ -47,7 +47,7 @@ def _passing_validator(path: Path) -> Path:
     return path
 
 
-def test_protected_ask_stops_and_restores_on_protected_change(tmp_path):
+def test_protected_ask_restores_and_continues_on_protected_change(tmp_path):
     protected = tmp_path / "validator.py"
     protected.write_text("original", encoding="utf-8")
 
@@ -59,9 +59,12 @@ def test_protected_ask_stops_and_restores_on_protected_change(tmp_path):
             change_detected()
             return "unreachable"
 
-    with pytest.raises(RunnerError, match="protected file modified"):
-        protected_ask(Agent(), "go", [protected], 1, lambda: False)
+    output, changed = protected_ask(
+        Agent(), "go", [protected], 1, lambda: False
+    )
 
+    assert output == "unreachable"
+    assert changed == [str(protected)]
     assert protected.read_text(encoding="utf-8") == "original"
 
 

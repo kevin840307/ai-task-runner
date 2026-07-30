@@ -1,0 +1,22 @@
+# Shared flow deployment configuration
+# This file contains common flow-deploy settings that can be overridden by workflow configs
+
+flow-deploy:
+  appAA:
+    config-aa-v1: abc
+    config-aa-v2: abc
+  appBB:
+    - name: flow-bb-v1
+      resource:
+        cpu: 5
+        gpu: 5
+        hpa:
+          dataa: 1
+          datab: 1
+    - name: flow-bb-v2
+      resource:
+        cpu: 6
+        gpu: 4
+        hpa:
+          dataa: 1
+          datab: 1

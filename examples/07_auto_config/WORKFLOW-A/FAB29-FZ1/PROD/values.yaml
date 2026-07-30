@@ -1,0 +1,15 @@
+fab: FAB29
+gateway: http://fz1.fab29-prod.com
+namespace:
+  name: name-a
+app-deploy: null
+flow-deploy: null
+__merge_probe__:
+  kept: global-kept
+  nested:
+    a: global-a
+    b: global-b
+  list_value:
+  - global-list
+  empty_dict_value: {}
+  null_value: null

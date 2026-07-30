@@ -1,0 +1,7 @@
+# Workflow-specific configuration for FAB30-FZ1
+# This file overrides global settings with workflow-specific values
+
+# Target family configuration
+target:
+  family: FAB30
+  instance: FZ1

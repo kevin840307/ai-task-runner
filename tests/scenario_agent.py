@@ -24,7 +24,13 @@ def count(name):
 
 
 if "Plan only the remaining work" in prompt:
-    if scenario == "multi_task_plan":
+    count("plan")
+    if scenario in {"planning_failure", "planning_failure_protected_execution"}:
+        answer = "not-json-plan"
+    elif scenario == "planning_protected":
+        Path(os.environ["PROTECTED_PATH"]).write_text("changed", encoding="utf-8")
+        answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "acceptance_criteria": ["done.txt exists"]}]}
+    elif scenario == "multi_task_plan":
         answer = {"tasks": [
             {"title": "Create first marker", "description": "Create first.txt", "acceptance_criteria": ["first.txt exists"]},
             {"title": "Create second marker", "description": "Create second.txt after first.txt", "acceptance_criteria": ["second.txt exists"]},
@@ -64,7 +70,7 @@ elif "Execute only the current task" in prompt:
     if scenario == "execution_model_error" and "Previous model call failed" not in prompt:
         print("missing retry diagnostic")
         raise SystemExit(7)
-    if scenario == "protected_retry" and n == 1:
+    if scenario in {"protected_retry", "planning_failure_protected_execution"} and n == 1:
         Path(os.environ["PROTECTED_PATH"]).write_text("changed", encoding="utf-8")
     if scenario == "stagnation" and "Previous attempts made no effective progress" in prompt:
         (state_dir / "strategy_seen.txt").write_text("yes", encoding="utf-8")

@@ -1,0 +1,14 @@
+name: v512
+shadow: true
+replict: 0
+resource:
+  cpu: 5
+  gpu: 5
+  res:
+    dataa: 2
+    datab: 2
+app: appA
+version: v512
+workflow: WORKFLOW-A
+target: FAB29
+env: prod

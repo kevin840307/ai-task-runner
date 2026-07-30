@@ -325,9 +325,9 @@ class TaskRunner:
                     self.protected,
                 )
                 if protected_changed:
-                    raise RunnerError(
-                        "AI modified files during planning and they were restored: "
-                        + ", ".join(protected_changed)
+                    self.ui.set(
+                        "AI restored protected files changed during planning",
+                        ", ".join(protected_changed),
                     )
                 tasks = right_size_planned_tasks(
                     self.state.goal,
@@ -355,7 +355,10 @@ class TaskRunner:
                 ):
                     self.ui.set(
                         "Planning fallback",
-                        "using fallback tasks from the goal after repeated planning failures",
+                        (
+                            "using hierarchical Markdown fallback after repeated "
+                            f"planning failures; last error: {message[-500:]}"
+                        ),
                     )
                     return derive_tasks_from_goal(
                         self.state.goal,
@@ -733,9 +736,14 @@ class TaskRunner:
                 change_detected,
             )
             if changed:
-                raise RunnerError(
-                    "protected file modified and restored: "
-                    + ", ".join(changed)
+                self.ui.set(
+                    "Protected files restored during model call",
+                    ", ".join(changed),
+                )
+                output = (
+                    output
+                    + "\n\nRunner note: protected-file changes were restored and "
+                    "must not be counted as task progress."
                 )
             return output
 
@@ -791,7 +799,7 @@ class TaskRunner:
             changed = [*protected_changed, *project_changed]
             if changed:
                 raise RunnerError(
-                    "review modified files and they were restored: "
+                    "AI review modified files and they were restored: "
                     + ", ".join(changed)
                 )
             return parse_review(raw)

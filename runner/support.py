@@ -141,14 +141,14 @@ def changed_snapshot_paths(
 def protected_change_detector(
     file_snapshot: dict[Path, tuple[str | None, bytes | None]],
     change_detected: Callable[[], bool] | None,
+    restored_paths: set[str] | None = None,
 ) -> Callable[[], bool]:
     def changed() -> bool:
-        protected_changed = changed_snapshot_paths(file_snapshot)
+        protected_changed = restore_changed(file_snapshot)
         if protected_changed:
-            raise RunnerError(
-                "protected file modified during model call: "
-                + ", ".join(protected_changed)
-            )
+            if restored_paths is not None:
+                restored_paths.update(protected_changed)
+            return True
         return change_detected() if change_detected is not None else False
 
     return changed
@@ -220,16 +220,21 @@ def protected_ask(
     change_detected: Callable[[], bool] | None = None,
 ) -> tuple[str, list[str]]:
     file_snapshot = snapshot(protected)
+    restored_paths: set[str] = set()
     output: str | None = None
     try:
         output = agent.ask(
             prompt,
             idle_timeout_after_change,
-            protected_change_detector(file_snapshot, change_detected),
+            protected_change_detector(
+                file_snapshot,
+                change_detected,
+                restored_paths,
+            ),
         )
     finally:
-        changed = restore_changed(file_snapshot)
-    return output, changed
+        restored_paths.update(restore_changed(file_snapshot))
+    return output, sorted(restored_paths)
 
 
 def _readonly_excludes(root: Path, work: Path) -> set[str]:

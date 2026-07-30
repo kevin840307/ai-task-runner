@@ -1,0 +1,5 @@
+app: appD
+workflow: WORKFLOW-A
+target: FAB29
+env: prod
+version: v512
