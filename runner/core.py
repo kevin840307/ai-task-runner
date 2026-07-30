@@ -97,8 +97,8 @@ def is_validator_repair_task(task: Task) -> bool:
 
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
-    """Let Qwen write planning artifacts without making source files its cwd."""
-    return work if backend == "qwen" else root
+    """Plan from the project root so every backend can inspect it read-only."""
+    return root
 
 
 class TaskRunner:

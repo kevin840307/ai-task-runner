@@ -1028,7 +1028,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     assert "fix the program behavior that produces it" in execute
 
 
-def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
+def test_plan_prompt_includes_project_outline_and_requires_readonly_inspection(tmp_path):
     import runner.support as support
     from runner.models import State
 
@@ -1047,11 +1047,15 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
     assert "Project files:" in prompt
     assert "README.md" in prompt
     assert "src/app.py" in prompt
+    assert "inspect the relevant project files read-only before planning" in prompt
+    assert "entry points, dependencies, public interfaces, existing patterns, and relevant tests" in prompt
+    assert "smallest complete task list, not the smallest task count" in prompt
+    assert "multiple independently implementable or independently verifiable outcomes" in prompt
     assert "If planning notes are written" in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
     assert "Always return valid JSON" in prompt
-    assert "broad or multi-file goals often need 6-20 tasks" in prompt
-    assert "Before answering, self-check that the JSON parses" in prompt
+    assert "broad or multi-file goals often need 6-20 or more tasks" in prompt
+    assert "Before answering, self-check requirement coverage" in prompt
     assert ".ai-task-runner/state.json" not in prompt
 
 
@@ -1088,6 +1092,23 @@ def test_qwen_planning_args_preserve_yolo():
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.planning_agent_args("qwen", args) == expected
     assert agent_args.planning_agent_args("opencode", args) == args
+
+
+def test_qwen_planning_allows_project_read_tools_and_blocks_writes():
+    import runner.agent_args as agent_args
+
+    excluded = set(agent_args.QWEN_PLANNING_EXCLUDED_TOOLS)
+    assert {"read_file", "list_directory", "glob", "grep_search"}.isdisjoint(excluded)
+    assert {"write_file", "edit", "notebook_edit", "run_shell_command"} <= excluded
+
+
+def test_planning_agent_uses_project_root_for_readonly_inspection(tmp_path):
+    import runner.core as core
+
+    root = tmp_path / "project"
+    work = root / ".ai-task-runner"
+    assert core.planning_agent_root("qwen", root, work) == root
+    assert core.planning_agent_root("opencode", root, work) == root
 
 
 def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
