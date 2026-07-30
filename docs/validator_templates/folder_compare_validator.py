@@ -7,12 +7,13 @@ Checks:
 - matching target files have identical content
 
 Large details are written under:
-.ai-task-runner/validator-reports/folder-compare/
+AI_TASK_RUNNER_REPORT_DIR/folder-compare/
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import configparser
 import difflib
 import re
@@ -276,7 +277,12 @@ def main() -> int:
     _state_file = Path(args.state_file).resolve()
     expected_root = (project_root / args.expected_dir).resolve()
     actual_root = (project_root / args.actual_dir).resolve()
-    report_dir = project_root / ".ai-task-runner" / "validator-reports" / "folder-compare"
+    report_dir = Path(
+        os.environ.get(
+            "AI_TASK_RUNNER_REPORT_DIR",
+            project_root / ".ai-task-runner" / "validator-reports",
+        )
+    ) / "folder-compare"
 
     errors: list[tuple[str, str, set[str], str]] = []
     warnings: list[tuple[str, str, set[str]]] = []

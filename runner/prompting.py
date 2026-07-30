@@ -7,6 +7,7 @@ from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any, Sequence
 
+from .defaults import DEFAULT_PLAN_PROGRESS_FEEDBACK_LIMIT
 from .errors import RunnerError
 from .models import RunState, Task
 
@@ -103,11 +104,13 @@ def plan_prompt(
     state: RunState,
     protected: Sequence[Path],
     work: Path | None = None,
+    quality_feedback: str = "",
 ) -> str:
     progress = {
         "cycle": state.cycle,
-        "validator_feedback": state.validator_output[-8000:],
+        "validator_feedback": state.validator_output[-DEFAULT_PLAN_PROGRESS_FEEDBACK_LIMIT:],
         "completed_tasks": completed_titles(state),
+        "plan_quality_feedback": quality_feedback,
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(

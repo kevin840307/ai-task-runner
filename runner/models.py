@@ -20,6 +20,7 @@ class Task:
     last_review: dict[str, Any] | None = None
     progress_key: str = ""
     stagnant_attempts: int = 0
+    start_fingerprint: str = ""
 
     def validate(self, index: int) -> None:
         prefix = f"tasks[{index}]"
@@ -27,6 +28,8 @@ class Task:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{prefix}.{name} must be a non-empty string")
+        if not isinstance(self.start_fingerprint, str):
+            raise ValueError(f"{prefix}.start_fingerprint must be a string")
         if not isinstance(self.acceptance_criteria, list) or any(
             not isinstance(item, str) or not item.strip()
             for item in self.acceptance_criteria

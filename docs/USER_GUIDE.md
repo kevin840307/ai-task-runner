@@ -53,7 +53,7 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
-Planning asks the model to extract concrete deliverables before returning task JSON. Trivial requests may become one task, small tools usually become 2-5 tasks, and broad or multi-file requests often become 6-20 tasks. If planning repeatedly fails, fallback planning derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases so the run can still continue.
+Planning asks the model to inspect the project read-only and split work by independently implementable, independently verifiable outcomes. There is no fixed task-count range. The structural quality gate and fallback do not use language-specific keywords, technology names, recognized file extensions, or project-specific phrases. Repeated planning failure falls back only to explicit Markdown headings and list items; an unstructured goal remains one conservative fallback task rather than being semantically guessed by code.
 
 ## Validators
 
@@ -81,9 +81,9 @@ Agents may read validator files to infer expected behavior, but they must not ed
 
 Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 
-For reusable validator patterns, see `docs/validator_templates/`. The folder comparison template is useful when a project generates many `.yml`, `.yaml`, `.cfg`, and `.xml` files: it prints a short summary, writes full file lists and diffs under `.ai-task-runner/validator-reports/`, and adds a warning-only config value sharing score.
+For reusable validator patterns, see `docs/validator_templates/`. The folder comparison template is useful when a project generates many `.yml`, `.yaml`, `.cfg`, and `.xml` files: it prints a short summary, writes full file lists and diffs under `AI_TASK_RUNNER_REPORT_DIR` (default `.ai-task-runner/validator-reports/`), and adds a warning-only config value sharing score.
 
-If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_templates/external_command_validator.py` as a Python wrapper. Pass the external command with repeated `--validator-arg --command ...` values and pass any external log folders with `--validator-arg --log-dir ...`. The wrapper captures stdout/stderr, copies matching log files into `.ai-task-runner/validator-reports/external-command/`, and prints compact paths so the agent knows which reports to read.
+If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_templates/external_command_validator.py` as a Python wrapper. Pass the external command with repeated `--validator-arg --command ...` values and pass any external log folders with `--validator-arg --log-dir ...`. The wrapper captures stdout/stderr, copies matching log files into `AI_TASK_RUNNER_REPORT_DIR/external-command/`, and prints compact paths so the agent knows which reports to read.
 
 Example:
 
@@ -104,7 +104,7 @@ python -m pip install -e C:\Users\kevin\ai-task-runner
 
 After that, validators in any project can use `from ai_task_runner_validator import ValidatorReport`. Without installing, copy `docs/validator_templates/validator_interface.py` next to the validator.
 
-`<project-root>/.ai-task-runner/validator-reports/` is cleared before every Python validator run. Write detailed reports there when stdout would be too large; the next repair task will receive the validator stdout and can read the referenced latest report files.
+`<work-dir>/validator-reports/` is cleared before every Python validator run and exposed through `AI_TASK_RUNNER_REPORT_DIR`. With the default work directory this is `<project-root>/.ai-task-runner/validator-reports/`. The next repair task receives validator stdout and follows the exact referenced report paths.
 
 For large reports, keep stdout focused on the model-facing summary: status, error/warning counts, `report_dir`, and the first few actionable errors. Put detailed diffs or long command output in files. When feedback references `report_dir` or `Full report:`, prompts instruct the agent to read `summary.txt`, then `errors.txt`, then only the first relevant detailed report before making a repair.
 

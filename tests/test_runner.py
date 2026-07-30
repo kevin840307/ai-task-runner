@@ -148,14 +148,10 @@ def test_model_calls_have_configurable_python_timeout():
 
 
 def test_task_schema_is_strict():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner", ROOT / "ai_task_runner.py")
-    runner = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    from ai_task_runner import RunnerError, parse_tasks
 
     valid = '{"tasks":[{"title":"A","description":"B","acceptance_criteria":["C"]}]}'
-    assert runner.parse_tasks(valid, 1)[0].title == "A"
+    assert parse_tasks(valid, 1)[0].title == "A"
 
     invalid_values = [
         '{"tasks":[{"title":1,"description":"B","acceptance_criteria":["C"]}]}',
@@ -164,22 +160,18 @@ def test_task_schema_is_strict():
     ]
     for value in invalid_values:
         try:
-            runner.parse_tasks(value, 1)
-        except runner.RunnerError:
+            parse_tasks(value, 1)
+        except RunnerError:
             pass
         else:
             raise AssertionError(f"schema accepted invalid value: {value}")
 
 
 def test_task_schema_accepts_common_criteria_alias():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner", ROOT / "ai_task_runner.py")
-    runner = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    from ai_task_runner import parse_tasks
 
     value = '{"tasks":[{"title":"A","description":"B","accept_criteria":["C"]}]}'
-    task = runner.parse_tasks(value, 1)[0]
+    task = parse_tasks(value, 1)[0]
     assert task.acceptance_criteria == ["C"]
 
 
@@ -221,6 +213,21 @@ def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
         "unexpected stored JSON:\n{\"todos\": []}",
     )
     assert "the actual bad value to change away from" in tasks[0].description
+
+
+def test_validator_finding_tags_are_not_hardcoded():
+    import runner.core as core
+
+    tasks = core.derive_tasks_from_goal(
+        "goal",
+        8,
+        "[CHECK-A] first finding\ncontext\n[任意標籤] second finding",
+    )
+
+    assert [task.title for task in tasks] == [
+        "Repair CHECK-A: first finding",
+        "Repair 任意標籤: second finding",
+    ]
 
 
 def test_goal_task_derivation_splits_structured_validator_errors():
@@ -273,9 +280,9 @@ def test_repair_review_requires_project_change_when_validator_failed():
     )
     assert core.validator_repair_should_use_file_validator(state, task, True)
     assert not core.validator_repair_should_use_file_validator(state, task, False)
-    assert not core.validator_repair_should_use_file_validator(
+    assert core.validator_repair_should_use_file_validator(
         state,
-        core.Task("id", "Normal task", "fix", []),
+        core.Task("id", "Any planned repair task", "fix", []),
         True,
     )
     split_task = core.Task(
@@ -284,7 +291,6 @@ def test_repair_review_requires_project_change_when_validator_failed():
         "fix",
         [],
     )
-    assert core.is_validator_repair_task(split_task)
     assert core.repair_review_needs_project_change(
         state,
         split_task,
@@ -298,130 +304,103 @@ def test_repair_review_requires_project_change_when_validator_failed():
     )
 
 
-def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
+def test_goal_task_derivation_does_not_guess_unstructured_semantics():
     import runner.core as core
 
-    tasks = core.derive_tasks_from_goal(
-        (
-            "Build a small CSV sales analyzer from input/sales.csv.\n\n"
-            "The finished tool should include analyze_sales.py and a CLI.\n\n"
-            "It should produce report.json with totals.\n\n"
-            "README.md should document Usage and Outputs.\n\n"
-            "Do not ask questions."
-        ),
-        3,
+    goal = (
+        "Create several outcomes described only in prose. "
+        "The fallback must not depend on vocabulary, language, or file extensions."
     )
-    assert len(tasks) == 3
-    assert tasks[0].id == "c03-t001"
-    assert tasks[-1].title == "README.md should document Usage and Outputs"
-    assert not any(task.title.startswith("Build a small CSV") for task in tasks)
-    assert not any("Do not ask" in task.title for task in tasks)
+    tasks = core.derive_tasks_from_goal(goal, 3)
 
+    assert len(tasks) == 1
+    assert tasks[0].description.endswith(goal)
 
-def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
+def test_planned_tasks_are_right_sized_from_explicit_structure():
     import runner.core as core
 
     planned = [
         core.Task(
             "c01-t001",
-            "Build everything",
+            "Single task",
             "Implement the whole request.",
             ["Done"],
         )
     ]
-    goal = (
-        "Build a safe arithmetic expression evaluator.\n\n"
-        "The finished tool should include expression_eval.py with evaluate().\n\n"
-        "The CLI should support single expression and batch commands.\n\n"
-        "Batch mode should generate results.json and results.md. README.md should document Usage."
-    )
+    goal = """
+## 第一部分
+- 完成 α.custom
+- 完成 β.unknown
+
+## 第二部分
+- 完成 γ.future
+"""
 
     tasks = core.right_size_planned_tasks(goal, 1, planned)
 
     assert len(tasks) == 3
-    assert tasks[0].title.startswith("The finished tool should include")
+    assert any("α.custom" in task.title for task in tasks)
+    assert any("β.unknown" in task.title for task in tasks)
+    assert any("γ.future" in task.title for task in tasks)
     assert core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
 
-
-def test_goal_task_derivation_splits_dense_complex_prompt():
-    import runner.core as core
-
-    goal = (
-        "Build a small inventory CLI with inventory.py and commands to add, list, "
-        "and remove items. Store data in inventory.json with sku, name, quantity, "
-        "and price fields. Generate report.json and report.md summaries. Also "
-        "write README.md usage docs and include focused tests."
-    )
-
-    tasks = core.derive_tasks_from_goal(goal, 1)
-
-    assert len(tasks) >= 4
-    assert any("inventory.py" in task.title for task in tasks)
-    assert any("inventory.json" in task.title for task in tasks)
-    assert any("report.json" in task.title for task in tasks)
-    assert any("README.md" in task.title for task in tasks)
-
-
-def test_goal_task_derivation_uses_markdown_sections_for_specs():
+def test_goal_task_derivation_is_language_and_extension_neutral():
     import runner.core as core
 
     goal = """
-## Required CLI
-- Provide one documented command that runs the tool.
-- Support selecting an input directory, output directory, and optional mode.
+## 任務
+1. 處理 alpha.future
+2. 處理 beta.vendor
+3. 處理 gamma.anything
+"""
 
-## Data Loading
-1. load structured input files
-2. validate required fields
-3. normalize paths before writing output
+    tasks = core.derive_tasks_from_goal(goal, 1)
 
-## Transformation
-1. combine shared defaults
-2. apply target-specific overrides
-3. render output templates
-4. write generated files
+    assert [task.title for task in tasks] == [
+        "任務: 處理 alpha.future",
+        "任務: 處理 beta.vendor",
+        "任務: 處理 gamma.anything",
+    ]
 
-## Configuration
-- shared values should live in one common location
-- target overrides may remain target-specific
-- adding a target should usually require one config change
+def test_goal_task_derivation_preserves_all_explicit_markdown_structure():
+    import runner.core as core
 
-## Validation
-- generated folders and files must match expected names
-- generated content must be deterministic
-- README.md must describe usage
+    goal = """
+## A
+- one
+- two
 
-## Examples
-This section is contextual and should not become its own task.
+## B
+1. three
+2. four
+
+## Context-like title in any language
+This heading is still explicit input and must not be discarded by a keyword list.
 """
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert 10 <= len(tasks) <= 20
-    assert any("Required CLI" in title for title in titles)
-    assert any("load structured input files" in title for title in titles)
-    assert any("combine shared defaults" in title for title in titles)
-    assert any("render output templates" in title for title in titles)
-    assert any("README.md" in title for title in titles)
-    assert not any(title.startswith("Examples") for title in titles)
+    assert titles == [
+        "A: one",
+        "A: two",
+        "B: three",
+        "B: four",
+        "Context-like title in any language",
+    ]
 
-
-def test_goal_task_derivation_keeps_persistence_deliverables():
+def test_goal_task_derivation_uses_syntax_not_domain_terms():
     import runner.core as core
 
     tasks = core.derive_tasks_from_goal(
-        (
-            "Build a small persistent todo CLI.\n\n"
-            "The finished tool should include todo_cli.py and support add/list/done.\n\n"
-            "Todos should be stored in a JSON file selected by --db. "
-            "Each todo should have id, text, priority, and done fields.\n\n"
-            "Export should write a Markdown summary file. README.md should document usage."
-        ),
+        """
+- 任意領域輸出一
+- 任意領域輸出二
+- 任意領域輸出三
+""",
         4,
     )
     assert len(tasks) == 3
-    assert any("stored in a JSON file" in task.title for task in tasks)
-
+    assert tasks[1].title == "任意領域輸出二"
 
 def test_prompts_forbid_questions_and_omit_runtime_fields():
     import importlib.util
@@ -997,6 +976,7 @@ def test_old_state_without_24h_fields_still_loads():
 
     assert state.tasks[0].progress_key == ""
     assert state.tasks[0].stagnant_attempts == 0
+    assert state.tasks[0].start_fingerprint == ""
 
 
 def test_prompts_require_project_understanding_and_minimal_compatible_changes(tmp_path):
@@ -1047,15 +1027,15 @@ def test_plan_prompt_includes_project_outline_and_requires_readonly_inspection(t
     assert "Project files:" in prompt
     assert "README.md" in prompt
     assert "src/app.py" in prompt
-    assert "inspect the relevant project files read-only before planning" in prompt
-    assert "entry points, dependencies, public interfaces, existing patterns, and relevant tests" in prompt
-    assert "smallest complete task list, not the smallest task count" in prompt
-    assert "multiple independently implementable or independently verifiable outcomes" in prompt
+    assert "Inspect relevant project files read-only before planning" in prompt
+    assert "observable outcomes, affected existing behavior, dependencies, interfaces, conventions" in prompt
+    assert "smallest complete task list" in prompt
+    assert "independently implementable and independently verifiable outcomes" in prompt
     assert "If planning notes are written" in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
-    assert "Always return valid JSON" in prompt
-    assert "broad or multi-file goals often need 6-20 or more tasks" in prompt
-    assert "Before answering, self-check requirement coverage" in prompt
+    assert "Return valid JSON" in prompt
+    assert "with no fixed minimum or maximum" in prompt
+    assert "Before answering, verify that every explicit goal item is covered" in prompt
     assert ".ai-task-runner/state.json" not in prompt
 
 
@@ -1132,3 +1112,115 @@ def test_qwen_args_default_to_yolo():
         "qwen",
         ["--approval-mode", "yolo"],
     )
+
+
+def test_planning_module_has_no_domain_keyword_or_extension_tables():
+    source = (ROOT / "runner" / "planning.py").read_text(encoding="utf-8")
+    assert "PLAN_SCOPE_TERMS" not in source
+    assert "GENERIC_PLAN_TITLES" not in source
+    assert "looks_like_deliverable" not in source
+    assert "should_split_ordered_item" not in source
+    assert "is_context_section_title" not in source
+
+
+def test_plan_quality_gate_is_structural_and_domain_neutral():
+    from runner.models import Task
+    from runner.planning import plan_quality_issue
+
+    duplicate = [
+        Task("1", "相同", "first", ["done"]),
+        Task("2", "相同", "second", ["done"]),
+    ]
+    assert "duplicate" in plan_quality_issue("任意目標", duplicate)
+
+    broad = [Task("1", "單一", "do all work", ["done"])]
+    goal = """
+- outcome one
+- outcome two
+- outcome three
+"""
+    assert "cover" in plan_quality_issue(goal, broad)
+
+    focused = [
+        Task("1", "一", "outcome one", ["done one"]),
+        Task("2", "二", "outcome two", ["done two"]),
+        Task("3", "三", "outcome three", ["done three"]),
+    ]
+    assert plan_quality_issue(goal, focused) == ""
+
+    overloaded = Task(
+        "4",
+        "多結果",
+        "- result a\n- result b",
+        ["a", "b"],
+    )
+    assert "split" in plan_quality_issue("goal", [overloaded])
+
+    # Long prose alone must not trigger vocabulary- or length-based guessing.
+    prose = "任意內容 " * 200
+    assert plan_quality_issue(prose, [Task("5", "單一", "coherent", ["done"])]) == ""
+
+def test_project_change_stamp_does_not_hash_file_contents(tmp_path, monkeypatch):
+    import runner.support as support
+
+    (tmp_path / "source.py").write_text("x = 1", encoding="utf-8")
+    monkeypatch.setattr(support, "digest", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    first = support.project_change_stamp(tmp_path, tmp_path / ".ai-task-runner")
+    time.sleep(0.01)
+    (tmp_path / "source.py").write_text("x = 22", encoding="utf-8")
+    second = support.project_change_stamp(tmp_path, tmp_path / ".ai-task-runner")
+    assert first != second
+
+
+def test_readonly_guard_excludes_hidden_dirs_and_disk_copy_for_markdown(tmp_path):
+    from runner.support import readonly_project_call
+
+    work = tmp_path / ".ai-task-runner"
+    hidden_dir_file = tmp_path / ".cache" / "value.txt"
+    markdown = tmp_path / "README.md"
+    dot_file = tmp_path / ".env"
+    hidden_dir_file.parent.mkdir()
+    hidden_dir_file.write_text("old", encoding="utf-8")
+    markdown.write_text("old", encoding="utf-8")
+    dot_file.write_text("old", encoding="utf-8")
+
+    def mutate():
+        hidden_dir_file.write_text("new", encoding="utf-8")
+        markdown.write_text("new", encoding="utf-8")
+        dot_file.write_text("new", encoding="utf-8")
+        return "ok"
+
+    result, changed = readonly_project_call(mutate, tmp_path, work)
+    assert result == "ok"
+    assert hidden_dir_file.read_text(encoding="utf-8") == "new"
+    assert markdown.read_text(encoding="utf-8") == "old"
+    assert dot_file.read_text(encoding="utf-8") == "old"
+    assert {"README.md", ".env"} <= set(changed)
+    assert ".cache/value.txt" not in changed
+
+
+def test_project_change_detector_uses_fifteen_second_max_interval(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import runner.core as core
+
+    stamps = iter(["before", "after"])
+    calls = []
+
+    def stamp(_root, _work):
+        calls.append(True)
+        return next(stamps)
+
+    times = iter([0.0, 10.0, 15.0])
+    monkeypatch.setattr(core, "project_change_stamp", stamp)
+    monkeypatch.setattr(core.time, "monotonic", lambda: next(times))
+
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.args = SimpleNamespace(agent_idle_after_change_timeout=900)
+
+    changed = runner._project_change_detector()
+    assert changed() is False
+    assert len(calls) == 1
+    assert changed() is True
+    assert len(calls) == 2

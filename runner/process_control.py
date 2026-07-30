@@ -9,12 +9,15 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
+
+from .defaults import DEFAULT_PROCESS_OUTPUT_CHARS
 
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
-WATCHDOG_POLL_SECONDS = 1.0
+WATCHDOG_POLL_SECONDS = 0.2
+OUTPUT_TRUNCATION_MARKER = "\n...[process output truncated; beginning and end retained]...\n"
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,40 @@ class ProcessResult:
     idle_timed_out: bool = False
 
 
+class _OutputBuffer:
+    """Keep the beginning and end of long process output in bounded memory."""
+
+    def __init__(self, limit: int = DEFAULT_PROCESS_OUTPUT_CHARS) -> None:
+        self.limit = max(1, limit)
+        self.head_limit = min(self.limit // 4, 256 * 1024)
+        self.tail_limit = max(
+            0, self.limit - self.head_limit - len(OUTPUT_TRUNCATION_MARKER)
+        )
+        self.head = ""
+        self.tail = ""
+        self.truncated = False
+
+    def append(self, text: str) -> None:
+        if not text:
+            return
+        if len(self.head) < self.head_limit:
+            take = min(self.head_limit - len(self.head), len(text))
+            self.head += text[:take]
+            text = text[take:]
+        if not text:
+            return
+        combined = self.tail + text
+        if len(combined) > self.tail_limit:
+            self.truncated = True
+            combined = combined[-self.tail_limit :]
+        self.tail = combined
+
+    def text(self) -> str:
+        if not self.truncated:
+            return self.head + self.tail
+        return self.head + OUTPUT_TRUNCATION_MARKER + self.tail
+
+
 def run_process(
     command: Sequence[str],
     cwd: Path,
@@ -32,8 +69,9 @@ def run_process(
     input_text: str | None = None,
     idle_timeout_after_change: float = 0,
     change_detected: Callable[[], bool] | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> ProcessResult:
-    """Run one command and ensure timeout cleanup cannot wait forever."""
+    """Run one command with bounded output and process-tree cleanup."""
     options: dict[str, Any] = {
         "cwd": cwd,
         "text": True,
@@ -44,6 +82,8 @@ def run_process(
     }
     if input_text is not None:
         options["stdin"] = subprocess.PIPE
+    if env is not None:
+        options["env"] = dict(env)
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -51,15 +91,31 @@ def run_process(
 
     process = subprocess.Popen(command, **options)
     try:
-        if idle_timeout_after_change and change_detected is not None:
-            return _communicate_with_watchdog(
-                process,
-                input_text,
-                timeout,
-                idle_timeout_after_change,
-                change_detected,
-            )
+        return _communicate_streaming(
+            process,
+            input_text,
+            timeout,
+            idle_timeout_after_change,
+            change_detected,
+        )
+    finally:
+        if process.poll() is None:
+            terminate_process_tree(process)
 
+
+def _communicate_streaming(
+    process: subprocess.Popen[str],
+    input_text: str | None,
+    timeout: int,
+    idle_timeout_after_change: float,
+    change_detected: Callable[[], bool] | None,
+) -> ProcessResult:
+    deadline = time.monotonic() + timeout if timeout else None
+    last_activity_at = time.monotonic()
+    output_buffer = _OutputBuffer()
+    output_queue: queue.Queue[str] = queue.Queue(maxsize=64)
+
+    if getattr(process, "stdout", None) is None:
         try:
             output, _ = process.communicate(input=input_text, timeout=timeout or None)
             return ProcessResult(output or "", process.returncode or 0)
@@ -68,26 +124,6 @@ def run_process(
             output = _drain_after_termination(process)
             partial = output or _text_output(error.output)
             return ProcessResult(partial, process.returncode or -1, timed_out=True)
-    finally:
-        if process.poll() is None:
-            terminate_process_tree(process)
-
-
-def _communicate_with_watchdog(
-    process: subprocess.Popen[str],
-    input_text: str | None,
-    timeout: int,
-    idle_timeout_after_change: float,
-    change_detected: Callable[[], bool],
-) -> ProcessResult:
-    deadline = time.monotonic() + timeout if timeout else None
-    last_activity_at: float = time.monotonic()
-    partial = ""
-    output_queue: queue.Queue[str] = queue.Queue()
-
-    if process.stdout is None:
-        output, _ = process.communicate(input=input_text, timeout=timeout or None)
-        return ProcessResult(output or "", process.returncode or 0)
 
     reader = threading.Thread(
         target=_read_stdout,
@@ -108,21 +144,30 @@ def _communicate_with_watchdog(
     while True:
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
-        partial += output
-        if had_output or _safe_change_detected(change_detected):
+        output_buffer.append(output)
+        if had_output or (
+            change_detected is not None
+            and _safe_change_detected(change_detected)
+        ):
             last_activity_at = now
 
         if process.poll() is not None:
             if writer is not None:
                 writer.join(timeout=0.2)
-            reader.join(timeout=0.2)
-            partial += _drain_output(output_queue)[0]
-            return ProcessResult(partial, process.returncode or 0)
+            _finish_reader(reader, output_queue, output_buffer)
+            return ProcessResult(output_buffer.text(), process.returncode or 0)
 
         if deadline is not None and now >= deadline:
-            return _terminate_timeout(process, partial, idle=False)
-        if now - last_activity_at >= idle_timeout_after_change:
-            return _terminate_timeout(process, partial, idle=True)
+            return _terminate_timeout(
+                process, output_buffer, output_queue, reader, writer, idle=False
+            )
+        if (
+            idle_timeout_after_change
+            and now - last_activity_at >= idle_timeout_after_change
+        ):
+            return _terminate_timeout(
+                process, output_buffer, output_queue, reader, writer, idle=True
+            )
 
         time.sleep(
             _next_poll_timeout(
@@ -134,11 +179,24 @@ def _communicate_with_watchdog(
         )
 
 
+
+def _finish_reader(
+    reader: threading.Thread,
+    output_queue: queue.Queue[str],
+    output_buffer: _OutputBuffer,
+    timeout: float = 1.0,
+) -> None:
+    deadline = time.monotonic() + timeout
+    while reader.is_alive() and time.monotonic() < deadline:
+        output_buffer.append(_drain_output(output_queue)[0])
+        reader.join(timeout=0.02)
+    output_buffer.append(_drain_output(output_queue)[0])
+
 def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
     try:
-        for line in iter(pipe.readline, ""):
-            if line:
-                output_queue.put(line)
+        for chunk in iter(lambda: pipe.readline(64 * 1024), ""):
+            if chunk:
+                output_queue.put(chunk)
     except OSError:
         pass
 
@@ -149,7 +207,7 @@ def _write_stdin(process: subprocess.Popen[str], input_text: str) -> None:
     try:
         process.stdin.write(input_text)
         process.stdin.close()
-    except OSError:
+    except (OSError, ValueError):
         pass
 
 
@@ -172,8 +230,9 @@ def _next_poll_timeout(
     timeout = WATCHDOG_POLL_SECONDS
     if deadline is not None:
         timeout = min(timeout, max(0.01, deadline - now))
-    idle_deadline = last_activity_at + idle_timeout_after_change
-    timeout = min(timeout, max(0.01, idle_deadline - now))
+    if idle_timeout_after_change:
+        idle_deadline = last_activity_at + idle_timeout_after_change
+        timeout = min(timeout, max(0.01, idle_deadline - now))
     return timeout
 
 
@@ -186,13 +245,23 @@ def _safe_change_detected(change_detected: Callable[[], bool]) -> bool:
 
 def _terminate_timeout(
     process: subprocess.Popen[str],
-    partial: str,
+    output_buffer: _OutputBuffer,
+    output_queue: queue.Queue[str],
+    reader: threading.Thread,
+    writer: threading.Thread | None,
     idle: bool,
 ) -> ProcessResult:
     terminate_process_tree(process)
-    output = _drain_after_termination(process) or partial
+    if writer is not None:
+        writer.join(timeout=0.2)
+    _finish_reader(reader, output_queue, output_buffer)
+    if reader.is_alive() and process.stdout is not None:
+        try:
+            process.stdout.close()
+        except OSError:
+            pass
     return ProcessResult(
-        output,
+        output_buffer.text(),
         process.returncode or -1,
         timed_out=True,
         idle_timed_out=idle,
@@ -228,10 +297,11 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> None:
 
 def _drain_after_termination(process: subprocess.Popen[str]) -> str:
     """Collect remaining output without trusting descendants to close pipes."""
+    process.stdin = None
     try:
         output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
         return output or ""
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, ValueError):
         if process.stdout is not None:
             try:
                 process.stdout.close()

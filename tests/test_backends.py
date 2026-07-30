@@ -50,6 +50,7 @@ def test_core_has_no_backend_specific_command_logic():
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
     assert 'backend == "opencode"' not in source
+    assert 'self.args.backend == "qwen"' not in source
 
 
 def test_windows_quoted_command_path_is_unwrapped():
@@ -210,3 +211,17 @@ def test_timeout_uses_existing_retry_loop(tmp_path):
     )
     assert result.strip() == "ok"
     assert counter.read_text() == "2"
+
+
+def test_bounded_stream_output_preserves_qwen_session_and_final_result(tmp_path):
+    from runner.process_control import _OutputBuffer
+
+    output = _OutputBuffer(1000)
+    output.append('{"type":"system","session_id":"session-1"}\n')
+    output.append("x" * 5000)
+    output.append('\n{"type":"result","session_id":"session-1","result":"final answer"}\n')
+
+    decoded = QwenBackend(sys.executable, tmp_path, []).decode(output.text())
+
+    assert decoded.session_id == "session-1"
+    assert decoded.text == "final answer"

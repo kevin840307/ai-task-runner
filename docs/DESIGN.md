@@ -49,14 +49,14 @@ Final Validator PASS sets `completed=true`. Validator FAIL stores `validator_out
 
 ## Process Control
 
-`process_control.py` starts each AI CLI or validator as a subprocess, captures stdout/stderr incrementally, and kills the child process tree on timeout. Qwen uses `stream-json`, so CLI output is also an activity signal.
+`process_control.py` starts each AI CLI or validator as a subprocess, captures stdout/stderr incrementally into a bounded head/tail buffer, and kills the child process tree on timeout. Qwen uses `stream-json`, so CLI output is also an activity signal.
 
 Execution has two limits:
 
 - hard timeout: `--agent-timeout`, default `7200`
 - activity idle watchdog: `--agent-idle-after-change-timeout`, default `900`
 
-The idle watchdog starts when the execution call starts. Project changes or CLI output refresh the activity timer. If no further activity appears, the runner stops that AI call and moves to review instead of waiting forever.
+The idle watchdog starts when the execution call starts. Project changes or CLI output refresh the activity timer. Frequent project checks use a metadata-only stamp and are throttled to at most once every fifteen seconds under normal defaults; short configured idle windows automatically use a shorter interval. If no further activity appears, the runner stops that AI call and moves to review instead of waiting forever.
 
 The default backend is `qwen`, and its default command is `qwen.cmd`. Users can still override either value for another shell, backend, or local installation.
 
@@ -68,7 +68,7 @@ Prompt text is stored as Markdown templates under `prompts/`. `prompting.py` loa
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 
-Planning runs from the project root so the agent can inspect relevant files with read-only read/list/glob/search tools. Planning notes may be JSON or Markdown only under the runner work directory, and implementation files must not be changed; the existing read-only snapshot restores accidental changes. The planner extracts affected components and deliverables first, returns valid JSON even when uncertain, and right-sizes tasks from one trivial task to many independently verifiable tasks for broad multi-file work.
+Planning runs from the project root so the agent can inspect relevant files with read-only read/list/glob/search tools. Planning notes may be JSON or Markdown only under the runner work directory, and implementation files must not be changed. Full readonly backups skip dot-prefixed paths and Markdown files to reduce disk copying; visible Markdown and dot-files are protected with lightweight in-memory snapshots, while hidden directories remain outside the readonly backup. The planner derives task count from independently implementable and independently verifiable outcomes. The quality gate is deliberately syntax-based and domain-neutral: it validates uniqueness, explicit-structure coverage, task structural cohesion, and bracket-tagged validator coverage, requests at most one corrected plan, and contains no vocabulary or extension taxonomy.
 
 Review prompts are read-only. If review changes project files, the runner restores them and retries.
 
@@ -86,9 +86,9 @@ python validator.py --project-root <root> --state-file <state.json>
 
 Validator files are protected. Agents may read validator files to understand expected behavior, but must not edit them, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths.
 
-When the same task makes no project changes while validator feedback is still present, the task is not accepted unless completion is explicitly deferred to the Python validator. When repeated no-progress or repeated final validator failure suggests a bad session, the runner clears the session and retries from saved state. If AI review returns no valid review JSON and a Python validator is configured, the runner can mark the task as deferred to final validation instead of looping on review format failures. Validator stdout is treated as a compact summary; detailed evidence belongs under `.ai-task-runner/validator-reports/`, where repair prompts read `summary.txt`, `errors.txt`, and then the first relevant `Full report:` file.
+When the same task makes no project changes while validator feedback is still present, the task is not accepted unless completion is explicitly deferred to the Python validator. When repeated no-progress or repeated final validator failure suggests a bad session, the runner clears the session and retries from saved state. If AI review returns no valid review JSON and a Python validator is configured, the runner can mark the task as deferred to final validation instead of looping on review format failures. Validator stdout is treated as a compact summary; detailed evidence belongs at the exact `report_dir` printed by the validator. The default is `<work-dir>/validator-reports/`, and repair prompts read `summary.txt`, `errors.txt`, then the first relevant `Full report:` file.
 
-Validator stdout and stderr do not need a schema. The runner stores bounded feedback, currently 20,000 characters, with head and tail preserved for long logs.
+Validator stdout and stderr do not need a schema. Process capture and persisted validator feedback are both bounded with the beginning and end retained for long logs.
 
 ## Backend Rule Files
 
