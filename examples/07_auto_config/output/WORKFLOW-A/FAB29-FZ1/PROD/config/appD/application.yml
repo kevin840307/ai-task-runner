@@ -1,7 +1,0 @@
-cpu: 5
-gpu: 5
-app: appD
-workflow: WORKFLOW-A
-target: FAB29
-env: prod
-version: v512
