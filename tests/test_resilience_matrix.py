@@ -47,7 +47,7 @@ def _passing_validator(path: Path) -> Path:
     return path
 
 
-def test_protected_ask_restores_and_continues_on_protected_change(tmp_path):
+def test_protected_ask_stops_and_restores_on_protected_change(tmp_path):
     protected = tmp_path / "validator.py"
     protected.write_text("original", encoding="utf-8")
 
@@ -59,12 +59,9 @@ def test_protected_ask_restores_and_continues_on_protected_change(tmp_path):
             change_detected()
             return "unreachable"
 
-    output, changed = protected_ask(
-        Agent(), "go", [protected], 1, lambda: False
-    )
+    with pytest.raises(RunnerError, match="protected file modified"):
+        protected_ask(Agent(), "go", [protected], 1, lambda: False)
 
-    assert output == "unreachable"
-    assert changed == [str(protected)]
     assert protected.read_text(encoding="utf-8") == "original"
 
 
@@ -254,7 +251,7 @@ def test_process_idle_after_change_timeout_stops_before_full_timeout(tmp_path):
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=1.5,
+        idle_timeout_after_change=0.2,
         change_detected=changed,
     )
     assert result.timed_out is True
@@ -268,7 +265,7 @@ def test_process_idle_without_initial_activity_stops_before_full_timeout(tmp_pat
         [sys.executable, "-c", "import time; time.sleep(30)"],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=1.5,
+        idle_timeout_after_change=0.2,
         change_detected=lambda: False,
     )
     assert result.timed_out is True
@@ -287,7 +284,7 @@ def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=1.5,
+        idle_timeout_after_change=0.3,
         change_detected=lambda: False,
     )
     assert result.timed_out is False
@@ -302,7 +299,7 @@ def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=1.5,
+        idle_timeout_after_change=0.2,
         change_detected=lambda: False,
     )
     assert result.timed_out is True
@@ -706,167 +703,3 @@ def test_file_validator_nonzero_exit_preserves_diagnostics(tmp_path):
     )
     assert passed is False
     assert "FAILED: expected A, actual B" in output
-
-
-def test_drain_after_termination_handles_closed_stdin(tmp_path):
-    from runner.process_control import _drain_after_termination
-
-    process = subprocess.Popen(
-        [sys.executable, "-c", "import time; print('ready', flush=True); time.sleep(30)"],
-        cwd=tmp_path,
-        text=True,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        start_new_session=os.name != "nt",
-    )
-    assert process.stdin is not None
-    process.stdin.close()
-    process.kill()
-    output = _drain_after_termination(process)
-    assert isinstance(output, str)
-
-
-def test_state_backup_does_not_replace_newer_main_state(tmp_path):
-    import argparse
-    import json
-    from runner.core import TaskRunner
-    from runner.models import RunState, Task
-
-    runner = object.__new__(TaskRunner)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state_file = runner.work / "state.json"
-    runner.state_backup_file = tmp_path / "backup.json"
-    runner.work.mkdir()
-
-    main = RunState("run", "goal", str(tmp_path), cycle=2, last_activity_at=2)
-    main.tasks = [Task("t1", "Task", "Do it", ["Done"], attempts=2)]
-    backup = RunState("run", "goal", str(tmp_path), cycle=1, last_activity_at=1)
-    backup.tasks = [Task("t1", "Task", "Do it", ["Done"], attempts=1)]
-    runner.state_file.write_text(json.dumps(main.dump()), encoding="utf-8")
-    runner.state_backup_file.write_text(json.dumps(backup.dump()), encoding="utf-8")
-
-    runner._restore_state_backup()
-
-    assert json.loads(runner.state_file.read_text(encoding="utf-8"))["cycle"] == 2
-
-
-def test_state_backup_recovers_invalid_main_state(tmp_path):
-    import json
-    from runner.core import TaskRunner
-    from runner.models import RunState
-
-    runner = object.__new__(TaskRunner)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state_file = runner.work / "state.json"
-    runner.state_backup_file = tmp_path / "backup.json"
-    runner.work.mkdir()
-    runner.state_file.write_text("{broken", encoding="utf-8")
-    backup = RunState("run", "goal", str(tmp_path), cycle=3, last_activity_at=3)
-    runner.state_backup_file.write_text(json.dumps(backup.dump()), encoding="utf-8")
-
-    runner._restore_state_backup()
-
-    assert json.loads(runner.state_file.read_text(encoding="utf-8"))["cycle"] == 3
-
-
-def test_resume_reviews_changed_interrupted_task_before_reexecution(tmp_path):
-    from types import SimpleNamespace
-    from runner.core import TaskRunner
-    from runner.models import RunState, Task
-
-    runner = object.__new__(TaskRunner)
-    runner.args = SimpleNamespace(resume=True)
-    task = Task("t1", "Task", "Do it", ["Done"], start_fingerprint="before")
-    runner.state = RunState(
-        "run", "goal", str(tmp_path), tasks=[task], stage="executing"
-    )
-    runner.ai_validation = True
-    runner.validator = None
-    events = []
-    runner._project_changed_since = lambda value: value == "before"
-    runner._set_stage = lambda stage, detail="": events.append((stage, detail))
-    runner._review_current_task = lambda current, output: {
-        "completed": True,
-        "reason": "already complete",
-        "missing_items": [],
-    }
-    runner._handle_review_result = lambda current, review, project_changed: events.append(
-        ("handled", project_changed)
-    )
-
-    runner._resume_interrupted_task()
-
-    assert ("reviewing", "resuming interrupted task review") in events
-    assert ("handled", True) in events
-
-
-def test_process_output_buffer_keeps_head_and_tail_with_limit():
-    from runner.process_control import _OutputBuffer
-
-    output = _OutputBuffer(200)
-    output.append("BEGIN\n" + "x" * 500 + "\nEND")
-    text = output.text()
-
-    assert len(text) <= 200
-    assert text.startswith("BEGIN")
-    assert text.endswith("END")
-    assert "truncated" in text
-
-
-def test_validator_report_dir_is_available_through_environment(tmp_path):
-    from runner.support import run_file_validator
-
-    state_file = tmp_path / "state.json"
-    state_file.write_text("{}", encoding="utf-8")
-    report_dir = tmp_path / "custom-work" / "validator-reports"
-    validator = tmp_path / "validator.py"
-    validator.write_text(
-        "import argparse,os,pathlib\n"
-        "p=argparse.ArgumentParser();p.add_argument('--project-root');p.add_argument('--state-file');p.parse_args()\n"
-        "reports=pathlib.Path(os.environ['AI_TASK_RUNNER_REPORT_DIR'])\n"
-        "reports.mkdir(parents=True, exist_ok=True)\n"
-        "(reports/'latest.txt').write_text('ok', encoding='utf-8')\n",
-        encoding="utf-8",
-    )
-
-    passed, output = run_file_validator(
-        validator, tmp_path, state_file, 10, [], [state_file], report_dir
-    )
-
-    assert passed is True, output
-    assert (report_dir / "latest.txt").read_text(encoding="utf-8") == "ok"
-
-
-def test_validator_report_helper_uses_runner_report_environment(tmp_path, monkeypatch):
-    from ai_task_runner_validator import ValidatorReport
-
-    report_root = tmp_path / "isolated-reports"
-    monkeypatch.setenv("AI_TASK_RUNNER_REPORT_DIR", str(report_root))
-
-    result = ValidatorReport(tmp_path, name="check")
-
-    assert result.report_dir == report_root / "check"
-
-
-def test_valid_main_state_from_another_run_is_not_replaced(tmp_path):
-    import json
-    from runner.core import TaskRunner
-    from runner.models import RunState
-
-    runner = object.__new__(TaskRunner)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state_file = runner.work / "state.json"
-    runner.state_backup_file = tmp_path / "backup.json"
-    runner.work.mkdir()
-    main = RunState("new-run", "goal", str(tmp_path), last_activity_at=1)
-    backup = RunState("old-run", "goal", str(tmp_path), last_activity_at=99)
-    runner.state_file.write_text(json.dumps(main.dump()), encoding="utf-8")
-    runner.state_backup_file.write_text(json.dumps(backup.dump()), encoding="utf-8")
-
-    runner._restore_state_backup()
-
-    assert json.loads(runner.state_file.read_text(encoding="utf-8"))["run_id"] == "new-run"

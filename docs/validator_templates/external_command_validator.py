@@ -2,7 +2,7 @@
 """Template for validators that wrap an external exe, bat, jar, or CLI.
 
 The external tool can write logs anywhere. This wrapper copies matching logs
-into AI_TASK_RUNNER_REPORT_DIR/external-command/ and prints compact
+into .ai-task-runner/validator-reports/external-command/ and prints compact
 paths for the agent.
 """
 

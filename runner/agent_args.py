@@ -80,7 +80,11 @@ QWEN_COMPUTER_USE_TOOLS = (
 )
 
 QWEN_PLANNING_EXCLUDED_TOOLS = (
+    "read_file",
     "read_mcp_resource",
+    "list_directory",
+    "glob",
+    "grep_search",
     "write_file",
     "edit",
     "notebook_edit",
@@ -100,7 +104,7 @@ QWEN_RUNTIME_EXCLUDED_TOOLS = (
 
 
 def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
-    """Allow read-only project inspection while blocking planning-side writes."""
+    """Preserve Qwen planning permissions while trimming custom context load."""
     result = list(extra_args)
     if backend == "qwen":
         ensure_qwen_yolo(result)

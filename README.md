@@ -42,19 +42,19 @@ AI validation uses a fresh independent agent session. It asks the agent to inspe
 5. On validator failure: add focused repair task(s) and continue
 ```
 
-The runner does not generate code itself. The agent writes project files. The runner owns durable state, retries, review orchestration, protected-file restore, validator execution, and stage-aware resume.
+The runner does not generate code itself. The agent writes project files. The runner owns state, retries, review orchestration, protected-file restore, validator execution, and resume.
 
 ## Reliability
 
-Within one live runner process, these failures are automatically recovered: model errors, Qwen loop detection, session unavailable, timeouts, invalid review JSON, review failure, validator failure, and no-progress attempts. Protected-file edits are restored immediately and reported to review without restarting an otherwise useful model call.
+Within one live runner process, these failures are automatically retried: model errors, Qwen loop detection, session unavailable, timeouts, invalid review JSON, review failure, protected-file edits, validator failure, and no-progress attempts.
 
 If a Python validator is configured and an AI review cannot return valid review JSON, the runner can defer that task's completion judgment to the final validator instead of rerunning the same task forever. The run still stops only after the final validator passes.
 
 When the same final validator failure repeats, repair tasks switch to a fresh agent session while still receiving the saved runner state and validator feedback. This helps a small model escape a bad prior approach without losing the 24h retry loop.
 
-When validator stdout contains bracket-tagged error headings such as `[E001] ...` or `[CHECK-A] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
+When validator stdout contains structured error headings such as `[E001] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
 
-Before splitting tasks, planning runs from the project root and may inspect relevant files with read-only read/list/glob/search tools. It identifies observable outcomes, affected existing behavior, dependencies, interfaces, conventions, and available verification evidence, then returns valid task JSON. The quality gate uses only domain-neutral structural invariants: duplicate tasks, duplicate criteria, uncovered explicit Markdown units, and uncovered bracket-tagged validator findings. It requests at most one corrected plan and never relies on language-specific keywords, technology names, file extensions, fixed task-count ranges, or project-specific titles. If model planning repeatedly fails, deterministic fallback uses Markdown hierarchy: sibling sections become tasks and their child list items become acceptance criteria; a root-level list is split only when no usable section hierarchy exists. Unstructured semantic decomposition remains the read-only planner model’s responsibility instead of being guessed by hardcoded vocabulary. The fallback status includes the last planning error.
+Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If model planning repeatedly fails, deterministic fallback still derives tasks from headings, numbered items, bullets, paragraphs, and dense deliverable phrases in the goal.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
@@ -62,7 +62,7 @@ The runner and prompt templates must stay task-agnostic. Case-specific names suc
 
 When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
-For Qwen, the backend uses `--output-format stream-json`. Process output is streamed through a bounded head/tail buffer so long-running CLI logs cannot grow memory without limit. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. Frequent change checks use file metadata instead of reading and hashing every file, and are throttled to at most once every fifteen seconds for normal 24h runs. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
+For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
 
 The default execution idle watchdog is:
 
@@ -82,7 +82,7 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 
 Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
 
-Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under the report directory supplied through `AI_TASK_RUNNER_REPORT_DIR` (default: `.ai-task-runner/validator-reports/`). `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
+Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`. `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
 
 For large validations, stdout should be a repair summary, not the full diff. Print the status, counts, `report_dir`, and the first few actionable errors. Put large evidence in `summary.txt`, `errors.txt`, `warnings.txt`, and referenced `Full report:` files. Repair prompts tell the agent to read `summary.txt`, then `errors.txt`, then only the first relevant full report needed for the first blocking error.
 
@@ -94,7 +94,7 @@ python -m pip install -e C:\Users\kevin\ai-task-runner
 
 Then any validator can use `from ai_task_runner_validator import ValidatorReport`. Without installing, copy `docs/validator_templates/validator_interface.py` next to the validator.
 
-Before each Python validator run, the runner clears `<work-dir>/validator-reports/` and exposes that path through `AI_TASK_RUNNER_REPORT_DIR`. With the default work directory this remains `<project-root>/.ai-task-runner/validator-reports/`. Validator stdout may reference any project-readable `report_dir`; the agent follows the exact reported path.
+Before each Python validator run, the runner clears `<project-root>/.ai-task-runner/validator-reports/`. Treat that directory as the latest validation report area, not a history folder.
 
 ## Rule Files
 

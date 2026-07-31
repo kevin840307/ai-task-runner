@@ -6,7 +6,7 @@ Runner contract:
 - exit code != 0: fail and retry
 - stdout/stderr: feedback for the next agent attempt
 
-Keep stdout short. Save full evidence through ValidatorReport; the runner supplies AI_TASK_RUNNER_REPORT_DIR.
+Keep stdout short. Save full evidence under .ai-task-runner/validator-reports/.
 """
 
 from __future__ import annotations

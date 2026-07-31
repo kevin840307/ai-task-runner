@@ -12,7 +12,6 @@ Runner contract stays unchanged:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -40,13 +39,9 @@ class ValidatorReport:
         stdout_items: int = DEFAULT_STDOUT_ITEMS,
     ) -> None:
         self.project_root = Path(project_root).resolve()
-        report_root = Path(
-            os.environ.get(
-                "AI_TASK_RUNNER_REPORT_DIR",
-                self.project_root / ".ai-task-runner" / "validator-reports",
-            )
+        self.report_dir = (
+            self.project_root / ".ai-task-runner" / "validator-reports" / name
         )
-        self.report_dir = report_root / name
         self.stdout_items = stdout_items
         self.errors: list[Finding] = []
         self.warnings: list[Finding] = []

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import tempfile
 import time
 import uuid
@@ -15,15 +16,10 @@ from .agent_args import (
     planning_agent_args,
     runtime_agent_args,
 )
-from .defaults import (
-    DEFAULT_PLAN_QUALITY_REPLANS,
-    DEFAULT_PLANNING_FAILURES_BEFORE_FALLBACK,
-)
 from .errors import RunnerError
 from .models import RunState, Task
 from .planning import (
     derive_tasks_from_goal,
-    plan_quality_issue,
     right_size_planned_tasks,
 )
 from .prompting import (
@@ -41,7 +37,6 @@ from .support import (
     cleanup_stale_artifacts,
     parse_review,
     parse_tasks,
-    project_change_stamp,
     project_fingerprint,
     protected_ask,
     progress_key,
@@ -75,6 +70,7 @@ def repair_review_needs_project_change(
 ) -> bool:
     return (
         bool(state.validator_output.strip())
+        and is_validator_repair_task(task)
         and review.get("completed") is True
         and review.get("defer_to_validator") is not True
         and not project_changed
@@ -88,14 +84,21 @@ def validator_repair_should_use_file_validator(
 ) -> bool:
     return (
         bool(state.validator_output.strip())
+        and is_validator_repair_task(task)
         and project_changed
     )
 
 
+def is_validator_repair_task(task: Task) -> bool:
+    return (
+        task.title == "Repair validator failure"
+        or re.match(r"^Repair E[^\s:]*:", task.title) is not None
+    )
+
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
-    """Plan from the project root so every backend can inspect it read-only."""
-    return root
+    """Let Qwen write planning artifacts without making source files its cwd."""
+    return work if backend == "qwen" else root
 
 
 class TaskRunner:
@@ -149,9 +152,6 @@ class TaskRunner:
         self.ui.bind(self.state)
 
     def run(self) -> int:
-        resume_code = self._resume_interrupted_task()
-        if resume_code is not None:
-            return resume_code
         while not self.state.completed:
             self._plan_if_needed()
             if self.args.plan_only:
@@ -247,35 +247,7 @@ class TaskRunner:
             return
         if Path(state.project_root).resolve() != self.root:
             return
-        current = self._read_state(self.state_file)
-        if current is not None and (
-            current.run_id != state.run_id
-            or self._state_rank(current, self.state_file)
-            >= self._state_rank(state, self.state_backup_file)
-        ):
-            return
         write_json(self.state_file, payload)
-
-    def _read_state(self, path: Path) -> RunState | None:
-        try:
-            return RunState.load(json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _state_rank(state: RunState, path: Path) -> tuple[float, int, int, int, int, int]:
-        try:
-            modified = path.stat().st_mtime_ns
-        except OSError:
-            modified = 0
-        return (
-            state.last_activity_at,
-            state.cycle,
-            state.current,
-            sum(task.status == "completed" for task in state.tasks),
-            sum(task.attempts for task in state.tasks),
-            modified,
-        )
 
     def _save_session(self) -> None:
         self.state.agent_session_id = self.agent.session_id
@@ -286,12 +258,10 @@ class TaskRunner:
             return
 
         planning_failures = 0
-        quality_replans = 0
-        quality_feedback = ""
         self._set_stage("planning")
 
         def plan_call() -> list[Task]:
-            nonlocal planning_failures, quality_replans, quality_feedback
+            nonlocal planning_failures
             planner_root = planning_agent_root(
                 self.args.backend,
                 self.root,
@@ -318,16 +288,15 @@ class TaskRunner:
                         self.state,
                         self.protected,
                         self.work,
-                        quality_feedback,
                     ),
                     self.root,
                     self.work,
                     self.protected,
                 )
                 if protected_changed:
-                    self.ui.set(
-                        "AI restored protected files changed during planning",
-                        ", ".join(protected_changed),
+                    raise RunnerError(
+                        "AI modified files during planning and they were restored: "
+                        + ", ".join(protected_changed)
                     )
                 tasks = right_size_planned_tasks(
                     self.state.goal,
@@ -335,13 +304,6 @@ class TaskRunner:
                     parse_tasks(output, self.state.cycle),
                     self.state.validator_output,
                 )
-                issue = plan_quality_issue(
-                    self.state.goal, tasks, self.state.validator_output
-                )
-                if issue and quality_replans < DEFAULT_PLAN_QUALITY_REPLANS:
-                    quality_replans += 1
-                    quality_feedback = issue
-                    raise RunnerError(f"plan quality gate requested replan: {issue}")
             except RunnerError as error:
                 planning_failures += 1
                 message = str(error)
@@ -350,15 +312,12 @@ class TaskRunner:
                     or "loop detection" in message.lower()
                 )
                 if (
-                    stalled
-                    or planning_failures >= DEFAULT_PLANNING_FAILURES_BEFORE_FALLBACK
+                    self.args.backend == "qwen"
+                    and (stalled or planning_failures >= 3)
                 ):
                     self.ui.set(
-                        "Planning fallback",
-                        (
-                            "using hierarchical Markdown fallback after repeated "
-                            f"planning failures; last error: {message[-500:]}"
-                        ),
+                        "Qwen planning fallback",
+                        "using fallback tasks from the goal after repeated planning failures",
                     )
                     return derive_tasks_from_goal(
                         self.state.goal,
@@ -404,39 +363,14 @@ class TaskRunner:
             and all(task.status == "completed" for task in self.state.tasks)
         )
 
-    def _resume_interrupted_task(self) -> int | None:
-        if not self.args.resume or self.state.stage not in {"executing", "reviewing"}:
-            return None
-        if not 0 <= self.state.current < len(self.state.tasks):
-            return None
-        task = self.state.tasks[self.state.current]
-        changed = bool(task.start_fingerprint) and self._project_changed_since(task.start_fingerprint)
-        if self.state.stage == "executing" and not changed:
-            self._set_stage("task_retry_wait", "resuming interrupted task execution")
-            return None
-        output = task.last_output or (
-            "Runner resumed after an interrupted execution/review. "
-            "Inspect the current filesystem and judge the current task state."
-        )
-        self._set_stage("reviewing", "resuming interrupted task review")
-        try:
-            review = self._review_current_task(task, output)
-        except RunnerError as error:
-            if self.ai_validation or self.validator is None:
-                self._set_stage("task_retry_wait", str(error))
-                return None
-            review = self._fallback_review_to_validator(task, error)
-        return self._handle_review_result(task, review, project_changed=changed)
-
     def _run_pending_tasks(self) -> int | None:
         while self.state.current < len(self.state.tasks):
             task = self.state.tasks[self.state.current]
             task.attempts += 1
-            project_before = project_fingerprint(self.root, self.work)
-            task.start_fingerprint = project_before
             self._save_state()
             show_todo(self.state, self.ui)
 
+            project_before = project_fingerprint(self.root, self.work)
             try:
                 self._set_stage("executing")
                 output = self._execute_current_task(task)
@@ -644,7 +578,6 @@ class TaskRunner:
 
     def _complete_current_task(self, task: Task) -> None:
         task.status = "completed"
-        task.start_fingerprint = ""
         task.progress_key = ""
         task.stagnant_attempts = 0
         self.state.current += 1
@@ -736,14 +669,9 @@ class TaskRunner:
                 change_detected,
             )
             if changed:
-                self.ui.set(
-                    "Protected files restored during model call",
-                    ", ".join(changed),
-                )
-                output = (
-                    output
-                    + "\n\nRunner note: protected-file changes were restored and "
-                    "must not be counted as task progress."
+                raise RunnerError(
+                    "protected file modified and restored: "
+                    + ", ".join(changed)
                 )
             return output
 
@@ -758,18 +686,11 @@ class TaskRunner:
         )
 
     def _project_change_detector(self):
-        fingerprint = project_change_stamp(self.root, self.work)
-        last_checked = time.monotonic()
-        idle_timeout = self.args.agent_idle_after_change_timeout
-        interval = min(15.0, max(0.1, idle_timeout / 3)) if idle_timeout else 15.0
+        fingerprint = project_fingerprint(self.root, self.work)
 
         def changed() -> bool:
-            nonlocal fingerprint, last_checked
-            now = time.monotonic()
-            if now - last_checked < interval:
-                return False
-            last_checked = now
-            latest = project_change_stamp(self.root, self.work)
+            nonlocal fingerprint
+            latest = project_fingerprint(self.root, self.work)
             if latest == fingerprint:
                 return False
             fingerprint = latest
@@ -799,7 +720,7 @@ class TaskRunner:
             changed = [*protected_changed, *project_changed]
             if changed:
                 raise RunnerError(
-                    "AI review modified files and they were restored: "
+                    "review modified files and they were restored: "
                     + ", ".join(changed)
                 )
             return parse_review(raw)
@@ -897,7 +818,6 @@ class TaskRunner:
             self.args.validator_timeout,
             self.args.validator_arg,
             self.protected,
-            self.work / "validator-reports",
         )
 
 

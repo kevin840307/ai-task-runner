@@ -1,8 +1,8 @@
 Validator feedback below is the final validator's failure report. It describes the current rejected behavior or output, not the desired result.
 
-Treat stdout/stderr as a compact summary for the next repair attempt. Detailed evidence may be stored at any project-readable path printed by the validator. The default convention is `.ai-task-runner/validator-reports/`.
+Treat stdout/stderr as a compact summary for the next repair attempt. Detailed evidence may be stored in files under `.ai-task-runner/validator-reports/`.
 
-If this feedback mentions `report_dir` or `Full report`, use the exact reported path:
+If this feedback mentions `report_dir`, `Full report`, or a `.ai-task-runner/validator-reports/` path:
 1. Read `summary.txt` first when it exists.
 2. Read `errors.txt` next when it exists.
 3. Read only the first relevant `Full report` file needed to fix the first blocking error.

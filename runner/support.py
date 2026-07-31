@@ -15,7 +15,6 @@ from typing import Any, Callable, Sequence, TypeVar
 from .agent import AgentClient
 from .errors import RunnerError
 from .models import RunState, Task
-from .defaults import VALIDATOR_REPORT_DIR_ENV
 from .process_control import run_process
 from .prompting import (
     ai_validator_prompt,
@@ -76,24 +75,14 @@ def runner_source_files() -> list[Path]:
 
 
 def write_json(path: Path, data: Any) -> None:
-    """Atomically and durably write indented UTF-8 JSON."""
+    """Atomically write indented UTF-8 JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8", newline="\n") as stream:
-        stream.write(json.dumps(data, ensure_ascii=False, indent=2))
-        stream.flush()
-        os.fsync(stream.fileno())
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     os.replace(temporary, path)
-    try:
-        descriptor = os.open(path.parent, os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(descriptor)
-    except OSError:
-        pass
-    finally:
-        os.close(descriptor)
 
 
 def digest(path: Path) -> str | None:
@@ -141,14 +130,14 @@ def changed_snapshot_paths(
 def protected_change_detector(
     file_snapshot: dict[Path, tuple[str | None, bytes | None]],
     change_detected: Callable[[], bool] | None,
-    restored_paths: set[str] | None = None,
 ) -> Callable[[], bool]:
     def changed() -> bool:
-        protected_changed = restore_changed(file_snapshot)
+        protected_changed = changed_snapshot_paths(file_snapshot)
         if protected_changed:
-            if restored_paths is not None:
-                restored_paths.update(protected_changed)
-            return True
+            raise RunnerError(
+                "protected file modified during model call: "
+                + ", ".join(protected_changed)
+            )
         return change_detected() if change_detected is not None else False
 
     return changed
@@ -220,21 +209,16 @@ def protected_ask(
     change_detected: Callable[[], bool] | None = None,
 ) -> tuple[str, list[str]]:
     file_snapshot = snapshot(protected)
-    restored_paths: set[str] = set()
     output: str | None = None
     try:
         output = agent.ask(
             prompt,
             idle_timeout_after_change,
-            protected_change_detector(
-                file_snapshot,
-                change_detected,
-                restored_paths,
-            ),
+            protected_change_detector(file_snapshot, change_detected),
         )
     finally:
-        restored_paths.update(restore_changed(file_snapshot))
-    return output, sorted(restored_paths)
+        changed = restore_changed(file_snapshot)
+    return output, changed
 
 
 def _readonly_excludes(root: Path, work: Path) -> set[str]:
@@ -247,17 +231,12 @@ def _readonly_excludes(root: Path, work: Path) -> set[str]:
 def _tree_manifest(
     root: Path,
     excluded_dirs: set[str],
-    *,
-    lightweight: bool = False,
-    readonly_excludes: bool = False,
 ) -> dict[str, tuple[str, str | None]]:
     result: dict[str, tuple[str, str | None]] = {}
     for current, directories, files in os.walk(root, followlinks=False):
         base = Path(current)
         directories[:] = [
-            name for name in directories
-            if name not in excluded_dirs
-            and not (readonly_excludes and name.startswith("."))
+            name for name in directories if name not in excluded_dirs
         ]
         for name in list(directories):
             path = base / name
@@ -269,43 +248,18 @@ def _tree_manifest(
                 result[relative_path] = ("dir", "")
         for name in files:
             path = base / name
-            if readonly_excludes and (
-                name.startswith(".") or path.suffix.lower() == ".md"
-            ):
-                continue
             relative_path = path.relative_to(root).as_posix()
             if path.is_symlink():
                 result[relative_path] = ("link", os.readlink(path))
             else:
-                try:
-                    stat = path.stat() if lightweight else None
-                    marker = (
-                        f"{stat.st_mtime_ns}:{stat.st_size}"
-                        if stat is not None
-                        else digest(path)
-                    )
-                except OSError:
-                    continue
-                result[relative_path] = ("file", marker)
+                result[relative_path] = ("file", digest(path))
     return result
 
 
-def _manifest_fingerprint(manifest: dict[str, tuple[str, str | None]]) -> str:
+def project_fingerprint(root: Path, work: Path) -> str:
+    manifest = _tree_manifest(root, _readonly_excludes(root, work))
     payload = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def project_fingerprint(root: Path, work: Path) -> str:
-    return _manifest_fingerprint(
-        _tree_manifest(root, _readonly_excludes(root, work))
-    )
-
-
-def project_change_stamp(root: Path, work: Path) -> str:
-    """Return a metadata-only stamp for frequent watchdog checks."""
-    return _manifest_fingerprint(
-        _tree_manifest(root, _readonly_excludes(root, work), lightweight=True)
-    )
 
 
 def progress_key(
@@ -364,29 +318,10 @@ def _copy_ignore(excluded_dirs: set[str]) -> Callable[[str, list[str]], list[str
         return [
             name
             for name in names
-            if name.startswith(".")
-            or ((base / name).is_dir() and name in excluded_dirs)
-            or ((base / name).is_file() and (base / name).suffix.lower() == ".md")
+            if name in excluded_dirs and (base / name).is_dir()
         ]
 
     return ignore
-
-
-def _readonly_light_files(root: Path, excluded_dirs: set[str]) -> list[Path]:
-    """Track excluded Markdown and dot-files without copying them to disk."""
-    result: list[Path] = []
-    for current, directories, files in os.walk(root, followlinks=False):
-        base = Path(current)
-        directories[:] = [
-            name for name in directories
-            if name not in excluded_dirs and not name.startswith(".")
-        ]
-        result.extend(
-            base / name
-            for name in files
-            if name.startswith(".") or (base / name).suffix.lower() == ".md"
-        )
-    return result
 
 
 def readonly_project_call(
@@ -396,12 +331,7 @@ def readonly_project_call(
 ) -> tuple[T, list[str]]:
     """Run an action and restore source changes while ignoring build caches."""
     excluded_dirs = _readonly_excludes(root, work)
-    light_files = _readonly_light_files(root, excluded_dirs)
-    light_snapshot = snapshot(light_files)
-    light_before = {path.relative_to(root).as_posix() for path in light_files}
-    before = _tree_manifest(
-        root, excluded_dirs, readonly_excludes=True
-    )
+    before = _tree_manifest(root, excluded_dirs)
     with tempfile.TemporaryDirectory(prefix="ai-task-runner-readonly-") as temp:
         backup = Path(temp) / "project"
         shutil.copytree(
@@ -413,29 +343,15 @@ def readonly_project_call(
         try:
             result = action()
         finally:
-            after = _tree_manifest(
-                root, excluded_dirs, readonly_excludes=True
-            )
-            changed = {
+            after = _tree_manifest(root, excluded_dirs)
+            changed = sorted(
                 path
                 for path in set(before) | set(after)
                 if before.get(path) != after.get(path)
-            }
-            if changed:
-                _restore_project_changes(root, backup, sorted(changed))
-
-            light_after = {
-                path.relative_to(root).as_posix(): path
-                for path in _readonly_light_files(root, excluded_dirs)
-            }
-            for relative in set(light_after) - light_before:
-                _remove_path(light_after[relative])
-                changed.add(relative)
-            changed.update(
-                Path(path).relative_to(root).as_posix()
-                for path in restore_changed(light_snapshot)
             )
-    return result, sorted(changed)
+            if changed:
+                _restore_project_changes(root, backup, changed)
+    return result, changed
 
 
 def readonly_ask(
@@ -618,14 +534,9 @@ def run_file_validator(
     timeout: int,
     extra_args: Sequence[str],
     protected: Sequence[Path],
-    report_dir: Path | None = None,
 ) -> tuple[bool, str]:
     file_snapshot = snapshot(protected)
-    legacy_reports = root / ".ai-task-runner" / "validator-reports"
-    reports = report_dir or legacy_reports
-    clear_validator_reports(reports)
-    if reports != legacy_reports:
-        clear_validator_reports(legacy_reports)
+    clear_validator_reports(root)
     command = [
         sys.executable,
         str(path),
@@ -635,10 +546,8 @@ def run_file_validator(
         str(state_file),
         *extra_args,
     ]
-    environment = os.environ.copy()
-    environment[VALIDATOR_REPORT_DIR_ENV] = str(reports)
     try:
-        result = run_process(command, root, timeout, env=environment)
+        result = run_process(command, root, timeout)
     except OSError as error:
         restore_changed(file_snapshot)
         raise RunnerError(f"validator failed: {error}") from error
@@ -662,7 +571,8 @@ def run_file_validator(
     return result.return_code == 0, result.output
 
 
-def clear_validator_reports(reports: Path) -> None:
+def clear_validator_reports(root: Path) -> None:
+    reports = root / ".ai-task-runner" / "validator-reports"
     if not reports.exists() and not reports.is_symlink():
         return
     try:

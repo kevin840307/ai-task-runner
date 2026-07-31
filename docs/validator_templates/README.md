@@ -27,7 +27,7 @@ Recommended validator behavior:
 
 - print a short stdout summary for the agent:
   `VALIDATION_*`, error count, warning count, `report_dir`, and the first few actionable findings
-- write full error, warning, diff, score, and command output reports under `AI_TASK_RUNNER_REPORT_DIR` (default `.ai-task-runner/validator-reports/`)
+- write full error, warning, diff, score, and command output reports under `.ai-task-runner/validator-reports/`
 - write standard files such as `summary.txt`, `errors.txt`, and `warnings.txt`
 - include `Full report:` paths in stdout when a finding has a specific detailed file
 - fail only for issues that block completion
@@ -35,7 +35,7 @@ Recommended validator behavior:
 
 Stdout should answer "what should the model fix next?" Keep detailed evidence in report files. Repair prompts read `summary.txt`, then `errors.txt`, then the first relevant `Full report:` path before changing project files.
 
-The runner clears the directory supplied through `AI_TASK_RUNNER_REPORT_DIR` before each Python validator run; the default is `.ai-task-runner/validator-reports/`. Do not store long-term history there; write only the current validation attempt's detailed evidence.
+The runner clears `.ai-task-runner/validator-reports/` before each Python validator run. Do not store long-term history there; write only the current validation attempt's detailed evidence.
 
 ## Templates
 
