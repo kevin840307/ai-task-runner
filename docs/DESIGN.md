@@ -1,108 +1,865 @@
 # AI Task Runner Design v1.1.1
 
-## Responsibilities
+> Traditional Chinese version: [`DESIGN.zh-TW.md`](DESIGN.zh-TW.md).
 
-The agent writes project code and documents. The runner owns orchestration:
+## 1. Purpose
 
-- planning TODO tasks
-- executing one task at a time
-- read-only review
-- final validator execution
-- retry and resume
-- protected-file restore
-- process control and activity watchdogs
+AI Task Runner is a small, task-agnostic orchestration layer around coding-agent CLIs. The agent owns project implementation; **the runner owns orchestration**, persistence, retry, review, validation, protection, and resume.
 
-## Core Modules
+The design goal is not to understand or implement one business domain in Python. The runner only provides a generic closed loop that can keep a coding task moving for long unattended runs:
+
+1. understand the goal and split it into TODO tasks;
+2. execute exactly one current task;
+3. review the current filesystem state without allowing review-time edits;
+4. retry incomplete or failed work;
+5. run an authoritative final validator;
+6. convert validator failures into repair tasks;
+7. persist enough state to resume after process or machine interruption.
+
+A run is complete only when **Final Validator PASS** is recorded. A model claiming that work is finished is never sufficient by itself.
+
+---
+
+## 2. Complete Flow at a Glance
+
+### 2.1 Simple end-to-end flow
+
+This is the shortest accurate representation of one run:
 
 ```text
-ai_task_runner.py        CLI parser and execute() entry
-runner/                  Main implementation package
-runner/defaults.py       Shared 24h default values
-runner/api.py            Public API and RunRequest validation
-runner/core.py           TaskRunner state machine and retry orchestration
-runner/agent_args.py     Backend-specific planning/runtime argument policy
-runner/script_runner.py  YAML batch orchestration and per-item resume setup
-runner/planning.py       TODO derivation, fallback splitting, repair task planning
-runner/validation.py     Python/AI final validator execution and AI failure feedback
-runner/prompting.py      Prompt template loading and prompt builders
-runner/ui.py             Live terminal UI and JSON progress events
-runner/support.py        Parsers, protection, retry, validator subprocess utilities
-runner/models.py         Task and RunState serialization
-runner/agent.py          AgentClient session facade
-runner/process_control.py  Subprocess output reader, timeout, process-tree kill
+Start / Resume
+  -> Understand project and requirement
+  -> Plan verifiable TODO tasks
+  -> Execute current TODO
+  -> Review current filesystem result
+       -> incomplete / failed: retry the same TODO
+       -> complete: mark TODO completed and continue
+  -> All TODOs completed
+  -> Run final Python or AI validator
+       -> PASS: save completed state and exit 0
+       -> FAIL: convert feedback into repair TODOs, increment cycle, and continue
+```
+
+```mermaid
+flowchart LR
+    A[Start or Resume] --> B[Understand]
+    B --> C[Plan TODOs]
+    C --> D[Execute TODO]
+    D --> E[Review]
+    E -- Incomplete --> D
+    E -- Complete --> F{More TODOs?}
+    F -- Yes --> D
+    F -- No --> G[Final Validator]
+    G -- PASS --> H[Completed / Exit 0]
+    G -- FAIL --> I[Create Repair TODOs]
+    I --> C
+```
+
+The important rule is: **execution or review success does not finish a run**. Only the authoritative final validator can mark the run completed.
+
+### 2.2 Detailed single-line stage sequence
+
+The normal stage order is:
+
+```text
+startup
+-> state_restore / state_create
+-> backend_prepare
+-> understanding
+-> planning
+-> todoing
+-> reviewing
+-> todo_completed
+-> next todoing/reviewing pair
+-> final_validating
+-> completed
+```
+
+When validation fails, the line continues as a new repair cycle:
+
+```text
+final_validating
+-> validator_failed
+-> cycle increment
+-> repair_understanding / repair_planning
+-> repair todoing
+-> reviewing or validator-deferred completion
+-> final_validating
+-> completed or another repair cycle
+```
+
+A practical expanded flow is:
+
+```mermaid
+flowchart TD
+    A[1. Start CLI API or YAML item] --> B{2. Resume requested?}
+    B -- Yes --> C[Restore external state backup]
+    C --> D[Load and validate state]
+    B -- No --> E[Create RunState cycle=1 current=0]
+    D --> F[Prepare backend session rules and protected files]
+    E --> F
+
+    F --> G{State already completed?}
+    G -- Yes --> Z[Exit 0]
+    G -- No --> H{Pending tasks exist?}
+
+    H -- No --> I[UNDERSTAND project goal current state and validator feedback]
+    I --> J[PLAN bounded verifiable TODO JSON]
+    J --> K{Planning call succeeded and JSON valid?}
+    K -- No --> L[Retry model call with backoff]
+    L --> K
+    K -- Repeated failure --> M[Deterministic fallback task derivation]
+    K -- Yes --> N[Persist planned tasks]
+    M --> N
+    H -- Yes --> O[Select current pending TODO]
+    N --> O
+
+    O --> P[TODOING execute one task in reusable session]
+    P --> Q{Model call outcome}
+    Q -- Success --> R[Detect project changes]
+    Q -- Failure but files changed --> R
+    Q -- Failure and no changes --> S[Retry same TODO / reset unhealthy session]
+    S --> P
+
+    R --> T{Review required?}
+    T -- Yes --> U[REVIEWING read-only completion review]
+    U --> V{Valid review JSON?}
+    V -- No --> W[Retry review call]
+    W --> U
+    V -- Complete --> X[Mark TODO completed and persist]
+    V -- Incomplete --> Y[Store missing items and progress key]
+    Y --> AA{No progress repeated?}
+    AA -- No --> P
+    AA -- Yes --> AB[Apply no-progress strategy / fresh session]
+    AB --> P
+
+    T -- Validator repair may defer --> X
+    X --> AC{More pending TODOs?}
+    AC -- Yes --> O
+    AC -- No --> AD[FINAL_VALIDATING]
+
+    AD --> AE{Python validator or fresh AI validator PASS?}
+    AE -- Yes --> AF[Set completed=true save state]
+    AF --> Z
+    AE -- No --> AG[Store bounded validator feedback]
+    AG --> AH[Hash failure and count repetition]
+    AH --> AI[cycle += 1 stage=validator_failed]
+    AI --> AJ{Max cycles reached?}
+    AJ -- Yes --> AK[Exit 3]
+    AJ -- No --> I
+```
+
+### 2.3 The three retry loops
+
+The runner has three separate retry scopes. They must not be confused:
+
+| Retry scope | Trigger | What is repeated | State/session behavior | Stop condition |
+|---|---|---|---|---|
+| Model-call retry | CLI error, timeout, loop detection, invalid structured output, temporary session failure | One planning, execution, review, or AI-validation call | Exponential backoff; unhealthy sessions may be replaced | Call succeeds or retry policy escalates to its parent flow |
+| TODO retry | Review says incomplete, execution made no usable progress, protected files were edited, or a recoverable call failed | The same current TODO | Attempts and progress fingerprint are persisted; repeated stagnation can force a fresh session | TODO is completed/deferred, or `max_attempts` returns exit 2 |
+| Validator-cycle retry | Final Python/AI validator returns failure | A new repair planning and TODO cycle | Validator output is persisted; repeated identical failures can reset the main session | Validator passes, or `max_cycles` returns exit 3 |
+
+```mermaid
+flowchart LR
+    A[Model Call Retry] -->|call finally returns| B[Current TODO Flow]
+    B -->|review incomplete| B
+    B -->|all TODOs complete| C[Final Validator]
+    C -->|FAIL| D[New Repair Cycle]
+    D --> B
+    C -->|PASS| E[Run Complete]
+```
+
+### 2.4 Understand and plan are logical stages
+
+`understand` means gathering enough current evidence to plan correctly: the goal, project structure, existing files, previous task output, and validator feedback. Depending on backend behavior, understanding may be represented inside the planning prompt rather than by a permanently separate source-code function. It is still a distinct logical stage in the task flow and logs.
+
+`plan` converts that understanding into bounded TODO records with a title, description, and acceptance criteria. Planning is read-only. If model planning cannot produce valid task JSON after retries, deterministic fallback planning derives tasks from requirement structure so the run can continue.
+
+---
+
+## 3. Responsibility Boundary
+
+### Agent responsibilities
+
+The selected backend agent, currently Qwen Code or OpenCode, may:
+
+- inspect the project and requirement;
+- propose TODO tasks during planning;
+- modify project source, tests, configuration, and documentation during execution;
+- inspect validator feedback and repair failures;
+- perform a read-only completion review;
+- perform a fresh-session read-only AI final validation when `--validator ai` is used.
+
+### Runner responsibilities
+
+Python code owns all generic control behavior:
+
+- CLI, Python API, and YAML batch entry points;
+- state-machine transitions;
+- task indexing and completion status;
+- model-call retry with exponential backoff;
+- task retry and no-progress detection;
+- validator-cycle retry;
+- session reuse and unhealthy-session reset;
+- protected-file snapshots and restoration;
+- read-only planning, review, and AI validation;
+- project-change detection;
+- subprocess timeout and process-tree termination;
+- activity watchdog behavior;
+- atomic state persistence and resume;
+- bounded model and validator feedback;
+- UI, log, JSON events, and exit codes.
+
+The runner must remain task-agnostic. It may contain generic orchestration rules and generic planning heuristics, but must not special-case a particular application, fab, workflow, generated file, algorithm, or validator implementation.
+
+---
+
+## 4. Main Entry Points
+
+All entry points converge on the same `TaskRunner` state machine.
+
+```text
+CLI: ai_task_runner.py
+        |
+Python API: from runner import RunRequest, run
+        |
+YAML script: --script tasks.yaml
+        v
+runner/core.py -> TaskRunner.run()
+```
+
+The canonical API is:
+
+```python
+from runner import RunRequest, run
+
+result = run(
+    RunRequest(
+        goal="Build X",
+        project_root=".",
+        validator="validator.py",
+    )
+)
+```
+
+YAML batch mode creates one independent child run per item. Each child has its own work directory and state file under:
+
+```text
+.ai-task-runner/script/001/state.json
+.ai-task-runner/script/002/state.json
+...
+```
+
+The batch stops at the first non-zero child exit code. Re-running the same script with `--resume` resumes items whose state files exist and starts new items fresh.
+
+---
+
+## 5. Core Modules
+
+```text
+ai_task_runner.py          CLI parser and main entry
+runner/api.py              Public RunRequest/run API and validation
+runner/core.py             TaskRunner state machine and orchestration
+runner/models.py           Persisted RunState and Task models
+runner/defaults.py         Shared default backend, timeout, and limit values
+runner/planning.py         Task derivation, right-sizing, and repair planning
+runner/prompting.py        Markdown prompt-template loading and builders
+runner/validation.py       Fresh-session AI final validator
+runner/script_runner.py    YAML batch orchestration and item resume setup
+runner/support.py          Retry, parsing, protection, fingerprint, validator helpers
+runner/process_control.py  Subprocess I/O, timeout, watchdog, process-tree kill
+runner/agent.py            Session-aware backend facade
+runner/agent_args.py       Backend-specific planning/runtime arguments
+runner/ui.py               Human UI, log file, and JSON events
+runner/errors.py           RunnerError contract
 runner/backends/base.py    Backend interface
-runner/backends/qwen.py    Qwen stream-json command/result/error parsing
-runner/backends/opencode.py OpenCode command/result parsing
-prompts/                   Editable prompt templates
+runner/backends/qwen.py    Qwen stream-json command and error parsing
+runner/backends/opencode.py OpenCode command and result parsing
+prompts/                   Editable task-agnostic prompt templates
 ```
 
-## State Machine
+Dependencies are intentionally one-way: `core.py` calls planning, prompting, validation, support, UI, and backend helpers; those modules do not import `core.py` to drive orchestration themselves.
+
+---
+
+## 6. Persisted State Model
+
+The main state file is:
 
 ```text
-planning -> executing -> reviewing -> validating
-                         ^             |
-                         |             v
-                     retry task <- validator_failed
+<project-root>/.ai-task-runner/state.json
 ```
 
-Final Validator PASS sets `completed=true`. Validator FAIL stores `validator_output`, increments the cycle, and creates focused repair task(s).
+A second backup copy is written outside the project under the system temporary directory. Its location is derived from a hash of the work-directory path. On `--resume`, the backup is copied back first when valid. This provides recovery when the in-project state file was lost or damaged while the external backup survived.
 
-## Process Control
+### RunState fields
 
-`process_control.py` starts each AI CLI or validator as a subprocess, captures stdout/stderr incrementally, and kills the child process tree on timeout. Qwen uses `stream-json`, so CLI output is also an activity signal.
+| Field | Meaning |
+|---|---|
+| `run_id` | Stable identifier for one run |
+| `goal` | Original persisted requirement |
+| `project_root` | Root this state belongs to |
+| `cycle` | Final-validation cycle, starting at 1 |
+| `current` | Index of the current task |
+| `tasks` | Completed and pending task records |
+| `validator_output` | Bounded latest final-validator feedback |
+| `completed` | True only after final validator PASS |
+| `agent_session_id` | Reusable main execution/review session |
+| `stage` | Current state-machine stage |
+| `stage_started_at` | Timestamp when the stage changed |
+| `last_activity_at` | Timestamp of the latest stage update |
+| `last_error` | Bounded latest stage error/detail |
+| `validator_failure_key` | Hash of normalized latest validator failure |
+| `validator_failure_count` | Consecutive count of the same failure |
 
-Execution has two limits:
+### Task fields
 
-- hard timeout: `--agent-timeout`, default `7200`
-- activity idle watchdog: `--agent-idle-after-change-timeout`, default `900`
+| Field | Meaning |
+|---|---|
+| `id` | Stable cycle/task identifier |
+| `title` | Short TODO title |
+| `description` | Work scope |
+| `acceptance_criteria` | Verifiable completion conditions |
+| `status` | `pending` or `completed` |
+| `attempts` | Number of task-flow attempts |
+| `last_output` | Bounded previous execution output/diagnostic |
+| `last_review` | Latest parsed completion review |
+| `progress_key` | Hash of project state plus missing items |
+| `stagnant_attempts` | Consecutive attempts with identical progress key |
 
-The idle watchdog starts when the execution call starts. Project changes or CLI output refresh the activity timer. If no further activity appears, the runner stops that AI call and moves to review instead of waiting forever.
+State is written after every meaningful transition. Writes use a temporary file plus atomic `os.replace`, with short retries for transient Windows locks. Model output retained per task is bounded to 10,000 characters. Validator feedback is bounded to **20,000** characters with beginning and end preserved.
 
-The default backend is `qwen`, and its default command is `qwen.cmd`. Users can still override either value for another shell, backend, or local installation.
+---
 
-## Prompt Design
+## 7. Top-Level Task Flow
 
-Prompt text is stored as Markdown templates under `prompts/`. `prompting.py` loads the templates and substitutes runtime fields; Python files should not be the place to tune model wording.
+```mermaid
+flowchart TD
+    A[Start CLI / API / YAML item] --> B[Validate paths and request]
+    B --> C{Resume?}
+    C -- Yes --> D[Restore external backup if valid]
+    D --> E[Load and validate state.json]
+    C -- No --> F[Create new RunState]
+    E --> G[Prepare backend and protected files]
+    F --> G
+    G --> H{Run completed?}
+    H -- Yes --> Z[Exit 0]
+    H -- No --> I{Planning needed?}
+    I -- Yes --> J[Planning stage]
+    I -- No --> K[Use existing pending tasks]
+    J --> K
+    K --> L[Execute pending tasks one at a time]
+    L --> M{All tasks completed?}
+    M -- No --> L
+    M -- Yes --> N[Final validation]
+    N --> O{PASS?}
+    O -- Yes --> P[Mark completed and save]
+    P --> Z
+    O -- No --> Q[Store validator output]
+    Q --> R[Hash/count repeated failure]
+    R --> S[cycle += 1]
+    S --> T[Stage = validator_failed]
+    T --> J
+```
 
-`runner/core.py` calls high-level helpers instead of owning all details: `runner/planning.py` turns goals or validator feedback into tasks, `runner/validation.py` runs final validators, `runner/prompting.py` builds prompts, `runner/ui.py` renders progress, `runner/agent_args.py` owns backend argument policy, and `runner/script_runner.py` owns YAML batch item setup. These modules avoid importing `runner/core.py`, keeping dependencies one-way.
+`TaskRunner.run()` is a loop over three phases:
 
-Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
+```text
+plan if needed -> run pending tasks -> validate cycle
+```
 
-Planning prompts may write JSON or Markdown only under the runner work directory. Implementation files must not be changed during planning. The planner is asked to extract deliverables first, return valid JSON even when uncertain, and right-size tasks from one trivial task to many verifiable tasks for broad multi-file work. Deterministic fallback uses structural cues rather than case-specific domain names, and keeps pure constraints as context instead of standalone TODO tasks.
+The loop ends only when:
 
-Review prompts are read-only. If review changes project files, the runner restores them and retries.
+- final validation passes, returning exit code `0`;
+- `--max-attempts` stops a repeatedly retried task, returning `2`;
+- `--max-cycles` stops repeated validator cycles, returning `3`;
+- an unrecoverable configuration or state error escapes to the CLI error boundary.
 
-AI validation is also read-only and runs in a fresh session. It returns `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. When it fails, the runner converts missing items into structured validator feedback so normal repair planning can continue without a Python validator.
+Both `--max-attempts` and `--max-cycles` default to `0`, meaning unlimited.
 
-Runner code and prompt templates must stay task-agnostic. They may contain generic orchestration rules and generic planning heuristics, but they must not special-case one user's app name, fab, workflow, generated filename, algorithm, or validator internals. Case-specific strings belong in user goals, validators, examples, smoke cases, or test fixtures only.
+---
 
-## Validator Handling
+## 8. Planning Flow
+
+Planning runs when no pending task remains and either:
+
+- there are no tasks yet; or
+- the previous final validator failed and repair tasks must be created.
+
+Planning is read-only with respect to the project. Qwen receives the runner work directory as its planning root so it can emit planning artifacts without using project source as its working directory. Other backends may use the project root, but all project changes made during planning are detected and restored.
+
+```mermaid
+flowchart TD
+    A[Need planning] --> B[stage = planning]
+    B --> C[Create fresh planner session]
+    C --> D[Send plan prompt]
+    D --> E{Model call succeeds?}
+    E -- No --> F[retry_model_call exponential backoff]
+    F --> D
+    E -- Yes --> G{Protected file changed?}
+    G -- Yes --> H[Restore and raise planning error]
+    G -- No --> I[Parse tasks JSON]
+    I --> J[Right-size planned tasks]
+    J --> K{Qwen timeout / loop / repeated failure?}
+    K -- Yes --> L[Deterministic fallback task derivation]
+    K -- No --> M[Use model tasks]
+    L --> N[Append after completed tasks]
+    M --> N
+    N --> O[Set current to first planned task]
+    O --> P[Persist state]
+```
+
+### Planning retry behavior
+
+The outer model-call retry uses `retry_model_call()` with exponential backoff:
+
+```text
+retry_wait, 2×retry_wait, 4×retry_wait, ... capped at retry_max_wait
+```
+
+Planning does not set a fixed `max_errors`, so ordinary planning model failures retry indefinitely by default. However, Qwen has a deterministic escape hatch inside the planning action:
+
+- if the error contains timeout or loop-detection language; or
+- after three planning failures;
+
+then the runner derives tasks from the goal and validator feedback without depending on more model output.
+
+Fallback splitting uses generic document structure: Markdown sections, numbered items, bullets, blank-line paragraphs, and file-like deliverables. Pure constraints stay as context rather than becoming standalone TODO tasks. When validator feedback exists, repair planning is focused on that feedback.
+
+---
+
+## 9. Single-Task Execution and Review Flow
+
+The runner executes exactly `tasks[current]`. Before each task-flow attempt it increments `task.attempts` and persists state.
+
+```mermaid
+flowchart TD
+    A[Select current pending task] --> B[attempts += 1; save]
+    B --> C[Fingerprint project]
+    C --> D[stage = executing]
+    D --> E[Run execution model call]
+    E --> F{Execution call succeeded?}
+
+    F -- Yes --> G[Save bounded output and session]
+    G --> H{Repair task + Python validator + project changed?}
+    H -- Yes --> I[Skip AI review; defer judgment to final validator]
+    H -- No --> J[stage = reviewing]
+    J --> K[Read-only AI review]
+    K --> L{Valid review result?}
+    L -- No, Python validator configured --> M[Fallback: defer judgment to final validator]
+    L -- No, AI validator/no file validator --> N[Task-flow error handling]
+    L -- Yes --> O[Handle review result]
+    I --> O
+    M --> O
+
+    F -- No --> P{Project changed before failure?}
+    P -- Yes --> Q{Repair task + Python validator?}
+    Q -- Yes --> I
+    Q -- No --> R[Review current filesystem despite execution error]
+    R --> S{Review succeeds?}
+    S -- Yes --> O
+    S -- No, Python validator configured --> M
+    S -- No otherwise --> N
+    P -- No --> N
+
+    N --> T[Store diagnostic; pending; stagnant += 1]
+    T --> U{Repeated no-change model failure and Python validator?}
+    U -- Yes --> M
+    U -- No --> V[stage = task_retry_wait]
+    V --> W[Retry same task]
+
+    O --> X{review.completed?}
+    X -- Yes --> Y[Mark task completed; current += 1]
+    X -- No --> Z[Compute progress key]
+    Z --> AA[Update stagnant_attempts]
+    AA --> W
+```
+
+### Why execution failure does not automatically discard work
+
+An agent call can end with timeout, loop detection, session failure, or another backend error after it has already written useful files. Therefore the runner fingerprints the project before execution and compares it afterward.
+
+If files changed before the model call failed, the runner does not blindly rerun the task. It asks read-only review to judge the current filesystem. For a validator-repair task with a Python validator, it can skip AI review entirely and let the authoritative final validator judge the repair.
+
+This behavior preserves partial progress and avoids repeating identical tool calls against files that may already contain the intended change.
+
+### Review contract
+
+Review is read-only. It returns JSON containing at least:
+
+```json
+{
+  "completed": true,
+  "reason": "...",
+  "missing_items": []
+}
+```
+
+The whole project is copied to a temporary backup before review. Any source changes made by the reviewer are detected, restored, and treated as a review error. Protected files are independently snapshotted and restored as well.
+
+When a Python final validator is configured, malformed or repeatedly failed AI review can be converted to:
+
+```text
+completed = true
+defer_to_validator = true
+```
+
+This does not mean the work is accepted. It only advances the TODO so the Python validator can make the authoritative decision after all tasks.
+
+### Validator-repair no-change safeguard
+
+A repair task cannot be marked completed merely because AI review says so when:
+
+- validator feedback is still present;
+- the task is a validator-repair task;
+- no project file changed;
+- completion was not explicitly deferred to the final validator.
+
+The runner rewrites that review to incomplete and requests an actual project change.
+
+---
+
+## 10. Three Retry Layers
+
+The project has three distinct retry levels. They must not be confused.
+
+### 9.1 Model-call retry
+
+`retry_model_call()` retries one logical model operation, such as planning, execution, review, or AI validation.
+
+```mermaid
+flowchart LR
+    A[Call model] --> B{RunnerError?}
+    B -- No --> C[Return result]
+    B -- Yes --> D[errors += 1]
+    D --> E{max_errors reached?}
+    E -- No --> F[Sleep delay]
+    F --> G[delay = min max_wait, delay × 2]
+    G --> A
+    E -- Yes --> H[Raise to task/cycle flow]
+```
+
+Defaults:
+
+- `retry_wait = 5` seconds;
+- delay doubles after each failure;
+- `retry_max_wait = 300` seconds;
+- execution allows one model-call error before returning control to task flow;
+- review allows one error with a Python validator, or three errors with AI validation;
+- planning retries without a fixed model-call limit, with Qwen fallback logic described above.
+
+This layer handles transient backend errors, invalid model JSON wrapped as `RunnerError`, timeout results surfaced by the backend, loop detection, unavailable sessions, and similar call-level failures.
+
+### 9.2 Task-flow retry
+
+Task-flow retry repeats the same TODO from its persisted state. It happens when:
+
+- review says `completed = false`;
+- execution fails without usable changed files;
+- protected files were modified and restored;
+- read-only review fails and cannot be delegated;
+- a repair task produced no project change;
+- the task remains otherwise unverified.
+
+Before retrying, the runner:
+
+1. keeps the task `pending`;
+2. stores bounded output or diagnostics;
+3. persists session and task state;
+4. optionally sleeps `retry_delay`, default 2 seconds;
+5. starts the same task again and increments `attempts`.
+
+`--max-attempts N` limits attempts per task. `0` means unlimited.
+
+### 9.3 Validator-cycle retry
+
+After every TODO is completed or deferred, the final validator runs. On FAIL:
+
+1. validator output is bounded and stored;
+2. a normalized SHA-256 failure key is calculated;
+3. repeated identical failures increment `validator_failure_count`;
+4. `cycle` increments;
+5. stage becomes `validator_failed`;
+6. planning runs again and creates repair task(s);
+7. completed prior tasks remain in state;
+8. project changes are kept.
+
+`--max-cycles N` limits final-validation cycles. `0` means unlimited.
+
+When the same validator failure repeats at least twice, repair prompts include a stronger repeated-failure hint and execution clears the agent session before retrying the repair. This preserves runner state and validator evidence while discarding a potentially stuck model conversation.
+
+---
+
+## 11. No-Progress Detection and Session Reset
+
+A task review that reports missing items produces a `progress_key` from:
+
+```text
+SHA-256(project fingerprint + ordered missing_items)
+```
+
+If the key is unchanged across attempts, `stagnant_attempts` increases. If project files or missing items change, the counter resets to 1 for the new key.
+
+`NO_PROGRESS_LIMIT` is 3. At or above this limit:
+
+- execution clears the main agent session before the next attempt;
+- the prompt receives a no-progress recovery strategy;
+- if execution model calls repeatedly fail without project changes and a Python validator exists, the runner may defer the task to final validation instead of looping forever on that model stage.
+
+Clearing a session does not lose the task. The new session receives the original goal, completed task titles, current task, validator feedback, previous diagnostics, and persisted filesystem state.
+
+---
+
+## 12. Final Validation Flow
+
+```mermaid
+flowchart TD
+    A[All current-cycle tasks completed] --> B[stage = validating]
+    B --> C{validator type}
+    C -- Python file --> D[Clear validator-reports]
+    D --> E[Run python validator.py --project-root ... --state-file ...]
+    C -- ai --> F[Create fresh read-only agent session]
+    F --> G[Inspect project and return validation JSON]
+    E --> H{PASS?}
+    G --> H
+    H -- Yes --> I[Clear failure key/count]
+    I --> J[completed = true]
+    J --> K[stage = completed]
+    K --> L[Exit 0]
+    H -- No --> M[Store bounded feedback]
+    M --> N[Record repeated-failure key/count]
+    N --> O[cycle += 1]
+    O --> P[stage = validator_failed]
+    P --> Q[Plan focused repair tasks]
+```
+
+### Python validator
 
 Python validators run as:
 
 ```text
-python validator.py --project-root <root> --state-file <state.json>
+python validator.py --project-root <root> --state-file <state.json> [validator args]
 ```
 
-Validator files are protected. Agents may read validator files to understand expected behavior, but must not edit them, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths.
+Contract:
 
-When the same task makes no project changes while validator feedback is still present, the task is not accepted unless completion is explicitly deferred to the Python validator. When repeated no-progress or repeated final validator failure suggests a bad session, the runner clears the session and retries from saved state. If AI review returns no valid review JSON and a Python validator is configured, the runner can mark the task as deferred to final validation instead of looping on review format failures. Validator stdout is treated as a compact summary; detailed evidence belongs under `.ai-task-runner/validator-reports/`, where repair prompts read `summary.txt`, `errors.txt`, and then the first relevant `Full report:` file.
+- exit code `0` means PASS;
+- any non-zero exit code means FAIL;
+- stdout and stderr are combined;
+- no stdout schema is required;
+- timeout is a validator failure;
+- protected-file changes during validation are restored and cause FAIL.
 
-Validator stdout and stderr do not need a schema. The runner stores bounded feedback, currently 20,000 characters, with head and tail preserved for long logs.
+The default validator timeout is 1200 seconds. Before each run, `.ai-task-runner/validator-reports/` is cleared so stale evidence cannot be mistaken for the current failure. Detailed evidence should be written there while stdout remains a compact actionable summary.
 
-## Backend Rule Files
+External commands such as exe, bat, jar, or Java tools should use `docs/validator_templates/external_command_validator.py`. It preserves the Python validator contract, stores command output, and copies configured log folders under `.ai-task-runner/validator-reports/external-command/`.
+
+### AI validator
+
+With `--validator ai`, validation uses a new session and a read-only project call. It returns:
+
+- `passed`;
+- `reason`;
+- `missing_items`;
+- `checks_run`;
+- `suggested_checks`.
+
+On failure, missing items are formatted into structured validator feedback for the next repair-planning cycle. A deterministic Python validator is still the stronger completion contract.
+
+---
+
+## 13. Process Control and Watchdogs
+
+Every AI CLI and validator subprocess is launched through `process_control.py`.
+
+### Hard timeout
+
+- execution default: `--agent-timeout 7200`;
+- planning/review default: `--planning-timeout 600`;
+- validator default: `--validator-timeout 1200`.
+
+A hard timeout kills the process tree. On Windows the runner uses `taskkill /PID <pid> /T /F`; on Unix-like systems it starts a new process session and kills the process group.
+
+### Activity idle watchdog
+
+Execution also uses `--agent-idle-after-change-timeout`, default 900 seconds. Activity is refreshed by either:
+
+- new CLI stdout; or
+- a detected project filesystem change.
+
+If neither happens before the idle timeout, the process tree is stopped. The resulting execution error then enters the normal changed-files decision flow:
+
+- files changed: review the current state or defer repair judgment to the Python validator;
+- no files changed: retry the task.
+
+The watchdog never marks work complete on its own.
+
+### Protected-file early detection
+
+During execution, each watchdog poll also checks protected-file snapshots. If a protected file changed, the call fails quickly, and the `finally` path restores the original bytes.
+
+---
+
+## 14. File Protection and Read-Only Operations
+
+Protected files include:
+
+- the goal file, when `--goal-file` is used;
+- the Python validator file;
+- `.ai-task-runner/state.json`;
+- runner source files;
+- backend rule files prepared by the agent facade;
+- every user-supplied `--protect-file` path.
+
+`protected_ask()` snapshots bytes and hashes before execution and restores every changed protected file afterward, even when the model call throws.
+
+Planning, review, and AI validation add a stronger project-wide read-only layer:
+
+1. build a manifest of files, directories, symlinks, and hashes;
+2. copy the project to a temporary backup, excluding build/cache directories and the runner work directory;
+3. perform the model operation;
+4. compare before/after manifests;
+5. restore every detected source change;
+6. return the changed-path list so the caller can treat edits as an error or informational event.
+
+Excluded cache/build directories include common paths such as `.git`, `.venv`, `node_modules`, `bin`, `obj`, `target`, `dist`, and `__pycache__`.
+
+---
+
+## 15. Resume Semantics
+
+Resume is state-based, not prompt-history-based.
+
+```mermaid
+flowchart TD
+    A[Process / OS / machine stops] --> B[Restart same command with --resume]
+    B --> C[Restore valid external state backup]
+    C --> D[Load state.json]
+    D --> E[Verify project_root matches]
+    E --> F[Restore bounded task/validator text]
+    F --> G[Reuse saved agent_session_id when possible]
+    G --> H[Continue from saved stage/current task]
+```
+
+Resume does not require repeating `--goal`; the original goal is already in state. The filesystem remains the source of implementation truth. The persisted session ID is reused when the backend supports it, but the runner can clear the session after no-progress or repeated validator failures and continue with the same saved task state.
+
+The runner itself cannot restart after its Python process, operating system, machine, or power is terminated. A service manager, scheduled task, CI agent, or other external supervisor must restart the command with `--resume`.
+
+---
+
+## 16. Prompt Design
+
+Prompt text lives under `prompts/`, not embedded as large domain-specific strings in Python.
+
+### Planning prompt receives
+
+- original goal;
+- project location and inspection rules;
+- protected-file boundaries;
+- previous validator feedback when repairing;
+- task JSON schema and right-sizing rules.
+
+### Execution prompt receives
+
+- hard runner rules;
+- original goal;
+- completed task titles;
+- current task only;
+- acceptance criteria;
+- previous attempt output or diagnostic;
+- current validator feedback;
+- no-progress or repeated-validator-failure recovery hints;
+- validator path when available.
+
+### Review prompt receives
+
+- current task;
+- current filesystem state;
+- execution output/diagnostic;
+- completion JSON contract;
+- read-only instruction.
+
+Execution prompts explicitly tell the agent to work only on the current task. The runner does not replay every historical output, which keeps context bounded for local models.
+
+---
+
+## 17. Stage Values
+
+The important persisted stages are:
+
+| Stage | Meaning |
+|---|---|
+| `created` | New state exists, planning has not started |
+| `planning` | Deriving initial or repair tasks |
+| `executing` | Agent may modify project files for current task |
+| `reviewing` | Read-only completion judgment |
+| `task_retry_wait` | Task-flow error recorded before retry |
+| `validating` | Running Python or AI final validator |
+| `validator_failed` | Final validation failed; repair planning required |
+| `completed` | Final validator passed |
+
+`stage_started_at`, `last_activity_at`, and `last_error` make state and JSON-line logs useful to an external UI or supervisor.
+
+---
+
+## 18. Exit Codes
+
+| Code | Meaning |
+|---:|---|
+| `0` | Final validator passed, or `--plan-only` completed planning |
+| `2` | Current task reached `--max-attempts` |
+| `3` | Run exceeded `--max-cycles` after validator failures |
+| other non-zero | CLI/configuration/unhandled runner error boundary |
+
+A YAML script returns the first failing item's code.
+
+---
+
+## 19. Backend Rule Files
 
 - Qwen Code: `QWEN.md`
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
-## Public API
+Backend-specific command construction and output/error parsing stay under `runner/backends/`. Backend-specific planning/runtime argument policy stays in `runner/agent_args.py`. The core state machine does not parse Qwen or OpenCode output directly.
 
-```python
-from runner import RunRequest, run
+---
 
-run(RunRequest(goal="Build X", validator="ai"))
+## 20. Important Design Guarantees and Limits
+
+### Guarantees provided by the runner
+
+- one persisted current task at a time;
+- project changes are not discarded merely because the model call exits with an error;
+- protected files are restored;
+- planning/review/AI validation project edits are restored;
+- transient model calls retry with bounded exponential delay;
+- incomplete tasks retry from persisted state;
+- validator failures create new repair cycles without reverting project work;
+- repeated no-progress can reset the model session;
+- state is atomically written to project and external backup locations;
+- final completion requires validator PASS.
+
+### Limits
+
+- the runner cannot guarantee business correctness beyond the validator contract;
+- unlimited attempts/cycles can run indefinitely when the goal or validator is impossible;
+- AI review and AI validation remain probabilistic;
+- project fingerprinting ignores configured cache/build directories and therefore is not a full version-control diff;
+- external restart is required after Python/OS/machine termination;
+- session recovery depends on backend support, so persisted filesystem and runner state remain authoritative.
+
+---
+
+## 21. Testing the Design
+
+The repository includes unit, integration, public-contract, architecture, backend, documentation, external-validator, and resilience-matrix tests under `tests/`.
+
+Run:
+
+```bat
+python -m pytest -q
 ```
 
-CLI, API, and YAML script mode all share the same state machine.
+The resilience tests cover important branches such as timeout after project changes, review timeout, session expiration, flaky calls, protected-file restoration, no-progress handling, validator repair, resume, YAML item state isolation, and process-control behavior.
