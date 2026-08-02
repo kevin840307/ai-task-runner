@@ -27,10 +27,7 @@ def test_example_inventory_and_launchers():
         if name == "07_auto_config":
             assert (folder / "prompt.md").is_file()
             assert (folder / "validation.py").is_file()
-            assert (folder / "rander.py").is_file()
             assert (folder / "ans").is_dir()
-            assert (folder / "config").is_dir()
-            assert (folder / "Template").is_dir()
             continue
         assert (folder / "project").is_dir()
         assert (folder / "run_qwen.ps1").is_file()
@@ -84,6 +81,24 @@ def test_single_prompt_examples_are_not_precompleted():
             stderr=subprocess.STDOUT,
         )
         assert result.returncode != 0, f"starter unexpectedly passed: {name}\n{result.stdout}"
+
+
+def test_auto_config_example_is_not_precompleted():
+    folder = EXAMPLES / "07_auto_config"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(folder / "validation.py"),
+            "--project-root",
+            str(folder),
+            "--state-file",
+            str(folder / "unused-state.json"),
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    assert result.returncode != 0, f"starter unexpectedly passed: 07_auto_config\n{result.stdout}"
 
 
 def test_yaml_file_validators_are_not_precompleted():

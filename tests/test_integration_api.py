@@ -48,6 +48,30 @@ def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
     assert all(event["runner_version"] == "1.1.1" for event in events)
 
 
+def test_runner_writes_debug_log_file(tmp_path):
+    result = run(
+        RunConfig(
+            goal="x",
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        )
+    )
+
+    assert result.completed is True
+    log_path = tmp_path / ".ai-task-runner" / "log.txt"
+    events = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert events
+    assert any(event["type"] == "runner.progress" for event in events)
+    assert events[-1]["completed"] is True
+
+
 def test_cli_json_events_are_machine_readable_json_lines(tmp_path):
     validator = _validator(tmp_path / "validator.py")
     result = subprocess.run(

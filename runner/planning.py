@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 from .models import Task
 from .prompting import format_validator_feedback
@@ -135,33 +136,78 @@ def markdown_goal_sections(goal: str) -> list[str]:
         if not body or is_context_section_title(title):
             continue
         expanded = split_markdown_section_items(title, body)
-        items.extend(expanded or [f"{title}\n{body}"])
+        if expanded:
+            items.extend(expanded)
+        elif not section_is_pure_constraint_list(body):
+            items.append(f"{title}\n{body}")
     return items
 
 
 def split_markdown_section_items(title: str, body: str) -> list[str]:
-    bullets = [
-        match.group(1).strip()
+    bullets = split_ready_list_items(
+        match.group(1)
         for match in re.finditer(r"(?m)^\s*-\s+(.+?)\s*$", body)
-        if should_split_list_item(match.group(1))
-    ]
-    numbered = [
-        match.group(1).strip()
+    )
+    numbered = split_ready_list_items(
+        match.group(1)
         for match in re.finditer(r"(?m)^\s*\d+[\).]\s+(.+?)\s*$", body)
-        if should_split_list_item(match.group(1))
-    ]
-    if len(bullets) >= 2:
+    )
+    if bullets:
         return [f"{title}: {item}\n{body}" for item in bullets]
-    if len(numbered) >= 2:
+    if numbered:
         return [f"{title}: {item}\n{body}" for item in numbered]
     return []
 
 
+def split_ready_list_items(candidates: Iterable[str]) -> list[str]:
+    items = [
+        item.strip()
+        for item in candidates
+        if should_split_list_item(item)
+    ]
+    return items if len(items) >= 1 else []
+
+
+def section_is_pure_constraint_list(body: str) -> bool:
+    items = [
+        match.group(1)
+        for match in re.finditer(
+            r"(?m)^\s*(?:-\s+|\d+[\).]\s+)(.+?)\s*$",
+            body,
+        )
+    ]
+    return bool(items) and all(not should_split_list_item(item) for item in items)
+
+
 def should_split_list_item(text: str) -> bool:
     lowered = text.strip().lower()
-    if lowered.startswith(("do not ", "don't ")):
+    if not lowered or is_runner_instruction(text) or is_constraint_item(text):
         return False
-    return bool(lowered)
+    return True
+
+
+def is_constraint_item(text: str) -> bool:
+    """Keep pure rules as context instead of turning them into TODO tasks."""
+    lowered = " ".join(text.lower().split())
+    if lowered.startswith(("do not ", "don't ", "never ")):
+        return True
+    if any(
+        phrase in lowered
+        for phrase in (
+            " must not ",
+            " should not ",
+            " may only ",
+            " no more than ",
+            " must stay ",
+        )
+    ):
+        return True
+    if has_file_reference(text):
+        return False
+    return any(
+        phrase in lowered
+        for phrase in (" should ", " must ", " may ")
+    )
 
 
 def is_context_section_title(title: str) -> bool:

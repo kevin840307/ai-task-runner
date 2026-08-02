@@ -40,7 +40,7 @@ Each TODO prompt is about the current task, completion conditions, and the last 
 
 Agents may read validator files to understand expected behavior, but they must not modify validator files, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
 
-Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback uses structure first: Markdown headings, numbered items, bullet items, blank-line paragraphs, and sentence fragments with file-like references.
+Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback uses structure first: Markdown headings, numbered items, bullet items, blank-line paragraphs, and sentence fragments with file-like references. Pure constraints remain context for execution and acceptance instead of becoming standalone TODO tasks.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
 
@@ -57,6 +57,8 @@ With `--validator ai`, the final check is a fresh read-only agent session. The A
 Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runner` if validators in other project directories should import `ValidatorReport` as `from ai_task_runner_validator import ValidatorReport`.
 
 The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
+
+Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt`. Inspect this file to debug long unattended runs without relying on terminal scrollback.
 
 ## Rule Files
 
@@ -134,4 +136,4 @@ requirements*.txt                 Runtime and development dependencies
 python -m pytest -q
 ```
 
-Latest local result: `140 passed, 1 skipped`.
+Latest local result: `145 passed, 1 skipped`.

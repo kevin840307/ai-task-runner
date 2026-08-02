@@ -68,7 +68,7 @@ Prompt text is stored as Markdown templates under `prompts/`. `prompting.py` loa
 
 Execution prompts contain only the current task, completed task titles, validator feedback, previous diagnostics, and recovery instructions. The prompt explicitly says to execute only the current task.
 
-Planning prompts may write JSON or Markdown only under the runner work directory. Implementation files must not be changed during planning. The planner is asked to extract deliverables first, return valid JSON even when uncertain, and right-size tasks from one trivial task to many verifiable tasks for broad multi-file work. Deterministic fallback uses structural cues rather than case-specific domain names.
+Planning prompts may write JSON or Markdown only under the runner work directory. Implementation files must not be changed during planning. The planner is asked to extract deliverables first, return valid JSON even when uncertain, and right-size tasks from one trivial task to many verifiable tasks for broad multi-file work. Deterministic fallback uses structural cues rather than case-specific domain names, and keeps pure constraints as context instead of standalone TODO tasks.
 
 Review prompts are read-only. If review changes project files, the runner restores them and retries.
 

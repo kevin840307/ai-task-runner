@@ -406,6 +406,31 @@ This section is contextual and should not become its own task.
     assert not any(title.startswith("Examples") for title in titles)
 
 
+def test_goal_task_derivation_keeps_pure_constraints_out_of_todo_titles():
+    import runner.core as core
+
+    goal = """
+## Renderer
+- load structured config
+- merge layered values
+- render template files
+- write output files
+- engine.py must not branch on a customer, product, or environment name
+- engine.py must stay small: no more than 500 lines
+- values should stay reusable across targets
+"""
+
+    tasks = core.derive_tasks_from_goal(goal, 1)
+    titles = [task.title.lower() for task in tasks]
+
+    assert len(tasks) == 4
+    assert any("load structured config" in title for title in titles)
+    assert any("render template files" in title for title in titles)
+    assert not any("must not" in title for title in titles)
+    assert not any("no more than" in title for title in titles)
+    assert not any("should stay" in title for title in titles)
+
+
 def test_goal_task_derivation_keeps_persistence_deliverables():
     import runner.core as core
 

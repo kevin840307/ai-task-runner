@@ -143,6 +143,7 @@ class TaskRunner:
             event_callback=getattr(args, "event_callback", None),
             json_events=getattr(args, "json_events", False),
             human_output=getattr(args, "human_output", True),
+            log_path=self.work / "log.txt",
             context={
                 key: value
                 for key, value in context.items()

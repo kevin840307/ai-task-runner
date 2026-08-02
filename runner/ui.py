@@ -7,6 +7,7 @@ import shutil
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .models import RunState, Task
@@ -24,11 +25,13 @@ class LiveUI:
         json_events: bool = False,
         human_output: bool = True,
         context: Mapping[str, Any] | None = None,
+        log_path: Path | None = None,
     ) -> None:
         self.event_callback = event_callback
         self.json_events = json_events
         self.human_output = human_output
         self.context = dict(context or {})
+        self.log_path = log_path
         self.enabled = human_output and not json_events and sys.stdout.isatty()
         self.fullscreen = self.enabled and supports_ansi_screen()
         self.state: RunState | None = None
@@ -208,12 +211,24 @@ class LiveUI:
             except Exception:
                 # Integration/UI failures must not stop the automation loop.
                 pass
+        self._write_log(event)
         if self.json_events:
             try:
                 print(json.dumps(event), flush=True)
             except (BrokenPipeError, OSError):
                 # A disconnected UI must not stop the automation loop.
                 self.json_events = False
+
+    def _write_log(self, event: dict[str, Any]) -> None:
+        if self.log_path is None:
+            return
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+        except OSError:
+            # Log writes are best-effort debug output only.
+            pass
 
     @staticmethod
     def _task_mark(state: RunState, index: int, task: Task) -> str:
