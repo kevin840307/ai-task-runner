@@ -58,7 +58,7 @@ Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runne
 
 The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
 
-Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt`. Inspect this file to debug long unattended runs without relying on terminal scrollback.
+Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt`. Inspect this file to debug long unattended runs without relying on terminal scrollback. State writes use atomic replace with a short retry window so transient Windows file locks from editors, antivirus, backup tools, or monitoring readers do not stop a 24h run.
 
 ## Rule Files
 
@@ -136,4 +136,4 @@ requirements*.txt                 Runtime and development dependencies
 python -m pytest -q
 ```
 
-Latest local result: `145 passed, 1 skipped`.
+Latest local result: `146 passed, 1 skipped`.

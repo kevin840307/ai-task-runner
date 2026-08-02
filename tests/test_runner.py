@@ -3,6 +3,29 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from runner import support
+
+
+def test_write_json_retries_transient_permission_error(tmp_path, monkeypatch):
+    target = tmp_path / "state.json"
+    calls = {"count": 0}
+    real_replace = os.replace
+
+    def flaky_replace(source, destination):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise PermissionError("temporarily locked")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(support.os, "replace", flaky_replace)
+    monkeypatch.setattr(support.time, "sleep", lambda _seconds: None)
+
+    support.write_json(target, {"ok": True})
+
+    assert calls["count"] == 2
+    assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
+
+
 def run_flow(tmp_path, backend):
     validator=tmp_path/'validator.py'
     validator.write_text('import argparse\np=argparse.ArgumentParser();p.add_argument("--project-root");p.add_argument("--state-file");p.parse_args();raise SystemExit(0)\n')

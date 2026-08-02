@@ -56,6 +56,8 @@ MAX_MISSING_ITEMS = 100
 MAX_MISSING_ITEM_CHARS = 1_000
 NO_PROGRESS_LIMIT = 3
 STALE_TEMP_SECONDS = 7 * 24 * 60 * 60
+JSON_WRITE_RETRIES = 10
+JSON_WRITE_RETRY_DELAY = 0.05
 
 
 def runner_source_files() -> list[Path]:
@@ -75,14 +77,21 @@ def runner_source_files() -> list[Path]:
 
 
 def write_json(path: Path, data: Any) -> None:
-    """Atomically write indented UTF-8 JSON."""
+    """Atomically write indented UTF-8 JSON with Windows lock tolerance."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    os.replace(temporary, path)
+    for attempt in range(JSON_WRITE_RETRIES):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == JSON_WRITE_RETRIES - 1:
+                raise
+            time.sleep(JSON_WRITE_RETRY_DELAY * (attempt + 1))
 
 
 def digest(path: Path) -> str | None:

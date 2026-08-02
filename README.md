@@ -179,7 +179,7 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `145 passed, 1 skipped`.
+Latest local result: `146 passed, 1 skipped`.
 
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
 
