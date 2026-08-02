@@ -19,7 +19,7 @@ When uncertain, choose the smallest conservative task list that can still comple
 Choose task count from actual complexity; there is no fixed limit.
 If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable.
 If the goal is a dense paragraph, split by deliverable nouns and verifiable outcomes before choosing task count.
-If the goal implies multiple deliverables such as source files, CLI behavior, generated outputs, tests, validators, persistence, data formats, templates, configuration, or documentation, split them into ordered tasks.
+If the goal implies multiple distinct files, commands, outputs, data contracts, validation evidence, or user-facing deliverables, split them into ordered tasks.
 Right-size the task list: trivial goals can be one task, small tools usually need 2-5 deliverable-sized tasks, and broad or multi-file goals often need 6-20 tasks grouped by verifiable outcomes.
 Do not collapse a broad or multi-file goal into one "build everything" task.
 Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, avoiding hardcode, or verifying work; put those into acceptance criteria instead.

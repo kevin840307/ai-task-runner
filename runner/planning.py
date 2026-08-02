@@ -148,7 +148,7 @@ def split_markdown_section_items(title: str, body: str) -> list[str]:
     numbered = [
         match.group(1).strip()
         for match in re.finditer(r"(?m)^\s*\d+[\).]\s+(.+?)\s*$", body)
-        if should_split_ordered_item(match.group(1))
+        if should_split_list_item(match.group(1))
     ]
     if len(bullets) >= 2:
         return [f"{title}: {item}\n{body}" for item in bullets]
@@ -164,34 +164,6 @@ def should_split_list_item(text: str) -> bool:
     return bool(lowered)
 
 
-def should_split_ordered_item(text: str) -> bool:
-    words = text.strip().lower().split()
-    if not words:
-        return False
-    return words[0].rstrip(":") in {
-        "add",
-        "apply",
-        "build",
-        "check",
-        "combine",
-        "compare",
-        "create",
-        "document",
-        "generate",
-        "implement",
-        "load",
-        "normalize",
-        "parse",
-        "render",
-        "run",
-        "support",
-        "test",
-        "update",
-        "validate",
-        "write",
-    }
-
-
 def is_context_section_title(title: str) -> bool:
     lowered = title.strip().lower()
     return any(word in lowered for word in ("sample", "example", "background"))
@@ -199,12 +171,15 @@ def is_context_section_title(title: str) -> bool:
 
 def deliverable_goal_items(goal: str) -> list[str]:
     parts = [part.strip() for part in re.split(r"\n\s*\n", goal) if part.strip()]
-    if len(parts) < 2:
-        parts = split_goal_sentences(goal)
+    if len(parts) >= 2:
+        paragraphs = paragraph_goal_items(parts)
+        if len(paragraphs) >= 2:
+            return paragraphs
+    parts = split_goal_sentences(goal)
     items: list[str] = []
     seen: set[str] = set()
     for part in parts:
-        if not looks_like_deliverable(part):
+        if not has_file_reference(part):
             continue
         normalized = " ".join(part.split())
         key = normalized.lower()
@@ -212,8 +187,27 @@ def deliverable_goal_items(goal: str) -> list[str]:
             continue
         seen.add(key)
         items.append(normalized)
-    concrete = [item for item in items if not looks_like_overview(item)]
-    return concrete if len(concrete) >= 2 else items
+    return items
+
+
+def paragraph_goal_items(parts: list[str]) -> list[str]:
+    items = [
+        normalize_item(part)
+        for part in parts
+        if not is_runner_instruction(part)
+    ]
+    if len(items) >= 4:
+        items = items[1:]
+    return items
+
+
+def normalize_item(text: str) -> str:
+    return " ".join(text.split())
+
+
+def is_runner_instruction(text: str) -> bool:
+    lowered = text.strip().lower()
+    return lowered.startswith(("do not ask", "don't ask", "expected command"))
 
 
 def split_goal_sentences(goal: str) -> list[str]:
@@ -228,38 +222,10 @@ def split_goal_sentences(goal: str) -> list[str]:
     return [piece.strip(" -.;:") for piece in pieces if piece.strip(" -.;:")]
 
 
-def looks_like_deliverable(text: str) -> bool:
-    lowered = text.strip().lower()
-    if lowered.startswith(("do not ask", "don't ask", "expected command")):
+def has_file_reference(text: str) -> bool:
+    if is_runner_instruction(text):
         return False
-    if re.search(r"\b[\w.-]+\.(?:py|js|ts|json|md|csv|txt|ya?ml|toml|ini)\b", text):
-        return True
-    return bool(
-        re.search(
-            r"\b(?:cli|command|tool|output|report|document|readme|validator|test|"
-            r"export|store|stored|storing|persist|persistence|generate|produce|"
-            r"support|data format|fields?)\b",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
-
-def looks_like_overview(text: str) -> bool:
-    lowered = text.strip().lower()
-    if not lowered.startswith(("build ", "create ", "implement ")):
-        return False
-    has_concrete_file = re.search(
-        r"\b[\w.-]+\.(?:py|js|ts|json|md|ya?ml|toml|ini)\b",
-        text,
-    )
-    has_verifiable_action = re.search(
-        r"\b(?:produce|generate|export|store|stored|storing|persist|persistence|"
-        r"support|document|data format|fields?)\b",
-        text,
-        re.IGNORECASE,
-    )
-    return not has_concrete_file and not has_verifiable_action
+    return bool(re.search(r"\b[\w.-]+\.[A-Za-z0-9]{1,8}\b", text))
 
 
 def short_task_title(text: str, limit: int = 72) -> str:
