@@ -26,6 +26,22 @@ def test_write_json_retries_transient_permission_error(tmp_path, monkeypatch):
     assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
 
 
+def test_protected_directory_snapshot_restores_changes(tmp_path):
+    protected = tmp_path / "ans"
+    protected.mkdir()
+    (protected / "keep.txt").write_text("original", encoding="utf-8")
+    saved = support.snapshot([protected])
+
+    (protected / "keep.txt").write_text("changed", encoding="utf-8")
+    (protected / "extra.txt").write_text("extra", encoding="utf-8")
+
+    changed = support.restore_changed(saved)
+
+    assert changed == [str(protected)]
+    assert (protected / "keep.txt").read_text(encoding="utf-8") == "original"
+    assert not (protected / "extra.txt").exists()
+
+
 def run_flow(tmp_path, backend):
     validator=tmp_path/'validator.py'
     validator.write_text('import argparse\np=argparse.ArgumentParser();p.add_argument("--project-root");p.add_argument("--state-file");p.parse_args();raise SystemExit(0)\n')
@@ -172,7 +188,7 @@ def test_model_calls_have_configurable_python_timeout():
 
 def test_task_schema_is_strict():
     import importlib.util
-    spec = importlib.util.spec_from_file_location("runner", ROOT / "ai_task_runner.py")
+    spec = importlib.util.spec_from_file_location("ai_task_runner_schema", ROOT / "ai_task_runner.py")
     runner = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner
     spec.loader.exec_module(runner)
@@ -196,7 +212,7 @@ def test_task_schema_is_strict():
 
 def test_task_schema_accepts_common_criteria_alias():
     import importlib.util
-    spec = importlib.util.spec_from_file_location("runner", ROOT / "ai_task_runner.py")
+    spec = importlib.util.spec_from_file_location("ai_task_runner_schema_alias", ROOT / "ai_task_runner.py")
     runner = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner
     spec.loader.exec_module(runner)

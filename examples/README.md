@@ -34,7 +34,9 @@ Each YAML array item contains its own `prompt`, `validator`, and optional `valid
 python ai_task_runner.py `
   --project-root examples/07_auto_config `
   --goal-file examples/07_auto_config/prompt.md `
-  --validator examples/07_auto_config/validation.py
+  --validator examples/07_auto_config/validation.py `
+  --protect-file examples/07_auto_config/ans `
+  --protect-file examples/07_auto_config/ans_manifest.json
 ```
 
 ## Notes

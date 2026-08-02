@@ -77,7 +77,7 @@ Python validators have no required output format. They receive:
 python validator.py --project-root <root> --state-file <state.json> [...validator args]
 ```
 
-Agents may read validator files to infer expected behavior, but they must not edit validator files, runner state, runner source, or backend rule files. Protected changes are restored and retried.
+Agents may read validator files and expected/reference/golden fixtures to infer expected behavior, but they must not edit validator files, read-only answer fixtures, runner state, runner source, or backend rule files. Protected changes are restored and retried when they touch runner-owned files. Add `--protect-file <path>` for read-only expected files or folders that the model may inspect but must not modify.
 
 Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 

@@ -94,39 +94,93 @@ def write_json(path: Path, data: Any) -> None:
             time.sleep(JSON_WRITE_RETRY_DELAY * (attempt + 1))
 
 
+ProtectedData = bytes | Path | None
+
+
+def _directory_digest(path: Path) -> str:
+    entries: list[tuple[str, str, str]] = []
+    for current, directories, files in os.walk(path, followlinks=False):
+        base = Path(current)
+        for name in sorted(directories):
+            child = base / name
+            relative = child.relative_to(path).as_posix()
+            if child.is_symlink():
+                entries.append((relative, "link", os.readlink(child)))
+                directories.remove(name)
+            else:
+                entries.append((relative, "dir", ""))
+        for name in sorted(files):
+            child = base / name
+            relative = child.relative_to(path).as_posix()
+            if child.is_symlink():
+                entries.append((relative, "link", os.readlink(child)))
+            else:
+                entries.append((
+                    relative,
+                    "file",
+                    hashlib.sha256(child.read_bytes()).hexdigest(),
+                ))
+    payload = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def digest(path: Path) -> str | None:
-    if not path.exists():
+    if not path.exists() and not path.is_symlink():
         return None
+    if path.is_symlink():
+        target = os.readlink(path)
+        return hashlib.sha256(f"link\0{target}".encode("utf-8")).hexdigest()
+    if path.is_dir():
+        return _directory_digest(path)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, bytes | None]]:
-    return {
-        path: (digest(path), path.read_bytes() if path.exists() else None)
-        for path in paths
-    }
+def _snapshot_data(path: Path) -> ProtectedData:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_dir() and not path.is_symlink():
+        backup_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-protect-"))
+        backup = backup_root / "snapshot"
+        shutil.copytree(path, backup, symlinks=True)
+        return backup
+    return path.read_bytes()
+
+
+def snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, ProtectedData]]:
+    return {path: (digest(path), _snapshot_data(path)) for path in paths}
 
 
 def restore_changed(
-    file_snapshot: dict[Path, tuple[str | None, bytes | None]],
+    file_snapshot: dict[Path, tuple[str | None, ProtectedData]],
 ) -> list[str]:
-    """Restore changed protected files and return their paths."""
+    """Restore changed protected files or folders and return their paths."""
     changed: list[str] = []
+    backup_roots: list[Path] = []
     for path, (old_hash, old_data) in file_snapshot.items():
+        if isinstance(old_data, Path):
+            backup_roots.append(old_data.parent)
         if digest(path) == old_hash:
             continue
         changed.append(str(path))
-        if old_data is None:
-            if path.exists():
+        if path.exists() or path.is_symlink():
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
                 path.unlink()
+        if old_data is None:
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(old_data)
+        if isinstance(old_data, Path):
+            shutil.copytree(old_data, path, symlinks=True)
+        else:
+            path.write_bytes(old_data)
+    for backup_root in backup_roots:
+        shutil.rmtree(backup_root, ignore_errors=True)
     return changed
 
 
 def changed_snapshot_paths(
-    file_snapshot: dict[Path, tuple[str | None, bytes | None]],
+    file_snapshot: dict[Path, tuple[str | None, ProtectedData]],
 ) -> list[str]:
     """Return protected files that differ from a prior snapshot."""
     return [
@@ -137,7 +191,7 @@ def changed_snapshot_paths(
 
 
 def protected_change_detector(
-    file_snapshot: dict[Path, tuple[str | None, bytes | None]],
+    file_snapshot: dict[Path, tuple[str | None, ProtectedData]],
     change_detected: Callable[[], bool] | None,
 ) -> Callable[[], bool]:
     def changed() -> bool:

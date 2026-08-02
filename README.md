@@ -80,7 +80,7 @@ Python validators are called as:
 python validator.py --project-root <root> --state-file <root>/.ai-task-runner/state.json [...validator args]
 ```
 
-Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files to understand expected behavior, but validator files, runner state, runner source, and backend rule files are protected and restored if modified.
+Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but validator files, runner state, runner source, backend rule files, and read-only answer fixtures must not be changed. Use `--protect-file <path>` for any read-only expected file or folder; protected paths are restored if the model edits them.
 
 Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`. `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
 
@@ -179,7 +179,7 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `146 passed, 1 skipped`.
+Latest local result: `147 passed, 1 skipped`.
 
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
 

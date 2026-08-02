@@ -38,7 +38,7 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
-Agents may read validator files to understand expected behavior, but they must not modify validator files, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
+Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
 
 Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback uses structure first: Markdown headings, numbered items, bullet items, blank-line paragraphs, and sentence fragments with file-like references. Pure constraints remain context for execution and acceptance instead of becoming standalone TODO tasks.
 
@@ -136,4 +136,4 @@ requirements*.txt                 Runtime and development dependencies
 python -m pytest -q
 ```
 
-Latest local result: `146 passed, 1 skipped`.
+Latest local result: `147 passed, 1 skipped`.

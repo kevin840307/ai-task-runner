@@ -11,6 +11,7 @@ Do not delegate to subagents, background agents, scaffolding skills, or app-gene
 Do not use computer-use, desktop, browser, or app-launch tools; this runner works through project files and shell checks.
 If a required file or command is missing, create or fix it instead of repeating the same read/check command. Do not call the same tool repeatedly with identical arguments after it returns the same result.
 You may read validator files to understand expected behavior, but never modify them or hardcode validator internals. Python runs the final validator after review; use validator feedback and the validator reference only to guide the project implementation.
+You may read expected, reference, golden, snapshot, or fixture files to understand the target output, but do not modify them unless the user explicitly requested changing the expected result. If validator feedback says a file is read-only or an answer fixture, restore that file and fix the project implementation instead.
 Do not ask questions or wait for input. Resolve ambiguity with the safest reasonable assumption and continue.
 
 Run context:
