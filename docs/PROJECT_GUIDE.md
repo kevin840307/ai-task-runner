@@ -38,9 +38,9 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
-Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative. If fallback planning sees validator stdout with structured `[E...]` error headings, it creates one repair TODO per error; otherwise it keeps one repair TODO.
+Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
 
-Planning is intentionally right-sized. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If the model returns too few tasks or planning repeatedly fails, deterministic fallback only uses language-neutral document structure: Markdown headings, top-level numbered items, and blank-line paragraphs. Dense natural-language prompts remain a single fallback task so interpretation stays with the model and validator.
+Planning is intentionally AI-owned. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
 
@@ -93,7 +93,6 @@ runner/models.py                  RunState and Task serialization
 runner/support.py                 Parsers, protection, retry, validator subprocess utilities
 runner/agent.py                   Session-aware backend facade
 runner/agent_args.py              Backend-specific planning/runtime argument policy
-runner/planning.py                TODO planning, fallback splitting, repair task derivation
 runner/prompting.py               Prompt template loading and prompt builders
 runner/validation.py              AI final validation helper
 runner/script_runner.py           YAML batch orchestration and per-item resume setup

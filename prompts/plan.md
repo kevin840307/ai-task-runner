@@ -16,6 +16,7 @@ $planning_feedback
 Use the project outline and progress above for planning; do not read files during planning.
 Always return valid JSON even if the goal is ambiguous or the project outline is incomplete.
 When uncertain, choose the smallest conservative task list that can still complete the goal.
+If the project already has code or the architecture is unclear, include an early read-only survey TODO so implementation tasks can follow the existing structure.
 Choose task count from actual complexity; there is no fixed limit.
 First identify concrete deliverables from the goal, then split by verifiable output families: files, commands, data contracts, generated outputs, reports, docs, or user-facing behavior.
 If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable; for dense paragraphs, split by deliverable nouns and verifiable outcomes.
@@ -34,4 +35,4 @@ Return at least one task. Never return an empty tasks array.
 Before answering, self-check that the JSON parses and that every task has title, description, and acceptance_criteria.
 
 Return only this JSON shape, without Markdown or explanation:
-{"tasks":[{"title":"Implement requested change","description":"Make the smallest maintainable project change needed to satisfy the goal.","acceptance_criteria":["The requested behavior is implemented","Relevant checks pass"]}]}
+{"tasks":[{"title":"Implement requested change","description":"Make the smallest maintainable project change needed to satisfy the goal.","acceptance_criteria":["The requested behavior is implemented","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior","Relevant checks pass"]}]}

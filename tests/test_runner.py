@@ -222,72 +222,6 @@ def test_task_schema_accepts_common_criteria_alias():
     assert task.acceptance_criteria == ["C"]
 
 
-def test_goal_task_derivation_splits_numbered_deliverables():
-    import runner.core as core
-
-    tasks = core.derive_tasks_from_goal(
-        "Build release packet.\n1. Create VERSION.\n2. Create CHANGELOG.md.\n3. Create summary JSON.",
-        2,
-    )
-    assert [task.id for task in tasks] == ["c02-t001", "c02-t002", "c02-t003"]
-    assert [task.title for task in tasks] == [
-        "Create VERSION",
-        "Create CHANGELOG.md",
-        "Create summary JSON",
-    ]
-
-    assert len(core.derive_tasks_from_goal("Build one thing", 1)) == 1
-
-
-def test_goal_task_derivation_uses_single_repair_task_after_validator_failure():
-    import runner.core as core
-
-    tasks = core.derive_tasks_from_goal(
-        "Create a document.\n1. ## Overview\n2. ## Complexity Table\n3. ## Worked Example",
-        5,
-        "score=75/100\nmissing exact complexity table header",
-    )
-
-    assert len(tasks) == 1
-    assert tasks[0].id == "c05-t001"
-    assert tasks[0].title == "Repair validator failure"
-    assert "missing exact complexity table header" in tasks[0].description
-    assert "current rejected behavior or output" in tasks[0].description
-
-    tasks = core.derive_tasks_from_goal(
-        "Build a CLI",
-        6,
-        "unexpected stored JSON:\n{\"todos\": []}",
-    )
-    assert "the actual bad value to change away from" in tasks[0].description
-
-
-def test_goal_task_derivation_splits_structured_validator_errors():
-    import runner.core as core
-
-    tasks = core.derive_tasks_from_goal(
-        "Generate config outputs",
-        7,
-        (
-            "VALIDATION_FAILED\n"
-            "errors: 2\n"
-            "[E005] check_config_shape failed\n"
-            "- shared values are repeated\n"
-            "Full report: .ai-task-runner/validator-reports/x/shape.txt\n"
-            "[E007] check_rendered_output failed\n"
-            "- missing output files\n"
-            "Full report: .ai-task-runner/validator-reports/x/output.txt\n"
-        ),
-    )
-
-    assert [task.id for task in tasks] == ["c07-t001", "c07-t002"]
-    assert tasks[0].title == "Repair E005: check_config_shape failed"
-    assert tasks[1].title == "Repair E007: check_rendered_output failed"
-    assert "shared values are repeated" in tasks[0].description
-    assert "missing output files" not in tasks[0].description
-    assert "missing output files" in tasks[1].description
-
-
 def test_repair_review_requires_project_change_when_validator_failed():
     import runner.core as core
 
@@ -335,176 +269,6 @@ def test_repair_review_requires_project_change_when_validator_failed():
         split_task,
         True,
     )
-
-
-def test_goal_task_derivation_uses_blank_line_paragraphs_without_language_filters():
-    import runner.core as core
-
-    tasks = core.derive_tasks_from_goal(
-        (
-            "Build a CSV sales analyzer.\n\n"
-            "Create analyze_sales.py CLI.\n\n"
-            "Write report.json.\n\n"
-            "Write README.md."
-        ),
-        3,
-    )
-    assert len(tasks) == 4
-    assert tasks[0].id == "c03-t001"
-    assert tasks[-1].title == "Write README.md"
-
-
-def test_structured_goal_can_request_ai_replanning_when_under_split():
-    import runner.core as core
-
-    planned = [
-        core.Task(
-            "c01-t001",
-            "Build everything",
-            "Implement the whole request.",
-            ["Done"],
-        )
-    ]
-    goal = (
-        "Build a safe arithmetic expression evaluator.\n\n"
-        "The finished tool should include expression_eval.py with evaluate().\n\n"
-        "The CLI should support single expression and batch commands.\n\n"
-        "Batch mode should generate results.json and results.md. README.md should document Usage."
-    )
-
-    assert core.plan_needs_refinement(goal, planned)
-    assert not core.plan_needs_refinement(goal, planned, "validator fail")
-
-
-def test_goal_task_derivation_keeps_dense_prompt_as_one_fallback_task():
-    import runner.core as core
-
-    goal = (
-        "Build a small inventory CLI with inventory.py and commands to add, list, "
-        "and remove items. Store data in inventory.json with sku, name, quantity, "
-        "and price fields. Generate report.json and report.md summaries. Also "
-        "write README.md usage docs and include focused tests."
-    )
-
-    tasks = core.derive_tasks_from_goal(goal, 1)
-
-    assert len(tasks) == 1
-    assert tasks[0].title == "Implement requested change"
-    assert "inventory.py" in tasks[0].description
-
-
-def test_goal_task_derivation_uses_markdown_sections_for_specs():
-    import runner.core as core
-
-    goal = """
-## Required CLI
-- Provide one documented command that runs the tool.
-- Support selecting an input directory, output directory, and optional mode.
-
-## Data Loading
-1. load structured input files
-2. validate required fields
-3. normalize paths before writing output
-
-## Transformation
-1. combine shared defaults
-2. apply target-specific overrides
-3. render output templates
-4. write generated files
-
-## Configuration
-- shared values should live in one common location
-- target overrides may remain target-specific
-- adding a target should usually require one config change
-
-## Validation
-- generated folders and files must match expected names
-- generated content must be deterministic
-- README.md must describe usage
-
-## Examples
-This section is contextual and should not become its own task.
-"""
-    tasks = core.derive_tasks_from_goal(goal, 1)
-    titles = [task.title for task in tasks]
-
-    assert len(tasks) == 6
-    assert any("Required CLI" in title for title in titles)
-    assert any("Data Loading" in title for title in titles)
-    assert any("Transformation" in title for title in titles)
-    assert any("README.md" in task.description for task in tasks)
-    assert any(title.startswith("Examples") for title in titles)
-
-
-def test_goal_task_derivation_skips_reference_only_sections_by_structure():
-    import runner.core as core
-
-    goal = """
-## Required CLI
-`tool.py` must support a documented command.
-
-## Renderer Responsibility
-- load config files
-- deep merge config values
-- render templates
-- write output files
-
-## Merge Order
-1. `config/defaults.yaml`
-2. `config/{target}/values.yaml`
-3. `config/{target}/{env}.yaml`
-
-## Expected Result
-Generated output must match the read-only reference folder.
-"""
-
-    tasks = core.derive_tasks_from_goal(goal, 1)
-    titles = [task.title for task in tasks]
-
-    assert "Expected Result" in titles
-    assert not any("Merge Order" in title for title in titles)
-    assert not any("config/{target}" in title for title in titles)
-    assert any("Required CLI" in title for title in titles)
-    assert any("deep merge config values" in task.description for task in tasks)
-
-
-def test_goal_task_derivation_keeps_markdown_sections_as_work_packages():
-    import runner.core as core
-
-    goal = """
-## Renderer
-- load structured config
-- merge layered values
-- render template files
-- write output files
-- engine.py must not branch on a customer, product, or environment name
-- engine.py must stay small: no more than 500 lines
-- values should stay reusable across targets
-"""
-
-    tasks = core.derive_tasks_from_goal(goal, 1)
-    titles = [task.title.lower() for task in tasks]
-
-    assert len(tasks) == 1
-    assert titles == ["renderer"]
-    assert "must not branch" in tasks[0].description
-
-
-def test_goal_task_derivation_keeps_persistence_deliverables():
-    import runner.core as core
-
-    tasks = core.derive_tasks_from_goal(
-        (
-            "Build a small persistent todo CLI.\n\n"
-            "The finished tool should include todo_cli.py and support add/list/done.\n\n"
-            "Todos should be stored in a JSON file selected by --db. "
-            "Each todo should have id, text, priority, and done fields.\n\n"
-            "Export should write a Markdown summary file. README.md should document usage."
-        ),
-        4,
-    )
-    assert len(tasks) == 4
-    assert any("stored in a JSON file" in task.title for task in tasks)
 
 
 def test_prompts_forbid_questions_and_omit_runtime_fields():
@@ -870,7 +634,6 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
 
 
 def test_ai_validator_failure_output_becomes_repair_findings():
-    import runner.core as core
     import runner.validation as validation
 
     output = validation.format_ai_validator_output({
@@ -886,12 +649,6 @@ def test_ai_validator_failure_output_becomes_repair_findings():
     assert "[E002] Document usage" in output
     assert "checks_run:" in output
     assert "suggested_checks:" in output
-
-    tasks = core.derive_tasks_from_goal("Build the app", 3, output)
-    assert [task.title for task in tasks] == [
-        "Repair E001: Create app.py",
-        "Repair E002: Document usage",
-    ]
 
 
 def test_no_progress_adds_different_strategy_instruction(tmp_path):

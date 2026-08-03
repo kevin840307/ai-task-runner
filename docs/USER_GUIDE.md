@@ -53,7 +53,7 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
-Planning asks the model to extract concrete deliverables before returning task JSON. Trivial requests may become one task, small tools usually become 2-5 tasks, and broad or multi-file requests often become 6-20 tasks. If planning repeatedly fails, fallback planning only uses language-neutral document structure: Markdown headings, top-level numbered items, and blank-line paragraphs. Dense natural-language prompts remain a single fallback task so interpretation stays with the model and validator.
+Planning asks the model to extract concrete deliverables before returning task JSON. Trivial requests may become one task, small tools usually become 2-5 tasks, and broad or multi-file requests often become 6-20 tasks. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 ## Validators
 

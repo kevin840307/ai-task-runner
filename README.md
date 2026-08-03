@@ -52,13 +52,13 @@ If a Python validator is configured and an AI review cannot return valid review 
 
 When the same final validator failure repeats, repair tasks switch to a fresh agent session while still receiving the saved runner state and validator feedback. This helps a small model escape a bad prior approach without losing the 24h retry loop.
 
-When validator stdout contains structured error headings such as `[E001] ...`, fallback repair planning splits them into separate TODO items. Unstructured validator output still creates one repair TODO.
+Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
-Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If model planning repeatedly fails, deterministic fallback only uses language-neutral document structure: Markdown headings, top-level numbered items, and blank-line paragraphs. Dense natural-language prompts remain a single fallback task so the model and validator, not runner heuristics, drive interpretation.
+Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If planning fails to return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
-The runner and prompt templates must stay task-agnostic. Case-specific names such as a particular app, fab, workflow, generated filename, or algorithm belong only in user goals, validators, examples, smoke cases, or test fixtures. The core runner may use generic structural planning heuristics, but it must not special-case one user's project.
+The runner and prompt templates must stay task-agnostic. Case-specific names such as a particular app, fab, workflow, generated filename, or algorithm belong only in user goals, validators, examples, smoke cases, or test fixtures. The core runner parses the fixed AI task JSON contract, but it does not interpret user prompt formats or special-case one user's project.
 
 When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
@@ -136,7 +136,6 @@ runner/                       Main implementation package
   support.py                  Shared parsing, protection, retry, validator helpers
   agent.py                    Session-aware facade over backend adapters
   agent_args.py               Backend-specific planning/runtime argument policy
-  planning.py                 TODO planning, fallback splitting, repair tasks
   prompting.py                Prompt template loading and prompt builders
   validation.py               AI final validation helper
   script_runner.py            YAML batch orchestration and per-item resume setup

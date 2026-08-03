@@ -18,10 +18,6 @@ from .agent_args import (
 )
 from .errors import RunnerError
 from .models import RunState, Task
-from .planning import (
-    derive_tasks_from_goal,
-    plan_needs_refinement,
-)
 from .prompting import (
     bounded_text,
     execution_prompt,
@@ -254,13 +250,11 @@ class TaskRunner:
         if not self._needs_planning():
             return
 
-        planning_failures = 0
-        planning_refinements = 0
         planning_feedback = ""
         self._set_stage("planning")
 
         def plan_call() -> list[Task]:
-            nonlocal planning_failures, planning_feedback, planning_refinements
+            nonlocal planning_feedback
             planner_root = planning_agent_root(
                 self.args.backend,
                 self.root,
@@ -299,45 +293,12 @@ class TaskRunner:
                         + ", ".join(protected_changed)
                     )
                 tasks = parse_tasks(output, self.state.cycle)
-                if plan_needs_refinement(
-                    self.state.goal,
-                    tasks,
-                    self.state.validator_output,
-                ):
-                    if planning_refinements < 2:
-                        planning_refinements += 1
-                        planning_feedback = (
-                            "The previous plan collapsed explicit goal sections or "
-                            "items into one TODO. Re-plan with multiple ordered, "
-                            "deliverable-sized TODOs when the goal structure shows "
-                            "separate work packages."
-                        )
-                        raise RunnerError("planning needs a finer TODO split")
-                    return derive_tasks_from_goal(
-                        self.state.goal,
-                        self.state.cycle,
-                        self.state.validator_output,
-                    )
-            except RunnerError as error:
-                planning_failures += 1
-                message = str(error)
-                stalled = (
-                    "timed out" in message.lower()
-                    or "loop detection" in message.lower()
+            except RunnerError:
+                planning_feedback = (
+                    "The previous planning attempt did not produce the required "
+                    "tasks JSON. Return only valid JSON with ordered, "
+                    "deliverable-sized TODOs."
                 )
-                if (
-                    self.args.backend == "qwen"
-                    and (stalled or planning_failures >= 3)
-                ):
-                    self.ui.set(
-                        "Qwen planning fallback",
-                        "using fallback tasks from the goal after repeated planning failures",
-                    )
-                    return derive_tasks_from_goal(
-                        self.state.goal,
-                        self.state.cycle,
-                        self.state.validator_output,
-                    )
                 raise
             if project_changed:
                 self.ui.set(

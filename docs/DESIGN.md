@@ -108,9 +108,7 @@ flowchart TD
     J --> K{Planning call succeeded and JSON valid?}
     K -- No --> L[Retry model call with backoff]
     L --> K
-    K -- Repeated failure --> M[Deterministic fallback task derivation]
     K -- Yes --> N[Persist planned tasks]
-    M --> N
     H -- Yes --> O[Select current pending TODO]
     N --> O
 
@@ -173,7 +171,7 @@ flowchart LR
 
 `understand` means gathering enough current evidence to plan correctly: the goal, project structure, existing files, previous task output, and validator feedback. Depending on backend behavior, understanding may be represented inside the planning prompt rather than by a permanently separate source-code function. It is still a distinct logical stage in the task flow and logs.
 
-`plan` converts that understanding into bounded TODO records with a title, description, and acceptance criteria. Planning is read-only. If model planning cannot produce valid task JSON after retries, deterministic fallback planning derives tasks from requirement structure so the run can continue.
+`plan` converts that understanding into bounded TODO records with a title, description, and acceptance criteria. Planning is read-only. If model planning cannot produce valid task JSON, the runner retries with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 ---
 
@@ -262,7 +260,6 @@ runner/api.py              Public RunRequest/run API and validation
 runner/core.py             TaskRunner state machine and orchestration
 runner/models.py           Persisted RunState and Task models
 runner/defaults.py         Shared default backend, timeout, and limit values
-runner/planning.py         Task derivation, right-sizing, and repair planning
 runner/prompting.py        Markdown prompt-template loading and builders
 runner/validation.py       Fresh-session AI final validator
 runner/script_runner.py    YAML batch orchestration and item resume setup
@@ -399,12 +396,8 @@ flowchart TD
     E -- Yes --> G{Protected file changed?}
     G -- Yes --> H[Restore and raise planning error]
     G -- No --> I[Parse tasks JSON]
-    I --> J[Right-size planned tasks]
-    J --> K{Qwen timeout / loop / repeated failure?}
-    K -- Yes --> L[Deterministic fallback task derivation]
-    K -- No --> M[Use model tasks]
-    L --> N[Append after completed tasks]
-    M --> N
+    I --> M[Use model tasks]
+    M --> N[Append after completed tasks]
     N --> O[Set current to first planned task]
     O --> P[Persist state]
 ```
@@ -417,14 +410,7 @@ The outer model-call retry uses `retry_model_call()` with exponential backoff:
 retry_wait, 2×retry_wait, 4×retry_wait, ... capped at retry_max_wait
 ```
 
-Planning does not set a fixed `max_errors`, so ordinary planning model failures retry indefinitely by default. However, Qwen has a deterministic escape hatch inside the planning action:
-
-- if the error contains timeout or loop-detection language; or
-- after three planning failures;
-
-then the runner derives tasks from the goal and validator feedback without depending on more model output.
-
-Fallback splitting uses only language-neutral document structure: Markdown sections, top-level numbered items, and blank-line paragraphs. Dense natural-language prompts remain one fallback task so the model and validator, not runner heuristics, decide the meaning. When validator feedback exists, repair planning is focused on that feedback.
+Planning does not set a fixed `max_errors`, so planning model failures retry indefinitely by default. Each retry receives compact feedback asking for valid task JSON. The runner does not derive tasks from the user's prompt structure; only valid AI task JSON becomes the persisted TODO list.
 
 ---
 
@@ -546,7 +532,7 @@ Defaults:
 - `retry_max_wait = 300` seconds;
 - execution allows one model-call error before returning control to task flow;
 - review allows one error with a Python validator, or three errors with AI validation;
-- planning retries without a fixed model-call limit, with Qwen fallback logic described above.
+- planning retries without a fixed model-call limit until valid task JSON is returned.
 
 This layer handles transient backend errors, invalid model JSON wrapped as `RunnerError`, timeout results surfaced by the backend, loop detection, unavailable sessions, and similar call-level failures.
 

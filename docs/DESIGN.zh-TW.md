@@ -91,9 +91,7 @@ flowchart TD
     J --> K{模型成功且 JSON 合法?}
     K -- 否 --> L[指數退避重試 Model Call]
     L --> K
-    K -- 持續失敗 --> M[使用 Deterministic Fallback 拆任務]
     K -- 是 --> N[保存 TODO]
-    M --> N
     H -- 是 --> O[選取目前 Pending TODO]
     N --> O
 
@@ -154,7 +152,7 @@ flowchart LR
 
 `Understand` 是邏輯階段，會綜合原始 goal、專案結構、現有檔案、前次 Task 輸出、Validator Feedback 與 Resume State。實作上可能整合在 planning prompt 中，不一定是一個獨立 Python 函式，但流程與 Log 應把它視為獨立概念。
 
-`Plan` 必須是只讀操作，將理解結果轉成有界 TODO。每個 TODO 包含 title、description、acceptance_criteria。若模型多次無法輸出合法 JSON，Runner 只依 Markdown 標題、頂層編號清單與空行段落做 deterministic fallback，避免整個 24h 流程卡死。密集自然語言會保留為單一 fallback 任務，由模型與 Validator 判斷語意。
+`Plan` is read-only and converts the model understanding into bounded TODO records with title, description, and acceptance_criteria. If planning does not return valid JSON, the runner retries with compact feedback until the fixed task schema is returned. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 ## 5. Runner 與 Agent 責任
 
@@ -169,7 +167,6 @@ ai_task_runner.py -> CLI
 runner/api.py -> Python API
 runner/script_runner.py -> YAML Batch
 runner/core.py -> TaskRunner.run() 主狀態機
-runner/planning.py -> TODO 與 Repair Planning
 runner/validation.py -> Fresh AI Final Validator
 runner/support.py -> Retry / Parsing / Protection / Fingerprint
 runner/process_control.py -> Timeout / Watchdog / Process Tree Kill
