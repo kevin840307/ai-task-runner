@@ -436,13 +436,45 @@ This section is contextual and should not become its own task.
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert 10 <= len(tasks) <= 20
+    assert 8 <= len(tasks) <= 20
     assert any("Required CLI" in title for title in titles)
     assert any("load structured input files" in title for title in titles)
     assert any("combine shared defaults" in title for title in titles)
     assert any("render output templates" in title for title in titles)
     assert any("README.md" in title for title in titles)
     assert not any(title.startswith("Examples") for title in titles)
+
+
+def test_goal_task_derivation_keeps_order_and_expected_sections_as_context():
+    import runner.core as core
+
+    goal = """
+## Required CLI
+`tool.py` must support a documented command.
+
+## Renderer Responsibility
+- load config files
+- deep merge config values
+- render templates
+- write output files
+
+## Merge Order
+1. `config/defaults.yaml`
+2. `config/{target}/values.yaml`
+3. `config/{target}/{env}.yaml`
+
+## Expected Result
+Generated output must match the read-only reference folder.
+"""
+
+    tasks = core.derive_tasks_from_goal(goal, 1)
+    titles = [task.title for task in tasks]
+
+    assert "Expected Result" not in titles
+    assert sum("Merge Order" in title for title in titles) == 1
+    assert not any("config/{target}" in title for title in titles)
+    assert any("Required CLI" in title for title in titles)
+    assert any("deep merge config values" in task.description for task in tasks)
 
 
 def test_goal_task_derivation_keeps_pure_constraints_out_of_todo_titles():

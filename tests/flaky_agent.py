@@ -14,7 +14,7 @@ session = 'retry-session-001'
 
 if 'Plan only the remaining work' in prompt:
     phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]}
-elif 'Execute only the current task' in prompt:
+elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
     phase, answer = 'execute', 'created done.txt'
 elif 'review only' in prompt.lower():
     phase, answer = 'review', {'completed':True,'reason':'checked','missing_items':[]}

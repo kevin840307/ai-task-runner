@@ -31,7 +31,7 @@ if "Plan only the remaining work" in prompt:
         ]}
     else:
         answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "acceptance_criteria": ["done.txt exists"]}]}
-elif "Execute only the current task" in prompt:
+elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     n = count("execute")
     if scenario == "multi_task_plan":
         log = state_dir / "order.log"

@@ -133,7 +133,10 @@ def markdown_goal_sections(goal: str) -> list[str]:
     items: list[str] = []
     for title, lines in sections:
         body = "\n".join(lines).strip()
-        if not body or is_context_section_title(title):
+        if not body:
+            continue
+        if is_spec_context_title(title):
+            items.extend(file_deliverables_from_spec_context(title, body))
             continue
         expanded = split_markdown_section_items(title, body)
         if expanded:
@@ -144,6 +147,9 @@ def markdown_goal_sections(goal: str) -> list[str]:
 
 
 def split_markdown_section_items(title: str, body: str) -> list[str]:
+    if is_grouped_deliverable_title(title):
+        return [] if section_is_pure_constraint_list(body) else [f"{title}\n{body}"]
+
     bullets = split_ready_list_items(
         match.group(1)
         for match in re.finditer(r"(?m)^\s*-\s+(.+?)\s*$", body)
@@ -159,6 +165,27 @@ def split_markdown_section_items(title: str, body: str) -> list[str]:
     return []
 
 
+def file_deliverables_from_spec_context(title: str, body: str) -> list[str]:
+    if not spec_context_allows_file_tasks(title):
+        return []
+    candidates = list_item_texts(body)
+    return [
+        f"{title}: {item}\n{body}"
+        for item in candidates
+        if has_file_reference(item) and not is_constraint_item(item)
+    ]
+
+
+def list_item_texts(body: str) -> list[str]:
+    return [
+        match.group(1).strip()
+        for match in re.finditer(
+            r"(?m)^\s*(?:-\s+|\d+[\).]\s+)(.+?)\s*$",
+            body,
+        )
+    ]
+
+
 def split_ready_list_items(candidates: Iterable[str]) -> list[str]:
     items = [
         item.strip()
@@ -169,13 +196,7 @@ def split_ready_list_items(candidates: Iterable[str]) -> list[str]:
 
 
 def section_is_pure_constraint_list(body: str) -> bool:
-    items = [
-        match.group(1)
-        for match in re.finditer(
-            r"(?m)^\s*(?:-\s+|\d+[\).]\s+)(.+?)\s*$",
-            body,
-        )
-    ]
+    items = list_item_texts(body)
     return bool(items) and all(not should_split_list_item(item) for item in items)
 
 
@@ -210,9 +231,40 @@ def is_constraint_item(text: str) -> bool:
     )
 
 
-def is_context_section_title(title: str) -> bool:
+def is_spec_context_title(title: str) -> bool:
     lowered = title.strip().lower()
-    return any(word in lowered for word in ("sample", "example", "background"))
+    return any(
+        word in lowered
+        for word in (
+            "sample",
+            "example",
+            "background",
+            "expected",
+            "result",
+            "validation",
+            "acceptance",
+            "criteria",
+        )
+    )
+
+
+def spec_context_allows_file_tasks(title: str) -> bool:
+    lowered = title.strip().lower()
+    return any(word in lowered for word in ("validation", "acceptance", "criteria"))
+
+
+def is_grouped_deliverable_title(title: str) -> bool:
+    lowered = title.strip().lower()
+    return any(
+        word in lowered
+        for word in (
+            "order",
+            "precedence",
+            "priority",
+            "sequence",
+            "responsibility",
+        )
+    )
 
 
 def deliverable_goal_items(goal: str) -> list[str]:

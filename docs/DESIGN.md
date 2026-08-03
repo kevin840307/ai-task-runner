@@ -424,7 +424,7 @@ Planning does not set a fixed `max_errors`, so ordinary planning model failures 
 
 then the runner derives tasks from the goal and validator feedback without depending on more model output.
 
-Fallback splitting uses generic document structure: Markdown sections, numbered items, bullets, blank-line paragraphs, and file-like deliverables. Pure constraints stay as context rather than becoming standalone TODO tasks. When validator feedback exists, repair planning is focused on that feedback.
+Fallback splitting uses generic document structure: Markdown sections, numbered items, bullets, blank-line paragraphs, and file-like deliverables. Expected-result, validation, acceptance, example, and ordering/precedence sections are treated as context unless they contain a distinct file deliverable. Pure constraints stay as context rather than becoming standalone TODO tasks. When validator feedback exists, repair planning is focused on that feedback.
 
 ---
 

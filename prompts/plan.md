@@ -13,19 +13,16 @@ Progress:
 $progress_json
 
 Use the project outline and progress above for planning; do not read files during planning.
-First identify concrete deliverables from the goal, then convert them into tasks.
 Always return valid JSON even if the goal is ambiguous or the project outline is incomplete.
 When uncertain, choose the smallest conservative task list that can still complete the goal.
 Choose task count from actual complexity; there is no fixed limit.
-If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable.
-If the goal is a dense paragraph, split by deliverable nouns and verifiable outcomes before choosing task count.
-If the goal implies multiple distinct files, commands, outputs, data contracts, validation evidence, or user-facing deliverables, split them into ordered tasks.
+First identify concrete deliverables from the goal, then split by verifiable output families: files, commands, data contracts, generated outputs, reports, docs, or user-facing behavior.
+If the goal lists numbered or bulleted deliverables, usually create one ordered task per deliverable; for dense paragraphs, split by deliverable nouns and verifiable outcomes.
 Right-size the task list: trivial goals can be one task, small tools usually need 2-5 deliverable-sized tasks, and broad or multi-file goals often need 6-20 tasks grouped by verifiable outcomes.
 Do not collapse a broad or multi-file goal into one "build everything" task.
+Prefer tasks that produce or modify a coherent deliverable. Do not create separate tasks for rules, examples, expected output descriptions, merge-order steps, or validation criteria unless they require a distinct file or user-facing output.
 Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, avoiding hardcode, or verifying work; put those into acceptance criteria instead.
-Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria.
-Prefer deliverable-sized tasks over tiny mechanical steps.
-Each task should describe exactly one project change or output family, plus its completion evidence.
+Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria describing completion evidence.
 If planning notes are written, they may be JSON or Markdown files only under this runner work directory: $work_dir
 Prefer returning the final tasks JSON directly instead of writing files during planning.
 Do not create, edit, delete, or rename project implementation files during planning; implementation happens only after tasks are returned.

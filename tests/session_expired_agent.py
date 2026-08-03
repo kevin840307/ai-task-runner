@@ -30,7 +30,7 @@ if "Plan only the remaining work" in prompt:
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
-elif "Execute only the current task" in prompt:
+elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     attempt = count("execute")
     has_old_session = (
         (is_qwen and "--resume" in args and args[args.index("--resume") + 1] == "old-session")

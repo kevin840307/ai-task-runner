@@ -28,7 +28,7 @@ if "Plan only the remaining work" in prompt:
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
-elif "Execute only the current task" in prompt:
+elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     stage = "execute"
     (root / "done.txt").write_text("done", encoding="utf-8")
     answer = "created done.txt"
