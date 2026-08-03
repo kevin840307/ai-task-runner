@@ -20,7 +20,7 @@ Coverage includes:
 - session invalid and loop-detection session reset
 - YAML batch validation and resume
 - validator failure repair cycles
-- task splitting and right-sizing when the planner under-splits
+- task splitting and re-planning when the planner under-splits
 - bounded state output and validator diagnostics
 - external exe/CLI validator wrapper log copying and model-facing report paths
 - long `--goal-file` input

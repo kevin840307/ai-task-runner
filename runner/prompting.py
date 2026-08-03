@@ -103,6 +103,7 @@ def plan_prompt(
     state: RunState,
     protected: Sequence[Path],
     work: Path | None = None,
+    planning_feedback: str = "",
 ) -> str:
     progress = {
         "cycle": state.cycle,
@@ -119,8 +120,14 @@ def plan_prompt(
             "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "work_dir": work_dir,
+            "planning_feedback": planning_feedback_section(planning_feedback),
         },
     )
+
+
+def planning_feedback_section(feedback: str) -> str:
+    text = feedback.strip()
+    return f"\nPlanning feedback:\n{text}\n" if text else ""
 
 
 def execution_prompt(

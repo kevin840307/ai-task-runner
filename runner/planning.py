@@ -7,7 +7,10 @@ from .models import Task
 from .prompting import format_validator_feedback
 
 
-TASK_SCOPE_CRITERION = "依目前架構+用最少程式碼完成"
+TASK_SCOPE_CRITERION = (
+    "Use the current architecture, minimum code, clean code, low coupling, "
+    "and preserve existing behavior"
+)
 
 
 def derive_tasks_from_goal(
@@ -37,11 +40,7 @@ def derive_tasks_from_goal(
             )
             for index, item in enumerate(repair_items, 1)
         ]
-    deliverables = markdown_goal_sections(goal)
-    if not deliverables:
-        deliverables = numbered_goal_items(goal)
-    if not deliverables:
-        deliverables = deliverable_goal_items(goal)
+    deliverables = goal_structure_items(goal)
     if deliverables:
         return [
             Task(
@@ -96,17 +95,24 @@ def validator_repair_title(feedback: str) -> str:
     return "Repair validator failure"
 
 
-def right_size_planned_tasks(
+def plan_needs_refinement(
     goal: str,
-    cycle: int,
     planned: list[Task],
     validator_feedback: str = "",
-) -> list[Task]:
-    """Use deterministic splitting when the planner under-splits deliverables."""
+) -> bool:
+    """Ask the model to re-plan when explicit structure was collapsed."""
     if validator_feedback.strip():
-        return planned
-    fallback = derive_tasks_from_goal(goal, cycle)
-    return fallback if len(fallback) > len(planned) else planned
+        return False
+    return len(planned) == 1 and len(goal_structure_items(goal)) > 1
+
+
+def goal_structure_items(goal: str) -> list[str]:
+    deliverables = markdown_goal_sections(goal)
+    if not deliverables:
+        deliverables = numbered_goal_items(goal)
+    if not deliverables:
+        deliverables = deliverable_goal_items(goal)
+    return deliverables
 
 
 def numbered_goal_items(goal: str) -> list[str]:

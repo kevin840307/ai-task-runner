@@ -342,19 +342,19 @@ def test_goal_task_derivation_uses_blank_line_paragraphs_without_language_filter
 
     tasks = core.derive_tasks_from_goal(
         (
-            "建立 CSV 銷售分析器。\n\n"
-            "產生 analyze_sales.py CLI。\n\n"
-            "輸出 report.json。\n\n"
-            "撰寫 README.md。"
+            "Build a CSV sales analyzer.\n\n"
+            "Create analyze_sales.py CLI.\n\n"
+            "Write report.json.\n\n"
+            "Write README.md."
         ),
         3,
     )
     assert len(tasks) == 4
     assert tasks[0].id == "c03-t001"
-    assert tasks[-1].title == "撰寫 README.md。"
+    assert tasks[-1].title == "Write README.md"
 
 
-def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
+def test_structured_goal_can_request_ai_replanning_when_under_split():
     import runner.core as core
 
     planned = [
@@ -372,11 +372,8 @@ def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
         "Batch mode should generate results.json and results.md. README.md should document Usage."
     )
 
-    tasks = core.right_size_planned_tasks(goal, 1, planned)
-
-    assert len(tasks) == 4
-    assert tasks[0].title.startswith("Build a safe arithmetic expression evaluator")
-    assert core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
+    assert core.plan_needs_refinement(goal, planned)
+    assert not core.plan_needs_refinement(goal, planned, "validator fail")
 
 
 def test_goal_task_derivation_keeps_dense_prompt_as_one_fallback_task():
@@ -874,8 +871,9 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
 
 def test_ai_validator_failure_output_becomes_repair_findings():
     import runner.core as core
+    import runner.validation as validation
 
-    output = core.format_ai_validator_output({
+    output = validation.format_ai_validator_output({
         "passed": False,
         "reason": "not ready",
         "missing_items": ["Create app.py", "Document usage"],
@@ -1027,8 +1025,8 @@ def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
 
 
 def test_review_and_validator_results_are_bounded():
+    from runner.prompting import bounded_text
     from runner.support import (
-        bounded_text,
         MAX_MISSING_ITEM_CHARS,
         MAX_MISSING_ITEMS,
         MAX_RESULT_REASON_CHARS,
@@ -1087,7 +1085,7 @@ def test_old_state_without_24h_fields_still_loads():
 
 
 def test_prompts_require_project_understanding_and_minimal_compatible_changes(tmp_path):
-    import runner.support as support
+    import runner.prompting as prompting
     from runner.models import State, Task
 
     state = State(
@@ -1099,9 +1097,9 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     state.validator_output = "unexpected output:\nold value"
     protected = [tmp_path / ".ai-task-runner" / "state.json"]
 
-    plan = support.plan_prompt(state.goal, tmp_path, state, protected)
-    execute = support.execution_prompt(state, tmp_path, protected)
-    review = support.review_prompt(state, tmp_path, protected, "done")
+    plan = prompting.plan_prompt(state.goal, tmp_path, state, protected)
+    execute = prompting.execution_prompt(state, tmp_path, protected)
+    review = prompting.review_prompt(state, tmp_path, protected, "done")
 
     for prompt in (plan, execute, review):
         assert "relevant project structure" in prompt
@@ -1116,7 +1114,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
 
 def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
-    import runner.support as support
+    import runner.prompting as prompting
     from runner.models import State
 
     (tmp_path / "README.md").write_text("fixture", encoding="utf-8")
@@ -1124,7 +1122,7 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
     (tmp_path / "src" / "app.py").write_text("print('hi')", encoding="utf-8")
     state = State("run", "goal", str(tmp_path))
 
-    prompt = support.plan_prompt(
+    prompt = prompting.plan_prompt(
         state.goal,
         tmp_path,
         state,
@@ -1138,14 +1136,15 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
     assert "Always return valid JSON" in prompt
     assert "broad or multi-file goals often need 6-20 tasks" in prompt
+    assert "minimum code, clean code, low coupling" in prompt
     assert "Before answering, self-check that the JSON parses" in prompt
     assert ".ai-task-runner/state.json" not in prompt
 
 
 def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
-    import runner.support as support
+    import runner.prompting as prompting
 
-    feedback = support.format_validator_feedback(
+    feedback = prompting.format_validator_feedback(
         "report_dir: .ai-task-runner/validator-reports/folder-compare\n"
         "Full report: .ai-task-runner/validator-reports/folder-compare/diff.txt",
         2000,

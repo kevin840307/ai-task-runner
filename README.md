@@ -193,4 +193,4 @@ Runner prompts live in `prompts/`:
 - `review.md`: read-only task review
 - `ai_validator.md`: AI final validation
 
-Edit these files to tune model behavior. Keep the core phase phrases such as `Plan only the remaining work`, `Execute only the current task`, `Review only`, and `fresh independent session`, because integrations and tests use them to identify stages.
+Edit these files to tune model behavior. Keep the required JSON response shapes and phase intent clear; wording can be adjusted without changing runner state or retry behavior.

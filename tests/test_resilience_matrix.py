@@ -584,7 +584,8 @@ def test_file_validator_clears_previous_reports_before_run(tmp_path):
 
 
 def test_file_validator_large_output_keeps_summary_and_report_reference(tmp_path):
-    from runner.support import MAX_VALIDATOR_OUTPUT_CHARS, bounded_text
+    from runner.prompting import bounded_text
+    from runner.support import MAX_VALIDATOR_OUTPUT_CHARS
 
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")
@@ -648,7 +649,7 @@ def test_force_new_setup_failure_preserves_previous_state(tmp_path):
 
 
 def test_invalid_yaml_fails_before_item_state_is_created(tmp_path):
-    from runner.core import load_yaml_script
+    from runner.script_runner import load_yaml_script
 
     script = tmp_path / "tasks.yaml"
     script.write_text("prompt: not-an-array\nvalidator: ai\n", encoding="utf-8")

@@ -133,7 +133,9 @@ def test_core_uses_descriptive_canonical_names():
 
     assert "from .models import RunState, Task" in core
     assert "from .agent import AgentClient" in core
-    assert "from .models import RunState, Task" in support
+    assert "from .models import Task" in support
+    assert "from .prompting import (" not in support
+    assert "from runner.prompting import (" in cli
     assert "from runner.api import RunRequest, run" in cli
 
 

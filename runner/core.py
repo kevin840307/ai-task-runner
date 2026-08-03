@@ -20,7 +20,7 @@ from .errors import RunnerError
 from .models import RunState, Task
 from .planning import (
     derive_tasks_from_goal,
-    right_size_planned_tasks,
+    plan_needs_refinement,
 )
 from .prompting import (
     bounded_text,
@@ -255,10 +255,12 @@ class TaskRunner:
             return
 
         planning_failures = 0
+        planning_refinements = 0
+        planning_feedback = ""
         self._set_stage("planning")
 
         def plan_call() -> list[Task]:
-            nonlocal planning_failures
+            nonlocal planning_failures, planning_feedback, planning_refinements
             planner_root = planning_agent_root(
                 self.args.backend,
                 self.root,
@@ -285,6 +287,7 @@ class TaskRunner:
                         self.state,
                         self.protected,
                         self.work,
+                        planning_feedback,
                     ),
                     self.root,
                     self.work,
@@ -295,12 +298,26 @@ class TaskRunner:
                         "AI modified files during planning and they were restored: "
                         + ", ".join(protected_changed)
                     )
-                tasks = right_size_planned_tasks(
+                tasks = parse_tasks(output, self.state.cycle)
+                if plan_needs_refinement(
                     self.state.goal,
-                    self.state.cycle,
-                    parse_tasks(output, self.state.cycle),
+                    tasks,
                     self.state.validator_output,
-                )
+                ):
+                    if planning_refinements < 2:
+                        planning_refinements += 1
+                        planning_feedback = (
+                            "The previous plan collapsed explicit goal sections or "
+                            "items into one TODO. Re-plan with multiple ordered, "
+                            "deliverable-sized TODOs when the goal structure shows "
+                            "separate work packages."
+                        )
+                        raise RunnerError("planning needs a finer TODO split")
+                    return derive_tasks_from_goal(
+                        self.state.goal,
+                        self.state.cycle,
+                        self.state.validator_output,
+                    )
             except RunnerError as error:
                 planning_failures += 1
                 message = str(error)
