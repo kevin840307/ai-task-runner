@@ -55,6 +55,7 @@ When the same final validator failure repeats, repair tasks switch to a fresh ag
 Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
 Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If planning fails to return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema.
+For Qwen, planning uses `--safe-mode` and may use read-only inspection tools so the model can understand existing code before returning TODO JSON. It still excludes write, shell, todo, delegation, and desktop tools. Runtime execution keeps the normal Qwen tool environment.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 

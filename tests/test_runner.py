@@ -926,7 +926,7 @@ def test_qwen_planning_args_preserve_yolo():
         "20",
     ]
 
-    expected = [*args]
+    expected = [*args, "--safe-mode"]
     for tool_name in agent_args.QWEN_PLANNING_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.planning_agent_args("qwen", args) == expected
@@ -949,6 +949,8 @@ def test_qwen_args_default_to_yolo():
     import runner.agent_args as agent_args
 
     assert agent_args.planning_agent_args("qwen", [])[0] == "--yolo"
+    assert "--safe-mode" in agent_args.planning_agent_args("qwen", [])
+    assert "--safe-mode" not in agent_args.runtime_agent_args("qwen", [])
     assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"
     assert "--yolo" not in agent_args.runtime_agent_args(
         "qwen",

@@ -80,11 +80,6 @@ QWEN_COMPUTER_USE_TOOLS = (
 )
 
 QWEN_PLANNING_EXCLUDED_TOOLS = (
-    "read_file",
-    "read_mcp_resource",
-    "list_directory",
-    "glob",
-    "grep_search",
     "write_file",
     "edit",
     "notebook_edit",
@@ -108,6 +103,7 @@ def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     result = list(extra_args)
     if backend == "qwen":
         ensure_qwen_yolo(result)
+        ensure_qwen_safe_mode(result)
         exclude_qwen_tools(result, QWEN_PLANNING_EXCLUDED_TOOLS)
     return result
 
@@ -123,6 +119,11 @@ def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
 def ensure_qwen_yolo(args: list[str]) -> None:
     if "--yolo" not in args and "--approval-mode" not in args:
         args.append("--yolo")
+
+
+def ensure_qwen_safe_mode(args: list[str]) -> None:
+    if "--safe-mode" not in args:
+        args.append("--safe-mode")
 
 
 def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
