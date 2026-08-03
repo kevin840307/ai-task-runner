@@ -16,6 +16,8 @@ from typing import Any, Iterable
 
 import yaml
 
+from validator_interface import ValidatorReport
+
 
 GENERIC_FORBIDDEN_SOURCE_TOKENS = ("ans",)
 GENERIC_ALLOWED_SOURCE_TOKENS = {
@@ -64,88 +66,6 @@ class Sample:
     target_family: str
     env: str
     expected_root: Path
-
-
-@dataclass
-class Finding:
-    code: str
-    title: str
-    details: list[str]
-    fix: str
-    report: Path
-
-
-class ValidatorReport:
-    def __init__(self, project_root: Path, name: str = "auto-config") -> None:
-        self.project_root = project_root
-        self.report_dir = project_root / ".ai-task-runner" / "validator-reports" / name
-        self.errors: list[Finding] = []
-        self.warnings: list[Finding] = []
-
-    def error(
-        self,
-        code: str,
-        title: str,
-        details: Iterable[object],
-        fix: str,
-        report_name: str,
-        report_content: Iterable[object],
-    ) -> None:
-        report = self.write_report(report_name, report_content)
-        self.errors.append(
-            Finding(
-                code=code,
-                title=title,
-                details=[str(item) for item in details],
-                fix=fix,
-                report=report,
-            )
-        )
-
-    def write_report(self, name: str, lines: Iterable[object]) -> Path:
-        self.report_dir.mkdir(parents=True, exist_ok=True)
-        path = self.report_dir / name
-        path.write_text("\n".join(str(line) for line in lines).rstrip() + "\n", encoding="utf-8")
-        return path
-
-    def finish(self) -> int:
-        self.write_standard_reports()
-        self.print_summary()
-        return 1 if self.errors else 0
-
-    def status(self) -> str:
-        if self.errors:
-            return "VALIDATION_FAILED"
-        if self.warnings:
-            return "VALIDATION_PASSED_WITH_WARNINGS"
-        return "VALIDATION_PASSED"
-
-    def write_standard_reports(self) -> None:
-        self.write_report("summary.txt", [
-            self.status(),
-            f"errors: {len(self.errors)}",
-            f"warnings: {len(self.warnings)}",
-            f"report_dir: {relative(self.project_root, self.report_dir)}",
-        ])
-        self.write_report("errors.txt", format_findings(self.project_root, self.errors, "No errors."))
-        self.write_report("warnings.txt", format_findings(self.project_root, self.warnings, "No warnings."))
-
-    def print_summary(self) -> None:
-        print(self.status())
-        print(f"errors: {len(self.errors)}")
-        print(f"warnings: {len(self.warnings)}")
-        print(f"report_dir: {relative(self.project_root, self.report_dir)}")
-        if self.errors:
-            print()
-            print("ERRORS:")
-            for finding in self.errors[:8]:
-                print(f"[{finding.code}] {finding.title}")
-                for detail in finding.details[:8]:
-                    print(f"- {detail}")
-                print(f"Fix: {finding.fix}")
-                print(f"Full report: {relative(self.project_root, finding.report)}")
-            if len(self.errors) > 8:
-                print(f"... {len(self.errors) - 8} more errors omitted from stdout")
 
 
 def main() -> int:
@@ -235,19 +155,6 @@ def report_lines(check_name: str, problem: str) -> list[str]:
         "",
         f"Expected fix: {expected_fix()}",
     ]
-
-
-def format_findings(root: Path, findings: list[Finding], empty: str) -> list[str]:
-    if not findings:
-        return [empty]
-    lines: list[str] = []
-    for finding in findings:
-        lines.append(f"[{finding.code}] {finding.title}")
-        lines.extend(f"- {detail}" for detail in finding.details)
-        lines.append(f"Fix: {finding.fix}")
-        lines.append(f"Full report: {relative(root, finding.report)}")
-        lines.append("")
-    return lines
 
 
 def find_samples(root: Path) -> list[Sample]:
