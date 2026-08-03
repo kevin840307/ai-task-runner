@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 
 from .models import Task
 from .prompting import format_validator_feedback
+
+
+TASK_SCOPE_CRITERION = "依目前架構+用最少程式碼完成"
 
 
 def derive_tasks_from_goal(
@@ -29,17 +31,18 @@ def derive_tasks_from_goal(
                 acceptance_criteria=[
                     "The validator feedback is addressed",
                     "The requested behavior is implemented",
+                    TASK_SCOPE_CRITERION,
                     "Relevant validator checks pass",
                 ],
             )
             for index, item in enumerate(repair_items, 1)
         ]
     deliverables = markdown_goal_sections(goal)
-    if len(deliverables) < 2:
+    if not deliverables:
         deliverables = numbered_goal_items(goal)
-    if len(deliverables) < 2:
+    if not deliverables:
         deliverables = deliverable_goal_items(goal)
-    if len(deliverables) >= 2:
+    if deliverables:
         return [
             Task(
                 id=f"c{cycle:02d}-t{index:03d}",
@@ -47,6 +50,7 @@ def derive_tasks_from_goal(
                 description=item,
                 acceptance_criteria=[
                     "This deliverable is implemented",
+                    TASK_SCOPE_CRITERION,
                     "Relevant validator checks pass",
                 ],
             )
@@ -62,6 +66,7 @@ def derive_tasks_from_goal(
             ),
             acceptance_criteria=[
                 "The requested behavior is implemented",
+                TASK_SCOPE_CRITERION,
                 "Relevant validator checks pass",
             ],
         )
@@ -108,8 +113,8 @@ def numbered_goal_items(goal: str) -> list[str]:
     items: list[str] = []
     for line in goal.splitlines():
         match = re.match(r"^\s*\d+[\).]\s+(.+?)\s*$", line)
-        if match:
-            items.append(match.group(1))
+        if match and should_keep_structured_item(match.group(1)):
+            items.append(match.group(1).strip())
     return items
 
 
@@ -135,195 +140,57 @@ def markdown_goal_sections(goal: str) -> list[str]:
         body = "\n".join(lines).strip()
         if not body:
             continue
-        if is_spec_context_title(title):
-            items.extend(file_deliverables_from_spec_context(title, body))
-            continue
-        expanded = split_markdown_section_items(title, body)
-        if expanded:
-            items.extend(expanded)
-        elif not section_is_pure_constraint_list(body):
+        if not is_reference_only_body(body):
             items.append(f"{title}\n{body}")
     return items
-
-
-def split_markdown_section_items(title: str, body: str) -> list[str]:
-    if is_grouped_deliverable_title(title):
-        return [] if section_is_pure_constraint_list(body) else [f"{title}\n{body}"]
-
-    bullets = split_ready_list_items(
-        match.group(1)
-        for match in re.finditer(r"(?m)^\s*-\s+(.+?)\s*$", body)
-    )
-    numbered = split_ready_list_items(
-        match.group(1)
-        for match in re.finditer(r"(?m)^\s*\d+[\).]\s+(.+?)\s*$", body)
-    )
-    if bullets:
-        return [f"{title}: {item}\n{body}" for item in bullets]
-    if numbered:
-        return [f"{title}: {item}\n{body}" for item in numbered]
-    return []
-
-
-def file_deliverables_from_spec_context(title: str, body: str) -> list[str]:
-    if not spec_context_allows_file_tasks(title):
-        return []
-    candidates = list_item_texts(body)
-    return [
-        f"{title}: {item}\n{body}"
-        for item in candidates
-        if has_file_reference(item) and not is_constraint_item(item)
-    ]
 
 
 def list_item_texts(body: str) -> list[str]:
     return [
         match.group(1).strip()
         for match in re.finditer(
-            r"(?m)^\s*(?:-\s+|\d+[\).]\s+)(.+?)\s*$",
+            r"(?m)^\s*(?:[-*]\s+|\d+[\).]\s+)(.+?)\s*$",
             body,
         )
     ]
 
 
-def split_ready_list_items(candidates: Iterable[str]) -> list[str]:
-    items = [
-        item.strip()
-        for item in candidates
-        if should_split_list_item(item)
-    ]
-    return items if len(items) >= 1 else []
-
-
-def section_is_pure_constraint_list(body: str) -> bool:
+def is_reference_only_body(body: str) -> bool:
     items = list_item_texts(body)
-    return bool(items) and all(not should_split_list_item(item) for item in items)
+    return bool(items) and all(is_reference_item(item) for item in items)
 
 
-def should_split_list_item(text: str) -> bool:
-    lowered = text.strip().lower()
-    if not lowered or is_runner_instruction(text) or is_constraint_item(text):
-        return False
-    return True
+def should_keep_structured_item(text: str) -> bool:
+    return bool(text.strip()) and not is_reference_item(text)
 
 
-def is_constraint_item(text: str) -> bool:
-    """Keep pure rules as context instead of turning them into TODO tasks."""
-    lowered = " ".join(text.lower().split())
-    if lowered.startswith(("do not ", "don't ", "never ")):
+def is_reference_item(text: str) -> bool:
+    """Skip list rows that are references or values, not work items."""
+    cleaned = re.sub(r"`([^`]*)`", r"\1", text).strip()
+    if re.match(r"^[\w{}./\\:-]+$", cleaned):
         return True
-    if any(
-        phrase in lowered
-        for phrase in (
-            " must not ",
-            " should not ",
-            " may only ",
-            " no more than ",
-            " must stay ",
-        )
-    ):
+    if re.match(r"^[\w -]+:\s*[\w{}./\\:-]+$", cleaned):
         return True
-    if has_file_reference(text):
-        return False
-    return any(
-        phrase in lowered
-        for phrase in (" should ", " must ", " may ")
-    )
-
-
-def is_spec_context_title(title: str) -> bool:
-    lowered = title.strip().lower()
-    return any(
-        word in lowered
-        for word in (
-            "sample",
-            "example",
-            "background",
-            "expected",
-            "result",
-            "validation",
-            "acceptance",
-            "criteria",
-        )
-    )
-
-
-def spec_context_allows_file_tasks(title: str) -> bool:
-    lowered = title.strip().lower()
-    return any(word in lowered for word in ("validation", "acceptance", "criteria"))
-
-
-def is_grouped_deliverable_title(title: str) -> bool:
-    lowered = title.strip().lower()
-    return any(
-        word in lowered
-        for word in (
-            "order",
-            "precedence",
-            "priority",
-            "sequence",
-            "responsibility",
-        )
-    )
+    return False
 
 
 def deliverable_goal_items(goal: str) -> list[str]:
     parts = [part.strip() for part in re.split(r"\n\s*\n", goal) if part.strip()]
-    if len(parts) >= 2:
-        paragraphs = paragraph_goal_items(parts)
-        if len(paragraphs) >= 2:
-            return paragraphs
-    parts = split_goal_sentences(goal)
-    items: list[str] = []
-    seen: set[str] = set()
-    for part in parts:
-        if not has_file_reference(part):
-            continue
-        normalized = " ".join(part.split())
-        key = normalized.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        items.append(normalized)
-    return items
+    if len(parts) < 2:
+        return []
+    return paragraph_goal_items(parts)
 
 
 def paragraph_goal_items(parts: list[str]) -> list[str]:
-    items = [
+    return [
         normalize_item(part)
         for part in parts
-        if not is_runner_instruction(part)
+        if not is_reference_item(part)
     ]
-    if len(items) >= 4:
-        items = items[1:]
-    return items
 
 
 def normalize_item(text: str) -> str:
     return " ".join(text.split())
-
-
-def is_runner_instruction(text: str) -> bool:
-    lowered = text.strip().lower()
-    return lowered.startswith(("do not ask", "don't ask", "expected command"))
-
-
-def split_goal_sentences(goal: str) -> list[str]:
-    normalized = re.sub(r"\s+", " ", goal).strip()
-    if not normalized:
-        return []
-    pieces = re.split(
-        r"(?<=[.!?。！？；;])\s+|\s+(?:and|then|also|plus)\s+",
-        normalized,
-        flags=re.IGNORECASE,
-    )
-    return [piece.strip(" -.;:") for piece in pieces if piece.strip(" -.;:")]
-
-
-def has_file_reference(text: str) -> bool:
-    if is_runner_instruction(text):
-        return False
-    return bool(re.search(r"\b[\w.-]+\.[A-Za-z0-9]{1,8}\b", text))
 
 
 def short_task_title(text: str, limit: int = 72) -> str:

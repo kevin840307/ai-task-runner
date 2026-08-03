@@ -154,7 +154,7 @@ flowchart LR
 
 `Understand` 是邏輯階段，會綜合原始 goal、專案結構、現有檔案、前次 Task 輸出、Validator Feedback 與 Resume State。實作上可能整合在 planning prompt 中，不一定是一個獨立 Python 函式，但流程與 Log 應把它視為獨立概念。
 
-`Plan` 必須是只讀操作，將理解結果轉成有界 TODO。每個 TODO 包含 title、description、acceptance_criteria。若模型多次無法輸出合法 JSON，Runner 會依標題、編號、條列、段落與檔案線索做 deterministic fallback，避免整個 24h 流程卡死。Expected result、validation、acceptance、example、order/precedence 這類規格段落預設保留為 context，除非段落內有明確檔案產物，不會被拆成機械 TODO。
+`Plan` 必須是只讀操作，將理解結果轉成有界 TODO。每個 TODO 包含 title、description、acceptance_criteria。若模型多次無法輸出合法 JSON，Runner 只依 Markdown 標題、頂層編號清單與空行段落做 deterministic fallback，避免整個 24h 流程卡死。密集自然語言會保留為單一 fallback 任務，由模型與 Validator 判斷語意。
 
 ## 5. Runner 與 Agent 責任
 

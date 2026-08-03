@@ -337,24 +337,21 @@ def test_repair_review_requires_project_change_when_validator_failed():
     )
 
 
-def test_goal_task_derivation_splits_natural_deliverable_paragraphs():
+def test_goal_task_derivation_uses_blank_line_paragraphs_without_language_filters():
     import runner.core as core
 
     tasks = core.derive_tasks_from_goal(
         (
-            "Build a small CSV sales analyzer from input/sales.csv.\n\n"
-            "The finished tool should include analyze_sales.py and a CLI.\n\n"
-            "It should produce report.json with totals.\n\n"
-            "README.md should document Usage and Outputs.\n\n"
-            "Do not ask questions."
+            "建立 CSV 銷售分析器。\n\n"
+            "產生 analyze_sales.py CLI。\n\n"
+            "輸出 report.json。\n\n"
+            "撰寫 README.md。"
         ),
         3,
     )
-    assert len(tasks) == 3
+    assert len(tasks) == 4
     assert tasks[0].id == "c03-t001"
-    assert tasks[-1].title == "README.md should document Usage and Outputs"
-    assert not any(task.title.startswith("Build a small CSV") for task in tasks)
-    assert not any("Do not ask" in task.title for task in tasks)
+    assert tasks[-1].title == "撰寫 README.md。"
 
 
 def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
@@ -377,12 +374,12 @@ def test_planned_tasks_are_right_sized_when_planner_under_splits_goal():
 
     tasks = core.right_size_planned_tasks(goal, 1, planned)
 
-    assert len(tasks) == 3
-    assert tasks[0].title.startswith("The finished tool should include")
+    assert len(tasks) == 4
+    assert tasks[0].title.startswith("Build a safe arithmetic expression evaluator")
     assert core.right_size_planned_tasks(goal, 2, planned, "validator fail") is planned
 
 
-def test_goal_task_derivation_splits_dense_complex_prompt():
+def test_goal_task_derivation_keeps_dense_prompt_as_one_fallback_task():
     import runner.core as core
 
     goal = (
@@ -394,11 +391,9 @@ def test_goal_task_derivation_splits_dense_complex_prompt():
 
     tasks = core.derive_tasks_from_goal(goal, 1)
 
-    assert len(tasks) >= 4
-    assert any("inventory.py" in task.title for task in tasks)
-    assert any("inventory.json" in task.title for task in tasks)
-    assert any("report.json" in task.title for task in tasks)
-    assert any("README.md" in task.title for task in tasks)
+    assert len(tasks) == 1
+    assert tasks[0].title == "Implement requested change"
+    assert "inventory.py" in tasks[0].description
 
 
 def test_goal_task_derivation_uses_markdown_sections_for_specs():
@@ -436,16 +431,15 @@ This section is contextual and should not become its own task.
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert 8 <= len(tasks) <= 20
+    assert len(tasks) == 6
     assert any("Required CLI" in title for title in titles)
-    assert any("load structured input files" in title for title in titles)
-    assert any("combine shared defaults" in title for title in titles)
-    assert any("render output templates" in title for title in titles)
-    assert any("README.md" in title for title in titles)
-    assert not any(title.startswith("Examples") for title in titles)
+    assert any("Data Loading" in title for title in titles)
+    assert any("Transformation" in title for title in titles)
+    assert any("README.md" in task.description for task in tasks)
+    assert any(title.startswith("Examples") for title in titles)
 
 
-def test_goal_task_derivation_keeps_order_and_expected_sections_as_context():
+def test_goal_task_derivation_skips_reference_only_sections_by_structure():
     import runner.core as core
 
     goal = """
@@ -470,14 +464,14 @@ Generated output must match the read-only reference folder.
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title for task in tasks]
 
-    assert "Expected Result" not in titles
-    assert sum("Merge Order" in title for title in titles) == 1
+    assert "Expected Result" in titles
+    assert not any("Merge Order" in title for title in titles)
     assert not any("config/{target}" in title for title in titles)
     assert any("Required CLI" in title for title in titles)
     assert any("deep merge config values" in task.description for task in tasks)
 
 
-def test_goal_task_derivation_keeps_pure_constraints_out_of_todo_titles():
+def test_goal_task_derivation_keeps_markdown_sections_as_work_packages():
     import runner.core as core
 
     goal = """
@@ -494,12 +488,9 @@ def test_goal_task_derivation_keeps_pure_constraints_out_of_todo_titles():
     tasks = core.derive_tasks_from_goal(goal, 1)
     titles = [task.title.lower() for task in tasks]
 
-    assert len(tasks) == 4
-    assert any("load structured config" in title for title in titles)
-    assert any("render template files" in title for title in titles)
-    assert not any("must not" in title for title in titles)
-    assert not any("no more than" in title for title in titles)
-    assert not any("should stay" in title for title in titles)
+    assert len(tasks) == 1
+    assert titles == ["renderer"]
+    assert "must not branch" in tasks[0].description
 
 
 def test_goal_task_derivation_keeps_persistence_deliverables():
@@ -515,7 +506,7 @@ def test_goal_task_derivation_keeps_persistence_deliverables():
         ),
         4,
     )
-    assert len(tasks) == 3
+    assert len(tasks) == 4
     assert any("stored in a JSON file" in task.title for task in tasks)
 
 

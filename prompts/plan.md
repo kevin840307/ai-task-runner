@@ -23,6 +23,7 @@ Do not collapse a broad or multi-file goal into one "build everything" task.
 Prefer tasks that produce or modify a coherent deliverable. Do not create separate tasks for rules, examples, expected output descriptions, merge-order steps, or validation criteria unless they require a distinct file or user-facing output.
 Do not create tasks for pure constraints or instructions such as not asking questions, keeping code small, avoiding hardcode, or verifying work; put those into acceptance criteria instead.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria describing completion evidence.
+Include this acceptance criterion in every task: 依目前架構+用最少程式碼完成
 If planning notes are written, they may be JSON or Markdown files only under this runner work directory: $work_dir
 Prefer returning the final tasks JSON directly instead of writing files during planning.
 Do not create, edit, delete, or rename project implementation files during planning; implementation happens only after tasks are returned.

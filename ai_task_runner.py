@@ -24,13 +24,13 @@ from runner.backends import backend_names
 # Compatibility exports for existing callers; new integrations should use runner.run.
 from runner.errors import RunnerError
 from runner.models import RunState, State, Task
-from runner.support import (
+from runner.prompting import (
     ai_validator_prompt,
     execution_prompt,
-    parse_tasks,
     plan_prompt,
     review_prompt,
 )
+from runner.support import parse_tasks
 
 
 def parser() -> argparse.ArgumentParser:
