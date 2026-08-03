@@ -1,110 +1,76 @@
-# Auto Config Renderer
-
 Build a generic Jinja2-based config renderer for this project.
 
-Current sample target. These names are examples only. They must not be hardcoded
-in `rander.py`, templates, or config schema. The renderer must work for any
-workflow/target/env values that follow the same config and ans layout:
+Create or update rander.py to load YAML config, deep merge values, render Jinja2 templates, create directories, and write output files.
 
-- workflow: `WORKFLOW-A`
-- target: `FAB29-FZ1`
-- env: `PROD`
-- expected output root: `output/WORKFLOW-A/FAB29-FZ1/PROD`
-- expected answer root: `ans/WORKFLOW-A/FAB29-FZ1/PROD`
-
-## Required CLI
-
-`rander.py` must support this generic interface:
-
-```bat
+Example command:
 python rander.py --workflow WORKFLOW-A --fab FAB29-FZ1 --env PROD --output output
-```
 
-The command above is only an example. `--workflow`, `--fab`, and `--env` values
-must be treated as runtime inputs. The `--fab` argument means "target id" for
-this project, not necessarily a real FAB name. Do not hardcode FAB or app naming
-assumptions; derive the target family from the target id only when a phase layer
-is needed.
+WORKFLOW-A, FAB29-FZ1, and PROD are examples only and must not be hardcoded.
 
-## Renderer Responsibility
+Requirements:
 
-`rander.py` may only:
+1. Treat --workflow, --fab, --env, and --output as runtime inputs.
 
-- load YAML config
-- deep merge config values
-- render Jinja2 templates
-- create folders and files
-- write rendered output files
+2. --fab is a generic target id, not necessarily a real FAB name.
 
-`rander.py` must not contain app-specific, FAB-specific, env-specific, YAML-output-specific, XML-output-specific, or answer-file business logic. Output paths and template choices must come from config values.
+3. rander.py may only load YAML, merge values, render templates, create folders, and write files.
 
-Implementation contract:
+4. Do not add app-specific, workflow-specific, target-specific, env-specific, format-specific, or ans-specific logic in Python.
 
-- `rander.py` must not branch on specific app, workflow, target, env, version, profile, filename, or answer names.
-- `rander.py` must not contain fixed app/profile/version loops such as `if app == "..."` or `for profile in ["p1", ...]`.
-- `rander.py` must stay small: no more than 500 source lines.
-- `rander.py` must not import, call, read, or delegate to other local project Python files. Do not hide renderer or answer-specific logic in helper Python modules.
-- apps, services, versions, profiles, file names, template names, and output paths must come from config values or a central render matrix.
-- templates may describe output file formats, but Python code must stay generic.
+5. Do not branch or loop on fixed app, workflow, target, env, version, profile, filename, or template names.
 
-If the sample names are moved to different workflow/target/env names, or if app
-names are replaced, the renderer should still work as long as the config values
-and templates define those names. Adding or removing apps should be config-driven,
-not renderer-code-driven.
+6. Apps, services, versions, profiles, templates, filenames, output paths, and render combinations must come from YAML config or one central render matrix.
 
-## Merge Order
+7. Adding or removing render targets must not require changing rander.py.
 
-Use this order. Later files override earlier files:
+8. Keep rander.py under 500 source lines.
 
-1. `config/values.yaml`
-2. `config/{workflow}/values.yaml`
-3. `config/phase/{target_family}.yaml` or `config/phases/{target_family}.yaml`, where `target_family` is the part before `-`, for example `FAB29`
-4. `config/{workflow}/{target}/values.yaml`
-5. env override from `config/{workflow}/{env}.yaml` or `config/{workflow}/{target}/{env}.yaml`
+9. rander.py must not import, call, or depend on other local Python files.
 
-If a file is missing, skip it. Do not fail only because an optional layer is absent.
+10. Python must remain format-agnostic. Templates may generate YAML, XML, INI, CFG, JSON, or text.
 
-Config values are normally deep-merged when both old and new values are non-empty
-dictionaries. Any later value that is a list, an empty dictionary, an empty list,
-or `null`/`None` is an explicit replacement and must overwrite the earlier value
-instead of being merged recursively.
+Load config in this order, with later files overriding earlier files:
 
-## Config Design Goal
+config/values.yaml
+config/{workflow}/values.yaml
+config/phase/{target_family}.yaml or config/phases/{target_family}.yaml
+config/{workflow}/{target}/values.yaml
+config/{workflow}/{env}.yaml
+config/{workflow}/{target}/{env}.yaml
 
-Move common values into shared config so future changes are localized:
+target_family is the part before the first hyphen.
+Example: FAB29-FZ1 becomes FAB29.
 
-- adding a target/phase should usually require changing only the target/phase config
-- adding/removing a render target should be driven by one render matrix
-- shared apps, versions, profiles, template mapping, defaults, and output patterns should not be duplicated across many files
-- individual resources and environment overrides may remain in their specific layer
+Skip missing optional config files.
 
-Use simple, maintainable YAML. Do not duplicate the same app/version/profile lists across multiple files.
+Deep merge only when both old and new values are non-empty dictionaries.
 
-## Templates
+A later list, empty dictionary, empty list, null, or scalar must fully replace the earlier value.
 
-Use Python Jinja2 templates under `Template/`.
+Do not merge lists item by item.
 
-Templates should include dynamic placeholders such as `{{ value }}`. Do not put final answer files directly in `Template/` without placeholders.
+Use simple YAML and avoid duplicating shared apps, versions, profiles, template mappings, or output patterns.
 
-## Expected Result
+Use one central render matrix to define templates, output paths, filenames, and render context.
 
-`ans/` is read-only validation fixture data. Do not create, edit, delete, move,
-or copy files under `ans/`. Generated files must be written only under the
-`--output` directory.
+Store Jinja2 templates under Template/.
 
-For every sample root under this layout:
+Templates must contain dynamic placeholders and may use standard Jinja2 features.
 
-```text
-ans/<workflow>/<target>/<env>
-```
+Pass merged config, runtime arguments, target_family, and the current render item into the template context.
 
-running:
+The ans directory is read-only validation data.
 
-```bat
-python rander.py --workflow <workflow> --fab <target> --env <env> --output output
-```
+Do not create, modify, delete, move, copy, or use ans files as renderer inputs or templates.
 
-must create `output/<workflow>/<target>/<env>` with the same file tree and
-contents as the matching `ans/<workflow>/<target>/<env>`.
+Write generated files only under --output.
 
-Keep the implementation small and easy to maintain. Do not ask questions; inspect the existing files and make reasonable assumptions.
+For every ans/{workflow}/{target}/{env}, running the matching command must create output/{workflow}/{target}/{env} with exactly the same file tree and contents.
+
+Inspect the existing project, implement the renderer, simplify the config, and run validation tests.
+
+Do not ask questions. Make reasonable assumptions from existing files.
+
+Use the smallest, simplest, and most maintainable solution.
+
+Do not add hardcoded logic only to pass current samples.
