@@ -305,6 +305,19 @@ def _tree_manifest(
     return result
 
 
+
+def project_manifest(root: Path, work: Path) -> dict[str, tuple[str, str | None]]:
+    return _tree_manifest(root, _readonly_excludes(root, work))
+
+
+def changed_project_files(
+    root: Path,
+    work: Path,
+    before: dict[str, tuple[str, str | None]],
+) -> list[str]:
+    after = project_manifest(root, work)
+    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
 def project_fingerprint(root: Path, work: Path) -> str:
     manifest = _tree_manifest(root, _readonly_excludes(root, work))
     payload = json.dumps(manifest, sort_keys=True, separators=(",", ":"))

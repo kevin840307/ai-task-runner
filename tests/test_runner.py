@@ -877,12 +877,16 @@ def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
 
     args = ["--approval-mode", "yolo"]
 
-    expected = [*args, "--max-tool-calls", agent_args.QWEN_DEFAULT_MAX_TOOL_CALLS]
+    expected = [
+        *args,
+        "--max-tool-calls", agent_args.QWEN_DEFAULT_MAX_TOOL_CALLS,
+        "--max-wall-time", agent_args.QWEN_DEFAULT_MAX_WALL_TIME,
+    ]
     for tool_name in agent_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.runtime_agent_args("qwen", args) == expected
-    custom = ["--max-tool-calls", "20"]
-    assert agent_args.runtime_agent_args("qwen", custom)[:2] == custom
+    custom = ["--max-tool-calls", "20", "--max-wall-time", "30"]
+    assert agent_args.runtime_agent_args("qwen", custom)[:4] == custom
     assert agent_args.runtime_agent_args("opencode", args) == args
 
 
@@ -894,6 +898,7 @@ def test_qwen_args_default_to_yolo():
     assert "--safe-mode" not in agent_args.runtime_agent_args("qwen", [])
     assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"
     assert "--max-tool-calls" in agent_args.runtime_agent_args("qwen", [])
+    assert "--max-wall-time" in agent_args.runtime_agent_args("qwen", [])
     assert "--yolo" not in agent_args.runtime_agent_args(
         "qwen",
         ["--approval-mode", "yolo"],

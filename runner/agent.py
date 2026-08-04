@@ -77,6 +77,8 @@ class AgentClient:
                 change_detected,
             )
         except BackendError as error:
+            if error.session_id and not self.session_id:
+                self.session_id = error.session_id
             message = str(error)
             if self.session_id and is_session_invalid_error(message):
                 expired_session = self.session_id

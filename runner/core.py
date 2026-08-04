@@ -30,10 +30,12 @@ from .support import (
     MAX_TASK_OUTPUT_CHARS,
     MAX_VALIDATOR_OUTPUT_CHARS,
     NO_PROGRESS_LIMIT,
+    changed_project_files,
     cleanup_stale_artifacts,
     parse_review,
     parse_tasks,
     project_fingerprint,
+    project_manifest,
     protected_ask,
     progress_key,
     readonly_ask,
@@ -348,7 +350,7 @@ class TaskRunner:
             self._save_state()
             show_todo(self.state, self.ui)
 
-            project_before = project_fingerprint(self.root, self.work)
+            project_before = project_manifest(self.root, self.work)
             try:
                 self._set_stage("executing")
                 output = self._execute_current_task(task)
@@ -378,9 +380,10 @@ class TaskRunner:
         self,
         task: Task,
         error: RunnerError,
-        project_before: str,
+        project_before: dict[str, tuple[str, str | None]],
     ) -> int | None:
-        changed = self._project_changed_since(project_before)
+        changed_files = changed_project_files(self.root, self.work, project_before)
+        changed = bool(changed_files)
         task.last_output = (
             "Previous model call failed before task completion"
             + (" after changing project files" if changed else "")
@@ -391,15 +394,28 @@ class TaskRunner:
         task.stagnant_attempts += 1
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
+        details = [
+            f"session={self.agent.session_id or '-'}",
+            f"changed_files={','.join(changed_files) if changed_files else '-'}",
+        ]
+        cause = error.__cause__
+        if cause is not None:
+            return_code = getattr(cause, "return_code", None)
+            elapsed = getattr(cause, "elapsed", 0.0)
+            if return_code is not None:
+                details.append(f"return_code={return_code}")
+            if elapsed:
+                details.append(f"elapsed={elapsed:.1f}s")
+        details.append(str(error)[-1000:])
         self.ui.set(
             "模型階段失敗，準備重試任務",
-            str(error)[-500:],
+            " | ".join(details),
         )
         self._set_stage("task_retry_wait", str(error))
         return self._prepare_task_retry(task)
 
-    def _project_changed_since(self, fingerprint: str) -> bool:
-        return project_fingerprint(self.root, self.work) != fingerprint
+    def _project_changed_since(self, before: dict[str, tuple[str, str | None]]) -> bool:
+        return bool(changed_project_files(self.root, self.work, before))
 
     def _handle_review_result(
         self,

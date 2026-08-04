@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 import shutil
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,21 @@ from runner.process_control import ProcessResult, run_process
 
 class BackendError(RunnerError):
     """Raised when a backend CLI call cannot produce a usable result."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        session_id: str = "",
+        return_code: int | None = None,
+        elapsed: float = 0.0,
+        output: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.session_id = session_id
+        self.return_code = return_code
+        self.elapsed = elapsed
+        self.output = output
 
 
 @dataclass(frozen=True)
@@ -94,12 +110,14 @@ class AgentBackend(ABC):
         input_text = self.prompt_stdin(prompt)
         command_prompt = "" if input_text is not None else prompt
         command = self.build_command(command_prompt, session_id)
+        started = time.monotonic()
         result = self._run(
             command,
             input_text,
             idle_timeout_after_change,
             change_detected,
         )
+        elapsed = time.monotonic() - started
         output, return_code = result.output, result.return_code
         if return_code:
             failure_output = self.error_output(output)
@@ -109,8 +127,13 @@ class AgentBackend(ABC):
                     f"for {idle_timeout_after_change:g} seconds:\n"
                     f"{failure_output[-4000:]}"
                 )
+            session_id = self.find_session_id(self.parse_json_events(output))
             raise BackendError(
-                f"{self.name} exit {return_code}:\n{failure_output[-4000:]}"
+                f"{self.name} exit {return_code}:\n{failure_output[-4000:]}",
+                session_id=session_id,
+                return_code=return_code,
+                elapsed=elapsed,
+                output=output,
             )
         decoded = self.decode(output)
         if not decoded.text.strip():
