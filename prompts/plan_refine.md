@@ -17,14 +17,14 @@ $progress_json
 Current task JSON:
 $tasks_json
 
-Return only valid JSON with the same schema.
+Return only valid JSON with the same schema. Keep at least 6 tasks; never shrink the plan below 6.
 Keep the plan ordered and AI-executable.
 Remove standalone survey-only TODOs. When existing code or architecture must be understood, include read-only inspection as acceptance criteria on the first concrete deliverable task.
 If a TODO only inspects, analyzes, plans, designs, reviews, runs validation, runs tests, or compares fixtures, rewrite it into acceptance criteria for the nearest concrete deliverable task.
 Understanding the project is required, but it is internal work for a deliverable task. Never output a TODO whose result is only understanding, notes, inspection, analysis, review, or validation.
 If the user goal includes process verbs such as inspect, understand, test, validate, compare, review, finalize, or cleanup, treat them as acceptance criteria unless the goal explicitly asks to create or modify a concrete artifact for that process.
 Split any task that contains multiple independently verifiable deliverables.
-Every TODO must create or modify a concrete project deliverable requested by the goal.
+Every TODO must create or modify a concrete project deliverable requested by the goal. Put that concrete result in the non-empty deliverable field.
 Remove tasks whose only purpose is final validation, review, retry, or comparing outputs to reference fixtures. Put those checks into acceptance criteria unless the goal explicitly asks to create or change a validator, test, or report artifact.
 Running an existing validator or test command is not a standalone TODO; the runner runs final validation automatically.
 Preserve or increase useful task granularity. Do not merge distinct deliverables only to shorten the list.
@@ -35,4 +35,4 @@ Do not implement, ask questions, use tools, or write files during planning.
 Every task must include this acceptance criterion: Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior.
 
 Return only this JSON shape, without Markdown or explanation:
-{"tasks":[{"title":"Implement requested change","description":"Make the smallest maintainable project change needed to satisfy the goal.","acceptance_criteria":["The requested behavior is implemented","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior","Relevant checks pass"]}]}
+{"tasks":[{"title":"Deliverable 1","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]},{"title":"Deliverable 2","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]},{"title":"Deliverable 3","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]},{"title":"Deliverable 4","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]},{"title":"Deliverable 5","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]},{"title":"Deliverable 6","description":"Create or modify one coherent result required by the goal.","deliverable":"A concrete project result for this task.","acceptance_criteria":["The declared deliverable is complete","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]}]}

@@ -53,18 +53,7 @@ EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 PLANNING_REFINE_PASSES = 3
-
-
-def validator_repair_should_use_file_validator(
-    state: RunState,
-    task: Task,
-    project_changed: bool,
-) -> bool:
-    return (
-        bool(state.validator_output.strip())
-        and is_current_validator_cycle_task(state, task)
-        and project_changed
-    )
+MIN_PLANNED_TASKS = 6
 
 
 def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
@@ -277,7 +266,10 @@ class TaskRunner:
                         "AI modified files during planning and they were restored: "
                         + ", ".join(protected_changed)
                     )
-                tasks = parse_tasks(output, self.state.cycle)
+                tasks = parse_tasks(
+                    output, self.state.cycle,
+                    min_tasks=MIN_PLANNED_TASKS, require_deliverable=True,
+                )
                 for _ in range(PLANNING_REFINE_PASSES):
                     refined, protected_changed, refined_project_changed = readonly_ask(
                         planner,
@@ -299,13 +291,16 @@ class TaskRunner:
                             "AI modified files during planning and they were restored: "
                             + ", ".join(protected_changed)
                         )
-                    tasks = parse_tasks(refined, self.state.cycle)
+                    tasks = parse_tasks(
+                        refined, self.state.cycle,
+                        min_tasks=MIN_PLANNED_TASKS, require_deliverable=True,
+                    )
                     project_changed = [*project_changed, *refined_project_changed]
             except RunnerError:
                 planning_feedback = (
                     "The previous planning attempt did not produce the required "
                     "tasks JSON. Return only valid JSON with ordered, "
-                    "deliverable-sized TODOs."
+                    f"at least {MIN_PLANNED_TASKS} deliverable-sized TODOs, each with a non-empty deliverable."
                 )
                 raise
             if project_changed:
@@ -361,26 +356,8 @@ class TaskRunner:
                 self._save_session()
 
                 project_changed = self._project_changed_since(project_before)
-                if (
-                    not self.ai_validation
-                    and validator_repair_should_use_file_validator(
-                        self.state,
-                        task,
-                        project_changed,
-                    )
-                ):
-                    review = self._defer_repair_review_to_file_validator(task)
-                else:
-                    self._set_stage("reviewing")
-                    try:
-                        review = self._review_current_task(task, output)
-                    except RunnerError as review_error:
-                        if self.ai_validation or self.validator is None:
-                            raise
-                        review = self._fallback_review_to_validator(
-                            task,
-                            review_error,
-                        )
+                self._set_stage("reviewing")
+                review = self._review_current_task(task, output)
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -391,11 +368,7 @@ class TaskRunner:
                     return result
                 continue
 
-            result = self._handle_review_result(
-                task,
-                review,
-                project_changed=self._project_changed_since(project_before),
-            )
+            result = self._handle_review_result(task, review)
             if result is not None:
                 return result
             continue
@@ -407,56 +380,15 @@ class TaskRunner:
         error: RunnerError,
         project_before: str,
     ) -> int | None:
-        if self._project_changed_since(project_before):
-            if (
-                not self.ai_validation
-                and validator_repair_should_use_file_validator(
-                    self.state,
-                    task,
-                    True,
-                )
-            ):
-                review = self._defer_repair_review_to_file_validator(task)
-                return self._handle_review_result(
-                    task,
-                    review,
-                    project_changed=True,
-                )
-
-            try:
-                review = self._review_failed_execution_changes(task, error)
-            except RunnerError as review_error:
-                if not self.ai_validation:
-                    review = self._fallback_review_to_validator(
-                        task,
-                        review_error,
-                    )
-                    return self._handle_review_result(
-                        task,
-                        review,
-                        project_changed=True,
-                    )
-                error = review_error
-            else:
-                return self._handle_review_result(
-                    task,
-                    review,
-                    project_changed=True,
-                )
-
+        changed = self._project_changed_since(project_before)
         task.last_output = (
-            "Previous model call failed before task completion:\n"
+            "Previous model call failed before task completion"
+            + (" after changing project files" if changed else "")
+            + ":\n"
             + str(error)[-MAX_TASK_OUTPUT_CHARS:]
         )
         task.status = "pending"
         task.stagnant_attempts += 1
-        if self._should_defer_model_error_to_validator(task):
-            review = self._defer_model_error_to_validator(task, error)
-            return self._handle_review_result(
-                task,
-                review,
-                project_changed=False,
-            )
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
         self.ui.set(
@@ -469,45 +401,10 @@ class TaskRunner:
     def _project_changed_since(self, fingerprint: str) -> bool:
         return project_fingerprint(self.root, self.work) != fingerprint
 
-    def _review_failed_execution_changes(
-        self,
-        task: Task,
-        error: RunnerError,
-    ) -> dict[str, Any]:
-        output = (
-            "Execution model call failed after changing project files; "
-            "review the current filesystem state.\n"
-            + str(error)[-MAX_TASK_OUTPUT_CHARS:]
-        )
-        task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
-        self._save_session()
-        self.ui.set(
-            "模型呼叫失敗但已有專案變更",
-            "改由 review 判定目前 task",
-        )
-        self._set_stage("reviewing")
-        return self._review_current_task(task, output)
-
-    def _defer_repair_review_to_file_validator(self, task: Task) -> dict[str, Any]:
-        self.ui.set(
-            "Repair task changed files",
-            "skipping AI review; final Python validator will judge the repair",
-        )
-        return {
-            "completed": True,
-            "defer_to_validator": True,
-            "reason": (
-                "Validator repair task changed project files. Skipping AI review "
-                "because the configured Python final validator is authoritative."
-            ),
-            "missing_items": [],
-        }
-
     def _handle_review_result(
         self,
         task: Task,
         review: dict[str, Any],
-        project_changed: bool,
     ) -> int | None:
         task.last_review = review
         self._save_session()
@@ -567,48 +464,6 @@ class TaskRunner:
             "validator_repair_hint.md",
             {"repeat_hint": repeat_hint},
         )
-
-    def _fallback_review_to_validator(
-        self,
-        task: Task,
-        error: RunnerError,
-    ) -> dict:
-        reason = (
-            "AI review failed, but a Python final validator is configured. "
-            "Deferring completion judgment to the configured Python final "
-            f"validator. Review failure: {str(error)[-500:]}"
-        )
-        return {
-            "completed": True,
-            "defer_to_validator": True,
-            "reason": reason,
-            "missing_items": [],
-        }
-
-    def _should_defer_model_error_to_validator(self, task: Task) -> bool:
-        return (
-            self.validator is not None
-            and not self.ai_validation
-            and task.stagnant_attempts >= NO_PROGRESS_LIMIT
-        )
-
-    def _defer_model_error_to_validator(
-        self,
-        task: Task,
-        error: RunnerError,
-    ) -> dict:
-        reason = (
-            "Execution model call failed repeatedly without project changes. "
-            "Deferring this task to the configured Python final validator so "
-            "the run can continue instead of looping on one model failure. "
-            f"Task: {task.title}. Failure: {str(error)[-500:]}"
-        )
-        return {
-            "completed": True,
-            "defer_to_validator": True,
-            "reason": reason,
-            "missing_items": [],
-        }
 
     def _execute_current_task(self, task: Task) -> str:
         strategy_note = ""

@@ -99,6 +99,7 @@ def task_spec(task: Task) -> dict[str, Any]:
     return {
         "title": task.title,
         "description": task.description,
+        "deliverable": task.deliverable,
         "acceptance_criteria": task.acceptance_criteria,
     }
 

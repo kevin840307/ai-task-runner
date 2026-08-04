@@ -14,6 +14,7 @@ class Task:
     title: str
     description: str
     acceptance_criteria: list[str] = field(default_factory=list)
+    deliverable: str = ""
     status: str = "pending"
     attempts: int = 0
     last_output: str = ""

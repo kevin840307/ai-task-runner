@@ -500,23 +500,34 @@ def require_string_list(
     return result
 
 
-def parse_tasks(text: str, cycle: int) -> list[Task]:
+def parse_tasks(
+    text: str,
+    cycle: int,
+    *,
+    min_tasks: int = 1,
+    require_deliverable: bool = False,
+) -> list[Task]:
     raw_tasks = parse_json(text).get("tasks")
-    if not isinstance(raw_tasks, list) or not raw_tasks:
-        raise RunnerError("tasks must be a non-empty array")
+    if not isinstance(raw_tasks, list) or len(raw_tasks) < min_tasks:
+        raise RunnerError(f"tasks must contain at least {min_tasks} items")
 
     tasks: list[Task] = []
     for index, item in enumerate(raw_tasks, 1):
         if not isinstance(item, dict):
             raise RunnerError(f"tasks[{index}] must be an object")
-        title = require_non_empty_string(
-            item.get("title"),
-            f"tasks[{index}].title",
-        )
+        title = require_non_empty_string(item.get("title"), f"tasks[{index}].title")
         description = require_non_empty_string(
-            item.get("description"),
-            f"tasks[{index}].description",
+            item.get("description"), f"tasks[{index}].description"
         )
+        deliverable = item.get("deliverable", "")
+        if require_deliverable:
+            deliverable = require_non_empty_string(
+                deliverable, f"tasks[{index}].deliverable"
+            )
+        elif deliverable:
+            deliverable = require_non_empty_string(
+                deliverable, f"tasks[{index}].deliverable"
+            )
         criteria_value = item.get("acceptance_criteria", item.get("accept_criteria"))
         criteria = require_string_list(
             criteria_value,
@@ -529,6 +540,7 @@ def parse_tasks(text: str, cycle: int) -> list[Task]:
                 title=title,
                 description=description,
                 acceptance_criteria=criteria,
+                deliverable=deliverable,
             )
         )
     return tasks

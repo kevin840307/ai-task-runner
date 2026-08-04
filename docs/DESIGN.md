@@ -465,7 +465,7 @@ flowchart TD
 
 An agent call can end with timeout, loop detection, session failure, or another backend error after it has already written useful files. Therefore the runner fingerprints the project before execution and compares it afterward.
 
-If files changed before the model call failed, the runner does not blindly rerun the task. It asks read-only review to judge the current filesystem. For a validator-repair task with a Python validator, it can skip AI review entirely and let the authoritative final validator judge the repair.
+A task is completed only after the execution call succeeds and the read-only AI review returns `completed=true`. Execution or review failures retry the same task even when files changed; the final validator never substitutes for task review.
 
 This behavior preserves partial progress and avoids repeating identical tool calls against files that may already contain the intended change.
 
@@ -487,7 +487,7 @@ When a Python final validator is configured, malformed or repeatedly failed AI r
 
 ```text
 completed = true
-defer_to_validator = true
+completed = true only after successful AI review
 ```
 
 This does not mean the work is accepted. It only advances the TODO so the Python validator can make the authoritative decision after all tasks.

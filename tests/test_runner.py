@@ -222,21 +222,11 @@ def test_task_schema_accepts_common_criteria_alias():
     assert task.acceptance_criteria == ["C"]
 
 
-def test_validator_repair_task_can_defer_to_file_validator():
-    import runner.core as core
-
-    state = core.RunState("run", "goal", "/project")
-    state.validator_output = "score=79/100"
-    state.cycle = 2
-    task = core.Task("c02-t001", "Fix validator feedback", "fix", [])
-
-    assert core.validator_repair_should_use_file_validator(state, task, True)
-    assert not core.validator_repair_should_use_file_validator(state, task, False)
-    assert not core.validator_repair_should_use_file_validator(
-        state,
-        core.Task("c01-t001", "Previously completed task", "fix", []),
-        True,
-    )
+def test_task_completion_requires_successful_execution_and_ai_review():
+    source = (ROOT / "runner/core.py").read_text(encoding="utf-8")
+    assert "defer_to_validator" not in source
+    assert "skipping AI review" not in source
+    assert 'if review["completed"] is True:' in source
 
 
 def test_prompts_forbid_questions_and_omit_runtime_fields():
@@ -397,82 +387,59 @@ def test_execution_model_errors_reenter_task_attempt_flow(tmp_path):
     assert state["completed"] is True
 
 
-def test_repeated_no_change_model_errors_defer_to_file_validator(tmp_path):
-    validator = tmp_path / "validator.py"
-    validator.write_text(
-        "import argparse\n"
-        "p=argparse.ArgumentParser();"
-        "p.add_argument('--project-root');"
-        "p.add_argument('--state-file');"
-        "p.parse_args();"
-        "raise SystemExit(0)\n",
-        encoding="utf-8",
-    )
-    env, state_dir = _scenario_env(
-        tmp_path,
-        "execution_model_error_no_change_forever",
-    )
+def test_repeated_no_change_model_errors_never_complete_task(tmp_path):
+    env, state_dir = _scenario_env(tmp_path, "execution_model_error_no_change_forever")
     result = subprocess.run(
         _scenario_args(
             tmp_path,
             "execution_model_error_no_change_forever",
-            validator=validator,
+            extra=["--max-attempts", "3"],
         ),
-        capture_output=True,
-        text=True,
-        env=env,
+        capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
     assert (state_dir / "execute.count").read_text() == "3"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["status"] == "completed"
-    assert "Deferring this task" in state["tasks"][0]["last_review"]["reason"]
-    assert state["completed"] is True
+    assert state["tasks"][0]["status"] == "pending"
+    assert state["tasks"][0]["last_review"] is None
+    assert state["completed"] is False
 
 
-def test_file_validator_judges_task_when_review_is_not_json(tmp_path):
-    validator = tmp_path / "validator.py"
-    validator.write_text(
-        "import argparse\n"
-        "from pathlib import Path\n"
-        "p=argparse.ArgumentParser();"
-        "p.add_argument('--project-root');"
-        "p.add_argument('--state-file');"
-        "args=p.parse_args();"
-        "raise SystemExit(0 if (Path(args.project_root)/'done.txt').exists() else 1)\n",
-        encoding="utf-8",
-    )
+def test_invalid_ai_review_never_completes_task(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "review_non_json")
     result = subprocess.run(
-        _scenario_args(tmp_path, "review_non_json", validator=validator),
-        capture_output=True,
-        text=True,
-        env=env,
+        _scenario_args(
+            tmp_path,
+            "review_non_json",
+            extra=["--max-attempts", "2"],
+        ),
+        capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (state_dir / "execute.count").read_text() == "1"
-    assert (state_dir / "review.count").read_text() == "1"
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "2"
+    assert (state_dir / "review.count").read_text() == "6"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    review = state["tasks"][0]["last_review"]
-    assert review["completed"] is True
-    assert review["defer_to_validator"] is True
-    assert state["completed"] is True
+    assert state["tasks"][0]["status"] == "pending"
+    assert state["completed"] is False
 
 
-def test_execution_error_after_project_change_goes_to_review(tmp_path):
+def test_execution_error_after_project_change_retries_without_review(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "execution_error_after_change")
     result = subprocess.run(
-        _scenario_args(tmp_path, "execution_error_after_change"),
-        capture_output=True,
-        text=True,
-        env=env,
+        _scenario_args(
+            tmp_path,
+            "execution_error_after_change",
+            extra=["--max-attempts", "2"],
+        ),
+        capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (state_dir / "execute.count").read_text() == "1"
-    assert (state_dir / "review.count").read_text() == "1"
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "2"
+    assert not (state_dir / "review.count").exists()
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["attempts"] == 1
-    assert state["completed"] is True
+    assert state["tasks"][0]["attempts"] == 2
+    assert state["tasks"][0]["status"] == "pending"
+    assert state["completed"] is False
 
 
 def test_protected_file_change_is_restored_and_retried(tmp_path):
@@ -931,3 +898,22 @@ def test_qwen_args_default_to_yolo():
         "qwen",
         ["--approval-mode", "yolo"],
     )
+
+
+def test_planning_schema_requires_six_deliverable_tasks():
+    import json
+    import pytest
+    from runner.support import parse_tasks
+    from runner.errors import RunnerError
+
+    task = {
+        "title": "Concrete change",
+        "description": "Modify one coherent project result",
+        "deliverable": "A concrete project result",
+        "acceptance_criteria": ["The result is complete"],
+    }
+    with pytest.raises(RunnerError, match="at least 6"):
+        parse_tasks(json.dumps({"tasks": [task] * 5}), 1, min_tasks=6, require_deliverable=True)
+    with pytest.raises(RunnerError, match="deliverable"):
+        parse_tasks(json.dumps({"tasks": [{**task, "deliverable": ""}] * 6}), 1, min_tasks=6, require_deliverable=True)
+    assert len(parse_tasks(json.dumps({"tasks": [task] * 6}), 1, min_tasks=6, require_deliverable=True)) == 6
