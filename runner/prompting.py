@@ -132,6 +132,8 @@ def plan_prompt(
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "work_dir": work_dir,
             "planning_feedback": planning_feedback_section(planning_feedback),
+            "minimum_tasks": 6 if state.cycle == 1 else 1,
+            "planning_mode": "initial" if state.cycle == 1 else "repair",
         },
     )
 
@@ -161,6 +163,8 @@ def plan_refine_prompt(
                 {"tasks": [task_spec(task) for task in tasks]},
                 ensure_ascii=False,
             ),
+            "minimum_tasks": 6 if state.cycle == 1 else 1,
+            "planning_mode": "initial" if state.cycle == 1 else "repair",
         },
     )
 

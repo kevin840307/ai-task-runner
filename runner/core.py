@@ -246,6 +246,7 @@ class TaskRunner:
                 timeout=self.args.planning_timeout,
             )
             planner.prepare_project()
+            min_tasks = MIN_PLANNED_TASKS if self.state.cycle == 1 else 1
             try:
                 output, protected_changed, project_changed = readonly_ask(
                     planner,
@@ -270,7 +271,7 @@ class TaskRunner:
                     )
                 tasks = parse_tasks(
                     output, self.state.cycle,
-                    min_tasks=MIN_PLANNED_TASKS, require_deliverable=True,
+                    min_tasks=min_tasks, require_deliverable=True,
                 )
                 for _ in range(PLANNING_REFINE_PASSES):
                     refined, protected_changed, refined_project_changed = readonly_ask(
@@ -295,14 +296,14 @@ class TaskRunner:
                         )
                     tasks = parse_tasks(
                         refined, self.state.cycle,
-                        min_tasks=MIN_PLANNED_TASKS, require_deliverable=True,
+                        min_tasks=min_tasks, require_deliverable=True,
                     )
                     project_changed = [*project_changed, *refined_project_changed]
             except RunnerError:
                 planning_feedback = (
                     "The previous planning attempt did not produce the required "
                     "tasks JSON. Return only valid JSON with ordered, "
-                    f"at least {MIN_PLANNED_TASKS} deliverable-sized TODOs, each with a non-empty deliverable."
+                    f"at least {min_tasks} deliverable-sized TODOs, each with a non-empty deliverable."
                 )
                 raise
             if project_changed:
