@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-import os
+from collections import deque
 from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any, Sequence
@@ -45,20 +45,30 @@ def bounded_text(text: str, limit: int) -> str:
 def project_outline(root: Path, limit: int = 120) -> str:
     """Return a compact read-only project outline for planning prompts."""
     entries: list[str] = []
-    for current, directories, files in os.walk(root, followlinks=False):
-        base = Path(current)
-        directories[:] = [
-            name for name in directories
-            if name not in PROJECT_OUTLINE_EXCLUDE_DIRS and not name.startswith(".")
+    queue = deque([root])
+    while queue and len(entries) < limit:
+        base = queue.popleft()
+        try:
+            children = sorted(base.iterdir(), key=lambda path: (path.is_file(), path.name.lower()))
+        except OSError:
+            continue
+        directories = [
+            path for path in children
+            if path.is_dir()
+            and path.name not in PROJECT_OUTLINE_EXCLUDE_DIRS
+            and not path.name.startswith(".")
         ]
-        for name in sorted(files):
-            if name.startswith("."):
-                continue
-            relative = (base / name).relative_to(root).as_posix()
-            entries.append(relative)
+        files = [
+            path for path in children
+            if path.is_file() and not path.name.startswith(".")
+        ]
+        for path in [*directories, *files]:
+            relative = path.relative_to(root).as_posix()
+            entries.append(relative + ("/" if path.is_dir() else ""))
             if len(entries) >= limit:
                 entries.append("...")
                 return "\n".join(entries)
+        queue.extend(directories)
     return "\n".join(entries) if entries else "(no project files)"
 
 
@@ -121,6 +131,35 @@ def plan_prompt(
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "work_dir": work_dir,
             "planning_feedback": planning_feedback_section(planning_feedback),
+        },
+    )
+
+
+def plan_refine_prompt(
+    goal: str,
+    root: Path,
+    state: RunState,
+    tasks: Sequence[Task],
+    work: Path | None = None,
+) -> str:
+    progress = {
+        "cycle": state.cycle,
+        "validator_feedback": state.validator_output[-8000:],
+        "completed_tasks": completed_titles(state),
+    }
+    work_dir = work or root / ".ai-task-runner"
+    return render_prompt_template(
+        "plan_refine.md",
+        {
+            "planning_rules": planning_rules(work_dir),
+            "goal": goal,
+            "root": root,
+            "outline": project_outline(root),
+            "progress_json": json.dumps(progress, ensure_ascii=False),
+            "tasks_json": json.dumps(
+                {"tasks": [task_spec(task) for task in tasks]},
+                ensure_ascii=False,
+            ),
         },
     )
 

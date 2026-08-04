@@ -26,7 +26,7 @@ Coverage includes:
 - long `--goal-file` input
 - documentation contract tests
 
-The public contract tests also lock the short 24h command defaults: backend `qwen`, command `qwen.cmd`, agent timeout `7200`, planning timeout `600`, activity watchdog `900`, validator timeout `1200`, and unlimited attempts/cycles.
+The public contract tests also lock the short 24h command defaults: backend `qwen`, command `qwen.cmd`, agent timeout `7200`, planning timeout `600`, activity watchdog `900`, validator timeout `1200`, and unlimited attempts/cycles. Qwen runtime argument tests cover the default `--max-tool-calls 40` guard and user override behavior.
 
 ## Real Qwen Smoke Cases
 

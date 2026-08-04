@@ -15,7 +15,7 @@ elif is_qwen and '--resume' in args:
     assert args[args.index('--resume')+1] == session
 elif not is_qwen and '--session' in args:
     assert args[args.index('--session')+1] == session
-if 'Plan only the remaining work' in prompt:
+if 'Plan only the remaining work' in prompt or 'Refine this task plan' in prompt:
     answer=json.dumps({'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]})
 elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
     (root/'done.txt').write_text('done'); answer='created done.txt'

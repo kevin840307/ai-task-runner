@@ -292,6 +292,36 @@ def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
     assert "second" in result.output
 
 
+def test_process_stdout_after_project_change_does_not_extend_idle(tmp_path):
+    marker = tmp_path / "changed.txt"
+    code = (
+        "import pathlib,time; "
+        f"pathlib.Path({str(marker)!r}).write_text('changed'); "
+        "[print('tick', flush=True) or time.sleep(0.05) for _ in range(200)]"
+    )
+    seen = False
+
+    def changed() -> bool:
+        nonlocal seen
+        if marker.exists() and not seen:
+            seen = True
+            return True
+        return False
+
+    started = time.monotonic()
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        timeout=20,
+        idle_timeout_after_change=0.2,
+        change_detected=changed,
+    )
+    assert result.timed_out is True
+    assert result.idle_timed_out is True
+    assert "tick" in result.output
+    assert time.monotonic() - started < 5
+
+
 def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
     code = "import time; print('ready', flush=True); time.sleep(30)"
     started = time.monotonic()

@@ -82,6 +82,7 @@ def _communicate_with_watchdog(
 ) -> ProcessResult:
     deadline = time.monotonic() + timeout if timeout else None
     last_activity_at: float = time.monotonic()
+    seen_project_change = False
     partial = ""
     output_queue: queue.Queue[str] = queue.Queue()
 
@@ -109,7 +110,10 @@ def _communicate_with_watchdog(
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
         partial += output
-        if had_output or _safe_change_detected(change_detected):
+        if _safe_change_detected(change_detected):
+            seen_project_change = True
+            last_activity_at = now
+        elif had_output and not seen_project_change:
             last_activity_at = now
 
         if process.poll() is not None:

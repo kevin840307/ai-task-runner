@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import tempfile
 import time
 import uuid
@@ -21,6 +20,7 @@ from .models import RunState, Task
 from .prompting import (
     bounded_text,
     execution_prompt,
+    plan_refine_prompt,
     plan_prompt,
     render_prompt_template,
     review_prompt,
@@ -52,21 +52,7 @@ MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
-
-
-def repair_review_needs_project_change(
-    state: RunState,
-    task: Task,
-    review: dict[str, Any],
-    project_changed: bool,
-) -> bool:
-    return (
-        bool(state.validator_output.strip())
-        and is_validator_repair_task(task)
-        and review.get("completed") is True
-        and review.get("defer_to_validator") is not True
-        and not project_changed
-    )
+PLANNING_REFINE_PASSES = 3
 
 
 def validator_repair_should_use_file_validator(
@@ -76,16 +62,13 @@ def validator_repair_should_use_file_validator(
 ) -> bool:
     return (
         bool(state.validator_output.strip())
-        and is_validator_repair_task(task)
+        and is_current_validator_cycle_task(state, task)
         and project_changed
     )
 
 
-def is_validator_repair_task(task: Task) -> bool:
-    return (
-        task.title == "Repair validator failure"
-        or re.match(r"^Repair E[^\s:]*:", task.title) is not None
-    )
+def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
+    return task.id.startswith(f"c{state.cycle:02d}-")
 
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
@@ -286,6 +269,8 @@ class TaskRunner:
                     self.root,
                     self.work,
                     self.protected,
+                    timeout=self.args.planning_timeout,
+                    idle_timeout=self.args.agent_idle_after_change_timeout,
                 )
                 if protected_changed:
                     raise RunnerError(
@@ -293,6 +278,29 @@ class TaskRunner:
                         + ", ".join(protected_changed)
                     )
                 tasks = parse_tasks(output, self.state.cycle)
+                for _ in range(PLANNING_REFINE_PASSES):
+                    refined, protected_changed, refined_project_changed = readonly_ask(
+                        planner,
+                        plan_refine_prompt(
+                            self.state.goal,
+                            self.root,
+                            self.state,
+                            tasks,
+                            self.work,
+                        ),
+                        self.root,
+                        self.work,
+                        self.protected,
+                        timeout=self.args.planning_timeout,
+                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                    )
+                    if protected_changed:
+                        raise RunnerError(
+                            "AI modified files during planning and they were restored: "
+                            + ", ".join(protected_changed)
+                        )
+                    tasks = parse_tasks(refined, self.state.cycle)
+                    project_changed = [*project_changed, *refined_project_changed]
             except RunnerError:
                 planning_feedback = (
                     "The previous planning attempt did not produce the required "
@@ -501,20 +509,6 @@ class TaskRunner:
         review: dict[str, Any],
         project_changed: bool,
     ) -> int | None:
-        if repair_review_needs_project_change(
-            self.state,
-            task,
-            review,
-            project_changed,
-        ):
-            review = {
-                "completed": False,
-                "reason": (
-                    "Validator repair task made no project changes while "
-                    "validator feedback is still present."
-                ),
-                "missing_items": ["Address validator feedback with a project change"],
-            }
         task.last_review = review
         self._save_session()
         if review["completed"] is True:
@@ -691,6 +685,7 @@ class TaskRunner:
                 self.work,
                 self.protected,
                 timeout=self.args.planning_timeout,
+                idle_timeout=self.args.agent_idle_after_change_timeout,
             )
             changed = [*protected_changed, *project_changed]
             if changed:

@@ -12,7 +12,9 @@ stdin_prompt = sys.stdin.read() if is_qwen else ""
 prompt = "\n".join(part for part in (stdin_prompt, prompt_arg) if part).strip()
 session = 'retry-session-001'
 
-if 'Plan only the remaining work' in prompt:
+if 'Refine this task plan' in prompt:
+    phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]}
+elif 'Plan only the remaining work' in prompt:
     phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]}
 elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
     phase, answer = 'execute', 'created done.txt'
@@ -27,7 +29,7 @@ else:
 counter = state_dir / f'.{phase}.count'
 count = int(counter.read_text() or '0') if counter.exists() else 0
 counter.write_text(str(count + 1))
-if count == 0:
+if count == 0 and phase != 'plan_refine':
     print('temporary model failure')
     raise SystemExit(7)
 

@@ -105,7 +105,7 @@ class AgentBackend(ABC):
             failure_output = self.error_output(output)
             if result.idle_timed_out:
                 raise BackendError(
-                    f"{self.name} idle timed out after project changes "
+                    f"{self.name} idle timed out without activity "
                     f"for {idle_timeout_after_change:g} seconds:\n"
                     f"{failure_output[-4000:]}"
                 )

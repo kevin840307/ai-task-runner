@@ -13,7 +13,7 @@ python ai_task_runner.py ^
   --validator C:\validators\validator.py
 ```
 
-This expands to Qwen Code via `qwen.cmd`, `--agent-timeout 7200`, `--planning-timeout 600`, `--agent-idle-after-change-timeout 900`, `--validator-timeout 1200`, `--max-attempts 0`, and `--max-cycles 0`.
+This expands to Qwen Code via `qwen.cmd`, `--agent-timeout 7200`, `--planning-timeout 600`, `--agent-idle-after-change-timeout 900`, `--validator-timeout 1200`, `--max-attempts 0`, and `--max-cycles 0`. Qwen runtime calls also get `--max-tool-calls 40` unless you provide your own value with `--agent-arg`.
 
 For long requirements, put the prompt in a UTF-8 text file:
 
@@ -54,8 +54,8 @@ When the same final validator failure repeats, repair tasks switch to a fresh ag
 
 Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
-Planning prompts ask the model to identify concrete deliverables first and to always return valid task JSON. Trivial goals may become one task, small tools usually become 2-5 tasks, and broad or multi-file goals often become 6-20 verifiable tasks. If planning fails to return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema.
-For Qwen, planning uses `--safe-mode` and may use read-only inspection tools so the model can understand existing code before returning TODO JSON. It still excludes write, shell, todo, delegation, and desktop tools. Runtime execution keeps the normal Qwen tool environment.
+Planning prompts give the model the goal, project outline, progress, and compact retry feedback. The model identifies concrete deliverables, splits work to match actual complexity, and returns valid task JSON. If planning fails to return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema.
+For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
@@ -63,9 +63,9 @@ The runner and prompt templates must stay task-agnostic. Case-specific names suc
 
 When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
-For Qwen, the backend uses `--output-format stream-json`. CLI stdout/stderr and project file changes both count as activity for the execution watchdog. The watchdog starts when the execution call starts; if there is no CLI output and no project file change for the idle window, the runner can stop the AI call and ask review/final validation to judge any saved files.
+For Qwen, the backend uses `--output-format stream-json`. During execution, CLI stdout/stderr counts as model-call activity until the first project file change; after that, new project changes refresh activity. If the model keeps talking but stops changing files for the idle window, the runner stops that call and asks review/final validation to judge the saved files. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output.
 
-The default execution idle watchdog is:
+The default model-call idle watchdog is:
 
 ```text
 --agent-idle-after-change-timeout 900
@@ -179,7 +179,7 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `147 passed, 1 skipped`.
+Latest local result: `138 passed, 1 skipped`.
 
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
 
@@ -189,6 +189,7 @@ Runner prompts live in `prompts/`:
 
 - `rules.md` and `planning_rules.md`: shared hard rules
 - `plan.md`: TODO planning
+- `plan_refine.md`: second-pass AI refinement for task granularity
 - `execution.md`: current-task execution
 - `review.md`: read-only task review
 - `ai_validator.md`: AI final validation

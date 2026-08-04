@@ -19,8 +19,8 @@ state_dir = Path(os.environ["REVIEW_TIMEOUT_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "review-timeout-session"
 
-if "Plan only the remaining work" in prompt:
-    stage = "plan"
+if "Plan only the remaining work" in prompt or "Refine this task plan" in prompt:
+    stage = "plan_refine" if "Refine this task plan" in prompt else "plan"
     answer = {
         "tasks": [{
             "title": "Create marker",

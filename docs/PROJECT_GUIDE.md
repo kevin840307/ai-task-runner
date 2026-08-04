@@ -20,7 +20,7 @@ Within one process, normal model errors, timeouts, loop detection, session unava
 
 ## Activity Watchdog
 
-Execution has a default activity idle watchdog. It starts when the AI execution call starts. Project file changes and AI CLI output both refresh activity. If neither signal appears for 900 seconds, the runner stops that AI CLI call early and asks review to decide whether the current task is complete. This never marks work complete by itself; review and final validation still own completion.
+AI model calls have a default activity idle watchdog. During execution, CLI output refreshes activity until the first project file change. After a project file changes, new project changes refresh activity; if the model keeps talking but stops changing files for 900 seconds, the runner stops that AI CLI call early and asks review/final validation to decide based on saved files. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output. This never marks work complete by itself; review and final validation still own completion.
 
 ## Task Prompt Shape
 
@@ -39,9 +39,10 @@ Each TODO execution usually reuses the same main agent session. The runner sends
 Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
 
 Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
+Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
-Planning is intentionally AI-owned. The planning prompt asks the model to extract concrete deliverables first, always return valid JSON, and choose task count from complexity: trivial goals can be one task, small tools usually need 2-5 tasks, and broad or multi-file goals often need 6-20 verifiable tasks. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
-For Qwen, planning runs with `--safe-mode` and may use read-only inspection tools so the model can understand existing code before returning TODO JSON. It still excludes write, shell, todo, delegation, and desktop tools. Runtime execution keeps the normal Qwen tool environment.
+Planning is intentionally AI-owned. The planning prompt gives the model the goal, project outline, progress, and compact retry feedback. The model extracts concrete deliverables, splits work to match actual complexity, and returns valid task JSON. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
 
@@ -107,6 +108,7 @@ runner/backends/qwen.py           Qwen stream-json backend
 runner/backends/opencode.py       OpenCode backend
 
 prompts/                          Editable runner prompt templates
+prompts/plan_refine.md            Repeated AI refinement for task granularity
 docs/                             Human and AI project documentation
 docs/validator_templates/         Copyable validator templates and wrappers
 examples/                         Reusable sample prompts, validators, and runners
@@ -136,4 +138,4 @@ requirements*.txt                 Runtime and development dependencies
 python -m pytest -q
 ```
 
-Latest local result: `147 passed, 1 skipped`.
+Latest local result: `138 passed, 1 skipped`.

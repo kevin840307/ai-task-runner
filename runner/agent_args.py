@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Sequence
 
 
+QWEN_DEFAULT_MAX_TOOL_CALLS = "40"
 QWEN_COMPUTER_USE_TOOLS = (
     "computer_use__bring_to_front",
     "computer_use__check_for_update",
@@ -80,6 +81,26 @@ QWEN_COMPUTER_USE_TOOLS = (
 )
 
 QWEN_PLANNING_EXCLUDED_TOOLS = (
+    "read_file",
+    "read_many_files",
+    "list_directory",
+    "glob",
+    "grep_search",
+    "search_file_content",
+    "read_mcp_resource",
+    "send_message",
+    "cron_create",
+    "cron_list",
+    "cron_delete",
+    "list_agents",
+    "task_stop",
+    "web_fetch",
+    "record_artifact",
+    "loop_wakeup",
+    "create_sub_session",
+    "enter_worktree",
+    "exit_worktree",
+    "monitor",
     "write_file",
     "edit",
     "notebook_edit",
@@ -112,6 +133,7 @@ def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     result = list(extra_args)
     if backend == "qwen":
         ensure_qwen_yolo(result)
+        ensure_qwen_max_tool_calls(result)
         exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
     return result
 
@@ -124,6 +146,11 @@ def ensure_qwen_yolo(args: list[str]) -> None:
 def ensure_qwen_safe_mode(args: list[str]) -> None:
     if "--safe-mode" not in args:
         args.append("--safe-mode")
+
+
+def ensure_qwen_max_tool_calls(args: list[str]) -> None:
+    if "--max-tool-calls" not in args:
+        args.extend(["--max-tool-calls", QWEN_DEFAULT_MAX_TOOL_CALLS])
 
 
 def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:

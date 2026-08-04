@@ -222,51 +222,19 @@ def test_task_schema_accepts_common_criteria_alias():
     assert task.acceptance_criteria == ["C"]
 
 
-def test_repair_review_requires_project_change_when_validator_failed():
+def test_validator_repair_task_can_defer_to_file_validator():
     import runner.core as core
 
     state = core.RunState("run", "goal", "/project")
     state.validator_output = "score=79/100"
-    task = core.Task("id", "Repair validator failure", "fix", [])
-    review = {"completed": True, "reason": "ok", "missing_items": []}
+    state.cycle = 2
+    task = core.Task("c02-t001", "Fix validator feedback", "fix", [])
 
-    assert core.repair_review_needs_project_change(state, task, review, False)
-    assert not core.repair_review_needs_project_change(state, task, review, True)
-    defer_review = {
-        "completed": True,
-        "defer_to_validator": True,
-        "reason": "use validator",
-        "missing_items": [],
-    }
-    assert not core.repair_review_needs_project_change(
-        state,
-        task,
-        defer_review,
-        False,
-    )
     assert core.validator_repair_should_use_file_validator(state, task, True)
     assert not core.validator_repair_should_use_file_validator(state, task, False)
     assert not core.validator_repair_should_use_file_validator(
         state,
-        core.Task("id", "Normal task", "fix", []),
-        True,
-    )
-    split_task = core.Task(
-        "id",
-        "Repair E003: check_renderer_source failed",
-        "fix",
-        [],
-    )
-    assert core.is_validator_repair_task(split_task)
-    assert core.repair_review_needs_project_change(
-        state,
-        split_task,
-        review,
-        False,
-    )
-    assert core.validator_repair_should_use_file_validator(
-        state,
-        split_task,
+        core.Task("c01-t001", "Previously completed task", "fix", []),
         True,
     )
 
@@ -870,7 +838,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     assert "fix the program behavior that produces it" in execute
 
 
-def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
+def test_plan_prompt_includes_project_outline_and_readonly_contract(tmp_path):
     import runner.prompting as prompting
     from runner.models import State
 
@@ -889,10 +857,9 @@ def test_plan_prompt_includes_project_outline_and_forbids_tools(tmp_path):
     assert "Project files:" in prompt
     assert "README.md" in prompt
     assert "src/app.py" in prompt
-    assert "If planning notes are written" in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
     assert "Always return valid JSON" in prompt
-    assert "broad or multi-file goals often need 6-20 tasks" in prompt
+    assert "split enough that a smaller model can complete one coherent step at a time" in prompt
     assert "minimum code, clean code, low coupling" in prompt
     assert "Before answering, self-check that the JSON parses" in prompt
     assert ".ai-task-runner/state.json" not in prompt
@@ -930,6 +897,11 @@ def test_qwen_planning_args_preserve_yolo():
     for tool_name in agent_args.QWEN_PLANNING_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.planning_agent_args("qwen", args) == expected
+    planning_args = agent_args.planning_agent_args("qwen", [])
+    assert "read_file" in planning_args
+    assert "grep_search" in planning_args
+    assert "write_file" in planning_args
+    assert "run_shell_command" in planning_args
     assert agent_args.planning_agent_args("opencode", args) == args
 
 
@@ -938,10 +910,12 @@ def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
 
     args = ["--approval-mode", "yolo"]
 
-    expected = [*args]
+    expected = [*args, "--max-tool-calls", agent_args.QWEN_DEFAULT_MAX_TOOL_CALLS]
     for tool_name in agent_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.runtime_agent_args("qwen", args) == expected
+    custom = ["--max-tool-calls", "20"]
+    assert agent_args.runtime_agent_args("qwen", custom)[:2] == custom
     assert agent_args.runtime_agent_args("opencode", args) == args
 
 
@@ -952,6 +926,7 @@ def test_qwen_args_default_to_yolo():
     assert "--safe-mode" in agent_args.planning_agent_args("qwen", [])
     assert "--safe-mode" not in agent_args.runtime_agent_args("qwen", [])
     assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"
+    assert "--max-tool-calls" in agent_args.runtime_agent_args("qwen", [])
     assert "--yolo" not in agent_args.runtime_agent_args(
         "qwen",
         ["--approval-mode", "yolo"],

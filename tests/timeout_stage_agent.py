@@ -18,8 +18,8 @@ state_dir = Path(os.environ["TIMEOUT_STAGE_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "timeout-main-session"
 
-if "Plan only the remaining work" in prompt:
-    stage = "plan"
+if "Plan only the remaining work" in prompt or "Refine this task plan" in prompt:
+    stage = "plan_refine" if "Refine this task plan" in prompt else "plan"
     answer = {
         "tasks": [{
             "title": "Create marker",
@@ -52,7 +52,7 @@ else:
 counter = state_dir / f"{stage}.count"
 count = int(counter.read_text()) if counter.exists() else 0
 counter.write_text(str(count + 1), encoding="utf-8")
-if count == 0:
+if count == 0 and stage != "plan_refine":
     print(f"{stage} started", flush=True)
     time.sleep(30)
 

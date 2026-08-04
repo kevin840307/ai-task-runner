@@ -10,6 +10,7 @@ python ai_task_runner.py ^
 ```
 
 By default this uses Qwen Code through `qwen.cmd` and runs as an unlimited retry/cycle 24h-style loop. Add `--resume` when restarting an existing run after the Python process exited.
+Qwen runtime calls also get `--max-tool-calls 40` unless you provide your own value with `--agent-arg=--max-tool-calls --agent-arg <N>`.
 
 Resume does not require repeating `--goal` if the state already exists, but passing the same goal is fine.
 
@@ -44,16 +45,16 @@ result = run(RunRequest(
 | --- | ---: | --- |
 | `--agent-timeout` | `7200` | Maximum seconds for one execution, review, or AI-validator model call. |
 | `--planning-timeout` | `600` | Maximum seconds for one planning model call. |
-| `--agent-idle-after-change-timeout` | `900` | Execution-only activity watchdog; CLI output or project file changes refresh it, `0` disables it. |
+| `--agent-idle-after-change-timeout` | `900` | AI model-call watchdog. Execution uses CLI output until the first project change, then project changes; read-only calls retry when CLI output goes idle. `0` disables it. |
 | `--validator-timeout` | `1200` | Maximum seconds for a Python validator subprocess. |
 
-For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a call that produces no CLI output and stops changing files can be handed to review.
+For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a read-only call that produces no CLI output, or an execution call that keeps talking after it stopped changing files, can be retried or handed to review/final validation.
 
 ## What Retries
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
-Planning asks the model to extract concrete deliverables before returning task JSON. Trivial requests may become one task, small tools usually become 2-5 tasks, and broad or multi-file requests often become 6-20 tasks. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+Planning gives the model the goal, project outline, progress, and compact retry feedback. The model extracts concrete deliverables, splits work to match actual complexity, and returns task JSON. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 ## Validators
 

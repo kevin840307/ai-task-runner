@@ -49,6 +49,8 @@ def run_ai_validator(
             root,
             work,
             protected,
+            timeout=args.agent_timeout,
+            idle_timeout=args.agent_idle_after_change_timeout,
         )
         changed = [*protected_changed, *project_changed]
         if changed:

@@ -410,11 +410,17 @@ def readonly_ask(
     work: Path,
     protected: Sequence[Path],
     timeout: int | None = None,
+    idle_timeout: float = 0,
 ) -> tuple[str, list[str], list[str]]:
     file_snapshot = snapshot(protected)
     try:
         output, project_changed = readonly_project_call(
-            lambda: agent.ask(prompt, timeout=timeout),
+            lambda: agent.ask(
+                prompt,
+                idle_timeout_after_change=idle_timeout,
+                change_detected=lambda: False,
+                timeout=timeout,
+            ),
             root,
             work,
         )

@@ -208,7 +208,7 @@ Python code owns all generic control behavior:
 - bounded model and validator feedback;
 - UI, log, JSON events, and exit codes.
 
-The runner must remain task-agnostic. It may contain generic orchestration rules and generic planning heuristics, but must not special-case a particular application, fab, workflow, generated file, algorithm, or validator implementation.
+The runner must remain task-agnostic. It may contain generic orchestration rules and AI prompt guidance, but Python must not split or classify user goals by Markdown, numbering, punctuation, natural-language keywords, or project-specific terms.
 
 ---
 
@@ -383,7 +383,7 @@ Planning runs when no pending task remains and either:
 - there are no tasks yet; or
 - the previous final validator failed and repair tasks must be created.
 
-Planning is read-only with respect to the project. Qwen receives the runner work directory as its planning root so it can emit planning artifacts without using project source as its working directory. Other backends may use the project root, but all project changes made during planning are detected and restored.
+Planning is read-only with respect to the project. Qwen receives the runner work directory as its planning root and tool access is disabled during planning, so planning must return task JSON instead of editing project files. Other backends may use the project root, but all project changes made during planning are detected and restored.
 
 ```mermaid
 flowchart TD
@@ -668,12 +668,12 @@ A hard timeout kills the process tree. On Windows the runner uses `taskkill /PID
 
 ### Activity idle watchdog
 
-Execution also uses `--agent-idle-after-change-timeout`, default 900 seconds. Activity is refreshed by either:
+Model calls also use `--agent-idle-after-change-timeout`, default 900 seconds. During execution, activity is refreshed by:
 
 - new CLI stdout; or
 - a detected project filesystem change.
 
-If neither happens before the idle timeout, the process tree is stopped. The resulting execution error then enters the normal changed-files decision flow:
+After the first project file change in an execution model call, only new project changes refresh the idle timer. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output. If no qualifying activity happens before the idle timeout, the process tree is stopped. The resulting error then enters the normal retry or changed-files decision flow:
 
 - files changed: review the current state or defer repair judgment to the Python validator;
 - no files changed: retry the task.

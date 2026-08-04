@@ -26,7 +26,7 @@ def count(name: str) -> int:
     return value
 
 
-if "Plan only the remaining work" in prompt:
+if "Plan only the remaining work" in prompt or "Refine this task plan" in prompt:
     count("plan")
     answer = {
         "tasks": [{
