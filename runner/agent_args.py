@@ -5,7 +5,6 @@ from typing import Sequence
 
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
-QWEN_DEFAULT_MAX_WALL_TIME = "-1"
 QWEN_COMPUTER_USE_TOOLS = (
     "computer_use__bring_to_front",
     "computer_use__check_for_update",
@@ -135,7 +134,6 @@ def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     if backend == "qwen":
         ensure_qwen_yolo(result)
         ensure_qwen_max_tool_calls(result)
-        ensure_qwen_max_wall_time(result)
         exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
     return result
 
@@ -153,11 +151,6 @@ def ensure_qwen_safe_mode(args: list[str]) -> None:
 def ensure_qwen_max_tool_calls(args: list[str]) -> None:
     if "--max-tool-calls" not in args:
         args.extend(["--max-tool-calls", QWEN_DEFAULT_MAX_TOOL_CALLS])
-
-
-def ensure_qwen_max_wall_time(args: list[str]) -> None:
-    if "--max-wall-time" not in args:
-        args.extend(["--max-wall-time", QWEN_DEFAULT_MAX_WALL_TIME])
 
 
 def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
