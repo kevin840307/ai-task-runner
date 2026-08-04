@@ -69,6 +69,27 @@ def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
     return work if backend == "qwen" else root
 
 
+def diagnostic_error(error: BaseException) -> BaseException | None:
+    """Find backend diagnostics through wrapped exception chains."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if any(
+            hasattr(current, name)
+            for name in (
+                "return_code",
+                "elapsed",
+                "output",
+                "command_mode",
+                "session_source_event",
+            )
+        ):
+            return current
+        current = current.__cause__ or current.__context__
+    return None
+
+
 class TaskRunner:
     """Owns one goal, one main model session, and one state file."""
 
@@ -407,7 +428,7 @@ class TaskRunner:
             f"session={self.agent.session_id or '-'}",
             f"changed_files={len(changed_files)}:{changed_detail}",
         ]
-        cause = error.__cause__
+        cause = diagnostic_error(error)
         if cause is not None:
             return_code = getattr(cause, "return_code", None)
             elapsed = getattr(cause, "elapsed", 0.0)
