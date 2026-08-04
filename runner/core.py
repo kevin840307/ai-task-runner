@@ -52,7 +52,7 @@ from .script_runner import (
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
-REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
+REVIEW_MODEL_ERRORS_BEFORE_SESSION_RESET = 3
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 PLANNING_REFINE_PASSES = 3
 MIN_PLANNED_TASKS = 6
@@ -564,21 +564,31 @@ class TaskRunner:
                     "review modified files and they were restored: "
                     + ", ".join(changed)
                 )
-            return parse_review(raw)
+            try:
+                return parse_review(raw)
+            except RunnerError as error:
+                raise RunnerError(
+                    f"{error}; raw_output_tail={raw[-1000:]}"
+                ) from error
 
-        return retry_model_call(
-            call,
-            self.ui,
-            "AI 正在確認任務是否完成",
-            task.title,
-            self.args.retry_wait,
-            self.args.retry_max_wait,
-            (
-                MODEL_CALL_ERRORS_BEFORE_TASK_RETRY
-                if self.ai_validation
-                else REVIEW_MODEL_ERRORS_BEFORE_TASK_FLOW
-            ),
-        )
+        while True:
+            try:
+                return retry_model_call(
+                    call,
+                    self.ui,
+                    "AI 正在確認任務是否完成",
+                    task.title,
+                    self.args.retry_wait,
+                    self.args.retry_max_wait,
+                    REVIEW_MODEL_ERRORS_BEFORE_SESSION_RESET,
+                )
+            except RunnerError:
+                self.agent.session_id = ""
+                self._save_session()
+                self.ui.set(
+                    "Review 連續失敗，使用新 session 重試",
+                    task.title,
+                )
 
     def _validate_cycle(self) -> int | None:
         detail = (

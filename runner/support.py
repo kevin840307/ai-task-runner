@@ -572,13 +572,18 @@ def parse_review(text: str) -> dict[str, Any]:
     value = parse_json(text)
     if not isinstance(value.get("completed"), bool):
         raise RunnerError("review.completed must be boolean")
+    missing_items = _bounded_missing_items(
+        value.get("missing_items", []),
+        "review.missing_items",
+    )
+    if value["completed"] and missing_items:
+        raise RunnerError("completed review must have empty missing_items")
+    if not value["completed"] and not missing_items:
+        raise RunnerError("failed review must have non-empty missing_items")
     return {
         "completed": value["completed"],
         "reason": _bounded_result_text(value.get("reason"), "review.reason"),
-        "missing_items": _bounded_missing_items(
-            value.get("missing_items", []),
-            "review.missing_items",
-        ),
+        "missing_items": missing_items,
     }
 
 

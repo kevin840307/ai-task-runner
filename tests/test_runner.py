@@ -880,7 +880,6 @@ def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
     expected = [
         *args,
         "--max-tool-calls", agent_args.QWEN_DEFAULT_MAX_TOOL_CALLS,
-        "--max-wall-time", agent_args.QWEN_DEFAULT_MAX_WALL_TIME,
     ]
     for tool_name in agent_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
@@ -898,7 +897,7 @@ def test_qwen_args_default_to_yolo():
     assert "--safe-mode" not in agent_args.runtime_agent_args("qwen", [])
     assert agent_args.runtime_agent_args("qwen", [])[0] == "--yolo"
     assert "--max-tool-calls" in agent_args.runtime_agent_args("qwen", [])
-    assert "--max-wall-time" in agent_args.runtime_agent_args("qwen", [])
+    assert "--max-wall-time" not in agent_args.runtime_agent_args("qwen", [])
     assert "--yolo" not in agent_args.runtime_agent_args(
         "qwen",
         ["--approval-mode", "yolo"],

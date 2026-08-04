@@ -47,7 +47,7 @@ class LiveUI:
     def bind(self, state: RunState) -> None:
         self.state = state
         self.draw()
-        self._emit("runner.progress")
+        self._emit("runner.progress", include_detail=False)
 
     def set(self, status: str, detail: str = "") -> None:
         with self._lock:
@@ -179,14 +179,14 @@ class LiveUI:
             return line
         return line[: width - 4] + "..."
 
-    def _emit(self, event_type: str) -> None:
+    def _emit(self, event_type: str, *, include_detail: bool = True) -> None:
         event: dict[str, Any] = {
             "schema_version": 1,
             "runner_version": __version__,
             "type": event_type,
             "timestamp": time.time(),
             "status": self.status,
-            "detail": self.detail,
+            "detail": self.detail if include_detail else "",
             **self.context,
         }
         if self.state is not None:
