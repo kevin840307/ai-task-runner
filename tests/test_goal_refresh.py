@@ -45,3 +45,24 @@ def test_delta_prompt_omits_full_goal_but_keeps_authority_reminder():
     assert "ORIGINAL GOAL" in full
     assert "ORIGINAL GOAL" not in delta
     assert "do not replace or narrow it" in delta
+
+
+def test_rebuilt_session_prompt_requires_read_before_modify():
+    run = state()
+    run.tasks[0].attempts = 2
+    prompt = execution_prompt(
+        run,
+        Path("/tmp"),
+        [],
+        include_goal=True,
+        rebuilt_session=True,
+    )
+    assert "continuing in a rebuilt session" in prompt
+    assert "read its current full content" in prompt
+    assert "never immediately repeat the identical tool call" in prompt
+
+
+def test_normal_session_omits_rebuilt_notice():
+    run = state()
+    prompt = execution_prompt(run, Path("/tmp"), [], rebuilt_session=False)
+    assert "continuing in a rebuilt session" not in prompt
