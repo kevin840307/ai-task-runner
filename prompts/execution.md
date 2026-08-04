@@ -1,6 +1,8 @@
 $rules
 
-Complete only the current TODO, but keep the whole goal and validator feedback in mind. Do not start unrelated TODOs unless they are necessary dependencies for the current one.
+Complete only the current TODO. Use the whole goal and validator feedback only as context.
+Do not begin, implement, create, modify, or verify work assigned to another TODO, even when it appears to be a dependency or would make later work easier.
+If the current TODO cannot be completed without changing the scope, report the blocker in the final summary instead of performing another TODO.
 Use this order: inspect relevant project files, make the smallest maintainable change, run focused local checks, then fix the first failure if any.
 If Run context includes validator_feedback, treat it as authoritative and fix the reported problem before doing other work.
 Validator stdout is only a compact summary. If validator_feedback mentions `Full report`, `report_dir`, or a `.ai-task-runner/validator-reports/` path, read `summary.txt` first when it exists, then `errors.txt` when it exists, then only the first relevant `Full report` file needed for the first blocking error. Do not repeatedly read the same report file; after reading, make one concrete project change for the first blocking error. Treat warnings as context unless the validator exits non-zero.

@@ -316,7 +316,16 @@ def changed_project_files(
     before: dict[str, tuple[str, str | None]],
 ) -> list[str]:
     after = project_manifest(root, work)
-    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+    changed = []
+    for path in set(before) | set(after):
+        if before.get(path) == after.get(path):
+            continue
+        old_kind = before.get(path, (None, None))[0]
+        new_kind = after.get(path, (None, None))[0]
+        if old_kind == "dir" or new_kind == "dir":
+            continue
+        changed.append(path)
+    return sorted(changed)
 
 def project_fingerprint(root: Path, work: Path) -> str:
     manifest = _tree_manifest(root, _readonly_excludes(root, work))

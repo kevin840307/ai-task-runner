@@ -399,9 +399,13 @@ class TaskRunner:
         task.stagnant_attempts += 1
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
+        shown_files = changed_files[:20]
+        changed_detail = ",".join(shown_files) if shown_files else "-"
+        if len(changed_files) > len(shown_files):
+            changed_detail += f",...(+{len(changed_files) - len(shown_files)})"
         details = [
             f"session={self.agent.session_id or '-'}",
-            f"changed_files={','.join(changed_files) if changed_files else '-'}",
+            f"changed_files={len(changed_files)}:{changed_detail}",
         ]
         cause = error.__cause__
         if cause is not None:
