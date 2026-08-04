@@ -20,6 +20,7 @@ from .models import RunState, Task
 from .prompting import (
     bounded_text,
     execution_prompt,
+    should_refresh_goal,
     plan_refine_prompt,
     plan_prompt,
     render_prompt_template,
@@ -45,6 +46,7 @@ from .support import (
     write_json,
 )
 from .validation import run_ai_validator
+from .backends.qwen import update_qwen_goal_reference
 from .script_runner import (
     execute_script as execute_yaml_script,
 )
@@ -98,6 +100,8 @@ class TaskRunner:
             timeout=args.agent_timeout,
         )
         self.backend_files = self.agent.prepare_project()
+        if args.backend == "qwen":
+            update_qwen_goal_reference(self.root, getattr(args, "goal_file", None))
         if not args.resume:
             self._save_state()
         self.protected = self._build_protected_files()
@@ -504,6 +508,7 @@ class TaskRunner:
                         if part
                     ),
                     str(self.validator) if self.validator else "",
+                    should_refresh_goal(self.state, bool(self.agent.session_id)),
                 ),
                 self.protected,
                 self.args.agent_idle_after_change_timeout,

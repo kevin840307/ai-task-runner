@@ -12,6 +12,8 @@ from .models import RunState, Task
 
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
+
+
 PROJECT_OUTLINE_EXCLUDE_DIRS = frozenset({
     ".git",
     ".ai-task-runner",
@@ -174,22 +176,40 @@ def planning_feedback_section(feedback: str) -> str:
     return f"\nPlanning feedback:\n{text}\n" if text else ""
 
 
+def should_refresh_goal(state: RunState, has_session: bool) -> bool:
+    """Send the full goal for new sessions and the first task of a repair cycle."""
+    task = state.tasks[state.current]
+    return not has_session or (
+        state.cycle > 1
+        and task.attempts == 1
+        and task.id == f"c{state.cycle:02d}-t001"
+    )
+
+
 def execution_prompt(
     state: RunState,
     root: Path,
     protected: Sequence[Path],
     strategy_note: str = "",
     validator_hint: str = "",
+    include_goal: bool = True,
 ) -> str:
     task = state.tasks[state.current]
     context = {
-        "goal": state.goal,
         "completed_tasks": completed_titles(state),
         "validator_feedback": format_validator_feedback(
             state.validator_output,
             2000,
         ),
     }
+    if include_goal:
+        context["goal"] = state.goal
+        context["goal_context"] = "Full original goal refresh. The original goal remains authoritative."
+    else:
+        context["goal_context"] = (
+            "Continue using the original goal already present in this session. "
+            "It remains authoritative; the current TODO and feedback do not replace or narrow it."
+        )
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
     previous = (
         f"\nPrevious attempt output or diagnostic:\n{task.last_output[-2000:]}\n"
