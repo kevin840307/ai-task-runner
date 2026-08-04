@@ -209,3 +209,33 @@ def test_timeout_uses_existing_retry_loop(tmp_path):
     )
     assert result.strip() == "ok"
     assert counter.read_text() == "2"
+
+
+def test_backend_error_preserves_failure_diagnostics(tmp_path):
+    class FailingBackend(AgentBackend):
+        name = "failing"
+        default_command = sys.executable
+
+        def build_command(self, prompt, session_id):
+            code = (
+                'import sys; '
+                'print(\'{"type":"system","session_id":"session-9"}\'); '
+                'print("raw failure detail"); '
+                'raise SystemExit(7)'
+            )
+            return [sys.executable, "-c", code]
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    backend = FailingBackend(sys.executable, tmp_path, [])
+    with pytest.raises(BackendError) as captured:
+        backend.ask("x", session_id="old-session")
+
+    error = captured.value
+    assert error.return_code == 7
+    assert error.elapsed >= 0
+    assert error.command_mode == "resume"
+    assert error.session_id == "session-9"
+    assert error.session_source_event == "event[0]:system"
+    assert "raw failure detail" in error.output

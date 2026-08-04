@@ -195,3 +195,11 @@ Runner prompts live in `prompts/`:
 - `ai_validator.md`: AI final validation
 
 Edit these files to tune model behavior. Keep the required JSON response shapes and phase intent clear; wording can be adjusted without changing runner state or retry behavior.
+
+## Model failure diagnostics
+
+Task retry status includes the backend exit code, elapsed seconds, command mode
+(`new` or `resume`), the parsed event that supplied the session ID, and a compact
+combined stderr/stdout tail. These fields are diagnostic only and do not change
+retry or completion behavior.
+

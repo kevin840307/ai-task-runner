@@ -26,12 +26,16 @@ class BackendError(RunnerError):
         return_code: int | None = None,
         elapsed: float = 0.0,
         output: str = "",
+        command_mode: str = "",
+        session_source_event: str = "",
     ) -> None:
         super().__init__(message)
         self.session_id = session_id
         self.return_code = return_code
         self.elapsed = elapsed
         self.output = output
+        self.command_mode = command_mode
+        self.session_source_event = session_source_event
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,7 @@ class AgentBackend(ABC):
     ) -> BackendResult:
         input_text = self.prompt_stdin(prompt)
         command_prompt = "" if input_text is not None else prompt
+        command_mode = "resume" if session_id else "new"
         command = self.build_command(command_prompt, session_id)
         started = time.monotonic()
         result = self._run(
@@ -127,13 +132,16 @@ class AgentBackend(ABC):
                     f"for {idle_timeout_after_change:g} seconds:\n"
                     f"{failure_output[-4000:]}"
                 )
-            session_id = self.find_session_id(self.parse_json_events(output))
+            events = self.parse_json_events(output)
+            session_id = self.find_session_id(events)
             raise BackendError(
                 f"{self.name} exit {return_code}:\n{failure_output[-4000:]}",
                 session_id=session_id,
                 return_code=return_code,
                 elapsed=elapsed,
                 output=output,
+                command_mode=command_mode,
+                session_source_event=self.find_session_source_event(events),
             )
         decoded = self.decode(output)
         if not decoded.text.strip():
@@ -201,6 +209,27 @@ class AgentBackend(ABC):
             except json.JSONDecodeError:
                 continue
         return events
+
+
+    @staticmethod
+    def find_session_source_event(values: Sequence[Any]) -> str:
+        """Describe the first parsed event containing the discovered session id."""
+        keys = ("session_id", "sessionID", "sessionId")
+
+        def contains(value: Any) -> bool:
+            if isinstance(value, dict):
+                return any(value.get(key) for key in keys) or any(
+                    contains(child) for child in value.values()
+                )
+            if isinstance(value, list):
+                return any(contains(child) for child in value)
+            return False
+
+        for index, value in enumerate(values):
+            if contains(value):
+                event_type = value.get("type") if isinstance(value, dict) else None
+                return f"event[{index}]" + (f":{event_type}" if event_type else "")
+        return "-"
 
     @staticmethod
     def find_session_id(values: Sequence[Any]) -> str:

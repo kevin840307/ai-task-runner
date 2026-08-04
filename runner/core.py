@@ -412,9 +412,19 @@ class TaskRunner:
             return_code = getattr(cause, "return_code", None)
             elapsed = getattr(cause, "elapsed", 0.0)
             if return_code is not None:
-                details.append(f"return_code={return_code}")
+                details.append(f"exit_code={return_code}")
             if elapsed:
-                details.append(f"elapsed={elapsed:.1f}s")
+                details.append(f"elapsed_seconds={elapsed:.1f}")
+            command_mode = getattr(cause, "command_mode", "")
+            if command_mode:
+                details.append(f"command_mode={command_mode}")
+            source_event = getattr(cause, "session_source_event", "")
+            if source_event:
+                details.append(f"session_source_event={source_event}")
+            output = getattr(cause, "output", "")
+            if output:
+                tail = " ".join(str(output).split())[-1000:]
+                details.append(f"stderr_tail={tail}")
         details.append(str(error)[-1000:])
         self.ui.set(
             "模型階段失敗，準備重試任務",
