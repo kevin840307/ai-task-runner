@@ -21,6 +21,7 @@ from .prompting import (
     bounded_text,
     execution_prompt,
     should_refresh_goal,
+    plan_judge_prompt,
     plan_refine_prompt,
     plan_prompt,
     render_prompt_template,
@@ -34,6 +35,7 @@ from .support import (
     changed_project_files,
     cleanup_stale_artifacts,
     parse_review,
+    parse_plan_judgment,
     parse_tasks,
     project_fingerprint,
     project_manifest,
@@ -57,6 +59,7 @@ EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 MIN_PLANNED_TASKS = 6
+PLAN_JUDGE_MAX_REWRITES = 2
 
 
 def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
@@ -302,33 +305,80 @@ class TaskRunner:
                     output, self.state.cycle,
                     min_tasks=min_tasks, require_deliverable=True,
                 )
-                # A different fresh session rewrites the draft instead of defending it.
-                refiner = new_planner()
-                refined, protected_changed, refined_project_changed = readonly_ask(
-                    refiner,
-                    plan_refine_prompt(
-                        self.state.goal,
-                        self.root,
-                        self.state,
-                        tasks,
-                        self.work,
-                    ),
-                    self.root,
-                    self.work,
-                    self.protected,
-                    timeout=self.args.planning_timeout,
-                    idle_timeout=self.args.agent_idle_after_change_timeout,
-                )
-                if protected_changed:
-                    raise RunnerError(
-                        "AI modified files during planning and they were restored: "
-                        + ", ".join(protected_changed)
+                judge_issues: list[str] = []
+                for rewrite_round in range(1, PLAN_JUDGE_MAX_REWRITES + 1):
+                    # Fresh sessions rewrite and judge independently to avoid plan anchoring.
+                    self.ui.set(
+                        "AI 正在重寫任務規劃",
+                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
                     )
-                tasks = parse_tasks(
-                    refined, self.state.cycle,
-                    min_tasks=min_tasks, require_deliverable=True,
-                )
-                project_changed = [*project_changed, *refined_project_changed]
+                    refiner = new_planner()
+                    refined, protected_changed, refined_project_changed = readonly_ask(
+                        refiner,
+                        plan_refine_prompt(
+                            self.state.goal,
+                            self.root,
+                            self.state,
+                            tasks,
+                            self.work,
+                            judge_issues,
+                        ),
+                        self.root,
+                        self.work,
+                        self.protected,
+                        timeout=self.args.planning_timeout,
+                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                    )
+                    if protected_changed:
+                        raise RunnerError(
+                            "AI modified files during planning and they were restored: "
+                            + ", ".join(protected_changed)
+                        )
+                    tasks = parse_tasks(
+                        refined, self.state.cycle,
+                        min_tasks=min_tasks, require_deliverable=True,
+                    )
+                    project_changed.extend(refined_project_changed)
+
+                    self.ui.set(
+                        "AI 正在審查任務規劃",
+                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                    )
+                    judge = new_planner()
+                    judgment_text, protected_changed, judge_project_changed = readonly_ask(
+                        judge,
+                        plan_judge_prompt(
+                            self.state.goal,
+                            self.root,
+                            self.state,
+                            tasks,
+                            self.work,
+                        ),
+                        self.root,
+                        self.work,
+                        self.protected,
+                        timeout=self.args.planning_timeout,
+                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                    )
+                    if protected_changed:
+                        raise RunnerError(
+                            "AI modified files during planning and they were restored: "
+                            + ", ".join(protected_changed)
+                        )
+                    project_changed.extend(judge_project_changed)
+                    judgment = parse_plan_judgment(judgment_text)
+                    if judgment["accepted"]:
+                        break
+                    judge_issues = judgment["issues"]
+                    self.ui.set(
+                        "AI 任務規劃未通過，重新拆分",
+                        "; ".join(judge_issues),
+                    )
+                else:
+                    raise RunnerError(
+                        "plan judge rejected the refined plan: "
+                        + "; ".join(judge_issues)
+                    )
             except RunnerError:
                 planning_feedback = (
                     "The previous planning attempt was invalid. Return only valid JSON with "

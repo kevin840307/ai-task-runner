@@ -54,7 +54,7 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
-Planning creates a draft from the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner rewrites the draft into concrete single-deliverable TODOs, removes process-only tasks, and splits work that can pass or fail independently. If either call returns invalid JSON, the runner retries the complete planning flow. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+Planning creates a draft from the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner rewrites it, then an independent no-tool Plan Judge accepts or rejects the complete plan. Rejected issues drive one more fresh rewrite and judgment; two rejections restart the complete planning flow. Python only controls this loop and does not split or judge tasks by Markdown, numbering, punctuation, language, or title keywords.
 
 ## Validators
 

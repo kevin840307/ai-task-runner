@@ -568,6 +568,27 @@ def parse_tasks(
     return tasks
 
 
+def parse_plan_judgment(text: str) -> dict[str, Any]:
+    value = parse_json(text)
+    if not isinstance(value.get("accepted"), bool):
+        raise RunnerError("plan_judge.accepted must be boolean")
+    issues = require_string_list(
+        value.get("issues", []),
+        "plan_judge.issues",
+    )
+    if value["accepted"] and issues:
+        raise RunnerError("accepted plan judgment must have empty issues")
+    if not value["accepted"] and not issues:
+        raise RunnerError("rejected plan judgment must have non-empty issues")
+    return {
+        "accepted": value["accepted"],
+        "issues": [
+            item[:MAX_MISSING_ITEM_CHARS]
+            for item in issues[:MAX_MISSING_ITEMS]
+        ],
+    }
+
+
 def _bounded_result_text(value: Any, field_name: str) -> str:
     return require_non_empty_string(value, field_name)[:MAX_RESULT_REASON_CHARS]
 

@@ -24,7 +24,7 @@ For Final AI validation, each configured validation is an independent new sessio
 
 ## Planning isolation
 
-Planning uses one fresh draft session and one different fresh independent refiner session. The refiner rewrites the full plan, removes process-only TODOs, and splits independently verifiable deliverables. Only the refined list is persisted; the initial minimum remains six and is not padded to a fixed eight.
+Planning uses a fresh draft session, a different fresh refiner session, and a separate no-tool Plan Judge session. The Judge checks semantics rather than title keywords. If rejected, its issues are sent to one more fresh refiner and then judged again. Two rejected rewrites restart the complete planning flow. Only a Judge-accepted list is persisted; the initial minimum remains six and is not padded to a fixed eight.
 
 ## Executor scope isolation
 

@@ -41,7 +41,7 @@ Each TODO prompt is about the current task, completion conditions, and the last 
 Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
-Planning is intentionally AI-owned. A draft planner receives the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner then rewrites the draft into concrete single-deliverable TODOs, removing process-only tasks and splitting independently verifiable work. Invalid output restarts the complete planning flow. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge checks whether every task has one concrete deliverable and no process-only or speculative work. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
 For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
@@ -109,6 +109,7 @@ runner/backends/opencode.py       OpenCode backend
 
 prompts/                          Editable runner prompt templates
 prompts/plan_refine.md            Independent fresh-session rewrite of draft task granularity
+prompts/plan_judge.md             Independent semantic quality gate for refined task JSON
 docs/                             Human and AI project documentation
 docs/validator_templates/         Copyable validator templates and wrappers
 examples/                         Reusable sample prompts, validators, and runners

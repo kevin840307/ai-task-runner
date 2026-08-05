@@ -171,7 +171,7 @@ flowchart LR
 
 `understand` means gathering enough current evidence to plan correctly: the goal, project structure, existing files, previous task output, and validator feedback. Depending on backend behavior, understanding may be represented inside the planning prompt rather than by a permanently separate source-code function. It is still a distinct logical stage in the task flow and logs.
 
-`plan` creates a draft of bounded TODO records. A second, independent fresh-session refiner rewrites the draft rather than defending it, removes process-only tasks, and splits independently verifiable deliverables. Planning is read-only. If either call cannot produce valid task JSON, the runner retries the complete planning flow with compact feedback. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge performs a semantic quality gate. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
 
 ---
 
@@ -400,10 +400,15 @@ flowchart TD
     J --> K[Rewrite complete task list]
     K --> L{Refined JSON valid?}
     L -- No --> F
-    L -- Yes --> M[Use refined tasks]
-    M --> N[Append after completed tasks]
-    N --> O[Set current to first planned task]
-    O --> P[Persist state]
+    L -- Yes --> M[Create fresh no-tool Plan Judge]
+    M --> N{Judge accepted?}
+    N -- Yes --> O[Use judged tasks]
+    N -- No, first rejection --> P[Send issues to a new refiner]
+    P --> K
+    N -- No, second rejection --> F
+    O --> Q[Append after completed tasks]
+    Q --> R[Set current to first planned task]
+    R --> S[Persist state]
 ```
 
 ### Planning retry behavior
@@ -414,7 +419,7 @@ The outer model-call retry uses `retry_model_call()` with exponential backoff:
 retry_wait, 2×retry_wait, 4×retry_wait, ... capped at retry_max_wait
 ```
 
-Planning does not set a fixed `max_errors`, so draft or independent-refinement failures retry indefinitely by default. Each retry restarts the complete draft-and-refine flow with compact feedback asking for concrete single-deliverable task JSON. The runner does not derive tasks from the user's prompt structure; only valid refined AI task JSON becomes the persisted TODO list.
+Planning does not set a fixed outer `max_errors`. Draft, refine, Judge-call, invalid-JSON, or two-round Judge rejection failures restart the complete flow with exponential backoff. Within one planning attempt, the Judge permits at most two fresh rewrite-and-judge rounds. The runner does not derive task meaning from prompt structure or title keywords; only valid Judge-accepted task JSON becomes the persisted TODO list.
 
 ---
 

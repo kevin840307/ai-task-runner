@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import json
 
 from runner.models import RunState, Task
-from runner.prompting import plan_prompt, plan_refine_prompt
+from runner.prompting import plan_judge_prompt, plan_prompt, plan_refine_prompt
 
 
 def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
@@ -33,6 +33,23 @@ def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
     assert "only result is knowledge" in prompt
     assert "implemented, reviewed, or fail independently" in prompt
     assert "without rereading the original goal or draft plan" in prompt
+
+
+def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
+    state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
+    tasks = [Task(
+        id="c01-t001",
+        title="One result",
+        description="Create one result",
+        deliverable="result",
+        acceptance_criteria=["result exists"],
+    )]
+    prompt = plan_judge_prompt("g", tmp_path, state, tasks)
+
+    assert "independent plan quality judge" in prompt
+    assert "Do not rewrite the plan" in prompt
+    assert "Never accept or reject a task from title wording or keyword matching" in prompt
+    assert '"accepted":true,"issues":[]' in prompt
 
 
 def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
@@ -69,7 +86,10 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         calls.append((agent, prompt))
         agent.session_id = f"planning-session-{len(calls)}"
-        payload = task_payload("Draft" if "Plan only" in prompt else "Refined")
+        if "plan quality judge" in prompt:
+            payload = {"accepted": True, "issues": []}
+        else:
+            payload = task_payload("Draft" if "Plan only" in prompt else "Refined")
         return json.dumps(payload), [], []
 
     runner = core.TaskRunner.__new__(core.TaskRunner)
@@ -99,9 +119,172 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 2
+    assert len(created) == 3
     assert created[0] is calls[0][0]
     assert created[1] is calls[1][0]
-    assert created[0] is not created[1]
-    assert [agent.initial_session_id for agent in created] == ["", ""]
+    assert created[2] is calls[2][0]
+    assert len({id(agent) for agent in created}) == 3
+    assert [agent.initial_session_id for agent in created] == ["", "", ""]
     assert runner.state.tasks[0].title == "Refined 1"
+
+
+def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monkeypatch):
+    import runner.core as core
+
+    created = []
+    prompts = []
+    judge_calls = 0
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.session_id = kwargs["session_id"]
+            created.append(self)
+
+        def prepare_project(self):
+            return []
+
+    def task_payload(prefix: str):
+        return {
+            "tasks": [
+                {
+                    "title": f"{prefix} {index}",
+                    "description": f"Create coherent result {index}",
+                    "deliverable": f"Observable result {index}",
+                    "acceptance_criteria": [
+                        f"Result {index} is complete",
+                        "Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior",
+                    ],
+                }
+                for index in range(1, 7)
+            ]
+        }
+
+    def fake_readonly_ask(agent, prompt, *args, **kwargs):
+        nonlocal judge_calls
+        prompts.append(prompt)
+        if "plan quality judge" in prompt:
+            judge_calls += 1
+            payload = (
+                {"accepted": False, "issues": ["Split the compound deliverable"]}
+                if judge_calls == 1
+                else {"accepted": True, "issues": []}
+            )
+        elif "Plan judge issues" in prompt:
+            payload = task_payload("Corrected")
+        elif "independent plan editor" in prompt:
+            payload = task_payload("Refined")
+        else:
+            payload = task_payload("Draft")
+        return json.dumps(payload), [], []
+
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(
+        backend="qwen",
+        command="fake",
+        agent_arg=[],
+        planning_timeout=1,
+        agent_idle_after_change_timeout=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    )
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.work.mkdir()
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
+    runner.protected = []
+    runner.agent = SimpleNamespace(session_id="")
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._set_stage = lambda *args: None
+    runner._save_state = lambda: None
+
+    monkeypatch.setattr(core, "AgentClient", FakeAgent)
+    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    runner._plan_if_needed()
+
+    assert len(created) == 5
+    assert judge_calls == 2
+    assert any("Split the compound deliverable" in prompt for prompt in prompts)
+    assert runner.state.tasks[0].title == "Corrected 1"
+
+
+def test_parse_plan_judgment_contract():
+    import pytest
+    from runner.errors import RunnerError
+    from runner.support import parse_plan_judgment
+
+    assert parse_plan_judgment('{"accepted":true,"issues":[]}')["accepted"] is True
+    rejected = parse_plan_judgment('{"accepted":false,"issues":["Split task 2"]}')
+    assert rejected["issues"] == ["Split task 2"]
+    with pytest.raises(RunnerError, match="empty issues"):
+        parse_plan_judgment('{"accepted":true,"issues":["x"]}')
+    with pytest.raises(RunnerError, match="non-empty issues"):
+        parse_plan_judgment('{"accepted":false,"issues":[]}')
+
+
+def test_plan_judge_rejects_twice_before_restarting_planning(tmp_path: Path, monkeypatch):
+    import pytest
+    import runner.core as core
+    from runner.errors import RunnerError
+
+    created = []
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.session_id = kwargs["session_id"]
+            created.append(self)
+
+        def prepare_project(self):
+            return []
+
+    tasks = {
+        "tasks": [
+            {
+                "title": f"Result {index}",
+                "description": f"Create result {index}",
+                "deliverable": f"Result {index}",
+                "acceptance_criteria": [f"Result {index} exists"],
+            }
+            for index in range(1, 7)
+        ]
+    }
+
+    def fake_readonly_ask(agent, prompt, *args, **kwargs):
+        payload = (
+            {"accepted": False, "issues": ["Plan is still not bounded"]}
+            if "plan quality judge" in prompt
+            else tasks
+        )
+        return json.dumps(payload), [], []
+
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(
+        backend="qwen",
+        command="fake",
+        agent_arg=[],
+        planning_timeout=1,
+        agent_idle_after_change_timeout=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    )
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.work.mkdir()
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
+    runner.protected = []
+    runner.agent = SimpleNamespace(session_id="")
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._set_stage = lambda *args: None
+    runner._save_state = lambda: None
+
+    monkeypatch.setattr(core, "AgentClient", FakeAgent)
+    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    with pytest.raises(RunnerError, match="plan judge rejected"):
+        runner._plan_if_needed()
+
+    assert len(created) == 5

@@ -54,7 +54,7 @@ When the same final validator failure repeats, repair tasks switch to a fresh ag
 
 Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
-Planning first creates a draft from the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner then rewrites that draft into concrete single-deliverable TODOs, removing process-only tasks and splitting independently verifiable work. If either call fails to return valid task JSON, the runner retries the complete planning flow with compact feedback.
+Planning uses a fresh draft planner, a different fresh refiner, and an independent no-tool Plan Judge. The Judge accepts only concrete single-deliverable TODOs; rejected issues are sent to another fresh refiner for one more rewrite. If two judged rewrites are still rejected, the runner discards the plan and retries the complete planning flow with compact feedback.
 For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
@@ -189,7 +189,8 @@ Runner prompts live in `prompts/`:
 
 - `rules.md` and `planning_rules.md`: shared hard rules
 - `plan.md`: TODO planning
-- `plan_refine.md`: independent fresh-session rewrite of draft task granularity
+- `plan_refine.md`: fresh-session rewrite of task granularity
+- `plan_judge.md`: independent semantic quality gate for the refined plan
 - `execution.md`: current-task execution
 - `review.md`: read-only task review
 - `ai_validator.md`: AI final validation

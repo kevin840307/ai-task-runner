@@ -16,6 +16,7 @@ $progress_json
 
 Draft task JSON:
 $tasks_json
+$judge_feedback
 
 Return a complete replacement task list for $planning_mode planning.
 

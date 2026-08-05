@@ -174,6 +174,7 @@ def plan_refine_prompt(
     state: RunState,
     tasks: Sequence[Task],
     work: Path | None = None,
+    judge_issues: Sequence[str] = (),
 ) -> str:
     progress = {
         "cycle": state.cycle,
@@ -184,6 +185,45 @@ def plan_refine_prompt(
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
         "plan_refine.md",
+        {
+            "planning_rules": planning_rules(work_dir),
+            "goal": goal,
+            "root": root,
+            "outline": project_outline(root),
+            "progress_json": json.dumps(progress, ensure_ascii=False),
+            "tasks_json": json.dumps(
+                {"tasks": [task_spec(task) for task in tasks]},
+                ensure_ascii=False,
+            ),
+            "minimum_tasks": 6 if state.cycle == 1 else 1,
+            "planning_mode": "initial" if state.cycle == 1 else "repair",
+            "judge_feedback": (
+                "\nPlan judge issues that must all be resolved:\n"
+                + "\n".join(f"- {item}" for item in judge_issues)
+                + "\n"
+                if judge_issues
+                else ""
+            ),
+        },
+    )
+
+
+def plan_judge_prompt(
+    goal: str,
+    root: Path,
+    state: RunState,
+    tasks: Sequence[Task],
+    work: Path | None = None,
+) -> str:
+    progress = {
+        "cycle": state.cycle,
+        "validator_feedback": state.validator_output[-8000:],
+        "completed_tasks": completed_titles(state),
+        "review_skipped_tasks": skipped_review_tasks(state),
+    }
+    work_dir = work or root / ".ai-task-runner"
+    return render_prompt_template(
+        "plan_judge.md",
         {
             "planning_rules": planning_rules(work_dir),
             "goal": goal,
