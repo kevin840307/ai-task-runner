@@ -24,8 +24,8 @@ For Final AI validation, each configured validation is an independent new sessio
 
 ## Executor scope isolation
 
-During TODO execution, treat only the current TODO as executable. The complete goal is intentionally not repeated in the Executor prompt because small models may attempt the entire project. When requirements are unclear, use the managed original-requirement reference. Repeated execution failures with saved changes are reviewed before another full attempt.
+During TODO execution, treat only the current TODO as executable. The complete goal is intentionally not repeated because small models may attempt the entire project. Do not use the managed original-requirement reference to discover additional work; inspect only directly relevant project files. Goal-wide constraints are carried through acceptance criteria shared by every planned task. Repeated failures with accumulated saved changes are reviewed before another full attempt.
 
 ## Review Scope Isolation
 
-Per-task Review judges only the current TODO deliverable and acceptance criteria. Incomplete later TODOs or remaining whole-project work cannot block the current TODO and must not be returned in `missing_items`. The complete original goal remains context for detecting contradictions and regressions; Final AI Validation independently judges the whole project.
+Per-task Review uses a fresh independent session, is read-only, inspects this TODO's accumulated changed files first, and reads only minimal additional evidence. Incomplete later TODOs or remaining whole-project work cannot block the current TODO or appear in `missing_items`. Final AI Validation independently judges the whole project.

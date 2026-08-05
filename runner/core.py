@@ -383,9 +383,11 @@ class TaskRunner:
                 task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
                 self._save_session()
 
-                project_changed = self._project_changed_since(project_before)
+                changed_files = changed_project_files(self.root, self.work, project_before)
+                task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
+                self._save_state()
                 self._set_stage("reviewing")
-                review = self._review_current_task(task, output, project_changed)
+                review = self._review_current_task(task, output, bool(task.changed_files))
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -410,6 +412,8 @@ class TaskRunner:
     ) -> int | None:
         changed_files = changed_project_files(self.root, self.work, project_before)
         changed = bool(changed_files)
+        task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
+        cumulative_changed = bool(task.changed_files)
         task.last_output = (
             "Previous model call failed before task completion"
             + (" after changing project files" if changed else "")
@@ -427,6 +431,7 @@ class TaskRunner:
         details = [
             f"session={self.agent.session_id or '-'}",
             f"changed_files={len(changed_files)}:{changed_detail}",
+            f"task_changed_files={len(task.changed_files)}",
         ]
         cause = diagnostic_error(error)
         if cause is not None:
@@ -451,7 +456,7 @@ class TaskRunner:
             "模型階段失敗，準備重試任務",
             " | ".join(details),
         )
-        if changed and task.stagnant_attempts >= EXECUTION_FAILURES_BEFORE_REVIEW:
+        if cumulative_changed and task.stagnant_attempts >= EXECUTION_FAILURES_BEFORE_REVIEW:
             self.ui.set(
                 "Executor 多次異常但已有檔案變更，先執行 Review",
                 task.title,
@@ -599,51 +604,69 @@ class TaskRunner:
         output: str,
         project_changed: bool,
     ) -> dict[str, Any]:
-        def call() -> dict[str, Any]:
-            raw, protected_changed, project_changed_during_review = readonly_ask(
-                self.agent,
-                review_prompt(
-                    self.state,
-                    self.root,
-                    self.protected,
-                    output,
-                ),
-                self.root,
-                self.work,
-                self.protected,
-                timeout=self.args.planning_timeout,
-                idle_timeout=self.args.agent_idle_after_change_timeout,
-            )
-            changed = [*protected_changed, *project_changed_during_review]
-            if changed:
-                raise RunnerError(
-                    "review modified files and they were restored: "
-                    + ", ".join(changed)
-                )
-            try:
-                return parse_review(raw)
-            except RunnerError as error:
-                raise RunnerError(
-                    f"{error}; raw_output_tail={raw[-1000:]}"
-                ) from error
-
+        consecutive_errors = 0
         while True:
+            reviewer = AgentClient(
+                backend=self.args.backend,
+                command=self.args.command,
+                root=self.root,
+                extra_args=runtime_agent_args(
+                    self.args.backend, self.args.agent_arg
+                ),
+                session_id="",
+                timeout=self.args.planning_timeout,
+            )
+
+            def call() -> dict[str, Any]:
+                raw, protected_changed, project_changed_during_review = readonly_ask(
+                    reviewer,
+                    review_prompt(
+                        self.state,
+                        self.root,
+                        self.protected,
+                        output,
+                    ),
+                    self.root,
+                    self.work,
+                    self.protected,
+                    timeout=self.args.planning_timeout,
+                    idle_timeout=self.args.agent_idle_after_change_timeout,
+                )
+                changed = [*protected_changed, *project_changed_during_review]
+                if changed:
+                    raise RunnerError(
+                        "review modified files and they were restored: "
+                        + ", ".join(changed)
+                    )
+                try:
+                    return parse_review(raw)
+                except RunnerError as error:
+                    raise RunnerError(
+                        f"{error}; raw_output_tail={raw[-1000:]}"
+                    ) from error
+
             try:
-                return retry_model_call(
+                result = retry_model_call(
                     call,
                     self.ui,
                     "AI 正在確認任務是否完成",
                     task.title,
                     self.args.retry_wait,
                     self.args.retry_max_wait,
-                    self.args.review_error_retries,
+                    1,
                 )
+                return result
             except RunnerError as error:
-                task.review_error_attempts += max(1, self.args.review_error_retries)
-                self.agent.session_id = ""
+                consecutive_errors += 1
+                task.review_error_attempts += 1
                 task.review_session_rebuilds += 1
-                self._save_session()
                 self._save_state()
+                if consecutive_errors < self.args.review_error_retries:
+                    self.ui.set(
+                        "Review 異常，使用新 session 重試",
+                        f"{task.title} · {consecutive_errors}/{self.args.review_error_retries}",
+                    )
+                    continue
                 if project_changed and not self.args.strict_review:
                     reason = str(error)[-1000:]
                     self.ui.set(
@@ -656,6 +679,7 @@ class TaskRunner:
                         "missing_items": [],
                         "review_skipped": True,
                     }
+                consecutive_errors = 0
                 self.ui.set(
                     "Review 連續失敗，使用新 session 重試",
                     task.title,

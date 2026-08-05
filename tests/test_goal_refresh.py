@@ -44,7 +44,8 @@ def test_execution_prompt_never_embeds_full_goal():
     continued = execution_prompt(run, Path("/tmp"), [], include_goal=False)
     assert "ORIGINAL GOAL" not in fresh
     assert "ORIGINAL GOAL" not in continued
-    assert "original requirement reference" in fresh
+    assert "Treat the current TODO as self-contained" in fresh
+    assert "Do not read the original goal or planning output" in fresh
     assert "current TODO is the only executable scope" in continued
 
 

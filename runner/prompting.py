@@ -106,6 +106,20 @@ def task_spec(task: Task) -> dict[str, Any]:
     }
 
 
+
+def shared_task_constraints(state: RunState) -> list[str]:
+    """Return concise goal-wide constraints repeated across every planned TODO."""
+    tasks = [
+        task for task in state.tasks
+        if task.id.startswith(f"c{state.cycle:02d}-")
+    ]
+    if not tasks:
+        return []
+    common = set(tasks[0].acceptance_criteria)
+    for task in tasks[1:]:
+        common.intersection_update(task.acceptance_criteria)
+    return [item for item in tasks[0].acceptance_criteria if item in common][:8]
+
 def completed_titles(state: RunState) -> list[str]:
     return [task.title for task in state.tasks if task.status == "completed"]
 
@@ -192,7 +206,7 @@ def planning_feedback_section(feedback: str) -> str:
 
 
 def should_refresh_goal(state: RunState, has_session: bool) -> bool:
-    """Send the full goal for new sessions and the first task of a repair cycle."""
+    """Identify executions that need explicit new-session context."""
     task = state.tasks[state.current]
     return not has_session or (
         state.cycle > 1
@@ -216,14 +230,14 @@ def execution_prompt(
             state.validator_output,
             2000,
         ),
+        "global_constraints": shared_task_constraints(state),
         "execution_scope": (
-            "The current TODO is the only executable scope. The original goal was "
-            "used by Planning and remains available through project guidance, but "
-            "must not be implemented as a whole in this execution step."
+            "Global constraints are compatibility and safety boundaries only. "
+            "The current TODO is the only executable work item."
         ),
         "session_context": (
-            "New execution session. If a requirement needed for this TODO is unclear, "
-            "read the project guidance and original requirement reference before proceeding."
+            "New execution session. Treat the current TODO as self-contained; inspect only "
+            "the project files directly needed to complete its deliverable."
             if include_goal
             else
             "Continue the current TODO using the existing session context."
@@ -279,8 +293,12 @@ def review_prompt(
         "review.md",
         {
             "rules": rules(root, protected),
+            "global_constraints_json": json.dumps(
+                shared_task_constraints(state), ensure_ascii=False
+            ),
             "task_json": json.dumps(task_spec(task), ensure_ascii=False),
-            "output": output[-5000:],
+            "changed_files_json": json.dumps(task.changed_files, ensure_ascii=False),
+            "output": output[-3000:],
             "validator_section": validator_section,
         },
     )

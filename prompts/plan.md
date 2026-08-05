@@ -26,10 +26,14 @@ This is $planning_mode planning. Return at least $minimum_tasks ordered task(s).
 Do not collapse a broad or multi-file goal into one "build everything" task.
 Prefer tasks that produce or modify one coherent deliverable. If a task contains multiple independently verifiable deliverables, split it.
 Every TODO must create or modify a concrete project deliverable requested by the goal. Put that concrete result in the non-empty deliverable field.
+Every TODO must be self-contained for execution: its description must include the task-specific context needed to act without rereading the original goal or planning output.
+Its deliverable must define the exact end result, and its acceptance criteria must provide enough evidence to know when to stop.
+Repeat only genuinely goal-wide compatibility, safety, and non-regression constraints in every task's acceptance criteria so the runner can pass them as a concise shared constraint summary.
 Do not create tasks for runner-owned final validation, review, retry, or comparing outputs to reference fixtures. Put expected checks into acceptance criteria unless the goal explicitly asks to create or change a validator, test, or report artifact.
 Running an existing validator or test command is not a standalone TODO; the runner runs final validation automatically.
 Do not add generic cleanup, final review, or check-only tasks.
 For complex changes, split by concrete deliverables and their dependencies so a smaller model can complete one useful project change at a time.
+split enough that a smaller model can complete one coherent step at a time without taking over later TODOs.
 Before returning JSON, reject your own plan if any TODO has no concrete file, command, data contract, generated output, report, documentation, or user-facing behavior to create or modify.
 Do not return a plan with only process or inspection tasks. Such a plan is invalid; rewrite it into concrete implementation/documentation/output tasks.
 Each task must be ordered, independently executable, meaningful, and have clear acceptance criteria describing completion evidence.

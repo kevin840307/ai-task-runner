@@ -207,7 +207,7 @@ retry or completion behavior.
 
 The normal flow remains `TODO execution -> AI Review -> final Validator`. A parsed Review FAIL is never skipped: its `missing_items` return to the same TODO. Only Review call, timeout, loop, parse, or schema errors use this policy.
 
-- Default: `--review-error-retries 3`. After that many consecutive Review errors, a successful executor result with project file changes is provisionally accepted with `review_skipped=true`; the final Validator remains authoritative.
+- Default: `--review-error-retries 3`. Every Review error creates a new independent Review session and increments the persisted audit counters. After that many consecutive Review errors, a TODO with accumulated project changes is provisionally accepted with `review_skipped=true`; the final Validator remains authoritative.
 - Strict: add `--strict-review`. Review errors never skip a TODO. Every error batch rebuilds only the Review session and retries without rerunning the successful executor.
 - No project changes: Review errors are never skipped, even in default mode.
 
@@ -230,8 +230,8 @@ python ai_task_runner.py ... --validator ai --final-ai-validations 3 --final-ai-
 
 ### Small-model TODO isolation
 
-The Executor is intentionally given only the current TODO rather than the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. After repeated Executor failures with saved file changes, the runner reviews the current project state before launching another full execution attempt.
+The Executor receives the current TODO plus only goal-wide constraints repeated across every planned task. It does not receive the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. Changed files are accumulated across attempts for the same TODO; after repeated Executor failures with any saved task change, the runner reviews the current project state before launching another full execution attempt.
 
 ## Review Scope Isolation
 
-Per-task Review judges only the current TODO deliverable and acceptance criteria. Incomplete later TODOs or remaining whole-project work cannot block the current TODO and must not be returned in `missing_items`. The complete original goal remains context for detecting contradictions and regressions; Final AI Validation independently judges the whole project.
+Per-task Review uses an independent fresh session, is read-only, and judges only the current TODO deliverable and acceptance criteria. It inspects this TODO's accumulated changed files first, then reads only the minimum additional directly related evidence. Incomplete later TODOs or whole-project work cannot block the current TODO. Final AI Validation independently judges the complete goal.

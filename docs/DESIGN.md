@@ -301,7 +301,7 @@ A second backup copy is written outside the project under the system temporary d
 | `tasks` | Completed and pending task records |
 | `validator_output` | Bounded latest final-validator feedback |
 | `completed` | True only after final validator PASS |
-| `agent_session_id` | Reusable main execution/review session |
+| `agent_session_id` | Reusable main execution session; Review uses independent sessions |
 | `stage` | Current state-machine stage |
 | `stage_started_at` | Timestamp when the stage changed |
 | `last_activity_at` | Timestamp of the latest stage update |
@@ -852,7 +852,7 @@ The resilience tests cover important branches such as timeout after project chan
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
+`--review-error-retries N` controls only Review infrastructure/format errors. Each Review attempt uses a fresh independent session; every error increments persisted audit counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N consecutive Review errors a TODO with accumulated project changes may be provisionally completed. `--strict-review` disables this skip. Final validation is always required.
 
 
 ## Final AI validation quorum
@@ -861,4 +861,4 @@ Final AI validation is an independent quorum stage. Each configured run construc
 
 ### Bounded executor context
 
-Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, its acceptance criteria, recent diagnostics, and relevant validator feedback. This prevents a small model from treating the full goal or later TODO list as executable scope. If an Executor fails repeatedly after changing files, the runner performs Review before another full execution attempt; explicit Review FAIL still returns the same TODO for repair, while Review errors follow the configured review-error policy.
+Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. Changed files accumulate across attempts. Review runs in an independent read-only session, starts with those files, and reads only minimal additional evidence. Explicit Review FAIL returns the same TODO for repair; Review errors follow the configured policy.

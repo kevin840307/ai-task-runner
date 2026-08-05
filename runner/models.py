@@ -25,6 +25,7 @@ class Task:
     review_skip_reason: str = ""
     review_error_attempts: int = 0
     review_session_rebuilds: int = 0
+    changed_files: list[str] = field(default_factory=list)
 
     def validate(self, index: int) -> None:
         prefix = f"tasks[{index}]"
@@ -43,6 +44,11 @@ class Task:
             raise ValueError(f"{prefix}.review_skipped must be boolean")
         if not isinstance(self.review_skip_reason, str):
             raise ValueError(f"{prefix}.review_skip_reason must be a string")
+        if not isinstance(self.changed_files, list) or any(
+            not isinstance(item, str) or not item.strip()
+            for item in self.changed_files
+        ):
+            raise ValueError(f"{prefix}.changed_files must be strings")
         for name in ("attempts", "stagnant_attempts", "review_error_attempts", "review_session_rebuilds"):
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:

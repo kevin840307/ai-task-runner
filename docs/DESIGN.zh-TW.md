@@ -244,7 +244,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
+`--review-error-retries N` 只控制 Review 呼叫／格式異常。每次 Review 都使用全新獨立 session，錯誤次數會持久化累積。Review PASS 完成 TODO；明確 Review FAIL 一定把 `missing_items` 交回同一 TODO。預設模式達 N 次連續錯誤且本 TODO 曾有累積檔案變更時，可暫時跳過並交給 Final Validator；`--strict-review` 禁止跳過。
 
 
 ## Final AI 多次獨立驗證
@@ -253,4 +253,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 會取得完整 Goal。TODO Executor 只取得目前 Task、驗收條件、近期診斷與相關 Validator feedback，避免小模型把完整需求或後續 TODO 當成當次可執行範圍。若 Executor 已修改檔案但連續失敗，Runner 會先執行 Review，再決定是否重做；Review 明確 FAIL 仍回到同一 TODO 修復，Review 異常則沿用既有容錯政策。
+Planning 與 Final AI 取得完整 Goal。Planner 必須讓每個 TODO 自包含，並把真正跨任務的限制重複放入各 Task 驗收條件。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback，不自行重讀完整 Goal擴張範圍。同一 TODO 的 changed files 會跨 attempt 累積。Review 使用全新唯讀 session，優先檢查這些 changed files，再只讀最少量直接相關證據。
