@@ -212,3 +212,18 @@ The normal flow remains `TODO execution -> AI Review -> final Validator`. A pars
 - No project changes: Review errors are never skipped, even in default mode.
 
 State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
+
+## Multiple independent Final AI validations
+
+When `--validator ai` is used, Final AI validation can require multiple independent verdicts:
+
+```bat
+python ai_task_runner.py ... --validator ai --final-ai-validations 3 --final-ai-required-passes 2
+```
+
+- Every validation uses a brand-new model session.
+- The default remains `1` validation and `1` required PASS.
+- A model call or JSON error is an abstention; it does not count as PASS or FAIL.
+- Any explicit FAIL with blocking findings fails the cycle immediately and enters repair planning.
+- The run passes only after the configured number of independent PASS results is reached.
+- Final AI checks both original requirements and concrete high-impact safety, destructive, reliability, portability, security, and regression defects. Style preferences and speculative concerns do not block PASS.

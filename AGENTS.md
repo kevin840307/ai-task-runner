@@ -19,3 +19,5 @@ The normal flow remains `TODO execution -> AI Review -> final Validator`. A pars
 - No project changes: Review errors are never skipped, even in default mode.
 
 State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
+
+Final AI validation may run multiple independent fresh sessions. Respect `final_ai_validations` and `final_ai_required_passes`: errors abstain, explicit FAIL vetoes, and PASS must reach quorum. Final AI must inspect concrete high-impact safety and regression defects in addition to the stated goal.

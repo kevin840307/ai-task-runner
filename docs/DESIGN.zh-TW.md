@@ -246,3 +246,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 
 `--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
 
+
+## Final AI 多次獨立驗證
+
+Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M` 設定。每一次驗證都建立全新 session，直接重新檢查目前專案。PASS 累積票數；AI 呼叫或 JSON 異常視為棄權；任何具體 FAIL 都會立即否決並進入 Repair Planning。Final AI 除了原始需求，也檢查具有具體證據的重大安全、破壞性、可靠性、可攜性與回歸問題。

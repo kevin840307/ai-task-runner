@@ -140,3 +140,14 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
 `--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
 
+
+## Independent Final AI validation
+
+Use `--validator ai` together with:
+
+```text
+--final-ai-validations N
+--final-ai-required-passes M
+```
+
+Each of the N validation attempts starts with a new session and independently reads the current project. `M` must be between 1 and N. Example: `N=3, M=2` accepts two PASS results plus one validator error, but any explicit FAIL blocks completion and starts a repair cycle.

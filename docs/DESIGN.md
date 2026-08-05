@@ -854,3 +854,7 @@ The resilience tests cover important branches such as timeout after project chan
 
 `--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
 
+
+## Final AI validation quorum
+
+Final AI validation is an independent quorum stage. Each configured run constructs a new `AgentClient` with an empty session ID. Results are classified as PASS, FAIL, or ERROR. PASS contributes to the configured threshold; ERROR is an abstention after call-level retries; FAIL is a veto carrying blocking findings into repair planning. This preserves conservative defect detection while allowing occasional small-model infrastructure or JSON failures.
