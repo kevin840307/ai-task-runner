@@ -139,3 +139,8 @@ python -m pytest -q
 ```
 
 Latest local result: `138 passed, 1 skipped`.
+
+## Review error tolerance
+
+`--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
+

@@ -110,6 +110,19 @@ def completed_titles(state: RunState) -> list[str]:
     return [task.title for task in state.tasks if task.status == "completed"]
 
 
+def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": task.id,
+            "title": task.title,
+            "reason": task.review_skip_reason,
+            "review_error_attempts": task.review_error_attempts,
+        }
+        for task in state.tasks
+        if task.review_skipped
+    ]
+
+
 def plan_prompt(
     goal: str,
     root: Path,
@@ -122,6 +135,7 @@ def plan_prompt(
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
         "completed_tasks": completed_titles(state),
+        "review_skipped_tasks": skipped_review_tasks(state),
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
@@ -151,6 +165,7 @@ def plan_refine_prompt(
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
         "completed_tasks": completed_titles(state),
+        "review_skipped_tasks": skipped_review_tasks(state),
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
@@ -193,6 +208,7 @@ def execution_prompt(
     strategy_note: str = "",
     validator_hint: str = "",
     include_goal: bool = True,
+    rebuilt_session: bool = False,
 ) -> str:
     task = state.tasks[state.current]
     context = {
@@ -216,6 +232,14 @@ def execution_prompt(
         if task.last_output
         else ""
     )
+    rebuilt_session_note = (
+        "\nRebuilt session notice:\n"
+        "This task is continuing in a rebuilt session. Project files may already "
+        "contain changes from previous attempts. Before modifying or overwriting "
+        "any existing file, read its current full content in this session.\n"
+        if rebuilt_session
+        else ""
+    )
     validator_reference = (
         f"\nValidator reference:\n{validator_hint}\n"
         if validator_hint
@@ -230,6 +254,7 @@ def execution_prompt(
             "task_json": json.dumps(task_spec(task), ensure_ascii=False),
             "previous": previous,
             "strategy": strategy,
+            "rebuilt_session_note": rebuilt_session_note,
         },
     )
 
@@ -273,12 +298,18 @@ def ai_validator_prompt(
     root: Path,
     protected: Sequence[Path],
     custom: str = "",
+    review_skipped: Sequence[dict[str, Any]] = (),
 ) -> str:
-    extra = (
-        f"\nAdditional validation instructions:\n{custom}\n"
-        if custom
-        else ""
-    )
+    notes = []
+    if custom:
+        notes.append(f"Additional validation instructions:\n{custom}")
+    if review_skipped:
+        notes.append(
+            "The following TODOs were provisionally completed because AI Review "
+            "was unavailable. Verify them independently and do not assume they passed Review:\n"
+            + json.dumps(list(review_skipped), ensure_ascii=False)
+        )
+    extra = "\n" + "\n\n".join(notes) + "\n" if notes else ""
     return render_prompt_template(
         "ai_validator.md",
         {

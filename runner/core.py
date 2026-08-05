@@ -54,7 +54,6 @@ from .script_runner import (
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
-REVIEW_MODEL_ERRORS_BEFORE_SESSION_RESET = 3
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 PLANNING_REFINE_PASSES = 3
 MIN_PLANNED_TASKS = 6
@@ -385,7 +384,7 @@ class TaskRunner:
 
                 project_changed = self._project_changed_since(project_before)
                 self._set_stage("reviewing")
-                review = self._review_current_task(task, output)
+                review = self._review_current_task(task, output, project_changed)
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -465,6 +464,8 @@ class TaskRunner:
         task.last_review = review
         self._save_session()
         if review["completed"] is True:
+            task.review_skipped = bool(review.get("review_skipped"))
+            task.review_skip_reason = str(review.get("reason", "")) if task.review_skipped else ""
             self._complete_current_task(task)
             return None
 
@@ -544,6 +545,7 @@ class TaskRunner:
                     ),
                     str(self.validator) if self.validator else "",
                     should_refresh_goal(self.state, bool(self.agent.session_id)),
+                    task.attempts > 1 and not bool(self.agent.session_id),
                 ),
                 self.protected,
                 self.args.agent_idle_after_change_timeout,
@@ -583,9 +585,10 @@ class TaskRunner:
         self,
         task: Task,
         output: str,
+        project_changed: bool,
     ) -> dict[str, Any]:
         def call() -> dict[str, Any]:
-            raw, protected_changed, project_changed = readonly_ask(
+            raw, protected_changed, project_changed_during_review = readonly_ask(
                 self.agent,
                 review_prompt(
                     self.state,
@@ -599,7 +602,7 @@ class TaskRunner:
                 timeout=self.args.planning_timeout,
                 idle_timeout=self.args.agent_idle_after_change_timeout,
             )
-            changed = [*protected_changed, *project_changed]
+            changed = [*protected_changed, *project_changed_during_review]
             if changed:
                 raise RunnerError(
                     "review modified files and they were restored: "
@@ -621,11 +624,26 @@ class TaskRunner:
                     task.title,
                     self.args.retry_wait,
                     self.args.retry_max_wait,
-                    REVIEW_MODEL_ERRORS_BEFORE_SESSION_RESET,
+                    self.args.review_error_retries,
                 )
-            except RunnerError:
+            except RunnerError as error:
+                task.review_error_attempts += max(1, self.args.review_error_retries)
                 self.agent.session_id = ""
+                task.review_session_rebuilds += 1
                 self._save_session()
+                self._save_state()
+                if project_changed and not self.args.strict_review:
+                    reason = str(error)[-1000:]
+                    self.ui.set(
+                        "Review 異常達上限，暫時跳過",
+                        f"{task.title} · final validator will decide",
+                    )
+                    return {
+                        "completed": True,
+                        "reason": reason,
+                        "missing_items": [],
+                        "review_skipped": True,
+                    }
                 self.ui.set(
                     "Review 連續失敗，使用新 session 重試",
                     task.title,

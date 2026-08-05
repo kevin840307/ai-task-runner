@@ -15,6 +15,7 @@ from .defaults import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_REVIEW_ERROR_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
 from .core import execute
@@ -47,6 +48,8 @@ class RunRequest:
     retry_delay: float = 2
     retry_wait: float = 5
     retry_max_wait: float = 300
+    review_error_retries: int = DEFAULT_REVIEW_ERROR_RETRIES
+    strict_review: bool = False
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
@@ -78,6 +81,8 @@ class RunRequest:
             retry_delay=args.retry_delay,
             retry_wait=args.retry_wait,
             retry_max_wait=args.retry_max_wait,
+            review_error_retries=args.review_error_retries,
+            strict_review=args.strict_review,
             work_dir=args.work_dir,
             resume=args.resume,
             force_new=args.force_new,
@@ -121,6 +126,8 @@ class RunRequest:
             retry_delay=self.retry_delay,
             retry_wait=self.retry_wait,
             retry_max_wait=self.retry_max_wait,
+            review_error_retries=self.review_error_retries,
+            strict_review=self.strict_review,
             work_dir=self.work_dir,
             resume=self.resume,
             force_new=self.force_new,
@@ -181,6 +188,8 @@ class RunRequest:
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
+        if not isinstance(self.review_error_retries, int) or self.review_error_retries < 1:
+            raise ValueError("review_error_retries must be a positive integer")
         for name in ("retry_delay", "retry_wait", "retry_max_wait"):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or value < 0:

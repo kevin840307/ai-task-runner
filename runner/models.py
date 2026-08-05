@@ -21,6 +21,10 @@ class Task:
     last_review: dict[str, Any] | None = None
     progress_key: str = ""
     stagnant_attempts: int = 0
+    review_skipped: bool = False
+    review_skip_reason: str = ""
+    review_error_attempts: int = 0
+    review_session_rebuilds: int = 0
 
     def validate(self, index: int) -> None:
         prefix = f"tasks[{index}]"
@@ -35,7 +39,11 @@ class Task:
             raise ValueError(f"{prefix}.acceptance_criteria must be strings")
         if self.status not in VALID_TASK_STATUSES:
             raise ValueError(f"{prefix}.status is invalid")
-        for name in ("attempts", "stagnant_attempts"):
+        if not isinstance(self.review_skipped, bool):
+            raise ValueError(f"{prefix}.review_skipped must be boolean")
+        if not isinstance(self.review_skip_reason, str):
+            raise ValueError(f"{prefix}.review_skip_reason must be a string")
+        for name in ("attempts", "stagnant_attempts", "review_error_attempts", "review_session_rebuilds"):
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:
                 raise ValueError(f"{prefix}.{name} must be non-negative")

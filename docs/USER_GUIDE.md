@@ -135,3 +135,8 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 - If review repeatedly fails for a Python-validator run after project changes, the runner can defer judgment to the final Python validator.
 - If validator feedback is ambiguous, improve the validator message with expected and actual values.
 - If a local model is very slow, raise `--agent-timeout`; do not disable final validation.
+
+## Review error tolerance
+
+`--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
+

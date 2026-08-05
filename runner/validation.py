@@ -10,7 +10,7 @@ from .agent import AgentClient
 from .errors import RunnerError
 from .models import RunState
 from .ui import LiveUI
-from .prompting import ai_validator_prompt
+from .prompting import ai_validator_prompt, skipped_review_tasks
 from .support import (
     parse_ai_validation,
     readonly_ask,
@@ -45,6 +45,7 @@ def run_ai_validator(
                 root,
                 protected,
                 args.validator_prompt,
+                skipped_review_tasks(state),
             ),
             root,
             work,

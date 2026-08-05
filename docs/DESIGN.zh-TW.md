@@ -241,3 +241,8 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 | 其他非零 | CLI、設定、State 或不可恢復錯誤 |
 
 `max_attempts=0` 與 `max_cycles=0` 表示不設上限，適合 24 小時持續執行；實際仍受外部 OS、電源與程序存活條件限制。
+
+## Review error tolerance
+
+`--review-error-retries N` controls only Review infrastructure/format errors. Review PASS completes the TODO; an explicit Review FAIL always returns its actionable `missing_items` to execution. In default mode, after N Review errors a TODO may be provisionally completed only when the executor exited successfully and changed project files. `--strict-review` disables this skip and rebuilds the Review session after each N-error batch. Final validation is always required.
+
