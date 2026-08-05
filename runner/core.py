@@ -54,6 +54,7 @@ from .script_runner import (
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
+EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 PLANNING_REFINE_PASSES = 3
 MIN_PLANNED_TASKS = 6
@@ -450,6 +451,17 @@ class TaskRunner:
             "模型階段失敗，準備重試任務",
             " | ".join(details),
         )
+        if changed and task.stagnant_attempts >= EXECUTION_FAILURES_BEFORE_REVIEW:
+            self.ui.set(
+                "Executor 多次異常但已有檔案變更，先執行 Review",
+                task.title,
+            )
+            self.agent.session_id = ""
+            self._save_session()
+            self._set_stage("reviewing")
+            review = self._review_current_task(task, task.last_output, True)
+            return self._handle_review_result(task, review)
+
         self._set_stage("task_retry_wait", str(error))
         return self._prepare_task_retry(task)
 

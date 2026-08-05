@@ -250,3 +250,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 ## Final AI 多次獨立驗證
 
 Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M` 設定。每一次驗證都建立全新 session，直接重新檢查目前專案。PASS 累積票數；AI 呼叫或 JSON 異常視為棄權；任何具體 FAIL 都會立即否決並進入 Repair Planning。Final AI 除了原始需求，也檢查具有具體證據的重大安全、破壞性、可靠性、可攜性與回歸問題。
+
+### Executor 上下文邊界
+
+Planning 與 Final AI 會取得完整 Goal。TODO Executor 只取得目前 Task、驗收條件、近期診斷與相關 Validator feedback，避免小模型把完整需求或後續 TODO 當成當次可執行範圍。若 Executor 已修改檔案但連續失敗，Runner 會先執行 Review，再決定是否重做；Review 明確 FAIL 仍回到同一 TODO 修復，Review 異常則沿用既有容錯政策。

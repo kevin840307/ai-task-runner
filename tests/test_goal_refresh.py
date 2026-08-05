@@ -38,13 +38,14 @@ def test_first_repair_task_refreshes_goal():
     assert should_refresh_goal(run, True)
 
 
-def test_delta_prompt_omits_full_goal_but_keeps_authority_reminder():
+def test_execution_prompt_never_embeds_full_goal():
     run = state()
-    full = execution_prompt(run, Path("/tmp"), [], include_goal=True)
-    delta = execution_prompt(run, Path("/tmp"), [], include_goal=False)
-    assert "ORIGINAL GOAL" in full
-    assert "ORIGINAL GOAL" not in delta
-    assert "do not replace or narrow it" in delta
+    fresh = execution_prompt(run, Path("/tmp"), [], include_goal=True)
+    continued = execution_prompt(run, Path("/tmp"), [], include_goal=False)
+    assert "ORIGINAL GOAL" not in fresh
+    assert "ORIGINAL GOAL" not in continued
+    assert "original requirement reference" in fresh
+    assert "current TODO is the only executable scope" in continued
 
 
 def test_rebuilt_session_prompt_requires_read_before_modify():

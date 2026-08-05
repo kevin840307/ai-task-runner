@@ -16,6 +16,8 @@ from runner.defaults import (
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_REVIEW_ERROR_RETRIES,
+    DEFAULT_FINAL_AI_VALIDATIONS,
+    DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
 from runner.api import RunRequest, run
@@ -116,6 +118,18 @@ def parser() -> argparse.ArgumentParser:
         "--strict-review",
         action="store_true",
         help="never skip a TODO because review is unavailable; rebuild review sessions instead",
+    )
+    command_parser.add_argument(
+        "--final-ai-validations",
+        type=int,
+        default=DEFAULT_FINAL_AI_VALIDATIONS,
+        help="maximum independent Final AI validation runs; each uses a fresh session",
+    )
+    command_parser.add_argument(
+        "--final-ai-required-passes",
+        type=int,
+        default=DEFAULT_FINAL_AI_REQUIRED_PASSES,
+        help="Final AI PASS results required; any explicit FAIL still fails the cycle",
     )
     command_parser.add_argument(
         "--retry-max-wait",

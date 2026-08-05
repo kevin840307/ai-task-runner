@@ -212,20 +212,23 @@ def execution_prompt(
 ) -> str:
     task = state.tasks[state.current]
     context = {
-        "completed_tasks": completed_titles(state),
         "validator_feedback": format_validator_feedback(
             state.validator_output,
             2000,
         ),
+        "execution_scope": (
+            "The current TODO is the only executable scope. The original goal was "
+            "used by Planning and remains available through project guidance, but "
+            "must not be implemented as a whole in this execution step."
+        ),
+        "session_context": (
+            "New execution session. If a requirement needed for this TODO is unclear, "
+            "read the project guidance and original requirement reference before proceeding."
+            if include_goal
+            else
+            "Continue the current TODO using the existing session context."
+        ),
     }
-    if include_goal:
-        context["goal"] = state.goal
-        context["goal_context"] = "Full original goal refresh. The original goal remains authoritative."
-    else:
-        context["goal_context"] = (
-            "Continue using the original goal already present in this session. "
-            "It remains authoritative; the current TODO and feedback do not replace or narrow it."
-        )
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
     previous = (
         f"\nPrevious attempt output or diagnostic:\n{task.last_output[-2000:]}\n"

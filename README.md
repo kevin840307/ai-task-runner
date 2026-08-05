@@ -227,3 +227,11 @@ python ai_task_runner.py ... --validator ai --final-ai-validations 3 --final-ai-
 - Any explicit FAIL with blocking findings fails the cycle immediately and enters repair planning.
 - The run passes only after the configured number of independent PASS results is reached.
 - Final AI checks both original requirements and concrete high-impact safety, destructive, reliability, portability, security, and regression defects. Style preferences and speculative concerns do not block PASS.
+
+### Small-model TODO isolation
+
+The Executor is intentionally given only the current TODO rather than the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. After repeated Executor failures with saved file changes, the runner reviews the current project state before launching another full execution attempt.
+
+## Review Scope Isolation
+
+Per-task Review judges only the current TODO deliverable and acceptance criteria. Incomplete later TODOs or remaining whole-project work cannot block the current TODO and must not be returned in `missing_items`. The complete original goal remains context for detecting contradictions and regressions; Final AI Validation independently judges the whole project.

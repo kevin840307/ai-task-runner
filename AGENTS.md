@@ -21,3 +21,11 @@ The normal flow remains `TODO execution -> AI Review -> final Validator`. A pars
 State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
 
 Final AI validation may run multiple independent fresh sessions. Respect `final_ai_validations` and `final_ai_required_passes`: errors abstain, explicit FAIL vetoes, and PASS must reach quorum. Final AI must inspect concrete high-impact safety and regression defects in addition to the stated goal.
+
+## Executor scope isolation
+
+TODO execution receives only the current task and relevant feedback. Do not reintroduce the complete goal or later TODO list into the Executor prompt; Planning and Final AI own whole-goal reasoning. After repeated failed execution attempts that changed files, Review inspects the saved state before another full execution attempt.
+
+## Review Scope Isolation
+
+Per-task Review judges only the current TODO deliverable and acceptance criteria. Incomplete later TODOs or remaining whole-project work cannot block the current TODO and must not be returned in `missing_items`. The complete original goal remains context for detecting contradictions and regressions; Final AI Validation independently judges the whole project.

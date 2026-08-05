@@ -858,3 +858,7 @@ The resilience tests cover important branches such as timeout after project chan
 ## Final AI validation quorum
 
 Final AI validation is an independent quorum stage. Each configured run constructs a new `AgentClient` with an empty session ID. Results are classified as PASS, FAIL, or ERROR. PASS contributes to the configured threshold; ERROR is an abstention after call-level retries; FAIL is a veto carrying blocking findings into repair planning. This preserves conservative defect detection while allowing occasional small-model infrastructure or JSON failures.
+
+### Bounded executor context
+
+Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, its acceptance criteria, recent diagnostics, and relevant validator feedback. This prevents a small model from treating the full goal or later TODO list as executable scope. If an Executor fails repeatedly after changing files, the runner performs Review before another full execution attempt; explicit Review FAIL still returns the same TODO for repair, while Review errors follow the configured review-error policy.
