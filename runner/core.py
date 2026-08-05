@@ -56,7 +56,6 @@ MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
 EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
-PLANNING_REFINE_PASSES = 3
 MIN_PLANNED_TASKS = 6
 
 
@@ -259,22 +258,27 @@ class TaskRunner:
                 self.root,
                 self.work,
             )
-            planner = AgentClient(
-                backend=self.args.backend,
-                command=self.args.command,
-                root=planner_root,
-                extra_args=planning_agent_args(
-                    self.args.backend,
-                    self.args.agent_arg,
-                ),
-                session_id="",
-                timeout=self.args.planning_timeout,
-            )
-            planner.prepare_project()
+
+            def new_planner() -> AgentClient:
+                planner = AgentClient(
+                    backend=self.args.backend,
+                    command=self.args.command,
+                    root=planner_root,
+                    extra_args=planning_agent_args(
+                        self.args.backend,
+                        self.args.agent_arg,
+                    ),
+                    session_id="",
+                    timeout=self.args.planning_timeout,
+                )
+                planner.prepare_project()
+                return planner
+
+            draft_planner = new_planner()
             min_tasks = MIN_PLANNED_TASKS if self.state.cycle == 1 else 1
             try:
                 output, protected_changed, project_changed = readonly_ask(
-                    planner,
+                    draft_planner,
                     plan_prompt(
                         self.state.goal,
                         self.root,
@@ -298,37 +302,38 @@ class TaskRunner:
                     output, self.state.cycle,
                     min_tasks=min_tasks, require_deliverable=True,
                 )
-                for _ in range(PLANNING_REFINE_PASSES):
-                    refined, protected_changed, refined_project_changed = readonly_ask(
-                        planner,
-                        plan_refine_prompt(
-                            self.state.goal,
-                            self.root,
-                            self.state,
-                            tasks,
-                            self.work,
-                        ),
+                # A different fresh session rewrites the draft instead of defending it.
+                refiner = new_planner()
+                refined, protected_changed, refined_project_changed = readonly_ask(
+                    refiner,
+                    plan_refine_prompt(
+                        self.state.goal,
                         self.root,
+                        self.state,
+                        tasks,
                         self.work,
-                        self.protected,
-                        timeout=self.args.planning_timeout,
-                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                    ),
+                    self.root,
+                    self.work,
+                    self.protected,
+                    timeout=self.args.planning_timeout,
+                    idle_timeout=self.args.agent_idle_after_change_timeout,
+                )
+                if protected_changed:
+                    raise RunnerError(
+                        "AI modified files during planning and they were restored: "
+                        + ", ".join(protected_changed)
                     )
-                    if protected_changed:
-                        raise RunnerError(
-                            "AI modified files during planning and they were restored: "
-                            + ", ".join(protected_changed)
-                        )
-                    tasks = parse_tasks(
-                        refined, self.state.cycle,
-                        min_tasks=min_tasks, require_deliverable=True,
-                    )
-                    project_changed = [*project_changed, *refined_project_changed]
+                tasks = parse_tasks(
+                    refined, self.state.cycle,
+                    min_tasks=min_tasks, require_deliverable=True,
+                )
+                project_changed = [*project_changed, *refined_project_changed]
             except RunnerError:
                 planning_feedback = (
-                    "The previous planning attempt did not produce the required "
-                    "tasks JSON. Return only valid JSON with ordered, "
-                    f"at least {min_tasks} deliverable-sized TODOs, each with a non-empty deliverable."
+                    "The previous planning attempt was invalid. Return only valid JSON with "
+                    f"at least {min_tasks} ordered, concrete, single-deliverable TODOs. "
+                    "Remove process-only tasks and split independently verifiable results."
                 )
                 raise
             if project_changed:
@@ -337,7 +342,7 @@ class TaskRunner:
                     ", ".join(project_changed),
                 )
             if planner_root == self.root:
-                self.agent.session_id = planner.session_id
+                self.agent.session_id = draft_planner.session_id
             return tasks
 
         planned = retry_model_call(

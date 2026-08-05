@@ -253,4 +253,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planner 必須讓每個 TODO 自包含，並把真正跨任務的限制重複放入各 Task 驗收條件。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback，不自行重讀完整 Goal擴張範圍。同一 TODO 的 changed files 會跨 attempt 累積。Review 使用全新唯讀 session，優先檢查這些 changed files，再只讀最少量直接相關證據。
+Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新獨立 session 的 Refiner 完整重寫，刪除只有理解／檢查結果的流程型 TODO，並拆開可獨立成功或失敗的複合工作；不固定成 8 項，初始規劃仍至少 6 項且依實際 deliverable 動態增加。Planner 必須讓每個 TODO 自包含，並把真正跨任務的限制重複放入各 Task 驗收條件。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback，不自行重讀完整 Goal 擴張範圍。同一 TODO 的 changed files 會跨 attempt 累積。Review 使用全新唯讀 session，優先檢查這些 changed files，再只讀最少量直接相關證據。

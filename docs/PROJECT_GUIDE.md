@@ -41,7 +41,7 @@ Each TODO prompt is about the current task, completion conditions, and the last 
 Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
-Planning is intentionally AI-owned. The planning prompt gives the model the goal, project outline, progress, and compact retry feedback. The model extracts concrete deliverables, splits work to match actual complexity, and returns valid task JSON. If planning does not return valid JSON, the runner retries planning with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+Planning is intentionally AI-owned. A draft planner receives the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner then rewrites the draft into concrete single-deliverable TODOs, removing process-only tasks and splitting independently verifiable work. Invalid output restarts the complete planning flow. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
@@ -108,7 +108,7 @@ runner/backends/qwen.py           Qwen stream-json backend
 runner/backends/opencode.py       OpenCode backend
 
 prompts/                          Editable runner prompt templates
-prompts/plan_refine.md            Repeated AI refinement for task granularity
+prompts/plan_refine.md            Independent fresh-session rewrite of draft task granularity
 docs/                             Human and AI project documentation
 docs/validator_templates/         Copyable validator templates and wrappers
 examples/                         Reusable sample prompts, validators, and runners

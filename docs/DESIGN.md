@@ -171,7 +171,7 @@ flowchart LR
 
 `understand` means gathering enough current evidence to plan correctly: the goal, project structure, existing files, previous task output, and validator feedback. Depending on backend behavior, understanding may be represented inside the planning prompt rather than by a permanently separate source-code function. It is still a distinct logical stage in the task flow and logs.
 
-`plan` converts that understanding into bounded TODO records with a title, description, and acceptance criteria. Planning is read-only. If model planning cannot produce valid task JSON, the runner retries with compact feedback until the model returns the fixed task schema. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+`plan` creates a draft of bounded TODO records. A second, independent fresh-session refiner rewrites the draft rather than defending it, removes process-only tasks, and splits independently verifiable deliverables. Planning is read-only. If either call cannot produce valid task JSON, the runner retries the complete planning flow with compact feedback. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
 ---
 
@@ -395,8 +395,12 @@ flowchart TD
     F --> D
     E -- Yes --> G{Protected file changed?}
     G -- Yes --> H[Restore and raise planning error]
-    G -- No --> I[Parse tasks JSON]
-    I --> M[Use model tasks]
+    G -- No --> I[Parse draft tasks JSON]
+    I --> J[Create fresh independent refiner session]
+    J --> K[Rewrite complete task list]
+    K --> L{Refined JSON valid?}
+    L -- No --> F
+    L -- Yes --> M[Use refined tasks]
     M --> N[Append after completed tasks]
     N --> O[Set current to first planned task]
     O --> P[Persist state]
@@ -410,7 +414,7 @@ The outer model-call retry uses `retry_model_call()` with exponential backoff:
 retry_wait, 2×retry_wait, 4×retry_wait, ... capped at retry_max_wait
 ```
 
-Planning does not set a fixed `max_errors`, so planning model failures retry indefinitely by default. Each retry receives compact feedback asking for valid task JSON. The runner does not derive tasks from the user's prompt structure; only valid AI task JSON becomes the persisted TODO list.
+Planning does not set a fixed `max_errors`, so draft or independent-refinement failures retry indefinitely by default. Each retry restarts the complete draft-and-refine flow with compact feedback asking for concrete single-deliverable task JSON. The runner does not derive tasks from the user's prompt structure; only valid refined AI task JSON becomes the persisted TODO list.
 
 ---
 
