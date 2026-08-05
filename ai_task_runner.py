@@ -15,6 +15,7 @@ from runner.defaults import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_REVIEW_ERROR_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
 from runner.api import RunRequest, run
@@ -104,6 +105,17 @@ def parser() -> argparse.ArgumentParser:
         type=float,
         default=5,
         help="initial model-call retry wait",
+    )
+    command_parser.add_argument(
+        "--review-error-retries",
+        type=int,
+        default=DEFAULT_REVIEW_ERROR_RETRIES,
+        help="review call/parse errors before skip or review-session rebuild",
+    )
+    command_parser.add_argument(
+        "--strict-review",
+        action="store_true",
+        help="never skip a TODO because review is unavailable; rebuild review sessions instead",
     )
     command_parser.add_argument(
         "--retry-max-wait",

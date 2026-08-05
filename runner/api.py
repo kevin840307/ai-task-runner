@@ -81,8 +81,10 @@ class RunRequest:
             retry_delay=args.retry_delay,
             retry_wait=args.retry_wait,
             retry_max_wait=args.retry_max_wait,
-            review_error_retries=args.review_error_retries,
-            strict_review=args.strict_review,
+            review_error_retries=getattr(
+                args, "review_error_retries", DEFAULT_REVIEW_ERROR_RETRIES
+            ),
+            strict_review=getattr(args, "strict_review", False),
             work_dir=args.work_dir,
             resume=args.resume,
             force_new=args.force_new,
