@@ -1,6 +1,6 @@
 # AI Task Runner v1.1.1
 
-AI Task Runner is a small automation wrapper for coding CLIs such as Qwen Code and OpenCode. You provide a project, a goal, and a validator. The runner asks the agent to understand the project, split the goal into TODO tasks, execute one task at a time, review each task, then run the final validator. It keeps state and retries recoverable failures until the validator passes or a configured limit is reached.
+AI Task Runner is a small automation wrapper for coding CLIs such as Qwen Code and OpenCode. You provide a project, a goal, and a validator. The runner asks the agent to split the goal into TODO tasks from the supplied project outline, inspect the files needed by each current TODO, execute one task at a time, review each task, then run the final validator. It keeps state and retries recoverable failures until the validator passes or a configured limit is reached.
 
 ## Quick Start
 
@@ -35,11 +35,10 @@ AI validation uses a fresh independent agent session. It asks the agent to inspe
 ## Flow
 
 ```text
-1. Understand project and goal
-2. Plan TODO tasks
-3. For each task: execute -> review -> retry if needed
-4. Run final Python or AI validator
-5. On validator failure: add focused repair task(s) and continue
+1. Plan TODO tasks from the goal and project outline
+2. For each task: inspect relevant files -> execute -> review -> retry if needed
+3. Run final Python or AI validator
+4. On validator failure: add focused repair task(s) and continue
 ```
 
 The runner does not generate code itself. The agent writes project files. The runner owns state, retries, review orchestration, protected-file restore, validator execution, and resume.
@@ -54,7 +53,9 @@ When the same final validator failure repeats, repair tasks switch to a fresh ag
 
 Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
-Planning uses a fresh draft planner, a different fresh refiner, and an independent no-tool Plan Judge. The Judge accepts only concrete single-deliverable TODOs; rejected issues are sent to another fresh refiner for one more rewrite. If two judged rewrites are still rejected, the runner discards the plan and retries the complete planning flow with compact feedback.
+There is no separate Understand model call or understanding artifact. Project understanding is performed inside the existing prompts: Planning uses the supplied project outline, and each Executor reads only the files needed by its current TODO before changing them.
+
+Planning uses a fresh draft planner, a different fresh refiner, and two independent no-tool Plan Judge passes. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
 For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.

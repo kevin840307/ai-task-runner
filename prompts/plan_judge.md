@@ -17,20 +17,17 @@ $progress_json
 Candidate task JSON:
 $tasks_json
 
-Judge the complete $planning_mode plan against these semantic rules:
-1. Every TODO must produce one concrete, observable, verifiable project result requested by the goal.
-2. Work whose only result is knowledge, findings, analysis, a review decision, or execution of an existing check is not a standalone deliverable unless the goal explicitly requests that artifact or changed behavior.
-3. Reject a TODO that contains multiple results which can be implemented, reviewed, or fail independently.
-4. Every TODO must be self-contained enough to execute without rereading the original goal or planning history.
-5. Deliverables and acceptance criteria must define an objective stopping point.
-6. Reject runner-owned final validation, retry, generic cleanup, speculative repair, or check-only TODOs unless the goal explicitly requires creating or changing that artifact or behavior.
-7. Dependencies must be ordered, the plan must not be padded, and it must contain at least $minimum_tasks task(s).
-8. Goal-wide compatibility, safety, and non-regression constraints must remain represented without turning them into separate process tasks.
+Reject the complete $planning_mode plan if any of these are false:
+1. Every TODO creates or modifies one concrete, observable result requested by the goal.
+2. Every TODO has one focused, independently actionable change and an objective stopping point.
+3. Small concrete TODOs are allowed, and multiple TODOs may modify the same file. Do not reject a plan merely because tasks share files or components.
+4. The tasks completely cover the remaining goal without duplicate work or missing requirements.
+5. Dependencies appear before dependent work.
+6. Read-only investigation, planning, review decisions, and merely running existing checks are not standalone TODOs unless the goal explicitly requests that artifact or changed behavior.
+7. The plan contains at least $minimum_tasks ordered task(s), and more when additional changes can be implemented or verified independently.
 
-Judge the task's actual description, deliverable, and acceptance criteria. Never accept or reject a task from title wording or keyword matching.
+Never judge from title wording or keyword matching. Judge the descriptions, deliverables, acceptance criteria, goal, and ordering.
+When rejecting, issues must identify the affected task number or plan-wide defect and state the required correction.
 
 Return only valid JSON, without Markdown or explanation:
 {"accepted":true,"issues":[]}
-
-Or, when rejected:
-{"accepted":false,"issues":["Specific actionable planning defect","Another defect"]}

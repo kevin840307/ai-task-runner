@@ -1,36 +1,31 @@
-Build a generic Jinja2-based config renderer for this project.
+Build a generic Jinja2 config renderer for this project.
 
-Create or update rander.py to load YAML config, deep merge values, render Jinja2 templates, create directories, and write output files.
+Create or update rander.py to:
 
-Example command:
+* load YAML
+* merge values
+* read one central render matrix
+* render Jinja2 templates
+* create directories
+* write output files
+
+Example:
 python rander.py --workflow WORKFLOW-A --fab FAB29-FZ1 --env PROD --output output
 
-WORKFLOW-A, FAB29-FZ1, and PROD are examples only and must not be hardcoded.
+All arguments are runtime values and must not be hardcoded.
 
-Requirements:
+Treat --fab as a generic target id.
+target_family is the text before its first hyphen.
 
-1. Treat --workflow, --fab, --env, and --output as runtime inputs.
+Keep rander.py generic, format-agnostic, under 500 lines, and independent of other local Python files.
 
-2. --fab is a generic target id, not necessarily a real FAB name.
+Do not add app, workflow, target, env, version, profile, template, filename, format, sample, or ans-specific Python logic.
 
-3. rander.py may only load YAML, merge values, render templates, create folders, and write files.
+All render targets, templates, filenames, output paths, combinations, and extra context must come from YAML.
 
-4. Do not add app-specific, workflow-specific, target-specific, env-specific, format-specific, or ans-specific logic in Python.
+Adding or removing render targets must not require changing rander.py.
 
-5. Do not branch or loop on fixed app, workflow, target, env, version, profile, filename, or template names.
-
-6. Apps, services, versions, profiles, templates, filenames, output paths, and render combinations must come from YAML config or one central render matrix.
-
-7. Adding or removing render targets must not require changing rander.py.
-
-8. Keep rander.py under 500 source lines.
-
-9. rander.py must not import, call, or depend on other local Python files.
-
-10. Python must remain format-agnostic. Templates may generate YAML, XML, INI, CFG, JSON, or text.
-
-Load config in this order, with later files overriding earlier files:
-
+Load config in this order:
 config/values.yaml
 config/{workflow}/values.yaml
 config/phase/{target_family}.yaml or config/phases/{target_family}.yaml
@@ -38,39 +33,25 @@ config/{workflow}/{target}/values.yaml
 config/{workflow}/{env}.yaml
 config/{workflow}/{target}/{env}.yaml
 
-target_family is the part before the first hyphen.
-Example: FAB29-FZ1 becomes FAB29.
+Skip missing optional files. Later files override earlier files.
 
-Skip missing optional config files.
+Recursively merge only when both values are non-empty dictionaries.
+Lists, scalars, null, and empty dictionaries or lists fully replace earlier values.
+Never merge list items.
 
-Deep merge only when both old and new values are non-empty dictionaries.
+Store templates under Template/.
+Pass merged config, runtime arguments, target_family, and the current render item to each template.
 
-A later list, empty dictionary, empty list, null, or scalar must fully replace the earlier value.
+Keep YAML simple and avoid duplicated shared definitions.
 
-Do not merge lists item by item.
+Treat ans as read-only validation data.
+Never use ans as renderer input, template source, or output.
 
-Use simple YAML and avoid duplicating shared apps, versions, profiles, template mappings, or output patterns.
+Write files only under --output.
 
-Use one central render matrix to define templates, output paths, filenames, and render context.
+For each ans/{workflow}/{target}/{env}, the matching command must reproduce the same file tree and contents.
 
-Store Jinja2 templates under Template/.
+Inspect the project, simplify the config, implement the renderer, and run validation.
 
-Templates must contain dynamic placeholders and may use standard Jinja2 features.
-
-Pass merged config, runtime arguments, target_family, and the current render item into the template context.
-
-The ans directory is read-only validation data.
-
-Do not create, modify, delete, move, copy, or use ans files as renderer inputs or templates.
-
-Write generated files only under --output.
-
-For every ans/{workflow}/{target}/{env}, running the matching command must create output/{workflow}/{target}/{env} with exactly the same file tree and contents.
-
-Inspect the existing project, implement the renderer, simplify the config, and run validation tests.
-
-Do not ask questions. Make reasonable assumptions from existing files.
-
-Use the smallest, simplest, and most maintainable solution.
-
-Do not add hardcoded logic only to pass current samples.
+Do not ask questions.
+Use the smallest maintainable solution and do not hardcode current samples.

@@ -24,7 +24,7 @@ For Final AI validation, each configured validation is an independent new sessio
 
 ## Planning isolation
 
-Planning uses a fresh draft session, a different fresh refiner session, and a separate no-tool Plan Judge session. The Judge checks semantics rather than title keywords. If rejected, its issues are sent to one more fresh refiner and then judged again. Two rejected rewrites restart the complete planning flow. Only a Judge-accepted list is persisted; the initial minimum remains six and is not padded to a fixed eight.
+Planning uses a fresh draft session, a different fresh refiner session, and two fresh no-tool Plan Judge passes. The Judges return only accepted/issues and check semantics rather than title keywords. Only a plan accepted twice is persisted. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Split by independently actionable changes, even when several TODOs modify the same file.
 
 ## Executor scope isolation
 

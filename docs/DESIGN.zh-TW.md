@@ -12,8 +12,7 @@ Runner 不在 Python 內 hardcode 特定專案知識。整個執行只有一個�
 
 ```text
 啟動或 Resume
-  -> Understand：理解專案、需求、目前狀態與前次驗證錯誤
-  -> Plan：拆成可驗證 TODO
+  -> Plan：依需求與專案 outline 拆成可驗證 TODO
   -> Todo：一次只執行目前 TODO
   -> Review：只讀檢查目前檔案結果
        -> 未完成：重試同一 TODO
@@ -26,9 +25,8 @@ Runner 不在 Python 內 hardcode 特定專案知識。整個執行只有一個�
 
 ```mermaid
 flowchart LR
-    A[啟動或 Resume] --> B[Understand]
-    B --> C[Plan TODO]
-    C --> D[Todo 執行]
+    A[啟動或 Resume] --> C[Plan TODO]
+    C --> D[讀取必要檔案並執行 Todo]
     D --> E[Review]
     E -- 未完成 --> D
     E -- 完成 --> F{還有 TODO?}
@@ -47,7 +45,6 @@ flowchart LR
 startup
 -> state_restore 或 state_create
 -> backend_prepare
--> understanding
 -> planning
 -> todoing
 -> reviewing
@@ -63,7 +60,6 @@ Validator 失敗後：
 final_validating
 -> validator_failed
 -> cycle + 1
--> repair_understanding
 -> repair_planning
 -> repair_todoing
 -> reviewing 或交由 validator 最終判定
@@ -86,8 +82,7 @@ flowchart TD
     G -- 是 --> Z[Exit 0]
     G -- 否 --> H{已有 Pending TODO?}
 
-    H -- 否 --> I[UNDERSTAND 需求 專案現況 前次輸出 Validator Feedback]
-    I --> J[PLAN 產生有界且可驗證的 TODO JSON]
+    H -- 否 --> J[PLAN 依需求 Outline State 與 Validator Feedback 產生 TODO JSON]
     J --> K{模型成功且 JSON 合法?}
     K -- 否 --> L[指數退避重試 Model Call]
     L --> K
@@ -148,9 +143,9 @@ flowchart LR
     C -->|PASS| E[Run 完成]
 ```
 
-## 4. Understand 與 Plan
+## 4. Prompt 內的專案理解與 Plan
 
-`Understand` 是邏輯階段，會綜合原始 goal、專案結構、現有檔案、前次 Task 輸出、Validator Feedback 與 Resume State。實作上可能整合在 planning prompt 中，不一定是一個獨立 Python 函式，但流程與 Log 應把它視為獨立概念。
+專案理解不是獨立的 Model 呼叫、持久化產物或 Python 階段。Planning 只使用 goal、專案 outline、進度與 Validator Feedback；Executor 執行每個 TODO 前，再於同一個 Prompt 流程中讀取該 TODO 必要的現有檔案，理解後直接完成具體修改。
 
 `Plan` is read-only and converts the model understanding into bounded TODO records with title, description, and acceptance_criteria. If planning does not return valid JSON, the runner retries with compact feedback until the fixed task schema is returned. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
 
@@ -253,4 +248,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給另一個無工具的 Plan Judge 做語意品質判定。Judge 不依標題關鍵字，而是檢查每個 TODO 是否只有一個具體可驗證 deliverable、是否含流程型或尚未發生的推測工作。若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次；兩輪仍拒絕才重啟完整 Planning。只有 Judge 接受的 TODO 會保存；初始規劃仍至少 6 項且不固定成 8 項。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback。同一 TODO 的 changed files 會跨 attempt 累積；Review 使用全新唯讀 session，優先檢查這些 changed files。
+Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給另一個無工具的 Plan Judge 做語意品質判定。Judge 不依標題關鍵字，而是逐項檢查是否產生具體變更、大小合理且可驗證，再檢查整體覆蓋、依賴順序與重疊。若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次；兩輪仍拒絕才重啟完整 Planning。只有 Judge 接受的 TODO 會保存；規劃至少一項，實際數量由可獨立 Review 的 deliverable 決定，不為湊數過度拆分或合併。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback。同一 TODO 的 changed files 會跨 attempt 累積；Review 使用全新唯讀 session，優先檢查這些 changed files。

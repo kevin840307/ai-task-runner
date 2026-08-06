@@ -8,7 +8,7 @@ AI Task Runner is a small, task-agnostic orchestration layer around coding-agent
 
 The design goal is not to understand or implement one business domain in Python. The runner only provides a generic closed loop that can keep a coding task moving for long unattended runs:
 
-1. understand the goal and split it into TODO tasks;
+1. split the goal into TODO tasks from the supplied project outline;
 2. execute exactly one current task;
 3. review the current filesystem state without allowing review-time edits;
 4. retry incomplete or failed work;
@@ -28,8 +28,7 @@ This is the shortest accurate representation of one run:
 
 ```text
 Start / Resume
-  -> Understand project and requirement
-  -> Plan verifiable TODO tasks
+  -> Plan verifiable TODO tasks from goal and project outline
   -> Execute current TODO
   -> Review current filesystem result
        -> incomplete / failed: retry the same TODO
@@ -42,9 +41,8 @@ Start / Resume
 
 ```mermaid
 flowchart LR
-    A[Start or Resume] --> B[Understand]
-    B --> C[Plan TODOs]
-    C --> D[Execute TODO]
+    A[Start or Resume] --> C[Plan TODOs]
+    C --> D[Inspect relevant files and execute TODO]
     D --> E[Review]
     E -- Incomplete --> D
     E -- Complete --> F{More TODOs?}
@@ -65,7 +63,6 @@ The normal stage order is:
 startup
 -> state_restore / state_create
 -> backend_prepare
--> understanding
 -> planning
 -> todoing
 -> reviewing
@@ -81,7 +78,7 @@ When validation fails, the line continues as a new repair cycle:
 final_validating
 -> validator_failed
 -> cycle increment
--> repair_understanding / repair_planning
+-> repair_planning
 -> repair todoing
 -> reviewing or validator-deferred completion
 -> final_validating
@@ -103,8 +100,7 @@ flowchart TD
     G -- Yes --> Z[Exit 0]
     G -- No --> H{Pending tasks exist?}
 
-    H -- No --> I[UNDERSTAND project goal current state and validator feedback]
-    I --> J[PLAN bounded verifiable TODO JSON]
+    H -- No --> J[PLAN bounded verifiable TODO JSON from goal outline state and validator feedback]
     J --> K{Planning call succeeded and JSON valid?}
     K -- No --> L[Retry model call with backoff]
     L --> K
@@ -167,11 +163,11 @@ flowchart LR
     C -->|PASS| E[Run Complete]
 ```
 
-### 2.4 Understand and plan are logical stages
+### 2.4 Project understanding is prompt behavior
 
-`understand` means gathering enough current evidence to plan correctly: the goal, project structure, existing files, previous task output, and validator feedback. Depending on backend behavior, understanding may be represented inside the planning prompt rather than by a permanently separate source-code function. It is still a distinct logical stage in the task flow and logs.
+Project understanding is prompt behavior, not a separate model call, persisted artifact, or Python stage. Planning uses the goal, project outline, progress, and validator feedback; each Executor then reads only the existing files needed by its current TODO before making the concrete change.
 
-`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge performs a semantic quality gate. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
+`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge checks each task for concrete change, suitable size, and verifiability, followed by complete-plan coverage, dependency order, and overlap. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
 
 ---
 

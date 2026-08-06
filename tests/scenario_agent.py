@@ -23,14 +23,17 @@ def count(name):
     return value + 1
 
 
-if "Plan only the remaining work" in prompt or "Refine this task plan" in prompt:
+if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
     if scenario == "multi_task_plan":
         answer = {"tasks": [
-            {"title": "Create first marker", "description": "Create first.txt", "acceptance_criteria": ["first.txt exists"]},
-            {"title": "Create second marker", "description": "Create second.txt after first.txt", "acceptance_criteria": ["second.txt exists"]},
+            {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"]},
+            {"title": "Create second marker", "description": "Create second.txt after first.txt", "deliverable": "second.txt exists", "acceptance_criteria": ["second.txt exists"]},
         ]}
     else:
-        answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "acceptance_criteria": ["done.txt exists"]}]}
+        answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "deliverable": "done.txt exists", "acceptance_criteria": ["done.txt exists"]}]}
+elif "plan quality judge" in prompt:
+    n = max(1, prompt.count('"title"'))
+    answer = {"task_checks":[{"index":i,"produces_change":True,"properly_sized":True,"verifiable":True,"issues":[]} for i in range(1,n+1)],"coverage_complete":True,"dependency_order_ok":True,"no_overlap":True,"plan_issues":[]}
 elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     n = count("execute")
     if scenario == "multi_task_plan":

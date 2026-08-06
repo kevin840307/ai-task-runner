@@ -6,6 +6,45 @@ from runner.models import RunState, Task
 from runner.prompting import plan_judge_prompt, plan_prompt, plan_refine_prompt
 
 
+def judge_payload(task_count: int, *, rejected_index: int | None = None, issue: str = "Task needs revision"):
+    checks = [
+        {
+            "index": index,
+            "produces_change": index != rejected_index,
+            "properly_sized": index != rejected_index,
+            "verifiable": index != rejected_index,
+            "issues": [issue] if index == rejected_index else [],
+        }
+        for index in range(1, task_count + 1)
+    ]
+    return {
+        "task_checks": checks,
+        "coverage_complete": True,
+        "dependency_order_ok": True,
+        "no_overlap": True,
+        "plan_issues": [],
+    }
+
+
+
+
+def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
+    state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[Task(
+        id="c01-t001",
+        title="Implement result",
+        description="Create the result",
+        deliverable="result",
+        acceptance_criteria=["result exists"],
+    )])
+
+    plan = plan_prompt("g", tmp_path, state, [])
+    from runner.prompting import execution_prompt
+    execute = execution_prompt(state, tmp_path, [])
+
+    assert "bounded read-only inspection at the start of the concrete TODO" in plan
+    assert "This inspection is preparation inside the TODO and never completes the TODO by itself" in execute
+    assert not (Path(__file__).parents[1] / "prompts" / "understand.md").exists()
+
 def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     prompt = plan_prompt("g", tmp_path, state, [])
@@ -13,7 +52,8 @@ def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
     assert "concrete, observable project result" in prompt
     assert "execution does not need the original goal or planning output" in prompt
     assert "objective stopping evidence" in prompt
-    assert "never pad with process tasks" in prompt
+    assert "Return at least 6 ordered task(s)" in prompt
+    assert "Multiple TODOs may modify the same file" in prompt
 
 
 def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
@@ -30,8 +70,9 @@ def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
     assert "independent plan editor" in prompt
     assert "do not defend it" in prompt
     assert "complete replacement task list" in prompt
-    assert "only result is knowledge" in prompt
-    assert "implemented, reviewed, or fail independently" in prompt
+    assert "Knowledge, findings" in prompt
+    assert "implemented, reviewed, verified, retried, or fail independently" in prompt
+    assert "never use file count as the task boundary" in prompt
     assert "without rereading the original goal or draft plan" in prompt
 
 
@@ -48,8 +89,9 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
 
     assert "independent plan quality judge" in prompt
     assert "Do not rewrite the plan" in prompt
-    assert "Never accept or reject a task from title wording or keyword matching" in prompt
-    assert '"accepted":true,"issues":[]' in prompt
+    assert "Never judge from title wording or keyword matching" in prompt
+    assert '"accepted":true' in prompt
+    assert 'multiple TODOs may modify the same file' in prompt
 
 
 def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
@@ -87,7 +129,7 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
         calls.append((agent, prompt))
         agent.session_id = f"planning-session-{len(calls)}"
         if "plan quality judge" in prompt:
-            payload = {"accepted": True, "issues": []}
+            payload = judge_payload(6)
         else:
             payload = task_payload("Draft" if "Plan only" in prompt else "Refined")
         return json.dumps(payload), [], []
@@ -119,12 +161,13 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 3
+    assert len(created) == 4
     assert created[0] is calls[0][0]
     assert created[1] is calls[1][0]
     assert created[2] is calls[2][0]
-    assert len({id(agent) for agent in created}) == 3
-    assert [agent.initial_session_id for agent in created] == ["", "", ""]
+    assert created[3] is calls[3][0]
+    assert len({id(agent) for agent in created}) == 4
+    assert [agent.initial_session_id for agent in created] == ["", "", "", ""]
     assert runner.state.tasks[0].title == "Refined 1"
 
 
@@ -165,9 +208,9 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
         if "plan quality judge" in prompt:
             judge_calls += 1
             payload = (
-                {"accepted": False, "issues": ["Split the compound deliverable"]}
+                judge_payload(6, rejected_index=1, issue="Split the compound deliverable")
                 if judge_calls == 1
-                else {"accepted": True, "issues": []}
+                else judge_payload(6)
             )
         elif "Plan judge issues" in prompt:
             payload = task_payload("Corrected")
@@ -204,8 +247,8 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
 
     runner._plan_if_needed()
 
-    assert len(created) == 5
-    assert judge_calls == 2
+    assert len(created) == 6
+    assert judge_calls == 3
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
     assert runner.state.tasks[0].title == "Corrected 1"
 
@@ -215,13 +258,33 @@ def test_parse_plan_judgment_contract():
     from runner.errors import RunnerError
     from runner.support import parse_plan_judgment
 
-    assert parse_plan_judgment('{"accepted":true,"issues":[]}')["accepted"] is True
-    rejected = parse_plan_judgment('{"accepted":false,"issues":["Split task 2"]}')
-    assert rejected["issues"] == ["Split task 2"]
-    with pytest.raises(RunnerError, match="empty issues"):
-        parse_plan_judgment('{"accepted":true,"issues":["x"]}')
-    with pytest.raises(RunnerError, match="non-empty issues"):
-        parse_plan_judgment('{"accepted":false,"issues":[]}')
+    assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}), 2)["accepted"] is True
+    assert parse_plan_judgment(json.dumps(judge_payload(2)), 2)["accepted"] is True
+    rejected = parse_plan_judgment(
+        json.dumps(judge_payload(2, rejected_index=2, issue="Split task 2")),
+        2,
+    )
+    assert rejected["issues"] == ["Task 2: Split task 2"]
+    with pytest.raises(RunnerError, match="accepted and issues"):
+        parse_plan_judgment(json.dumps(judge_payload(1)), 2)
+    invalid = judge_payload(2)
+    invalid["task_checks"][1]["index"] = 1
+    with pytest.raises(RunnerError, match="index is invalid"):
+        parse_plan_judgment(json.dumps(invalid), 2)
+
+
+def test_plan_judge_gate_rejects_task_and_plan_failures():
+    from runner.support import parse_plan_judgment
+
+    payload = judge_payload(8, rejected_index=1, issue="No concrete deliverable")
+    payload["dependency_order_ok"] = False
+    payload["plan_issues"] = ["A prerequisite appears after dependent work"]
+
+    result = parse_plan_judgment(json.dumps(payload), 8)
+
+    assert result["accepted"] is False
+    assert "Task 1: No concrete deliverable" in result["issues"]
+    assert "A prerequisite appears after dependent work" in result["issues"]
 
 
 def test_plan_judge_rejects_twice_before_restarting_planning(tmp_path: Path, monkeypatch):
@@ -253,7 +316,7 @@ def test_plan_judge_rejects_twice_before_restarting_planning(tmp_path: Path, mon
 
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         payload = (
-            {"accepted": False, "issues": ["Plan is still not bounded"]}
+            judge_payload(6, rejected_index=1, issue="Plan is still not bounded")
             if "plan quality judge" in prompt
             else tasks
         )

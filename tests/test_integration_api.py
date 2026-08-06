@@ -229,14 +229,14 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
     ui.bind(RunState("run", "goal", "/project", tasks=[
         Task("t1", "Task one", "Do it", ["Done"]),
     ]))
-    ui.start("AI 正在理解並拆分任務")
+    ui.start("AI 正在規劃並拆分任務")
     ui.stop()
 
     assert "\r" in stdout.output
     assert "\x1b[2J" not in stdout.output
     assert "AI Task Runner  Cycle 1  Progress 0/1" in stdout.output
     assert "[>] 1. Task one" in stdout.output
-    assert "AI 正在理解並拆分任務" in stdout.output
+    assert "AI 正在規劃並拆分任務" in stdout.output
 
 
 def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):

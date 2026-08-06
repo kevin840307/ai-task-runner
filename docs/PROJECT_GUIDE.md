@@ -8,8 +8,8 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 
 ## Closed Loop
 
-1. Understand the project and goal.
-2. Split the goal into ordered TODO tasks.
+1. Split the goal into ordered TODO tasks from the supplied project outline.
+2. Before editing, inspect only the existing files needed by the current TODO.
 3. Execute only the current task.
 4. Ask read-only review whether that task is complete.
 5. Retry the same task on model errors, invalid review JSON, no progress, or review failure.
@@ -41,7 +41,7 @@ Each TODO prompt is about the current task, completion conditions, and the last 
 Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
-Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge checks whether every task has one concrete deliverable and no process-only or speculative work. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
+Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge checks each task for a concrete change, suitable size, and verifiability, then checks plan coverage, dependency order, and overlap. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
 For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.

@@ -800,7 +800,9 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
         assert "Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies" in prompt
 
     assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
-    assert "verify the change is scoped, maintainable, and preserves relevant existing behavior" in review
+    assert "bounded read-only inspection at the start of the concrete TODO" in plan
+    assert "This inspection is preparation inside the TODO and never completes the TODO by itself" in execute
+    assert "Review only. You are a read-only task reviewer" in review
     assert "the actual bad value to change away from" in execute
     assert "fix the program behavior that produces it" in execute
 
@@ -904,7 +906,7 @@ def test_qwen_args_default_to_yolo():
     )
 
 
-def test_planning_schema_requires_six_deliverable_tasks():
+def test_initial_planning_schema_requires_six_deliverable_tasks():
     import json
     import pytest
     from runner.support import parse_tasks

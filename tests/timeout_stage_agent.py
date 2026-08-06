@@ -18,15 +18,20 @@ state_dir = Path(os.environ["TIMEOUT_STAGE_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "timeout-main-session"
 
-if "Plan only the remaining work" in prompt or "Refine this task plan" in prompt:
-    stage = "plan_refine" if "Refine this task plan" in prompt else "plan"
+if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
+    stage = "plan_refine" if "independent plan editor" in prompt else "plan"
     answer = {
         "tasks": [{
             "title": "Create marker",
             "description": "Create done.txt",
+            "deliverable": "done.txt exists",
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
+elif "plan quality judge" in prompt:
+    stage = "plan_judge"
+    n = max(1, prompt.count('"title"'))
+    answer = {"task_checks":[{"index":i,"produces_change":True,"properly_sized":True,"verifiable":True,"issues":[]} for i in range(1,n+1)],"coverage_complete":True,"dependency_order_ok":True,"no_overlap":True,"plan_issues":[]}
 elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     stage = "execute"
     (root / "done.txt").write_text("done", encoding="utf-8")

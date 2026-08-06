@@ -15,8 +15,11 @@ elif is_qwen and '--resume' in args:
     assert args[args.index('--resume')+1] == session
 elif not is_qwen and '--session' in args:
     assert args[args.index('--session')+1] == session
-if 'Plan only the remaining work' in prompt or 'Refine this task plan' in prompt:
-    answer=json.dumps({'tasks':[{'title':'Create marker','description':'create done.txt','acceptance_criteria':['done.txt exists']}]})
+if 'Plan only the remaining work' in prompt or 'independent plan editor' in prompt:
+    answer=json.dumps({'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]})
+elif 'plan quality judge' in prompt:
+    count = max(1, prompt.count('\"title\"'))
+    answer = json.dumps({'task_checks':[{'index':i,'produces_change':True,'properly_sized':True,'verifiable':True,'issues':[]} for i in range(1,count+1)],'coverage_complete':True,'dependency_order_ok':True,'no_overlap':True,'plan_issues':[]})
 elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
     (root/'done.txt').write_text('done'); answer='created done.txt'
 elif 'review only' in prompt.lower():

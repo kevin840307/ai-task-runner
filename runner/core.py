@@ -61,6 +61,7 @@ EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 MIN_PLANNED_TASKS = 6
 PLAN_JUDGE_MAX_REWRITES = 2
+PLAN_JUDGE_REQUIRED_PASSES = 2
 
 
 def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
@@ -341,36 +342,40 @@ class TaskRunner:
                     )
                     project_changed.extend(refined_project_changed)
 
-                    self.ui.set(
-                        "AI 正在審查任務規劃",
-                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
-                    )
-                    judge = new_planner()
-                    judgment_text, protected_changed, judge_project_changed = readonly_ask(
-                        judge,
-                        plan_judge_prompt(
-                            self.state.goal,
-                            self.root,
-                            self.state,
-                            tasks,
-                            self.work,
-                        ),
-                        self.root,
-                        self.work,
-                        self.protected,
-                        timeout=self.args.planning_timeout,
-                        idle_timeout=self.args.agent_idle_after_change_timeout,
-                    )
-                    if protected_changed:
-                        raise RunnerError(
-                            "AI modified files during planning and they were restored: "
-                            + ", ".join(protected_changed)
+                    judge_issues = []
+                    for judge_pass in range(1, PLAN_JUDGE_REQUIRED_PASSES + 1):
+                        self.ui.set(
+                            "AI 正在審查任務規劃",
+                            f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES} · pass {judge_pass}/{PLAN_JUDGE_REQUIRED_PASSES}",
                         )
-                    project_changed.extend(judge_project_changed)
-                    judgment = parse_plan_judgment(judgment_text)
-                    if judgment["accepted"]:
+                        judge = new_planner()
+                        judgment_text, protected_changed, judge_project_changed = readonly_ask(
+                            judge,
+                            plan_judge_prompt(
+                                self.state.goal,
+                                self.root,
+                                self.state,
+                                tasks,
+                                self.work,
+                            ),
+                            self.root,
+                            self.work,
+                            self.protected,
+                            timeout=self.args.planning_timeout,
+                            idle_timeout=self.args.agent_idle_after_change_timeout,
+                        )
+                        if protected_changed:
+                            raise RunnerError(
+                                "AI modified files during planning and they were restored: "
+                                + ", ".join(protected_changed)
+                            )
+                        project_changed.extend(judge_project_changed)
+                        judgment = parse_plan_judgment(judgment_text, len(tasks))
+                        if not judgment["accepted"]:
+                            judge_issues = judgment["issues"]
+                            break
+                    if not judge_issues:
                         break
-                    judge_issues = judgment["issues"]
                     self.ui.set(
                         "AI 任務規劃未通過，重新拆分",
                         "; ".join(judge_issues),
@@ -384,7 +389,7 @@ class TaskRunner:
                 planning_feedback = (
                     "The previous planning attempt was invalid. Return only valid JSON with "
                     f"at least {min_tasks} ordered, concrete, single-deliverable TODOs. "
-                    "Remove process-only tasks and split independently verifiable results."
+                    "Remove process-only tasks and split independently implementable or verifiable changes, even when they modify the same file."
                 )
                 raise
             if project_changed:
@@ -399,7 +404,7 @@ class TaskRunner:
         planned = retry_model_call(
             plan_call,
             self.ui,
-            "AI 正在理解並拆分任務",
+            "AI 正在規劃並拆分任務",
             "",
             self.args.retry_wait,
             self.args.retry_max_wait,

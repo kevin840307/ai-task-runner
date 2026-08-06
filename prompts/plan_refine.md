@@ -21,18 +21,19 @@ $judge_feedback
 Return a complete replacement task list for $planning_mode planning.
 
 Quality gate:
-1. Every TODO must create or modify one concrete, observable project deliverable requested by the goal.
-2. A TODO whose only result is knowledge, findings, a review decision, or execution of an existing check is not a standalone deliverable. Move that work into the acceptance criteria of the concrete task that needs it.
-3. Split a TODO when two parts can be implemented, reviewed, or fail independently. Keep one coherent deliverable per TODO.
-4. Each description must contain the task-specific context needed to execute it without rereading the original goal or draft plan.
-5. Each deliverable must state the exact end result. Acceptance criteria must make the stopping point objectively clear.
-6. Remove runner-owned final validation, retry, generic cleanup, and check-only tasks unless the goal explicitly requires creating or changing that artifact or behavior.
-7. Keep dependencies ordered. Do not pad the plan, but return at least $minimum_tasks task(s).
-8. Include genuinely goal-wide compatibility, safety, and non-regression constraints consistently so they can be summarized for execution.
+1. Every TODO must create or modify one concrete, observable project result requested by the goal.
+2. Knowledge, findings, review decisions, and execution of an existing check are not standalone deliverables. Put those steps inside the concrete TODO that uses them.
+3. Split changes whenever they can be implemented, reviewed, verified, retried, or fail independently. Multiple TODOs may modify the same file; never use file count as the task boundary.
+4. Small focused changes are valid. Merge only duplicate or process-only tasks, not independent changes that happen to share a file or component.
+5. Each description must contain the task-specific context needed to execute it without rereading the original goal or draft plan.
+6. Each deliverable must state the exact end result. Acceptance criteria must make the stopping point objectively clear.
+7. Remove runner-owned final validation, retry, generic cleanup, read-only inspection, and check-only tasks unless the goal explicitly requests that artifact or changed behavior.
+8. Keep dependencies ordered. Return at least $minimum_tasks task(s); add more whenever the goal contains more independently actionable changes.
+9. Include genuinely goal-wide compatibility, safety, and non-regression constraints consistently so they can be summarized for execution.
 
-Before returning, independently reject and rewrite the plan if any TODO has no concrete observable result or contains multiple independently verifiable deliverables.
+Before returning, independently reject and rewrite the plan if any TODO has no concrete observable change, is only a read/check step, duplicates another TODO, or combines independently implementable or verifiable changes.
 Do not implement, ask questions, use tools, or write files during planning.
 Every task must include this acceptance criterion: Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior.
 
 Return only valid JSON in this shape, without Markdown or explanation:
-{"tasks":[{"title":"Deliverable","description":"Task-specific context and one coherent change.","deliverable":"The exact observable project result.","acceptance_criteria":["Objective completion evidence","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]}]}
+{"tasks":[{"title":"Deliverable","description":"Task-specific context and one focused change.","deliverable":"The exact observable project result.","acceptance_criteria":["Objective completion evidence","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]}]}
