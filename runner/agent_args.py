@@ -111,6 +111,13 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "agent",
     *QWEN_COMPUTER_USE_TOOLS,
 )
+QWEN_REVIEW_EXCLUDED_TOOLS = (
+    "write_file",
+    "edit",
+    "notebook_edit",
+    "run_shell_command",
+)
+
 QWEN_RUNTIME_EXCLUDED_TOOLS = (
     "todo_write",
     "skill",
@@ -126,6 +133,14 @@ def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
         ensure_qwen_yolo(result)
         ensure_qwen_safe_mode(result)
         exclude_qwen_tools(result, QWEN_PLANNING_EXCLUDED_TOOLS)
+    return result
+
+
+def review_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
+    """Keep review sessions read-only at the backend capability level."""
+    result = runtime_agent_args(backend, extra_args)
+    if backend == "qwen":
+        exclude_qwen_tools(result, QWEN_REVIEW_EXCLUDED_TOOLS)
     return result
 
 

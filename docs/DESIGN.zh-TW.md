@@ -244,7 +244,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 
 ## Review error tolerance
 
-`--review-error-retries N` 只控制 Review 呼叫／格式異常。每次 Review 都使用全新獨立 session，錯誤次數會持久化累積。Review PASS 完成 TODO；明確 Review FAIL 一定把 `missing_items` 交回同一 TODO。預設模式達 N 次連續錯誤且本 TODO 曾有累積檔案變更時，可暫時跳過並交給 Final Validator；`--strict-review` 禁止跳過。
+`--review-error-retries N` 只控制 Review 呼叫／格式異常。每次 Review 都使用全新獨立 session，錯誤次數會持久化累積。Review PASS 完成 TODO；明確 Review FAIL 一定把 `missing_items` 交回同一 TODO。預設模式以 Task 持久化累積 Review 錯誤，達 N 次後可暫時跳過並交給 Final Validator；`--strict-review` 禁止跳過，達上限時保存狀態並停止，避免無限循環。Qwen Review 會停用寫入、編輯與 shell 工具。
 
 
 ## Final AI 多次獨立驗證

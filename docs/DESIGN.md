@@ -861,7 +861,7 @@ The resilience tests cover important branches such as timeout after project chan
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Each Review attempt uses a fresh independent session; every error increments persisted audit counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N consecutive Review errors a TODO with accumulated project changes may be provisionally completed. `--strict-review` disables this skip. Final validation is always required.
+`--review-error-retries N` controls only Review infrastructure/format errors. Each Review attempt uses a fresh independent session; every error increments persisted audit counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N total Review errors for the TODO it may be provisionally completed. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
 
 
 ## Final AI validation quorum

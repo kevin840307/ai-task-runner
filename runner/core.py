@@ -13,9 +13,10 @@ from typing import Any
 from .agent import AgentClient
 from .agent_args import (
     planning_agent_args,
+    review_agent_args,
     runtime_agent_args,
 )
-from .errors import RunnerError
+from .errors import ReviewUnavailableError, RunnerError
 from .models import RunState, Task
 from .prompting import (
     bounded_text,
@@ -443,6 +444,10 @@ class TaskRunner:
                 self._save_state()
                 self._set_stage("reviewing")
                 review = self._review_current_task(task, output, bool(task.changed_files))
+            except ReviewUnavailableError as error:
+                self._set_stage("review_unavailable", str(error))
+                self.ui.set("Review 無法完成，已保存狀態", task.title)
+                return 4
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -519,7 +524,12 @@ class TaskRunner:
             self.agent.session_id = ""
             self._save_session()
             self._set_stage("reviewing")
-            review = self._review_current_task(task, task.last_output, True)
+            try:
+                review = self._review_current_task(task, task.last_output, True)
+            except ReviewUnavailableError as review_error:
+                self._set_stage("review_unavailable", str(review_error))
+                self.ui.set("Review 無法完成，已保存狀態", task.title)
+                return 4
             return self._handle_review_result(task, review)
 
         self._set_stage("task_retry_wait", str(error))
@@ -659,13 +669,24 @@ class TaskRunner:
         output: str,
         project_changed: bool,
     ) -> dict[str, Any]:
-        consecutive_errors = 0
         while True:
+            if task.review_error_attempts >= self.args.review_error_retries:
+                if not self.args.strict_review:
+                    return {
+                        "completed": True,
+                        "reason": task.review_skip_reason or "review error budget exhausted",
+                        "missing_items": [],
+                        "review_skipped": True,
+                    }
+                raise ReviewUnavailableError(
+                    f"review failed {task.review_error_attempts} times for {task.title}"
+                )
+
             reviewer = AgentClient(
                 backend=self.args.backend,
                 command=self.args.command,
                 root=self.root,
-                extra_args=runtime_agent_args(
+                extra_args=review_agent_args(
                     self.args.backend, self.args.agent_arg
                 ),
                 session_id="",
@@ -712,33 +733,32 @@ class TaskRunner:
                 )
                 return result
             except RunnerError as error:
-                consecutive_errors += 1
                 task.review_error_attempts += 1
                 task.review_session_rebuilds += 1
+                task.review_skip_reason = str(error)[-1000:]
                 self._save_state()
-                if consecutive_errors < self.args.review_error_retries:
+                attempts = task.review_error_attempts
+                if attempts < self.args.review_error_retries:
                     self.ui.set(
                         "Review 異常，使用新 session 重試",
-                        f"{task.title} · {consecutive_errors}/{self.args.review_error_retries}",
+                        f"{task.title} · {attempts}/{self.args.review_error_retries}",
                     )
                     continue
-                if project_changed and not self.args.strict_review:
-                    reason = str(error)[-1000:]
+                if not self.args.strict_review:
                     self.ui.set(
                         "Review 異常達上限，暫時跳過",
                         f"{task.title} · final validator will decide",
                     )
                     return {
                         "completed": True,
-                        "reason": reason,
+                        "reason": task.review_skip_reason,
                         "missing_items": [],
                         "review_skipped": True,
                     }
-                consecutive_errors = 0
-                self.ui.set(
-                    "Review 連續失敗，使用新 session 重試",
-                    task.title,
-                )
+                raise ReviewUnavailableError(
+                    f"review failed {attempts} times for {task.title}: "
+                    f"{task.review_skip_reason}"
+                ) from error
 
     def _validate_cycle(self) -> int | None:
         detail = (

@@ -208,8 +208,8 @@ retry or completion behavior.
 
 The normal flow remains `TODO execution -> AI Review -> final Validator`. A parsed Review FAIL is never skipped: its `missing_items` return to the same TODO. Only Review call, timeout, loop, parse, or schema errors use this policy.
 
-- Default: `--review-error-retries 3`. Every Review error creates a new independent Review session and increments the persisted audit counters. After that many consecutive Review errors, a TODO with accumulated project changes is provisionally accepted with `review_skipped=true`; the final Validator remains authoritative.
-- Strict: add `--strict-review`. Review errors never skip a TODO. Every error batch rebuilds only the Review session and retries without rerunning the successful executor.
+- Default: `--review-error-retries 3`. Every Review error creates a new independent Review session and increments the task-persisted error budget. After that many total Review errors, the TODO is provisionally accepted with `review_skipped=true`; the final Validator remains authoritative. Qwen Review sessions exclude mutating and shell tools.
+- Strict: add `--strict-review`. Review errors never skip a TODO. When the persisted Review budget is exhausted, the runner saves state and exits instead of looping indefinitely; resume after changing the review policy or model availability.
 - No project changes: Review errors are never skipped, even in default mode.
 
 State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
