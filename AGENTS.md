@@ -14,11 +14,10 @@ Follow these project rules:
 
 The normal flow remains `TODO execution -> AI Review -> final Validator`. A parsed Review FAIL is never skipped: its `missing_items` return to the same TODO. Only Review call, timeout, loop, parse, or schema errors use this policy.
 
-- Default: `--review-error-retries 1`. Review is best-effort: an explicit FAIL retries the TODO, while one Review call/format error provisionally accepts it with `review_skipped=true`; the final Validator remains authoritative.
-- Strict: add `--strict-review`. Review errors never skip a TODO. Every error batch rebuilds only the Review session and retries without rerunning the successful executor.
+- Review is one independent best-effort call. An explicit FAIL retries the TODO; a Review call/format error records `review_skipped=true` and continues to the final Validator.
 - No project changes: Review is skipped immediately and the final Validator decides.
 
-State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
+State records `review_skipped` and `review_skip_reason` for audit and repair planning.
 
 Final AI validation may run multiple independent fresh sessions. Respect `final_ai_validations` and `final_ai_required_passes`: errors abstain, explicit FAIL vetoes, and PASS must reach quorum. Final AI must inspect concrete high-impact safety and regression defects in addition to the stated goal.
 

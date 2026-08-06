@@ -143,7 +143,7 @@ Latest local result: `138 passed, 1 skipped`.
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Every Review attempt uses a fresh independent session and each error increments persisted counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. By default, one Review infrastructure/format error provisionally completes the TODO and delegates the decision to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
+Review uses one fresh independent session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. A Review infrastructure or format error records the skip and delegates the decision to final validation. Final validation is always required.
 
 
 ## Final AI policy knobs

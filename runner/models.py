@@ -1,7 +1,7 @@
 """Canonical task and run-state models persisted by AI Task Runner."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
 
@@ -23,8 +23,6 @@ class Task:
     stagnant_attempts: int = 0
     review_skipped: bool = False
     review_skip_reason: str = ""
-    review_error_attempts: int = 0
-    review_session_rebuilds: int = 0
     changed_files: list[str] = field(default_factory=list)
 
     def validate(self, index: int) -> None:
@@ -49,7 +47,7 @@ class Task:
             for item in self.changed_files
         ):
             raise ValueError(f"{prefix}.changed_files must be strings")
-        for name in ("attempts", "stagnant_attempts", "review_error_attempts", "review_session_rebuilds"):
+        for name in ("attempts", "stagnant_attempts"):
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:
                 raise ValueError(f"{prefix}.{name} must be non-negative")
@@ -117,7 +115,8 @@ class RunState:
         for index, item in enumerate(raw_tasks, 1):
             if not isinstance(item, dict):
                 raise ValueError(f"tasks[{index}] must be an object")
-            tasks.append(Task(**item))
+            allowed = {field.name for field in fields(Task)}
+            tasks.append(Task(**{key: value for key, value in item.items() if key in allowed}))
         values["tasks"] = tasks
         state = cls(**values)
         state.validate()

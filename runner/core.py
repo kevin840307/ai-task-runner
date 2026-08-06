@@ -16,7 +16,7 @@ from .agent_args import (
     review_agent_args,
     runtime_agent_args,
 )
-from .errors import ReviewUnavailableError, RunnerError
+from .errors import RunnerError
 from .models import RunState, Task
 from .prompting import (
     bounded_text,
@@ -61,7 +61,6 @@ EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 MIN_PLANNED_TASKS = 6
 PLAN_JUDGE_MAX_REWRITES = 2
-PLAN_JUDGE_REQUIRED_PASSES = 1
 
 
 def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
@@ -342,38 +341,34 @@ class TaskRunner:
                     )
                     project_changed.extend(refined_project_changed)
 
-                    judge_issues = []
-                    for judge_pass in range(1, PLAN_JUDGE_REQUIRED_PASSES + 1):
-                        self.ui.set(
-                            "AI 正在審查任務規劃",
-                            f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES} · pass {judge_pass}/{PLAN_JUDGE_REQUIRED_PASSES}",
-                        )
-                        judge = new_planner()
-                        judgment_text, protected_changed, judge_project_changed = readonly_ask(
-                            judge,
-                            plan_judge_prompt(
-                                self.state.goal,
-                                self.root,
-                                self.state,
-                                tasks,
-                                self.work,
-                            ),
+                    self.ui.set(
+                        "AI 正在審查任務規劃",
+                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                    )
+                    judge = new_planner()
+                    judgment_text, protected_changed, judge_project_changed = readonly_ask(
+                        judge,
+                        plan_judge_prompt(
+                            self.state.goal,
                             self.root,
+                            self.state,
+                            tasks,
                             self.work,
-                            self.protected,
-                            timeout=self.args.planning_timeout,
-                            idle_timeout=self.args.agent_idle_after_change_timeout,
+                        ),
+                        self.root,
+                        self.work,
+                        self.protected,
+                        timeout=self.args.planning_timeout,
+                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                    )
+                    if protected_changed:
+                        raise RunnerError(
+                            "AI modified files during planning and they were restored: "
+                            + ", ".join(protected_changed)
                         )
-                        if protected_changed:
-                            raise RunnerError(
-                                "AI modified files during planning and they were restored: "
-                                + ", ".join(protected_changed)
-                            )
-                        project_changed.extend(judge_project_changed)
-                        judgment = parse_plan_judgment(judgment_text, len(tasks))
-                        if not judgment["accepted"]:
-                            judge_issues = judgment["issues"]
-                            break
+                    project_changed.extend(judge_project_changed)
+                    judgment = parse_plan_judgment(judgment_text, len(tasks))
+                    judge_issues = [] if judgment["accepted"] else judgment["issues"]
                     if not judge_issues:
                         break
                     self.ui.set(
@@ -461,10 +456,6 @@ class TaskRunner:
                         "missing_items": [],
                         "review_skipped": True,
                     }
-            except ReviewUnavailableError as error:
-                self._set_stage("review_unavailable", str(error))
-                self.ui.set("Review 無法完成，已保存狀態", task.title)
-                return 4
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,
@@ -541,12 +532,7 @@ class TaskRunner:
             self.agent.session_id = ""
             self._save_session()
             self._set_stage("reviewing")
-            try:
-                review = self._review_current_task(task, task.last_output)
-            except ReviewUnavailableError as review_error:
-                self._set_stage("review_unavailable", str(review_error))
-                self.ui.set("Review 無法完成，已保存狀態", task.title)
-                return 4
+            review = self._review_current_task(task, task.last_output)
             return self._handle_review_result(task, review)
 
         self._set_stage("task_retry_wait", str(error))
@@ -685,96 +671,61 @@ class TaskRunner:
         task: Task,
         output: str,
     ) -> dict[str, Any]:
-        while True:
-            if task.review_error_attempts >= self.args.review_error_retries:
-                if not self.args.strict_review:
-                    return {
-                        "completed": True,
-                        "reason": task.review_skip_reason or "review error budget exhausted",
-                        "missing_items": [],
-                        "review_skipped": True,
-                    }
-                raise ReviewUnavailableError(
-                    f"review failed {task.review_error_attempts} times for {task.title}"
-                )
+        reviewer = AgentClient(
+            backend=self.args.backend,
+            command=self.args.command,
+            root=self.root,
+            extra_args=review_agent_args(self.args.backend, self.args.agent_arg),
+            session_id="",
+            timeout=self.args.planning_timeout,
+        )
 
-            reviewer = AgentClient(
-                backend=self.args.backend,
-                command=self.args.command,
-                root=self.root,
-                extra_args=review_agent_args(
-                    self.args.backend, self.args.agent_arg
-                ),
-                session_id="",
+        def call() -> dict[str, Any]:
+            raw, protected_changed, project_changed_during_review = readonly_ask(
+                reviewer,
+                review_prompt(self.state, self.root, self.protected, output),
+                self.root,
+                self.work,
+                self.protected,
                 timeout=self.args.planning_timeout,
+                idle_timeout=self.args.agent_idle_after_change_timeout,
             )
-
-            def call() -> dict[str, Any]:
-                raw, protected_changed, project_changed_during_review = readonly_ask(
-                    reviewer,
-                    review_prompt(
-                        self.state,
-                        self.root,
-                        self.protected,
-                        output,
-                    ),
-                    self.root,
-                    self.work,
-                    self.protected,
-                    timeout=self.args.planning_timeout,
-                    idle_timeout=self.args.agent_idle_after_change_timeout,
+            changed = [*protected_changed, *project_changed_during_review]
+            if changed:
+                raise RunnerError(
+                    "review modified files and they were restored: "
+                    + ", ".join(changed)
                 )
-                changed = [*protected_changed, *project_changed_during_review]
-                if changed:
-                    raise RunnerError(
-                        "review modified files and they were restored: "
-                        + ", ".join(changed)
-                    )
-                try:
-                    return parse_review(raw)
-                except RunnerError as error:
-                    raise RunnerError(
-                        f"{error}; raw_output_tail={raw[-1000:]}"
-                    ) from error
-
             try:
-                result = retry_model_call(
-                    call,
-                    self.ui,
-                    "AI 正在確認任務是否完成",
-                    task.title,
-                    self.args.retry_wait,
-                    self.args.retry_max_wait,
-                    1,
-                )
-                return result
+                return parse_review(raw)
             except RunnerError as error:
-                task.review_error_attempts += 1
-                task.review_session_rebuilds += 1
-                task.review_skip_reason = str(error)[-1000:]
-                self._save_state()
-                attempts = task.review_error_attempts
-                if attempts < self.args.review_error_retries:
-                    self.ui.set(
-                        "Review 異常，使用新 session 重試",
-                        f"{task.title} · {attempts}/{self.args.review_error_retries}",
-                    )
-                    continue
-                if not self.args.strict_review:
-                    self.ui.set(
-                        "Review 異常達上限，暫時跳過",
-                        f"{task.title} · final validator will decide",
-                    )
-                    return {
-                        "completed": True,
-                        "reason": task.review_skip_reason,
-                        "missing_items": [],
-                        "review_skipped": True,
-                    }
-                raise ReviewUnavailableError(
-                    f"review failed {attempts} times for {task.title}: "
-                    f"{task.review_skip_reason}"
+                raise RunnerError(
+                    f"{error}; raw_output_tail={raw[-1000:]}"
                 ) from error
+
+        try:
+            return retry_model_call(
+                call,
+                self.ui,
+                "AI 正在確認任務是否完成",
+                task.title,
+                self.args.retry_wait,
+                self.args.retry_max_wait,
+                1,
+            )
+        except RunnerError as error:
+            task.review_skip_reason = str(error)[-1000:]
+            self._save_state()
+            self.ui.set(
+                "Review 異常，暫時跳過",
+                f"{task.title} · final validator will decide",
+            )
+            return {
+                "completed": True,
+                "reason": task.review_skip_reason,
+                "missing_items": [],
+                "review_skipped": True,
+            }
 
     def _validate_cycle(self) -> int | None:
         detail = (

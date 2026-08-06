@@ -133,7 +133,6 @@ def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
             "id": task.id,
             "title": task.title,
             "reason": task.review_skip_reason,
-            "review_error_attempts": task.review_error_attempts,
         }
         for task in state.tasks
         if task.review_skipped

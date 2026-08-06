@@ -15,7 +15,6 @@ from .defaults import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
-    DEFAULT_REVIEW_ERROR_RETRIES,
     DEFAULT_FINAL_AI_VALIDATIONS,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
@@ -50,8 +49,6 @@ class RunRequest:
     retry_delay: float = 2
     retry_wait: float = 5
     retry_max_wait: float = 300
-    review_error_retries: int = DEFAULT_REVIEW_ERROR_RETRIES
-    strict_review: bool = False
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     work_dir: str = ".ai-task-runner"
@@ -85,10 +82,6 @@ class RunRequest:
             retry_delay=args.retry_delay,
             retry_wait=args.retry_wait,
             retry_max_wait=args.retry_max_wait,
-            review_error_retries=getattr(
-                args, "review_error_retries", DEFAULT_REVIEW_ERROR_RETRIES
-            ),
-            strict_review=getattr(args, "strict_review", False),
             final_ai_validations=getattr(
                 args, "final_ai_validations", DEFAULT_FINAL_AI_VALIDATIONS
             ),
@@ -138,8 +131,6 @@ class RunRequest:
             retry_delay=self.retry_delay,
             retry_wait=self.retry_wait,
             retry_max_wait=self.retry_max_wait,
-            review_error_retries=self.review_error_retries,
-            strict_review=self.strict_review,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
             work_dir=self.work_dir,
@@ -202,8 +193,6 @@ class RunRequest:
             value = getattr(self, name)
             if not isinstance(value, int) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
-        if not isinstance(self.review_error_retries, int) or self.review_error_retries < 1:
-            raise ValueError("review_error_retries must be a positive integer")
         if not isinstance(self.final_ai_validations, int) or self.final_ai_validations < 1:
             raise ValueError("final_ai_validations must be a positive integer")
         if (
