@@ -10,7 +10,7 @@ python ai_task_runner.py ^
 ```
 
 By default this uses Qwen Code through `qwen.cmd` and runs as an unlimited retry/cycle 24h-style loop. Add `--resume` when restarting an existing run after the Python process exited.
-Qwen runtime calls also get `--max-tool-calls 40` unless you provide your own value with `--agent-arg=--max-tool-calls --agent-arg <N>`.
+Qwen runtime calls also get `--max-tool-calls -1` unless you provide your own value with `--agent-arg=--max-tool-calls --agent-arg <N>`.
 
 Resume does not require repeating `--goal` if the state already exists, but passing the same goal is fine.
 
@@ -138,7 +138,7 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Every Review attempt uses a fresh independent session and each error increments persisted counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N total errors for the TODO it is provisionally completed and delegated to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
+`--review-error-retries N` controls only Review infrastructure/format errors. Every Review attempt uses a fresh independent session and each error increments persisted counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. By default, one Review infrastructure/format error provisionally completes the TODO and delegates the decision to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
 
 
 ## Independent Final AI validation

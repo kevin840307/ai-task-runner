@@ -239,7 +239,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 
 ## Review error tolerance
 
-`--review-error-retries N` 只控制 Review 呼叫／格式異常。每次 Review 都使用全新獨立 session，錯誤次數會持久化累積。Review PASS 完成 TODO；明確 Review FAIL 一定把 `missing_items` 交回同一 TODO。預設模式以 Task 持久化累積 Review 錯誤，達 N 次後可暫時跳過並交給 Final Validator；`--strict-review` 禁止跳過，達上限時保存狀態並停止，避免無限循環。Qwen Review 會停用寫入、編輯與 shell 工具。
+`--review-error-retries N` 只控制 Review 呼叫／格式異常。每次 Review 都使用全新獨立 session，錯誤次數會持久化累積。Review PASS 完成 TODO；明確 Review FAIL 一定把 `missing_items` 交回同一 TODO。預設為一次 best-effort Review；明確 FAIL 重試 TODO，Review 呼叫／格式異常則暫時跳過並交給 Final Validator；`--strict-review` 禁止跳過，達上限時保存狀態並停止，避免無限循環。Qwen Review 會停用寫入、編輯與 shell 工具。
 
 
 ## Final AI 多次獨立驗證
@@ -248,4 +248,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給另一個無工具的 Plan Judge 做語意品質判定。Judge 不依標題關鍵字，而是逐項檢查是否產生具體變更、大小合理且可驗證，再檢查整體覆蓋、依賴順序與重疊。若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次；兩輪仍拒絕才重啟完整 Planning。只有 Judge 接受的 TODO 會保存；規劃至少一項，實際數量由可獨立 Review 的 deliverable 決定，不為湊數過度拆分或合併。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback。同一 TODO 的 changed files 會跨 attempt 累積；Review 使用全新唯讀 session，優先檢查這些 changed files。
+Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給一個無工具的 Plan Judge 做語意品質判定。Judge 只回傳 accepted/issues，不依標題關鍵字；若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次。初始規劃至少六項，Repair 規劃至少一項；同一檔案可由多個可獨立實作、驗證、重試或失敗的 TODO 修改。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback。同一 TODO 的 changed files 會跨 attempt 累積；TODO 完成後清除 Session，下一個 TODO 使用新 Session。Review 使用全新唯讀 Session，無變更時直接略過並交由 Final Validator 判定。

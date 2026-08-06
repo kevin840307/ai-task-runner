@@ -11,7 +11,7 @@ def test_review_policy_defaults_and_cli_namespace():
     request = RunRequest(goal='g', project_root='.', validator='ai')
     request.validate()
     args = request.to_namespace()
-    assert args.review_error_retries == 3
+    assert args.review_error_retries == 1
     assert args.strict_review is False
 
 
@@ -145,7 +145,7 @@ def test_review_rebuilds_fresh_session_and_counts_each_error(tmp_path, monkeypat
     monkeypatch.setattr(core, "AgentClient", FakeAgent)
     monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
 
-    result = core.TaskRunner._review_current_task(runner, task, "evidence", True)
+    result = core.TaskRunner._review_current_task(runner, task, "evidence")
 
     assert result["completed"] is True
     assert created_sessions == ["", ""]
@@ -206,7 +206,7 @@ def test_review_tolerant_mode_stops_after_configured_errors(tmp_path, monkeypatc
     monkeypatch.setattr(core, "AgentClient", FakeAgent)
     monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
 
-    result = core.TaskRunner._review_current_task(runner, task, "evidence", True)
+    result = core.TaskRunner._review_current_task(runner, task, "evidence")
 
     assert result["completed"] is True
     assert result["review_skipped"] is True
@@ -266,7 +266,7 @@ def test_review_budget_is_persisted_across_function_reentry(tmp_path, monkeypatc
     monkeypatch.setattr(core, "AgentClient", FakeAgent)
     monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
 
-    result = core.TaskRunner._review_current_task(runner, task, "evidence", False)
+    result = core.TaskRunner._review_current_task(runner, task, "evidence")
 
     assert result["review_skipped"] is True
     assert task.review_error_attempts == 3
@@ -292,7 +292,7 @@ def test_review_budget_already_exhausted_skips_without_new_call(tmp_path):
         run_id="r", goal="g", project_root=str(tmp_path), tasks=[task]
     )
 
-    result = core.TaskRunner._review_current_task(runner, task, "evidence", False)
+    result = core.TaskRunner._review_current_task(runner, task, "evidence")
 
     assert result == {
         "completed": True,
@@ -324,7 +324,7 @@ def test_strict_review_budget_exhaustion_is_terminal(tmp_path):
     )
 
     with pytest.raises(ReviewUnavailableError, match="review failed 3 times"):
-        core.TaskRunner._review_current_task(runner, task, "evidence", False)
+        core.TaskRunner._review_current_task(runner, task, "evidence")
 
 
 def test_qwen_review_args_disable_mutating_tools():

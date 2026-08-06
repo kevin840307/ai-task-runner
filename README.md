@@ -13,7 +13,7 @@ python ai_task_runner.py ^
   --validator C:\validators\validator.py
 ```
 
-This expands to Qwen Code via `qwen.cmd`, `--agent-timeout 7200`, `--planning-timeout 600`, `--agent-idle-after-change-timeout 900`, `--validator-timeout 1200`, `--max-attempts 0`, and `--max-cycles 0`. Qwen runtime calls also get `--max-tool-calls 40` unless you provide your own value with `--agent-arg`.
+This expands to Qwen Code via `qwen.cmd`, `--agent-timeout 7200`, `--planning-timeout 600`, `--agent-idle-after-change-timeout 900`, `--validator-timeout 1200`, `--max-attempts 0`, and `--max-cycles 0`. Qwen runtime calls also get `--max-tool-calls -1` unless you provide your own value with `--agent-arg`.
 
 For long requirements, put the prompt in a UTF-8 text file:
 
@@ -55,8 +55,8 @@ Validator feedback is passed back into the next planning prompt. The model, not 
 
 There is no separate Understand model call or understanding artifact. Project understanding is performed inside the existing prompts: Planning uses the supplied project outline, and each Executor reads only the files needed by its current TODO before changing them.
 
-Planning uses a fresh draft planner, a different fresh refiner, and two independent no-tool Plan Judge passes. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
-For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
+Planning uses a fresh draft planner, a different fresh refiner, and one independent no-tool Plan Judge pass. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
+For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
@@ -209,9 +209,9 @@ retry or completion behavior.
 
 The normal flow remains `TODO execution -> AI Review -> final Validator`. A parsed Review FAIL is never skipped: its `missing_items` return to the same TODO. Only Review call, timeout, loop, parse, or schema errors use this policy.
 
-- Default: `--review-error-retries 3`. Every Review error creates a new independent Review session and increments the task-persisted error budget. After that many total Review errors, the TODO is provisionally accepted with `review_skipped=true`; the final Validator remains authoritative. Qwen Review sessions exclude mutating and shell tools.
+- Default: `--review-error-retries 1`. Review is best-effort: an explicit FAIL retries the TODO, while a Review call/format error provisionally accepts it with `review_skipped=true`; the final Validator remains authoritative. Qwen Review sessions exclude mutating and shell tools.
 - Strict: add `--strict-review`. Review errors never skip a TODO. When the persisted Review budget is exhausted, the runner saves state and exits instead of looping indefinitely; resume after changing the review policy or model availability.
-- No project changes: Review errors are never skipped, even in default mode.
+- No project changes: Review is skipped immediately and the final Validator decides.
 
 State records `review_skipped`, `review_skip_reason`, `review_error_attempts`, and `review_session_rebuilds` for audit and repair planning.
 

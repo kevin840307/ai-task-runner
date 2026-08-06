@@ -12,6 +12,7 @@ from .models import RunState, Task
 
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
+MAX_PROMPT_HISTORY_ITEMS = 20
 
 
 PROJECT_OUTLINE_EXCLUDE_DIRS = frozenset({
@@ -121,7 +122,9 @@ def shared_task_constraints(state: RunState) -> list[str]:
     return [item for item in tasks[0].acceptance_criteria if item in common][:8]
 
 def completed_titles(state: RunState) -> list[str]:
-    return [task.title for task in state.tasks if task.status == "completed"]
+    return [
+        task.title for task in state.tasks if task.status == "completed"
+    ][-MAX_PROMPT_HISTORY_ITEMS:]
 
 
 def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
@@ -134,7 +137,7 @@ def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
         }
         for task in state.tasks
         if task.review_skipped
-    ]
+    ][-MAX_PROMPT_HISTORY_ITEMS:]
 
 
 def plan_prompt(

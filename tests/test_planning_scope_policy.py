@@ -7,22 +7,10 @@ from runner.prompting import plan_judge_prompt, plan_prompt, plan_refine_prompt
 
 
 def judge_payload(task_count: int, *, rejected_index: int | None = None, issue: str = "Task needs revision"):
-    checks = [
-        {
-            "index": index,
-            "produces_change": index != rejected_index,
-            "properly_sized": index != rejected_index,
-            "verifiable": index != rejected_index,
-            "issues": [issue] if index == rejected_index else [],
-        }
-        for index in range(1, task_count + 1)
-    ]
+    del task_count
     return {
-        "task_checks": checks,
-        "coverage_complete": True,
-        "dependency_order_ok": True,
-        "no_overlap": True,
-        "plan_issues": [],
+        "accepted": rejected_index is None,
+        "issues": [] if rejected_index is None else [f"Task {rejected_index}: {issue}"],
     }
 
 
@@ -161,13 +149,12 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 4
+    assert len(created) == 3
     assert created[0] is calls[0][0]
     assert created[1] is calls[1][0]
     assert created[2] is calls[2][0]
-    assert created[3] is calls[3][0]
-    assert len({id(agent) for agent in created}) == 4
-    assert [agent.initial_session_id for agent in created] == ["", "", "", ""]
+    assert len({id(agent) for agent in created}) == 3
+    assert [agent.initial_session_id for agent in created] == ["", "", ""]
     assert runner.state.tasks[0].title == "Refined 1"
 
 
@@ -247,8 +234,8 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
 
     runner._plan_if_needed()
 
-    assert len(created) == 6
-    assert judge_calls == 3
+    assert len(created) == 5
+    assert judge_calls == 2
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
     assert runner.state.tasks[0].title == "Corrected 1"
 
@@ -259,32 +246,28 @@ def test_parse_plan_judgment_contract():
     from runner.support import parse_plan_judgment
 
     assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}), 2)["accepted"] is True
-    assert parse_plan_judgment(json.dumps(judge_payload(2)), 2)["accepted"] is True
     rejected = parse_plan_judgment(
         json.dumps(judge_payload(2, rejected_index=2, issue="Split task 2")),
         2,
     )
     assert rejected["issues"] == ["Task 2: Split task 2"]
-    with pytest.raises(RunnerError, match="accepted and issues"):
-        parse_plan_judgment(json.dumps(judge_payload(1)), 2)
-    invalid = judge_payload(2)
-    invalid["task_checks"][1]["index"] = 1
-    with pytest.raises(RunnerError, match="index is invalid"):
-        parse_plan_judgment(json.dumps(invalid), 2)
+    with pytest.raises(RunnerError, match="accepted must be boolean"):
+        parse_plan_judgment(json.dumps({"issues": []}), 2)
 
 
 def test_plan_judge_gate_rejects_task_and_plan_failures():
     from runner.support import parse_plan_judgment
 
-    payload = judge_payload(8, rejected_index=1, issue="No concrete deliverable")
-    payload["dependency_order_ok"] = False
-    payload["plan_issues"] = ["A prerequisite appears after dependent work"]
-
+    payload = {
+        "accepted": False,
+        "issues": [
+            "Task 1: No concrete deliverable",
+            "A prerequisite appears after dependent work",
+        ],
+    }
     result = parse_plan_judgment(json.dumps(payload), 8)
-
     assert result["accepted"] is False
-    assert "Task 1: No concrete deliverable" in result["issues"]
-    assert "A prerequisite appears after dependent work" in result["issues"]
+    assert result["issues"] == payload["issues"]
 
 
 def test_plan_judge_rejects_twice_before_restarting_planning(tmp_path: Path, monkeypatch):

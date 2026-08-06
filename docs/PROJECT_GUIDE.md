@@ -26,7 +26,7 @@ AI model calls have a default activity idle watchdog. During execution, CLI outp
 
 Runner prompt templates live under `prompts/`. `prompting.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
 
-Each TODO execution usually reuses the same main agent session. The runner sends compact context:
+Each TODO owns one task-scoped agent session. Retries may reuse that session, but completing the TODO clears it so the next TODO starts fresh. The runner sends compact context:
 
 - hard rules and protected-file boundaries
 - original goal
@@ -42,7 +42,7 @@ Agents may read validator files and expected/reference/golden fixtures to unders
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
 Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge checks each task for a concrete change, suitable size, and verifiability, then checks plan coverage, dependency order, and overlap. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
-For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment, with a default tool-call cap to prevent one task from running forever while repeatedly using tools.
+For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
 
@@ -143,7 +143,7 @@ Latest local result: `138 passed, 1 skipped`.
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Every Review attempt uses a fresh independent session and each error increments persisted counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N total errors for the TODO it is provisionally completed and delegated to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
+`--review-error-retries N` controls only Review infrastructure/format errors. Every Review attempt uses a fresh independent session and each error increments persisted counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. By default, one Review infrastructure/format error provisionally completes the TODO and delegates the decision to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
 
 
 ## Final AI policy knobs

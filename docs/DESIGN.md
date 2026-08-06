@@ -108,7 +108,7 @@ flowchart TD
     H -- Yes --> O[Select current pending TODO]
     N --> O
 
-    O --> P[TODOING execute one task in reusable session]
+    O --> P[TODOING execute one task in a task-scoped session]
     P --> Q{Model call outcome}
     Q -- Success --> R[Detect project changes]
     Q -- Failure but files changed --> R
@@ -597,7 +597,7 @@ If the key is unchanged across attempts, `stagnant_attempts` increases. If proje
 - the prompt receives a no-progress recovery strategy;
 - if execution model calls repeatedly fail without project changes and a Python validator exists, the runner may defer the task to final validation instead of looping forever on that model stage.
 
-Clearing a session does not lose the task. The new session receives the original goal, completed task titles, current task, validator feedback, previous diagnostics, and persisted filesystem state.
+Clearing a session does not lose the task. A rebuilt task session receives the current task, shared constraints, validator feedback, previous diagnostics, and persisted filesystem state. A completed TODO always clears its session before the next TODO starts.
 
 ---
 
@@ -732,7 +732,7 @@ flowchart TD
     G --> H[Continue from saved stage/current task]
 ```
 
-Resume does not require repeating `--goal`; the original goal is already in state. The filesystem remains the source of implementation truth. The persisted session ID is reused when the backend supports it, but the runner can clear the session after no-progress or repeated validator failures and continue with the same saved task state.
+Resume does not require repeating `--goal`; the original goal is already in state. The filesystem remains the source of implementation truth. The persisted session ID is reused only while the same TODO is still active. Completion clears it so the next TODO starts fresh; no-progress, loop detection, or repeated validator failures may clear it earlier without losing saved task state.
 
 The runner itself cannot restart after its Python process, operating system, machine, or power is terminated. A service manager, scheduled task, CI agent, or other external supervisor must restart the command with `--resume`.
 
@@ -857,7 +857,7 @@ The resilience tests cover important branches such as timeout after project chan
 
 ## Review error tolerance
 
-`--review-error-retries N` controls only Review infrastructure/format errors. Each Review attempt uses a fresh independent session; every error increments persisted audit counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. In default mode, after N total Review errors for the TODO it may be provisionally completed. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
+`--review-error-retries N` controls only Review infrastructure/format errors. Each Review attempt uses a fresh independent session; every error increments persisted audit counters. Review PASS completes the TODO; an explicit Review FAIL always returns actionable `missing_items` to execution. By default, one Review infrastructure/format error provisionally completes the TODO and delegates the decision to final validation. `--strict-review` disables this skip and stops with saved state when the budget is exhausted. Final validation is always required.
 
 
 ## Final AI validation quorum

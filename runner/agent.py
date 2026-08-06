@@ -15,6 +15,8 @@ SESSION_INVALID_MARKERS = (
     "cannot resume session",
     "failed to resume session",
     "unknown session",
+)
+SESSION_RESET_MARKERS = (
     "loop detection halted the run",
 )
 
@@ -22,6 +24,11 @@ SESSION_INVALID_MARKERS = (
 def is_session_invalid_error(message: str) -> bool:
     text = message.lower()
     return any(marker in text for marker in SESSION_INVALID_MARKERS)
+
+
+def should_reset_session(message: str) -> bool:
+    text = message.lower()
+    return any(marker in text for marker in SESSION_RESET_MARKERS)
 
 
 class AgentError(RunnerError):
@@ -87,6 +94,8 @@ class AgentClient:
                     f"session {expired_session} is unavailable; "
                     "a new session will continue from runner state"
                 ) from error
+            if self.session_id and should_reset_session(message):
+                self.session_id = ""
             raise AgentError(message) from error
         finally:
             self.timeout = previous_timeout
@@ -118,5 +127,7 @@ __all__ = [
     "Agent",
     "AgentError",
     "SESSION_INVALID_MARKERS",
+    "SESSION_RESET_MARKERS",
     "is_session_invalid_error",
+    "should_reset_session",
 ]

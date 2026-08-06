@@ -11,7 +11,7 @@ if "Plan only the remaining work" in prompt or "independent plan editor" in prom
         print(json.dumps({"tasks":[{"title":"First","description":"Create task-001.done","deliverable":"task-001.done exists","acceptance_criteria":["exists"]},{"title":"Second","description":"Create task-002.done","deliverable":"task-002.done exists","acceptance_criteria":["exists"]}]}))
 elif "plan quality judge" in prompt:
     count = max(1, prompt.count('"title"'))
-    print(json.dumps({"task_checks":[{"index":i,"produces_change":True,"properly_sized":True,"verifiable":True,"issues":[]} for i in range(1,count+1)],"coverage_complete":True,"dependency_order_ok":True,"no_overlap":True,"plan_issues":[]}))
+    print(json.dumps({"accepted": True, "issues": []}))
 elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     if '"task_index": 0' in prompt: (root/"task-001.done").write_text("done")
     else: (root/"task-002.done").write_text("done")

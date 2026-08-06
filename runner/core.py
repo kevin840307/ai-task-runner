@@ -61,7 +61,7 @@ EXECUTION_FAILURES_BEFORE_REVIEW = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 MIN_PLANNED_TASKS = 6
 PLAN_JUDGE_MAX_REWRITES = 2
-PLAN_JUDGE_REQUIRED_PASSES = 2
+PLAN_JUDGE_REQUIRED_PASSES = 1
 
 
 def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
@@ -447,8 +447,20 @@ class TaskRunner:
                 changed_files = changed_project_files(self.root, self.work, project_before)
                 task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
                 self._save_state()
-                self._set_stage("reviewing")
-                review = self._review_current_task(task, output, bool(task.changed_files))
+                if task.changed_files:
+                    self._set_stage("reviewing")
+                    review = self._review_current_task(task, output)
+                else:
+                    self.ui.set(
+                        "沒有專案變更，略過 Review",
+                        f"{task.title} · final validator will decide",
+                    )
+                    review = {
+                        "completed": True,
+                        "reason": "No project changes; final validator will decide",
+                        "missing_items": [],
+                        "review_skipped": True,
+                    }
             except ReviewUnavailableError as error:
                 self._set_stage("review_unavailable", str(error))
                 self.ui.set("Review 無法完成，已保存狀態", task.title)
@@ -530,7 +542,7 @@ class TaskRunner:
             self._save_session()
             self._set_stage("reviewing")
             try:
-                review = self._review_current_task(task, task.last_output, True)
+                review = self._review_current_task(task, task.last_output)
             except ReviewUnavailableError as review_error:
                 self._set_stage("review_unavailable", str(review_error))
                 self.ui.set("Review 無法完成，已保存狀態", task.title)
@@ -539,9 +551,6 @@ class TaskRunner:
 
         self._set_stage("task_retry_wait", str(error))
         return self._prepare_task_retry(task)
-
-    def _project_changed_since(self, before: dict[str, tuple[str, str | None]]) -> bool:
-        return bool(changed_project_files(self.root, self.work, before))
 
     def _handle_review_result(
         self,
@@ -588,8 +597,11 @@ class TaskRunner:
 
     def _complete_current_task(self, task: Task) -> None:
         task.status = "completed"
+        task.last_output = ""
         task.progress_key = ""
         task.stagnant_attempts = 0
+        self.agent.session_id = ""
+        self.state.agent_session_id = ""
         self.state.current += 1
         self._save_state()
         self.ui.set("任務完成", task.title)
@@ -672,7 +684,6 @@ class TaskRunner:
         self,
         task: Task,
         output: str,
-        project_changed: bool,
     ) -> dict[str, Any]:
         while True:
             if task.review_error_attempts >= self.args.review_error_retries:
@@ -776,7 +787,15 @@ class TaskRunner:
         try:
             passed, output = self._run_validator()
         except RunnerError as error:
-            passed, output = False, str(error)
+            output = str(error)
+            self.state.validator_output = bounded_text(
+                output, MAX_VALIDATOR_OUTPUT_CHARS
+            )
+            self._set_stage("validator_retry_wait", output)
+            self.ui.set("Validator 無法執行，稍後重試", output[-1000:])
+            if self.args.retry_delay:
+                time.sleep(self.args.retry_delay)
+            return None
         finally:
             self.ui.stop()
 

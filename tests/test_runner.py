@@ -405,7 +405,7 @@ def test_repeated_no_change_model_errors_never_complete_task(tmp_path):
     assert state["completed"] is False
 
 
-def test_invalid_ai_review_never_completes_task(tmp_path):
+def test_invalid_ai_review_is_skipped_to_final_validator(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "review_non_json")
     result = subprocess.run(
         _scenario_args(
@@ -415,12 +415,12 @@ def test_invalid_ai_review_never_completes_task(tmp_path):
         ),
         capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert (state_dir / "execute.count").read_text() == "2"
-    assert (state_dir / "review.count").read_text() == "6"
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["status"] == "pending"
-    assert state["completed"] is False
+    assert state["tasks"][0]["review_skipped"] is True
+    assert state["completed"] is True
 
 
 def test_execution_error_after_project_change_retries_without_review(tmp_path):

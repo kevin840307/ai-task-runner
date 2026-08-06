@@ -39,7 +39,7 @@ if "Plan only the remaining work" in prompt or "independent plan editor" in prom
 elif "plan quality judge" in prompt:
     count("judge")
     n = max(1, prompt.count('"title"'))
-    answer = {"task_checks":[{"index":i,"produces_change":True,"properly_sized":True,"verifiable":True,"issues":[]} for i in range(1,n+1)],"coverage_complete":True,"dependency_order_ok":True,"no_overlap":True,"plan_issues":[]}
+    answer = {"accepted": True, "issues": []}
 elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
     count("execute")
     (root / "done.txt").write_text("done", encoding="utf-8")

@@ -19,7 +19,7 @@ elif 'Plan only the remaining work' in prompt:
 elif 'plan quality judge' in prompt:
     phase = 'plan_judge'
     n = max(1, prompt.count('\"title\"'))
-    answer = {'task_checks':[{'index':i,'produces_change':True,'properly_sized':True,'verifiable':True,'issues':[]} for i in range(1,n+1)],'coverage_complete':True,'dependency_order_ok':True,'no_overlap':True,'plan_issues':[]}
+    answer = {"accepted": True, "issues": []}
 elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
     phase, answer = 'execute', 'created done.txt'
 elif 'review only' in prompt.lower():

@@ -171,8 +171,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                     f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
                     f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
                 )
-            _report_error(request, "runner.retry", f"{error}; retrying from state", 0)
-            request.resume, request.force_new = True, False
+            state_file = Path(
+                request.project_root, request.work_dir, "state.json"
+            ).resolve()
+            if state_file.is_file():
+                request.resume, request.force_new = True, False
+                detail = f"{error}; retrying from state"
+            else:
+                detail = f"{error}; retrying original request"
+            _report_error(request, "runner.retry", detail, 0)
             time.sleep(max(1, request.retry_delay))
 
 

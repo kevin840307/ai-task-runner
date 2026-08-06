@@ -569,61 +569,20 @@ def parse_tasks(
 
 
 def parse_plan_judgment(text: str, task_count: int) -> dict[str, Any]:
+    del task_count  # Kept for public-call compatibility.
     value = parse_json(text)
-    if "accepted" in value:
-        if not isinstance(value.get("accepted"), bool):
-            raise RunnerError("plan_judge.accepted must be boolean")
-        issues = require_string_list(value.get("issues", []), "plan_judge.issues")
-        accepted = value["accepted"] and not issues
-        if not accepted and not issues:
-            issues = ["The plan did not pass the quality judge"]
-        return {
-            "accepted": accepted,
-            "issues": [item[:MAX_MISSING_ITEM_CHARS] for item in issues[:MAX_MISSING_ITEMS]],
-        }
-
-    # Backward-compatible parser for older judge responses and test agents.
-    checks = value.get("task_checks")
-    if not isinstance(checks, list) or len(checks) != task_count:
-        raise RunnerError("plan_judge response must contain accepted and issues")
-
-    issues: list[str] = []
-    seen: set[int] = set()
-    fields = ("produces_change", "properly_sized", "verifiable")
-    all_tasks_ok = True
-    for position, check in enumerate(checks, 1):
-        if not isinstance(check, dict):
-            raise RunnerError(f"plan_judge.task_checks[{position}] must be an object")
-        index = check.get("index")
-        if not isinstance(index, int) or isinstance(index, bool) or not 1 <= index <= task_count or index in seen:
-            raise RunnerError(f"plan_judge.task_checks[{position}].index is invalid")
-        seen.add(index)
-        for field in fields:
-            if not isinstance(check.get(field), bool):
-                raise RunnerError(f"plan_judge.task_checks[{position}].{field} must be boolean")
-        task_issues = require_string_list(
-            check.get("issues", []),
-            f"plan_judge.task_checks[{position}].issues",
-        )
-        task_ok = all(check[field] for field in fields) and not task_issues
-        all_tasks_ok = all_tasks_ok and task_ok
-        if not task_ok and not task_issues:
-            task_issues = ["The task did not pass every plan quality check"]
-        issues.extend(f"Task {index}: {item}" for item in task_issues)
-
-    global_fields = ("coverage_complete", "dependency_order_ok", "no_overlap")
-    for field in global_fields:
-        if not isinstance(value.get(field), bool):
-            raise RunnerError(f"plan_judge.{field} must be boolean")
-    plan_issues = require_string_list(value.get("plan_issues", []), "plan_judge.plan_issues")
-    global_ok = all(value[field] for field in global_fields) and not plan_issues
-    if not global_ok and not plan_issues:
-        plan_issues = ["The complete plan did not pass every plan quality check"]
-    issues.extend(plan_issues)
-
+    if not isinstance(value.get("accepted"), bool):
+        raise RunnerError("plan_judge.accepted must be boolean")
+    issues = require_string_list(value.get("issues", []), "plan_judge.issues")
+    accepted = value["accepted"] and not issues
+    if not accepted and not issues:
+        issues = ["The plan did not pass the quality judge"]
     return {
-        "accepted": all_tasks_ok and global_ok,
-        "issues": [item[:MAX_MISSING_ITEM_CHARS] for item in issues[:MAX_MISSING_ITEMS]],
+        "accepted": accepted,
+        "issues": [
+            item[:MAX_MISSING_ITEM_CHARS]
+            for item in issues[:MAX_MISSING_ITEMS]
+        ],
     }
 
 
@@ -718,9 +677,9 @@ def run_file_validator(
             result.output[-4000:].strip(),
             changed_message,
         ]
-        return False, "\n".join(item for item in details if item)
+        raise RunnerError("\n".join(item for item in details if item))
     if changed_message:
-        return False, changed_message
+        raise RunnerError(changed_message)
     return result.return_code == 0, result.output
 
 
