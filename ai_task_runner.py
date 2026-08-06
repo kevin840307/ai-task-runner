@@ -6,7 +6,9 @@ import argparse
 import json
 import sys
 import time
+import traceback
 from collections.abc import Sequence
+from pathlib import Path
 
 from runner.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
@@ -155,14 +157,23 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     request = RunRequest.from_namespace(parser().parse_args(argv))
-    try:
-        return run(request).exit_code
-    except KeyboardInterrupt:
-        _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
-        return 130
-    except Exception as error:
-        _report_error(request, "runner.error", str(error), 1)
-        return 1
+    while True:
+        try:
+            return run(request).exit_code
+        except KeyboardInterrupt:
+            _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
+            return 130
+        except Exception as error:
+            log = Path(request.project_root, request.work_dir, "exception.log").resolve()
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open("a", encoding="utf-8") as file:
+                file.write(
+                    f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
+                )
+            _report_error(request, "runner.retry", f"{error}; retrying from state", 0)
+            request.resume, request.force_new = True, False
+            time.sleep(max(1, request.retry_delay))
 
 
 def _report_error(

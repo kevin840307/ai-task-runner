@@ -399,3 +399,31 @@ def test_goal_file_is_loaded_by_public_request(tmp_path):
 def test_shared_entry_rejects_invalid_requests_early(run_request, message):
     with pytest.raises(ValueError, match=message):
         run(run_request)
+
+
+def test_cli_logs_unexpected_exception_and_resumes(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.api import RunResult
+
+    requests = []
+
+    def fake_run(request, on_event=None):
+        requests.append(request.resume)
+        if len(requests) == 1:
+            raise ValueError("boom")
+        return RunResult(exit_code=0, state_files=(), states=())
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+    monkeypatch.setattr(ai_task_runner.time, "sleep", lambda _: None)
+
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--backend", "opencode",
+    ])
+
+    assert code == 0
+    assert requests == [False, True]
+    log = tmp_path / ".ai-task-runner" / "exception.log"
+    assert "ValueError: boom" in log.read_text(encoding="utf-8")
