@@ -187,13 +187,13 @@ State 在每個重要轉換後原子寫入，使用暫存檔加 `os.replace`，�
 
 ## 8. Todo Execution 與 Review
 
-Runner 一次只執行一個 TODO。Execution 模型即使以 Loop Detection、Timeout 或非零 Exit 結束，只要專案已產生有效變更，Runner 不會直接丟棄成果，而會偵測檔案狀態並進入 Review 或 Final Validator 判斷。
+Runner 一次只執行一個 TODO。Executor 可以先完成一個一致、可保留的進展後返回，不要求單次 Model Call 做完整個 TODO。Execution 模型即使以 Loop Detection、Timeout 或非零 Exit 結束，只要該次呼叫已產生專案變更，Runner 就保留成果並立即進入一次 Fresh Read-only Review，不再先重跑另一個完整 Executor。
 
 Review 是只讀操作。若 Review 修改 Protected Files，Runner 會還原。Review 必須輸出結構化結果；不合法 JSON 會重試。若有 Python Validator，特定 Review 無法可靠判斷時可把完成判定延後給 Final Validator，避免模型一直重複相同 TODO。
 
 ## 9. No Progress 與 Session Reset
 
-每次未完成 Review 會依專案 Fingerprint 與 missing_items 產生 `progress_key`。相同 key 連續出現代表沒有進度，`stagnant_attempts` 會增加。達門檻後 Runner 會加入 no-progress 指示、要求採取不同策略，必要時建立新 Session。
+每次未完成 Review 會依專案 Fingerprint 與 missing_items 產生 `progress_key`。Executor Error 若完全沒有新專案變更，也會以錯誤尾端建立通用 Fingerprint 並立即清除 Execution Session；兩個 Fresh Session 連續出現相同失敗且都沒有進展時，該 TODO 先延後給 Final Validator，避免永久卡住。若已有實際變更，則清除 stagnation 並直接 Review 現有成果。
 
 相同 Validator Failure 也會正規化後 Hash。連續重複代表目前 Session 可能被錯誤上下文綁住，因此 Repair Cycle 可切換 Fresh Session，但仍保留 State 與 Validator Feedback。
 
@@ -248,4 +248,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給一個無工具的 Plan Judge 做語意品質判定。Judge 只回傳 accepted/issues，不依標題關鍵字；若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次。初始規劃至少六項，Repair 規劃至少一項；同一檔案可由多個可獨立實作、驗證、重試或失敗的 TODO 修改。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback。同一 TODO 的 changed files 會跨 attempt 累積；TODO 完成後清除 Session，下一個 TODO 使用新 Session。Review 使用全新唯讀 Session，無變更時直接略過並交由 Final Validator 判定。
+Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給一個無工具的 Plan Judge 做語意品質判定。Judge 只回傳 accepted/issues，不依標題關鍵字；對實作／變更型 Goal，只有取得知識、結論或檢查結果而沒有產生需求專案結果的 TODO 必須拒絕，必要的 inspection 應放在真正使用它的 TODO 內。若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次。初始規劃至少六項，Repair 規劃至少一項；每次 Repair Plan 通過後只保留該 Cycle 的 active TODO，上一 Cycle 的完成紀錄留在 `log.txt`，不再累積於 `state.tasks`。同一檔案可由多個可獨立實作、驗證、重試或失敗的 TODO 修改。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback；每次寫入都必須是目前 TODO deliverable 或 acceptance criteria 所需，唯讀 deliverable 不得修改專案，也不得提前執行後續 TODO。Executor 並允許先完成一段一致進展後返回。同一 TODO 的 changed files 會跨 attempt 累積；失敗但本次有變更時立即 Review，失敗且無變更時以 Fresh Session 重試。TODO 完成後清除 Session，下一個 TODO 使用新 Session。Review 使用全新唯讀 Session，無變更或 Review infrastructure error 時交由 Final Validator 判定。

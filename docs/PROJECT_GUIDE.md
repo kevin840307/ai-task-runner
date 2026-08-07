@@ -12,36 +12,34 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 2. Before editing, inspect only the existing files needed by the current TODO.
 3. Execute only the current task.
 4. Ask read-only review whether that task is complete.
-5. Retry the same task on model errors, invalid review JSON, no progress, or review failure.
+5. Preserve partial progress: review immediately after a failed Executor call that changed files; otherwise retry in a fresh session and defer repeated identical no-change failures to final validation.
 6. Run the final Python or AI validator after all tasks are reviewed.
-7. If final validation fails, keep the project changes, create focused repair task(s), and continue.
+7. If final validation fails, keep the project changes, replace the active TODO list with focused repair task(s), and continue.
 
-Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are retried automatically. If one TODO repeatedly fails in the model stage without any project changes and a Python validator is configured, the runner defers that TODO to final validation so the whole run can keep moving. If an AI review cannot produce valid review JSON while a Python validator is configured, the runner also defers that task's completion judgment to the final validator instead of rerunning the same task forever. When the same final validator failure repeats, repair tasks use a fresh agent session while keeping saved runner state and validator feedback. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
+Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are recovered automatically. A failed Executor call that changed files is reviewed immediately. A no-change failure clears the execution session; if a second fresh session repeats the same failure without project progress, the runner defers that TODO to final validation so the whole run can keep moving. If AI Review itself fails, the runner also defers that task's completion judgment to the final validator. When the same final validator failure repeats, repair tasks use a fresh agent session while keeping saved runner state and validator feedback. Each accepted repair plan replaces the prior cycle's active TODO list; completed history remains in `log.txt` rather than growing `state.tasks`. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
 
 ## Activity Watchdog
 
-AI model calls have a default activity idle watchdog. During execution, CLI output refreshes activity until the first project file change. After a project file changes, new project changes refresh activity; if the model keeps talking but stops changing files for 900 seconds, the runner stops that AI CLI call early and asks review/final validation to decide based on saved files. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output. This never marks work complete by itself; review and final validation still own completion.
+AI model calls have a default activity idle watchdog. CLI output and project-file changes both refresh activity for the whole call, including after the first edit. The runner stops a call only when neither kind of activity occurs for the configured interval. Read-only planning, review, and AI-validation calls use the same setting. This never marks work complete by itself; review and final validation still own completion.
 
 ## Task Prompt Shape
 
 Runner prompt templates live under `prompts/`. `prompting.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
 
-Each TODO owns one task-scoped agent session. Retries may reuse that session, but completing the TODO clears it so the next TODO starts fresh. The runner sends compact context:
+Each TODO owns task-scoped execution state, but failed no-change calls discard their session before retry. Completing the TODO also clears the session so the next TODO starts fresh. The runner sends compact context:
 
 - hard rules and protected-file boundaries
-- original goal
-- completed task titles
 - recent validator feedback
 - current task title, description, and acceptance criteria
 - previous attempt output or diagnostic
 - recovery instructions when needed
 
-Each TODO prompt is about the current task, completion conditions, and the last failure. If repeated no-progress suggests the session is unhealthy, the runner clears the session and continues from runner state in a fresh session.
+Each TODO prompt is about the current task, completion conditions, and the last failure. The Executor may return after one coherent improvement. A failed call with new changes goes directly to Review; a no-change failure retries in a fresh session, and a repeated matching no-change failure is deferred to final validation.
 
 Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but they must not modify validator files, read-only answer fixtures, hardcode validator internals, or create sidecar state/log/scratch files next to outside-root paths. Use `--protect-file <path>` for read-only fixture files or folders that must be restored automatically if a model edits them. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
-Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge checks each task for a concrete change, suitable size, and verifiability, then checks plan coverage, dependency order, and overlap. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
+Planning is intentionally AI-owned. A fresh draft planner is followed by a fresh refiner and an independent no-tool Plan Judge. The Judge rejects tasks whose deliverable is only supporting knowledge/check work for an implementation goal; required inspection belongs inside the concrete TODO that uses it. It also checks suitable size, verifiability, plan coverage, dependency order, and overlap. Its issues drive at most one more fresh rewrite; two rejected rewrites restart planning. Python controls sessions and retries only, without task-title keywords or prompt-structure heuristics.
 For Qwen, planning runs with `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.

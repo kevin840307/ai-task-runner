@@ -57,14 +57,10 @@ from .script_runner import (
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
-EXECUTION_FAILURES_BEFORE_REVIEW = 2
+EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 MIN_PLANNED_TASKS = 6
 PLAN_JUDGE_MAX_REWRITES = 2
-
-
-def is_current_validator_cycle_task(state: RunState, task: Task) -> bool:
-    return task.id.startswith(f"c{state.cycle:02d}-")
 
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
@@ -404,13 +400,9 @@ class TaskRunner:
             self.args.retry_wait,
             self.args.retry_max_wait,
         )
-        completed = [
-            task for task in self.state.tasks
-            if task.status == "completed"
-        ]
         self.state.agent_session_id = self.agent.session_id
-        self.state.tasks = [*completed, *planned]
-        self.state.current = len(completed)
+        self.state.tasks = planned
+        self.state.current = 0
         self._save_state()
         show_todo(self.state, self.ui)
 
@@ -481,7 +473,6 @@ class TaskRunner:
         changed_files = changed_project_files(self.root, self.work, project_before)
         changed = bool(changed_files)
         task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
-        cumulative_changed = bool(task.changed_files)
         task.last_output = (
             "Previous model call failed before task completion"
             + (" after changing project files" if changed else "")
@@ -489,7 +480,18 @@ class TaskRunner:
             + str(error)[-MAX_TASK_OUTPUT_CHARS:]
         )
         task.status = "pending"
-        task.stagnant_attempts += 1
+        if changed:
+            task.progress_key = ""
+            task.stagnant_attempts = 0
+        else:
+            lines = [line.strip() for line in str(error).splitlines() if line.strip()]
+            signature = lines[-1] if lines else type(error).__name__
+            key = hashlib.sha256(signature.encode("utf-8")).hexdigest()
+            if key == task.progress_key:
+                task.stagnant_attempts += 1
+            else:
+                task.progress_key = key
+                task.stagnant_attempts = 1
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
         shown_files = changed_files[:20]
@@ -524,9 +526,9 @@ class TaskRunner:
             "模型階段失敗，準備重試任務",
             " | ".join(details),
         )
-        if cumulative_changed and task.stagnant_attempts >= EXECUTION_FAILURES_BEFORE_REVIEW:
+        if changed:
             self.ui.set(
-                "Executor 多次異常但已有檔案變更，先執行 Review",
+                "Executor 異常但已有檔案變更，先執行 Review",
                 task.title,
             )
             self.agent.session_id = ""
@@ -534,6 +536,24 @@ class TaskRunner:
             self._set_stage("reviewing")
             review = self._review_current_task(task, task.last_output)
             return self._handle_review_result(task, review)
+
+        self.agent.session_id = ""
+        self._save_session()
+        if task.stagnant_attempts >= EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER:
+            task.review_skipped = True
+            task.review_skip_reason = (
+                "Repeated fresh sessions made no project progress; "
+                "final validator will decide"
+            )
+            task.last_review = {
+                "completed": True,
+                "reason": task.review_skip_reason,
+                "missing_items": [],
+                "review_skipped": True,
+            }
+            self.ui.set("Executor 連續無進展，交給 Final Validator", task.title)
+            self._complete_current_task(task)
+            return None
 
         self._set_stage("task_retry_wait", str(error))
         return self._prepare_task_retry(task)

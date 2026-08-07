@@ -23,7 +23,7 @@ Final AI validation may run multiple independent fresh sessions. Respect `final_
 
 ## Executor scope isolation
 
-TODO execution receives only the current task, relevant feedback, and concise constraints shared by every planned task. Do not reintroduce the complete goal or later TODO list into the Executor prompt; Planning and Final AI own whole-goal reasoning. Initial planning requires at least six concrete TODOs and one independent simple Judge acceptance. Split by independently actionable changes even when tasks share a file; Judge rejection is semantic and must not use title-keyword checks. Changed files accumulate across attempts, so Review can inspect prior saved work before another full execution attempt.
+TODO execution receives only the current task, relevant feedback, and concise constraints shared by every planned task. Do not reintroduce the complete goal or later TODO list into the Executor prompt; Planning and Final AI own whole-goal reasoning. Initial planning requires at least six concrete TODOs and one independent simple Judge acceptance. Split by independently actionable changes even when tasks share a file; Judge rejection is semantic and must not use title-keyword checks. Executor calls may stop after one coherent improvement. Preserve partial changes: a failed call with new project changes goes directly to Review; repeated matching fresh-session failures with no changes defer to final validation.
 
 ## Review Scope Isolation
 

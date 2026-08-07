@@ -82,7 +82,6 @@ def _communicate_with_watchdog(
 ) -> ProcessResult:
     deadline = time.monotonic() + timeout if timeout else None
     last_activity_at: float = time.monotonic()
-    seen_project_change = False
     partial = ""
     output_queue: queue.Queue[str] = queue.Queue()
 
@@ -110,10 +109,7 @@ def _communicate_with_watchdog(
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
         partial += output
-        if _safe_change_detected(change_detected):
-            seen_project_change = True
-            last_activity_at = now
-        elif had_output and not seen_project_change:
+        if _safe_change_detected(change_detected) or had_output:
             last_activity_at = now
 
         if process.poll() is not None:
@@ -232,6 +228,8 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> None:
 
 def _drain_after_termination(process: subprocess.Popen[str]) -> str:
     """Collect remaining output without trusting descendants to close pipes."""
+    if process.stdin is not None and process.stdin.closed:
+        process.stdin = None
     try:
         output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
         return output or ""

@@ -45,14 +45,14 @@ result = run(RunRequest(
 | --- | ---: | --- |
 | `--agent-timeout` | `7200` | Maximum seconds for one execution, review, or AI-validator model call. |
 | `--planning-timeout` | `600` | Maximum seconds for one planning model call. |
-| `--agent-idle-after-change-timeout` | `900` | AI model-call watchdog. Execution uses CLI output until the first project change, then project changes; read-only calls retry when CLI output goes idle. `0` disables it. |
+| `--agent-idle-after-change-timeout` | `900` | AI model-call idle watchdog. CLI output or project-file changes both count as activity, including after the first edit; `0` disables it. |
 | `--validator-timeout` | `1200` | Maximum seconds for a Python validator subprocess. |
 
-For slow local models, the default `7200` second hard timeout is intentionally high. Keep the idle watchdog enabled so a read-only call that produces no CLI output, or an execution call that keeps talking after it stopped changing files, can be retried or handed to review/final validation.
+For slow local models, the default `7200` second hard timeout is intentionally high. The idle watchdog only fires when there is neither CLI output nor a project-file change for the configured interval, so long-running active work is not cut merely because the latest file edit was a while ago.
 
 ## What Retries
 
-The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. With a Python validator, repeated no-change model-stage failures on one TODO are deferred to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
+The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. A failed Executor call that changed files goes directly to Review. Two fresh sessions that repeat the same failure with no project change defer that TODO to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
 Planning creates a draft from the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner rewrites it, then an independent no-tool Plan Judge checks each task and the complete plan before accepting it. Rejected issues drive one more fresh rewrite and judgment; two rejections restart the complete planning flow. Python only controls this loop and does not split or judge tasks by Markdown, numbering, punctuation, language, or title keywords.
 

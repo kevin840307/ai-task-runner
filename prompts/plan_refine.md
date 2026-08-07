@@ -21,17 +21,17 @@ $judge_feedback
 Return a complete replacement task list for $planning_mode planning.
 
 Quality gate:
-1. Every TODO must create or modify one concrete, observable project result requested by the goal.
-2. Knowledge, findings, review decisions, and execution of an existing check are not standalone deliverables. Put those steps inside the concrete TODO that uses them.
+1. Every TODO must create or modify one concrete, observable project result requested by the goal. For an implementation/change goal, remove any TODO whose deliverable can be satisfied without changing a requested project result.
+2. Knowledge, findings, design decisions, review decisions, and existing checks are supporting steps, not standalone deliverables. Put them inside the concrete TODO that uses them unless the goal explicitly requests their artifact as an end result.
 3. Split changes whenever they can be implemented, reviewed, verified, retried, or fail independently. Multiple TODOs may modify the same file; never use file count as the task boundary.
 4. Small focused changes are valid. Merge only duplicate or process-only tasks, not independent changes that happen to share a file or component.
 5. Each description must contain the task-specific context needed to execute it without rereading the original goal or draft plan.
 6. Each deliverable must state the exact end result. Acceptance criteria must make the stopping point objectively clear.
 7. Remove runner-owned final validation, retry, generic cleanup, read-only inspection, and check-only tasks unless the goal explicitly requests that artifact or changed behavior.
-8. Keep dependencies ordered. Return at least $minimum_tasks task(s); add more whenever the goal contains more independently actionable changes.
+8. Keep dependencies ordered. Return at least $minimum_tasks task(s); reach the minimum by splitting real independently verifiable changes, never by adding process-only tasks.
 9. Include genuinely goal-wide compatibility, safety, and non-regression constraints consistently so they can be summarized for execution.
 
-Before returning, independently reject and rewrite the plan if any TODO has no concrete observable change, is only a read/check step, duplicates another TODO, or combines independently implementable or verifiable changes.
+Before returning, independently reject and rewrite the plan if any TODO can finish without producing its requested project result, exists only to gather knowledge/check work, duplicates another TODO, or combines independently implementable or verifiable changes.
 Do not implement, ask questions, use tools, or write files during planning.
 Every task must include this acceptance criterion: Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior.
 

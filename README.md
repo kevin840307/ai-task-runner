@@ -38,7 +38,7 @@ AI validation uses a fresh independent agent session. It asks the agent to inspe
 1. Plan TODO tasks from the goal and project outline
 2. For each task: inspect relevant files -> execute -> review -> retry if needed
 3. Run final Python or AI validator
-4. On validator failure: add focused repair task(s) and continue
+4. On validator failure: replace the active TODO list with focused repair task(s) and continue
 ```
 
 The runner does not generate code itself. The agent writes project files. The runner owns state, retries, review orchestration, protected-file restore, validator execution, and resume.
@@ -51,11 +51,11 @@ If a Python validator is configured and an AI review cannot return valid review 
 
 When the same final validator failure repeats, repair tasks switch to a fresh agent session while still receiving the saved runner state and validator feedback. This helps a small model escape a bad prior approach without losing the 24h retry loop.
 
-Validator feedback is passed back into the next planning prompt. The model, not Python prompt heuristics, decides how to split repair TODOs.
+Validator feedback is passed back into the next planning prompt. After that repair plan is accepted, `state.tasks` is replaced by the new cycle TODOs instead of retaining completed TODOs from older cycles. Full history remains in `log.txt`; active state stays bounded for UI, prompts, and resume. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
 There is no separate Understand model call or understanding artifact. Project understanding is performed inside the existing prompts: Planning uses the supplied project outline, and each Executor reads only the files needed by its current TODO before changing them.
 
-Planning uses a fresh draft planner, a different fresh refiner, and one independent no-tool Plan Judge pass. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
+Planning uses a fresh draft planner, a different fresh refiner, and one independent no-tool Plan Judge pass. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. The minimum must come from real independently verifiable project changes, not standalone investigation/check steps; required inspection stays inside the TODO that uses it. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
 For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
@@ -231,7 +231,7 @@ python ai_task_runner.py ... --validator ai --final-ai-validations 3 --final-ai-
 
 ### Small-model TODO isolation
 
-The Executor receives the current TODO plus only goal-wide constraints repeated across every planned task. It does not receive the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. Changed files are accumulated across attempts for the same TODO; after repeated Executor failures with any saved task change, the runner reviews the current project state before launching another full execution attempt.
+The Executor receives the current TODO plus only goal-wide constraints repeated across every planned task. It does not receive the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. Every write must be required by the current TODO deliverable or acceptance criteria; a read-only deliverable must not mutate project files, and later TODO work must not be implemented early. The Executor may return after making one coherent improvement instead of forcing the whole TODO into one model call. If a failed call changed project files, the runner immediately reviews the saved state; if two fresh sessions hit the same failure with no new project change, the TODO is deferred to final validation instead of blocking the run.
 
 ## Review Scope Isolation
 

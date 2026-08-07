@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.core import EXECUTION_FAILURES_BEFORE_REVIEW
+from runner.core import EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER
 from runner.models import RunState, Task
 from runner.prompting import execution_prompt
 
@@ -28,10 +28,14 @@ def test_execution_prompt_does_not_embed_full_goal_or_completed_task_list(tmp_pa
     assert '"completed_tasks"' not in prompt
     assert "current TODO is the only executable scope" in prompt
     assert "Do not run the final project validator" in prompt
+    assert "coherent improved state and return" in prompt
+    assert "temporary, diagnostic, exploratory" in prompt
+    assert "Before every write, confirm that the change is required by the current TODO deliverable or acceptance criteria" in prompt
+    assert "If the current deliverable does not require a project change, do not modify project files" in prompt
 
 
-def test_execution_failure_review_threshold_is_small_and_positive():
-    assert EXECUTION_FAILURES_BEFORE_REVIEW == 2
+def test_no_change_failure_defer_threshold_is_small_and_positive():
+    assert EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER == 2
 
 
 def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
@@ -54,48 +58,83 @@ def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
     assert "current TODO is the only executable work item" in prompt
 
 
-def test_execution_error_uses_cumulative_task_changes_for_review(tmp_path, monkeypatch):
-    from types import SimpleNamespace
+def _runner(tmp_path, task):
+    import runner.core as core
 
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[task])
+    runner.agent = SimpleNamespace(session_id="old-session")
+    runner.ui = SimpleNamespace(set=lambda *args: None, bind=lambda *args: None)
+    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner._save_state = lambda: None
+    runner._save_session = lambda: None
+    runner._set_stage = lambda *args: None
+    return runner
+
+
+def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monkeypatch):
     import runner.core as core
     from runner.errors import RunnerError
 
     task = Task(
-        id="c01-t001",
-        title="Current task",
-        description="Do current work",
-        deliverable="result",
-        acceptance_criteria=["result exists"],
-        stagnant_attempts=1,
-        changed_files=["saved-from-attempt-1.txt"],
+        id="c01-t001", title="Current task", description="Do work",
+        deliverable="result", acceptance_criteria=["result exists"],
     )
-    runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state = RunState(
-        run_id="r", goal="g", project_root=str(tmp_path), tasks=[task]
-    )
-    runner.agent = SimpleNamespace(session_id="")
-    runner.ui = SimpleNamespace(set=lambda *args: None)
-    runner.args = SimpleNamespace()
-    runner._save_state = lambda: None
-    runner._save_session = lambda: None
-    runner._set_stage = lambda *args: None
+    runner = _runner(tmp_path, task)
     runner._review_current_task = lambda *args: {
-        "completed": True,
-        "reason": "saved work satisfies the task",
-        "missing_items": [],
+        "completed": True, "reason": "saved work satisfies the task", "missing_items": []
     }
     runner._handle_review_result = lambda *args: 77
+    monkeypatch.setattr(core, "changed_project_files", lambda *args: ["result.txt"])
 
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
-
-    result = core.TaskRunner._handle_execution_error(
-        runner,
-        task,
-        RunnerError("attempt 2 failed without a new file"),
-        {},
-    )
+    result = core.TaskRunner._handle_execution_error(runner, task, RunnerError("failed"), {})
 
     assert result == 77
-    assert task.changed_files == ["saved-from-attempt-1.txt"]
+    assert task.changed_files == ["result.txt"]
+    assert runner.agent.session_id == ""
+
+
+def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path, monkeypatch):
+    import runner.core as core
+    from runner.errors import RunnerError
+
+    task = Task(
+        id="c01-t001", title="Current task", description="Do work",
+        deliverable="result", acceptance_criteria=["result exists"],
+        changed_files=["saved-from-previous-attempt.txt"],
+    )
+    runner = _runner(tmp_path, task)
+    runner._review_current_task = lambda *args: (_ for _ in ()).throw(AssertionError("must not review"))
+    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+
+    result = core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {})
+
+    assert result is None
+    assert task.status == "pending"
+    assert task.stagnant_attempts == 1
+    assert runner.agent.session_id == ""
+
+
+def test_two_same_fresh_no_change_failures_defer_to_validator(tmp_path, monkeypatch):
+    import runner.core as core
+    from runner.errors import RunnerError
+
+    task = Task(
+        id="c01-t001", title="Current task", description="Do work",
+        deliverable="result", acceptance_criteria=["result exists"],
+    )
+    runner = _runner(tmp_path, task)
+    completed = []
+    runner._complete_current_task = lambda value: completed.append(value.id)
+    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+
+    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
+    runner.agent.session_id = "fresh-session"
+    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
+
+    assert completed == [task.id]
+    assert task.review_skipped is True
+    assert "final validator" in task.review_skip_reason.lower()
+    assert runner.agent.session_id == ""

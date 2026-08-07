@@ -284,7 +284,7 @@ def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=0.3,
+        idle_timeout_after_change=1.0,
         change_detected=lambda: False,
     )
     assert result.timed_out is False
@@ -292,12 +292,12 @@ def test_process_stdout_heartbeat_keeps_watchdog_alive(tmp_path):
     assert "second" in result.output
 
 
-def test_process_stdout_after_project_change_does_not_extend_idle(tmp_path):
+def test_process_stdout_after_project_change_keeps_watchdog_alive(tmp_path):
     marker = tmp_path / "changed.txt"
     code = (
         "import pathlib,time; "
         f"pathlib.Path({str(marker)!r}).write_text('changed'); "
-        "[print('tick', flush=True) or time.sleep(0.05) for _ in range(200)]"
+        "[print('tick', flush=True) or time.sleep(0.05) for _ in range(60)]"
     )
     seen = False
 
@@ -308,18 +308,16 @@ def test_process_stdout_after_project_change_does_not_extend_idle(tmp_path):
             return True
         return False
 
-    started = time.monotonic()
     result = run_process(
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=0.2,
+        idle_timeout_after_change=1.0,
         change_detected=changed,
     )
-    assert result.timed_out is True
-    assert result.idle_timed_out is True
+    assert result.timed_out is False
+    assert result.idle_timed_out is False
     assert "tick" in result.output
-    assert time.monotonic() - started < 5
 
 
 def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
@@ -329,13 +327,28 @@ def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
         [sys.executable, "-c", code],
         tmp_path,
         timeout=20,
-        idle_timeout_after_change=0.2,
+        idle_timeout_after_change=1.0,
         change_detected=lambda: False,
     )
     assert result.timed_out is True
     assert result.idle_timed_out is True
     assert "ready" in result.output
     assert time.monotonic() - started < 5
+
+
+def test_process_idle_timeout_handles_closed_stdin(tmp_path):
+    code = "import sys,time; sys.stdin.read(); print('ready', flush=True); time.sleep(30)"
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        timeout=20,
+        input_text="prompt",
+        idle_timeout_after_change=1.0,
+        change_detected=lambda: False,
+    )
+    assert result.timed_out is True
+    assert result.idle_timed_out is True
+    assert "ready" in result.output
 
 
 def test_process_unexpected_error_cleans_up_process_tree(tmp_path, monkeypatch):
@@ -520,7 +533,7 @@ def test_execution_idle_after_change_goes_to_review(tmp_path, monkeypatch):
         validator="ai",
         command=_fake_command("idle_after_change_agent.py"),
         agent_timeout=20,
-        agent_idle_after_change_timeout=0.2,
+        agent_idle_after_change_timeout=1.0,
         retry_delay=0,
         retry_wait=0,
         retry_max_wait=0,

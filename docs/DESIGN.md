@@ -167,7 +167,7 @@ flowchart LR
 
 Project understanding is prompt behavior, not a separate model call, persisted artifact, or Python stage. Planning uses the goal, project outline, progress, and validator feedback; each Executor then reads only the existing files needed by its current TODO before making the concrete change.
 
-`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge checks each task for concrete change, suitable size, and verifiability, followed by complete-plan coverage, dependency order, and overlap. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
+`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge checks that each task produces a requested project result rather than only supporting knowledge/check work, plus suitable size and verifiability, followed by complete-plan coverage, dependency order, and overlap. Required inspection stays inside the concrete TODO that uses it. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
 
 ---
 
@@ -402,8 +402,8 @@ flowchart TD
     N -- No, first rejection --> P[Send issues to a new refiner]
     P --> K
     N -- No, second rejection --> F
-    O --> Q[Append after completed tasks]
-    Q --> R[Set current to first planned task]
+    O --> Q[Replace active tasks with judged tasks]
+    Q --> R[Set current to 0]
     R --> S[Persist state]
 ```
 
@@ -432,29 +432,19 @@ flowchart TD
     E --> F{Execution call succeeded?}
 
     F -- Yes --> G[Save bounded output and session]
-    G --> H{Repair task + Python validator + project changed?}
-    H -- Yes --> I[Skip AI review; defer judgment to final validator]
-    H -- No --> J[stage = reviewing]
-    J --> K[Read-only AI review]
+    G --> H{Project changed?}
+    H -- No --> M[Defer judgment to final validator]
+    H -- Yes --> J[stage = reviewing]
+    J --> K[Fresh read-only AI review]
     K --> L{Valid review result?}
-    L -- No, Python validator configured --> M[Fallback: defer judgment to final validator]
-    L -- No, AI validator/no file validator --> N[Task-flow error handling]
+    L -- No --> M
     L -- Yes --> O[Handle review result]
-    I --> O
     M --> O
 
-    F -- No --> P{Project changed before failure?}
-    P -- Yes --> Q{Repair task + Python validator?}
-    Q -- Yes --> I
-    Q -- No --> R[Review current filesystem despite execution error]
-    R --> S{Review succeeds?}
-    S -- Yes --> O
-    S -- No, Python validator configured --> M
-    S -- No otherwise --> N
-    P -- No --> N
-
-    N --> T[Store diagnostic; pending; stagnant += 1]
-    T --> U{Repeated no-change model failure and Python validator?}
+    F -- No --> P{Project changed during this call?}
+    P -- Yes --> J
+    P -- No --> N[Store diagnostic; clear execution session]
+    N --> U{Same no-change failure from two fresh sessions?}
     U -- Yes --> M
     U -- No --> V[stage = task_retry_wait]
     V --> W[Retry same task]
@@ -470,7 +460,7 @@ flowchart TD
 
 An agent call can end with timeout, loop detection, session failure, or another backend error after it has already written useful files. Therefore the runner fingerprints the project before execution and compares it afterward.
 
-A task is completed only after the execution call succeeds and the read-only AI review returns `completed=true`. Execution or review failures retry the same task even when files changed; the final validator never substitutes for task review.
+A failed execution call never discards project changes. If that call changed files, the runner immediately sends the saved state to one fresh read-only Review. If the call made no change, the execution session is discarded and the TODO retries in a fresh session. Two matching fresh-session failures with no project progress defer the TODO to final validation instead of blocking the run.
 
 This behavior preserves partial progress and avoids repeating identical tool calls against files that may already contain the intended change.
 
@@ -678,7 +668,7 @@ Model calls also use `--agent-idle-after-change-timeout`, default 900 seconds. D
 - new CLI stdout; or
 - a detected project filesystem change.
 
-After the first project file change in an execution model call, only new project changes refresh the idle timer. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output. If no qualifying activity happens before the idle timeout, the process tree is stopped. The resulting error then enters the normal retry or changed-files decision flow:
+CLI stdout continues to refresh the idle timer even after project files have changed, so a long-running but visibly active model or test is not killed merely because it has not written another file. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output. If neither stdout nor a project change occurs before the idle timeout, the process tree is stopped. The resulting error then enters the normal retry or changed-files decision flow:
 
 - files changed: review the current state or defer repair judgment to the Python validator;
 - no files changed: retry the task.
@@ -866,4 +856,4 @@ Final AI validation is an independent quorum stage. Each configured run construc
 
 ### Bounded executor context
 
-Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. Changed files accumulate across attempts. Review runs in an independent read-only session, starts with those files, and reads only minimal additional evidence. Explicit Review FAIL returns the same TODO for repair; Review errors follow the configured policy.
+Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. The Executor is encouraged to stop after one coherent improvement instead of over-exploring. Changed files accumulate across attempts. A failed call that made changes goes directly to an independent read-only Review; repeated matching fresh-session failures with no changes are deferred to final validation. Explicit Review FAIL returns the same TODO for repair; Review errors defer judgment to final validation.

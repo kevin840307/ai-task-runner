@@ -42,6 +42,8 @@ def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
     assert "objective stopping evidence" in prompt
     assert "Return at least 6 ordered task(s)" in prompt
     assert "Multiple TODOs may modify the same file" in prompt
+    assert "deliverable can be satisfied only by learning, deciding, reviewing, or checking is invalid" in prompt
+    assert "never by adding process-only work" in prompt
 
 
 def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
@@ -80,6 +82,8 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     assert "Never judge from title wording or keyword matching" in prompt
     assert '"accepted":true' in prompt
     assert 'multiple TODOs may modify the same file' in prompt
+    assert "could be completed entirely by reading, reasoning, deciding, reviewing, or checking" in prompt
+    assert "Never judge from title wording or keyword matching" in prompt
 
 
 def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
@@ -334,3 +338,74 @@ def test_plan_judge_rejects_twice_before_restarting_planning(tmp_path: Path, mon
         runner._plan_if_needed()
 
     assert len(created) == 5
+
+
+def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
+    import runner.core as core
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.session_id = kwargs["session_id"]
+
+        def prepare_project(self):
+            return []
+
+    def fake_readonly_ask(agent, prompt, *args, **kwargs):
+        if "plan quality judge" in prompt:
+            payload = {"accepted": True, "issues": []}
+        else:
+            payload = {"tasks": [{
+                "title": "Repair current failure",
+                "description": "Repair the validator-reported failure",
+                "deliverable": "Validator-relevant repair",
+                "acceptance_criteria": ["The reported failure is fixed"],
+            }]}
+        return json.dumps(payload), [], []
+
+    old = Task(
+        id="c01-t001",
+        title="Old completed task",
+        description="Old work",
+        deliverable="Old result",
+        acceptance_criteria=["Old result exists"],
+        status="completed",
+    )
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(
+        backend="qwen",
+        command="fake",
+        agent_arg=[],
+        planning_timeout=1,
+        agent_idle_after_change_timeout=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    )
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.work.mkdir()
+    runner.state = RunState(
+        run_id="r",
+        goal="g",
+        project_root=str(tmp_path),
+        cycle=2,
+        current=1,
+        tasks=[old],
+        stage="validator_failed",
+        validator_output="failure",
+    )
+    runner.protected = []
+    runner.agent = SimpleNamespace(session_id="")
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._set_stage = lambda *args: None
+    runner._save_state = lambda: None
+
+    monkeypatch.setattr(core, "AgentClient", FakeAgent)
+    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    runner._plan_if_needed()
+
+    assert runner.state.current == 0
+    assert [task.id for task in runner.state.tasks] == ["c02-t001"]
+    assert [task.title for task in runner.state.tasks] == ["Repair current failure"]

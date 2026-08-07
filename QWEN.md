@@ -27,7 +27,7 @@ Planning uses a fresh draft session, a different fresh refiner session, and one 
 
 ## Executor scope isolation
 
-During TODO execution, treat only the current TODO as executable. The complete goal is intentionally not repeated because small models may attempt the entire project. Do not use the managed original-requirement reference to discover additional work; inspect only directly relevant project files. Goal-wide constraints are carried through acceptance criteria shared by every planned task. Repeated failures with accumulated saved changes are reviewed before another full attempt.
+During TODO execution, treat only the current TODO as executable. The complete goal is intentionally not repeated because small models may attempt the entire project. Do not use the managed original-requirement reference to discover additional work; inspect only directly relevant project files. Goal-wide constraints are carried through acceptance criteria shared by every planned task. Make one coherent improvement and return rather than over-exploring. A failed call with new project changes is reviewed immediately; a no-change failure resumes in a fresh session, and repeated matching no-change failures defer to final validation.
 
 ## Review Scope Isolation
 
