@@ -858,7 +858,7 @@ The resilience tests cover important branches such as timeout after project chan
 
 ## Review error tolerance
 
-Review uses one fresh independent session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. A Review infrastructure or format error records the skip and delegates the decision to final validation. Final validation is always required.
+Review starts with one fresh independent read-only session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. If Review has an infrastructure or format error and the session is resumable, the runner makes one same-session no-tool finalization attempt using evidence already gathered. Only a second error records the skip and delegates the decision to final validation. Final validation is always required.
 
 
 ## Final AI validation quorum
@@ -867,4 +867,4 @@ Final AI validation is an independent quorum stage. Each configured run construc
 
 ### Bounded executor context
 
-Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. The Executor is encouraged to stop after one coherent improvement instead of over-exploring. Changed files accumulate across attempts. A failed call that made changes goes directly to an independent read-only Review; repeated matching fresh-session failures with no changes are deferred to final validation. Explicit Review FAIL returns the same TODO for repair; Review errors defer judgment to final validation.
+Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. The Executor is encouraged to stop after one coherent improvement instead of over-exploring. Changed files accumulate across attempts. A failed call that made changes goes directly to an independent read-only Review; repeated matching fresh-session failures with no changes are deferred to final validation. Explicit Review FAIL returns the same TODO for repair; a Review error first attempts one same-session no-tool finalization, and only a second error defers judgment to final validation.

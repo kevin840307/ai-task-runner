@@ -139,7 +139,7 @@ python -m pytest -q
 
 ## Review error tolerance
 
-Review uses one fresh independent session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. A Review infrastructure or format error records the skip and delegates the decision to final validation. Final validation is always required.
+Review starts with one fresh independent read-only session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. If Review errors and its session is resumable, the runner makes one same-session no-tool finalization attempt; only another error records the skip and delegates the decision to final validation. Final validation is always required.
 
 
 ## Final AI policy knobs

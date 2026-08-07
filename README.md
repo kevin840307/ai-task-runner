@@ -221,7 +221,7 @@ retry or completion behavior.
 
 The normal flow remains `TODO execution -> AI Review -> final Validator`. A parsed Review FAIL is never skipped: its `missing_items` return to the same TODO. Only Review call, timeout, loop, parse, or schema errors use this policy.
 
-- Review is one independent best-effort call. An explicit FAIL retries the TODO; a Review call/format error records `review_skipped=true` and continues to the final Validator. Qwen Review sessions exclude mutating and shell tools.
+- Review starts with one independent read-only call. An explicit FAIL retries the TODO. If that call errors and its session is resumable, the runner makes one same-session no-tool finalization attempt; only a second error records `review_skipped=true` and continues to the final Validator. Qwen enforces the no-tool finalization at the backend capability level.
 - No project changes: Review is skipped immediately and the final Validator decides.
 
 State records `review_skipped` and `review_skip_reason` for audit and repair planning.

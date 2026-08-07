@@ -406,6 +406,10 @@ def review_prompt(
     )
 
 
+def review_finalize_prompt() -> str:
+    return render_prompt_template("review_finalize.md", {})
+
+
 def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
     text = feedback.strip()
     if not text:

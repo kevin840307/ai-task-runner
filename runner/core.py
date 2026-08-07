@@ -12,6 +12,7 @@ from typing import Any
 
 from .agent import AgentClient
 from .agent_args import (
+    no_tool_agent_args,
     planning_agent_args,
     review_agent_args,
     runtime_agent_args,
@@ -28,6 +29,7 @@ from .prompting import (
     plan_refine_prompt,
     plan_understand_prompt,
     render_prompt_template,
+    review_finalize_prompt,
     review_prompt,
 )
 from .ui import LiveUI, show_todo
@@ -806,15 +808,20 @@ class TaskRunner:
             timeout=self.args.planning_timeout,
         )
 
-        def call() -> dict[str, Any]:
+        def ask_review(
+            agent: AgentClient,
+            prompt: str,
+            preserve_session: bool = False,
+        ) -> dict[str, Any]:
             raw, protected_changed, project_changed_during_review = readonly_ask(
-                reviewer,
-                review_prompt(self.state, self.root, self.protected, output),
+                agent,
+                prompt,
                 self.root,
                 self.work,
                 self.protected,
                 timeout=self.args.planning_timeout,
                 idle_timeout=self.args.agent_idle_after_change_timeout,
+                preserve_session_on_error=preserve_session,
             )
             changed = [*protected_changed, *project_changed_during_review]
             if changed:
@@ -831,7 +838,11 @@ class TaskRunner:
 
         try:
             return retry_model_call(
-                call,
+                lambda: ask_review(
+                    reviewer,
+                    review_prompt(self.state, self.root, self.protected, output),
+                    preserve_session=True,
+                ),
                 self.ui,
                 "AI 正在確認任務是否完成",
                 task.title,
@@ -840,7 +851,36 @@ class TaskRunner:
                 1,
             )
         except RunnerError as error:
-            task.review_skip_reason = str(error)[-1000:]
+            final_error = error
+            if reviewer.session_id:
+                self.ui.set(
+                    "Review 異常，嘗試收斂判斷",
+                    f"{task.title} · reuse review context without tools",
+                )
+                finalizer = AgentClient(
+                    backend=self.args.backend,
+                    command=self.args.command,
+                    root=self.root,
+                    extra_args=no_tool_agent_args(
+                        self.args.backend, self.args.agent_arg
+                    ),
+                    session_id=reviewer.session_id,
+                    timeout=self.args.planning_timeout,
+                )
+                try:
+                    return retry_model_call(
+                        lambda: ask_review(finalizer, review_finalize_prompt()),
+                        self.ui,
+                        "AI 正在收斂 Review 判斷",
+                        task.title,
+                        self.args.retry_wait,
+                        self.args.retry_max_wait,
+                        1,
+                    )
+                except RunnerError as finalize_error:
+                    final_error = finalize_error
+
+            task.review_skip_reason = str(final_error)[-1000:]
             self._save_state()
             self.ui.set(
                 "Review 異常，暫時跳過",

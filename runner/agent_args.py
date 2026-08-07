@@ -160,6 +160,11 @@ def review_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     return result
 
 
+def no_tool_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
+    """Reuse the strict read-disabled policy for decision-only follow-up calls."""
+    return planning_agent_args(backend, extra_args, allow_project_read=False)
+
+
 def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     result = list(extra_args)
     if backend == "qwen":

@@ -243,7 +243,7 @@ Batch 遇到第一個非零 Exit Code 停止。使用相同 YAML 加 `--resume` 
 
 ## Review error tolerance
 
-Review 使用一次全新獨立 session。Review PASS 完成 TODO；明確 Review FAIL 把 `missing_items` 交回同一 TODO。Review 呼叫／格式異常會記錄跳過並交給 Final Validator；Qwen Review 會停用寫入、編輯與 shell 工具。
+Review 先使用一次全新獨立唯讀 session。Review PASS 完成 TODO；明確 Review FAIL 把 `missing_items` 交回同一 TODO。若 Review 異常且 session 可續，Runner 會保留已取得的 Context，以同一 session、停用工具再做一次收斂判斷；只有收斂也失敗才記錄跳過並交給 Final Validator。Qwen 會在 backend 層強制停用 Finalize Review 的工具。
 
 
 ## Final AI 多次獨立驗證
