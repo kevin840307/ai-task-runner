@@ -70,6 +70,7 @@ class AgentClient:
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
         timeout: int | None = None,
+        preserve_session_on_error: bool = False,
     ) -> str:
         previous_timeout = self.timeout
         previous_backend_timeout = self._backend.timeout
@@ -94,7 +95,11 @@ class AgentClient:
                     f"session {expired_session} is unavailable; "
                     "a new session will continue from runner state"
                 ) from error
-            if self.session_id and should_reset_session(message):
+            if (
+                self.session_id
+                and should_reset_session(message)
+                and not preserve_session_on_error
+            ):
                 self.session_id = ""
             raise AgentError(message) from error
         finally:

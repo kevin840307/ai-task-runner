@@ -433,6 +433,7 @@ def readonly_ask(
     protected: Sequence[Path],
     timeout: int | None = None,
     idle_timeout: float = 0,
+    preserve_session_on_error: bool = False,
 ) -> tuple[str, list[str], list[str]]:
     file_snapshot = snapshot(protected)
     try:
@@ -442,6 +443,7 @@ def readonly_ask(
                 idle_timeout_after_change=idle_timeout,
                 change_detected=lambda: False,
                 timeout=timeout,
+                preserve_session_on_error=preserve_session_on_error,
             ),
             root,
             work,

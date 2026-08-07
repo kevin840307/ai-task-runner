@@ -6,13 +6,17 @@ AI Task Runner 是包在 Qwen Code、OpenCode 等 coding-agent CLI 外層的通�
 
 Runner 不在 Python 內 hardcode 特定專案知識。整個執行只有一個最終完成條件：**Final Validator 必須 PASS**。模型自己說完成、單一 TODO 完成或 Review 通過，都不代表整個 Run 完成。
 
+專案可在 `<project-root>/.ai-task-runner.yaml` 設定 `protected_paths`。路徑相對於 project root，資料夾會保護整棵子樹；Policy YAML 本身也自動受保護。每次模型呼叫前會保存實際工作目錄內容，若 protected path 被新增、修改、刪除或 rename，Runner 會還原成呼叫前狀態，因此不會用 `git restore HEAD` 蓋掉人原本尚未 commit 的修改。
+
+Runner 啟動的所有子程序固定禁止 `git add`、`git commit`、`git push`；`git status`、`git diff`、`git log`、`git show` 等唯讀操作仍可使用。Final Validator PASS 只代表 AI 自動化完成，最後 stage / commit / push 一律由人審核後執行。
+
 ## 2. 完整流程
 
 ### 2.1 簡單版
 
 ```text
 啟動或 Resume
-  -> Plan：依需求與專案 outline 拆成可驗證 TODO
+  -> Plan：先以 outline 當地圖，只讀理解與需求相關區域，再拆成可驗證 TODO
   -> Todo：一次只執行目前 TODO
   -> Review：只讀檢查目前檔案結果
        -> 未完成：重試同一 TODO
@@ -82,7 +86,7 @@ flowchart TD
     G -- 是 --> Z[Exit 0]
     G -- 否 --> H{已有 Pending TODO?}
 
-    H -- 否 --> J[PLAN 依需求 Outline State 與 Validator Feedback 產生 TODO JSON]
+    H -- 否 --> J[PLAN 先 Map/Select/只讀相關證據，再產生 TODO JSON]
     J --> K{模型成功且 JSON 合法?}
     K -- 否 --> L[指數退避重試 Model Call]
     L --> K
@@ -145,9 +149,9 @@ flowchart LR
 
 ## 4. Prompt 內的專案理解與 Plan
 
-專案理解不是獨立的 Model 呼叫、持久化產物或 Python 階段。Planning 只使用 goal、專案 outline、進度與 Validator Feedback；Executor 執行每個 TODO 前，再於同一個 Prompt 流程中讀取該 TODO 必要的現有檔案，理解後直接完成具體修改。
+專案理解不是獨立 Agent、持久化產物或固定模型模式，而是既有 Planning Stage 裡的第一個 Turn。Draft Planner 先把專案 outline 當地圖，只讀檢查與 Goal 有關的區域，而且這一 Turn 不產 TODO；大型專案先縮小範圍，再深入必要入口與直接相依，證據足夠就停止，不追求讀完整個 Repository。接著 Runner 必定嘗試用同一 Session、關閉所有專案工具做 Plan Turn。即使 Understand Turn 因 Loop、工具上限或程序異常中止，只要 Session 可恢復仍直接 Plan；Session 不可用或 Plan 失敗時才改用 Fresh no-tool Minimal Plan，後續重試都留在 Minimal 模式，不再從頭掃 Repository。
 
-`Plan` is read-only and converts the model understanding into bounded TODO records with title, description, and acceptance_criteria. If planning does not return valid JSON, the runner retries with compact feedback until the fixed task schema is returned. Python does not split user prompts by Markdown, numbering, paragraphs, punctuation, or language-specific keywords.
+Planning 只依「成功／失敗／是否有可用成果」自適應，不判斷 4B、35B、模型名稱、Repository 檔案數或固定探索配額。任何可解析且符合固定 Task Schema 的 Plan 都會成為 last usable plan；Refiner/Judge 的 infrastructure、timeout、parse、schema error 不會把它丟掉。Python 不依 Markdown、編號、語言或 task title keyword 拆需求。
 
 ## 5. Runner 與 Agent 責任
 
@@ -248,4 +252,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planning 先由 Draft Planner 產生草稿，再由全新 Refiner 重寫，接著交給一個無工具的 Plan Judge 做語意品質判定。Judge 只回傳 accepted/issues，不依標題關鍵字；對實作／變更型 Goal，只有取得知識、結論或檢查結果而沒有產生需求專案結果的 TODO 必須拒絕，必要的 inspection 應放在真正使用它的 TODO 內。若拒絕，issues 會交給另一個全新 Refiner 重寫並再 Judge 一次。初始規劃至少六項，Repair 規劃至少一項；每次 Repair Plan 通過後只保留該 Cycle 的 active TODO，上一 Cycle 的完成紀錄留在 `log.txt`，不再累積於 `state.tasks`。同一檔案可由多個可獨立實作、驗證、重試或失敗的 TODO 修改。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback；每次寫入都必須是目前 TODO deliverable 或 acceptance criteria 所需，唯讀 deliverable 不得修改專案，也不得提前執行後續 TODO。Executor 並允許先完成一段一致進展後返回。同一 TODO 的 changed files 會跨 attempt 累積；失敗但本次有變更時立即 Review，失敗且無變更時以 Fresh Session 重試。TODO 完成後清除 Session，下一個 TODO 使用新 Session。Review 使用全新唯讀 Session，無變更或 Review infrastructure error 時交由 Final Validator 判定。
+Planning 與 Final AI 取得完整 Goal。Planning 先由同一個 Draft Planner Session 執行兩個 Turn：Understand Turn 做 Map → Select → Focused Read 且不產 TODO，Plan Turn 則關閉專案工具、只用既有 Context 產 TODO。Understand 中止但 Session 可恢復時仍直接進 Plan Turn；Session 不可用或 Plan 再失敗才切到 Fresh no-tool Minimal Plan，後續只在 Minimal 模式重試。得到第一份有效 Plan 後，全新 Refiner 與無工具 Plan Judge 都只是 soft quality gate：Refiner 異常保留上一份有效 Plan，Judge infrastructure/格式異常直接使用目前有效 Plan；Judge 明確 rejected 時最多做兩輪 Fresh rewrite，仍被拒絕就交由後續 Executor + Final Validator 閉環，而不是重新掃專案。Judge 不依標題關鍵字；初始規劃至少六項，Repair 規劃至少一項。每次 Repair Plan 後只保留該 Cycle active TODO，歷史留在 `log.txt`。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback；失敗但本次有變更時立即 Review，失敗且無變更時以 Fresh Session 重試。Review infrastructure error 交由 Final Validator；只有 Final Validator PASS 才能完成整個 Run。

@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+import shutil
+from types import SimpleNamespace
+from pathlib import Path
+
+import pytest
+
+from runner.core import TaskRunner
+from runner.errors import RunnerError
+from runner.git_guard import git_subcommand
+from runner.policy import POLICY_FILENAME, protected_paths
+from runner.process_control import run_process
+from runner.support import restore_changed, snapshot
+
+
+def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - ans/\n  - validation.py\n",
+        encoding="utf-8",
+    )
+    paths = protected_paths(tmp_path)
+
+    assert paths == [
+        (tmp_path / POLICY_FILENAME).resolve(),
+        (tmp_path / "ans").resolve(),
+        (tmp_path / "validation.py").resolve(),
+    ]
+
+
+
+
+def test_runner_merges_yaml_paths_into_existing_protection(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - locked/\n",
+        encoding="utf-8",
+    )
+    runner = TaskRunner.__new__(TaskRunner)
+    runner.root = tmp_path.resolve()
+    runner.args = SimpleNamespace(goal_file=None, protect_file=[])
+    runner.validator = None
+    runner.state_file = tmp_path / ".ai-task-runner" / "state.json"
+    runner.backend_files = []
+
+    protected = runner._build_protected_files()
+
+    assert (tmp_path / POLICY_FILENAME).resolve() in protected
+    assert (tmp_path / "locked").resolve() in protected
+
+
+def test_policy_folder_snapshot_restores_modify_create_and_delete(tmp_path: Path) -> None:
+    protected = tmp_path / "locked"
+    protected.mkdir()
+    (protected / "keep.txt").write_text("original", encoding="utf-8")
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - locked/\n",
+        encoding="utf-8",
+    )
+    saved = snapshot(protected_paths(tmp_path))
+
+    (protected / "keep.txt").write_text("changed", encoding="utf-8")
+    (protected / "new.txt").write_text("new", encoding="utf-8")
+    changed = restore_changed(saved)
+
+    assert str(protected.resolve()) in changed
+    assert (protected / "keep.txt").read_text(encoding="utf-8") == "original"
+    assert not (protected / "new.txt").exists()
+
+
+
+def test_policy_rejects_unknown_keys_instead_of_silently_disabling_protection(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protect_paths:\n  - locked/\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="unknown keys"):
+        protected_paths(tmp_path)
+
+
+def test_policy_rejects_paths_outside_project(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "protected_paths:\n  - ../outside\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="must stay inside project_root"):
+        protected_paths(tmp_path)
+
+
+def test_git_subcommand_handles_global_options() -> None:
+    assert git_subcommand(["status"]) == "status"
+    assert git_subcommand(["-C", "repo", "add", "."]) == "add"
+    assert git_subcommand(["-c", "user.name=x", "commit", "-m", "x"]) == "commit"
+    assert git_subcommand(["--no-pager", "push"]) == "push"
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_path: Path) -> None:
+    version = run_process(["git", "--version"], tmp_path, 10)
+    blocked = run_process(["git", "-C", str(tmp_path), "add", "."], tmp_path, 10)
+
+    assert version.return_code == 0
+    assert "git version" in version.output.lower()
+    assert blocked.return_code == 126
+    assert "human review is required" in blocked.output.lower()

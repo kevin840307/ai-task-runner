@@ -23,8 +23,8 @@ Reject the complete $planning_mode plan if any of these are false:
 3. Small concrete TODOs are allowed, and multiple TODOs may modify the same file. Do not reject a plan merely because tasks share files or components.
 4. The tasks completely cover the remaining goal without duplicate work or missing requirements.
 5. Dependencies appear before dependent work.
-6. Supporting investigation, planning, design decisions, review decisions, and existing checks are embedded in the concrete TODO that uses them unless the goal explicitly requests their artifact as an end result.
-7. The plan contains at least $minimum_tasks ordered task(s), with the minimum satisfied by real independently verifiable changes rather than process-only tasks.
+6. Project-wide understanding was completed in a dedicated planning turn before TODO creation. Reject any standalone preparation/inspection task that moves that already-completed planning work into execution; any remaining task-specific investigation, design reasoning, review decision, or check is embedded in the concrete TODO that uses it unless the goal explicitly requests its artifact as an end result.
+7. The plan contains at least $minimum_tasks ordered task(s), with the minimum satisfied by real independently verifiable implementation behavior or project changes rather than preparation/read/check tasks.
 
 Never judge from title wording or keyword matching. Judge the descriptions, deliverables, acceptance criteria, goal, and ordering.
 When rejecting, issues must identify the affected task number or plan-wide defect and state the required correction.

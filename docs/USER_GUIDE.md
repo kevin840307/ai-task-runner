@@ -54,7 +54,7 @@ For slow local models, the default `7200` second hard timeout is intentionally h
 
 The runner retries model errors, Qwen loop detection, session unavailable, invalid review JSON, protected-file edits, review failure, validator failure, timeouts, and no-progress attempts. A failed Executor call that changed files goes directly to Review. Two fresh sessions that repeat the same failure with no project change defer that TODO to final validation instead of blocking the entire run. Final Validator must PASS before the run is marked completed.
 
-Planning creates a draft from the goal, project outline, progress, and compact retry feedback. A separate fresh-session refiner rewrites it, then an independent no-tool Plan Judge checks each task and the complete plan before accepting it. Rejected issues drive one more fresh rewrite and judgment; two rejections restart the complete planning flow. Python only controls this loop and does not split or judge tasks by Markdown, numbering, punctuation, language, or title keywords.
+Planning starts with one fresh draft Planner session. Turn 1 is bounded read-only project understanding only: map the outline, narrow to goal-relevant areas, read focused evidence, and do not create TODOs yet. Turn 2 resumes the same session with project tools disabled and produces TODO JSON. If Turn 1 is interrupted but the session is resumable, Turn 2 still runs from the gathered context; if the session is unavailable or Turn 2 fails, planning switches to fresh no-tool minimal planning and retries without re-exploring the repository. A fresh Refiner and no-tool Plan Judge improve plan quality but are soft gates: their infrastructure/format failures keep the last usable plan, and explicit Judge rejection is bounded before Final Validator owns correctness. No model-size or repository-size mode is required.
 
 ## Validators
 
@@ -78,7 +78,7 @@ Python validators have no required output format. They receive:
 python validator.py --project-root <root> --state-file <state.json> [...validator args]
 ```
 
-Agents may read validator files and expected/reference/golden fixtures to infer expected behavior, but they must not edit validator files, read-only answer fixtures, runner state, runner source, or backend rule files. Protected changes are restored and retried when they touch runner-owned files. Add `--protect-file <path>` for read-only expected files or folders that the model may inspect but must not modify.
+Agents may read reference/golden/fixture files, but protected paths must not be changed. Configure project-relative files or folders in `<project-root>/.ai-task-runner.yaml` under `protected_paths`; the policy file is automatically protected, and any protected create/modify/delete/rename is restored to the exact state from before the model call. `--protect-file <path>` remains available for one-off protection. Runner child processes permanently block `git add`, `git commit`, and `git push`; Git status/diff/log/show remain available and final staging/commit/push is a human action.
 
 Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 

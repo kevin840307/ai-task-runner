@@ -53,10 +53,12 @@ When the same final validator failure repeats, repair tasks switch to a fresh ag
 
 Validator feedback is passed back into the next planning prompt. After that repair plan is accepted, `state.tasks` is replaced by the new cycle TODOs instead of retaining completed TODOs from older cycles. Full history remains in `log.txt`; active state stays bounded for UI, prompts, and resume. The model, not Python prompt heuristics, decides how to split repair TODOs.
 
-There is no separate Understand model call or understanding artifact. Project understanding is performed inside the existing prompts: Planning uses the supplied project outline, and each Executor reads only the files needed by its current TODO before changing them.
+There is no separate Understand Agent or persisted understanding artifact. Planning uses one draft Planner session in two turns: first a bounded read-only Understand turn maps the outline, narrows to goal-relevant areas, reads only enough evidence to plan reliably, and stops rather than scanning the whole repository; then the same session is resumed with project tools disabled to produce TODO JSON. Each Executor later reads only the files needed by its current TODO before changing them.
 
-Planning uses a fresh draft planner, a different fresh refiner, and one independent no-tool Plan Judge pass. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. The minimum must come from real independently verifiable project changes, not standalone investigation/check steps; required inspection stays inside the TODO that uses it. Tasks are split by independently actionable changes, not by file count, so multiple TODOs may safely modify the same file. Each Judge returns only accepted/issues; rejected issues are sent to another fresh refiner for one more rewrite.
-For Qwen, planning uses `--safe-mode` and excludes tools so planning cannot get stuck exploring files before returning TODO JSON. The planning prompt includes a breadth-first project outline so top-level structure stays visible even when a project has many fixture or output files. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
+Planning is behavior-adaptive rather than model-size-specific. A fresh draft Planner first performs a bounded read-only Understand turn using map → select → focused deep-read, without creating TODOs. Whether that turn completes normally or is stopped by a model/tool error, a resumable session is reused once with project tools disabled to produce the plan from evidence already gathered. If the session is unavailable or that no-tool Plan turn fails, planning falls back to fresh no-tool minimal planning using the goal, runner outline, progress, constraints, validator feedback, and any successful inspection summary; retries stay in this no-tool fallback instead of restarting repository exploration. Initial planning still requires at least six concrete TODOs; repair planning may contain fewer.
+
+Refiner and Plan Judge remain fresh no-tool quality layers. A valid draft is retained as the last usable plan: Refiner infrastructure/format errors keep the previous plan, Judge infrastructure/format errors allow the current valid plan to proceed, and repeated explicit Judge rejection is bounded before execution continues to the Final Validator loop. The Final Validator remains the only hard correctness gate. This lets stronger models stay on the happy path while weaker models automatically degrade without special model names, repository-size thresholds, or fixed exploration budgets.
+For Qwen, only the first draft planner runs from the project root in `--safe-mode` with local read/list/search tools available and write/edit/shell side effects excluded. The same-session Plan turn, minimal fallback, Refiner, and Judge run without project-read tools. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
 
 When a task repeatedly fails in the model stage without changing project files and a Python validator is configured, the runner can defer that TODO to final validation instead of looping forever on one model failure. The run is still marked complete only after the final validator passes.
 
@@ -82,7 +84,18 @@ Python validators are called as:
 python validator.py --project-root <root> --state-file <root>/.ai-task-runner/state.json [...validator args]
 ```
 
-Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but validator files, runner state, runner source, backend rule files, and read-only answer fixtures must not be changed. Use `--protect-file <path>` for any read-only expected file or folder; protected paths are restored if the model edits them.
+Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but protected paths must not be changed. Put project-relative files or folders in `<project-root>/.ai-task-runner.yaml` under `protected_paths`; the policy file protects itself, and protected changes are restored to the exact pre-call working-tree state. `--protect-file <path>` remains supported for one-off protection. Every runner child process blocks `git add`, `git commit`, and `git push`; read-only Git commands remain available, and final Git acceptance is human review.
+
+
+Example project policy:
+
+```yaml
+protected_paths:
+  - expected/
+  - validation.py
+```
+
+A folder entry protects the entire subtree, including create/delete/rename operations. Paths must stay inside `project-root`.
 
 Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`. `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
 
@@ -180,8 +193,6 @@ Run the full suite:
 python -m pytest -q
 ```
 
-Latest local result: `138 passed, 1 skipped`.
-
 For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md).
 
 ## Prompt Templates
@@ -189,7 +200,8 @@ For a concise human/AI overview, read [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE
 Runner prompts live in `prompts/`:
 
 - `rules.md` and `planning_rules.md`: shared hard rules
-- `plan.md`: TODO planning
+- `plan_understand.md`: bounded read-only project understanding; no TODOs yet
+- `plan_finalize.md`: no-tool TODO planning from already gathered evidence
 - `plan_refine.md`: fresh-session rewrite of task granularity
 - `plan_judge.md`: independent semantic quality gate for the refined plan
 - `execution.md`: current-task execution

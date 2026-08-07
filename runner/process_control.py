@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+from .git_guard import guarded_environment
+
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
@@ -41,6 +43,7 @@ def run_process(
         "errors": "replace",
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
+        "env": guarded_environment(),
     }
     if input_text is not None:
         options["stdin"] = subprocess.PIPE

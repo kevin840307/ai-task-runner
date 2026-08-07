@@ -147,6 +147,25 @@ def plan_prompt(
     work: Path | None = None,
     planning_feedback: str = "",
 ) -> str:
+    """Backward-compatible alias for the dedicated planning inspection turn."""
+    return plan_understand_prompt(
+        goal,
+        root,
+        state,
+        protected,
+        work,
+        planning_feedback,
+    )
+
+
+def plan_understand_prompt(
+    goal: str,
+    root: Path,
+    state: RunState,
+    protected: Sequence[Path],
+    work: Path | None = None,
+    planning_feedback: str = "",
+) -> str:
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
@@ -155,7 +174,7 @@ def plan_prompt(
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
-        "plan.md",
+        "plan_understand.md",
         {
             "planning_rules": planning_rules(work_dir),
             "goal": goal,
@@ -164,6 +183,47 @@ def plan_prompt(
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "work_dir": work_dir,
             "planning_feedback": planning_feedback_section(planning_feedback),
+            "minimum_tasks": 6 if state.cycle == 1 else 1,
+            "planning_mode": "initial" if state.cycle == 1 else "repair",
+        },
+    )
+
+
+def plan_finalize_prompt(
+    goal: str,
+    root: Path,
+    state: RunState,
+    work: Path | None = None,
+    *,
+    same_session: bool,
+    inspection_summary: str = "",
+) -> str:
+    progress = {
+        "cycle": state.cycle,
+        "validator_feedback": state.validator_output[-8000:],
+        "completed_tasks": completed_titles(state),
+        "review_skipped_tasks": skipped_review_tasks(state),
+    }
+    work_dir = work or root / ".ai-task-runner"
+    source_instruction = (
+        "Project understanding was already performed in the previous turn of this "
+        "same planning session. Use that evidence plus the supplied runner context. "
+        "Do not resume exploration."
+        if same_session
+        else "This is a fresh no-tool fallback. Use only the supplied goal, project "
+        "outline, progress, validator feedback, and inspection summary; do not "
+        "inspect the repository."
+    )
+    return render_prompt_template(
+        "plan_finalize.md",
+        {
+            "planning_rules": planning_rules(work_dir),
+            "goal": goal,
+            "root": root,
+            "outline": project_outline(root),
+            "progress_json": json.dumps(progress, ensure_ascii=False),
+            "source_instruction": source_instruction,
+            "inspection_summary": bounded_text(inspection_summary, 12000),
             "minimum_tasks": 6 if state.cycle == 1 else 1,
             "planning_mode": "initial" if state.cycle == 1 else "repair",
         },

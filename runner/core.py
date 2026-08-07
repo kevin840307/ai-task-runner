@@ -18,13 +18,15 @@ from .agent_args import (
 )
 from .errors import RunnerError
 from .models import RunState, Task
+from .policy import protected_paths as policy_protected_paths
 from .prompting import (
     bounded_text,
     execution_prompt,
     should_refresh_goal,
+    plan_finalize_prompt,
     plan_judge_prompt,
     plan_refine_prompt,
-    plan_prompt,
+    plan_understand_prompt,
     render_prompt_template,
     review_prompt,
 )
@@ -64,7 +66,7 @@ PLAN_JUDGE_MAX_REWRITES = 2
 
 
 def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
-    """Let Qwen write planning artifacts without making source files its cwd."""
+    """Keep non-inspecting Qwen planning sessions isolated from source cwd."""
     return work if backend == "qwen" else root
 
 
@@ -179,6 +181,7 @@ class TaskRunner:
             self.state_file,
             *runner_source_files(),
             *self.backend_files,
+            *policy_protected_paths(self.root),
             *[Path(value).resolve() for value in self.args.protect_file],
         ]
         return list(dict.fromkeys(paths))
@@ -248,69 +251,180 @@ class TaskRunner:
         if not self._needs_planning():
             return
 
-        planning_feedback = ""
         self._set_stage("planning")
 
         def plan_call() -> list[Task]:
-            nonlocal planning_feedback
             planner_root = planning_agent_root(
                 self.args.backend,
                 self.root,
                 self.work,
             )
+            min_tasks = MIN_PLANNED_TASKS if self.state.cycle == 1 else 1
+            project_changed: list[str] = []
 
-            def new_planner() -> AgentClient:
+            def new_planner(
+                allow_project_read: bool = False,
+                session_id: str = "",
+            ) -> AgentClient:
                 planner = AgentClient(
                     backend=self.args.backend,
                     command=self.args.command,
-                    root=planner_root,
+                    root=self.root if allow_project_read or session_id else planner_root,
                     extra_args=planning_agent_args(
                         self.args.backend,
                         self.args.agent_arg,
+                        allow_project_read=allow_project_read,
                     ),
-                    session_id="",
+                    session_id=session_id,
                     timeout=self.args.planning_timeout,
                 )
                 planner.prepare_project()
                 return planner
 
-            draft_planner = new_planner()
-            min_tasks = MIN_PLANNED_TASKS if self.state.cycle == 1 else 1
+            def parse_plan(text: str) -> list[Task]:
+                return parse_tasks(
+                    text,
+                    self.state.cycle,
+                    min_tasks=min_tasks,
+                    require_deliverable=True,
+                )
+
+            def salvage_plan(agent: AgentClient, error: RunnerError) -> list[Task] | None:
+                diagnostic = diagnostic_error(error)
+                raw = getattr(diagnostic, "output", "") if diagnostic else ""
+                if not raw:
+                    return None
+                try:
+                    return parse_plan(agent._decode(raw))
+                except Exception:
+                    return None
+
+            def ask_plan(
+                planner: AgentClient,
+                prompt: str,
+                *,
+                preserve_session: bool = False,
+            ) -> list[Task]:
+                try:
+                    output, protected_changed, changed = readonly_ask(
+                        planner,
+                        prompt,
+                        self.root,
+                        self.work,
+                        self.protected,
+                        timeout=self.args.planning_timeout,
+                        idle_timeout=self.args.agent_idle_after_change_timeout,
+                        preserve_session_on_error=preserve_session,
+                    )
+                    if protected_changed:
+                        raise RunnerError(
+                            "AI modified files during planning and they were restored: "
+                            + ", ".join(protected_changed)
+                        )
+                    project_changed.extend(changed)
+                    return parse_plan(output)
+                except RunnerError as error:
+                    salvaged = salvage_plan(planner, error)
+                    if salvaged is not None:
+                        self.ui.set(
+                            "AI 規劃程序異常但已取得有效規劃",
+                            "using usable model output",
+                        )
+                        return salvaged
+                    raise
+
+            draft_planner = new_planner(allow_project_read=True)
+            inspection_summary = ""
+            inspection_error: RunnerError | None = None
+            self.ui.set(
+                "AI 正在理解專案",
+                "bounded read-only planning inspection",
+            )
             try:
-                output, protected_changed, project_changed = readonly_ask(
+                inspection_summary, protected_changed, changed = readonly_ask(
                     draft_planner,
-                    plan_prompt(
+                    plan_understand_prompt(
                         self.state.goal,
                         self.root,
                         self.state,
                         self.protected,
                         self.work,
-                        planning_feedback,
                     ),
                     self.root,
                     self.work,
                     self.protected,
                     timeout=self.args.planning_timeout,
                     idle_timeout=self.args.agent_idle_after_change_timeout,
+                    preserve_session_on_error=True,
                 )
                 if protected_changed:
                     raise RunnerError(
                         "AI modified files during planning and they were restored: "
                         + ", ".join(protected_changed)
                     )
-                tasks = parse_tasks(
-                    output, self.state.cycle,
-                    min_tasks=min_tasks, require_deliverable=True,
+                project_changed.extend(changed)
+            except RunnerError as error:
+                inspection_error = error
+
+            tasks = None
+            if draft_planner.session_id:
+                self.ui.set(
+                    "AI 正在產生任務規劃",
+                    "reuse completed planning inspection without tools",
                 )
-                judge_issues: list[str] = []
-                for rewrite_round in range(1, PLAN_JUDGE_MAX_REWRITES + 1):
-                    # Fresh sessions rewrite and judge independently to avoid plan anchoring.
-                    self.ui.set(
-                        "AI 正在重寫任務規劃",
-                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                planner = new_planner(session_id=draft_planner.session_id)
+                try:
+                    tasks = ask_plan(
+                        planner,
+                        plan_finalize_prompt(
+                            self.state.goal,
+                            self.root,
+                            self.state,
+                            self.work,
+                            same_session=True,
+                        ),
                     )
+                except RunnerError as error:
+                    inspection_error = error
+
+            if tasks is None:
+                self.ui.set(
+                    "AI 正在建立最小任務規劃",
+                    "fresh no-tool fallback",
+                )
+
+                def minimal_plan() -> list[Task]:
+                    planner = new_planner()
+                    return ask_plan(
+                        planner,
+                        plan_finalize_prompt(
+                            self.state.goal,
+                            self.root,
+                            self.state,
+                            self.work,
+                            same_session=False,
+                            inspection_summary=inspection_summary,
+                        ),
+                    )
+
+                tasks = retry_model_call(
+                    minimal_plan,
+                    self.ui,
+                    "AI 正在建立最小任務規劃",
+                    str(inspection_error or "planning session unavailable")[-500:],
+                    self.args.retry_wait,
+                    self.args.retry_max_wait,
+                )
+
+            judge_issues: list[str] = []
+            for rewrite_round in range(1, PLAN_JUDGE_MAX_REWRITES + 1):
+                self.ui.set(
+                    "AI 正在重寫任務規劃",
+                    f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                )
+                try:
                     refiner = new_planner()
-                    refined, protected_changed, refined_project_changed = readonly_ask(
+                    tasks = ask_plan(
                         refiner,
                         plan_refine_prompt(
                             self.state.goal,
@@ -320,29 +434,20 @@ class TaskRunner:
                             self.work,
                             judge_issues,
                         ),
-                        self.root,
-                        self.work,
-                        self.protected,
-                        timeout=self.args.planning_timeout,
-                        idle_timeout=self.args.agent_idle_after_change_timeout,
                     )
-                    if protected_changed:
-                        raise RunnerError(
-                            "AI modified files during planning and they were restored: "
-                            + ", ".join(protected_changed)
-                        )
-                    tasks = parse_tasks(
-                        refined, self.state.cycle,
-                        min_tasks=min_tasks, require_deliverable=True,
-                    )
-                    project_changed.extend(refined_project_changed)
-
+                except RunnerError as error:
                     self.ui.set(
-                        "AI 正在審查任務規劃",
-                        f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                        "AI 重寫規劃異常，保留目前有效規劃",
+                        str(error)[-500:],
                     )
+
+                self.ui.set(
+                    "AI 正在審查任務規劃",
+                    f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                )
+                try:
                     judge = new_planner()
-                    judgment_text, protected_changed, judge_project_changed = readonly_ask(
+                    judgment_text, protected_changed, judge_changed = readonly_ask(
                         judge,
                         plan_judge_prompt(
                             self.state.goal,
@@ -362,31 +467,32 @@ class TaskRunner:
                             "AI modified files during planning and they were restored: "
                             + ", ".join(protected_changed)
                         )
-                    project_changed.extend(judge_project_changed)
+                    project_changed.extend(judge_changed)
                     judgment = parse_plan_judgment(judgment_text, len(tasks))
-                    judge_issues = [] if judgment["accepted"] else judgment["issues"]
-                    if not judge_issues:
-                        break
+                except RunnerError as error:
                     self.ui.set(
-                        "AI 任務規劃未通過，重新拆分",
-                        "; ".join(judge_issues),
+                        "AI 規劃審查異常，使用目前有效規劃",
+                        str(error)[-500:],
                     )
-                else:
-                    raise RunnerError(
-                        "plan judge rejected the refined plan: "
-                        + "; ".join(judge_issues)
-                    )
-            except RunnerError:
-                planning_feedback = (
-                    "The previous planning attempt was invalid. Return only valid JSON with "
-                    f"at least {min_tasks} ordered, concrete, single-deliverable TODOs. "
-                    "Remove process-only tasks and split independently implementable or verifiable changes, even when they modify the same file."
+                    break
+
+                judge_issues = [] if judgment["accepted"] else judgment["issues"]
+                if not judge_issues:
+                    break
+                self.ui.set(
+                    "AI 任務規劃未通過，重新拆分",
+                    "; ".join(judge_issues),
                 )
-                raise
+            else:
+                self.ui.set(
+                    "AI 任務規劃仍有疑慮，交由後續驗證閉環",
+                    "; ".join(judge_issues),
+                )
+
             if project_changed:
                 self.ui.set(
                     "AI restored project changes made during planning",
-                    ", ".join(project_changed),
+                    ", ".join(sorted(set(project_changed))),
                 )
             if planner_root == self.root:
                 self.agent.session_id = draft_planner.session_id

@@ -15,8 +15,11 @@ elif is_qwen and '--resume' in args:
     assert args[args.index('--resume')+1] == session
 elif not is_qwen and '--session' in args:
     assert args[args.index('--session')+1] == session
-if 'Plan only the remaining work' in prompt or 'independent plan editor' in prompt:
-    answer=json.dumps({'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]})
+if 'dedicated project-understanding turn' in prompt:
+    answer='relevant project evidence gathered'
+elif 'Create the implementation plan now' in prompt or 'Plan only the remaining work' in prompt or 'independent plan editor' in prompt:
+    count = 2 if 'repair plan' in prompt.lower() or 'repair planning' in prompt.lower() else 6
+    answer=json.dumps({'tasks':[{'title':f'Create marker {i}','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']} for i in range(1,count+1)]})
 elif 'plan quality judge' in prompt:
     count = max(1, prompt.count('\"title\"'))
     answer = json.dumps({"accepted": True, "issues": []})

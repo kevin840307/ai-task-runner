@@ -5,6 +5,7 @@ AI Task Runner v1.1.1 is a small orchestration tool. It runs an external coding 
 Follow these project rules:
 - Keep changes small, maintainable, and generic. Do not hardcode smoke-case answers into runner logic.
 - The runner owns task order, retry state, review state, and `.ai-task-runner/state.json`.
+- Project `.ai-task-runner.yaml` defines protected read-only paths; never run `git add`, `git commit`, or `git push`. Final Git acceptance is human review.
 - Agents being executed by the runner write task deliverables; runner code only orchestrates, monitors, retries, reviews, and validates.
 - Use `ai_task_runner.py` or `runner.api` as the public entry points.
 - For tests, run focused pytest targets first, then `python -m pytest` before finalizing broad changes.
@@ -23,7 +24,7 @@ For Final AI validation, each configured validation is an independent new sessio
 
 ## Planning isolation
 
-Planning uses a fresh draft session, a different fresh refiner session, and one fresh no-tool Plan Judge pass. The Judges return only accepted/issues and check semantics rather than title keywords. Only a Judge-accepted plan is persisted. Initial planning requires at least six concrete TODOs; repair planning may contain fewer. Split by independently actionable changes, even when several TODOs modify the same file.
+Planning is behavior-adaptive. One fresh draft Planner session runs two turns: a bounded read-only Understand turn (outline → narrow search/list → focused reads, no TODOs yet), then a same-session Plan turn with project tools disabled. If Understand is stopped by a model/tool error but its session is resumable, still run the no-tool Plan turn from the gathered context. If the session is unavailable or Plan fails, use fresh no-tool minimal planning and do not restart repository exploration. Fresh Refiner and no-tool Judge are soft quality gates and must not reintroduce standalone discovery work already completed in Planning. Initial planning requires at least six concrete TODOs; repair planning may contain fewer.
 
 ## Executor scope isolation
 

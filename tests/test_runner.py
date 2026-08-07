@@ -53,8 +53,8 @@ def run_flow(tmp_path, backend):
     assert validator.read_bytes()==before
     state=json.loads((tmp_path/'.ai-task-runner/state.json').read_text())
     assert state['completed'] is True
-    assert state['agent_session_id'] == 'test-session-001'
-    assert 'AI 正在理解並拆分任務' in r.stdout
+    assert state['agent_session_id'] == ''
+    assert 'AI 正在規劃並拆分任務' in r.stdout
     assert '正在執行最終驗證' in r.stdout
 
 def test_qwen_same_session(tmp_path):
@@ -92,7 +92,7 @@ def test_plan_only_stops_after_todo_creation(tmp_path):
     result = subprocess.run(args, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["title"] == "Create marker"
+    assert state["tasks"][0]["title"] == "Create marker 1"
     assert state["completed"] is False
     assert not (tmp_path / "done.txt").exists()
 
@@ -109,7 +109,7 @@ def test_qwen_ai_validator_uses_fresh_session(tmp_path):
     assert r.returncode==0,r.stdout+r.stderr
     state=json.loads((tmp_path/'.ai-task-runner/state.json').read_text())
     assert state['completed'] is True
-    assert state['agent_session_id'] == 'test-session-001'
+    assert state['agent_session_id'] == ''
     assert 'AI · new session' in r.stdout
 
 def test_opencode_ai_validator_uses_fresh_session(tmp_path):
@@ -120,7 +120,7 @@ def test_opencode_ai_validator_uses_fresh_session(tmp_path):
     assert r.returncode==0,r.stdout+r.stderr
     state=json.loads((tmp_path/'.ai-task-runner/state.json').read_text())
     assert state['completed'] is True
-    assert state['agent_session_id'] == 'test-session-001'
+    assert state['agent_session_id'] == ''
 
 def test_yaml_script_runs_items_in_order(tmp_path):
     script = tmp_path/'tasks.yaml'
@@ -141,7 +141,7 @@ def test_yaml_script_runs_items_in_order(tmp_path):
     for i in (1,2):
         state=json.loads((tmp_path/f'.ai-task-runner/script/{i:03d}/state.json').read_text())
         assert state['completed'] is True
-        assert state['agent_session_id']=='test-session-001'
+        assert state['agent_session_id']==''
 
 
 def test_yaml_script_rejects_missing_validator(tmp_path):
@@ -800,7 +800,8 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
         assert "Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies" in prompt
 
     assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
-    assert "bounded read-only inspection at the start of the concrete TODO" in plan
+    assert "dedicated project-understanding turn" in plan
+    assert "Do not try to read the whole repository" in plan
     assert "This inspection is preparation inside the TODO and never completes the TODO by itself" in execute
     assert "Review only. You are a read-only task reviewer" in review
     assert "the actual bad value to change away from" in execute
@@ -822,15 +823,23 @@ def test_plan_prompt_includes_project_outline_and_readonly_contract(tmp_path):
         state,
         [tmp_path / ".ai-task-runner" / "state.json"],
     )
+    task_prompt = prompting.plan_finalize_prompt(
+        state.goal,
+        tmp_path,
+        state,
+        same_session=True,
+    )
 
     assert "Project files:" in prompt
     assert "README.md" in prompt
     assert "src/app.py" in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
-    assert "Always return valid JSON" in prompt
-    assert "split enough that a smaller model can complete one coherent step at a time" in prompt
-    assert "minimum code, clean code, low coupling" in prompt
-    assert "Before answering, self-check that the JSON parses" in prompt
+    assert "dedicated project-understanding turn" in prompt
+    assert "Do not try to read the whole repository" in prompt
+    assert "Do not output TODO JSON" in prompt
+    assert "smaller model can complete one coherent step at a time" in task_prompt
+    assert "minimum code, clean code, low coupling" in task_prompt
+    assert "Return only valid JSON" in task_prompt
     assert ".ai-task-runner/state.json" not in prompt
 
 
@@ -871,6 +880,22 @@ def test_qwen_planning_args_preserve_yolo():
     assert "grep_search" in planning_args
     assert "write_file" in planning_args
     assert "run_shell_command" in planning_args
+
+    inspect_args = agent_args.planning_agent_args("qwen", [], allow_project_read=True)
+    excluded = {
+        inspect_args[index + 1]
+        for index, value in enumerate(inspect_args[:-1])
+        if value == "--exclude-tools"
+    }
+    assert "read_file" not in excluded
+    assert "read_many_files" not in excluded
+    assert "list_directory" not in excluded
+    assert "glob" not in excluded
+    assert "grep_search" not in excluded
+    assert "search_file_content" not in excluded
+    assert "write_file" in excluded
+    assert "edit" in excluded
+    assert "run_shell_command" in excluded
     assert agent_args.planning_agent_args("opencode", args) == args
 
 

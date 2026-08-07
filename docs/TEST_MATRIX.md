@@ -16,6 +16,8 @@ Coverage includes:
 - stdout/stderr plus file-change activity watchdog
 - process-tree cleanup on timeout
 - protected validator, state, runner source, and backend rule files
+- YAML-configured protected files/folders, including subtree restore
+- Git write guard blocks add/commit/push while allowing read-only Git
 - review and AI-validator read-only restore
 - session invalid and loop-detection session reset
 - YAML batch validation and resume

@@ -92,6 +92,33 @@ def test_loop_detection_resets_session_without_hiding_error():
     assert agent.session_id == ""
 
 
+def test_planning_can_preserve_loop_session_for_no_tool_finalize():
+    from runner.agent import AgentClient, AgentError
+    from runner.backends import BackendError
+
+    class Backend:
+        timeout = 1
+
+        def ask(self, *args, **kwargs):
+            raise BackendError(
+                "Loop detection halted the run",
+                session_id="planning-session",
+            )
+
+    agent = AgentClient.__new__(AgentClient)
+    agent._backend = Backend()
+    agent.backend = "qwen"
+    agent.base_command = []
+    agent.root = Path(".")
+    agent.extra_args = []
+    agent.session_id = ""
+    agent.timeout = 1
+
+    with pytest.raises(AgentError, match="Loop detection halted"):
+        agent.ask("p", preserve_session_on_error=True)
+    assert agent.session_id == "planning-session"
+
+
 def test_prompt_history_is_bounded_to_recent_items(tmp_path):
     from runner.models import RunState, Task
     from runner.prompting import MAX_PROMPT_HISTORY_ITEMS, completed_titles

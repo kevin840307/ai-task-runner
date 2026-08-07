@@ -8,7 +8,7 @@ AI Task Runner is a small, task-agnostic orchestration layer around coding-agent
 
 The design goal is not to understand or implement one business domain in Python. The runner only provides a generic closed loop that can keep a coding task moving for long unattended runs:
 
-1. split the goal into TODO tasks from the supplied project outline;
+1. perform bounded read-only project inspection and split the goal into TODO tasks;
 2. execute exactly one current task;
 3. review the current filesystem state without allowing review-time edits;
 4. retry incomplete or failed work;
@@ -28,7 +28,7 @@ This is the shortest accurate representation of one run:
 
 ```text
 Start / Resume
-  -> Plan verifiable TODO tasks from goal and project outline
+  -> Plan: map relevant project areas, inspect enough evidence, then create verifiable TODO tasks
   -> Execute current TODO
   -> Review current filesystem result
        -> incomplete / failed: retry the same TODO
@@ -100,13 +100,19 @@ flowchart TD
     G -- Yes --> Z[Exit 0]
     G -- No --> H{Pending tasks exist?}
 
-    H -- No --> J[PLAN bounded verifiable TODO JSON from goal outline state and validator feedback]
-    J --> K{Planning call succeeded and JSON valid?}
-    K -- No --> L[Retry model call with backoff]
-    L --> K
-    K -- Yes --> N[Persist planned tasks]
+    H -- No --> J[PLAN Understand turn: bounded read-only project evidence]
+    J --> L{Resumable planning session?}
+    L -- Yes --> M[Same-session no-tool Plan turn]
+    L -- No --> MM[Fresh no-tool minimal plan]
+    M --> N{Usable plan?}
+    N -- No --> MM
+    MM --> NN[Retry only no-tool minimal planning until usable]
+    N -- Yes --> O1
+    NN --> O1
+    O1[Fresh Refiner then fresh Judge as soft quality gates]
+    O1 --> N2[Persist valid planned tasks]
     H -- Yes --> O[Select current pending TODO]
-    N --> O
+    N2 --> O
 
     O --> P[TODOING execute one task in a task-scoped session]
     P --> Q{Model call outcome}
@@ -165,9 +171,9 @@ flowchart LR
 
 ### 2.4 Project understanding is prompt behavior
 
-Project understanding is prompt behavior, not a separate model call, persisted artifact, or Python stage. Planning uses the goal, project outline, progress, and validator feedback; each Executor then reads only the existing files needed by its current TODO before making the concrete change.
+Project understanding is a dedicated turn inside the existing Planning stage, not a separate Agent, persisted artifact, or Python workflow stage. The draft Planner uses the project outline as a map, performs bounded read-only inspection of goal-relevant areas, and stops when there is enough evidence to produce a reliable plan. The same session is then resumed with project tools disabled to create TODO JSON. Large repositories are not read exhaustively: the Planner narrows first, then deep-reads only relevant entry points and necessary dependencies. Each Executor later reads only the existing files needed by its current TODO before making the concrete change.
 
-`plan` creates a draft of bounded TODO records. A fresh refiner rewrites the draft, then a separate no-tool Plan Judge checks that each task produces a requested project result rather than only supporting knowledge/check work, plus suitable size and verifiability, followed by complete-plan coverage, dependency order, and overlap. Required inspection stays inside the concrete TODO that uses it. Rejected issues drive one more fresh rewrite and judgment; two rejected rewrites restart the complete planning flow. Planning is read-only. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, or title keywords.
+`plan` creates bounded TODO records only after the dedicated Understand turn. Whether Understand completes normally or is interrupted, a resumable draft session gets one same-session no-tool Plan turn; otherwise the runner falls back to fresh no-tool minimal planning and does not restart exploration. A fresh Refiner then rewrites from supplied context only, and a separate no-tool Plan Judge checks task deliverables, size, coverage, dependency order, and overlap. The last structurally valid plan is retained across Refiner/Judge infrastructure or format failures. Explicit Judge rejection drives bounded fresh rewrites, then execution continues and Final Validator remains the hard correctness gate. Project-wide inspection therefore does not become a standalone TODO; task-specific inspection stays inside the concrete TODO that uses it. Python controls sessions and retries but does not split or judge tasks by prompt structure, language, model size, repository size, or title keywords.
 
 ---
 
@@ -379,32 +385,33 @@ Planning runs when no pending task remains and either:
 - there are no tasks yet; or
 - the previous final validator failed and repair tasks must be created.
 
-Planning is read-only with respect to the project. Qwen receives the runner work directory as its planning root and tool access is disabled during planning, so planning must return task JSON instead of editing project files. Other backends may use the project root, but all project changes made during planning are detected and restored.
+Planning is read-only with respect to the project. The first Qwen draft Planner runs an Understand turn from the project root with bounded local read/list/search tools enabled and write/edit/shell side effects excluded. Its same-session Plan turn, fresh minimal fallback, Refiner, and Judge run with project-read tools disabled. All project changes made during planning are detected and restored.
 
 ```mermaid
 flowchart TD
-    A[Need planning] --> B[stage = planning]
-    B --> C[Create fresh planner session]
-    C --> D[Send plan prompt]
-    D --> E{Model call succeeds?}
-    E -- No --> F[retry_model_call exponential backoff]
-    F --> D
-    E -- Yes --> G{Protected file changed?}
-    G -- Yes --> H[Restore and raise planning error]
-    G -- No --> I[Parse draft tasks JSON]
-    I --> J[Create fresh independent refiner session]
-    J --> K[Rewrite complete task list]
-    K --> L{Refined JSON valid?}
-    L -- No --> F
-    L -- Yes --> M[Create fresh no-tool Plan Judge]
-    M --> N{Judge accepted?}
-    N -- Yes --> O[Use judged tasks]
-    N -- No, first rejection --> P[Send issues to a new refiner]
-    P --> K
-    N -- No, second rejection --> F
-    O --> Q[Replace active tasks with judged tasks]
-    Q --> R[Set current to 0]
-    R --> S[Persist state]
+    A[Need planning] --> B[Fresh Draft Planner: Understand turn]
+    B --> C[Map / select / focused read; no TODOs]
+    C --> D{Resumable session available?}
+    D -- Yes --> E[Same session: Plan turn, project tools disabled]
+    E --> F{Usable task JSON?}
+    F -- Yes --> H[Keep valid plan]
+    F -- No --> I[Fresh no-tool minimal planning]
+    D -- No --> I
+    I --> J{Usable task JSON?}
+    J -- No --> I
+    J -- Yes --> H
+    H --> K[Fresh no-tool Refiner]
+    K --> L{Refiner usable?}
+    L -- No --> M[Keep previous valid plan]
+    L -- Yes --> N[Use refined valid plan]
+    M --> O[Fresh no-tool Judge]
+    N --> O
+    O --> P{Judge outcome}
+    P -- Accept --> Q[Persist current valid plan]
+    P -- Infrastructure / format error --> Q
+    P -- Explicit reject and rewrite remains --> K
+    P -- Explicit reject after bounded rewrites --> Q
+    Q --> R[Replace active tasks and set current = 0]
 ```
 
 ### Planning retry behavior
@@ -415,7 +422,7 @@ The outer model-call retry uses `retry_model_call()` with exponential backoff:
 retry_wait, 2×retry_wait, 4×retry_wait, ... capped at retry_max_wait
 ```
 
-Planning does not set a fixed outer `max_errors`. Draft, refine, Judge-call, invalid-JSON, or two-round Judge rejection failures restart the complete flow with exponential backoff. Within one planning attempt, the Judge permits at most two fresh rewrite-and-judge rounds. The runner does not derive task meaning from prompt structure or title keywords; only valid Judge-accepted task JSON becomes the persisted TODO list.
+Planning does not classify model size or repository size. The first draft session always separates bounded read-only understanding from TODO creation: Understand may explore with read-only tools, then Plan runs with project tools disabled. If Understand is interrupted but its session is resumable, Plan still runs from the gathered context; if that session is unavailable or Plan fails, retries remain in fresh no-tool minimal planning rather than restarting project exploration. Any structurally valid plan becomes the last usable plan. Refiner and Judge are soft quality gates: infrastructure, timeout, parse, or schema errors keep the last usable plan; explicit Judge rejection drives at most two fresh rewrite rounds, after which the current valid plan proceeds to execution and the Final Validator loop. The runner does not derive task meaning from title keywords or project-specific rules. Final Validator PASS remains the only completion authority.
 
 ---
 
@@ -690,9 +697,13 @@ Protected files include:
 - `.ai-task-runner/state.json`;
 - runner source files;
 - backend rule files prepared by the agent facade;
+- every project-relative path from `<project-root>/.ai-task-runner.yaml` `protected_paths`;
+- the `.ai-task-runner.yaml` policy file itself;
 - every user-supplied `--protect-file` path.
 
-`protected_ask()` snapshots bytes and hashes before execution and restores every changed protected file afterward, even when the model call throws.
+`protected_ask()` snapshots bytes and hashes before execution and restores every changed protected file or directory afterward, even when the model call throws. Restoration uses the pre-call working-tree contents rather than `git restore`, so existing human uncommitted edits are preserved.
+
+All subprocesses launched by the runner inherit a Git guard. `git add`, `git commit`, and `git push` are rejected before Git executes; read-only Git commands remain available. Validator PASS ends automation but never stages, commits, or pushes changes; those actions are reserved for human review.
 
 Planning, review, and AI validation add a stronger project-wide read-only layer:
 

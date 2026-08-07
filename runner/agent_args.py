@@ -80,6 +80,14 @@ QWEN_COMPUTER_USE_TOOLS = (
     "zoom",
 )
 
+QWEN_PLANNING_PROJECT_READ_TOOLS = (
+    "read_file",
+    "read_many_files",
+    "list_directory",
+    "glob",
+    "grep_search",
+    "search_file_content",
+)
 QWEN_PLANNING_EXCLUDED_TOOLS = (
     "read_file",
     "read_many_files",
@@ -126,13 +134,21 @@ QWEN_RUNTIME_EXCLUDED_TOOLS = (
 )
 
 
-def planning_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
-    """Preserve Qwen planning permissions while trimming custom context load."""
+def planning_agent_args(
+    backend: str,
+    extra_args: Sequence[str],
+    allow_project_read: bool = False,
+) -> list[str]:
+    """Keep Qwen planning read-only; optionally allow bounded project inspection."""
     result = list(extra_args)
     if backend == "qwen":
         ensure_qwen_yolo(result)
         ensure_qwen_safe_mode(result)
-        exclude_qwen_tools(result, QWEN_PLANNING_EXCLUDED_TOOLS)
+        excluded = tuple(
+            tool for tool in QWEN_PLANNING_EXCLUDED_TOOLS
+            if not allow_project_read or tool not in QWEN_PLANNING_PROJECT_READ_TOOLS
+        )
+        exclude_qwen_tools(result, excluded)
     return result
 
 

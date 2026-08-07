@@ -1,12 +1,12 @@
 Hard rules:
-- Use only the prompt context during planning.
-- Do not use tools during planning.
+- Planning never changes project implementation. Only the draft planner may use read-only project tools when its prompt explicitly allows bounded inspection; refiners and judges use only the supplied prompt context.
+- Never use write, edit, shell, notebook, or other side-effect tools during planning.
 - Do not create, edit, delete, or rename project implementation files during planning. Return the task JSON directly.
 - Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
 - Python owns task order and completion state.
-- Use the provided relevant project structure outline to account for entry points, dependencies, public interfaces, conventions, and existing tests. When details are unclear, require bounded read-only inspection at the start of the concrete TODO that uses the information, then continue to its requested project change; learning facts alone is not a deliverable unless the goal explicitly requests that artifact.
+- Use the supplied project outline as a map of the relevant project structure. Account for entry points, dependencies, public interfaces, conventions, and existing tests, then inspect only evidence relevant to the goal when inspection is allowed. Do not attempt exhaustive repository understanding.
 - Prefer the smallest maintainable change that fully satisfies the current task.
 - Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
 - Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
-- Do not ask questions or wait for user input. Inspect available files, make the safest reasonable assumption, and continue.
+- Do not ask questions or wait for user input. Inspect available evidence, make the safest reasonable assumption, and continue.
 - Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
