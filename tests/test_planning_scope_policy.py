@@ -91,6 +91,7 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
 
 def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
 
     created = []
     calls = []
@@ -155,8 +156,9 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -193,6 +195,7 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
 def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
 
     created = []
     prompts = []
@@ -265,8 +268,9 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -310,6 +314,7 @@ def test_plan_judge_gate_rejects_task_and_plan_failures():
 
 def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
 
     created = []
 
@@ -364,8 +369,9 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -377,6 +383,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
 def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
 
     class FakeAgent:
         def __init__(self, **kwargs):
@@ -437,8 +444,9 @@ def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -491,6 +499,7 @@ def _six_tasks(prefix="Plan"):
 
 def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
     from runner.errors import RunnerError
 
     created = []
@@ -518,8 +527,9 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
         return json.dumps(judge_payload(6)), [], []
 
     runner = _adaptive_runner(core, tmp_path)
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -540,6 +550,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
 def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reexplore(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
     from runner.errors import RunnerError
 
     created = []
@@ -571,8 +582,9 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
         return json.dumps(judge_payload(6)), [], []
 
     runner = _adaptive_runner(core, tmp_path)
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -595,6 +607,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
 
 def test_successful_understanding_without_session_is_carried_into_minimal_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
 
     prompts = []
 
@@ -616,8 +629,9 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
         return json.dumps(judge_payload(6)), [], []
 
     runner = _adaptive_runner(core, tmp_path)
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -627,6 +641,7 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
 
 def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
     from runner.errors import RunnerError
 
     class FakeAgent:
@@ -646,8 +661,9 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
         return json.dumps(judge_payload(6)), [], []
 
     runner = _adaptive_runner(core, tmp_path)
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
@@ -657,6 +673,7 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
 
 def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
+    import runner.planning as planning
     from runner.errors import RunnerError
 
     class FakeAgent:
@@ -676,8 +693,9 @@ def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
         raise RunnerError("judge unavailable")
 
     runner = _adaptive_runner(core, tmp_path)
-    monkeypatch.setattr(core, "AgentClient", FakeAgent)
-    monkeypatch.setattr(core, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 

@@ -118,7 +118,7 @@ Then any validator can use `from ai_task_runner_validator import ValidatorReport
 
 Before each Python validator run, the runner clears `<project-root>/.ai-task-runner/validator-reports/`. Treat that directory as the latest validation report area, not a history folder.
 
-Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt` for debugging long unattended runs.
+Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt` for debugging long unattended runs. The latest model call is also exposed as two overwrite-only local snapshots under `.ai-task-runner/debug/`: `current-prompt.txt` contains the exact current prompt, and `current-result.txt` contains the exact model result plus parser/schema errors when applicable. They are diagnostic only: no history is retained, write failures are ignored, and these files do not participate in state, resume, validation, or project-change detection.
 
 ## Rule Files
 
@@ -153,10 +153,14 @@ ai_task_runner_validator.py   Installable ValidatorReport helper
 
 runner/                       Main implementation package
   api.py                      Public Python API and request validation
-  core.py                     TaskRunner state machine, retry, review, resume
+  core.py                     TaskRunner state machine, retry, resume, validation loop
+  planning.py                 Understand, plan, refine, and plan-judge flow
+  reviewing.py                Read-only Review and no-tool Review Finalize flow
+  model_results.py            Strict model JSON/result parsing
   models.py                   RunState and Task serialization
-  support.py                  Shared parsing, protection, retry, validator helpers
+  support.py                  Protection, project snapshots, retry, validator helpers
   agent.py                    Session-aware facade over backend adapters
+  debug.py                    Overwrite-only current prompt/result diagnostics
   agent_args.py               Backend-specific planning/runtime argument policy
   prompting.py                Prompt template loading and prompt builders
   validation.py               AI final validation helper

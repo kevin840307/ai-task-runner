@@ -167,8 +167,11 @@ ai_task_runner.py -> CLI
 runner/api.py -> Python API
 runner/script_runner.py -> YAML Batch
 runner/core.py -> TaskRunner.run() 主狀態機
+runner/planning.py -> Understand / Plan / Refine / Judge
+runner/reviewing.py -> Review / Review Finalize
+runner/model_results.py -> 模型 JSON / 結果格式解析
 runner/validation.py -> Fresh AI Final Validator
-runner/support.py -> Retry / Parsing / Protection / Fingerprint
+runner/support.py -> Retry / Protection / Snapshot / Fingerprint
 runner/process_control.py -> Timeout / Watchdog / Process Tree Kill
 runner/backends/qwen.py -> Qwen Backend
 runner/backends/opencode.py -> OpenCode Backend

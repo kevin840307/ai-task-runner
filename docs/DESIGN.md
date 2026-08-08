@@ -260,12 +260,15 @@ The batch stops at the first non-zero child exit code. Re-running the same scrip
 ai_task_runner.py          CLI parser and main entry
 runner/api.py              Public RunRequest/run API and validation
 runner/core.py             TaskRunner state machine and orchestration
+runner/planning.py         Understand -> Plan -> Refine -> Judge planning flow
+runner/reviewing.py        Read-only Review and adaptive Review Finalize
+runner/model_results.py    Strict model JSON/result parsing
 runner/models.py           Persisted RunState and Task models
 runner/defaults.py         Shared default backend, timeout, and limit values
 runner/prompting.py        Markdown prompt-template loading and builders
 runner/validation.py       Fresh-session AI final validator
 runner/script_runner.py    YAML batch orchestration and item resume setup
-runner/support.py          Retry, parsing, protection, fingerprint, validator helpers
+runner/support.py          Protection, project snapshots, retry, fingerprint, file validator helpers
 runner/process_control.py  Subprocess I/O, timeout, watchdog, process-tree kill
 runner/agent.py            Session-aware backend facade
 runner/agent_args.py       Backend-specific planning/runtime arguments
@@ -277,7 +280,7 @@ runner/backends/opencode.py OpenCode command and result parsing
 prompts/                   Editable task-agnostic prompt templates
 ```
 
-Dependencies are intentionally one-way: `core.py` calls planning, prompting, validation, support, UI, and backend helpers; those modules do not import `core.py` to drive orchestration themselves.
+Dependencies are intentionally one-way: `core.py` owns the state machine and delegates bounded feature flows to `planning.py`, `reviewing.py`, `validation.py`, prompting, support, UI, and backend helpers. Feature/helper modules never import `core.py`; `model_results.py` stays independent from orchestration.
 
 ---
 

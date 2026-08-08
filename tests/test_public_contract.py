@@ -133,10 +133,19 @@ def test_core_uses_descriptive_canonical_names():
 
     assert "from .models import RunState, Task" in core
     assert "from .agent import AgentClient" in core
-    assert "from .models import Task" in support
+    assert "from .model_results import (" in support
     assert "from .prompting import (" not in support
     assert "from runner.prompting import (" in cli
     assert "from runner.api import RunRequest, run" in cli
+
+
+def test_support_keeps_model_result_import_compatibility():
+    from runner import model_results
+    from runner import support
+
+    assert support.parse_tasks is model_results.parse_tasks
+    assert support.parse_review is model_results.parse_review
+    assert support.parse_ai_validation is model_results.parse_ai_validation
 
 
 def test_agent_timeout_is_part_of_public_request_contract():

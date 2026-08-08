@@ -22,6 +22,26 @@ FORBIDDEN_IMPORTS = {
         "runner.ui",
         "runner.validation",
     },
+    "runner/planning.py": {
+        "runner.core",
+        "runner.script_runner",
+        "runner.validation",
+    },
+    "runner/reviewing.py": {
+        "runner.core",
+        "runner.script_runner",
+        "runner.validation",
+    },
+    "runner/model_results.py": {
+        "runner.core",
+        "runner.planning",
+        "runner.prompting",
+        "runner.reviewing",
+        "runner.script_runner",
+        "runner.support",
+        "runner.ui",
+        "runner.validation",
+    },
     "runner/prompting.py": {
         "runner.core",
         "runner.support",
@@ -73,7 +93,9 @@ def test_core_depends_on_feature_modules():
     imports = module_imports("runner/core.py")
     assert {
         "runner.agent_args",
+        "runner.planning",
         "runner.prompting",
+        "runner.reviewing",
         "runner.script_runner",
         "runner.ui",
         "runner.validation",

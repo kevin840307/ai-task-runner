@@ -88,9 +88,12 @@ ai_task_runner_validator.py       Installable ValidatorReport helper
 
 runner/                           Main implementation package
 runner/api.py                     Public Python API and request validation
-runner/core.py                    TaskRunner state machine, retry, review, resume
+runner/core.py                    TaskRunner state machine, retry, resume, validation loop
+runner/planning.py                Understand, plan, refine, and plan-judge flow
+runner/reviewing.py               Read-only Review and Review Finalize flow
+runner/model_results.py           Strict model JSON/result parsing
 runner/models.py                  RunState and Task serialization
-runner/support.py                 Parsers, protection, retry, validator subprocess utilities
+runner/support.py                 Protection, snapshots, retry, validator subprocess utilities
 runner/agent.py                   Session-aware backend facade
 runner/agent_args.py              Backend-specific planning/runtime argument policy
 runner/prompting.py               Prompt template loading and prompt builders

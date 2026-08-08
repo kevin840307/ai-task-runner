@@ -274,7 +274,7 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     state.validator_output = "unexpected file content"
     review_with_feedback = runner.review_prompt(state, root, protected, "report")
     assert "Latest validator feedback to consider" in review_with_feedback
-    assert "Do not mark the task complete unless the reported failure is fixed" in review_with_feedback
+    assert "feedback about later tasks or whole-project work must not block this task" in review_with_feedback
 
 
 
