@@ -22,9 +22,9 @@ def state(attempts=1):
     )
 
 
-def test_execution_prompt_does_not_embed_full_goal_or_completed_task_list(tmp_path):
+def test_fresh_execution_prompt_embeds_goal_as_context_not_completed_task_list(tmp_path):
     prompt = execution_prompt(state(), tmp_path, [], include_goal=True)
-    assert "Build the entire application including many later features." not in prompt
+    assert "Build the entire application including many later features." in prompt
     assert '"completed_tasks"' not in prompt
     assert "current TODO is the only executable scope" in prompt
     assert "Do not run the final project validator" in prompt
@@ -54,7 +54,7 @@ def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
 
     assert shared in prompt
     assert "Later feature" not in prompt
-    assert "Do not read the original goal or planning output" in prompt
+    assert "Do not use the original goal or planning output to discover or execute additional work" in prompt
     assert "current TODO is the only executable work item" in prompt
 
 

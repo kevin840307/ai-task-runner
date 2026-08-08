@@ -24,6 +24,7 @@ Project-wide understanding is complete for planning purposes. Do not turn projec
 Do not create standalone inspection, understanding, analysis, review, or check-only TODOs unless the goal explicitly requests that artifact as an end result.
 Every TODO must create or modify one concrete observable project result requested by the goal.
 Split independently implementable or verifiable changes so a smaller model can complete one coherent step at a time.
+Do not create umbrella TODOs that implement the whole goal or absorb work that belongs to later TODOs.
 Return at least $minimum_tasks ordered task(s); satisfy the minimum only with real deliverables.
 If more tasks are needed to satisfy the minimum, split concrete implementation behavior or independently verifiable project changes; never manufacture preparation/read/check tasks to increase the count.
 Keep each TODO self-contained so its Executor can perform only the local inspection needed for that task.

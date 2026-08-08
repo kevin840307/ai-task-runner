@@ -45,6 +45,9 @@ def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
     assert "Split independently implementable or verifiable changes" in prompt
     assert "Do not create standalone inspection" in prompt
     assert "never manufacture preparation/read/check tasks" in prompt
+    assert "Do not create umbrella TODOs" in prompt
+    assert "Goal:" not in prompt
+    assert "Project root:" not in prompt
 
 
 def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
@@ -701,3 +704,26 @@ def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
     assert runner.state.tasks[0].title == "Refined 1"
+
+
+def test_same_session_finalize_is_compact_but_fresh_fallback_is_self_contained(tmp_path: Path):
+    state = RunState(run_id="r", goal="UNIQUE ORIGINAL GOAL", project_root=str(tmp_path))
+    (tmp_path / "app.txt").write_text("x", encoding="utf-8")
+
+    same = plan_finalize_prompt("UNIQUE ORIGINAL GOAL", tmp_path, state, same_session=True)
+    fresh = plan_finalize_prompt(
+        "UNIQUE ORIGINAL GOAL",
+        tmp_path,
+        state,
+        same_session=False,
+        inspection_summary="UNIQUE INSPECTION SUMMARY",
+    )
+
+    assert "UNIQUE ORIGINAL GOAL" not in same
+    assert str(tmp_path) not in same
+    assert "app.txt" not in same
+    assert "UNIQUE ORIGINAL GOAL" in fresh
+    assert str(tmp_path) in fresh
+    assert "app.txt" in fresh
+    assert "UNIQUE INSPECTION SUMMARY" in fresh
+    assert len(same) < len(fresh)

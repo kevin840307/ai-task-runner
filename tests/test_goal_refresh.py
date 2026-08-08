@@ -38,15 +38,16 @@ def test_first_repair_task_refreshes_goal():
     assert should_refresh_goal(run, True)
 
 
-def test_execution_prompt_never_embeds_full_goal():
+def test_fresh_execution_includes_goal_but_same_session_retry_does_not():
     run = state()
     fresh = execution_prompt(run, Path("/tmp"), [], include_goal=True)
     continued = execution_prompt(run, Path("/tmp"), [], include_goal=False)
-    assert "ORIGINAL GOAL" not in fresh
+    assert "ORIGINAL GOAL" in fresh
     assert "ORIGINAL GOAL" not in continued
-    assert "Treat the current TODO as self-contained" in fresh
-    assert "Do not read the original goal or planning output" in fresh
-    assert "current TODO is the only executable scope" in continued
+    assert "context and global constraints only; never executable scope" in fresh
+    assert "current TODO is the only executable scope" in fresh
+    assert "Continue only the same current TODO" in continued
+    assert '"title": "task"' not in continued
 
 
 def test_rebuilt_session_prompt_requires_read_before_modify():
@@ -68,3 +69,45 @@ def test_normal_session_omits_rebuilt_notice():
     run = state()
     prompt = execution_prompt(run, Path("/tmp"), [], rebuilt_session=False)
     assert "continuing in a rebuilt session" not in prompt
+
+
+def test_rebuilt_session_includes_original_goal_and_current_task():
+    run = state()
+    run.tasks[0].attempts = 3
+    prompt = execution_prompt(
+        run,
+        Path("/tmp"),
+        [],
+        include_goal=True,
+        rebuilt_session=True,
+    )
+    assert "ORIGINAL GOAL" in prompt
+    assert '"title": "task"' in prompt
+    assert "Rebuilt execution session" in prompt
+    assert "current TODO is the only executable scope" in prompt
+
+
+def test_same_session_retry_is_short_and_carries_only_new_feedback():
+    run = state()
+    run.tasks[0].attempts = 2
+    run.tasks[0].last_review = {
+        "completed": False,
+        "reason": "Missing rendered file",
+        "missing_items": ["Create output.yaml"],
+    }
+    run.tasks[0].last_output = "Previous execution summary"
+    prompt = execution_prompt(
+        run,
+        Path("/tmp"),
+        [],
+        strategy_note="Fix the first blocking issue",
+        include_goal=False,
+    )
+    assert "Continue only the same current TODO" in prompt
+    assert "Missing rendered file" in prompt
+    assert "Create output.yaml" in prompt
+    assert "Previous execution summary" not in prompt
+    assert "Fix the first blocking issue" in prompt
+    assert "ORIGINAL GOAL" not in prompt
+    assert '"description": "do it"' not in prompt
+    assert "Project root:" not in prompt

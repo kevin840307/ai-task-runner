@@ -204,6 +204,14 @@ def plan_finalize_prompt(
     same_session: bool,
     inspection_summary: str = "",
 ) -> str:
+    minimum_tasks = 6 if state.cycle == 1 else 1
+    planning_mode = "initial" if state.cycle == 1 else "repair"
+    if same_session:
+        return render_prompt_template(
+            "plan_finalize_same_session.md",
+            {"minimum_tasks": minimum_tasks, "planning_mode": planning_mode},
+        )
+
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
@@ -211,15 +219,6 @@ def plan_finalize_prompt(
         "review_skipped_tasks": skipped_review_tasks(state),
     }
     work_dir = work or root / ".ai-task-runner"
-    source_instruction = (
-        "Project understanding was already performed in the previous turn of this "
-        "same planning session. Use that evidence plus the supplied runner context. "
-        "Do not resume exploration."
-        if same_session
-        else "This is a fresh no-tool fallback. Use only the supplied goal, project "
-        "outline, progress, validator feedback, and inspection summary; do not "
-        "inspect the repository."
-    )
     return render_prompt_template(
         "plan_finalize.md",
         {
@@ -228,10 +227,14 @@ def plan_finalize_prompt(
             "root": root,
             "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
-            "source_instruction": source_instruction,
+            "source_instruction": (
+                "This is a fresh no-tool fallback. Use only the supplied goal, project "
+                "outline, progress, validator feedback, and inspection summary; do not "
+                "inspect the repository."
+            ),
             "inspection_summary": bounded_text(inspection_summary, 12000),
-            "minimum_tasks": 6 if state.cycle == 1 else 1,
-            "planning_mode": "initial" if state.cycle == 1 else "repair",
+            "minimum_tasks": minimum_tasks,
+            "planning_mode": planning_mode,
         },
     )
 
@@ -323,6 +326,29 @@ def should_refresh_goal(state: RunState, has_session: bool) -> bool:
     )
 
 
+def _execution_feedback(
+    state: RunState,
+    strategy_note: str,
+) -> str:
+    """Return only information that was not already present in this session."""
+    task = state.tasks[state.current]
+    parts: list[str] = []
+    if task.last_review and task.last_review.get("completed") is False:
+        parts.append(
+            "Latest review feedback:\n"
+            + json.dumps(
+                {
+                    "reason": task.last_review.get("reason", ""),
+                    "missing_items": task.last_review.get("missing_items", []),
+                },
+                ensure_ascii=False,
+            )
+        )
+    if strategy_note:
+        parts.append("New recovery instruction:\n" + strategy_note)
+    return "\n\n".join(parts) or "No new external feedback; continue from the existing session state."
+
+
 def execution_prompt(
     state: RunState,
     root: Path,
@@ -333,6 +359,12 @@ def execution_prompt(
     rebuilt_session: bool = False,
 ) -> str:
     task = state.tasks[state.current]
+    if not include_goal:
+        return render_prompt_template(
+            "execution_continue.md",
+            {"feedback": _execution_feedback(state, strategy_note)},
+        )
+
     context = {
         "validator_feedback": format_validator_feedback(
             state.validator_output,
@@ -340,15 +372,16 @@ def execution_prompt(
         ),
         "global_constraints": shared_task_constraints(state),
         "execution_scope": (
-            "Global constraints are compatibility and safety boundaries only. "
+            "The original goal is context and global constraints only. "
             "The current TODO is the only executable work item."
         ),
         "session_context": (
-            "New execution session. Treat the current TODO as self-contained; inspect only "
-            "the project files directly needed to complete its deliverable."
-            if include_goal
+            "Rebuilt execution session. Re-establish only the current TODO from the "
+            "current project state; previous attempts may already have changed files."
+            if rebuilt_session
             else
-            "Continue the current TODO using the existing session context."
+            "New execution session. Inspect only the project files directly needed "
+            "to complete the current TODO."
         ),
     }
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
@@ -357,6 +390,19 @@ def execution_prompt(
         if task.last_output
         else ""
     )
+    review_feedback = ""
+    if task.last_review and task.last_review.get("completed") is False:
+        review_feedback = (
+            "\nLatest review feedback:\n"
+            + json.dumps(
+                {
+                    "reason": task.last_review.get("reason", ""),
+                    "missing_items": task.last_review.get("missing_items", []),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
     rebuilt_session_note = (
         "\nRebuilt session notice:\n"
         "This task is continuing in a rebuilt session. Project files may already "
@@ -374,10 +420,12 @@ def execution_prompt(
         "execution.md",
         {
             "rules": rules(root, protected),
+            "goal": state.goal,
             "context_json": json.dumps(context, ensure_ascii=False),
             "validator_reference": validator_reference,
             "task_json": json.dumps(task_spec(task), ensure_ascii=False),
             "previous": previous,
+            "review_feedback": review_feedback,
             "strategy": strategy,
             "rebuilt_session_note": rebuilt_session_note,
         },
