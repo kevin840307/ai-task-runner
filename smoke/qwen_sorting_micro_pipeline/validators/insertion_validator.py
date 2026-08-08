@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-
 import argparse
 from pathlib import Path
-
 from common import validate_functions
+from validator_interface import ValidatorReport, run_validation
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--project-root", required=True)
-parser.add_argument("--state-file", required=True)
-args = parser.parse_args()
-try:
-    validate_functions(Path(args.project_root), ["bubble_sort", "insertion_sort"])
-except Exception as error:
-    print(f"FAIL: {error}")
-    raise SystemExit(1)
-print("PASS: bubble_sort and insertion_sort")
+def main()->int:
+    p=argparse.ArgumentParser(); p.add_argument('--project-root',required=True); p.add_argument('--state-file',required=True); a=p.parse_args(); root=Path(a.project_root).resolve()
+    return run_validation(ValidatorReport(root,'insertion-sort'),lambda:validate_functions(root,['bubble_sort','insertion_sort']))
+if __name__=='__main__': raise SystemExit(main())

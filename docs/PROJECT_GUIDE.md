@@ -1,158 +1,42 @@
-# AI Task Runner Project Guide v1.1.1
+# Project and Maintainer Guide
 
-AI Task Runner is a small retry/review/validator loop around coding agents. The user provides a requirement and a validator. The agent writes the project files; the runner keeps the 24h-style loop alive.
+Version: 1.1.1
 
-Default CLI behavior is Qwen Code through `qwen.cmd` with unlimited task attempts and validator cycles. A normal run only needs `--project-root`, `--goal`, and `--validator`.
+## Mandatory maintenance rules
+1. No project-specific hardcode in generic Runner code. Never branch on sample project names, FAB/ENV/version values, filenames, business fields, or a specific model identity to solve one case.
+2. One behavior, one shared implementation. All equivalent paths must call the same helper/function instead of copying logic.
+3. Minimum code. Prefer deleting/merging code over introducing another service/helper layer when the existing architecture can express the behavior.
+4. Readability is a requirement: clear names, short cohesive functions, explicit contracts, few layers, no clever hidden behavior.
+5. Preserve unrelated behavior. Scope every production change to the demonstrated need.
+6. Keep Runner content-agnostic. Project rules belong in policy/prompts/validators/project source.
 
-Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing the whole prompt into one shell argument. The loaded text becomes the persisted state goal.
+## Change checklist
+- Can an existing shared helper be reused?
+- Would this introduce a second parser/retry/path/snapshot/session implementation? If yes, stop and consolidate.
+- Does any literal belong to one example/project rather than the Runner? Move it out.
+- Is the change required by current evidence, or speculative? Remove speculative parts.
+- Is the same-session prompt repeating information already in session? Remove it.
+- Does a fresh/rebuilt session have enough context to continue independently? Add only missing context.
+- Does Executor scope remain Current TODO only?
+- Do deterministic validators still judge requirements rather than Planner strategy?
+- Are docs and tests updated with the real behavior?
 
-## Closed Loop
+## Public integration
+Use `runner.api.RunRequest` / `runner.api.run()` as the shared entry for CLI/UI/skills. Do not build a second orchestration path for a UI or skill.
 
-1. Split the goal into ordered TODO tasks after bounded project inspection.
-2. Before editing, inspect only the existing files needed by the current TODO.
-3. Execute only the current task.
-4. Ask read-only review whether that task is complete.
-5. Preserve partial progress: review immediately after a failed Executor call that changed files; otherwise retry in a fresh session and defer repeated identical no-change failures to final validation.
-6. Run the final Python or AI validator after all tasks are reviewed.
-7. If final validation fails, keep the project changes, replace the active TODO list with focused repair task(s), and continue.
+## Project policy
+Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
 
-Within one process, normal model errors, timeouts, loop detection, session unavailable, review failures, validator failures, protected-file edits, and no-progress cycles are recovered automatically. A failed Executor call that changed files is reviewed immediately. A no-change failure clears the execution session; if a second fresh session repeats the same failure without project progress, the runner defers that TODO to final validation so the whole run can keep moving. If AI Review itself fails, the runner also defers that task's completion judgment to the final validator. When the same final validator failure repeats, repair tasks use a fresh agent session while keeping saved runner state and validator feedback. Each accepted repair plan replaces the prior cycle's active TODO list; completed history remains in `log.txt` rather than growing `state.tasks`. If the Python process, OS, machine, or power fails, use an external supervisor to restart the same command with `--resume`.
+## Current task execution contract
+A fresh/rebuilt Executor receives the current task, Original Goal as global context only, and any relevant validator/review feedback. A same-session continuation receives only new feedback. When recovery needs it, include the previous attempt output or diagnostic without expanding scope beyond the current task.
 
-## Activity Watchdog
+## Validation and batch mode
+Validator feedback in state is bounded to 20,000 characters with the start and end preserved. External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`; configured log folders are copied into `.ai-task-runner/validator-reports/external-command/`.
 
-AI model calls have a default activity idle watchdog. CLI output and project-file changes both refresh activity for the whole call, including after the first edit. The runner stops a call only when neither kind of activity occurs for the configured interval. Read-only planning, review, and AI-validation calls use the same setting. This never marks work complete by itself; review and final validation still own completion.
+YAML batch mode is supported. Each item gets its own nested state directory under the configured work directory.
 
-## Task Prompt Shape
-
-Runner prompt templates live under `prompts/`. `prompting.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
-
-Prompt/session policy is deliberately asymmetric: a fresh session receives all context required for its role; a same-session continuation receives only new information and the next instruction. Planning's same-session finalize turn does not resend the goal/project outline/progress. Fresh or rebuilt Executor sessions receive the original goal only as context/global constraints plus the current TODO; same-session Executor retries use `execution_continue.md` and carry only new review/recovery feedback. The current TODO is always the only executable scope.
-
-Each TODO owns task-scoped execution state, but failed no-change calls discard their session before retry. Completing the TODO also clears the session so the next TODO starts fresh. The runner sends compact context:
-
-- hard rules and protected-file boundaries
-- recent validator feedback
-- current task title, description, and acceptance criteria
-- previous attempt output or diagnostic
-- recovery instructions when needed
-
-Each TODO prompt is about the current task, completion conditions, and the last failure. The Executor may return after one coherent improvement. A failed call with new changes goes directly to Review; a no-change failure retries in a fresh session, and a repeated matching no-change failure is deferred to final validation.
-
-Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but protected paths must not be changed. Put project-relative read-only files/folders in `<project-root>/.ai-task-runner.yaml` under `protected_paths`; the policy file protects itself and protected create/modify/delete/rename operations are restored automatically. `--protect-file <path>` remains available for one-off protection. Runner child processes block `git add`, `git commit`, and `git push`; final Git acceptance is human review. Python owns final validator execution and runner state. Validator feedback is authoritative and is passed back into the next AI planning prompt.
-Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
-
-Planning is intentionally AI-owned and behavior-adaptive. A fresh draft Planner session first performs bounded read-only project understanding without creating TODOs, then the runner resumes that same session with project tools disabled to produce TODO JSON from the gathered evidence. If the Understand turn is interrupted but the session is resumable, the no-tool Plan turn still runs. If the session is unavailable or Plan fails, planning switches to fresh no-tool minimal planning, carrying any successful inspection summary, and retries there instead of restarting repository exploration. A fresh Refiner and independent no-tool Plan Judge then act as soft quality gates: failures keep the last usable plan, while explicit Judge rejection gets only bounded rewrite rounds before the plan proceeds to execution and Final Validator. Python controls sessions and fallback only, without model-size, repository-size, task-title, or prompt-structure heuristics.
-
-Planning does not inject a precomputed `Project files:` listing. The Understand turn uses bounded read/list/search from the project root; no-tool stages use the resulting inspection summary. Initial plans require at least six concrete, bounded TODOs and reject umbrella tasks that would execute the whole goal in one step.
-For Qwen, only the first draft planner runs from the project root with local read/list/search tools available. `--safe-mode` remains enabled and write/edit/shell plus other side-effect tools stay excluded. The same-session Plan turn, minimal fallback, Refiner, and Judge remain tool-isolated. This avoids exhaustive large-repository loading while preserving read-only planning safety. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
-
-Qwen prompts are transported through stdin only; no `-p` prompt argument is used. The runner writes the exact prompt, flushes/closes stdin to signal EOF, and reads the `stream-json` output normally. Keeping the large prompt out of argv avoids Windows command-line length limits and leaves only one input route.
-
-Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
-
-## Validator Output
-
-File validators are format-free: exit code `0` is PASS, any non-zero exit is FAIL. Stdout and stderr are captured together. The state keeps bounded validator feedback at 20,000 characters, preserving both the beginning and end of long output so the first failure and final summary usually survive.
-
-Recommended validators keep stdout compact and write full evidence under `.ai-task-runner/validator-reports/`. Stdout should be the model-facing summary: status, counts, `report_dir`, and the first actionable blocking findings. Detailed diffs, long command output, and scoring evidence should go into `summary.txt`, `errors.txt`, `warnings.txt`, and referenced `Full report:` files. Repair prompts tell the agent to read `summary.txt`, then `errors.txt`, then only the first relevant full report needed to fix the first blocking error. `docs/validator_templates/` contains copy-and-edit templates, including a large folder comparison validator that checks target config files while saving full diffs to disk and reporting config value sharing as warning-only feedback.
-
-External validators such as exe, bat, jar, or Java CLIs should be wrapped by `docs/validator_templates/external_command_validator.py`. The wrapper keeps the runner contract unchanged: the Python wrapper is still the `--validator`, the external command exit code becomes PASS/FAIL, stdout/stderr are saved, and any configured log folders are copied into `.ai-task-runner/validator-reports/external-command/` with a `logs-index.txt` file for the agent.
-
-With `--validator ai`, the final check is a fresh read-only agent session. The AI validator prompt asks for project inspection, reasonable local checks, and JSON containing `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. On failure, the runner formats `missing_items` as structured `[E...]` feedback so the next cycle can create focused repair tasks. This is a useful fallback when no Python validator exists, but a deterministic Python validator remains the stronger contract.
-
-Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runner` if validators in other project directories should import `ValidatorReport` as `from ai_task_runner_validator import ValidatorReport`.
-
-The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
-
-Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt`. Inspect this file to debug long unattended runs without relying on terminal scrollback. State writes use atomic replace with a short retry window so transient Windows file locks from editors, antivirus, backup tools, or monitoring readers do not stop a 24h run.
-
-Model-call diagnostics live in `.ai-task-runner/debug/`. `current-prompt.txt` is the active call; `last-prompt.txt` and `last-result.txt` keep the latest completed/failed pair. `history/` stores a bounded recent call history: up to 100 prompt/result pairs, 50 MB total, and 2 MB per history entry with head/tail retention when truncation is required. Oldest pairs are removed first. These files are best-effort diagnostics and are excluded from task change detection, state semantics, resume decisions, and validation.
-
-## Rule Files
-
-Backend rule files live at the project root:
-
+## Agent rule files
 - Qwen Code: `QWEN.md`
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
-
-## YAML Resume
-
-YAML batch mode is supported. Each item gets its own state file:
-
-```text
-.ai-task-runner/script/001/state.json
-.ai-task-runner/script/002/state.json
-```
-
-Re-run the same script with `--resume`: completed items return immediately, unfinished items continue from their current task, validator feedback, and session state, and new items start fresh.
-
-## Project Structure
-
-```text
-ai_task_runner.py                 CLI parser and main entry point
-ai_task_runner_validator.py       Installable ValidatorReport helper
-
-runner/                           Main implementation package
-runner/api.py                     Public Python API and request validation
-runner/core.py                    TaskRunner state machine, retry, resume, validation loop
-runner/planning.py                Understand, plan, refine, and plan-judge flow
-runner/reviewing.py               Read-only Review and Review Finalize flow
-runner/model_results.py           Shared JSON candidate extraction + strict stage validation
-runner/models.py                  RunState and Task serialization
-runner/support.py                 Protection, snapshots, retry, validator subprocess utilities
-runner/agent.py                   Session-aware backend facade
-runner/agent_args.py              Backend-specific planning/runtime argument policy
-runner/prompting.py               Prompt template loading and prompt builders
-runner/validation.py              AI final validation helper
-runner/script_runner.py           YAML batch orchestration and per-item resume setup
-runner/process_control.py         Subprocess timeout and activity watchdog
-runner/ui.py                      Live terminal UI and JSON progress events
-runner/defaults.py                Shared default backend, command, timeout, and limit values
-runner/errors.py                  RunnerError
-runner/version.py                 Package version used by docs and JSON events
-runner/backends/base.py           Backend interface and shared command handling
-runner/backends/qwen.py           Qwen stream-json backend
-runner/backends/opencode.py       OpenCode backend
-
-prompts/                          Editable runner prompt templates
-prompts/plan_refine.md            Independent fresh-session rewrite of draft task granularity
-prompts/plan_judge.md             Independent semantic quality gate for refined task JSON
-docs/                             Human and AI project documentation
-docs/validator_templates/         Copyable validator templates and wrappers
-examples/                         Reusable sample prompts, validators, and runners
-smoke/                            Real Qwen smoke cases and validators
-tests/                            Unit, API, resilience, and documentation tests
-
-QWEN.md                           Qwen project rule file for this repository
-AGENTS.md                         OpenCode project rule file for this repository
-pyproject.toml                    Package metadata for runner and ValidatorReport helper
-requirements*.txt                 Runtime and development dependencies
-.ai-task-runner/                  Local run state, ignored by git
-.qwen/                            Local Qwen state, ignored by git
-.pytest_cache/                    Local pytest cache, ignored by git
-```
-
-## Real Qwen Results
-
-2026-07-27 local Qwen runs completed through `ai_task_runner.py`:
-
-- `qwen_todo_cli`: PASS. Covered validator repair, protected state restore, no-project-change retry, and resume.
-- `qwen_expression_evaluator`: PASS. Covered 3 task planning, loop detection, protected state restore, read-only review restore, longer local-model timeout, and final Python validation.
-- `qwen_csv_analyzer`: PASS. Covered 3 task planning, task-by-task review, report generation, documentation, and final Python validation.
-
-## Test Command
-
-```bat
-python -m pytest -q
-```
-
-## Review error tolerance
-
-Review starts with one fresh independent read-only session. Review PASS completes the TODO; an explicit Review FAIL returns actionable `missing_items` to execution. If Review errors and its session is resumable, the runner makes one same-session no-tool finalization attempt; only another error records the skip and delegates the decision to final validation. Final validation is always required.
-
-
-## Final AI policy knobs
-
-`RunRequest.final_ai_validations` controls independent fresh-session validation runs. `RunRequest.final_ai_required_passes` controls the required PASS quorum. Keep defaults at `1/1` for compatibility; use `3/2` for higher confidence. Explicit FAIL is always blocking.

@@ -105,6 +105,8 @@ def test_yaml_file_validators_are_not_precompleted():
     for name in ("05_yaml_release_pipeline", "06_yaml_data_migration_pipeline"):
         folder = EXAMPLES / name
         for validator in sorted((folder / "validators").glob("*.py")):
+            if validator.name == "validator_interface.py":
+                continue
             result = subprocess.run(
                 [
                     sys.executable,
@@ -119,3 +121,19 @@ def test_yaml_file_validators_are_not_precompleted():
                 stderr=subprocess.STDOUT,
             )
             assert result.returncode != 0, f"starter unexpectedly passed: {validator}\n{result.stdout}"
+
+
+def test_all_smoke_and_example_validators_use_local_interface():
+    entries = []
+    for base in (ROOT / "smoke", ROOT / "examples"):
+        for path in base.rglob("*.py"):
+            if path.name in {"validator_interface.py", "common.py"}:
+                continue
+            if path.name in {"validator.py", "validation.py"} or path.name.endswith("_validator.py"):
+                entries.append(path)
+    assert entries
+    for path in entries:
+        text = path.read_text(encoding="utf-8")
+        assert "validator_interface import" in text, path
+        assert "ValidatorReport" in text, path
+        assert (path.parent / "validator_interface.py").is_file(), path

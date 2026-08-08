@@ -153,3 +153,19 @@ def test_protected_roots_drop_descendants_without_guessing_siblings(tmp_path: Pa
     assert locked / "a.txt" not in roots
     assert locked / "nested" / "b.txt" not in roots
     assert tmp_path.resolve() not in roots
+
+
+def test_all_smoke_and_example_project_roots_have_valid_self_protecting_policy() -> None:
+    root = Path(__file__).resolve().parents[1]
+    project_roots = sorted(
+        path for group in (root / "examples", root / "smoke")
+        for path in group.glob("*/project") if path.is_dir()
+    )
+    assert len(project_roots) == 18
+    for project in project_roots:
+        policy = project / POLICY_FILENAME
+        assert policy.is_file(), f"missing project policy: {project}"
+        paths = protected_paths(project)
+        assert policy.resolve() in paths
+        for path in paths:
+            assert path == project.resolve() or path.is_relative_to(project.resolve())

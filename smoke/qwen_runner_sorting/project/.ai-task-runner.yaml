@@ -1,0 +1,8 @@
+protected_paths:
+- .ai-task-runner/sorting_algorithms_test.py
+- README.md
+instructions:
+  always: Keep changes minimal. Do not hardcode project-specific values. Work only
+    within the current TODO scope.
+  project: Preserve immutable fixtures and existing behavior. Reuse existing helpers
+    instead of duplicating logic.

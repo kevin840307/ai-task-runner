@@ -83,3 +83,47 @@ def test_external_validator_wrapper_is_documented():
     assert "exe, bat, jar" in combined
     assert ".ai-task-runner/validator-reports/external-command/" in combined
     assert "log folders" in combined
+
+
+def test_bilingual_document_set_is_complete_and_linked():
+    pairs = (
+        ("README.md", "README.zh-TW.md"),
+        ("docs/INDEX.md", "docs/INDEX.zh-TW.md"),
+        ("docs/DESIGN.md", "docs/DESIGN.zh-TW.md"),
+        ("docs/ARCHITECTURE.md", "docs/ARCHITECTURE.zh-TW.md"),
+        ("docs/USER_GUIDE.md", "docs/USER_GUIDE.zh-TW.md"),
+        ("docs/CLI_REFERENCE.md", "docs/CLI_REFERENCE.zh-TW.md"),
+        ("docs/API_REFERENCE.md", "docs/API_REFERENCE.zh-TW.md"),
+        ("docs/PROMPT_SESSION.md", "docs/PROMPT_SESSION.zh-TW.md"),
+        ("docs/STATE_EVENTS.md", "docs/STATE_EVENTS.zh-TW.md"),
+        ("docs/SECURITY_PROTECTION.md", "docs/SECURITY_PROTECTION.zh-TW.md"),
+        ("docs/OPERATIONS.md", "docs/OPERATIONS.zh-TW.md"),
+        ("docs/PROJECT_GUIDE.md", "docs/PROJECT_GUIDE.zh-TW.md"),
+        ("docs/TEST_MATRIX.md", "docs/TEST_MATRIX.zh-TW.md"),
+        ("docs/validator_templates/README.md", "docs/validator_templates/README.zh-TW.md"),
+        ("examples/README.md", "examples/README.zh-TW.md"),
+        ("smoke/README.md", "smoke/README.zh-TW.md"),
+    )
+    for english, chinese in pairs:
+        assert (ROOT / english).is_file(), english
+        assert (ROOT / chinese).is_file(), chinese
+
+
+def test_validator_arg_and_maintenance_contract_are_documented():
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            ROOT / "README.md",
+            ROOT / "README.zh-TW.md",
+            ROOT / "docs" / "CLI_REFERENCE.md",
+            ROOT / "docs" / "CLI_REFERENCE.zh-TW.md",
+            ROOT / "docs" / "PROJECT_GUIDE.md",
+            ROOT / "docs" / "PROJECT_GUIDE.zh-TW.md",
+            ROOT / "AGENTS.md",
+            ROOT / "QWEN.md",
+        )
+    )
+    assert "--validator-arg" in combined
+    assert "No project-specific hardcode" in combined or "禁止 project-specific hardcode" in combined
+    assert "one shared implementation" in combined.lower()
+    assert "minimum code" in combined.lower() or "最小程式碼" in combined

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -20,8 +21,12 @@ def load_module(root: Path):
     if not path.is_file():
         raise AssertionError("missing sorting_algorithms.py")
     source = path.read_text(encoding="utf-8")
-    if "sorted(" in source or ".sort(" in source:
-        raise AssertionError("built-in sorting is not allowed")
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and (
+            isinstance(node.func, ast.Name) and node.func.id == "sorted"
+            or isinstance(node.func, ast.Attribute) and node.func.attr == "sort"
+        ):
+            raise AssertionError("built-in sorting is not allowed")
     spec = importlib.util.spec_from_file_location("sorting_algorithms", path)
     if spec is None or spec.loader is None:
         raise AssertionError("could not load sorting_algorithms.py")

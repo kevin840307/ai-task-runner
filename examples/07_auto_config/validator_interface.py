@@ -157,3 +157,19 @@ class ValidatorReport:
                 lines.append(f"Full report: {self.display_path(finding.report)}")
             lines.append("")
         return lines
+
+def run_validation(report: ValidatorReport, check) -> int:
+    """Run one validator check function and convert failures to the standard report."""
+    try:
+        check()
+    except AssertionError as error:
+        report.error("E001", "Validation failed", [str(error)], fix="Fix the reported project issue and rerun validation.")
+    except Exception as error:
+        report.error(
+            "E999",
+            "Validator crashed",
+            [f"{type(error).__name__}: {error}"],
+            fix="Fix the project or validator input that caused this unexpected validation error.",
+        )
+    return report.finish()
+
