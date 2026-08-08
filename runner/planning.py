@@ -7,6 +7,7 @@ from typing import Sequence
 
 from .agent import AgentClient
 from .agent_args import planning_agent_args
+from .debug import parse_with_debug
 from .errors import RunnerError, diagnostic_error
 from .models import RunState, Task
 from .prompting import (
@@ -42,6 +43,7 @@ def build_plan(
     planner_root = planning_agent_root(args.backend, root, work)
     min_tasks = MIN_PLANNED_TASKS if state.cycle == 1 else 1
     project_changed: list[str] = []
+    debug_dir = work / "debug"
 
     def new_planner(
         allow_project_read: bool = False,
@@ -58,12 +60,15 @@ def build_plan(
             ),
             session_id=session_id,
             timeout=args.planning_timeout,
+            debug_dir=debug_dir,
         )
         planner.prepare_project()
         return planner
 
     def parse_plan(text: str) -> list[Task]:
-        return parse_tasks(
+        return parse_with_debug(
+            debug_dir,
+            parse_tasks,
             text,
             state.cycle,
             min_tasks=min_tasks,
@@ -249,7 +254,12 @@ def build_plan(
                     + ", ".join(protected_changed)
                 )
             project_changed.extend(judge_changed)
-            judgment = parse_plan_judgment(judgment_text, len(tasks))
+            judgment = parse_with_debug(
+                debug_dir,
+                parse_plan_judgment,
+                judgment_text,
+                len(tasks),
+            )
         except RunnerError as error:
             ui.set(
                 "AI 規劃審查異常，使用目前有效規劃",

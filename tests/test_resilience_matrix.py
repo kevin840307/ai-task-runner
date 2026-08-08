@@ -336,20 +336,13 @@ def test_process_idle_after_stdout_stops_before_full_timeout(tmp_path):
     assert time.monotonic() - started < 5
 
 
-def test_process_idle_timeout_handles_closed_stdin(tmp_path):
-    code = "import sys,time; sys.stdin.read(); print('ready', flush=True); time.sleep(30)"
-    result = run_process(
-        [sys.executable, "-c", code],
-        tmp_path,
-        timeout=20,
-        input_text="prompt",
-        idle_timeout_after_change=1.0,
-        change_detected=lambda: False,
-    )
-    assert result.timed_out is True
-    assert result.idle_timed_out is True
-    assert "ready" in result.output
 
+
+def test_process_stdin_is_devnull(tmp_path):
+    code = "import sys; print(repr(sys.stdin.read()))"
+    result = run_process([sys.executable, "-c", code], tmp_path, 10)
+    assert result.return_code == 0
+    assert result.output.strip() == "''"
 
 def test_process_unexpected_error_cleans_up_process_tree(tmp_path, monkeypatch):
     import runner.process_control as process_control

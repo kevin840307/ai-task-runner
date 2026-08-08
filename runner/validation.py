@@ -7,15 +7,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .agent import AgentClient
+from .debug import parse_with_debug
 from .errors import RunnerError
 from .models import RunState
 from .ui import LiveUI
 from .prompting import ai_validator_prompt, skipped_review_tasks
-from .support import (
-    parse_ai_validation,
-    readonly_ask,
-    retry_model_call,
-)
+from .model_results import parse_ai_validation
+from .support import readonly_ask, retry_model_call
 
 
 def run_ai_validator(
@@ -30,6 +28,7 @@ def run_ai_validator(
 ) -> tuple[bool, str]:
     total = getattr(args, "final_ai_validations", 1)
     required = getattr(args, "final_ai_required_passes", 1)
+    debug_dir = work / "debug"
     results: list[dict[str, Any]] = []
     passes = 0
 
@@ -42,6 +41,7 @@ def run_ai_validator(
             extra_args=runtime_args,
             session_id="",
             timeout=args.agent_timeout,
+            debug_dir=debug_dir,
         )
 
         def call() -> dict[str, Any]:
@@ -66,7 +66,7 @@ def run_ai_validator(
                     "AI validator modified files and they were restored: "
                     + ", ".join(changed)
                 )
-            return parse_ai_validation(raw)
+            return parse_with_debug(debug_dir, parse_ai_validation, raw)
 
         try:
             result = retry_model_call(

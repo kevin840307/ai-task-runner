@@ -133,14 +133,11 @@ class AgentBackend(ABC):
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
     ) -> BackendResult:
-        input_text = self.prompt_stdin(prompt)
-        command_prompt = "" if input_text is not None else prompt
         command_mode = "resume" if session_id else "new"
-        command = self.build_command(command_prompt, session_id)
+        command = self.build_command(prompt, session_id)
         started = time.monotonic()
         result = self._run(
             command,
-            input_text,
             idle_timeout_after_change,
             change_detected,
         )
@@ -173,7 +170,6 @@ class AgentBackend(ABC):
     def _run(
         self,
         command: Sequence[str],
-        input_text: str | None = None,
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
     ) -> ProcessResult:
@@ -182,7 +178,6 @@ class AgentBackend(ABC):
                 command,
                 self.root,
                 self.timeout,
-                input_text,
                 idle_timeout_after_change,
                 change_detected,
             )
@@ -201,10 +196,6 @@ class AgentBackend(ABC):
     def prepare_project(self) -> list[Path]:
         """Create optional backend-specific project files and return them."""
         return []
-
-    def prompt_stdin(self, prompt: str) -> str | None:
-        """Return prompt text to send through stdin instead of argv."""
-        return None
 
     @abstractmethod
     def build_command(self, prompt: str, session_id: str) -> list[str]:

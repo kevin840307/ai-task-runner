@@ -7,6 +7,7 @@ from typing import Sequence
 
 from .agent import AgentClient
 from .agent_args import no_tool_agent_args, review_agent_args
+from .debug import parse_with_debug
 from .errors import RunnerError
 from .models import RunState, Task
 from .prompting import review_finalize_prompt, review_prompt
@@ -36,6 +37,7 @@ def review_task(
     output: str,
 ) -> dict[str, object]:
     """Review one changed task without changing retry or fallback semantics."""
+    debug_dir = work / "debug"
     reviewer = AgentClient(
         backend=args.backend,
         command=args.command,
@@ -43,6 +45,7 @@ def review_task(
         extra_args=review_agent_args(args.backend, args.agent_arg),
         session_id="",
         timeout=args.planning_timeout,
+        debug_dir=debug_dir,
     )
 
     def ask_review(
@@ -67,7 +70,7 @@ def review_task(
                 + ", ".join(changed)
             )
         try:
-            return parse_review(raw)
+            return parse_with_debug(debug_dir, parse_review, raw)
         except RunnerError as error:
             raise RunnerError(
                 f"{error}; raw_output_tail={raw[-1000:]}"
@@ -101,6 +104,7 @@ def review_task(
                 extra_args=no_tool_agent_args(args.backend, args.agent_arg),
                 session_id=reviewer.session_id,
                 timeout=args.planning_timeout,
+                debug_dir=debug_dir,
             )
             try:
                 return retry_model_call(

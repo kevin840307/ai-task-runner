@@ -12,9 +12,7 @@ from pathlib import Path
 args = sys.argv[1:]
 root = Path.cwd()
 is_qwen = "-p" in args
-prompt_arg = args[args.index("-p") + 1] if is_qwen else args[-1]
-stdin_prompt = sys.stdin.read() if is_qwen else ""
-prompt = "\n".join(part for part in (stdin_prompt, prompt_arg) if part).strip()
+prompt = args[args.index("-p") + 1] if is_qwen else args[-1]
 state_dir = Path(os.environ["REVIEW_TIMEOUT_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "review-timeout-session"

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from runner.defaults import DEFAULT_QWEN_COMMAND
-from .base import AgentBackend, BackendResult, ensure_project_rules
+from .base import AgentBackend, BackendError, BackendResult, ensure_project_rules
 
 
 class QwenBackend(AgentBackend):
@@ -13,19 +13,19 @@ class QwenBackend(AgentBackend):
     default_command = DEFAULT_QWEN_COMMAND
 
     def build_command(self, prompt: str, session_id: str) -> list[str]:
+        prompt_arg = single_line_prompt(prompt)
+        if not prompt_arg:
+            raise BackendError("qwen prompt is empty")
         session_args = ["--resume", session_id] if session_id else []
         return [
             *self.base_command,
             *session_args,
             "-p",
-            single_line_prompt(prompt),
+            prompt_arg,
             "--output-format",
             "stream-json",
             *self.extra_args,
         ]
-
-    def prompt_stdin(self, prompt: str) -> str:
-        return prompt
 
     def decode(self, raw: str) -> BackendResult:
         values = self.parse_json_events(raw)

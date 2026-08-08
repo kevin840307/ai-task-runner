@@ -175,13 +175,14 @@ class LiveUI:
         )
 
     @staticmethod
-    def _display_width(text: str) -> int:
-        return sum(
-            0 if unicodedata.combining(char)
-            else 2 if unicodedata.east_asian_width(char) in "WF"
-            else 1
-            for char in text
-        )
+    def _character_width(char: str) -> int:
+        if unicodedata.combining(char):
+            return 0
+        return 2 if unicodedata.east_asian_width(char) in "WF" else 1
+
+    @classmethod
+    def _display_width(cls, text: str) -> int:
+        return sum(cls._character_width(char) for char in text)
 
     @classmethod
     def _fit_terminal_line(cls, line: str, width: int) -> str:
@@ -193,11 +194,7 @@ class LiveUI:
         used = 0
         end = 0
         for end, char in enumerate(line, start=1):
-            char_width = (
-                0 if unicodedata.combining(char)
-                else 2 if unicodedata.east_asian_width(char) in "WF"
-                else 1
-            )
+            char_width = cls._character_width(char)
             if used + char_width > available:
                 end -= 1
                 break

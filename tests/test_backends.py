@@ -124,30 +124,6 @@ def test_backend_rejects_empty_success_output(tmp_path):
         backend.ask("x")
 
 
-def test_backend_can_send_prompt_through_stdin(tmp_path):
-    class StdinBackend(AgentBackend):
-        name = "stdin"
-        default_command = sys.executable
-
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.command_prompt = None
-
-        def prompt_stdin(self, prompt):
-            return prompt
-
-        def build_command(self, prompt, session_id):
-            self.command_prompt = prompt
-            return [sys.executable, "-c", "import sys; print(sys.stdin.read())"]
-
-        def decode(self, raw):
-            return BackendResult(raw)
-
-    backend = StdinBackend(sys.executable, tmp_path, [])
-    assert backend.ask("hello from stdin").text.strip() == "hello from stdin"
-    assert backend.command_prompt == ""
-
-
 def test_backend_timeout_kills_call_and_raises_recoverable_error(tmp_path):
     class SlowBackend(AgentBackend):
         name = "slow"
@@ -271,3 +247,68 @@ def test_backend_project_instructions_are_replaced_from_policy(tmp_path):
     cleared = path.read_text(encoding="utf-8")
     assert "Replacement project rule." not in cleared
     assert "AI-TASK-RUNNER:PROJECT-INSTRUCTIONS" not in cleared
+
+
+def test_qwen_ask_passes_prompt_through_p_only(tmp_path, monkeypatch):
+    from runner.process_control import ProcessResult
+
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    captured = {}
+
+    def fake_run(command, idle_timeout_after_change=0, change_detected=None):
+        captured["command"] = list(command)
+        return ProcessResult(
+            '{"type":"result","session_id":"s1","result":"ok"}',
+            0,
+        )
+
+    monkeypatch.setattr(backend, "_run", fake_run)
+    prompt = "Plan the work\nReturn JSON only\nTask count must be at least 6"
+    assert backend.ask(prompt).text == "ok"
+
+    command = captured["command"]
+    assert command.count("-p") == 1
+    prompt_index = command.index("-p") + 1
+    assert prompt_index < len(command)
+    assert command[prompt_index]
+    assert command[prompt_index] == single_line_prompt(prompt)
+    assert command[prompt_index] != "--output-format"
+
+
+def test_qwen_long_todo_split_prompt_keeps_non_empty_p_value(tmp_path):
+    from runner.agent_args import no_tool_agent_args
+
+    prompt = "\n".join(
+        ["Plan only the remaining work. Return JSON only."]
+        + [
+            f"Requirement {i}: split this into one focused, independently actionable TODO."
+            for i in range(1, 131)
+        ]
+        + [
+            '{"tasks":[{"title":"Task 1","description":"Do work",'
+            '"deliverable":"result","acceptance_criteria":["passes"]}]}'
+        ]
+    )
+    backend = QwenBackend(
+        sys.executable,
+        tmp_path,
+        no_tool_agent_args("qwen", []),
+    )
+
+    for session_id in ("", "session-123"):
+        command = backend.build_command(prompt, session_id)
+        assert command.count("-p") == 1
+        index = command.index("-p")
+        assert index + 1 < len(command)
+        assert command[index + 1]
+        assert command[index + 1] == single_line_prompt(prompt)
+        assert "Requirement 130:" in command[index + 1]
+        assert '"tasks"' in command[index + 1]
+        if session_id:
+            assert command[command.index("--resume") + 1] == session_id
+
+
+def test_qwen_rejects_blank_p_value(tmp_path):
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    with pytest.raises(BackendError, match="prompt is empty"):
+        backend.build_command(" \n\t ", "")

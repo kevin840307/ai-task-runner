@@ -31,7 +31,6 @@ def run_process(
     command: Sequence[str],
     cwd: Path,
     timeout: int,
-    input_text: str | None = None,
     idle_timeout_after_change: float = 0,
     change_detected: Callable[[], bool] | None = None,
 ) -> ProcessResult:
@@ -41,12 +40,11 @@ def run_process(
         "text": True,
         "encoding": "utf-8",
         "errors": "replace",
+        "stdin": subprocess.DEVNULL,
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
         "env": guarded_environment(),
     }
-    if input_text is not None:
-        options["stdin"] = subprocess.PIPE
     if os.name == "nt":
         options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
@@ -57,14 +55,13 @@ def run_process(
         if idle_timeout_after_change and change_detected is not None:
             return _communicate_with_watchdog(
                 process,
-                input_text,
                 timeout,
                 idle_timeout_after_change,
                 change_detected,
             )
 
         try:
-            output, _ = process.communicate(input=input_text, timeout=timeout or None)
+            output, _ = process.communicate(timeout=timeout or None)
             return ProcessResult(output or "", process.returncode or 0)
         except subprocess.TimeoutExpired as error:
             terminate_process_tree(process)
@@ -78,7 +75,6 @@ def run_process(
 
 def _communicate_with_watchdog(
     process: subprocess.Popen[str],
-    input_text: str | None,
     timeout: int,
     idle_timeout_after_change: float,
     change_detected: Callable[[], bool],
@@ -89,7 +85,7 @@ def _communicate_with_watchdog(
     output_queue: queue.Queue[str] = queue.Queue()
 
     if process.stdout is None:
-        output, _ = process.communicate(input=input_text, timeout=timeout or None)
+        output, _ = process.communicate(timeout=timeout or None)
         return ProcessResult(output or "", process.returncode or 0)
 
     reader = threading.Thread(
@@ -99,15 +95,6 @@ def _communicate_with_watchdog(
     )
     reader.start()
 
-    writer = None
-    if input_text is not None:
-        writer = threading.Thread(
-            target=_write_stdin,
-            args=(process, input_text),
-            daemon=True,
-        )
-        writer.start()
-
     while True:
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
@@ -116,8 +103,6 @@ def _communicate_with_watchdog(
             last_activity_at = now
 
         if process.poll() is not None:
-            if writer is not None:
-                writer.join(timeout=0.2)
             reader.join(timeout=0.2)
             partial += _drain_output(output_queue)[0]
             return ProcessResult(partial, process.returncode or 0)
@@ -142,16 +127,6 @@ def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
         for line in iter(pipe.readline, ""):
             if line:
                 output_queue.put(line)
-    except OSError:
-        pass
-
-
-def _write_stdin(process: subprocess.Popen[str], input_text: str) -> None:
-    if process.stdin is None:
-        return
-    try:
-        process.stdin.write(input_text)
-        process.stdin.close()
     except OSError:
         pass
 
@@ -231,8 +206,6 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> None:
 
 def _drain_after_termination(process: subprocess.Popen[str]) -> str:
     """Collect remaining output without trusting descendants to close pipes."""
-    if process.stdin is not None and process.stdin.closed:
-        process.stdin = None
     try:
         output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
         return output or ""
