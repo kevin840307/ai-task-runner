@@ -26,23 +26,10 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert "--resume" in qwen_command
     assert qwen_command[qwen_command.index("--output-format") + 1] == "stream-json"
     assert "--session" in opencode.build_command("prompt", "session-1")
-    protected_names = {path.name for path in runner_source_files()}
-    assert {
-        "api.py",
-        "models.py",
-        "agent_args.py",
-        "planning.py",
-        "reviewing.py",
-        "model_results.py",
-        "script_runner.py",
-        "prompting.py",
-        "validation.py",
-        "ui.py",
-        "version.py",
-        "qwen.py",
-        "opencode.py",
-        "base.py",
-    } <= protected_names
+    protected = runner_source_files()
+    protected_names = {path.name for path in protected}
+    assert {"ai_task_runner.py", "ai_task_runner_validator.py", "runner"} == protected_names
+    assert next(path for path in protected if path.name == "runner").is_dir()
 
 
 def test_core_has_no_backend_specific_command_logic():

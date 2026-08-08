@@ -38,6 +38,7 @@ from .support import (
     progress_key,
     retry_model_call,
     run_file_validator,
+    normalize_protected_paths,
     runner_source_files,
     write_json,
 )
@@ -148,7 +149,7 @@ class TaskRunner:
             *policy_protected_paths(self.root),
             *[Path(value).resolve() for value in self.args.protect_file],
         ]
-        return list(dict.fromkeys(paths))
+        return normalize_protected_paths(paths)
 
     def _load_or_create_state(self) -> RunState:
         if self.args.resume:

@@ -1,6 +1,6 @@
 # AI Task Runner v1.1.1
 
-AI Task Runner is a small automation wrapper for coding CLIs such as Qwen Code and OpenCode. You provide a project, a goal, and a validator. The runner asks the agent to split the goal into TODO tasks from the supplied project outline, inspect the files needed by each current TODO, execute one task at a time, review each task, then run the final validator. It keeps state and retries recoverable failures until the validator passes or a configured limit is reached.
+AI Task Runner is a small automation wrapper for coding CLIs such as Qwen Code and OpenCode. You provide a project, a goal, and a validator. The runner asks the agent to split the goal into TODO tasks after bounded project inspection, inspect the files needed by each current TODO, execute one task at a time, review each task, then run the final validator. It keeps state and retries recoverable failures until the validator passes or a configured limit is reached.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ AI validation uses a fresh independent agent session. It asks the agent to inspe
 ## Flow
 
 ```text
-1. Plan TODO tasks from the goal and project outline
+1. Plan TODO tasks from the goal and bounded project inspection
 2. For each task: inspect relevant files -> execute -> review -> retry if needed
 3. Run final Python or AI validator
 4. On validator failure: replace the active TODO list with focused repair task(s) and continue
@@ -118,7 +118,7 @@ Then any validator can use `from ai_task_runner_validator import ValidatorReport
 
 Before each Python validator run, the runner clears `<project-root>/.ai-task-runner/validator-reports/`. Treat that directory as the latest validation report area, not a history folder.
 
-Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt` for debugging long unattended runs. The latest model call is also exposed as two overwrite-only local snapshots under `.ai-task-runner/debug/`: `current-prompt.txt` contains the exact current prompt, and `current-result.txt` contains the exact model result plus parser/schema errors when applicable. They are diagnostic only: no history is retained, write failures are ignored, and these files do not participate in state, resume, validation, or project-change detection.
+Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt` for debugging long unattended runs. Model-call diagnostics live under `.ai-task-runner/debug/`: `current-prompt.txt` shows the active prompt, while `last-prompt.txt` and `last-result.txt` keep the previous completed/failed call. A bounded `history/` keeps up to 100 prompt/result pairs, 50 MB total, with each history entry capped at 2 MB (head and tail retained when truncated). History is trimmed oldest-pair-first. Debug writes are best-effort and do not participate in state, resume, validation, or project-change detection.
 
 ## Rule Files
 
@@ -160,7 +160,7 @@ runner/                       Main implementation package
   models.py                   RunState and Task serialization
   support.py                  Protection, project snapshots, retry, validator helpers
   agent.py                    Session-aware facade over backend adapters
-  debug.py                    Overwrite-only current prompt/result diagnostics
+  debug.py                    Current/last diagnostics plus bounded model-call history
   agent_args.py               Backend-specific planning/runtime argument policy
   prompting.py                Prompt template loading and prompt builders
   validation.py               AI final validation helper

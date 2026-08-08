@@ -2,11 +2,18 @@
 from __future__ import annotations
 
 import os
+from itertools import count
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from .errors import RunnerError
+
+
+_HISTORY_MAX_CALLS = 100
+_HISTORY_MAX_BYTES = 50 * 1024 * 1024
+_HISTORY_MAX_ENTRY_BYTES = 2 * 1024 * 1024
+_HISTORY_SEQUENCE = count(1)
 
 
 def _write(path: Path, text: str) -> None:
@@ -40,6 +47,64 @@ def _call_values(backend: str, cwd: Path, session_id: str) -> dict[str, object]:
 
 def _one_line(value: object, limit: int = 1000) -> str:
     return str(value).replace("\r", " ").replace("\n", " ")[-limit:]
+
+
+def _bounded_text(text: str, max_bytes: int | None = None) -> str:
+    max_bytes = _HISTORY_MAX_ENTRY_BYTES if max_bytes is None else max_bytes
+    data = text.encode("utf-8")
+    if len(data) <= max_bytes:
+        return text
+    marker = f"\n\n--- TRUNCATED: original_bytes={len(data)} ---\n\n".encode("utf-8")
+    budget = max(0, max_bytes - len(marker))
+    head = budget // 2
+    tail = budget - head
+    return (data[:head] + marker + data[-tail:]).decode("utf-8", errors="replace")
+
+
+def _history_pairs(history: Path) -> list[tuple[str, list[Path]]]:
+    grouped: dict[str, list[Path]] = {}
+    try:
+        files = list(history.glob("*.txt"))
+    except OSError:
+        return []
+    for path in files:
+        name = path.name
+        for suffix in ("-prompt.txt", "-result.txt"):
+            if name.endswith(suffix):
+                grouped.setdefault(name[: -len(suffix)], []).append(path)
+                break
+    return sorted(grouped.items())
+
+
+def _trim_history(history: Path) -> None:
+    pairs = _history_pairs(history)
+    def total_bytes() -> int:
+        total = 0
+        for _, files in pairs:
+            for path in files:
+                try:
+                    total += path.stat().st_size
+                except OSError:
+                    pass
+        return total
+
+    size = total_bytes()
+    while pairs and (len(pairs) > _HISTORY_MAX_CALLS or size > _HISTORY_MAX_BYTES):
+        _, files = pairs.pop(0)
+        for path in files:
+            try:
+                size -= path.stat().st_size
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _write_history(debug_dir: Path, prompt_text: str, result_text: str) -> None:
+    history = debug_dir / "history"
+    call_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ") + f"-{next(_HISTORY_SEQUENCE):06d}"
+    _write(history / f"{call_id}-prompt.txt", _bounded_text(prompt_text))
+    _write(history / f"{call_id}-result.txt", _bounded_text(result_text))
+    _trim_history(history)
 
 
 def begin_model_call(
@@ -79,14 +144,11 @@ def finish_model_call(
     values["prompt_chars"] = len(prompt)
     if error:
         values["error"] = _one_line(error)
-    _write(
-        debug_dir / "last-prompt.txt",
-        _header(**values) + "\n\n--- PROMPT ---\n\n" + prompt,
-    )
-    _write(
-        debug_dir / "last-result.txt",
-        _header(**values) + "\n\n--- RESULT ---\n\n" + result,
-    )
+    prompt_text = _header(**values) + "\n\n--- PROMPT ---\n\n" + prompt
+    result_text = _header(**values) + "\n\n--- RESULT ---\n\n" + result
+    _write(debug_dir / "last-prompt.txt", prompt_text)
+    _write(debug_dir / "last-result.txt", result_text)
+    _write_history(debug_dir, prompt_text, result_text)
 
 
 def note_parse_error(debug_dir: Path | None, error: BaseException) -> None:
@@ -104,7 +166,13 @@ def note_parse_error(debug_dir: Path | None, error: BaseException) -> None:
         return
     lines = [line for line in head.splitlines() if not line.startswith("parse_error=")]
     lines.append(f"parse_error={_one_line(error)}")
-    _write(path, "\n".join(lines) + marker + body)
+    updated = "\n".join(lines) + marker + body
+    _write(path, updated)
+    pairs = _history_pairs(debug_dir / "history")
+    if pairs:
+        result_path = debug_dir / "history" / f"{pairs[-1][0]}-result.txt"
+        if result_path.exists():
+            _write(result_path, _bounded_text(updated))
 
 
 def parse_with_debug(

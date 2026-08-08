@@ -152,3 +152,94 @@ def test_parse_error_metadata_is_replaced_not_duplicated(tmp_path, monkeypatch):
     assert "parse_error=second error" in result
     assert "parse_error=first error" not in result
     assert result.count("parse_error=") == 1
+
+
+def test_history_keeps_matching_prompt_result_pairs(tmp_path, monkeypatch):
+    backend = FakeBackend(tmp_path)
+    client = _client(tmp_path, monkeypatch, backend)
+    client.ask("first history prompt")
+    client.session_id = ""
+    client.ask("second history prompt")
+
+    history = tmp_path / ".ai-task-runner" / "debug" / "history"
+    prompts = sorted(history.glob("*-prompt.txt"))
+    results = sorted(history.glob("*-result.txt"))
+    assert len(prompts) == len(results) == 2
+    assert [p.name.removesuffix("-prompt.txt") for p in prompts] == [
+        p.name.removesuffix("-result.txt") for p in results
+    ]
+    assert "first history prompt" in prompts[0].read_text(encoding="utf-8")
+    assert '"title":"result-1"' in results[0].read_text(encoding="utf-8")
+    assert "second history prompt" in prompts[1].read_text(encoding="utf-8")
+    assert '"title":"result-2"' in results[1].read_text(encoding="utf-8")
+
+
+def test_parse_error_updates_matching_latest_history_result(tmp_path, monkeypatch):
+    backend = FakeBackend(tmp_path)
+    client = _client(tmp_path, monkeypatch, backend)
+    client.ask("plan history")
+    debug = tmp_path / ".ai-task-runner" / "debug"
+
+    note_parse_error(debug, RunnerError("bad schema"))
+
+    history_result = next((debug / "history").glob("*-result.txt")).read_text(encoding="utf-8")
+    assert "parse_error=bad schema" in history_result
+    assert '"title":"result-1"' in history_result
+
+
+def test_history_entry_is_bounded_but_last_result_stays_complete(tmp_path, monkeypatch):
+    import runner.debug as debug_module
+
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_ENTRY_BYTES", 160)
+    backend = FakeBackend(tmp_path)
+    backend.ask = lambda *args, **kwargs: BackendResult("x" * 1000, "session")
+    client = _client(tmp_path, monkeypatch, backend)
+    client.ask("p" * 1000)
+
+    debug = tmp_path / ".ai-task-runner" / "debug"
+    last_result = (debug / "last-result.txt").read_text(encoding="utf-8")
+    history_result = next((debug / "history").glob("*-result.txt")).read_text(encoding="utf-8")
+    assert "x" * 500 in last_result
+    assert "TRUNCATED: original_bytes=" in history_result
+    assert len(history_result.encode("utf-8")) <= 160 + 6  # replacement chars may expand slightly
+
+
+def test_history_rotation_removes_oldest_pairs(tmp_path, monkeypatch):
+    import runner.debug as debug_module
+
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_CALLS", 2)
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_BYTES", 10_000_000)
+    backend = FakeBackend(tmp_path)
+    client = _client(tmp_path, monkeypatch, backend)
+    for value in ("one", "two", "three"):
+        client.session_id = ""
+        client.ask(value)
+
+    history = tmp_path / ".ai-task-runner" / "debug" / "history"
+    prompts = sorted(history.glob("*-prompt.txt"))
+    results = sorted(history.glob("*-result.txt"))
+    assert len(prompts) == len(results) == 2
+    bodies = "\n".join(p.read_text(encoding="utf-8") for p in prompts)
+    assert "one" not in bodies
+    assert "two" in bodies and "three" in bodies
+
+
+def test_history_total_size_rotation_removes_oldest_pairs(tmp_path, monkeypatch):
+    import runner.debug as debug_module
+
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_CALLS", 100)
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_BYTES", 1200)
+    monkeypatch.setattr(debug_module, "_HISTORY_MAX_ENTRY_BYTES", 1000)
+    backend = FakeBackend(tmp_path)
+    client = _client(tmp_path, monkeypatch, backend)
+    for value in ("a" * 300, "b" * 300, "c" * 300):
+        client.session_id = ""
+        client.ask(value)
+
+    history = tmp_path / ".ai-task-runner" / "debug" / "history"
+    files = list(history.glob("*.txt"))
+    assert sum(p.stat().st_size for p in files) <= 1200
+    stems = {p.name.rsplit("-", 1)[0] for p in files}
+    for stem in stems:
+        assert (history / f"{stem}-prompt.txt").exists()
+        assert (history / f"{stem}-result.txt").exists()

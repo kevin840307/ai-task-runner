@@ -55,19 +55,23 @@ JSON_WRITE_RETRY_DELAY = 0.05
 
 
 def runner_source_files() -> list[Path]:
-    """Return all Python files that implement the runner itself."""
+    """Return protected runner source roots (files or directory subtrees)."""
     package_root = Path(__file__).resolve().parent
     root = package_root.parent
-    root_modules = (
-        "ai_task_runner.py",
-        "ai_task_runner_validator.py",
-    )
-    files = [
-        *(root / name for name in root_modules),
-        *sorted(package_root.glob("*.py")),
-        *sorted((package_root / "backends").glob("*.py")),
+    return [
+        *(path for name in ("ai_task_runner.py", "ai_task_runner_validator.py")
+          if (path := root / name).is_file()),
+        package_root,
     ]
-    return [path for path in files if path.is_file()]
+
+
+def normalize_protected_paths(paths: Sequence[Path]) -> list[Path]:
+    """Deduplicate protected roots and drop descendants of an existing root."""
+    roots: list[Path] = []
+    for path in sorted({Path(value).resolve() for value in paths}, key=lambda p: (len(p.parts), str(p))):
+        if not any(path == root or root in path.parents for root in roots):
+            roots.append(path)
+    return roots
 
 
 def write_json(path: Path, data: Any) -> None:

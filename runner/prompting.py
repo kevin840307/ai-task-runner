@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from collections import deque
 from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any, Sequence
@@ -16,24 +15,6 @@ PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 MAX_PROMPT_HISTORY_ITEMS = 20
 
 
-PROJECT_OUTLINE_EXCLUDE_DIRS = frozenset({
-    ".git",
-    ".ai-task-runner",
-    ".idea",
-    ".qwen",
-    ".venv",
-    ".vs",
-    "__pycache__",
-    "bin",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "obj",
-    "target",
-})
-
-
 def bounded_text(text: str, limit: int) -> str:
     """Keep useful start and end context without letting state grow forever."""
     if len(text) <= limit:
@@ -44,36 +25,6 @@ def bounded_text(text: str, limit: int) -> str:
     marker = f"\n... omitted {len(text) - limit} characters ...\n"
     tail = max(0, limit - head - len(marker))
     return text[:head] + marker + text[-tail:]
-
-
-def project_outline(root: Path, limit: int = 120) -> str:
-    """Return a compact read-only project outline for planning prompts."""
-    entries: list[str] = []
-    queue = deque([root])
-    while queue and len(entries) < limit:
-        base = queue.popleft()
-        try:
-            children = sorted(base.iterdir(), key=lambda path: (path.is_file(), path.name.lower()))
-        except OSError:
-            continue
-        directories = [
-            path for path in children
-            if path.is_dir()
-            and path.name not in PROJECT_OUTLINE_EXCLUDE_DIRS
-            and not path.name.startswith(".")
-        ]
-        files = [
-            path for path in children
-            if path.is_file() and not path.name.startswith(".")
-        ]
-        for path in [*directories, *files]:
-            relative = path.relative_to(root).as_posix()
-            entries.append(relative + ("/" if path.is_dir() else ""))
-            if len(entries) >= limit:
-                entries.append("...")
-                return "\n".join(entries)
-        queue.extend(directories)
-    return "\n".join(entries) if entries else "(no project files)"
 
 
 def render_prompt_template(name: str, values: dict[str, Any]) -> str:
@@ -185,7 +136,6 @@ def plan_understand_prompt(
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
-            "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "work_dir": work_dir,
             "planning_feedback": planning_feedback_section(planning_feedback),
@@ -225,11 +175,10 @@ def plan_finalize_prompt(
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
-            "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "source_instruction": (
-                "This is a fresh no-tool fallback. Use only the supplied goal, project "
-                "outline, progress, validator feedback, and inspection summary; do not "
+                "This is a fresh no-tool fallback. Use only the supplied goal, progress, "
+                "validator feedback, and inspection summary; do not "
                 "inspect the repository."
             ),
             "inspection_summary": bounded_text(inspection_summary, 12000),
@@ -260,7 +209,6 @@ def plan_refine_prompt(
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
-            "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "tasks_json": json.dumps(
                 {"tasks": [task_spec(task) for task in tasks]},
@@ -299,7 +247,6 @@ def plan_judge_prompt(
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
-            "outline": project_outline(root),
             "progress_json": json.dumps(progress, ensure_ascii=False),
             "tasks_json": json.dumps(
                 {"tasks": [task_spec(task) for task in tasks]},

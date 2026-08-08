@@ -8,7 +8,7 @@ Long requirements should use `--goal-file <utf8-text-file>` instead of squeezing
 
 ## Closed Loop
 
-1. Split the goal into ordered TODO tasks from the supplied project outline.
+1. Split the goal into ordered TODO tasks after bounded project inspection.
 2. Before editing, inspect only the existing files needed by the current TODO.
 3. Execute only the current task.
 4. Ask read-only review whether that task is complete.

@@ -11,7 +11,7 @@ from runner.errors import RunnerError
 from runner.git_guard import git_subcommand
 from runner.policy import POLICY_FILENAME, protected_paths
 from runner.process_control import run_process
-from runner.support import restore_changed, snapshot
+from runner.support import normalize_protected_paths, restore_changed, snapshot
 
 
 def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
@@ -136,3 +136,20 @@ def test_policy_rejects_non_string_instructions(tmp_path: Path) -> None:
     )
     with pytest.raises(RunnerError, match="instruction values must be strings"):
         protected_paths(tmp_path)
+
+
+def test_protected_roots_drop_descendants_without_guessing_siblings(tmp_path: Path) -> None:
+    locked = (tmp_path / "locked").resolve()
+    other = (tmp_path / "other.txt").resolve()
+    roots = normalize_protected_paths([
+        locked / "a.txt",
+        other,
+        locked,
+        locked / "nested" / "b.txt",
+    ])
+
+    assert locked in roots
+    assert other in roots
+    assert locked / "a.txt" not in roots
+    assert locked / "nested" / "b.txt" not in roots
+    assert tmp_path.resolve() not in roots

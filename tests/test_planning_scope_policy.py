@@ -724,6 +724,6 @@ def test_same_session_finalize_is_compact_but_fresh_fallback_is_self_contained(t
     assert "app.txt" not in same
     assert "UNIQUE ORIGINAL GOAL" in fresh
     assert str(tmp_path) in fresh
-    assert "app.txt" in fresh
+    assert "app.txt" not in fresh
     assert "UNIQUE INSPECTION SUMMARY" in fresh
     assert len(same) < len(fresh)

@@ -8,9 +8,6 @@ $goal
 Project root:
 $root
 
-Project files already supplied by the runner:
-$outline
-
 Progress:
 $progress_json
 

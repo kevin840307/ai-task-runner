@@ -808,7 +808,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     assert "fix the program behavior that produces it" in execute
 
 
-def test_plan_prompt_includes_project_outline_and_readonly_contract(tmp_path):
+def test_plan_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
     import runner.prompting as prompting
     from runner.models import State
 
@@ -830,9 +830,11 @@ def test_plan_prompt_includes_project_outline_and_readonly_contract(tmp_path):
         same_session=True,
     )
 
-    assert "Project files:" in prompt
-    assert "README.md" in prompt
-    assert "src/app.py" in prompt
+    assert "Project root:" in prompt
+    assert str(tmp_path) in prompt
+    assert "Project files:" not in prompt
+    assert "README.md" not in prompt
+    assert "src/app.py" not in prompt
     assert "Do not create, edit, delete, or rename project implementation files during planning" in prompt
     assert "dedicated project-understanding turn" in prompt
     assert "Do not try to read the whole repository" in prompt

@@ -4,7 +4,7 @@ Hard rules:
 - Do not create, edit, delete, or rename project implementation files during planning. Return the task JSON directly.
 - Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
 - Python owns task order and completion state.
-- Use the supplied project outline as a map of the relevant project structure. Account for entry points, dependencies, public interfaces, conventions, and existing tests, then inspect only evidence relevant to the goal when inspection is allowed. Do not attempt exhaustive repository understanding.
+- Use the project root as the boundary. When inspection is allowed, list/search narrowly and inspect only evidence relevant to the goal, including needed entry points, dependencies, public interfaces, conventions, and existing tests. Do not attempt exhaustive repository understanding.
 - Prefer the smallest maintainable change that fully satisfies the current task.
 - Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
 - Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
