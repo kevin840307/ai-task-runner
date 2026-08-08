@@ -427,3 +427,52 @@ def test_cli_logs_unexpected_exception_and_resumes(monkeypatch, tmp_path):
     assert requests == [False, True]
     log = tmp_path / ".ai-task-runner" / "exception.log"
     assert "ValueError: boom" in log.read_text(encoding="utf-8")
+
+
+def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
+    import os
+
+    from runner.models import RunState, Task
+    from runner.support import LiveUI
+
+    class FakeStdout:
+        def __init__(self):
+            self.output = ""
+
+        def isatty(self):
+            return True
+
+        def write(self, text):
+            self.output += text
+
+        def flush(self):
+            pass
+
+    stdout = FakeStdout()
+    monkeypatch.setattr("runner.ui.sys.stdout", stdout)
+    monkeypatch.setattr("runner.ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr(
+        "runner.ui.shutil.get_terminal_size",
+        lambda fallback: os.terminal_size((80, 20)),
+    )
+
+    ui = LiveUI()
+    ui.bind(RunState("run", "goal", "/project", tasks=[
+        Task("t1", "Task one", "Do it", ["Done"]),
+    ]))
+    ui.set(
+        "AI 正在處理目前任務",
+        "c01-t001 · Create rander.py entry point with CLI, YAML loading, deep merge, Jinja2 rendering, and file writing",
+    )
+
+    line = stdout.output.rsplit("\r", 1)[-1]
+    assert LiveUI._display_width(line.rstrip()) < 80
+    assert "..." in line
+
+
+def test_terminal_fit_keeps_short_cjk_line():
+    from runner.support import LiveUI
+
+    line = "AI 正在處理目前任務"
+    assert LiveUI._fit_terminal_line(line, 80) == line
+    assert LiveUI._display_width(line) > len(line)

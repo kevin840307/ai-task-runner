@@ -7,6 +7,7 @@ import shutil
 import sys
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -137,10 +138,10 @@ class LiveUI:
         if detail:
             message += f"  {detail}"
         width = shutil.get_terminal_size((120, 20)).columns
-        if width > 10 and len(message) >= width:
-            message = message[: width - 4] + "..."
-        padding = max(0, self._line_width - len(message))
-        self._line_width = len(message)
+        message = self._fit_terminal_line(message, width)
+        message_width = self._display_width(message)
+        padding = max(0, self._line_width - message_width)
+        self._line_width = message_width
         sys.stdout.write("\r" + message + (" " * padding))
 
     def _draw_plain_task_list_if_changed(self, state: RunState) -> None:
@@ -174,10 +175,34 @@ class LiveUI:
         )
 
     @staticmethod
-    def _fit_terminal_line(line: str, width: int) -> str:
-        if width <= 10 or len(line) < width:
+    def _display_width(text: str) -> int:
+        return sum(
+            0 if unicodedata.combining(char)
+            else 2 if unicodedata.east_asian_width(char) in "WF"
+            else 1
+            for char in text
+        )
+
+    @classmethod
+    def _fit_terminal_line(cls, line: str, width: int) -> str:
+        limit = max(1, width - 1)
+        if cls._display_width(line) <= limit:
             return line
-        return line[: width - 4] + "..."
+        suffix = "..."
+        available = max(0, limit - len(suffix))
+        used = 0
+        end = 0
+        for end, char in enumerate(line, start=1):
+            char_width = (
+                0 if unicodedata.combining(char)
+                else 2 if unicodedata.east_asian_width(char) in "WF"
+                else 1
+            )
+            if used + char_width > available:
+                end -= 1
+                break
+            used += char_width
+        return line[:end] + suffix
 
     def _emit(self, event_type: str, *, include_detail: bool = True) -> None:
         event: dict[str, Any] = {
