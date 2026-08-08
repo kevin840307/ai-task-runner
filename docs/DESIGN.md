@@ -262,7 +262,7 @@ runner/api.py              Public RunRequest/run API and validation
 runner/core.py             TaskRunner state machine and orchestration
 runner/planning.py         Understand -> Plan -> Refine -> Judge planning flow
 runner/reviewing.py        Read-only Review and adaptive Review Finalize
-runner/model_results.py    Strict model JSON/result parsing
+runner/model_results.py    Shared JSON candidate extraction + strict stage validation
 runner/models.py           Persisted RunState and Task models
 runner/defaults.py         Shared default backend, timeout, and limit values
 runner/prompting.py        Markdown prompt-template loading and builders
@@ -719,6 +719,8 @@ Planning, review, and AI validation add a stronger project-wide read-only layer:
 5. restore every detected source change;
 6. return the changed-path list so the caller can treat edits as an error or informational event.
 
+Protected entries are normalized as roots. A descendant is redundant when an explicitly protected ancestor already covers it, so prompt/guard input collapses such descendants to the ancestor. The runner never infers a new protected directory simply because every currently known child is protected.
+
 Excluded cache/build directories include common paths such as `.git`, `.venv`, `node_modules`, `bin`, `obj`, `target`, `dist`, and `__pycache__`.
 
 ---
@@ -742,11 +744,15 @@ Resume does not require repeating `--goal`; the original goal is already in stat
 
 The runner itself cannot restart after its Python process, operating system, machine, or power is terminated. A service manager, scheduled task, CI agent, or other external supervisor must restart the command with `--resume`.
 
+Debug history is diagnostic only. `.ai-task-runner/debug/` keeps `current-prompt.txt`, the latest completed `last-prompt.txt`/`last-result.txt`, and a bounded `history/` of recent model-call pairs. History defaults to 100 calls, 50 MB total, and 2 MB per archived prompt/result with head/tail truncation. Oldest pairs are trimmed together. Debug files do not influence fingerprints, changed-file decisions, validators, state, or resume.
+
 ---
 
 ## 16. Prompt Design
 
 Prompt text lives under `prompts/`, not embedded as large domain-specific strings in Python.
+
+The prompt contract follows one rule: **fresh session = sufficient role context; same session = only new information plus the next instruction**. Planning's same-session finalize prompt is intentionally slim. Fresh/rebuilt Executor prompts include the original goal strictly as context/global constraints and the current TODO as the only executable scope; same-session retries use a short continuation prompt and do not resend the goal, task JSON, or static rules. Planning does not pre-enumerate a `Project files:` tree.
 
 ### Planning prompt receives
 
@@ -758,15 +764,16 @@ Prompt text lives under `prompts/`, not embedded as large domain-specific string
 
 ### Execution prompt receives
 
+For a fresh or rebuilt session:
+
 - hard runner rules;
-- original goal;
-- completed task titles;
+- original goal, explicitly marked context/global-constraints-only;
 - current task only;
-- acceptance criteria;
-- previous attempt output or diagnostic;
-- current validator feedback;
-- no-progress or repeated-validator-failure recovery hints;
+- acceptance criteria and shared constraints;
+- relevant validator/recovery feedback;
 - validator path when available.
+
+For a same-session retry, the runner uses a short continuation prompt with only newly available review/recovery feedback; it does not resend the original goal, full task JSON, static rules, or already supplied context.
 
 ### Review prompt receives
 
@@ -821,6 +828,10 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
 Backend-specific command construction and output/error parsing stay under `runner/backends/`. Backend-specific planning/runtime argument policy stays in `runner/agent_args.py`. The core state machine does not parse Qwen or OpenCode output directly.
 
+Backend event streams and final model results are intentionally separate concerns. Qwen/OpenCode backend code parses transport/event protocol. Final structured model results go through one shared candidate extractor in `runner/model_results.py`: the standard JSON decoder scans top-level candidates, then the stage parser validates the required schema and semantics. This is a lenient envelope with a strict payload; the runner does not repair malformed JSON or infer stage-specific fields in the generic layer.
+
+Qwen prompt transport is stdin-only. `runner/backends/qwen.py` does not put the model prompt in `-p`/argv; `process_control` writes the exact prompt to stdin and closes it to deliver EOF, including watchdog-managed calls. This avoids Windows command-line length limits and prevents competing prompt input paths.
+
 ---
 
 ## 20. Important Design Guarantees and Limits
@@ -872,4 +883,4 @@ Final AI validation is an independent quorum stage. Each configured run construc
 
 ### Bounded executor context
 
-Planning and Final AI receive the complete goal. A TODO Executor receives only the current task, recent diagnostics, relevant validator feedback, and constraints repeated across every task. Planner output must be self-contained so execution does not reread the full goal. The Executor is encouraged to stop after one coherent improvement instead of over-exploring. Changed files accumulate across attempts. A failed call that made changes goes directly to an independent read-only Review; repeated matching fresh-session failures with no changes are deferred to final validation. Explicit Review FAIL returns the same TODO for repair; a Review error first attempts one same-session no-tool finalization, and only a second error defers judgment to final validation.
+Planning and Final AI receive the complete goal. A fresh or rebuilt TODO Executor session also receives the original goal, but only as context and global constraints; the current TODO remains the only executable scope and the later TODO list is not supplied. Same-session Executor retries use a short continuation prompt containing only newly available review/recovery feedback, without resending the original goal, full task JSON, or static rules. Planner output remains self-contained and bounded so execution does not use the goal to discover extra work. The Executor is encouraged to stop after one coherent improvement instead of over-exploring. Changed files accumulate across attempts. A failed call that made changes goes directly to an independent read-only Review; repeated matching fresh-session failures with no changes are deferred to final validation. Explicit Review FAIL returns the same TODO for repair; a Review error first attempts one same-session no-tool finalization, and only a second error defers judgment to final validation.

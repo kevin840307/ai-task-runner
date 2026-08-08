@@ -56,6 +56,8 @@ The runner retries model errors, Qwen loop detection, session unavailable, inval
 
 Planning starts with one fresh draft Planner session. Turn 1 is bounded read-only project understanding only: map the outline, narrow to goal-relevant areas, read focused evidence, and do not create TODOs yet. Turn 2 resumes the same session with project tools disabled and produces TODO JSON. If Turn 1 is interrupted but the session is resumable, Turn 2 still runs from the gathered context; if the session is unavailable or Turn 2 fails, planning switches to fresh no-tool minimal planning and retries without re-exploring the repository. A fresh Refiner and no-tool Plan Judge improve plan quality but are soft gates: their infrastructure/format failures keep the last usable plan, and explicit Judge rejection is bounded before Final Validator owns correctness. No model-size or repository-size mode is required.
 
+The same-session Plan turn is intentionally short and does not resend context already present from Understand. Planning does not inject a `Project files:` listing; Understand discovers only goal-relevant files itself, while fresh no-tool fallback receives the original goal, project root, progress, validator feedback, and the bounded inspection summary. Initial plans require at least six bounded TODOs and must not create umbrella tasks that perform the whole goal.
+
 ## Validators
 
 Use a Python validator:
@@ -71,6 +73,8 @@ python ai_task_runner.py --goal "Build X" --validator ai
 ```
 
 AI validation is useful when there is no Python validator yet. It runs in a fresh independent agent session, asks the agent to inspect files and run reasonable local checks, and expects JSON with `passed`, `reason`, `missing_items`, `checks_run`, and `suggested_checks`. If it fails, `missing_items` become focused repair feedback for the next cycle. This is weaker than a Python validator, but better than relying only on per-task review.
+
+All model stages that return structured results share the same JSON candidate extraction. Surrounding prose, Markdown code fences, or an earlier unrelated JSON object are tolerated, but malformed JSON and stage-specific schema/semantic errors are not repaired or guessed. Fresh or rebuilt Executor sessions receive the original goal only for context/global constraints and the current TODO as the sole executable scope. Same-session retries receive only newly available review/recovery feedback.
 
 Python validators have no required output format. They receive:
 
@@ -110,6 +114,8 @@ After that, validators in any project can use `from ai_task_runner_validator imp
 `<project-root>/.ai-task-runner/validator-reports/` is cleared before every Python validator run. Write detailed reports there when stdout would be too large; the next repair task will receive the validator stdout and can read the referenced latest report files.
 
 `<project-root>/.ai-task-runner/log.txt` stores runner progress and status events as JSON lines. It is useful when checking why an unattended run retried, changed cycles, or stopped.
+
+For model-call inspection, `.ai-task-runner/debug/current-prompt.txt` shows the active prompt, `last-prompt.txt` and `last-result.txt` preserve the latest finished/failed pair, and `debug/history/` retains a bounded recent history. The default history keeps at most 100 prompt/result pairs, 50 MB total, with each archived prompt/result capped at 2 MB by retaining its head and tail. History cleanup always removes the oldest prompt/result pair together.
 
 For large reports, keep stdout focused on the model-facing summary: status, error/warning counts, `report_dir`, and the first few actionable errors. Put detailed diffs or long command output in files. When feedback references `report_dir` or `Full report:`, prompts instruct the agent to read `summary.txt`, then `errors.txt`, then only the first relevant detailed report before making a repair.
 

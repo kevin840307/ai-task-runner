@@ -26,6 +26,8 @@ AI model calls have a default activity idle watchdog. CLI output and project-fil
 
 Runner prompt templates live under `prompts/`. `prompting.py` loads those Markdown templates and fills runtime values such as project root, protected files, current task JSON, validator feedback, and executor output.
 
+Prompt/session policy is deliberately asymmetric: a fresh session receives all context required for its role; a same-session continuation receives only new information and the next instruction. Planning's same-session finalize turn does not resend the goal/project outline/progress. Fresh or rebuilt Executor sessions receive the original goal only as context/global constraints plus the current TODO; same-session Executor retries use `execution_continue.md` and carry only new review/recovery feedback. The current TODO is always the only executable scope.
+
 Each TODO owns task-scoped execution state, but failed no-change calls discard their session before retry. Completing the TODO also clears the session so the next TODO starts fresh. The runner sends compact context:
 
 - hard rules and protected-file boundaries
@@ -40,7 +42,11 @@ Agents may read validator files and expected/reference/golden fixtures to unders
 Execution prompts also remind agents to use shell commands compatible with the current OS, because Windows shells can interpret Unix-only flags as literal paths.
 
 Planning is intentionally AI-owned and behavior-adaptive. A fresh draft Planner session first performs bounded read-only project understanding without creating TODOs, then the runner resumes that same session with project tools disabled to produce TODO JSON from the gathered evidence. If the Understand turn is interrupted but the session is resumable, the no-tool Plan turn still runs. If the session is unavailable or Plan fails, planning switches to fresh no-tool minimal planning, carrying any successful inspection summary, and retries there instead of restarting repository exploration. A fresh Refiner and independent no-tool Plan Judge then act as soft quality gates: failures keep the last usable plan, while explicit Judge rejection gets only bounded rewrite rounds before the plan proceeds to execution and Final Validator. Python controls sessions and fallback only, without model-size, repository-size, task-title, or prompt-structure heuristics.
+
+Planning does not inject a precomputed `Project files:` listing. The Understand turn uses bounded read/list/search from the project root; no-tool stages use the resulting inspection summary. Initial plans require at least six concrete, bounded TODOs and reject umbrella tasks that would execute the whole goal in one step.
 For Qwen, only the first draft planner runs from the project root with local read/list/search tools available. `--safe-mode` remains enabled and write/edit/shell plus other side-effect tools stay excluded. The same-session Plan turn, minimal fallback, Refiner, and Judge remain tool-isolated. This avoids exhaustive large-repository loading while preserving read-only planning safety. Runtime execution keeps the normal Qwen tool environment; runner timeouts, loop detection, no-progress recovery, and per-TODO session reset prevent one task from polluting later work.
+
+Qwen prompts are transported through stdin only; no `-p` prompt argument is used. The runner writes the exact prompt, flushes/closes stdin to signal EOF, and reads the `stream-json` output normally. Keeping the large prompt out of argv avoids Windows command-line length limits and leaves only one input route.
 
 Runner code and prompt templates are task-agnostic by design. Generic structure such as files, commands, outputs, data contracts, validation evidence, or user-facing deliverables may guide planning. Names from one real case, such as a specific app, fab, workflow, generated filename, algorithm, or validator detail, belong only in user goals, validators, examples, smoke cases, or test fixtures.
 
@@ -59,6 +65,8 @@ Install this project with `python -m pip install -e C:\Users\kevin\ai-task-runne
 The runner clears `<project-root>/.ai-task-runner/validator-reports/` immediately before each Python validator subprocess starts. This prevents stale detailed reports from one validation attempt being mistaken for the current failure.
 
 Runner progress and status events are appended as JSON lines to `<project-root>/.ai-task-runner/log.txt`. Inspect this file to debug long unattended runs without relying on terminal scrollback. State writes use atomic replace with a short retry window so transient Windows file locks from editors, antivirus, backup tools, or monitoring readers do not stop a 24h run.
+
+Model-call diagnostics live in `.ai-task-runner/debug/`. `current-prompt.txt` is the active call; `last-prompt.txt` and `last-result.txt` keep the latest completed/failed pair. `history/` stores a bounded recent call history: up to 100 prompt/result pairs, 50 MB total, and 2 MB per history entry with head/tail retention when truncation is required. Oldest pairs are removed first. These files are best-effort diagnostics and are excluded from task change detection, state semantics, resume decisions, and validation.
 
 ## Rule Files
 
@@ -91,7 +99,7 @@ runner/api.py                     Public Python API and request validation
 runner/core.py                    TaskRunner state machine, retry, resume, validation loop
 runner/planning.py                Understand, plan, refine, and plan-judge flow
 runner/reviewing.py               Read-only Review and Review Finalize flow
-runner/model_results.py           Strict model JSON/result parsing
+runner/model_results.py           Shared JSON candidate extraction + strict stage validation
 runner/models.py                  RunState and Task serialization
 runner/support.py                 Protection, snapshots, retry, validator subprocess utilities
 runner/agent.py                   Session-aware backend facade

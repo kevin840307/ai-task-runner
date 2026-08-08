@@ -28,7 +28,7 @@ Planning is behavior-adaptive. One fresh draft Planner session runs two turns: a
 
 ## Executor scope isolation
 
-During TODO execution, treat only the current TODO as executable. The complete goal is intentionally not repeated because small models may attempt the entire project. Do not use the managed original-requirement reference to discover additional work; inspect only directly relevant project files. Goal-wide constraints are carried through acceptance criteria shared by every planned task. Make one coherent improvement and return rather than over-exploring. A failed call with new project changes is reviewed immediately; a no-change failure resumes in a fresh session, and repeated matching no-change failures defer to final validation.
+During TODO execution, treat only the current TODO as executable. A fresh or rebuilt execution session receives the original goal only to preserve context and global constraints; never use it or the managed original-requirement reference to discover or implement later TODOs. Same-session retries are intentionally short and carry only new review/recovery feedback rather than repeating the goal, task JSON, or static rules. Inspect only directly relevant project files, make one coherent improvement, and return rather than over-exploring. A failed call with new project changes is reviewed immediately; a no-change failure resumes in a fresh session, and repeated matching no-change failures defer to final validation.
 
 ## Review Scope Isolation
 

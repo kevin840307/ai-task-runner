@@ -7,6 +7,8 @@ AI Task Runner 是包在 Qwen Code、OpenCode 等 coding-agent CLI 外層的通�
 Runner 不在 Python 內 hardcode 特定專案知識。整個執行只有一個最終完成條件：**Final Validator 必須 PASS**。模型自己說完成、單一 TODO 完成或 Review 通過，都不代表整個 Run 完成。
 
 專案可在 `<project-root>/.ai-task-runner.yaml` 設定 `protected_paths`。路徑相對於 project root，資料夾會保護整棵子樹；Policy YAML 本身也自動受保護。每次模型呼叫前會保存實際工作目錄內容，若 protected path 被新增、修改、刪除或 rename，Runner 會還原成呼叫前狀態，因此不會用 `git restore HEAD` 蓋掉人原本尚未 commit 的修改。
+
+Protected paths 會先正規化成 root/subtree；若某個明確 protected ancestor 已涵蓋 descendant，後者不再重複出現在 Guard 或 Prompt。Runner 不會因為目前看到某資料夾內的檔案都受保護，就自行推論整個資料夾為 protected。
 同一份 Policy 也可設定 `instructions.always` 與 `instructions.project`：前者會附加到每一次 AI Prompt，適合短且不可忘記的強制規則；後者會維護在 Runner 生成的 `QWEN.md` / `AGENTS.md` 區塊，適合較長的專案規範。兩者皆為選填，且不綁定模型大小或專案內容。
 
 Runner 啟動的所有子程序固定禁止 `git add`、`git commit`、`git push`；`git status`、`git diff`、`git log`、`git show` 等唯讀操作仍可使用。Final Validator PASS 只代表 AI 自動化完成，最後 stage / commit / push 一律由人審核後執行。
@@ -170,6 +172,10 @@ runner/core.py -> TaskRunner.run() 主狀態機
 runner/planning.py -> Understand / Plan / Refine / Judge
 runner/reviewing.py -> Review / Review Finalize
 runner/model_results.py -> 模型 JSON / 結果格式解析
+
+所有最終 structured model result 共用同一套 JSON candidate extraction，再交給各 stage 做嚴格 schema/semantic validation。外層自然語言、Markdown fence、前置無關 JSON 可以容忍；JSON 本身損壞、schema 錯誤或 task 數量不符都不自動修補。Backend 的 stream-json event parsing 仍屬 transport protocol，不與最終 model result parser 混用。
+
+Qwen 的 Prompt transport 固定為 stdin-only：完整 Prompt 不放入 `-p`/argv，而是寫入 child process stdin 後關閉以送出 EOF；watchdog 路徑也遵守同一規則。這可避免 Windows 命令列長度限制與雙重 Prompt 輸入路徑。
 runner/validation.py -> Fresh AI Final Validator
 runner/support.py -> Retry / Protection / Snapshot / Fingerprint
 runner/process_control.py -> Timeout / Watchdog / Process Tree Kill
@@ -203,6 +209,8 @@ Review 是只讀操作。若 Review 修改 Protected Files，Runner 會還原。
 
 每次未完成 Review 會依專案 Fingerprint 與 missing_items 產生 `progress_key`。Executor Error 若完全沒有新專案變更，也會以錯誤尾端建立通用 Fingerprint 並立即清除 Execution Session；兩個 Fresh Session 連續出現相同失敗且都沒有進展時，該 TODO 先延後給 Final Validator，避免永久卡住。若已有實際變更，則清除 stagnation 並直接 Review 現有成果。
 
+Prompt/session 原則為：Fresh session 必須拿到該角色需要的完整 Context；Same session 只補新資訊與下一步。Planning same-session Finalize 不重送 Goal/Project Root/Outline/Progress；Fresh/Rebuilt Executor 重新帶 Original Goal，但只供背景與全域限制，Current TODO 才是唯一可執行範圍；Same-session Executor retry 使用短 Continue Prompt，只送新的 Review/Recovery feedback。Planning 也不再預先塞入 `Project files:` 清單。
+
 相同 Validator Failure 也會正規化後 Hash。連續重複代表目前 Session 可能被錯誤上下文綁住，因此 Repair Cycle 可切換 Fresh Session，但仍保留 State 與 Validator Feedback。
 
 ## 10. Validator
@@ -214,6 +222,8 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 ```
 
 Exit 0 為 PASS，非零為 FAIL。AI Validator 則必須使用獨立 Fresh Session，避免執行 Agent 自我審查。Validator Feedback 會限制大小並保留頭尾，再轉成 Repair TODO。
+
+模型診斷位於 `.ai-task-runner/debug/`：`current-prompt.txt` 為目前 call，`last-prompt.txt` / `last-result.txt` 保存上一筆完成或失敗 call；`history/` 預設保留最近 100 組 Prompt/Result、總量 50 MB、單一歷史檔最多 2 MB（超過時保留頭尾）。超限會成對刪除最舊 call，且 debug 檔不參與 state、resume、validator、project fingerprint 或 changed-files 判斷。
 
 ## 11. Timeout、Watchdog 與 Process Kill
 
@@ -256,4 +266,4 @@ Final AI 可透過 `--final-ai-validations N` 與 `--final-ai-required-passes M`
 
 ### Executor 上下文邊界
 
-Planning 與 Final AI 取得完整 Goal。Planning 先由同一個 Draft Planner Session 執行兩個 Turn：Understand Turn 做 Map → Select → Focused Read 且不產 TODO，Plan Turn 則關閉專案工具、只用既有 Context 產 TODO。Understand 中止但 Session 可恢復時仍直接進 Plan Turn；Session 不可用或 Plan 再失敗才切到 Fresh no-tool Minimal Plan，後續只在 Minimal 模式重試。得到第一份有效 Plan 後，全新 Refiner 與無工具 Plan Judge 都只是 soft quality gate：Refiner 異常保留上一份有效 Plan，Judge infrastructure/格式異常直接使用目前有效 Plan；Judge 明確 rejected 時最多做兩輪 Fresh rewrite，仍被拒絕就交由後續 Executor + Final Validator 閉環，而不是重新掃專案。Judge 不依標題關鍵字；初始規劃至少六項，Repair 規劃至少一項。每次 Repair Plan 後只保留該 Cycle active TODO，歷史留在 `log.txt`。Executor 只取得目前 Task、共通限制摘要、近期診斷與相關 Validator feedback；失敗但本次有變更時立即 Review，失敗且無變更時以 Fresh Session 重試。Review infrastructure error 交由 Final Validator；只有 Final Validator PASS 才能完成整個 Run。
+Planning 與 Final AI 取得完整 Goal。Planning 先由同一個 Draft Planner Session 執行兩個 Turn：Understand Turn 做 Map → Select → Focused Read 且不產 TODO；同 Session 的 Plan Turn 只送產生 TODO 所需的精簡指令與輸出契約，不重複塞 Goal、Project Root、Outline、Progress 等既有 Context。Session 不可用或 Plan 失敗時才切到 Fresh no-tool Minimal Plan，並重新帶齊 Goal、Project Root、Progress、Validator feedback 與既有 Inspection Summary，但不重新掃描專案。得到第一份有效 Plan 後，全新 Refiner 與無工具 Plan Judge 都只是 soft quality gate：Refiner 異常保留上一份有效 Plan，Judge infrastructure/格式異常直接使用目前有效 Plan；Judge 明確 rejected 時最多做兩輪 Fresh rewrite，仍被拒絕就交由後續 Executor + Final Validator 閉環。初始規劃至少六項，且不得產生一次包辦完整 Goal 的 umbrella TODO；Repair 規劃至少一項。Fresh 或 rebuilt Executor 會取得 Original Goal，但 Goal 只供背景與全域限制，Current TODO 才是唯一 executable scope；Same-session retry 則使用短 Continue Prompt，只補新的 Review/Recovery feedback，不重送 Goal、Task JSON 或靜態規則。失敗但本次有變更時立即 Review，失敗且無變更時以 Fresh Session 重試。只有 Final Validator PASS 才能完成整個 Run。

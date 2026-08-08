@@ -55,6 +55,8 @@ Validator feedback is passed back into the next planning prompt. After that repa
 
 There is no separate Understand Agent or persisted understanding artifact. Planning uses one draft Planner session in two turns: first a bounded read-only Understand turn maps the outline, narrows to goal-relevant areas, reads only enough evidence to plan reliably, and stops rather than scanning the whole repository; then the same session is resumed with project tools disabled to produce TODO JSON. Each Executor later reads only the files needed by its current TODO before changing them.
 
+Planning prompts do not pre-enumerate a `Project files:` tree. The project root remains the execution boundary; the read-enabled Understand turn discovers only the files it needs, while no-tool planning stages rely on the goal, progress, validator feedback, and bounded inspection summary already gathered. The same-session Plan prompt is intentionally slim because the session already contains the Understand context.
+
 Planning is behavior-adaptive rather than model-size-specific. A fresh draft Planner first performs a bounded read-only Understand turn using map → select → focused deep-read, without creating TODOs. Whether that turn completes normally or is stopped by a model/tool error, a resumable session is reused once with project tools disabled to produce the plan from evidence already gathered. If the session is unavailable or that no-tool Plan turn fails, planning falls back to fresh no-tool minimal planning using the goal, runner outline, progress, constraints, validator feedback, and any successful inspection summary; retries stay in this no-tool fallback instead of restarting repository exploration. Initial planning still requires at least six concrete TODOs; repair planning may contain fewer.
 
 Refiner and Plan Judge remain fresh no-tool quality layers. A valid draft is retained as the last usable plan: Refiner infrastructure/format errors keep the previous plan, Judge infrastructure/format errors allow the current valid plan to proceed, and repeated explicit Judge rejection is bounded before execution continues to the Final Validator loop. The Final Validator remains the only hard correctness gate. This lets stronger models stay on the happy path while weaker models automatically degrade without special model names, repository-size thresholds, or fixed exploration budgets.
@@ -64,9 +66,13 @@ When a task repeatedly fails in the model stage without changing project files a
 
 The runner and prompt templates must stay task-agnostic. Case-specific names such as a particular app, fab, workflow, generated filename, or algorithm belong only in user goals, validators, examples, smoke cases, or test fixtures. The core runner parses the fixed AI task JSON contract, but it does not interpret user prompt formats or special-case one user's project.
 
+Structured model results use one shared parser path. The envelope is tolerant but the payload remains strict: surrounding prose, Markdown fences, and earlier unrelated JSON values are allowed, while malformed JSON, wrong schema, missing required fields, or invalid task counts still fail. Candidate extraction uses the standard JSON decoder and then each stage applies its own schema/semantic validation; the generic layer does not hardcode `tasks`, `accepted`, `passed`, or other stage fields.
+
 When `--validator ai` is used, the final AI validator runs in a fresh session and its `missing_items` become focused repair feedback if it fails. This gives no-validator runs a closed loop, but the guarantee is only as strong as the independent AI review and the checks it chooses to run.
 
 For Qwen, the backend uses `--output-format stream-json`. During execution, CLI stdout/stderr counts as model-call activity until the first project file change; after that, new project changes refresh activity. If the model keeps talking but stops changing files for the idle window, the runner stops that call and asks review/final validation to judge the saved files. Read-only planning, review, and AI-validation calls use the same setting to retry calls that produce no CLI output.
+
+Qwen prompt transport is stdin-only. The full prompt is written to the child process stdin and EOF is closed after the write; the Qwen command does not carry `-p` or a prompt in argv. This avoids dual-input ambiguity and Windows command-line length limits for large planning prompts. Other backends keep their own transport contract.
 
 The default model-call idle watchdog is:
 
@@ -85,6 +91,8 @@ python validator.py --project-root <root> --state-file <root>/.ai-task-runner/st
 ```
 
 Exit code `0` means pass. Non-zero output is saved as validator feedback and sent into the next repair cycle. Validator feedback stored in state is capped at 20,000 characters, preserving the start and end of very long logs. Agents may read validator files and expected/reference/golden fixtures to understand expected behavior, but protected paths must not be changed. Put project-relative files or folders in `<project-root>/.ai-task-runner.yaml` under `protected_paths`; the policy file protects itself, and protected changes are restored to the exact pre-call working-tree state. `--protect-file <path>` remains supported for one-off protection. Every runner child process blocks `git add`, `git commit`, and `git push`; read-only Git commands remain available, and final Git acceptance is human review.
+
+Protected paths are normalized as roots/subtrees. If an explicitly protected root already contains another protected path, the descendant is omitted from the effective list and from prompts; the runner does not infer a new protected directory merely because all currently known children happen to be protected. Runner source protection therefore represents `runner/` as one subtree instead of listing every module separately.
 
 
 Example project policy:
@@ -156,7 +164,7 @@ runner/                       Main implementation package
   core.py                     TaskRunner state machine, retry, resume, validation loop
   planning.py                 Understand, plan, refine, and plan-judge flow
   reviewing.py                Read-only Review and no-tool Review Finalize flow
-  model_results.py            Strict model JSON/result parsing
+  model_results.py            Shared JSON candidate extraction + strict stage validation
   models.py                   RunState and Task serialization
   support.py                  Protection, project snapshots, retry, validator helpers
   agent.py                    Session-aware facade over backend adapters
@@ -254,7 +262,7 @@ python ai_task_runner.py ... --validator ai --final-ai-validations 3 --final-ai-
 
 ### Small-model TODO isolation
 
-The Executor receives the current TODO plus only goal-wide constraints repeated across every planned task. It does not receive the complete goal or remaining TODO list. Planning and Final AI still receive the complete goal. Every write must be required by the current TODO deliverable or acceptance criteria; a read-only deliverable must not mutate project files, and later TODO work must not be implemented early. The Executor may return after making one coherent improvement instead of forcing the whole TODO into one model call. If a failed call changed project files, the runner immediately reviews the saved state; if two fresh sessions hit the same failure with no new project change, the TODO is deferred to final validation instead of blocking the run.
+A fresh or rebuilt Executor session receives the original goal for context and global constraints plus the current TODO, but the current TODO is the only executable scope. The goal must never be used to discover or implement later TODOs, and the remaining TODO list is not provided. Same-session retries use a short continuation prompt that does not resend the goal, task JSON, or static rules; it carries only new review/recovery feedback. Every write must be required by the current TODO deliverable or acceptance criteria; a read-only deliverable must not mutate project files, and later TODO work must not be implemented early. The Executor may return after making one coherent improvement instead of forcing the whole TODO into one model call. If a failed call changed project files, the runner immediately reviews the saved state; if two fresh sessions hit the same failure with no new project change, the TODO is deferred to final validation instead of blocking the run.
 
 ## Review Scope Isolation
 

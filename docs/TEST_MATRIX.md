@@ -13,6 +13,13 @@ Coverage includes:
 - CLI/API public contract
 - Qwen and OpenCode backend command construction
 - Qwen `stream-json` final result and error parsing
+- Qwen stdin-only prompt transport, exact multiline/Unicode prompt delivery, EOF, and no `-p` prompt argument
+- shared structured-result JSON candidate extraction with strict stage schema validation
+- fresh/rebuilt Executor goal context versus short same-session continuation prompts
+- Planning prompt isolation with no pre-enumerated `Project files:` tree
+- protected-root/subtree normalization and redundant descendant collapse
+- current/last model diagnostics plus bounded prompt/result history rotation and truncation
+- single-line terminal rendering for multiline backend errors
 - stdout/stderr plus file-change activity watchdog
 - process-tree cleanup on timeout
 - protected validator, state, runner source, and backend rule files
