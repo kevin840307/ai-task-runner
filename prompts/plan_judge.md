@@ -26,5 +26,10 @@ Reject the complete $planning_mode plan if any of these are false:
 Never judge from title wording or keyword matching. Judge the descriptions, deliverables, acceptance criteria, goal, and ordering.
 When rejecting, issues must identify the affected task number or plan-wide defect and state the required correction.
 
-Return only valid JSON, without Markdown or explanation:
+Return only valid JSON, without Markdown or explanation.
+
+FAIL:
+{"accepted":false,"issues":["Task 2 combines independently actionable changes and must be split."]}
+
+PASS:
 {"accepted":true,"issues":[]}

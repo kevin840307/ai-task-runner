@@ -14,5 +14,10 @@ Run reasonable local checks when possible, such as tests, lint/build commands, C
 If no reliable command is obvious, inspect the relevant files directly and explain that no command was available in checks_run.
 When failing, make missing_items concrete, actionable, evidence-based, and grouped by blocking issue. Do not include warnings unless they block safe and correct completion.$extra
 Do not ask questions or wait for input. Make a verdict from available evidence.
-Return only JSON, without Markdown or explanation:
+Return only JSON, without Markdown or explanation.
+
+FAIL:
+{"passed":false,"reason":"One or more blocking requirements are not satisfied.","missing_items":["Describe the specific evidence-backed blocking defect."],"checks_run":["command or file inspection performed"],"suggested_checks":[]}
+
+PASS:
 {"passed":true,"reason":"All original requirements are satisfied and no concrete blocking defects were found.","missing_items":[],"checks_run":["command or file inspection performed"],"suggested_checks":[]}

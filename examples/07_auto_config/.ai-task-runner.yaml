@@ -1,0 +1,5 @@
+protected_paths:
+  - ans/
+  - validation.py
+  - prompt.md
+  - validator_interface.py

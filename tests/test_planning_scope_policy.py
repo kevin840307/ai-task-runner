@@ -85,7 +85,10 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     assert "independent plan quality judge" in prompt
     assert "Do not rewrite the plan" in prompt
     assert "Never judge from title wording or keyword matching" in prompt
+    assert '"accepted":false' in prompt
     assert '"accepted":true' in prompt
+    assert 'FAIL:' in prompt
+    assert 'PASS:' in prompt
     assert 'multiple TODOs may modify the same file' in prompt
     assert "could be completed entirely by reading, reasoning, deciding, reviewing, or checking" in prompt
     assert "dedicated planning turn before TODO creation" in prompt

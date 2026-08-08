@@ -253,6 +253,10 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert all('do not invent' in prompt.lower() for prompt in prompts)
     assert '"missing_items":[]' in prompts[2]
     assert '"missing_items":[]' in prompts[3]
+    assert '"passed":false' in prompts[3]
+    assert '"passed":true' in prompts[3]
+    assert "FAIL:" in prompts[3]
+    assert "PASS:" in prompts[3]
     assert '"checks_run"' in prompts[3]
     assert '"suggested_checks"' in prompts[3]
     assert "Run reasonable local checks" in prompts[3]
