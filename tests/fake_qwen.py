@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json, sys
 from pathlib import Path
-prompt = sys.argv[sys.argv.index("-p") + 1]; root = Path.cwd()
+prompt = sys.stdin.read(); root = Path.cwd()
 if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
     cycle2 = '"cycle": 2' in prompt
     if cycle2:

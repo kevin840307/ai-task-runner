@@ -4,10 +4,11 @@ import os
 import sys
 from pathlib import Path
 
+from fake_agent_io import read_prompt
+
 args = sys.argv[1:]
 root = Path.cwd()
-is_qwen = "-p" in args
-prompt = args[args.index("-p") + 1] if is_qwen else args[-1]
+is_qwen, prompt = read_prompt(args)
 session = "scenario-session-001"
 scenario = os.environ.get("SCENARIO", "")
 state_dir = Path(os.environ["SCENARIO_STATE_DIR"])

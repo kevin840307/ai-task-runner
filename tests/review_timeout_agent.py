@@ -8,11 +8,12 @@ import sys
 import time
 from pathlib import Path
 
+from fake_agent_io import read_prompt
+
 
 args = sys.argv[1:]
 root = Path.cwd()
-is_qwen = "-p" in args
-prompt = args[args.index("-p") + 1] if is_qwen else args[-1]
+is_qwen, prompt = read_prompt(args)
 state_dir = Path(os.environ["REVIEW_TIMEOUT_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "review-timeout-session"

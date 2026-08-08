@@ -4,12 +4,13 @@ import os
 import sys
 from pathlib import Path
 
+from fake_agent_io import read_prompt
+
 args = sys.argv[1:]
 root = Path.cwd()
 state_dir = Path(os.environ["SESSION_TEST_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
-is_qwen = "-p" in args
-prompt = args[args.index("-p") + 1] if is_qwen else args[-1]
+is_qwen, prompt = read_prompt(args)
 
 
 def count(name: str) -> int:

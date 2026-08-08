@@ -140,6 +140,7 @@ class AgentBackend(ABC):
             command,
             idle_timeout_after_change,
             change_detected,
+            self.stdin_prompt(prompt),
         )
         elapsed = time.monotonic() - started
         output, return_code = result.output, result.return_code
@@ -172,6 +173,7 @@ class AgentBackend(ABC):
         command: Sequence[str],
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
+        input_text: str | None = None,
     ) -> ProcessResult:
         try:
             result = run_process(
@@ -180,6 +182,7 @@ class AgentBackend(ABC):
                 self.timeout,
                 idle_timeout_after_change,
                 change_detected,
+                input_text,
             )
         except OSError as error:
             raise BackendError(f"{self.name} failed: {error}") from error
@@ -196,6 +199,10 @@ class AgentBackend(ABC):
     def prepare_project(self) -> list[Path]:
         """Create optional backend-specific project files and return them."""
         return []
+
+    def stdin_prompt(self, prompt: str) -> str | None:
+        """Return a prompt payload for stdin, or None when argv carries the prompt."""
+        return None
 
     @abstractmethod
     def build_command(self, prompt: str, session_id: str) -> list[str]:

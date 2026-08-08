@@ -13,19 +13,19 @@ class QwenBackend(AgentBackend):
     default_command = DEFAULT_QWEN_COMMAND
 
     def build_command(self, prompt: str, session_id: str) -> list[str]:
-        prompt_arg = single_line_prompt(prompt)
-        if not prompt_arg:
+        if not prompt.strip():
             raise BackendError("qwen prompt is empty")
         session_args = ["--resume", session_id] if session_id else []
         return [
             *self.base_command,
             *session_args,
-            "-p",
-            prompt_arg,
             "--output-format",
             "stream-json",
             *self.extra_args,
         ]
+
+    def stdin_prompt(self, prompt: str) -> str:
+        return prompt
 
     def decode(self, raw: str) -> BackendResult:
         values = self.parse_json_events(raw)
@@ -132,7 +132,3 @@ does not replace or narrow them.
 """
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
     return path
-
-def single_line_prompt(prompt: str) -> str:
-    """Avoid qwen.cmd on Windows receiving only the first prompt line."""
-    return " ".join(line.strip() for line in prompt.splitlines() if line.strip())

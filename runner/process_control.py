@@ -33,6 +33,7 @@ def run_process(
     timeout: int,
     idle_timeout_after_change: float = 0,
     change_detected: Callable[[], bool] | None = None,
+    input_text: str | None = None,
 ) -> ProcessResult:
     """Run one command and ensure timeout cleanup cannot wait forever."""
     options: dict[str, Any] = {
@@ -40,7 +41,7 @@ def run_process(
         "text": True,
         "encoding": "utf-8",
         "errors": "replace",
-        "stdin": subprocess.DEVNULL,
+        "stdin": subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
         "stdout": subprocess.PIPE,
         "stderr": subprocess.STDOUT,
         "env": guarded_environment(),
@@ -58,10 +59,11 @@ def run_process(
                 timeout,
                 idle_timeout_after_change,
                 change_detected,
+                input_text,
             )
 
         try:
-            output, _ = process.communicate(timeout=timeout or None)
+            output, _ = process.communicate(input=input_text, timeout=timeout or None)
             return ProcessResult(output or "", process.returncode or 0)
         except subprocess.TimeoutExpired as error:
             terminate_process_tree(process)
@@ -78,6 +80,7 @@ def _communicate_with_watchdog(
     timeout: int,
     idle_timeout_after_change: float,
     change_detected: Callable[[], bool],
+    input_text: str | None,
 ) -> ProcessResult:
     deadline = time.monotonic() + timeout if timeout else None
     last_activity_at: float = time.monotonic()
@@ -85,8 +88,15 @@ def _communicate_with_watchdog(
     output_queue: queue.Queue[str] = queue.Queue()
 
     if process.stdout is None:
-        output, _ = process.communicate(timeout=timeout or None)
+        output, _ = process.communicate(input=input_text, timeout=timeout or None)
         return ProcessResult(output or "", process.returncode or 0)
+
+    if input_text is not None:
+        threading.Thread(
+            target=_send_input,
+            args=(process, input_text),
+            daemon=True,
+        ).start()
 
     reader = threading.Thread(
         target=_read_stdout,
@@ -121,6 +131,24 @@ def _communicate_with_watchdog(
             )
         )
 
+
+
+def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
+    """Write one complete stdin payload and close it so the child receives EOF."""
+    pipe = process.stdin
+    if pipe is None:
+        return
+    try:
+        pipe.write(input_text)
+        pipe.flush()
+    except OSError:
+        pass
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+        process.stdin = None
 
 def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
     try:

@@ -6,7 +6,7 @@ import pytest
 from runner.backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
 from runner.backends.base import BackendError, BackendResult, split_command
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
-from runner.backends.qwen import QwenBackend, ensure_qwen_rules, single_line_prompt
+from runner.backends.qwen import QwenBackend, ensure_qwen_rules
 from runner.support import runner_source_files
 
 
@@ -58,11 +58,6 @@ def test_windows_quoted_command_path_is_unwrapped():
     assert split_command('"C:\\Program Files\\Qwen\\qwen.cmd"', windows=True) == [
         "C:\\Program Files\\Qwen\\qwen.cmd"
     ]
-
-
-def test_qwen_prompt_is_single_line_for_windows_cmd():
-    prompt = "Hard rules:\n- Do the task\n\nReturn only JSON"
-    assert single_line_prompt(prompt) == "Hard rules: - Do the task Return only JSON"
 
 
 def test_qwen_stream_json_uses_final_result_event(tmp_path):
@@ -249,14 +244,15 @@ def test_backend_project_instructions_are_replaced_from_policy(tmp_path):
     assert "AI-TASK-RUNNER:PROJECT-INSTRUCTIONS" not in cleared
 
 
-def test_qwen_ask_passes_prompt_through_p_only(tmp_path, monkeypatch):
+def test_qwen_ask_passes_exact_prompt_through_stdin_only(tmp_path, monkeypatch):
     from runner.process_control import ProcessResult
 
     backend = QwenBackend(sys.executable, tmp_path, [])
     captured = {}
 
-    def fake_run(command, idle_timeout_after_change=0, change_detected=None):
+    def fake_run(command, idle_timeout_after_change=0, change_detected=None, input_text=None):
         captured["command"] = list(command)
+        captured["input_text"] = input_text
         return ProcessResult(
             '{"type":"result","session_id":"s1","result":"ok"}',
             0,
@@ -266,16 +262,11 @@ def test_qwen_ask_passes_prompt_through_p_only(tmp_path, monkeypatch):
     prompt = "Plan the work\nReturn JSON only\nTask count must be at least 6"
     assert backend.ask(prompt).text == "ok"
 
-    command = captured["command"]
-    assert command.count("-p") == 1
-    prompt_index = command.index("-p") + 1
-    assert prompt_index < len(command)
-    assert command[prompt_index]
-    assert command[prompt_index] == single_line_prompt(prompt)
-    assert command[prompt_index] != "--output-format"
+    assert "-p" not in captured["command"]
+    assert captured["input_text"] == prompt
 
 
-def test_qwen_long_todo_split_prompt_keeps_non_empty_p_value(tmp_path):
+def test_qwen_long_todo_split_prompt_uses_exact_stdin(tmp_path):
     from runner.agent_args import no_tool_agent_args
 
     prompt = "\n".join(
@@ -297,18 +288,47 @@ def test_qwen_long_todo_split_prompt_keeps_non_empty_p_value(tmp_path):
 
     for session_id in ("", "session-123"):
         command = backend.build_command(prompt, session_id)
-        assert command.count("-p") == 1
-        index = command.index("-p")
-        assert index + 1 < len(command)
-        assert command[index + 1]
-        assert command[index + 1] == single_line_prompt(prompt)
-        assert "Requirement 130:" in command[index + 1]
-        assert '"tasks"' in command[index + 1]
+        assert "-p" not in command
+        assert backend.stdin_prompt(prompt) == prompt
+        assert "Requirement 130:" in backend.stdin_prompt(prompt)
+        assert '"tasks"' in backend.stdin_prompt(prompt)
         if session_id:
             assert command[command.index("--resume") + 1] == session_id
 
 
-def test_qwen_rejects_blank_p_value(tmp_path):
+def test_qwen_rejects_blank_stdin_prompt(tmp_path):
     backend = QwenBackend(sys.executable, tmp_path, [])
     with pytest.raises(BackendError, match="prompt is empty"):
         backend.build_command(" \n\t ", "")
+
+
+def test_run_process_sends_multiline_unicode_stdin_exactly(tmp_path):
+    from runner.process_control import run_process
+
+    prompt = "第一行\n第二行 JSON: {\"tasks\":[]}\n" + ("長內容\n" * 200)
+    code = "import sys; data=sys.stdin.read(); sys.stdout.write(data)"
+    result = run_process([sys.executable, "-c", code], tmp_path, 10, input_text=prompt)
+    assert result.return_code == 0
+    assert result.output == prompt
+
+
+def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
+    from runner.process_control import run_process
+
+    prompt = "line1\nline2\n" * 500
+    code = (
+        "import sys; data=sys.stdin.read(); "
+        "print('LEN=' + str(len(data))); print('EOF')"
+    )
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        10,
+        idle_timeout_after_change=5,
+        change_detected=lambda: False,
+        input_text=prompt,
+    )
+    assert result.return_code == 0
+    assert f"LEN={len(prompt)}" in result.output
+    assert "EOF" in result.output
+

@@ -3,8 +3,8 @@ import json, sys
 from pathlib import Path
 args=sys.argv[1:]
 root=Path.cwd(); session='test-session-001'
-is_qwen='-p' in args
-prompt = args[args.index('-p')+1] if is_qwen else args[-1]
+is_qwen='--output-format' in args and 'stream-json' in args
+prompt = sys.stdin.read() if is_qwen else args[-1]
 is_validator = 'fresh independent session' in prompt
 if is_validator:
     assert '--resume' not in args and '--session' not in args
