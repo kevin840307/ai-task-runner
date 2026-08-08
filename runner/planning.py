@@ -172,7 +172,7 @@ def build_plan(
             )
         except RunnerError as error:
             inspection_error = error
-    tasks = None
+
     if tasks is None:
         ui.set(
             "AI 正在建立最小任務規劃",

@@ -62,8 +62,8 @@ class LiveUI:
             return
         with self._lock:
             state = self.state
-            status = self.status
-            detail = self.detail
+            status = self._single_line_text(self.status)
+            detail = self._single_line_text(self.detail)
             spinner = (
                 self.FRAMES[self._frame % len(self.FRAMES)]
                 if self._thread
@@ -173,6 +173,10 @@ class LiveUI:
             "\n".join(self._fit_terminal_line(line, width) for line in lines)
             + "\n"
         )
+
+    @staticmethod
+    def _single_line_text(text: str) -> str:
+        return " ".join(text.splitlines())
 
     @staticmethod
     def _character_width(char: str) -> int:
