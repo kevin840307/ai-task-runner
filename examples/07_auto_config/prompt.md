@@ -1,31 +1,17 @@
 Build a generic Jinja2 config renderer for this project.
 
-Create or update rander.py to:
-
-* load YAML
-* merge values
-* read one central render matrix
-* render Jinja2 templates
-* create directories
-* write output files
+Create or update rander.py. It should only load YAML, merge values, render Jinja2 templates, create folders, and write files.
 
 Example:
 python rander.py --workflow WORKFLOW-A --fab FAB29-FZ1 --env PROD --output output
 
-All arguments are runtime values and must not be hardcoded.
+The example values are samples only. Never hardcode workflow, target, env, app, version, profile, template, filename, or answer-specific values in Python.
 
-Treat --fab as a generic target id.
-target_family is the text before its first hyphen.
+Treat --workflow, --fab, --env, and --output as runtime inputs. --fab is only a generic target id.
 
-Keep rander.py generic, format-agnostic, under 500 lines, and independent of other local Python files.
+Keep Python generic and format-agnostic. All render combinations, templates, filenames, output paths, apps, services, versions, and profiles must come from YAML config.
 
-Do not add app, workflow, target, env, version, profile, template, filename, format, sample, or ans-specific Python logic.
-
-All render targets, templates, filenames, output paths, combinations, and extra context must come from YAML.
-
-Adding or removing render targets must not require changing rander.py.
-
-Load config in this order:
+Load available config layers in this order, with later values overriding earlier values:
 config/values.yaml
 config/{workflow}/values.yaml
 config/phase/{target_family}.yaml or config/phases/{target_family}.yaml
@@ -33,25 +19,20 @@ config/{workflow}/{target}/values.yaml
 config/{workflow}/{env}.yaml
 config/{workflow}/{target}/{env}.yaml
 
-Skip missing optional files. Later files override earlier files.
+target_family is the part before the first hyphen. Missing optional layers must be skipped.
 
-Recursively merge only when both values are non-empty dictionaries.
-Lists, scalars, null, and empty dictionaries or lists fully replace earlier values.
-Never merge list items.
+Deep merge only when both values are non-empty dictionaries. Lists, empty dictionaries, empty lists, null, and scalars from a later layer replace the earlier value. Do not merge lists item by item.
 
-Store templates under Template/.
-Pass merged config, runtime arguments, target_family, and the current render item to each template.
+Keep shared values centralized and YAML simple. Adding a new render target should not require changing rander.py.
 
-Keep YAML simple and avoid duplicated shared definitions.
+Store Jinja2 templates under Template/. Templates must be dynamic and may generate any text format.
 
-Treat ans as read-only validation data.
-Never use ans as renderer input, template source, or output.
+Pass merged config, runtime inputs, target_family, and the current render item to templates.
 
-Write files only under --output.
+ans/ is read-only expected output. Never use ans/ as renderer input and never modify it. Write generated files only under --output.
 
-For each ans/{workflow}/{target}/{env}, the matching command must reproduce the same file tree and contents.
+For every ans/{workflow}/{target}/{env}, the matching command must generate exactly the same file tree and contents under output/{workflow}/{target}/{env}.
 
-Inspect the project, simplify the config, implement the renderer, and run validation.
+Keep rander.py under 500 lines and do not depend on other local Python files.
 
-Do not ask questions.
-Use the smallest maintainable solution and do not hardcode current samples.
+Inspect the project, implement the smallest maintainable solution, run validation, and fix failures. Do not add one-off logic only to pass the samples.

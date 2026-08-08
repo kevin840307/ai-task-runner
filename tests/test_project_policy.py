@@ -102,3 +102,37 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_pat
     assert "git version" in version.output.lower()
     assert blocked.return_code == 126
     assert "human review is required" in blocked.output.lower()
+
+
+def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
+    from runner.policy import instructions
+
+    (tmp_path / POLICY_FILENAME).write_text(
+        "instructions:\n"
+        "  always: |\n"
+        "    Never hardcode project-specific values.\n"
+        "  project: |\n"
+        "    Keep configuration data-driven.\n",
+        encoding="utf-8",
+    )
+
+    assert instructions(tmp_path, "always") == "Never hardcode project-specific values."
+    assert instructions(tmp_path, "project") == "Keep configuration data-driven."
+
+
+def test_policy_rejects_unknown_instruction_keys(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "instructions:\n  every_time: x\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="unknown instruction keys"):
+        protected_paths(tmp_path)
+
+
+def test_policy_rejects_non_string_instructions(tmp_path: Path) -> None:
+    (tmp_path / POLICY_FILENAME).write_text(
+        "instructions:\n  always:\n    - x\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="instruction values must be strings"):
+        protected_paths(tmp_path)

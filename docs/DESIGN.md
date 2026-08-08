@@ -699,6 +699,8 @@ Protected files include:
 - backend rule files prepared by the agent facade;
 - every project-relative path from `<project-root>/.ai-task-runner.yaml` `protected_paths`;
 - the `.ai-task-runner.yaml` policy file itself;
+
+The same policy optionally carries two user instruction scopes: `instructions.always` is appended to every model prompt, while `instructions.project` is written into a replaceable Runner-managed block in backend project rule files (`QWEN.md` / `AGENTS.md`). This keeps strict reminders independent from longer project knowledge without adding backend-specific policy keys.
 - every user-supplied `--protect-file` path.
 
 `protected_ask()` snapshots bytes and hashes before execution and restores every changed protected file or directory afterward, even when the model call throws. Restoration uses the pre-call working-tree contents rather than `git restore`, so existing human uncommitted edits are preserved.

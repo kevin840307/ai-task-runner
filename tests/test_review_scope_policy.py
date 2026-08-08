@@ -93,3 +93,13 @@ def test_review_finalize_prompt_forces_decision_without_more_exploration():
     assert "Do not redo implementation" in prompt
     assert '"completed":true' in prompt
     assert '"completed":false' in prompt
+
+
+def test_review_finalize_includes_always_instructions_when_root_is_supplied(tmp_path: Path):
+    (tmp_path / ".ai-task-runner.yaml").write_text(
+        "instructions:\n  always: Never hardcode values.\n",
+        encoding="utf-8",
+    )
+    prompt = review_finalize_prompt(tmp_path)
+    assert "User-enforced instructions" in prompt
+    assert "Never hardcode values." in prompt

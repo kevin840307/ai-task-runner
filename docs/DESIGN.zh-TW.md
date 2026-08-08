@@ -7,6 +7,7 @@ AI Task Runner 是包在 Qwen Code、OpenCode 等 coding-agent CLI 外層的通�
 Runner 不在 Python 內 hardcode 特定專案知識。整個執行只有一個最終完成條件：**Final Validator 必須 PASS**。模型自己說完成、單一 TODO 完成或 Review 通過，都不代表整個 Run 完成。
 
 專案可在 `<project-root>/.ai-task-runner.yaml` 設定 `protected_paths`。路徑相對於 project root，資料夾會保護整棵子樹；Policy YAML 本身也自動受保護。每次模型呼叫前會保存實際工作目錄內容，若 protected path 被新增、修改、刪除或 rename，Runner 會還原成呼叫前狀態，因此不會用 `git restore HEAD` 蓋掉人原本尚未 commit 的修改。
+同一份 Policy 也可設定 `instructions.always` 與 `instructions.project`：前者會附加到每一次 AI Prompt，適合短且不可忘記的強制規則；後者會維護在 Runner 生成的 `QWEN.md` / `AGENTS.md` 區塊，適合較長的專案規範。兩者皆為選填，且不綁定模型大小或專案內容。
 
 Runner 啟動的所有子程序固定禁止 `git add`、`git commit`、`git push`；`git status`、`git diff`、`git log`、`git show` 等唯讀操作仍可使用。Final Validator PASS 只代表 AI 自動化完成，最後 stage / commit / push 一律由人審核後執行。
 

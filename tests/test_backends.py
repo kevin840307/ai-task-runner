@@ -239,3 +239,32 @@ def test_backend_error_preserves_failure_diagnostics(tmp_path):
     assert error.session_id == "session-9"
     assert error.session_source_event == "event[0]:system"
     assert "raw failure detail" in error.output
+
+
+def test_backend_project_instructions_are_replaced_from_policy(tmp_path):
+    policy = tmp_path / ".ai-task-runner.yaml"
+    policy.write_text(
+        "instructions:\n  project: |\n    First project rule.\n",
+        encoding="utf-8",
+    )
+
+    path = ensure_qwen_rules(tmp_path)
+    first = path.read_text(encoding="utf-8")
+    assert "First project rule." in first
+    assert first.count("AI-TASK-RUNNER:PROJECT-INSTRUCTIONS") == 2
+
+    policy.write_text(
+        "instructions:\n  project: |\n    Replacement project rule.\n",
+        encoding="utf-8",
+    )
+    ensure_qwen_rules(tmp_path)
+    second = path.read_text(encoding="utf-8")
+    assert "First project rule." not in second
+    assert "Replacement project rule." in second
+    assert second.count("AI-TASK-RUNNER:PROJECT-INSTRUCTIONS") == 2
+
+    policy.write_text("instructions:\n  project: \"\"\n", encoding="utf-8")
+    ensure_qwen_rules(tmp_path)
+    cleared = path.read_text(encoding="utf-8")
+    assert "Replacement project rule." not in cleared
+    assert "AI-TASK-RUNNER:PROJECT-INSTRUCTIONS" not in cleared

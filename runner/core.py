@@ -869,7 +869,7 @@ class TaskRunner:
                 )
                 try:
                     return retry_model_call(
-                        lambda: ask_review(finalizer, review_finalize_prompt()),
+                        lambda: ask_review(finalizer, review_finalize_prompt(self.root)),
                         self.ui,
                         "AI 正在收斂 Review 判斷",
                         task.title,

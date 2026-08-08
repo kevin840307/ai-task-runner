@@ -9,6 +9,7 @@ from typing import Any, Sequence
 
 from .errors import RunnerError
 from .models import RunState, Task
+from .policy import instructions
 
 
 PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
@@ -86,16 +87,21 @@ def render_prompt_template(name: str, values: dict[str, Any]) -> str:
     )
 
 
+def _always_instructions(root: Path) -> str:
+    text = instructions(root, "always")
+    return f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
+
+
 def rules(root: Path, protected: Sequence[Path]) -> str:
     protected_names = "\n".join(f"- {path}" for path in protected)
     return render_prompt_template(
         "rules.md",
         {"root": root, "protected_names": protected_names},
-    )
+    ) + _always_instructions(root)
 
 
-def planning_rules(work: Path) -> str:
-    return render_prompt_template("planning_rules.md", {"work": work})
+def planning_rules(work: Path, root: Path) -> str:
+    return render_prompt_template("planning_rules.md", {"work": work}) + _always_instructions(root)
 
 
 def task_spec(task: Task) -> dict[str, Any]:
@@ -176,7 +182,7 @@ def plan_understand_prompt(
     return render_prompt_template(
         "plan_understand.md",
         {
-            "planning_rules": planning_rules(work_dir),
+            "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "outline": project_outline(root),
@@ -217,7 +223,7 @@ def plan_finalize_prompt(
     return render_prompt_template(
         "plan_finalize.md",
         {
-            "planning_rules": planning_rules(work_dir),
+            "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "outline": project_outline(root),
@@ -248,7 +254,7 @@ def plan_refine_prompt(
     return render_prompt_template(
         "plan_refine.md",
         {
-            "planning_rules": planning_rules(work_dir),
+            "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "outline": project_outline(root),
@@ -287,7 +293,7 @@ def plan_judge_prompt(
     return render_prompt_template(
         "plan_judge.md",
         {
-            "planning_rules": planning_rules(work_dir),
+            "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "outline": project_outline(root),
@@ -406,8 +412,9 @@ def review_prompt(
     )
 
 
-def review_finalize_prompt() -> str:
-    return render_prompt_template("review_finalize.md", {})
+def review_finalize_prompt(root: Path | None = None) -> str:
+    prompt = render_prompt_template("review_finalize.md", {})
+    return prompt + (_always_instructions(root) if root is not None else "")
 
 
 def format_validator_feedback(feedback: str, limit: int = 2000) -> str:

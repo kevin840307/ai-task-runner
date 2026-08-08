@@ -1,2 +1,9 @@
 # Project-relative files or folders that AI sessions may read but must never change.
 protected_paths: []
+
+instructions:
+  # Short, critical rules injected into every AI call.
+  always: ""
+
+  # Longer project guidance maintained in generated QWEN.md / AGENTS.md.
+  project: ""

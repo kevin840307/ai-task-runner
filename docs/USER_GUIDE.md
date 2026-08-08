@@ -80,6 +80,8 @@ python validator.py --project-root <root> --state-file <state.json> [...validato
 
 Agents may read reference/golden/fixture files, but protected paths must not be changed. Configure project-relative files or folders in `<project-root>/.ai-task-runner.yaml` under `protected_paths`; the policy file is automatically protected, and any protected create/modify/delete/rename is restored to the exact state from before the model call. `--protect-file <path>` remains available for one-off protection. Runner child processes permanently block `git add`, `git commit`, and `git push`; Git status/diff/log/show remain available and final staging/commit/push is a human action.
 
+The same policy can define `instructions.always` for short rules injected into every AI call and `instructions.project` for longer project guidance maintained in the generated `QWEN.md` / `AGENTS.md`. Keep `always` concise because it is repeated on every call.
+
 Exit code `0` means PASS. Any non-zero exit code means FAIL. Stdout and stderr are captured as feedback; state keeps a bounded 20,000-character version that preserves the beginning and end of long logs, and task prompts receive a smaller focused excerpt.
 
 For reusable validator patterns, see `docs/validator_templates/`. The folder comparison template is useful when a project generates many `.yml`, `.yaml`, `.cfg`, and `.xml` files: it prints a short summary, writes full file lists and diffs under `.ai-task-runner/validator-reports/`, and adds a warning-only config value sharing score.

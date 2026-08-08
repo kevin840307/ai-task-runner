@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Sequence
 
 from runner.errors import RunnerError
+from runner.policy import instructions
 from runner.process_control import ProcessResult, run_process
 
 
@@ -45,6 +46,8 @@ class BackendResult:
 
 
 RUNNER_RULE_MARKER = "# AI Task Runner Rules"
+PROJECT_INSTRUCTIONS_START = "<!-- AI-TASK-RUNNER:PROJECT-INSTRUCTIONS -->"
+PROJECT_INSTRUCTIONS_END = "<!-- /AI-TASK-RUNNER:PROJECT-INSTRUCTIONS -->"
 
 
 def ensure_project_rules(root: Path, filename: str) -> Path:
@@ -64,7 +67,25 @@ def ensure_project_rules(root: Path, filename: str) -> Path:
 - Complete the task with the smallest clean change possible; avoid unnecessary code, files, abstractions, dependencies, refactoring, or unrelated modifications.
 - Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
 """
-        path.write_text(existing.rstrip() + block, encoding="utf-8")
+        existing = existing.rstrip() + block
+
+    start = existing.find(PROJECT_INSTRUCTIONS_START)
+    if start >= 0:
+        end = existing.find(PROJECT_INSTRUCTIONS_END, start)
+        if end >= 0:
+            existing = (
+                existing[:start] + existing[end + len(PROJECT_INSTRUCTIONS_END):]
+            ).rstrip()
+    project = instructions(root, "project")
+    if project:
+        existing += f"""
+
+{PROJECT_INSTRUCTIONS_START}
+# User Project Instructions
+{project}
+{PROJECT_INSTRUCTIONS_END}
+"""
+    path.write_text(existing.rstrip() + "\n", encoding="utf-8")
     return path
 
 

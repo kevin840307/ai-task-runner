@@ -93,9 +93,16 @@ Example project policy:
 protected_paths:
   - expected/
   - validation.py
+
+instructions:
+  always: |
+    Never hardcode project-specific values.
+    Keep changes minimal and preserve existing behavior.
+  project: |
+    Keep configuration data-driven and follow existing project conventions.
 ```
 
-A folder entry protects the entire subtree, including create/delete/rename operations. Paths must stay inside `project-root`.
+`instructions.always` is injected into every AI call, so keep it short and reserve it for rules the model must never forget. `instructions.project` is maintained in the Runner-managed `QWEN.md` / `AGENTS.md` block and is better for longer project guidance. Both fields are optional. A folder entry protects the entire subtree, including create/delete/rename operations. Paths must stay inside `project-root`.
 
 Reusable validator templates live in `docs/validator_templates/`. They show the recommended pattern: fail with a non-zero exit code only for blocking errors, keep stdout short, and write full error, warning, and diff reports under `.ai-task-runner/validator-reports/`. `external_command_validator.py` wraps an exe, bat, jar, or CLI and copies external log folders into model-readable reports.
 
