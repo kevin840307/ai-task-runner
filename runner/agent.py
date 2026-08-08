@@ -79,9 +79,9 @@ class AgentClient:
             backend=self.backend,
             cwd=self.root,
             session_id=session_id,
+            prompt=prompt,
             result=result,
             error=error,
-            prompt_chars=len(prompt),
         )
 
     def ask(

@@ -57,11 +57,6 @@ def begin_model_call(
         debug_dir / "current-prompt.txt",
         _header(**common) + "\n\n--- PROMPT ---\n\n" + prompt,
     )
-    _write(
-        debug_dir / "current-result.txt",
-        _header(**common, status="waiting_for_model")
-        + "\n\n--- RESULT ---\n\n",
-    )
 
 
 def finish_model_call(
@@ -70,9 +65,9 @@ def finish_model_call(
     backend: str,
     cwd: Path,
     session_id: str,
+    prompt: str,
     result: str,
     error: str = "",
-    prompt_chars: int | None = None,
 ) -> None:
     if debug_dir is None:
         return
@@ -81,12 +76,15 @@ def finish_model_call(
         "status": "error" if error else "completed",
         "result_chars": len(result),
     }
-    if prompt_chars is not None:
-        values["prompt_chars"] = prompt_chars
+    values["prompt_chars"] = len(prompt)
     if error:
         values["error"] = _one_line(error)
     _write(
-        debug_dir / "current-result.txt",
+        debug_dir / "last-prompt.txt",
+        _header(**values) + "\n\n--- PROMPT ---\n\n" + prompt,
+    )
+    _write(
+        debug_dir / "last-result.txt",
         _header(**values) + "\n\n--- RESULT ---\n\n" + result,
     )
 
@@ -95,7 +93,7 @@ def note_parse_error(debug_dir: Path | None, error: BaseException) -> None:
     """Attach parser/schema failure metadata while preserving the current result body."""
     if debug_dir is None:
         return
-    path = debug_dir / "current-result.txt"
+    path = debug_dir / "last-result.txt"
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
