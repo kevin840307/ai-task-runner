@@ -12,11 +12,11 @@ Fresh/rebuilt sessions must be self-contained for the stage. Same-session calls 
 - Refiner/Judge: fresh no-tool sessions with candidate tasks and required context. Judge prompts include both FAIL and PASS examples.
 
 ## Execution
-- Fresh/rebuilt: Original Goal is supplied as context/global constraints; Current TODO is explicitly the only executable scope. Shared task constraints, validator/review recovery information, and current state may be supplied as needed.
+- Fresh/rebuilt: Original Goal is supplied once as context/global constraints; Current TODO is the only executable scope. The prompt keeps only cross-stage safety boundaries plus executor-specific rules, shared constraints, and relevant validator/review recovery evidence. Scope/session wording is not duplicated inside `Run context`.
 - Same-session retry: short `execution_continue` prompt only. Do not repeat Original Goal, full task JSON, static rules, or old output; send only new review/validator/recovery information.
 
 ## Review
-- Fresh, read-only, scoped to the Current TODO and observed changes/evidence.
+- Fresh, read-only, scoped to the Current TODO. It receives task/global constraints plus executor and relevant validator evidence, but does not preload a changed-files list or generic write/git/shell rules. It reads only the smallest directly related file subset needed for unresolved acceptance criteria.
 - Same-session Finalize after resumable error: no tools, use already gathered evidence and emit JSON verdict. Both FAIL and PASS examples are shown.
 
 ## Final validation

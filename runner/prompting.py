@@ -318,18 +318,6 @@ def execution_prompt(
             2000,
         ),
         "global_constraints": shared_task_constraints(state),
-        "execution_scope": (
-            "The original goal is context and global constraints only. "
-            "The current TODO is the only executable work item."
-        ),
-        "session_context": (
-            "Rebuilt execution session. Re-establish only the current TODO from the "
-            "current project state; previous attempts may already have changed files."
-            if rebuilt_session
-            else
-            "New execution session. Inspect only the project files directly needed "
-            "to complete the current TODO."
-        ),
     }
     strategy = f"\nRecovery instruction:\n{strategy_note}\n" if strategy_note else ""
     previous = (
@@ -395,12 +383,11 @@ def review_prompt(
     return render_prompt_template(
         "review.md",
         {
-            "rules": rules(root, protected),
+            "always_instructions": _always_instructions(root),
             "global_constraints_json": json.dumps(
                 shared_task_constraints(state), ensure_ascii=False
             ),
             "task_json": json.dumps(task_spec(task), ensure_ascii=False),
-            "changed_files_json": json.dumps(task.changed_files, ensure_ascii=False),
             "output": output[-3000:],
             "validator_section": validator_section,
         },

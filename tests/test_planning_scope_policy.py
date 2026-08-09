@@ -31,7 +31,7 @@ def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
 
     assert "dedicated project-understanding turn" in plan
     assert "Do not try to read the whole repository" in plan
-    assert "This inspection is preparation inside the TODO and never completes the TODO by itself" in execute
+    assert "inspect only the project files directly needed for this TODO" in execute
     assert not (Path(__file__).parents[1] / "prompts" / "understand.md").exists()
 
 def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):

@@ -12,11 +12,11 @@ Fresh/Rebuilt session 必須針對該 stage 自足；Same-session call 只送新
 - Refiner/Judge：fresh no-tool session，帶 candidate tasks 與必要 context。Judge Prompt 同時示範 FAIL/PASS。
 
 ## Execution
-- Fresh/Rebuilt：Original Goal 只作 context/global constraints；Current TODO 明確是唯一 executable scope。依需要附 shared constraints、validator/review recovery、current state。
+- Fresh/Rebuilt：Original Goal 只送一次並只作 context/global constraints；Current TODO 是唯一 executable scope。Prompt 只保留跨 stage 安全邊界、Executor 專用規則、shared constraints 與必要的 validator/review recovery evidence；`Run context` 不再重複 scope/session 說明。
 - Same-session retry：只用短 `execution_continue` Prompt。不重送 Original Goal、完整 Task JSON、static rules、舊 output；只帶新的 Review/Validator/Recovery 資訊。
 
 ## Review
-- Fresh、read-only，只審 Current TODO 與實際 changes/evidence。
+- Fresh、read-only，只審 Current TODO。會帶 Task/global constraints、Executor evidence 與相關 Validator evidence，但不預先塞入 changed-files 清單，也不帶通用 write/git/shell 規則；只在 acceptance criteria 尚未確認時讀取最小必要的相關檔案。
 - 可 resume 的 error 後使用 Same-session Finalize：no tools，直接用已取得 evidence 輸出 JSON verdict。Prompt 同時示範 FAIL/PASS。
 
 ## Final Validation

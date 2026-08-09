@@ -246,11 +246,12 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
         runner.review_prompt(state, root, protected, "report"),
         runner.ai_validator_prompt("goal", root, protected),
     ]
-    assert all("ask questions" in prompt.lower() for prompt in prompts)
+    # Interactive stages must not pause for user input. Review is a bounded verdict stage.
+    assert all("ask questions" in prompt.lower() for prompt in (prompts[0], prompts[1], prompts[3]))
     assert '"attempts"' not in prompts[1]
     assert '"last_output"' not in prompts[1]
     assert '"status"' not in prompts[1]
-    assert all('do not invent' in prompt.lower() for prompt in prompts)
+    assert all('do not invent' in prompt.lower() for prompt in (prompts[0], prompts[1], prompts[3]))
     assert '"missing_items":[]' in prompts[2]
     assert '"missing_items":[]' in prompts[3]
     assert '"passed":false' in prompts[3]
@@ -270,15 +271,15 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert "validator.py" in prompt_with_legacy_hint
     assert "You may read validator files" in prompt_with_legacy_hint
     assert "never modify them or hardcode validator internals" in prompt_with_legacy_hint
-    assert "Do not delegate to subagents" in prompt_with_legacy_hint
-    assert "Do not use computer-use" in prompt_with_legacy_hint
-    assert "instead of repeating the same read/check command" in prompt_with_legacy_hint
-    assert "treat it as authoritative" in prompt_with_legacy_hint
+    assert "do not delegate to subagents" in prompt_with_legacy_hint.lower()
+    assert "computer-use" in prompt_with_legacy_hint
+    assert "never immediately repeat the identical tool call" in prompt_with_legacy_hint
+    assert "Treat validator feedback as authoritative" in prompt_with_legacy_hint
 
     state.validator_output = "unexpected file content"
     review_with_feedback = runner.review_prompt(state, root, protected, "report")
     assert "Latest validator feedback to consider" in review_with_feedback
-    assert "feedback about later tasks or whole-project work must not block this task" in review_with_feedback
+    assert "later-task or whole-project feedback must not block this task" in review_with_feedback
 
 
 
@@ -801,7 +802,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
         assert "relevant project structure" in prompt
         assert "smallest maintainable change" in prompt
         assert "Preserve existing behavior, public interfaces, file formats, and dependencies" in prompt
-        assert "Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies" in prompt
+        assert "Preserve unrelated behavior and public interfaces" in prompt
 
     assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
     assert "dedicated project-understanding turn" in plan

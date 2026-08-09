@@ -51,7 +51,7 @@ def test_review_prompt_limits_validator_feedback_to_current_task(tmp_path: Path)
     assert "must not block this task" in prompt
 
 
-def test_review_prompt_is_changed_files_first_and_does_not_embed_full_goal(tmp_path: Path):
+def test_review_prompt_uses_minimal_evidence_and_does_not_embed_full_goal_or_changed_files(tmp_path: Path):
     shared = "Preserve existing behavior and avoid hardcoding"
     state = RunState(
         run_id="r",
@@ -79,9 +79,10 @@ def test_review_prompt_is_changed_files_first_and_does_not_embed_full_goal(tmp_p
     prompt = review_prompt(state, tmp_path, [], "focused check passed")
 
     assert "Build every feature in the full application" not in prompt
-    assert "Inspect the files changed during this TODO first" in prompt
-    assert 'src/current.py' in prompt
+    assert "Files changed during this TODO" not in prompt
+    assert 'src/current.py' not in prompt
     assert shared in prompt
+    assert "smallest directly related file subset" in prompt
     assert "Do not broadly explore the repository" in prompt
     assert "Do not run the full project validator" in prompt
 

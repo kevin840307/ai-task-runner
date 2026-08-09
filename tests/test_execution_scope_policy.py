@@ -26,12 +26,12 @@ def test_fresh_execution_prompt_embeds_goal_as_context_not_completed_task_list(t
     prompt = execution_prompt(state(), tmp_path, [], include_goal=True)
     assert "Build the entire application including many later features." in prompt
     assert '"completed_tasks"' not in prompt
-    assert "current TODO is the only executable scope" in prompt
+    assert "Current TODO is the only executable scope" in prompt
     assert "Do not run the final project validator" in prompt
-    assert "coherent improved state and return" in prompt
-    assert "temporary, diagnostic, exploratory" in prompt
-    assert "Before every write, confirm that the change is required by the current TODO deliverable or acceptance criteria" in prompt
-    assert "If the current deliverable does not require a project change, do not modify project files" in prompt
+    assert "satisfied or safely improved" in prompt
+    assert "scratch, diagnostic, runner-state, or sidecar files" in prompt
+    assert "Make the smallest maintainable change that satisfies the deliverable and acceptance criteria" in prompt
+    assert "If no project change is required, do not modify files" in prompt
 
 
 def test_no_change_failure_defer_threshold_is_small_and_positive():
@@ -54,8 +54,8 @@ def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
 
     assert shared in prompt
     assert "Later feature" not in prompt
-    assert "Do not use the original goal or planning output to discover or execute additional work" in prompt
-    assert "current TODO is the only executable work item" in prompt
+    assert "never use it to discover or perform later work" in prompt
+    assert "Current TODO is the only executable scope" in prompt
 
 
 def _runner(tmp_path, task):
