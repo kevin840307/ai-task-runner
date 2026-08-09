@@ -154,22 +154,20 @@ def build_plan(
 
     tasks: list[Task] | None = None
     if draft_planner.session_id:
+        planner = new_planner(session_id=draft_planner.session_id)
+        prompt = plan_finalize_prompt(
+            state.goal,
+            root,
+            state,
+            work,
+            same_session=True,
+        )
         ui.set(
             "AI 正在產生任務規劃",
             "reuse completed planning inspection without tools",
         )
-        planner = new_planner(session_id=draft_planner.session_id)
         try:
-            tasks = ask_plan(
-                planner,
-                plan_finalize_prompt(
-                    state.goal,
-                    root,
-                    state,
-                    work,
-                    same_session=True,
-                ),
-            )
+            tasks = ask_plan(planner, prompt)
         except RunnerError as error:
             inspection_error = error
 
