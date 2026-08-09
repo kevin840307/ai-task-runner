@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_no_change_skips_review_and_preserves_executor_session(tmp_path, monkeypatch):
+def test_no_change_still_reviews_and_preserves_executor_session(tmp_path, monkeypatch):
     import runner.core as core
     from runner.models import RunState, Task
 
@@ -27,15 +27,19 @@ def test_no_change_skips_review_and_preserves_executor_session(tmp_path, monkeyp
     runner._save_state = lambda: None
     runner._set_stage = lambda *args: None
     runner._execute_current_task = lambda current: "inspection complete"
-    runner._review_current_task = lambda *args: pytest.fail("review must not run")
+    reviews = []
+    runner._review_current_task = lambda current, output: reviews.append((current.id, output)) or {
+        "completed": True, "reason": "already satisfied", "missing_items": []
+    }
 
     monkeypatch.setattr(core, "project_manifest", lambda *args: {})
     monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
     monkeypatch.setattr(core, "show_todo", lambda *args: None)
 
     assert runner._run_pending_tasks() is None
+    assert reviews == [(task.id, "inspection complete")]
     assert task.status == "completed"
-    assert task.review_skipped is True
+    assert task.review_skipped is False
     assert runner.agent.session_id == "task-session"
     assert runner.state.agent_session_id == "task-session"
 

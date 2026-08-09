@@ -397,10 +397,9 @@ def test_file_validator_timeout_kills_child_tree_and_preserves_partial_output(tm
         "time.sleep(30)\n",
         encoding="utf-8",
     )
-    passed, output = run_file_validator(
-        validator, tmp_path, state_file, 1, [], [state_file]
-    )
-    assert passed is False
+    with pytest.raises(RunnerError) as exc_info:
+        run_file_validator(validator, tmp_path, state_file, 1, [], [state_file])
+    output = str(exc_info.value)
     assert "validator timeout after 1 seconds" in output
     assert "validator-started" in output
     assert state_file.read_text() == "{}"
