@@ -24,3 +24,5 @@ Final AI Validator 固定使用 fresh independent session 並看完整 Goal。Fi
 
 ## Rule injection
 Project policy 的 `instructions.always` 會附到相關 model call；`instructions.project` 維護在 project agent rule files。相同行為不應再複製到每一份 Prompt template。
+
+Qwen 的 decision-only stage 在語意上仍是 no-tool：Prompt 明確禁止使用工具。為避免某些 OpenAI-compatible endpoint 拒絕空的 `tools` array，Runner 會保留剛好一個內建唯讀 compatibility tool（`read_file`）可被 discovery，其餘 write、shell、skill、agent、MCP 類與不必要工具仍排除；正常 decision output 不應呼叫這個 compatibility tool。

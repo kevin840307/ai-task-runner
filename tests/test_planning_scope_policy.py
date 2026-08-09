@@ -193,9 +193,13 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     assert "grep_search" not in excluded_tools(created[0])
     assert "write_file" in excluded_tools(created[0])
     assert "run_shell_command" in excluded_tools(created[0])
-    assert "read_file" in excluded_tools(created[1])
-    assert "read_file" in excluded_tools(created[2])
-    assert "read_file" in excluded_tools(created[3])
+    # Decision-only Qwen calls keep one built-in read-only compatibility tool
+    # available so strict OpenAI-compatible endpoints never receive tools=[].
+    assert "read_file" not in excluded_tools(created[1])
+    assert "read_file" not in excluded_tools(created[2])
+    assert "read_file" not in excluded_tools(created[3])
+    assert "write_file" in excluded_tools(created[1])
+    assert "run_shell_command" in excluded_tools(created[1])
     assert runner.state.tasks[0].title == "Refined 1"
 
 
@@ -549,7 +553,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
         for i, value in enumerate(created[1].extra_args[:-1])
         if value == "--exclude-tools"
     }
-    assert "read_file" in excluded
+    assert "read_file" not in excluded
     assert "grep_search" in excluded
     assert runner.state.tasks[0].title == "Refined 1"
 
@@ -607,7 +611,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
         for i, value in enumerate(minimal.extra_args[:-1])
         if value == "--exclude-tools"
     }
-    assert "read_file" in excluded
+    assert "read_file" not in excluded
     assert "grep_search" in excluded
 
 

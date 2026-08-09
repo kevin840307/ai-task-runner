@@ -172,29 +172,26 @@ def build_plan(
             inspection_error = error
 
     if tasks is None:
-        ui.set(
-            "AI 正在建立最小任務規劃",
-            "fresh no-tool fallback",
-        )
-
         def minimal_plan() -> list[Task]:
             planner = new_planner()
-            return ask_plan(
-                planner,
-                plan_finalize_prompt(
-                    state.goal,
-                    root,
-                    state,
-                    work,
-                    same_session=False,
-                    inspection_summary=inspection_summary,
-                ),
+            prompt = plan_finalize_prompt(
+                state.goal,
+                root,
+                state,
+                work,
+                same_session=False,
+                inspection_summary=inspection_summary,
             )
+            ui.set(
+                "AI 正在建立最小任務規劃",
+                "fresh no-tool fallback",
+            )
+            return ask_plan(planner, prompt)
 
         tasks = retry_model_call(
             minimal_plan,
             ui,
-            "AI 正在建立最小任務規劃",
+            "AI 正在準備最小任務規劃",
             str(inspection_error or "planning session unavailable")[-500:],
             args.retry_wait,
             args.retry_max_wait,
@@ -202,44 +199,43 @@ def build_plan(
 
     judge_issues: list[str] = []
     for rewrite_round in range(1, PLAN_JUDGE_MAX_REWRITES + 1):
-        ui.set(
-            "AI 正在重寫任務規劃",
-            f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
-        )
         try:
             refiner = new_planner()
-            tasks = ask_plan(
-                refiner,
-                plan_refine_prompt(
-                    state.goal,
-                    root,
-                    state,
-                    tasks,
-                    work,
-                    judge_issues,
-                ),
+            prompt = plan_refine_prompt(
+                state.goal,
+                root,
+                state,
+                tasks,
+                work,
+                judge_issues,
             )
+            ui.set(
+                "AI 正在重寫任務規劃",
+                f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+            )
+            tasks = ask_plan(refiner, prompt)
         except RunnerError as error:
             ui.set(
                 "AI 重寫規劃異常，保留目前有效規劃",
                 str(error)[-500:],
             )
 
-        ui.set(
-            "AI 正在審查任務規劃",
-            f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
-        )
         try:
             judge = new_planner()
+            prompt = plan_judge_prompt(
+                state.goal,
+                root,
+                state,
+                tasks,
+                work,
+            )
+            ui.set(
+                "AI 正在審查任務規劃",
+                f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+            )
             judgment_text, protected_changed, judge_changed = readonly_ask(
                 judge,
-                plan_judge_prompt(
-                    state.goal,
-                    root,
-                    state,
-                    tasks,
-                    work,
-                ),
+                prompt,
                 root,
                 work,
                 protected,

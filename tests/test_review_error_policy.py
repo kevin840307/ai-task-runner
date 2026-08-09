@@ -213,9 +213,14 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
     assert calls[0][2] is True
     assert calls[1][2] is False
     assert "Finalize the current review now" in calls[1][1]
-    for tool in ("read_file", "list_directory", "grep_search", "write_file", "run_shell_command"):
-        index = agents[1].extra_args.index(tool)
-        assert agents[1].extra_args[index - 1] == "--exclude-tools"
+    excluded = {
+        agents[1].extra_args[index + 1]
+        for index, value in enumerate(agents[1].extra_args[:-1])
+        if value == "--exclude-tools"
+    }
+    assert "read_file" not in excluded
+    for tool in ("list_directory", "grep_search", "write_file", "run_shell_command"):
+        assert tool in excluded
 
 
 def test_review_finalize_error_still_skips_to_final_validator(tmp_path, monkeypatch):

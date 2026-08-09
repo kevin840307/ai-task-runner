@@ -880,10 +880,11 @@ def test_qwen_planning_args_preserve_yolo():
 
     expected = [*args, "--safe-mode"]
     for tool_name in agent_args.QWEN_PLANNING_EXCLUDED_TOOLS:
-        expected.extend(["--exclude-tools", tool_name])
+        if tool_name != agent_args.QWEN_NO_TOOL_COMPAT_TOOL:
+            expected.extend(["--exclude-tools", tool_name])
     assert agent_args.planning_agent_args("qwen", args) == expected
     planning_args = agent_args.planning_agent_args("qwen", [])
-    assert "read_file" in planning_args
+    assert "read_file" not in planning_args
     assert "grep_search" in planning_args
     assert "write_file" in planning_args
     assert "run_shell_command" in planning_args
@@ -905,6 +906,27 @@ def test_qwen_planning_args_preserve_yolo():
     assert "run_shell_command" in excluded
     assert agent_args.planning_agent_args("opencode", args) == args
 
+
+
+def test_qwen_no_tool_args_keep_one_read_only_compatibility_tool():
+    import runner.agent_args as agent_args
+
+    args = agent_args.no_tool_agent_args("qwen", [])
+    excluded = {
+        args[index + 1]
+        for index, value in enumerate(args[:-1])
+        if value == "--exclude-tools"
+    }
+
+    assert "--safe-mode" in args
+    assert agent_args.QWEN_NO_TOOL_COMPAT_TOOL == "read_file"
+    assert "read_file" not in excluded
+    assert "write_file" in excluded
+    assert "edit" in excluded
+    assert "run_shell_command" in excluded
+    assert "skill" in excluded
+    assert "agent" in excluded
+    assert agent_args.no_tool_agent_args("opencode", ["--x"]) == ["--x"]
 
 def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
     import runner.agent_args as agent_args

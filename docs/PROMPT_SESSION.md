@@ -24,3 +24,5 @@ Final AI Validator always uses a fresh independent session and sees the complete
 
 ## Rule injection
 `instructions.always` from project policy is appended to every relevant model call. `instructions.project` is maintained in generated project agent-rule files. Same behavior should not be duplicated in individual prompt templates.
+
+Decision-only Qwen stages remain logically no-tool: the prompt forbids tool use. For OpenAI-compatible endpoints that reject an empty `tools` array, Runner leaves exactly one built-in read-only compatibility tool (`read_file`) discoverable while excluding mutating, shell, skill, agent, MCP-style, and other unnecessary tools. Normal decision output must not use the compatibility tool.

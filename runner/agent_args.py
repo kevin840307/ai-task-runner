@@ -80,6 +80,8 @@ QWEN_COMPUTER_USE_TOOLS = (
     "zoom",
 )
 
+QWEN_NO_TOOL_COMPAT_TOOL = "read_file"
+
 QWEN_PLANNING_PROJECT_READ_TOOLS = (
     "read_file",
     "read_many_files",
@@ -146,7 +148,11 @@ def planning_agent_args(
         ensure_qwen_safe_mode(result)
         excluded = tuple(
             tool for tool in QWEN_PLANNING_EXCLUDED_TOOLS
-            if not allow_project_read or tool not in QWEN_PLANNING_PROJECT_READ_TOOLS
+            if (
+                tool not in QWEN_PLANNING_PROJECT_READ_TOOLS
+                if allow_project_read
+                else tool != QWEN_NO_TOOL_COMPAT_TOOL
+            )
         )
         exclude_qwen_tools(result, excluded)
     return result
@@ -161,7 +167,7 @@ def review_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
 
 
 def no_tool_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
-    """Reuse the strict read-disabled policy for decision-only follow-up calls."""
+    """Keep decision calls logically tool-free while retaining one read-only API tool."""
     return planning_agent_args(backend, extra_args, allow_project_read=False)
 
 
