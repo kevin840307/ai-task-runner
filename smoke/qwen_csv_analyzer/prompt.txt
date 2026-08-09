@@ -6,5 +6,3 @@ python analyze_sales.py --input input/sales.csv --json report.json --markdown re
 It should produce report.json with total_revenue, order_count, units_by_product, revenue_by_region, top_product_by_revenue, and date_range. Money values should be rounded to 2 decimals.
 
 It should also produce report.md with a title, summary bullets, a revenue-by-region table, and a top-product section. README.md should document Usage, Outputs, and Assumptions.
-
-Do not ask questions. Implement and verify the tool, outputs, and documentation.

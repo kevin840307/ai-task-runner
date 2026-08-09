@@ -10,5 +10,3 @@ Output JSON requirements:
 - by_region keys are alphabetically sorted; each value has order_count and total_amount.
 - by_status keys are alphabetically sorted; each value is an integer count.
 - Reject a negative amount or malformed row with a non-zero exit code.
-
-Do not ask questions. Implement and run the CLI against the provided CSV.

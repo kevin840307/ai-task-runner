@@ -3,11 +3,10 @@ from types import SimpleNamespace
 import json
 
 from runner.models import RunState, Task
-from runner.prompting import plan_finalize_prompt, plan_judge_prompt, plan_prompt, plan_refine_prompt
+from runner.prompting import plan_finalize_prompt, plan_judge_prompt, plan_understand_prompt, plan_refine_prompt
 
 
-def judge_payload(task_count: int, *, rejected_index: int | None = None, issue: str = "Task needs revision"):
-    del task_count
+def judge_payload(*, rejected_index: int | None = None, issue: str = "Task needs revision"):
     return {
         "accepted": rejected_index is None,
         "issues": [] if rejected_index is None else [f"Task {rejected_index}: {issue}"],
@@ -25,7 +24,7 @@ def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
         acceptance_criteria=["result exists"],
     )])
 
-    plan = plan_prompt("g", tmp_path, state, [])
+    plan = plan_understand_prompt("g", tmp_path, state, [])
     from runner.prompting import execution_prompt
     execute = execution_prompt(state, tmp_path, [])
 
@@ -135,7 +134,7 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
             agent.session_id = "planning-session"
             return "Relevant project evidence gathered", [], []
         if "plan quality judge" in prompt:
-            payload = judge_payload(6)
+            payload = judge_payload()
         elif "Create the implementation plan now" in prompt:
             payload = task_payload("Draft")
         else:
@@ -241,9 +240,9 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
         if "plan quality judge" in prompt:
             judge_calls += 1
             payload = (
-                judge_payload(6, rejected_index=1, issue="Split the compound deliverable")
+                judge_payload(rejected_index=1, issue="Split the compound deliverable")
                 if judge_calls == 1
-                else judge_payload(6)
+                else judge_payload()
             )
         elif "Plan judge issues" in prompt:
             payload = task_payload("Corrected")
@@ -299,14 +298,13 @@ def test_parse_plan_judgment_contract():
     from runner.errors import RunnerError
     from runner.support import parse_plan_judgment
 
-    assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}), 2)["accepted"] is True
+    assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}))["accepted"] is True
     rejected = parse_plan_judgment(
-        json.dumps(judge_payload(2, rejected_index=2, issue="Split task 2")),
-        2,
+        json.dumps(judge_payload(rejected_index=2, issue="Split task 2"))
     )
     assert rejected["issues"] == ["Task 2: Split task 2"]
     with pytest.raises(RunnerError, match="accepted must be boolean"):
-        parse_plan_judgment(json.dumps({"issues": []}), 2)
+        parse_plan_judgment(json.dumps({"issues": []}))
 
 
 def test_plan_judge_gate_rejects_task_and_plan_failures():
@@ -319,7 +317,7 @@ def test_plan_judge_gate_rejects_task_and_plan_failures():
             "A prerequisite appears after dependent work",
         ],
     }
-    result = parse_plan_judgment(json.dumps(payload), 8)
+    result = parse_plan_judgment(json.dumps(payload))
     assert result["accepted"] is False
     assert result["issues"] == payload["issues"]
 
@@ -355,7 +353,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
             agent.session_id = "planning-session"
             return "Relevant project evidence gathered", [], []
         payload = (
-            judge_payload(6, rejected_index=1, issue="Plan is still not bounded")
+            judge_payload(rejected_index=1, issue="Plan is still not bounded")
             if "plan quality judge" in prompt
             else tasks
         )
@@ -536,7 +534,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
             return json.dumps(_six_tasks("Finalized")), [], []
         if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload(6)), [], []
+        return json.dumps(judge_payload()), [], []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
@@ -591,7 +589,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
             return json.dumps(_six_tasks("Minimal")), [], []
         if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload(6)), [], []
+        return json.dumps(judge_payload()), [], []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
@@ -637,7 +635,7 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
             return json.dumps(_six_tasks("Minimal")), [], []
         if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload(6)), [], []
+        return json.dumps(judge_payload()), [], []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
@@ -669,7 +667,7 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
             return json.dumps(_six_tasks("Draft")), [], []
         if "Continue the existing planning work" in prompt:
             raise RunnerError("refiner unavailable")
-        return json.dumps(judge_payload(6)), [], []
+        return json.dumps(judge_payload()), [], []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
@@ -763,7 +761,7 @@ def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path
             return json.dumps(_six_tasks("Draft")), [], []
         if "plan quality judge" in prompt:
             judge_calls += 1
-            return json.dumps(judge_payload(6, rejected_index=1)) if judge_calls == 1 else json.dumps(judge_payload(6)), [], []
+            return json.dumps(judge_payload(rejected_index=1)) if judge_calls == 1 else json.dumps(judge_payload()), [], []
         if "Continue the existing planning work" in prompt:
             rewrite_calls += 1
             if rewrite_calls == 1:

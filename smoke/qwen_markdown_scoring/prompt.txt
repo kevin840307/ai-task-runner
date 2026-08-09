@@ -14,5 +14,3 @@ Requirements:
 - Include at least three concrete selection-guide bullets.
 - Do not add extra H1 or H2 sections.
 - Keep the document concise.
-
-Do not ask questions; create and verify the Markdown file.

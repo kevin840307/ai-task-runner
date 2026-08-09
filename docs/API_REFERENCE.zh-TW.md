@@ -5,6 +5,8 @@
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
 
+舊版 compatibility 名稱可能仍為既有 caller 保留，但不屬於 canonical API，新 integration 不應使用。純 internal、已無 production caller 的 compatibility shim 會直接移除。
+
 ## RunRequest 欄位
 `goal`、`goal_file`、`project_root`、`script`、`validator`、`validator_prompt`、`backend`、`command`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
 

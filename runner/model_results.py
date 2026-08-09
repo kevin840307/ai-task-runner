@@ -138,9 +138,7 @@ def parse_tasks(
     return _parse_result(text, parse)
 
 
-def parse_plan_judgment(text: str, task_count: int) -> dict[str, Any]:
-    del task_count  # Kept for public-call compatibility.
-
+def parse_plan_judgment(text: str) -> dict[str, Any]:
     def parse(value: Any) -> dict[str, Any]:
         value = _require_object(value)
         if not isinstance(value.get("accepted"), bool):

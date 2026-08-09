@@ -71,3 +71,6 @@ External commands such as exe, bat, jar, or Java tools should use `docs/validato
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
+
+## Compatibility cleanup
+Internal helpers should use one canonical name/signature. Dead internal aliases and unused compatibility parameters are removed instead of being carried indefinitely. Compatibility aliases that may be used by external Python callers remain until an intentional public breaking change; new code should use the canonical `RunRequest`, `AgentClient`, `RunState`, and `AgentBackend` names.

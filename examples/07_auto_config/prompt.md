@@ -35,4 +35,4 @@ For every ans/{workflow}/{target}/{env}, the matching command must generate exac
 
 Keep rander.py under 500 lines and do not depend on other local Python files.
 
-Inspect the project, implement the smallest maintainable solution, run validation, and fix failures. Do not add one-off logic only to pass the samples.
+Do not add one-off logic only to pass the samples.

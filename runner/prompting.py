@@ -96,25 +96,6 @@ def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
     ][-MAX_PROMPT_HISTORY_ITEMS:]
 
 
-def plan_prompt(
-    goal: str,
-    root: Path,
-    state: RunState,
-    protected: Sequence[Path],
-    work: Path | None = None,
-    planning_feedback: str = "",
-) -> str:
-    """Backward-compatible alias for the dedicated planning inspection turn."""
-    return plan_understand_prompt(
-        goal,
-        root,
-        state,
-        protected,
-        work,
-        planning_feedback,
-    )
-
-
 def plan_understand_prompt(
     goal: str,
     root: Path,

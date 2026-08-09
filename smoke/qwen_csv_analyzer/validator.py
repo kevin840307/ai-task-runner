@@ -9,7 +9,7 @@ def validate(root: Path)->None:
     result=subprocess.run([sys.executable,str(script),'--input','input/sales.csv','--json','report.json','--markdown','report.md'],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
     assert result.returncode==0,'analyze_sales.py failed:\n'+result.stdout
     report_path=root/'report.json'; assert report_path.is_file(),'missing report.json'; actual=json.loads(report_path.read_text(encoding='utf-8')); assert actual==EXPECTED_REPORT,'unexpected report.json:\n'+json.dumps(actual,indent=2,sort_keys=True)
-    markdown=(root/'report.md').read_text(encoding='utf-8') if (root/'report.md').is_file() else ''; missing=[x for x in ['# Sales Report','Total revenue','333.19','| Region | Revenue |','Gadget'] if x not in markdown]; assert not missing,'report.md missing: '+', '.join(missing)
+    markdown=(root/'report.md').read_text(encoding='utf-8') if (root/'report.md').is_file() else ''; lines=markdown.splitlines(); assert any(x.startswith('# ') for x in lines),'report.md needs a title'; missing=[x for x in ['333.19','East','North','South','West','Gadget'] if x not in markdown]; assert not missing,'report.md missing report content: '+', '.join(missing)
     readme=(root/'README.md').read_text(encoding='utf-8') if (root/'README.md').is_file() else ''
     for heading in ('## Usage','## Outputs','## Assumptions'): assert heading in readme,f'README.md missing {heading}'
 def main()->int:

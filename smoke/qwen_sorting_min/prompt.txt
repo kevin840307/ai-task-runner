@@ -1,4 +1,4 @@
-Use the write_file tool exactly once to create sorting_algorithms.py in this project root.
+Create sorting_algorithms.py in this project root.
 
 The module must implement:
 - bubble_sort(values)

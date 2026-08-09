@@ -7,5 +7,3 @@ Required behavior:
 - Return `untitled` when no usable characters remain.
 - Preserve the public function name and avoid third-party runtime dependencies.
 - Update README.md with three examples.
-
-Do not ask questions. Inspect, implement, run the tests, and summarize the result.

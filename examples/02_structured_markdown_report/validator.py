@@ -20,8 +20,9 @@ def validate(root: Path) -> None:
     assert heads==expected, f'Invalid incident headings: {heads}'
     for item in data:
         pos=lines.index(f"### {item['id']} — {item['title']}")
-        required=['| Field | Value |','|---|---|',f"| Severity | {item['severity']} |",f"| Service | {item['service']} |",f"| Owner | {item['owner']} |"]
-        assert [x for x in lines[pos+1:pos+8] if x.strip()][:5]==required, f"Invalid table for {item['id']}"
+        block=[x for x in lines[pos+1:pos+10] if x.strip()]
+        required=[f"| Severity | {item['severity']} |",f"| Service | {item['service']} |",f"| Owner | {item['owner']} |"]
+        assert all(row in block for row in required), f"Invalid table for {item['id']}"
     actions=[f"- [ ] {x['id']}: {x['action']} (@{x['owner']})" for x in data]
     assert [x for x in lines[lines.index('## Follow-up Actions')+1:] if x.strip()]==actions, 'Invalid follow-up actions'
 

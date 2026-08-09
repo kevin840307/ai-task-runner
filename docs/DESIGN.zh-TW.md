@@ -54,3 +54,6 @@ Policy 只從 project root 讀取。Protected directory 自動涵蓋 subtree。`
 
 ## Debug / History
 Current/last files 用於立即診斷；bounded pair history 用於完整回溯最近 call 而不讓磁碟無限成長。Terminal status/detail 只做單行化顯示；raw event/debug 仍保留真正換行與完整診斷。
+
+## 相容性清理
+Internal helper 維持單一 canonical 名稱與 signature；已無用途的內部 alias、無效 compatibility parameter 應直接移除，不永久累積。可能被外部 Python caller 使用的 compatibility alias，除非明確做 public breaking change，否則先保留；新程式一律使用 `RunRequest`、`AgentClient`、`RunState`、`AgentBackend` canonical 名稱。

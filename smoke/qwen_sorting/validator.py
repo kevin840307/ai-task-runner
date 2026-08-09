@@ -7,7 +7,10 @@ REQUIRED_FUNCTIONS=['bubble_sort','insertion_sort','merge_sort','quick_sort']
 def load_module(path: Path):
     spec=importlib.util.spec_from_file_location('sorting_algorithms',path); assert spec and spec.loader,'could not load sorting_algorithms.py'; module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module); return module
 def assert_no_builtin_sorting(source: str)->None:
-    for node in ast.walk(ast.parse(source)):
+    tree=ast.parse(source)
+    imports={name.split('.',1)[0] for node in ast.walk(tree) if isinstance(node,(ast.Import,ast.ImportFrom)) for name in ([a.name for a in node.names] if isinstance(node,ast.Import) else ([node.module] if node.module else []))}
+    third_party=sorted(name for name in imports if name not in sys.stdlib_module_names); assert not third_party,'standard-library only: '+', '.join(third_party)
+    for node in ast.walk(tree):
         if isinstance(node,ast.Call) and ((isinstance(node.func,ast.Name) and node.func.id=='sorted') or (isinstance(node.func,ast.Attribute) and node.func.attr=='sort')): raise AssertionError('built-in sorting is not allowed')
 def cases():
     fixed=[[],[1],[2,1],[3,3,1,2,1],[-5,0,4,-1,4,2],[9,8,7,6,5,4,3,2,1]]; rng=random.Random(12345); return fixed+[[rng.randint(-20,20) for _ in range(size)] for size in range(2,20)]

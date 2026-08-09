@@ -12,5 +12,3 @@ python todo_cli.py --db todos.json list --format json
 python todo_cli.py --db todos.json done 1
 python todo_cli.py --db todos.json delete 2
 python todo_cli.py --db todos.json export --output summary.md
-
-Do not ask questions. Implement and verify the CLI, persistence, export, and documentation.

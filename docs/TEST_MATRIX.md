@@ -19,3 +19,6 @@ Every `examples/*/project` and `smoke/*/project` root contains `.ai-task-runner.
 
 ## Validator contract
 Example/smoke validators use the local `validator_interface.py` reporting contract. Validators primarily test observable deliverables. Only tests whose purpose is Runner planning may assert TODO/state structure.
+
+## Prompt/validator alignment
+Smoke/example prompts contain task-specific requirements only; generic Runner behavior such as autonomous inspection, retry, and verification is not repeated. Deterministic validators must not enforce hidden formatting or planning strategy. Every hard validator assertion should map to an explicit task requirement or an immutable fixture invariant; qualitative goals such as concision should normally be warnings unless the prompt gives a numeric limit.

@@ -230,7 +230,6 @@ def build_plan(
                 debug_dir,
                 parse_plan_judgment,
                 judgment_text,
-                len(tasks),
             )
         except RunnerError as error:
             ui.set(

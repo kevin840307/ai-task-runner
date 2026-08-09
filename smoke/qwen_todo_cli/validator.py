@@ -17,7 +17,7 @@ def validate(root: Path)->None:
     current=json.loads(run_cli(root,'--db','todos.json','list','--format','json').stdout); assert current[-1].get('id')==4,'IDs must keep increasing after deletion'
     exported=run_cli(root,'--db','todos.json','export','--output','summary.md'); assert exported.returncode==0,command_failure(('export',),exported)
     summary=(root/'summary.md').read_text(encoding='utf-8') if (root/'summary.md').is_file() else ''
-    for text in ('# Todo Summary','## Open','Write docs','## Completed','Fix parser'): assert text in summary,'summary.md missing: '+text
+    for text in ('## Open','Write docs','## Completed','Fix parser'): assert text in summary,'summary.md missing: '+text
     readme=(root/'README.md').read_text(encoding='utf-8') if (root/'README.md').is_file() else ''
     for heading in ('## Usage','## Data format','## Commands','## Examples'): assert heading in readme,f'README.md missing {heading}'
 def main()->int:

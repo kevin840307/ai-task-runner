@@ -31,7 +31,7 @@ from runner.models import RunState, State, Task
 from runner.prompting import (
     ai_validator_prompt,
     execution_prompt,
-    plan_prompt,
+    plan_understand_prompt as plan_prompt,
     review_prompt,
 )
 from runner.support import parse_tasks

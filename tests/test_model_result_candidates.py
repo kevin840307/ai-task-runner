@@ -50,6 +50,6 @@ def test_valid_json_with_invalid_task_schema_stays_invalid():
 
 def test_judge_review_and_validator_share_candidate_selection():
     prefix = json.dumps({"status": "done"}) + "\n"
-    assert parse_plan_judgment(prefix + json.dumps({"accepted": True, "issues": []}), 6)["accepted"] is True
+    assert parse_plan_judgment(prefix + json.dumps({"accepted": True, "issues": []}))["accepted"] is True
     assert parse_review(prefix + json.dumps({"completed": True, "reason": "ok", "missing_items": []}))["completed"] is True
     assert parse_ai_validation(prefix + json.dumps({"passed": True, "reason": "ok", "missing_items": [], "checks_run": [], "suggested_checks": []}))["passed"] is True

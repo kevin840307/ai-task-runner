@@ -141,11 +141,6 @@ def format_ai_validator_runs(
     return "\n".join(lines)
 
 
-def format_ai_validator_output(result: Mapping[str, Any]) -> str:
-    """Backward-compatible single-result formatter."""
-    return format_ai_validator_runs([result], 1, 1)
-
-
 def clean_string_items(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []

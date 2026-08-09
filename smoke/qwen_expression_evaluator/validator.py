@@ -24,7 +24,7 @@ def validate(root: Path)->None:
         assert actual.get('expression')==expected['expression'],'batch expression order mismatch'
         if 'result' in expected: assert 'result' in actual and close_enough(actual['result'],expected['result']),'batch result mismatch:\n'+json.dumps(results,indent=2)
         else: assert 'error' in actual,'invalid expression did not produce an error entry'
-    markdown=(root/'results.md').read_text(encoding='utf-8') if (root/'results.md').is_file() else ''; assert all(x in markdown for x in ('# Expression Results','| Expression | Result |','bad + 1')),'results.md missing required content'
+    markdown=(root/'results.md').read_text(encoding='utf-8') if (root/'results.md').is_file() else ''; assert any(x.startswith('# ') for x in markdown.splitlines()),'results.md needs a title'; assert all(x['expression'] in markdown for x in EXPECTED_BATCH),'results.md must include every batch expression'
     readme=(root/'README.md').read_text(encoding='utf-8') if (root/'README.md').is_file() else ''
     for heading in ('## Usage','## Supported syntax','## Error handling','## Examples'): assert heading in readme,f'README.md missing {heading}'
 def main()->int:

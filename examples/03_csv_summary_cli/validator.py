@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse, json, subprocess, sys, tempfile
+import argparse, ast, json, subprocess, sys, tempfile
 from pathlib import Path
 from validator_interface import ValidatorReport, run_validation
 
@@ -12,14 +12,17 @@ EXPECTED={
 
 def validate(root: Path) -> None:
     script=root/'summarize_orders.py'; assert script.is_file(), 'Missing summarize_orders.py'
+    tree=ast.parse(script.read_text(encoding='utf-8'))
+    imports={name.split('.',1)[0] for node in ast.walk(tree) if isinstance(node,(ast.Import,ast.ImportFrom)) for name in ([a.name for a in node.names] if isinstance(node,ast.Import) else ([node.module] if node.module else []))}
+    third_party=sorted(name for name in imports if name not in sys.stdlib_module_names)
+    assert not third_party, 'summarize_orders.py must use only the Python standard library: '+', '.join(third_party)
     out=root/'output'/'summary.json'; out.parent.mkdir(exist_ok=True)
     r=subprocess.run([sys.executable,str(script),'--input','input/orders.csv','--output','output/summary.json'],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
     assert r.returncode==0, 'summarize_orders.py failed:\n'+r.stdout
     assert out.is_file(), 'Missing output/summary.json'
     raw=out.read_text(encoding='utf-8'); data=json.loads(raw)
-    assert raw.endswith('\n'), 'summary.json must end with a newline'
-    assert data==EXPECTED, 'Unexpected summary:\n'+raw
-    assert list(data)==['order_count','total_amount','by_region','by_status'], 'Top-level key order is wrong'
+    expected_raw=json.dumps(EXPECTED,ensure_ascii=False,indent=2)+'\n'
+    assert raw==expected_raw, 'summary.json must use the required values, key order, indent=2, and final newline:\n'+raw
     with tempfile.TemporaryDirectory() as d:
         bad=Path(d)/'bad.csv'; bad.write_text('order_id,region,status,amount\nX,North,paid,-1\n',encoding='utf-8'); badout=Path(d)/'out.json'
         rr=subprocess.run([sys.executable,str(script),'--input',str(bad),'--output',str(badout)],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)

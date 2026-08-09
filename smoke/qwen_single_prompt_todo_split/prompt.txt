@@ -4,5 +4,3 @@ This should be planned as separate ordered tasks because the deliverables are in
 1. Create VERSION containing exactly the version string.
 2. Create CHANGELOG.md with exactly these sections in order: # Changelog, ## 2.1.0 - 2026-07-26, ### Added, ### Fixed. Include one bullet per entry from the JSON.
 3. Create release_summary.json with keys name, version, added_count, fixed_count, and release_date.
-
-Do not ask questions. Implement and verify each deliverable.

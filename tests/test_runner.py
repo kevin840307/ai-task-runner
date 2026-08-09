@@ -576,19 +576,19 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
 def test_ai_validator_failure_output_becomes_repair_findings():
     import runner.validation as validation
 
-    output = validation.format_ai_validator_output({
+    output = validation.format_ai_validator_runs([{
         "passed": False,
         "reason": "not ready",
         "missing_items": ["Create app.py", "Document usage"],
         "checks_run": ["inspected files"],
         "suggested_checks": ["python app.py --help"],
-    })
+    }], 1, 1)
 
     assert "AI_VALIDATION_FAILED" in output
-    assert "[E001] Create app.py" in output
-    assert "[E002] Document usage" in output
-    assert "checks_run:" in output
-    assert "suggested_checks:" in output
+    assert "[E001] run 1: Create app.py" in output
+    assert "[E002] run 1: Document usage" in output
+    assert '"checks_run":' in output
+    assert '"suggested_checks":' in output
 
 
 def test_no_progress_adds_different_strategy_instruction(tmp_path):
@@ -794,7 +794,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     state.validator_output = "unexpected output:\nold value"
     protected = [tmp_path / ".ai-task-runner" / "state.json"]
 
-    plan = prompting.plan_prompt(state.goal, tmp_path, state, protected)
+    plan = prompting.plan_understand_prompt(state.goal, tmp_path, state, protected)
     execute = prompting.execution_prompt(state, tmp_path, protected)
     review = prompting.review_prompt(state, tmp_path, protected, "done")
 
@@ -813,7 +813,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     assert "fix the program behavior that produces it" in execute
 
 
-def test_plan_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
+def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
     import runner.prompting as prompting
     from runner.models import State
 
@@ -822,7 +822,7 @@ def test_plan_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
     (tmp_path / "src" / "app.py").write_text("print('hi')", encoding="utf-8")
     state = State("run", "goal", str(tmp_path))
 
-    prompt = prompting.plan_prompt(
+    prompt = prompting.plan_understand_prompt(
         state.goal,
         tmp_path,
         state,

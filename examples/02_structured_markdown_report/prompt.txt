@@ -8,4 +8,4 @@ The Markdown format must be exactly:
 5. Each incident section contains a two-column table with rows Severity, Service, Owner.
 6. `## Follow-up Actions` with one unchecked task per incident formatted `- [ ] <id>: <action> (@<owner>)`.
 
-Do not add other H1/H2 sections. Preserve source values exactly. Do not ask questions; generate and check the file.
+Do not add other H1/H2 sections. Preserve source values exactly.

@@ -1,19 +1,18 @@
 - prompt: >-
     Add a VERSION file and update app.py so `python app.py --version` prints exactly
-    the version from release_notes.json. Keep normal execution working. Add automated tests.
-    Do not ask questions; implement and verify.
+    the version from release_notes.json. Keep normal execution working.
   validator: examples/05_yaml_release_pipeline/validators/version_validator.py
 
 - prompt: >-
     Generate CHANGELOG.md from release_notes.json using headings `# Changelog`,
     `## 1.4.0 - 2026-07-24`, `### Added`, and `### Fixed`, with one bullet per entry.
-    Do not add unrelated sections. Do not ask questions; generate and verify.
+    Do not add unrelated sections.
   validator: examples/05_yaml_release_pipeline/validators/changelog_validator.py
 
 - prompt: >-
-    Update README.md with concise installation, normal usage, `--version`, and test instructions.
-    Ensure all documented commands match the current project. Do not ask questions.
+    Update README.md with concise installation, normal usage, and `--version` instructions.
+    Ensure all documented commands match the current project.
   validator: ai
   validator_prompt: >-
     Confirm README instructions are executable and consistent with app.py, VERSION,
-    CHANGELOG.md, release_notes.json, and the available automated tests.
+    CHANGELOG.md and release_notes.json.
