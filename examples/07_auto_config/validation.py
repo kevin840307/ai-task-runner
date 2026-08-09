@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -97,7 +98,7 @@ def main() -> int:
                 report_lines(check.__name__, problem),
             )
         except Exception as error:
-            problem = f"crashed: {type(error).__name__}: {error}"
+            problem = f"crashed: {type(error).__name__}: {error}\n" + traceback.format_exc(limit=8)
             report.error(
                 f"E{index:03d}",
                 f"{check.__name__} crashed",

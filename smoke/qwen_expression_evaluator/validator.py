@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, ast, importlib.util, json, subprocess, sys, traceback
 from pathlib import Path
-from validator_interface import ValidatorReport, run_validation
+from validator_interface import ValidatorReport, parse_json, run_validation
 EXPECTED_BATCH=[{'expression':'1 + 2 * 3','result':7.0},{'expression':'(10 - 4) / 3','result':2.0},{'expression':'-2.5 * (4 + 1)','result':-12.5},{'expression':'8 / (2 + 2)','result':2.0},{'expression':'bad + 1','error':'invalid'}]
 def close_enough(actual,expected): return abs(float(actual)-expected)<1e-9
 def load_module(script: Path):
@@ -19,10 +19,10 @@ def validate(root: Path)->None:
         assert close_enough(actual,expected),f'evaluate({expression!r}) returned {actual!r}, expected {expected!r}'
     cli=subprocess.run([sys.executable,str(script),'1 + 2 * 3'],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30); assert cli.returncode==0 and cli.stdout.strip() in {'7','7.0'},'single-expression CLI failed:\n'+cli.stdout
     batch=subprocess.run([sys.executable,str(script),'--batch','input/expressions.txt','--json','results.json','--markdown','results.md'],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30); assert batch.returncode==0,'batch CLI failed:\n'+batch.stdout
-    path=root/'results.json'; assert path.is_file(),'missing results.json'; results=json.loads(path.read_text(encoding='utf-8')); assert len(results)==len(EXPECTED_BATCH),f'expected {len(EXPECTED_BATCH)} batch rows, got {len(results)}'
+    path=root/'results.json'; assert path.is_file(),'missing results.json'; results=parse_json(path.read_text(encoding='utf-8'),'results.json'); assert len(results)==len(EXPECTED_BATCH),f'expected {len(EXPECTED_BATCH)} batch rows, got {len(results)}'
     for actual,expected in zip(results,EXPECTED_BATCH):
-        assert actual.get('expression')==expected['expression'],'batch expression order mismatch'
-        if 'result' in expected: assert 'result' in actual and close_enough(actual['result'],expected['result']),'batch result mismatch:\n'+json.dumps(results,indent=2)
+        assert actual.get('expression')==expected['expression'],f"batch expression order mismatch: expected={expected['expression']!r}, actual={actual.get('expression')!r}"
+        if 'result' in expected: assert 'result' in actual and close_enough(actual['result'],expected['result']),f"batch result mismatch for {expected['expression']!r}: expected={expected['result']!r}, actual={actual.get('result')!r}"
         else: assert 'error' in actual,'invalid expression did not produce an error entry'
     markdown=(root/'results.md').read_text(encoding='utf-8') if (root/'results.md').is_file() else ''; assert any(x.startswith('# ') for x in markdown.splitlines()),'results.md needs a title'; assert all(x['expression'] in markdown for x in EXPECTED_BATCH),'results.md must include every batch expression'
     readme=(root/'README.md').read_text(encoding='utf-8') if (root/'README.md').is_file() else ''

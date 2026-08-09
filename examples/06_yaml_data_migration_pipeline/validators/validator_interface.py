@@ -13,6 +13,8 @@ Runner contract stays unchanged:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+import traceback
 from pathlib import Path
 from typing import Iterable
 
@@ -158,6 +160,20 @@ class ValidatorReport:
             lines.append("")
         return lines
 
+def parse_json(text: str, label: str):
+    """Parse model/project JSON and turn malformed output into actionable validation feedback."""
+    if not text.strip():
+        raise AssertionError(f"{label} is empty; expected valid JSON")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as error:
+        preview=text[:500].replace("\n", "\\n")
+        raise AssertionError(
+            f"{label} is not valid JSON at line {error.lineno}, column {error.colno}: {error.msg}. "
+            f"Output preview: {preview!r}"
+        ) from error
+
+
 def run_validation(report: ValidatorReport, check) -> int:
     """Run one validator check function and convert failures to the standard report."""
     try:
@@ -168,8 +184,8 @@ def run_validation(report: ValidatorReport, check) -> int:
         report.error(
             "E999",
             "Validator crashed",
-            [f"{type(error).__name__}: {error}"],
-            fix="Fix the project or validator input that caused this unexpected validation error.",
+            [f"{type(error).__name__}: {error}", *traceback.format_exc(limit=8).splitlines()],
+            fix="Use the traceback to identify the failing validator step, then fix the project output or validator input that triggered it.",
         )
     return report.finish()
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, ast, json, subprocess, sys, tempfile
 from pathlib import Path
-from validator_interface import ValidatorReport, run_validation
+from validator_interface import ValidatorReport, parse_json, run_validation
 
 EXPECTED={
  'order_count':6,'total_amount':'400.00',
@@ -20,16 +20,16 @@ def validate(root: Path) -> None:
     r=subprocess.run([sys.executable,str(script),'--input','input/orders.csv','--output','output/summary.json'],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
     assert r.returncode==0, 'summarize_orders.py failed:\n'+r.stdout
     assert out.is_file(), 'Missing output/summary.json'
-    raw=out.read_text(encoding='utf-8'); data=json.loads(raw)
+    raw=out.read_text(encoding='utf-8'); data=parse_json(raw,'output/summary.json')
     expected_raw=json.dumps(EXPECTED,ensure_ascii=False,indent=2)+'\n'
     assert raw==expected_raw, 'summary.json must use the required values, key order, indent=2, and final newline:\n'+raw
     with tempfile.TemporaryDirectory() as d:
         bad=Path(d)/'bad.csv'; bad.write_text('order_id,region,status,amount\nX,North,paid,-1\n',encoding='utf-8'); badout=Path(d)/'out.json'
         rr=subprocess.run([sys.executable,str(script),'--input',str(bad),'--output',str(badout)],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
-        assert rr.returncode!=0, 'Negative amount was accepted'
+        assert rr.returncode!=0, 'Negative amount was accepted; command output='+repr(rr.stdout)
         malformed=Path(d)/'malformed.csv'; malformed.write_text('order_id,region,status,amount\nX,North,paid\n',encoding='utf-8'); malformed_out=Path(d)/'malformed.json'
         mr=subprocess.run([sys.executable,str(script),'--input',str(malformed),'--output',str(malformed_out)],cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
-        assert mr.returncode!=0, 'Malformed row was accepted'
+        assert mr.returncode!=0, 'Malformed row was accepted; command output='+repr(mr.stdout)
 
 
 def main()->int:

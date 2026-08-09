@@ -13,6 +13,7 @@ Runner contract stays unchanged:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 from typing import Iterable
 
@@ -173,3 +174,18 @@ class ValidatorReport:
                 lines.append(f"Full report: {self.display_path(finding.report)}")
             lines.append("")
         return lines
+
+
+def parse_json(text: str, label: str):
+    """Parse project JSON with actionable validation feedback."""
+    if not text.strip():
+        raise AssertionError(f"{label} is empty; expected valid JSON")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as error:
+        preview=text[:500].replace("\n", "\\n")
+        raise AssertionError(
+            f"{label} is not valid JSON at line {error.lineno}, column {error.colno}: {error.msg}. "
+            f"Output preview: {preview!r}"
+        ) from error
+

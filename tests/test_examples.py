@@ -137,3 +137,18 @@ def test_all_smoke_and_example_validators_use_local_interface():
         assert "validator_interface import" in text, path
         assert "ValidatorReport" in text, path
         assert (path.parent / "validator_interface.py").is_file(), path
+
+
+def test_local_validator_interfaces_provide_actionable_json_diagnostics():
+    interfaces = sorted((ROOT / "examples").rglob("validator_interface.py")) + sorted((ROOT / "smoke").rglob("validator_interface.py"))
+    assert interfaces
+    for path in interfaces:
+        text = path.read_text(encoding="utf-8")
+        assert "def parse_json(" in text, path
+        assert "traceback.format_exc" in text, path
+
+
+def test_todo_cli_validator_checks_state_after_each_mutation():
+    text = (ROOT / "smoke" / "qwen_todo_cli" / "validator.py").read_text(encoding="utf-8")
+    assert "read_state(root,db,'after '+" in text
+    assert "CLI list and stored JSON differ" in text
