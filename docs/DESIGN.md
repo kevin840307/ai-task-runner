@@ -16,7 +16,7 @@ The Runner owns orchestration; project code and validators own application-speci
 2. Load/create Runner state.
 3. Build normalized protected roots.
 4. Planning Understand: fresh, bounded read-only inspection.
-5. Planning Finalize: same session, no tools, generate >=6 bounded implementation TODOs.
+5. Planning Finalize: reuse the exact Understand planner client/session and tool policy; the finalize prompt forbids further tool use and generates >=6 bounded implementation TODOs.
 6. If planning session/result fails, use a fresh no-tool minimal plan with goal, prior inspection summary, progress, and validator feedback.
 7. Optional Refiner/Judge: fresh no-tool checks; fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
 8. Execute one Current TODO. A fresh/rebuilt Executor sees Original Goal only as global context and the Current TODO as the only executable scope.
@@ -36,7 +36,7 @@ Original Goal may be supplied to a fresh/rebuilt Executor so global constraints 
 - Retry based on actual behavior/errors, never model size/name.
 - Preserve coherent file changes when a model crashes after making progress.
 - Use fresh sessions when the previous session is unavailable/expired/looping.
-- Use same-session no-tool finalize when evidence is already present and only a decision/result is needed.
+- In-run continuation is simple and global: keep the same `AgentClient` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries reuse the main Executor client until the Runner intentionally clears an invalid/stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
 - Avoid arbitrary short model timeouts; defaults favor long work, while idle-after-change provides bounded recovery.
 - `max_attempts=0` and `max_cycles=0` mean unbounded by count.
 

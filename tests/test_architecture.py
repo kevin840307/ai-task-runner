@@ -107,3 +107,16 @@ def test_root_python_files_stay_minimal():
         "ai_task_runner.py",
         "ai_task_runner_validator.py",
     }
+
+
+def test_in_run_resume_never_builds_a_new_client_from_an_existing_session():
+    root = Path(__file__).resolve().parents[1]
+    production = [
+        root / "runner" / "planning.py",
+        root / "runner" / "reviewing.py",
+        root / "runner" / "validation.py",
+    ]
+    source = "\n".join(path.read_text(encoding="utf-8") for path in production)
+    assert "session_id=reviewer.session_id" not in source
+    assert "session_id=draft_planner.session_id" not in source
+    assert "new_planner(session_id=" not in source

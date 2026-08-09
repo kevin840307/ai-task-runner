@@ -209,17 +209,19 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
     result = core.TaskRunner._review_current_task(runner, task, "evidence")
 
     assert result == {"completed": True, "reason": "enough evidence", "missing_items": []}
-    assert [agent.session_id for agent in agents] == ["review-session", "review-session"]
+    assert len(agents) == 1
+    assert calls[0][0] is agents[0]
+    assert calls[1][0] is agents[0]
+    assert agents[0].session_id == "review-session"
     assert calls[0][2] is True
     assert calls[1][2] is False
     assert "Finalize the current review now" in calls[1][1]
     excluded = {
-        agents[1].extra_args[index + 1]
-        for index, value in enumerate(agents[1].extra_args[:-1])
+        agents[0].extra_args[index + 1]
+        for index, value in enumerate(agents[0].extra_args[:-1])
         if value == "--exclude-tools"
     }
-    assert "read_file" not in excluded
-    for tool in ("list_directory", "grep_search", "write_file", "run_shell_command"):
+    for tool in ("write_file", "edit", "notebook_edit", "run_shell_command"):
         assert tool in excluded
 
 

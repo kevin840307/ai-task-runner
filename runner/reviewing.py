@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .agent import AgentClient
-from .agent_args import no_tool_agent_args, review_agent_args
+from .agent_args import review_agent_args
 from .debug import parse_with_debug
 from .errors import RunnerError
 from .models import RunState, Task
@@ -95,20 +95,11 @@ def review_task(
         if reviewer.session_id:
             ui.set(
                 "Review 異常，嘗試收斂判斷",
-                f"{task.title} · reuse review context without tools",
-            )
-            finalizer = AgentClient(
-                backend=args.backend,
-                command=args.command,
-                root=root,
-                extra_args=no_tool_agent_args(args.backend, args.agent_arg),
-                session_id=reviewer.session_id,
-                timeout=args.planning_timeout,
-                debug_dir=debug_dir,
+                f"{task.title} · reuse the same review client/session without further exploration",
             )
             try:
                 return retry_model_call(
-                    lambda: ask_review(finalizer, review_finalize_prompt(root)),
+                    lambda: ask_review(reviewer, review_finalize_prompt(root)),
                     ui,
                     "AI 正在收斂 Review 判斷",
                     task.title,

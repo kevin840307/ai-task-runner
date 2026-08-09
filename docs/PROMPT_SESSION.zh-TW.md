@@ -6,6 +6,8 @@
 Fresh/Rebuilt session 必須針對該 stage 自足；Same-session call 只送新增資訊與下一步。這可降低 context 膨脹與 loop 風險，同時保留可恢復性。
 
 ## Planning
+
+所有執行中的 same-session continuation 都必須重用完全相同的 `AgentClient`，禁止拿既有 session id 再建立 client。Planning Finalize 重用 Understand planner；Review Finalize 重用 Reviewer；Executor continuation 重用主 Executor client。後續 Prompt 保持精簡並要求不要重複探索。Fresh/fallback stage 使用空 session。唯一例外是程式重啟後的 `--resume`：舊 Python client 已不存在，因此 Runner 才能從 state/session id 重建 client。
 - Understand：fresh session，Goal/project root/progress/rules，只有 bounded project read tools，禁止寫入。不再預塞 `Project files:` tree。
 - Finalize：沿用 Understand session、no tools，只送 Plan output contract 與 bounded-TODO rule。
 - Fresh minimal fallback：新 no-tool session，重新帶 Goal、project root、progress、validator feedback、成功 inspection summary。

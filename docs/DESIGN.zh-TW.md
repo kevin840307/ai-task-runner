@@ -33,7 +33,7 @@ Fresh/Rebuilt Executor 收到 Original Goal 是為了避免遺失全域限制，
 - 依實際 error/behavior retry，不依模型名稱或大小。
 - 模型 crash 前若已有 coherent file changes，保留變更再交 Review/後續 recovery。
 - Session expired/unavailable/looping 時使用 fresh rebuilt session。
-- 已有足夠 evidence、只差結論時使用 same-session no-tool finalize。
+- 執行中的 continuation 全專案採單一規則：保留同一個 `AgentClient` 與其 session，禁止只為 resume 舊 session 而建立新 client。Planning Finalize 重用 Understand planner；Review Finalize 重用 Reviewer；Executor retry 持續重用主 Executor client，直到 Runner 因 session 無效或停滯而主動清空 session。只有程式重啟後的 `--resume` 可用 state 中 session id 建立新 client，因為舊 Python client 已不存在。
 - 不用過短 timeout 殺掉有進展的模型；預設允許長時間 work，idle-after-change 負責 bounded recovery。
 - `max_attempts=0`、`max_cycles=0` 表示不以次數設上限。
 

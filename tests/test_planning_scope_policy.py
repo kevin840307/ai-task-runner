@@ -170,17 +170,16 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 4
+    assert len(created) == 3
     assert created[0] is calls[0][0]
-    assert created[1] is calls[1][0]
-    assert created[2] is calls[2][0]
-    assert created[3] is calls[3][0]
-    assert len({id(agent) for agent in created}) == 4
-    assert [agent.initial_session_id for agent in created] == ["", "planning-session", "", ""]
+    assert created[0] is calls[1][0]
+    assert created[1] is calls[2][0]
+    assert created[2] is calls[3][0]
+    assert len({id(agent) for agent in created}) == 3
+    assert [agent.initial_session_id for agent in created] == ["", "", ""]
     assert created[0].root == tmp_path
-    assert created[1].root == tmp_path
+    assert created[1].root == runner.work
     assert created[2].root == runner.work
-    assert created[3].root == runner.work
 
     def excluded_tools(agent):
         return {
@@ -197,7 +196,6 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     # available so strict OpenAI-compatible endpoints never receive tools=[].
     assert "read_file" not in excluded_tools(created[1])
     assert "read_file" not in excluded_tools(created[2])
-    assert "read_file" not in excluded_tools(created[3])
     assert "write_file" in excluded_tools(created[1])
     assert "run_shell_command" in excluded_tools(created[1])
     assert runner.state.tasks[0].title == "Refined 1"
@@ -286,7 +284,7 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
 
     runner._plan_if_needed()
 
-    assert len(created) == 6
+    assert len(created) == 5
     assert judge_calls == 2
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
     assert runner.state.tasks[0].title == "Corrected 1"
@@ -387,7 +385,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
     runner._plan_if_needed()
 
-    assert len(created) == 6
+    assert len(created) == 5
     assert len(runner.state.tasks) == 6
 
 
@@ -545,16 +543,16 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
     runner._plan_if_needed()
 
-    assert [agent.initial_session_id for agent in created] == ["", "draft-session", "", ""]
+    assert [agent.initial_session_id for agent in created] == ["", "", ""]
     assert created[0].root == tmp_path
-    assert created[1].root == tmp_path
+    # Same-session finalize reuses the exact planner client/tool policy from Understand.
     excluded = {
-        created[1].extra_args[i + 1]
-        for i, value in enumerate(created[1].extra_args[:-1])
+        created[0].extra_args[i + 1]
+        for i, value in enumerate(created[0].extra_args[:-1])
         if value == "--exclude-tools"
     }
     assert "read_file" not in excluded
-    assert "grep_search" in excluded
+    assert "grep_search" not in excluded
     assert runner.state.tasks[0].title == "Refined 1"
 
 
@@ -602,8 +600,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
 
     assert explore_calls == 1
     assert created[0].root == tmp_path
-    assert created[1].initial_session_id == "draft-session"
-    minimal = created[2]
+    minimal = created[1]
     assert minimal.initial_session_id == ""
     assert minimal.root == runner.work
     excluded = {

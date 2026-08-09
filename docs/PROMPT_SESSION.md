@@ -6,6 +6,8 @@ Version: 1.1.1
 Fresh/rebuilt sessions must be self-contained for the stage. Same-session calls should send only new information and the next instruction. This reduces context growth and loop risk while preserving recoverability.
 
 ## Planning
+
+All in-run same-session continuations reuse the exact same `AgentClient`; do not rebuild a client from an existing session id. Planning Finalize reuses the Understand planner, Review Finalize reuses the Reviewer, and Executor continuation reuses the main Executor client. The follow-up prompt is short and tells the model not to repeat exploration. Fresh/fallback stages use an empty session. Process-level `--resume` is the only exception: after a restart the old Python client no longer exists, so the Runner reconstructs one from saved state/session id.
 - Understand: fresh session, goal/project root/progress/rules, bounded project read tools, no writes. No precomputed `Project files:` tree is injected.
 - Finalize: same Understand session, no tools, only plan output contract and bounded-TODO rules.
 - Fresh minimal fallback: new no-tool session with goal, project root, progress, validator feedback, and successful inspection summary.

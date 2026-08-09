@@ -40,3 +40,5 @@ YAML batch mode is supported. Each item gets its own nested state directory unde
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
+
+- Session rule: during one process, never instantiate a new `AgentClient` solely to resume an existing session. Reuse the existing client. Only process-level `--resume` may reconstruct a client from persisted session state.

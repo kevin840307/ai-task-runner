@@ -43,3 +43,7 @@ Protected paths are normalized roots; protecting a directory protects its subtre
 
 ## Debug model
 `current-prompt.txt` shows the active call. `last-prompt.txt` and `last-result.txt` keep the most recently finished call. `debug/history/` stores paired bounded history (default 100 calls, 50 MiB total, 2 MiB per history entry with head/tail truncation). Diagnostics are fail-soft and excluded from task progress/change semantics.
+
+## Session continuation invariant
+
+Within one Runner process, a logical agent role keeps one `AgentClient`; continuation mutates only its `session_id` state and never constructs a replacement client merely to resume. Fresh independent roles use empty sessions. Process-level `--resume` may reconstruct the main client from persisted state because no prior local client survives the restart.

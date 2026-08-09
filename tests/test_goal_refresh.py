@@ -45,7 +45,7 @@ def test_fresh_execution_includes_goal_but_same_session_retry_does_not():
     assert "ORIGINAL GOAL" in fresh
     assert "ORIGINAL GOAL" not in continued
     assert "context and global constraints only; never executable scope" in fresh
-    assert "current TODO is the only executable scope" in fresh
+    assert "Current TODO is the only executable scope" in fresh
     assert "Continue only the same current TODO" in continued
     assert '"title": "task"' not in continued
 
@@ -83,8 +83,8 @@ def test_rebuilt_session_includes_original_goal_and_current_task():
     )
     assert "ORIGINAL GOAL" in prompt
     assert '"title": "task"' in prompt
-    assert "Rebuilt execution session" in prompt
-    assert "current TODO is the only executable scope" in prompt
+    assert "Rebuilt session notice" in prompt
+    assert "Current TODO is the only executable scope" in prompt
 
 
 def test_same_session_retry_is_short_and_carries_only_new_feedback():

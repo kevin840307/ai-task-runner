@@ -43,3 +43,7 @@ Protected path 會正規化成 root；保護資料夾即保護 subtree。來源�
 
 ## Debug
 `current-prompt.txt` 是正在執行的 call；`last-prompt.txt` / `last-result.txt` 是上一筆完成或失敗的 call；`debug/history/` 成對保存 bounded history，預設最近 100 calls、50 MiB、單筆 history entry 2 MiB（保留頭尾）。Debug failure 為 fail-soft，且不影響 changed-files/progress/validation/resume。
+
+## Session continuation 不變量
+
+同一個 Runner 程序內，每個 logical agent role 維持同一個 `AgentClient`；continuation 只沿用其 `session_id` 狀態，不得只為 resume 而建立替代 client。Fresh 獨立角色使用空 session。程式重啟後的 `--resume` 因舊本機 client 已不存在，才可從持久化 state 重建主 client。

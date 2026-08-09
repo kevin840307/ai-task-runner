@@ -45,20 +45,17 @@ def build_plan(
     project_changed: list[str] = []
     debug_dir = work / "debug"
 
-    def new_planner(
-        allow_project_read: bool = False,
-        session_id: str = "",
-    ) -> AgentClient:
+    def new_planner(allow_project_read: bool = False) -> AgentClient:
         planner = AgentClient(
             backend=args.backend,
             command=args.command,
-            root=root if allow_project_read or session_id else planner_root,
+            root=root if allow_project_read else planner_root,
             extra_args=planning_agent_args(
                 args.backend,
                 args.agent_arg,
                 allow_project_read=allow_project_read,
             ),
-            session_id=session_id,
+            session_id="",
             timeout=args.planning_timeout,
             debug_dir=debug_dir,
         )
@@ -154,7 +151,7 @@ def build_plan(
 
     tasks: list[Task] | None = None
     if draft_planner.session_id:
-        planner = new_planner(session_id=draft_planner.session_id)
+        planner = draft_planner
         prompt = plan_finalize_prompt(
             state.goal,
             root,
