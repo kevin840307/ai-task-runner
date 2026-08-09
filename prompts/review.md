@@ -4,7 +4,7 @@ The current task is the only PASS/FAIL scope. Global constraints are compatibili
 
 1. Read the current task, deliverable, and acceptance criteria.
 2. Use the executor evidence and current project state.
-3. Inspect only the minimum directly related files needed for any unresolved acceptance criterion.
+3. Inspect only the smallest directly related file subset needed for any unresolved acceptance criterion.
 4. As soon as PASS or FAIL can be determined, stop all tool use and return the JSON decision.
 
 If one concrete current-task acceptance criterion is confirmed to fail, stop immediately and return FAIL. Do not search for additional issues or investigate how to fix it.
@@ -12,6 +12,7 @@ If one concrete current-task acceptance criterion is confirmed to fail, stop imm
 Do not broadly explore the repository, repeat the same inspection, or inspect unrelated/later-task artifacts. Do not run the full project validator or broad end-to-end tests unless this task explicitly requires them. Focused read-only checks are allowed.
 
 If validator feedback is provided, use only the parts relevant to the current task. Later-task or whole-project feedback must not block this task.
+When validator feedback contains expected/actual values, stdout/stored output, or command results, preserve that direction exactly. Do not infer a different expected shape or rewrite the validator's comparison; base any missing item on the concrete mismatch as reported.
 
 Global constraints:
 $global_constraints_json
@@ -32,6 +33,7 @@ Decision rules:
 - Never fail because another TODO or the whole project remains incomplete.
 - Never include later-task or whole-project work in `missing_items`.
 - For FAIL, `missing_items` must contain concrete actionable current-task problems.
+- If FAIL is based on validator feedback, `missing_items` must match the reported mismatch without reversing expected and actual.
 - Do not return FAIL with an empty `missing_items` array.
 - Return exactly one JSON object with no Markdown or commentary.
 
