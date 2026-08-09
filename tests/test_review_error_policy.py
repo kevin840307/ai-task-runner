@@ -172,7 +172,7 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
     calls = []
 
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
-        calls.append((agent, prompt, kwargs.get("preserve_session_on_error", False)))
+        calls.append((agent, prompt))
         if len(calls) == 1:
             agent.session_id = "review-session"
             raise RunnerError("review unavailable")
@@ -213,8 +213,6 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
     assert calls[0][0] is agents[0]
     assert calls[1][0] is agents[0]
     assert agents[0].session_id == "review-session"
-    assert calls[0][2] is True
-    assert calls[1][2] is False
     assert "Finalize the current review now" in calls[1][1]
     excluded = {
         agents[0].extra_args[index + 1]

@@ -20,4 +20,4 @@ Runner source/backend files 與 configured goal/validator 由 orchestrator 加�
 AI child-process PATH guard 阻擋 `git add`、`git commit`、`git push`；Git read/diagnostic 可使用。這是 guardrail，不是 OS sandbox；stage/commit/push 最終由人類負責。
 
 ## Backend capability limits
-Qwen Planning 是 read-only；decision-only call 關閉 project read tools；Review 關閉 write/edit/shell；Runtime 排除不相關 agent/skill/computer-use tools。這些 capability policy 是 filesystem protection 的額外一層。
+Qwen Planning 是 read-only，當目前 planning step 需要證據時可 bounded 使用 project read tools；write/edit/shell 仍關閉。Review 關閉 write/edit/shell；Runtime 排除不相關 agent/skill/computer-use tools。這些 capability policy 是 filesystem protection 的額外一層。

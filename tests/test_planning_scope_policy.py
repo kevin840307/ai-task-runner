@@ -81,7 +81,8 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     )]
     prompt = plan_judge_prompt("g", tmp_path, state, tasks)
 
-    assert "independent plan quality judge" in prompt
+    assert "plan quality judge" in prompt
+    assert "bounded read-only project inspection" in prompt
     assert "Do not rewrite the plan" in prompt
     assert "Never judge from title wording or keyword matching" in prompt
     assert '"accepted":false' in prompt
@@ -169,14 +170,10 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 2
-    assert created[0] is calls[0][0]
-    assert created[0] is calls[1][0]
-    assert created[1] is calls[2][0]
-    assert len({id(agent) for agent in created}) == 2
-    assert [agent.initial_session_id for agent in created] == ["", ""]
+    assert len(created) == 1
+    assert all(agent is created[0] for agent, _ in calls)
+    assert created[0].initial_session_id == ""
     assert created[0].root == tmp_path
-    assert created[1].root == runner.work
 
     def excluded_tools(agent):
         return {
@@ -189,11 +186,9 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     assert "grep_search" not in excluded_tools(created[0])
     assert "write_file" in excluded_tools(created[0])
     assert "run_shell_command" in excluded_tools(created[0])
-    # Decision-only Qwen calls keep one built-in read-only compatibility tool
-    # available so strict OpenAI-compatible endpoints never receive tools=[].
-    assert "read_file" not in excluded_tools(created[1])
-    assert "write_file" in excluded_tools(created[1])
-    assert "run_shell_command" in excluded_tools(created[1])
+    # The same planning session keeps bounded read tools available for judge/refine.
+    assert "read_file" not in excluded_tools(created[0])
+    assert "grep_search" not in excluded_tools(created[0])
     assert runner.state.tasks[0].title == "Draft 1"
 
 
@@ -282,13 +277,9 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
 
     runner._plan_if_needed()
 
-    assert len(created) == 3
+    assert len(created) == 1
     assert judge_calls == 2
-    assert calls[0][0] is created[0]  # understand
-    assert calls[1][0] is created[0]  # finalize
-    assert calls[2][0] is created[1]  # fresh judge
-    assert calls[3][0] is created[0]  # rewrite reuses planner
-    assert calls[4][0] is created[2]  # next judge is fresh
+    assert all(agent is created[0] for agent, _ in calls)
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
     assert runner.state.tasks[0].title == "Corrected 1"
 
@@ -387,7 +378,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
     runner._plan_if_needed()
 
-    assert len(created) == 4
+    assert len(created) == 1
     assert len(runner.state.tasks) == 6
 
 
@@ -545,7 +536,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
     runner._plan_if_needed()
 
-    assert [agent.initial_session_id for agent in created] == ["", ""]
+    assert [agent.initial_session_id for agent in created] == [""]
     assert created[0].root == tmp_path
     # Same-session finalize reuses the exact planner client/tool policy from Understand.
     excluded = {
@@ -602,16 +593,17 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
 
     assert explore_calls == 1
     assert created[0].root == tmp_path
-    minimal = created[1]
+    assert len(created) == 1
+    minimal = created[0]
     assert minimal.initial_session_id == ""
-    assert minimal.root == runner.work
+    assert minimal.root == tmp_path
     excluded = {
         minimal.extra_args[i + 1]
         for i, value in enumerate(minimal.extra_args[:-1])
         if value == "--exclude-tools"
     }
     assert "read_file" not in excluded
-    assert "grep_search" in excluded
+    assert "grep_search" not in excluded
 
 
 def test_successful_understanding_without_session_is_carried_into_minimal_plan(tmp_path: Path, monkeypatch):
@@ -784,3 +776,40 @@ def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path
     assert rewrite_calls == 2
     assert rewrite_agents == [created[0], created[0]]
     assert runner.state.tasks[0].title == "Recovered 1"
+
+
+def test_planning_reuses_existing_main_session_when_available(tmp_path: Path, monkeypatch):
+    import runner.core as core
+    import runner.planning as planning
+
+    created = []
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.initial_session_id = kwargs["session_id"]
+            self.session_id = kwargs["session_id"]
+            created.append(self)
+        def prepare_project(self):
+            return []
+
+    def fake_readonly_ask(agent, prompt, *args, **kwargs):
+        if "dedicated project-understanding turn" in prompt:
+            assert agent.session_id == "executor-session"
+            return "evidence", [], []
+        if "Create the implementation plan now" in prompt:
+            return json.dumps(_six_tasks("Plan")), [], []
+        return json.dumps(judge_payload()), [], []
+
+    runner = _adaptive_runner(core, tmp_path)
+    runner.agent.session_id = "executor-session"
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    runner._plan_if_needed()
+
+    assert len(created) == 1
+    assert created[0].initial_session_id == "executor-session"
+    assert runner.agent.session_id == "executor-session"

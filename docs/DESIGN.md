@@ -17,12 +17,12 @@ The Runner owns orchestration; project code and validators own application-speci
 3. Build normalized protected roots.
 4. Planning Understand: fresh, bounded read-only inspection.
 5. Planning Finalize: reuse the exact Understand planner client/session and tool policy; the finalize prompt forbids further tool use and generates >=6 bounded implementation TODOs.
-6. If planning session/result fails, use a fresh no-tool minimal plan with goal, prior inspection summary, progress, and validator feedback.
-7. Judge the valid plan first in a fresh independent session. Only on rejection, rewrite with the original Planner client/session, then judge again with a new independent Judge. Planning quality gates fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
-8. Execute one Current TODO. A fresh/rebuilt Executor sees Original Goal only as global context and the Current TODO as the only executable scope.
+6. If planning output fails, retry the same planning session while it remains usable. Only after the session is invalid or repeated attempts cannot recover, clear it and use the same planner client with a fresh full-context plan prompt.
+7. Judge the valid plan in the same planning session. Judge may use bounded read-only inspection when needed; on rejection, rewrite in that same session and judge again. If the quality gate itself cannot produce a usable verdict, fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
+8. Execute one Current TODO. The Executor session survives successful TODO completion; the next TODO resumes that same session with only the new TODO spec and a strict current-scope reminder. Fresh/rebuilt execution receives the Original Goal only as global context.
 9. Review the Current TODO in a fresh read-only session. On a resumable model error, same-session no-tool Review Finalize uses gathered evidence.
 10. PASS advances to the next TODO. Semantic FAIL retries the same TODO using a short same-session continuation containing only new feedback.
-11. Repeated no-progress/model failure may rebuild the session or defer to Final Validator while preserving project changes.
+11. Repeated no-progress/model failure keeps the current TODO pending; the Runner retries the same session first and rebuilds only after repeated stagnation. Final Validator remains the last step after all TODOs in the cycle have finished.
 12. Deterministic Final Validator runs against the complete project/goal. PASS completes. FAIL creates Repair Planning with validator feedback and starts another bounded cycle. Validator infrastructure failure retries and never fails open.
 13. Optional Final AI validation uses fresh independent sessions. Any explicit AI FAIL vetoes that cycle; errors abstain.
 
@@ -30,13 +30,13 @@ The Runner owns orchestration; project code and validators own application-speci
 Planning must create at least six concrete implementation TODOs. TODOs are bounded, executable, and should not be pure discovery tasks. Do not create umbrella tasks such as “implement everything” or “finish the project.” Discovery belongs in bounded Planning inspection; implementation belongs in TODOs.
 
 ## Executor scope isolation
-Original Goal may be supplied to a fresh/rebuilt Executor so global constraints are not lost. It is not executable scope. The Current TODO is the only allowed work unit; later TODOs must be left for later Runner steps. Same-session retries do not resend Goal/task/static rules.
+Original Goal may be supplied to a fresh/rebuilt Executor so global constraints are not lost. It is not executable scope. The Current TODO is the only allowed work unit; later TODOs must be left for later Runner steps. Cross-TODO resume sends only the new TODO spec; same-TODO retries do not resend Goal/task/static rules.
 
 ## Retry/recovery principles
 - Retry based on actual behavior/errors, never model size/name.
 - Preserve coherent file changes when a model crashes after making progress.
-- Use fresh sessions when the previous session is unavailable/expired/looping.
-- In-run continuation is simple and global: keep the same `AgentClient` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries reuse the main Executor client until the Runner intentionally clears an invalid/stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
+- Use fresh sessions only when the previous session is unavailable/expired or bounded recovery shows repeated loop/no-progress failure.
+- In-run continuation is simple and global: keep the same `AgentClient` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries and subsequent TODOs reuse the main Executor client until the Runner intentionally clears an invalid or repeatedly stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
 - Avoid arbitrary short model timeouts; defaults favor long work, while idle-after-change provides bounded recovery.
 - `max_attempts=0` and `max_cycles=0` mean unbounded by count.
 
@@ -44,7 +44,7 @@ Original Goal may be supplied to a fresh/rebuilt Executor so global constraints 
 A configured Python validator is the hard correctness gate. It receives `--project-root` and `--state-file`, followed by each repeatable `--validator-arg`. Optional `validator_interface.py` standardizes reporting but does not contain project-specific assertions.
 
 ## Prompt design
-Fresh/rebuilt sessions are self-contained. Same-session prompts contain only new information. Planning does not pre-inject a full `Project files:` listing; read-capable stages inspect what they need, while no-tool stages receive bounded summaries. Binary verdict prompts include explicit FAIL and PASS examples while still requiring the model to return only JSON.
+Fresh/rebuilt sessions are self-contained. Same-session prompts contain only new information. Structured-output/schema errors are treated as valid model responses with an invalid contract: the Runner sends one short same-session JSON-only correction before stage fallback/rebuild.  Planning does not pre-inject a full `Project files:` listing; all planning steps share one bounded read-only tool policy and inspect only when current/session context is insufficient. Binary verdict prompts include explicit FAIL and PASS examples while still requiring the model to return only JSON.
 
 ## Qwen transport
 The full Qwen prompt is written only to subprocess stdin and EOF is closed. It is not placed in `-p` or another command argument, avoiding Windows command-line length limits and dual-input ambiguity. Qwen stream-json events remain backend transport and are parsed separately from final model-result JSON.

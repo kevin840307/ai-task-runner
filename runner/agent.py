@@ -20,12 +20,34 @@ SESSION_INVALID_MARKERS = (
 SESSION_RESET_MARKERS = (
     "loop detection halted the run",
 )
+SESSION_RECOVERABLE_FAILURES_BEFORE_RESET = 2
+TRANSIENT_SERVICE_MARKERS = (
+    "timed out",
+    "timeout",
+    "connection",
+    "rate limit",
+    "too many requests",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "http 429",
+    "http 502",
+    "http 503",
+    "http 504",
+)
 
 
 def is_session_invalid_error(message: str) -> bool:
     text = message.lower()
     return any(marker in text for marker in SESSION_INVALID_MARKERS)
 
+
+
+def is_transient_service_error(message: str) -> bool:
+    text = message.lower()
+    if "idle timed out" in text:
+        return False
+    return any(marker in text for marker in TRANSIENT_SERVICE_MARKERS)
 
 def should_reset_session(message: str) -> bool:
     text = message.lower()
@@ -34,6 +56,10 @@ def should_reset_session(message: str) -> bool:
 
 class AgentError(RunnerError):
     """Raised when an AI backend call fails."""
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 class AgentClient:
@@ -52,7 +78,7 @@ class AgentClient:
                 backend, command, root, extra_args, timeout
             )
         except BackendError as error:
-            raise AgentError(str(error)) from error
+            raise AgentError(str(error), transient=is_transient_service_error(str(error))) from error
 
         # Preserve the simple public attributes from the original single-file Agent.
         self.backend = self._backend.name
@@ -62,6 +88,7 @@ class AgentClient:
         self.session_id = session_id
         self.timeout = timeout
         self.debug_dir = debug_dir
+        self._recoverable_session_failures = 0
 
     @property
     def name(self) -> str:
@@ -92,7 +119,6 @@ class AgentClient:
         idle_timeout_after_change: float = 0,
         change_detected: Callable[[], bool] | None = None,
         timeout: int | None = None,
-        preserve_session_on_error: bool = False,
     ) -> str:
         previous_timeout = self.timeout
         previous_backend_timeout = self._backend.timeout
@@ -132,18 +158,24 @@ class AgentClient:
                     f"session {expired_session} is unavailable; "
                     "a new session will continue from runner state"
                 ) from error
-            if (
-                self.session_id
-                and should_reset_session(message)
-                and not preserve_session_on_error
-            ):
-                self.session_id = ""
-            raise AgentError(message) from error
+            if self.session_id and should_reset_session(message):
+                failures = getattr(self, "_recoverable_session_failures", 0) + 1
+                self._recoverable_session_failures = failures
+                if failures >= SESSION_RECOVERABLE_FAILURES_BEFORE_RESET:
+                    self.session_id = ""
+                    self._recoverable_session_failures = 0
+            else:
+                self._recoverable_session_failures = 0
+            raise AgentError(
+                message,
+                transient=is_transient_service_error(message),
+            ) from error
         finally:
             self.timeout = previous_timeout
             self._backend.timeout = previous_backend_timeout
         if result.session_id and not self.session_id:
             self.session_id = result.session_id
+        self._recoverable_session_failures = 0
         self._finish_debug(call_session_id, prompt, result.text, debug_call_id)
         return result.text
 
@@ -171,6 +203,9 @@ __all__ = [
     "AgentError",
     "SESSION_INVALID_MARKERS",
     "SESSION_RESET_MARKERS",
+    "SESSION_RECOVERABLE_FAILURES_BEFORE_RESET",
+    "TRANSIENT_SERVICE_MARKERS",
     "is_session_invalid_error",
+    "is_transient_service_error",
     "should_reset_session",
 ]

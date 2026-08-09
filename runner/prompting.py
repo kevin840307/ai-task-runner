@@ -239,19 +239,22 @@ def plan_judge_prompt(
     )
 
 
+
+def structured_output_retry_prompt(error: str) -> str:
+    """Short same-session correction for malformed structured model output."""
+    return render_prompt_template(
+        "structured_output_retry.md",
+        {"error": error.strip()[-500:] or "invalid structured output"},
+    )
+
 def planning_feedback_section(feedback: str) -> str:
     text = feedback.strip()
     return f"\nPlanning feedback:\n{text}\n" if text else ""
 
 
 def should_refresh_goal(state: RunState, has_session: bool) -> bool:
-    """Identify executions that need explicit new-session context."""
-    task = state.tasks[state.current]
-    return not has_session or (
-        state.cycle > 1
-        and task.attempts == 1
-        and task.id == f"c{state.cycle:02d}-t001"
-    )
+    """Full goal context is needed only when no usable session exists."""
+    return not has_session
 
 
 def _execution_feedback(
@@ -272,6 +275,10 @@ def _execution_feedback(
                 ensure_ascii=False,
             )
         )
+    if task.last_output and not (
+        task.last_review and task.last_review.get("completed") is False
+    ):
+        parts.append("Latest execution diagnostic:\n" + task.last_output[-2000:])
     if strategy_note:
         parts.append("New recovery instruction:\n" + strategy_note)
     return "\n\n".join(parts) or "No new external feedback; continue from the existing session state."
@@ -288,10 +295,11 @@ def execution_prompt(
 ) -> str:
     task = state.tasks[state.current]
     if not include_goal:
-        return render_prompt_template(
-            "execution_continue.md",
-            {"feedback": _execution_feedback(state, strategy_note)},
-        )
+        template = "execution_continue.md" if task.attempts > 1 else "execution_next_todo.md"
+        values = {"feedback": _execution_feedback(state, strategy_note)}
+        if task.attempts <= 1:
+            values["task_json"] = json.dumps(task_spec(task), ensure_ascii=False)
+        return render_prompt_template(template, values)
 
     context = {
         "validator_feedback": format_validator_feedback(

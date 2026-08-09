@@ -1,7 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.core import EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER
 from runner.models import RunState, Task
 from runner.prompting import execution_prompt
 
@@ -32,10 +31,6 @@ def test_fresh_execution_prompt_embeds_goal_as_context_not_completed_task_list(t
     assert "scratch, diagnostic, runner-state, or sidecar files" in prompt
     assert "Make the smallest maintainable change that satisfies the deliverable and acceptance criteria" in prompt
     assert "If no project change is required, do not modify files" in prompt
-
-
-def test_no_change_failure_defer_threshold_is_small_and_positive():
-    assert EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER == 2
 
 
 def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
@@ -93,7 +88,7 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monk
 
     assert result == 77
     assert task.changed_files == ["result.txt"]
-    assert runner.agent.session_id == ""
+    assert runner.agent.session_id == "old-session"
 
 
 def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path, monkeypatch):
@@ -114,10 +109,10 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
     assert result is None
     assert task.status == "pending"
     assert task.stagnant_attempts == 1
-    assert runner.agent.session_id == ""
+    assert runner.agent.session_id == "old-session"
 
 
-def test_two_same_fresh_no_change_failures_defer_to_validator(tmp_path, monkeypatch):
+def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp_path, monkeypatch):
     import runner.core as core
     from runner.errors import RunnerError
 
@@ -126,15 +121,43 @@ def test_two_same_fresh_no_change_failures_defer_to_validator(tmp_path, monkeypa
         deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
-    completed = []
-    runner._complete_current_task = lambda value: completed.append(value.id)
     monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
 
     assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
-    runner.agent.session_id = "fresh-session"
+    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
+    assert runner.agent.session_id == "old-session"
     assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
 
-    assert completed == [task.id]
-    assert task.review_skipped is True
-    assert "final validator" in task.review_skip_reason.lower()
+    assert task.status == "pending"
+    assert task.review_skipped is False
     assert runner.agent.session_id == ""
+    assert task.stagnant_attempts == 0
+
+
+def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monkeypatch):
+    import runner.core as core
+
+    tasks = [
+        Task(id="c01-t001", title="one", description="d", deliverable="a", acceptance_criteria=["a"]),
+        Task(id="c01-t002", title="two", description="d", deliverable="b", acceptance_criteria=["b"]),
+    ]
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=tasks)
+    runner.agent = SimpleNamespace(session_id="executor-session")
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._save_state = lambda: None
+    runner._set_stage = lambda *args: None
+    seen = []
+    runner._execute_current_task = lambda task: seen.append((task.id, runner.agent.session_id)) or "done"
+    runner._review_current_task = lambda *args: (_ for _ in ()).throw(AssertionError("no changes: review must not run"))
+    monkeypatch.setattr(core, "project_manifest", lambda *args: {})
+    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+    monkeypatch.setattr(core, "show_todo", lambda *args: None)
+
+    assert runner._run_pending_tasks() is None
+    assert seen == [("c01-t001", "executor-session"), ("c01-t002", "executor-session")]
+    assert runner.agent.session_id == "executor-session"
+    assert runner.state.agent_session_id == "executor-session"

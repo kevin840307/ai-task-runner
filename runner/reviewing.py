@@ -10,9 +10,9 @@ from .agent_args import review_agent_args
 from .debug import parse_with_debug
 from .errors import RunnerError
 from .models import RunState, Task
-from .prompting import review_finalize_prompt, review_prompt
+from .prompting import review_finalize_prompt, review_prompt, structured_output_retry_prompt
 from .model_results import parse_review
-from .support import readonly_ask, retry_model_call
+from .support import recover_structured_output, readonly_ask, retry_model_call
 from .ui import LiveUI
 
 
@@ -48,11 +48,7 @@ def review_task(
         debug_dir=debug_dir,
     )
 
-    def ask_review(
-        agent: AgentClient,
-        prompt: str,
-        preserve_session: bool = False,
-    ) -> dict[str, object]:
+    def ask_raw(agent: AgentClient, prompt: str) -> str:
         raw, protected_changed, project_changed_during_review = readonly_ask(
             agent,
             prompt,
@@ -61,7 +57,6 @@ def review_task(
             protected,
             timeout=args.planning_timeout,
             idle_timeout=args.agent_idle_after_change_timeout,
-            preserve_session_on_error=preserve_session,
         )
         changed = [*protected_changed, *project_changed_during_review]
         if changed:
@@ -69,19 +64,23 @@ def review_task(
                 "review modified files and they were restored: "
                 + ", ".join(changed)
             )
-        try:
-            return parse_with_debug(debug_dir, parse_review, raw)
-        except RunnerError as error:
-            raise RunnerError(
-                f"{error}; raw_output_tail={raw[-1000:]}"
-            ) from error
+        return raw
+
+    def ask_review(agent: AgentClient, prompt: str) -> dict[str, object]:
+        raw = ask_raw(agent, prompt)
+        return recover_structured_output(
+            raw,
+            lambda text: parse_with_debug(debug_dir, parse_review, text),
+            lambda error: ask_raw(
+                agent, structured_output_retry_prompt(error)
+            ),
+        )
 
     try:
         return retry_model_call(
             lambda: ask_review(
                 reviewer,
                 review_prompt(state, root, protected, output),
-                preserve_session=True,
             ),
             ui,
             "AI 正在確認任務是否完成",

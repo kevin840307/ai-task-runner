@@ -15,19 +15,16 @@ from .prompting import (
     plan_judge_prompt,
     plan_refine_prompt,
     plan_understand_prompt,
+    structured_output_retry_prompt,
 )
 from .model_results import parse_plan_judgment, parse_tasks
-from .support import readonly_ask, retry_model_call
+from .support import recover_structured_output, readonly_ask, retry_model_call
 from .ui import LiveUI
 
 
 MIN_PLANNED_TASKS = 6
 PLAN_JUDGE_MAX_REWRITES = 2
 
-
-def planning_agent_root(backend: str, root: Path, work: Path) -> Path:
-    """Keep non-inspecting Qwen planning sessions isolated from source cwd."""
-    return work if backend == "qwen" else root
 
 
 def build_plan(
@@ -40,22 +37,21 @@ def build_plan(
     main_agent: AgentClient,
 ) -> list[Task]:
     """Build one current-cycle plan without changing planning semantics."""
-    planner_root = planning_agent_root(args.backend, root, work)
     min_tasks = MIN_PLANNED_TASKS if state.cycle == 1 else 1
     project_changed: list[str] = []
     debug_dir = work / "debug"
 
-    def new_planner(allow_project_read: bool = False) -> AgentClient:
+    def new_planner() -> AgentClient:
         planner = AgentClient(
             backend=args.backend,
             command=args.command,
-            root=root if allow_project_read else planner_root,
+            root=root,
             extra_args=planning_agent_args(
                 args.backend,
                 args.agent_arg,
-                allow_project_read=allow_project_read,
+                allow_project_read=True,
             ),
-            session_id="",
+            session_id=main_agent.session_id,
             timeout=args.planning_timeout,
             debug_dir=debug_dir,
         )
@@ -82,30 +78,34 @@ def build_plan(
         except Exception:
             return None
 
-    def ask_plan(
-        planner: AgentClient,
-        prompt: str,
-        *,
-        preserve_session: bool = False,
-    ) -> list[Task]:
-        try:
-            output, protected_changed, changed = readonly_ask(
-                planner,
-                prompt,
-                root,
-                work,
-                protected,
-                timeout=args.planning_timeout,
-                idle_timeout=args.agent_idle_after_change_timeout,
-                preserve_session_on_error=preserve_session,
+    def ask_raw(planner: AgentClient, prompt: str) -> str:
+        output, protected_changed, changed = readonly_ask(
+            planner,
+            prompt,
+            root,
+            work,
+            protected,
+            timeout=args.planning_timeout,
+            idle_timeout=args.agent_idle_after_change_timeout,
+        )
+        if protected_changed:
+            raise RunnerError(
+                "AI modified files during planning and they were restored: "
+                + ", ".join(protected_changed)
             )
-            if protected_changed:
-                raise RunnerError(
-                    "AI modified files during planning and they were restored: "
-                    + ", ".join(protected_changed)
-                )
-            project_changed.extend(changed)
-            return parse_plan(output)
+        project_changed.extend(changed)
+        return output
+
+    def ask_plan(planner: AgentClient, prompt: str) -> list[Task]:
+        try:
+            output = ask_raw(planner, prompt)
+            return recover_structured_output(
+                output,
+                parse_plan,
+                lambda error: ask_raw(
+                    planner, structured_output_retry_prompt(error)
+                ),
+            )
         except RunnerError as error:
             salvaged = salvage_plan(planner, error)
             if salvaged is not None:
@@ -116,7 +116,7 @@ def build_plan(
                 return salvaged
             raise
 
-    draft_planner = new_planner(allow_project_read=True)
+    draft_planner = new_planner()
     inspection_summary = ""
     inspection_error: RunnerError | None = None
     understand_prompt = plan_understand_prompt(
@@ -139,7 +139,6 @@ def build_plan(
             protected,
             timeout=args.planning_timeout,
             idle_timeout=args.agent_idle_after_change_timeout,
-            preserve_session_on_error=True,
         )
         if protected_changed:
             raise RunnerError(
@@ -168,11 +167,16 @@ def build_plan(
             tasks = ask_plan(planner, prompt)
         except RunnerError as error:
             inspection_error = error
+            if planner.session_id:
+                try:
+                    tasks = ask_plan(planner, prompt)
+                except RunnerError as retry_error:
+                    inspection_error = retry_error
 
     if tasks is None:
+        planner.session_id = ""
+
         def minimal_plan() -> list[Task]:
-            nonlocal planner
-            planner = new_planner()
             prompt = plan_finalize_prompt(
                 state.goal,
                 root,
@@ -183,7 +187,7 @@ def build_plan(
             )
             ui.set(
                 "AI 正在建立最小任務規劃",
-                "fresh no-tool fallback",
+                "fresh full-context fallback",
             )
             return ask_plan(planner, prompt)
 
@@ -199,7 +203,7 @@ def build_plan(
     judge_issues: list[str] = []
     for judge_round in range(PLAN_JUDGE_MAX_REWRITES + 1):
         try:
-            judge = new_planner()
+            judge = planner
             prompt = plan_judge_prompt(
                 state.goal,
                 root,
@@ -211,25 +215,15 @@ def build_plan(
                 "AI 正在審查任務規劃",
                 f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES + 1}",
             )
-            judgment_text, protected_changed, judge_changed = readonly_ask(
-                judge,
-                prompt,
-                root,
-                work,
-                protected,
-                timeout=args.planning_timeout,
-                idle_timeout=args.agent_idle_after_change_timeout,
-            )
-            if protected_changed:
-                raise RunnerError(
-                    "AI modified files during planning and they were restored: "
-                    + ", ".join(protected_changed)
-                )
-            project_changed.extend(judge_changed)
-            judgment = parse_with_debug(
-                debug_dir,
-                parse_plan_judgment,
+            judgment_text = ask_raw(judge, prompt)
+            judgment = recover_structured_output(
                 judgment_text,
+                lambda raw: parse_with_debug(
+                    debug_dir, parse_plan_judgment, raw
+                ),
+                lambda error: ask_raw(
+                    judge, structured_output_retry_prompt(error)
+                ),
             )
         except RunnerError as error:
             ui.set(
@@ -285,8 +279,7 @@ def build_plan(
             "AI restored project changes made during planning",
             ", ".join(sorted(set(project_changed))),
         )
-    if planner_root == root:
-        main_agent.session_id = draft_planner.session_id
+    main_agent.session_id = planner.session_id
     return tasks
 
 
@@ -294,5 +287,4 @@ __all__ = [
     "MIN_PLANNED_TASKS",
     "PLAN_JUDGE_MAX_REWRITES",
     "build_plan",
-    "planning_agent_root",
 ]

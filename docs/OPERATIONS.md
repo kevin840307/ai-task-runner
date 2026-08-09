@@ -6,8 +6,8 @@ Version: 1.1.1
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Count limits default to zero (unbounded by count). Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.
 
 ## Common recovery paths
-- Invalid Planning JSON/schema/task count -> retry/fallback; last valid plan is preserved where possible.
-- Session unavailable/expired/loop detection -> rebuild fresh session with required context.
+- Invalid structured JSON/schema -> send a short same-session JSON-only correction first. Planning then retries/falls back as needed; Judge/Review remain fail-soft only after correction/recovery cannot produce a usable result.
+- Session unavailable/expired -> rebuild immediately. Recoverable model failures such as a single loop keep the current session; repeated loop/no-progress failures trigger a bounded fresh rebuild with required context.
 - Executor crashes after changing files -> preserve coherent changes and let Review/next recovery decide.
 - Review model error with resumable session -> no-tool Review Finalize.
 - Validator FAIL -> Repair Planning with validator feedback.
@@ -28,3 +28,5 @@ Human status/detail text is converted to one line before spinner rendering so em
 
 ## What to collect for a bug
 Provide state/event log, `current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, relevant history pair, command line, and visible error. This normally reconstructs stage -> prompt -> model result -> parser/backend decision -> Runner recovery.
+
+Transient API/network/rate-limit outages use bounded exponential backoff per delay interval but no retry-count exhaustion; they preserve current state/session. Persistent model/session problems use the normal reuse-then-rebuild policy.

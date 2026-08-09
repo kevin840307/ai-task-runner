@@ -6,8 +6,8 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 
 ## Key properties
 - Qwen and OpenCode backends; Qwen prompt transport is stdin-only.
-- Adaptive Planning: bounded read-only Understand -> same-client/session Plan Finalize (prompt forbids further tools) -> fresh minimal fallback when needed.
-- Bounded TODO execution with current-task-only scope and read-only Review.
+- Adaptive Planning: bounded read-only Understand -> same planning client/session Plan Finalize -> same-session Judge/Rewrite as needed; only an unrecoverable planning session falls back to fresh full-context planning.
+- Bounded TODO execution keeps one Executor session across TODOs; each next-TODO prompt contains only the new TODO and scope reminder. Review remains a fresh read-only session.
 - Deterministic final validator as the hard correctness gate; optional independent Final AI validations.
 - Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode.
 - Shared model-result parser: lenient JSON envelope, strict stage payload/schema.

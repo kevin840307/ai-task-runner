@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_no_change_skips_review_and_clears_task_session(tmp_path, monkeypatch):
+def test_no_change_skips_review_and_preserves_executor_session(tmp_path, monkeypatch):
     import runner.core as core
     from runner.models import RunState, Task
 
@@ -36,8 +36,8 @@ def test_no_change_skips_review_and_clears_task_session(tmp_path, monkeypatch):
     assert runner._run_pending_tasks() is None
     assert task.status == "completed"
     assert task.review_skipped is True
-    assert runner.agent.session_id == ""
-    assert runner.state.agent_session_id == ""
+    assert runner.agent.session_id == "task-session"
+    assert runner.state.agent_session_id == "task-session"
 
 
 def test_validator_infrastructure_error_retries_without_repair_cycle(tmp_path):
@@ -68,7 +68,7 @@ def test_validator_infrastructure_error_retries_without_repair_cycle(tmp_path):
     assert any(stage == "validator_retry_wait" for stage, _ in stages)
 
 
-def test_loop_detection_resets_session_without_hiding_error():
+def test_loop_detection_reuses_once_then_resets_repeated_session():
     from runner.agent import AgentClient, AgentError
     from runner.backends import BackendError
 
@@ -86,6 +86,10 @@ def test_loop_detection_resets_session_without_hiding_error():
     agent.extra_args = []
     agent.session_id = "old-session"
     agent.timeout = 1
+
+    with pytest.raises(AgentError, match="Loop detection halted"):
+        agent.ask("p")
+    assert agent.session_id == "old-session"
 
     with pytest.raises(AgentError, match="Loop detection halted"):
         agent.ask("p")
@@ -115,7 +119,7 @@ def test_planning_can_preserve_loop_session_for_no_tool_finalize():
     agent.timeout = 1
 
     with pytest.raises(AgentError, match="Loop detection halted"):
-        agent.ask("p", preserve_session_on_error=True)
+        agent.ask("p")
     assert agent.session_id == "planning-session"
 
 

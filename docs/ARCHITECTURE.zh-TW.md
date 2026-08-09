@@ -28,10 +28,10 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 ## Session 規則
 - Fresh Understand：完整 Goal/context + bounded read tools，禁止寫入。
 - Same-session Plan：只送下一步與輸出契約，不重送靜態 context。
-- Fresh fallback/Judge：decision context 必須自足。Rewrite 沿用產生目前 plan 的 Planner；若共用 Agent 錯誤策略已重置 session，同一 client 會自然以自足的 rewrite Prompt fresh 重建。
+- Planning fallback/Judge：decision context 必須足以支援 recovery。Judge 與 Rewrite 沿用產生目前 plan 的 Planner；若共用 Agent policy 判定 session 不可用並 reset，同一 client 才以自足 Prompt fresh 重建。
 - Fresh/Rebuilt Executor：Original Goal 只提供 global context；Current TODO 是唯一 executable scope。
-- Same-session Executor retry：短 Continue Prompt，只帶最新 Review/recovery feedback。
-- Fresh Review：只看 Current TODO/evidence，read-only。
+- Executor 跨 TODO 維持同 session：下一個 TODO 只送短 next-TODO Prompt；retry／Review 修正只送新增 feedback 的 Continue Prompt。
+- Fresh Review：只看 Current TODO/evidence，read-only；Review 是刻意的獨立 session 邊界。
 - Same-session Review Finalize：停止查詢，直接輸出 verdict。
 - Final AI Validator：fresh independent session，驗完整 Goal。
 

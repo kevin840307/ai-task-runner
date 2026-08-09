@@ -51,7 +51,6 @@ from .script_runner import (
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
-EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER = 2
 VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 
@@ -359,25 +358,13 @@ class TaskRunner:
                 "Executor 異常但已有檔案變更，先執行 Review",
                 task.title,
             )
-            self.agent.session_id = ""
             self._save_session()
             self._set_stage("reviewing")
             review = self._review_current_task(task, task.last_output)
             return self._handle_review_result(task, review)
 
-        self.agent.session_id = ""
         self._save_session()
-        if task.stagnant_attempts >= EXECUTION_NO_CHANGE_FAILURES_BEFORE_DEFER:
-            task.review_skipped = True
-            task.review_skip_reason = (
-                "Repeated fresh sessions made no project progress; "
-                "final validator will decide"
-            )
-            task.last_review = skipped_review(task.review_skip_reason)
-            self.ui.set("Executor 連續無進展，交給 Final Validator", task.title)
-            self._complete_current_task(task)
-            return None
-
+        self._rebuild_stagnant_session(task)
         self._set_stage("task_retry_wait", str(error))
         return self._prepare_task_retry(task)
 
@@ -396,6 +383,7 @@ class TaskRunner:
 
         task.status = "pending"
         self._record_no_progress(task, review)
+        self._rebuild_stagnant_session(task)
         self._save_state()
         self.ui.set("任務未完成，準備重試", review["reason"])
         return self._prepare_task_retry(task)
@@ -424,13 +412,30 @@ class TaskRunner:
             task.progress_key = key
             task.stagnant_attempts = 1
 
+    def _rebuild_stagnant_session(self, task: Task) -> None:
+        if task.stagnant_attempts < NO_PROGRESS_LIMIT:
+            return
+        self.agent.session_id = ""
+        self.state.agent_session_id = ""
+        task.progress_key = ""
+        task.stagnant_attempts = 0
+        task.last_output = bounded_text(
+            task.last_output
+            + "\nRecovery: Previous attempts made no effective progress. "
+              "Continue this TODO with a different approach in the rebuilt session.",
+            MAX_TASK_OUTPUT_CHARS,
+        )
+        self.ui.set(
+            "目前 session 持續無進展，下一次改用 fresh session",
+            task.title,
+        )
+
     def _complete_current_task(self, task: Task) -> None:
         task.status = "completed"
         task.last_output = ""
         task.progress_key = ""
         task.stagnant_attempts = 0
-        self.agent.session_id = ""
-        self.state.agent_session_id = ""
+        self.state.agent_session_id = self.agent.session_id
         self.state.current += 1
         self._save_state()
         self.ui.set("任務完成", task.title)
@@ -451,12 +456,6 @@ class TaskRunner:
         )
 
     def _execute_current_task(self, task: Task) -> str:
-        strategy_note = ""
-        if task.stagnant_attempts >= NO_PROGRESS_LIMIT:
-            self.agent.session_id = ""
-            strategy_note = render_prompt_template("no_progress_strategy.md", {})
-        elif self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
-            self.agent.session_id = ""
         change_detected = self._project_change_detector()
 
         def call() -> str:
@@ -466,11 +465,7 @@ class TaskRunner:
                     self.state,
                     self.root,
                     self.protected,
-                    "\n".join(
-                        part
-                        for part in (strategy_note, self._validator_repair_hint())
-                        if part
-                    ),
+                    self._validator_repair_hint(),
                     str(self.validator) if self.validator else "",
                     should_refresh_goal(self.state, bool(self.agent.session_id)),
                     task.attempts > 1 and not bool(self.agent.session_id),
@@ -556,6 +551,8 @@ class TaskRunner:
         if passed:
             self.state.validator_failure_key = ""
             self.state.validator_failure_count = 0
+            self.agent.session_id = ""
+            self.state.agent_session_id = ""
             self.state.completed = True
             self._set_stage("completed")
             self._save_state()
@@ -563,6 +560,9 @@ class TaskRunner:
             return 0
 
         self._record_validator_failure(output)
+        if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+            self.agent.session_id = ""
+            self.state.agent_session_id = ""
         self.state.cycle += 1
         self.state.current = len(self.state.tasks)
         self._save_state()

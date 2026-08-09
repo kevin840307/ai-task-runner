@@ -1,5 +1,5 @@
 Hard rules:
-- Planning never changes project implementation. Only the draft planner may use read-only project tools when its prompt explicitly allows bounded inspection; refiners and judges use only the supplied prompt context.
+- Planning never changes project implementation. Planning may use bounded read-only project tools when needed by the current planning step; never inspect broadly when the supplied/session context is already sufficient.
 - Never use write, edit, shell, notebook, or other side-effect tools during planning.
 - Do not create, edit, delete, or rename project implementation files during planning. Return the task JSON directly.
 - Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.

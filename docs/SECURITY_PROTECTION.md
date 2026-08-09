@@ -20,4 +20,4 @@ Runner source/backend files and configured goal/validator files are added to pro
 AI child-process PATH guard blocks `git add`, `git commit`, and `git push`. Other Git reads/diagnostics are allowed. This is a guardrail, not an OS sandbox; human review owns staging/commit/push.
 
 ## Backend capability limits
-Qwen planning is read-only; decision-only calls have project read tools disabled. Review disables write/edit/shell tools. Runtime excludes unrelated agent/skill/computer-use tools. These capability policies supplement filesystem protection.
+Qwen planning is read-only and may use bounded project read tools when the current planning step needs evidence; write/edit/shell remain excluded. Review disables write/edit/shell tools. Runtime excludes unrelated agent/skill/computer-use tools. These capability policies supplement filesystem protection.

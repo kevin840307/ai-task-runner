@@ -11,9 +11,9 @@ from .debug import parse_with_debug
 from .errors import RunnerError
 from .models import RunState
 from .ui import LiveUI
-from .prompting import ai_validator_prompt, skipped_review_tasks
+from .prompting import ai_validator_prompt, skipped_review_tasks, structured_output_retry_prompt
 from .model_results import parse_ai_validation
-from .support import readonly_ask, retry_model_call
+from .support import recover_structured_output, readonly_ask, retry_model_call
 
 
 def run_ai_validator(
@@ -44,16 +44,10 @@ def run_ai_validator(
             debug_dir=debug_dir,
         )
 
-        def call() -> dict[str, Any]:
+        def ask_raw(prompt: str) -> str:
             raw, protected_changed, project_changed = readonly_ask(
                 validator,
-                ai_validator_prompt(
-                    state.goal,
-                    root,
-                    protected,
-                    args.validator_prompt,
-                    skipped_review_tasks(state),
-                ),
+                prompt,
                 root,
                 work,
                 protected,
@@ -66,7 +60,27 @@ def run_ai_validator(
                     "AI validator modified files and they were restored: "
                     + ", ".join(changed)
                 )
-            return parse_with_debug(debug_dir, parse_ai_validation, raw)
+            return raw
+
+        def call() -> dict[str, Any]:
+            raw = ask_raw(
+                ai_validator_prompt(
+                    state.goal,
+                    root,
+                    protected,
+                    args.validator_prompt,
+                    skipped_review_tasks(state),
+                )
+            )
+            return recover_structured_output(
+                raw,
+                lambda text: parse_with_debug(
+                    debug_dir, parse_ai_validation, text
+                ),
+                lambda error: ask_raw(
+                    structured_output_retry_prompt(error)
+                ),
+            )
 
         try:
             result = retry_model_call(

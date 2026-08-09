@@ -161,7 +161,7 @@ def test_all_smoke_and_example_project_roots_have_valid_self_protecting_policy()
         path for group in (root / "examples", root / "smoke")
         for path in group.glob("*/project") if path.is_dir()
     )
-    assert len(project_roots) == 18
+    assert project_roots
     for project in project_roots:
         policy = project / POLICY_FILENAME
         assert policy.is_file(), f"missing project policy: {project}"

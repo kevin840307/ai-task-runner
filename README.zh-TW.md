@@ -6,8 +6,8 @@
 
 ## 核心能力
 - 支援 Qwen / OpenCode；Qwen Prompt 僅走 stdin，不使用 `-p` 傳完整 Prompt。
-- Adaptive Planning：bounded read-only Understand -> 同一 client/session 的 Plan Finalize（Prompt 禁止再用工具）-> 必要時 fresh minimal fallback。
-- TODO 隔離執行：Executor 只做 Current TODO，Review 只審 Current TODO。
+- Adaptive Planning：bounded read-only Understand -> 同一 planning client/session 的 Plan Finalize -> 必要時同 session Judge/Rewrite；只有 planning session 無法恢復時才用 fresh full-context fallback。
+- TODO 隔離執行：Executor 跨 TODO 沿用同一 session，每次只送新的 Current TODO 與 scope 提醒；Review 才使用 fresh read-only session。
 - Deterministic Final Validator 是 hard gate；可額外執行多次獨立 Final AI Validation。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。

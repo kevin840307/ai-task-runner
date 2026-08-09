@@ -33,21 +33,23 @@ def test_retry_does_not_repeat_full_goal_in_existing_session():
     assert not should_refresh_goal(run, True)
 
 
-def test_first_repair_task_refreshes_goal():
+def test_first_repair_task_reuses_existing_session_context():
     run = state(cycle=2)
-    assert should_refresh_goal(run, True)
+    assert not should_refresh_goal(run, True)
 
 
-def test_fresh_execution_includes_goal_but_same_session_retry_does_not():
+def test_fresh_execution_includes_goal_and_next_todo_resume_is_task_only():
     run = state()
     fresh = execution_prompt(run, Path("/tmp"), [], include_goal=True)
-    continued = execution_prompt(run, Path("/tmp"), [], include_goal=False)
+    run.current = 1
+    next_todo = execution_prompt(run, Path("/tmp"), [], include_goal=False)
     assert "ORIGINAL GOAL" in fresh
-    assert "ORIGINAL GOAL" not in continued
+    assert "ORIGINAL GOAL" not in next_todo
     assert "context and global constraints only; never executable scope" in fresh
     assert "Current TODO is the only executable scope" in fresh
-    assert "Continue only the same current TODO" in continued
-    assert '"title": "task"' not in continued
+    assert "previous TODO is complete" in next_todo
+    assert '"title": "task"' in next_todo
+    assert "Do not revisit completed TODOs" in next_todo
 
 
 def test_rebuilt_session_prompt_requires_read_before_modify():

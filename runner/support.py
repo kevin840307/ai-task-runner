@@ -391,7 +391,6 @@ def readonly_ask(
     protected: Sequence[Path],
     timeout: int | None = None,
     idle_timeout: float = 0,
-    preserve_session_on_error: bool = False,
 ) -> tuple[str, list[str], list[str]]:
     file_snapshot = snapshot(protected)
     try:
@@ -401,7 +400,6 @@ def readonly_ask(
                 idle_timeout_after_change=idle_timeout,
                 change_detected=lambda: False,
                 timeout=timeout,
-                preserve_session_on_error=preserve_session_on_error,
             ),
             root,
             work,
@@ -431,6 +429,26 @@ def cleanup_stale_artifacts(
             continue
 
 
+
+def recover_structured_output(
+    raw: str,
+    parse: Callable[[str], T],
+    correct: Callable[[str], str],
+    retries: int = 1,
+) -> T:
+    """Retry only malformed structured output in the same live model session."""
+    error: RunnerError | None = None
+    for attempt in range(retries + 1):
+        try:
+            return parse(raw)
+        except RunnerError as current:
+            error = current
+            if attempt >= retries:
+                raise
+            raw = correct(str(current))
+    assert error is not None
+    raise error
+
 def retry_model_call(
     action: Callable[[], T],
     ui: LiveUI,
@@ -447,9 +465,11 @@ def retry_model_call(
         try:
             return action()
         except RunnerError as error:
-            errors += 1
+            transient = bool(getattr(error, "transient", False))
+            if not transient:
+                errors += 1
             ui.stop("模型呼叫異常，將自動重試", str(error)[-500:])
-            if max_errors and errors >= max_errors:
+            if not transient and max_errors and errors >= max_errors:
                 raise RunnerError(
                     f"model call failed {errors} times; "
                     "retrying from the runner task flow: "
