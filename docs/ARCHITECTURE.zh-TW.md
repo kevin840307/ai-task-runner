@@ -42,7 +42,7 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 Protected path 會正規化成 root；保護資料夾即保護 subtree。來源包含 Runner source、goal/validator、backend files、CLI `--protect-file` 與 project-root `.ai-task-runner.yaml`。Policy 本身自動保護。AI 違規修改會依 snapshot 偵測並還原。
 
 ## Debug
-`current-prompt.txt` 是正在執行的 call；`last-prompt.txt` / `last-result.txt` 是上一筆完成或失敗的 call；`debug/history/` 成對保存 bounded history，預設最近 100 calls、50 MiB、單筆 history entry 2 MiB（保留頭尾）。Debug failure 為 fail-soft，且不影響 changed-files/progress/validation/resume。
+每次模型 backend call 前會立即寫入 `current-prompt.txt`，同時先保存 `debug/history/<call-id>-prompt.txt`，因此即使 call 卡住或程序中止也能留下輸入。完成或失敗後再寫 `last-prompt.txt`、`last-result.txt` 與相同 call-id 的 `history/<call-id>-result.txt`。History 仍採 bounded rotation（預設最近 100 calls、50 MiB、單筆 entry 2 MiB，保留頭尾）。Debug failure 為 fail-soft，且不影響 changed-files/progress/validation/resume。
 
 ## Session continuation 不變量
 

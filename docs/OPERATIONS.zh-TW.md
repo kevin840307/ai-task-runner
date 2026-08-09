@@ -17,10 +17,10 @@
 Qwen Prompt 固定 stdin-only。Qwen non-zero exit 仍可能已經輸出有用 stdout；Runner 會保存 raw result/diagnostic，由各 stage fail-soft 策略決定是否可繼續。Windows `3221226505` (`0xC0000409`) 是 process fast-fail，不是正常 success exit。
 
 ## Debug files
-- `current-prompt.txt`：目前 call 的 Prompt，call 開始時更新。
-- `last-prompt.txt`：上一筆完成 call 的 Prompt。
+- `current-prompt.txt`：目前 call 的 Prompt，在送入 backend 前立即寫入。
+- `last-prompt.txt`：上一筆完成或失敗 call 的 Prompt。
 - `last-result.txt`：同一筆 call 的 Result/Error/parse diagnostic。
-- `history/`：最近 Prompt/Result 成對歷史。
+- `history/`：call 開始時先寫 prompt，完成或失敗時再寫相同 call-id 的 result。
 History 上限為最近 100 calls、50 MiB 總量、單一 history entry 2 MiB；超大 entry 保留頭尾。Current/last 不受 history truncate 限制。
 
 ## Terminal UI

@@ -78,6 +78,29 @@ def test_current_and_last_prompt_result_follow_call_lifecycle(tmp_path, monkeypa
     assert (debug / "last-result.txt").read_text(encoding="utf-8") == first_last_result
 
 
+
+
+def test_history_prompt_is_written_before_backend_returns(tmp_path, monkeypatch):
+    debug = tmp_path / ".ai-task-runner" / "debug"
+
+    class InspectingBackend(FakeBackend):
+        def ask(self, prompt, session_id, idle_timeout_after_change, change_detected):
+            prompts = list((debug / "history").glob("*-prompt.txt"))
+            results = list((debug / "history").glob("*-result.txt"))
+            assert len(prompts) == 1
+            assert results == []
+            assert "in-flight prompt" in prompts[0].read_text(encoding="utf-8")
+            assert "in-flight prompt" in (debug / "current-prompt.txt").read_text(encoding="utf-8")
+            return BackendResult('{"ok":true}', "session-1")
+
+    client = _client(tmp_path, monkeypatch, InspectingBackend(tmp_path))
+    client.ask("in-flight prompt")
+
+    prompts = list((debug / "history").glob("*-prompt.txt"))
+    results = list((debug / "history").glob("*-result.txt"))
+    assert len(prompts) == len(results) == 1
+    assert prompts[0].name.removesuffix("-prompt.txt") == results[0].name.removesuffix("-result.txt")
+
 def test_completed_call_updates_matching_last_prompt_and_result(tmp_path, monkeypatch):
     backend = FakeBackend(tmp_path)
     client = _client(tmp_path, monkeypatch, backend)

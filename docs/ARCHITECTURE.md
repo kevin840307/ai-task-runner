@@ -42,7 +42,7 @@ All final structured model results go through one extractor in `runner/model_res
 Protected paths are normalized roots; protecting a directory protects its subtree. Sources include Runner source, goal/validator files, backend files, CLI `--protect-file`, and project-root `.ai-task-runner.yaml`. The policy file is automatically protected. AI mutations are compared against snapshots and restored on violation.
 
 ## Debug model
-`current-prompt.txt` shows the active call. `last-prompt.txt` and `last-result.txt` keep the most recently finished call. `debug/history/` stores paired bounded history (default 100 calls, 50 MiB total, 2 MiB per history entry with head/tail truncation). Diagnostics are fail-soft and excluded from task progress/change semantics.
+`current-prompt.txt` is written immediately before every backend model call. At the same time, `debug/history/<call-id>-prompt.txt` is persisted so an in-flight/crashed call still has its input. On completion or error, `last-prompt.txt`, `last-result.txt`, and the matching `history/<call-id>-result.txt` are written. History remains bounded (default 100 calls, 50 MiB total, 2 MiB per entry with head/tail truncation). Diagnostics are fail-soft and excluded from task progress/change semantics.
 
 ## Session continuation invariant
 

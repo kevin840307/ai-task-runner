@@ -99,10 +99,18 @@ def _trim_history(history: Path) -> None:
                 pass
 
 
-def _write_history(debug_dir: Path, prompt_text: str, result_text: str) -> None:
+def _new_call_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ") + f"-{next(_HISTORY_SEQUENCE):06d}"
+
+
+def _write_history_prompt(debug_dir: Path, call_id: str, prompt_text: str) -> None:
     history = debug_dir / "history"
-    call_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ") + f"-{next(_HISTORY_SEQUENCE):06d}"
     _write(history / f"{call_id}-prompt.txt", _bounded_text(prompt_text))
+    _trim_history(history)
+
+
+def _write_history_result(debug_dir: Path, call_id: str, result_text: str) -> None:
+    history = debug_dir / "history"
     _write(history / f"{call_id}-result.txt", _bounded_text(result_text))
     _trim_history(history)
 
@@ -114,14 +122,15 @@ def begin_model_call(
     cwd: Path,
     session_id: str,
     prompt: str,
-) -> None:
+) -> str:
+    call_id = _new_call_id()
     if debug_dir is None:
-        return
+        return call_id
     common = {**_call_values(backend, cwd, session_id), "prompt_chars": len(prompt)}
-    _write(
-        debug_dir / "current-prompt.txt",
-        _header(**common) + "\n\n--- PROMPT ---\n\n" + prompt,
-    )
+    prompt_text = _header(**common) + "\n\n--- PROMPT ---\n\n" + prompt
+    _write(debug_dir / "current-prompt.txt", prompt_text)
+    _write_history_prompt(debug_dir, call_id, prompt_text)
+    return call_id
 
 
 def finish_model_call(
@@ -132,6 +141,7 @@ def finish_model_call(
     session_id: str,
     prompt: str,
     result: str,
+    call_id: str,
     error: str = "",
 ) -> None:
     if debug_dir is None:
@@ -148,7 +158,7 @@ def finish_model_call(
     result_text = _header(**values) + "\n\n--- RESULT ---\n\n" + result
     _write(debug_dir / "last-prompt.txt", prompt_text)
     _write(debug_dir / "last-result.txt", result_text)
-    _write_history(debug_dir, prompt_text, result_text)
+    _write_history_result(debug_dir, call_id, result_text)
 
 
 def note_parse_error(debug_dir: Path | None, error: BaseException) -> None:

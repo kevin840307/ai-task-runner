@@ -17,10 +17,10 @@ Defaults intentionally allow long model calls: runtime 7200s, planning 600s, val
 Qwen prompt is stdin-only. A non-zero Qwen exit may still contain useful stdout; the Runner records raw result/diagnostics and stage fail-soft behavior determines whether work can continue. Windows `3221226505` (`0xC0000409`) is a process fast-fail and is not considered a normal successful exit.
 
 ## Debug files
-- `current-prompt.txt`: active prompt; updated when a call starts.
+- `current-prompt.txt`: active prompt; written immediately before the backend call.
 - `last-prompt.txt`: prompt paired with the most recently finished call.
 - `last-result.txt`: result/error/parse diagnostics paired with that call.
-- `history/`: recent paired prompt/result history.
+- `history/`: each prompt entry is written when the call starts; its matching result entry is written on completion/error.
 History is bounded to 100 calls, 50 MiB total, 2 MiB per history entry; oversized entries preserve head and tail. Current/last files are not truncated by history limits.
 
 ## Terminal UI

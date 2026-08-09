@@ -119,6 +119,13 @@ def build_plan(
     draft_planner = new_planner(allow_project_read=True)
     inspection_summary = ""
     inspection_error: RunnerError | None = None
+    understand_prompt = plan_understand_prompt(
+        state.goal,
+        root,
+        state,
+        protected,
+        work,
+    )
     ui.set(
         "AI 正在理解專案",
         "bounded read-only planning inspection",
@@ -126,13 +133,7 @@ def build_plan(
     try:
         inspection_summary, protected_changed, changed = readonly_ask(
             draft_planner,
-            plan_understand_prompt(
-                state.goal,
-                root,
-                state,
-                protected,
-                work,
-            ),
+            understand_prompt,
             root,
             work,
             protected,

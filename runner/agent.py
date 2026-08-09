@@ -72,6 +72,7 @@ class AgentClient:
         session_id: str,
         prompt: str,
         result: str,
+        call_id: str,
         error: str = "",
     ) -> None:
         finish_model_call(
@@ -81,6 +82,7 @@ class AgentClient:
             session_id=session_id,
             prompt=prompt,
             result=result,
+            call_id=call_id,
             error=error,
         )
 
@@ -98,7 +100,7 @@ class AgentClient:
             self.timeout = timeout
             self._backend.timeout = timeout
         call_session_id = self.session_id
-        begin_model_call(
+        debug_call_id = begin_model_call(
             getattr(self, "debug_dir", None),
             backend=self.backend,
             cwd=self.root,
@@ -119,7 +121,7 @@ class AgentClient:
                     error_result = self._backend.decode(error.output).text
                 except Exception:
                     error_result = error.output[-20_000:]
-            self._finish_debug(call_session_id, prompt, error_result, str(error))
+            self._finish_debug(call_session_id, prompt, error_result, debug_call_id, str(error))
             if error.session_id and not self.session_id:
                 self.session_id = error.session_id
             message = str(error)
@@ -142,7 +144,7 @@ class AgentClient:
             self._backend.timeout = previous_backend_timeout
         if result.session_id and not self.session_id:
             self.session_id = result.session_id
-        self._finish_debug(call_session_id, prompt, result.text)
+        self._finish_debug(call_session_id, prompt, result.text, debug_call_id)
         return result.text
 
     def prepare_project(self) -> list[Path]:
