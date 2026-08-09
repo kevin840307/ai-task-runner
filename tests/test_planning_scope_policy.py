@@ -50,7 +50,7 @@ def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
     assert "Project root:" not in prompt
 
 
-def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
+def test_plan_refine_continues_existing_planner_contract(tmp_path: Path):
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     tasks = [Task(
         id="c01-t001",
@@ -61,8 +61,8 @@ def test_plan_refine_is_an_independent_rewrite_contract(tmp_path: Path):
     )]
     prompt = plan_refine_prompt("g", tmp_path, state, tasks)
 
-    assert "independent plan editor" in prompt
-    assert "do not defend it" in prompt
+    assert "Continue the existing planning work" in prompt
+    assert "defend the old plan" in prompt
     assert "complete replacement task list" in prompt
     assert "Knowledge, findings" in prompt
     assert "dedicated planning turn before TODO creation" in prompt
@@ -95,7 +95,7 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     assert "Never judge from title wording or keyword matching" in prompt
 
 
-def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
+def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     import runner.core as core
     import runner.planning as planning
 
@@ -170,16 +170,14 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 3
+    assert len(created) == 2
     assert created[0] is calls[0][0]
     assert created[0] is calls[1][0]
     assert created[1] is calls[2][0]
-    assert created[2] is calls[3][0]
-    assert len({id(agent) for agent in created}) == 3
-    assert [agent.initial_session_id for agent in created] == ["", "", ""]
+    assert len({id(agent) for agent in created}) == 2
+    assert [agent.initial_session_id for agent in created] == ["", ""]
     assert created[0].root == tmp_path
     assert created[1].root == runner.work
-    assert created[2].root == runner.work
 
     def excluded_tools(agent):
         return {
@@ -195,18 +193,18 @@ def test_planning_refine_uses_a_fresh_agent(tmp_path: Path, monkeypatch):
     # Decision-only Qwen calls keep one built-in read-only compatibility tool
     # available so strict OpenAI-compatible endpoints never receive tools=[].
     assert "read_file" not in excluded_tools(created[1])
-    assert "read_file" not in excluded_tools(created[2])
     assert "write_file" in excluded_tools(created[1])
     assert "run_shell_command" in excluded_tools(created[1])
-    assert runner.state.tasks[0].title == "Refined 1"
+    assert runner.state.tasks[0].title == "Draft 1"
 
 
-def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monkeypatch):
+def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monkeypatch):
     import runner.core as core
     import runner.planning as planning
 
     created = []
     prompts = []
+    calls = []
     judge_calls = 0
 
     class FakeAgent:
@@ -236,6 +234,7 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         nonlocal judge_calls
         prompts.append(prompt)
+        calls.append((agent, prompt))
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planning-session"
             return "Relevant project evidence gathered", [], []
@@ -248,7 +247,7 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
             )
         elif "Plan judge issues" in prompt:
             payload = task_payload("Corrected")
-        elif "independent plan editor" in prompt:
+        elif "Continue the existing planning work" in prompt:
             payload = task_payload("Refined")
         elif "Create the implementation plan now" in prompt:
             payload = task_payload("Draft")
@@ -284,8 +283,13 @@ def test_plan_judge_feedback_drives_one_more_fresh_rewrite(tmp_path: Path, monke
 
     runner._plan_if_needed()
 
-    assert len(created) == 5
+    assert len(created) == 3
     assert judge_calls == 2
+    assert calls[0][0] is created[0]  # understand
+    assert calls[1][0] is created[0]  # finalize
+    assert calls[2][0] is created[1]  # fresh judge
+    assert calls[3][0] is created[0]  # rewrite reuses planner
+    assert calls[4][0] is created[2]  # next judge is fresh
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
     assert runner.state.tasks[0].title == "Corrected 1"
 
@@ -385,7 +389,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
     runner._plan_if_needed()
 
-    assert len(created) == 5
+    assert len(created) == 4
     assert len(runner.state.tasks) == 6
 
 
@@ -530,7 +534,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
         if "Create the implementation plan now" in prompt:
             assert agent.session_id == "draft-session"
             return json.dumps(_six_tasks("Finalized")), [], []
-        if "independent plan editor" in prompt:
+        if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
         return json.dumps(judge_payload(6)), [], []
 
@@ -543,7 +547,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
     runner._plan_if_needed()
 
-    assert [agent.initial_session_id for agent in created] == ["", "", ""]
+    assert [agent.initial_session_id for agent in created] == ["", ""]
     assert created[0].root == tmp_path
     # Same-session finalize reuses the exact planner client/tool policy from Understand.
     excluded = {
@@ -553,7 +557,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
     }
     assert "read_file" not in excluded
     assert "grep_search" not in excluded
-    assert runner.state.tasks[0].title == "Refined 1"
+    assert runner.state.tasks[0].title == "Finalized 1"
 
 
 def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reexplore(tmp_path: Path, monkeypatch):
@@ -585,7 +589,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
             raise RunnerError("resume failed")
         if "Create the implementation plan now" in prompt:
             return json.dumps(_six_tasks("Minimal")), [], []
-        if "independent plan editor" in prompt:
+        if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
         return json.dumps(judge_payload(6)), [], []
 
@@ -631,7 +635,7 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
         if "Create the implementation plan now" in prompt:
             assert "Important evidence: renderer uses layered values and Jinja templates." in prompt
             return json.dumps(_six_tasks("Minimal")), [], []
-        if "independent plan editor" in prompt:
+        if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
         return json.dumps(judge_payload(6)), [], []
 
@@ -643,7 +647,7 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
     runner._plan_if_needed()
-    assert runner.state.tasks[0].title == "Refined 1"
+    assert runner.state.tasks[0].title == "Minimal 1"
 
 
 def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
@@ -663,7 +667,7 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
             return "Relevant project evidence gathered", [], []
         if "Create the implementation plan now" in prompt:
             return json.dumps(_six_tasks("Draft")), [], []
-        if "independent plan editor" in prompt:
+        if "Continue the existing planning work" in prompt:
             raise RunnerError("refiner unavailable")
         return json.dumps(judge_payload(6)), [], []
 
@@ -678,7 +682,7 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
     assert runner.state.tasks[0].title == "Draft 1"
 
 
-def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
+def test_judge_error_uses_last_valid_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
     import runner.planning as planning
     from runner.errors import RunnerError
@@ -695,7 +699,7 @@ def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
             return "Relevant project evidence gathered", [], []
         if "Create the implementation plan now" in prompt:
             return json.dumps(_six_tasks("Draft")), [], []
-        if "independent plan editor" in prompt:
+        if "Continue the existing planning work" in prompt:
             return json.dumps(_six_tasks("Refined")), [], []
         raise RunnerError("judge unavailable")
 
@@ -707,7 +711,7 @@ def test_judge_error_uses_last_valid_refined_plan(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
     runner._plan_if_needed()
-    assert runner.state.tasks[0].title == "Refined 1"
+    assert runner.state.tasks[0].title == "Draft 1"
 
 
 def test_same_session_finalize_is_compact_but_fresh_fallback_is_self_contained(tmp_path: Path):
@@ -731,3 +735,54 @@ def test_same_session_finalize_is_compact_but_fresh_fallback_is_self_contained(t
     assert "app.txt" not in fresh
     assert "UNIQUE INSPECTION SUMMARY" in fresh
     assert len(same) < len(fresh)
+
+def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path, monkeypatch):
+    import runner.core as core
+    import runner.planning as planning
+    from runner.errors import RunnerError
+
+    created = []
+    calls = []
+    judge_calls = 0
+    rewrite_calls = 0
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            self.session_id = kwargs["session_id"]
+            created.append(self)
+        def prepare_project(self):
+            return []
+
+    def fake_readonly_ask(agent, prompt, *args, **kwargs):
+        nonlocal judge_calls, rewrite_calls
+        calls.append((agent, prompt))
+        if "dedicated project-understanding turn" in prompt:
+            agent.session_id = "planner-session"
+            return "evidence", [], []
+        if "Create the implementation plan now" in prompt:
+            return json.dumps(_six_tasks("Draft")), [], []
+        if "plan quality judge" in prompt:
+            judge_calls += 1
+            return json.dumps(judge_payload(6, rejected_index=1)) if judge_calls == 1 else json.dumps(judge_payload(6)), [], []
+        if "Continue the existing planning work" in prompt:
+            rewrite_calls += 1
+            if rewrite_calls == 1:
+                agent.session_id = ""
+                raise RunnerError("session unavailable")
+            agent.session_id = "fresh-planner-session"
+            return json.dumps(_six_tasks("Recovered")), [], []
+        raise AssertionError(prompt)
+
+    runner = _adaptive_runner(core, tmp_path)
+    monkeypatch.setattr(planning, "AgentClient", FakeAgent)
+    monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
+    monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    runner._plan_if_needed()
+
+    rewrite_agents = [agent for agent, prompt in calls if "Continue the existing planning work" in prompt]
+    assert rewrite_calls == 2
+    assert rewrite_agents == [created[0], created[0]]
+    assert runner.state.tasks[0].title == "Recovered 1"

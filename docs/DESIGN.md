@@ -18,7 +18,7 @@ The Runner owns orchestration; project code and validators own application-speci
 4. Planning Understand: fresh, bounded read-only inspection.
 5. Planning Finalize: reuse the exact Understand planner client/session and tool policy; the finalize prompt forbids further tool use and generates >=6 bounded implementation TODOs.
 6. If planning session/result fails, use a fresh no-tool minimal plan with goal, prior inspection summary, progress, and validator feedback.
-7. Optional Refiner/Judge: fresh no-tool checks; fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
+7. Judge the valid plan first in a fresh independent session. Only on rejection, rewrite with the original Planner client/session, then judge again with a new independent Judge. Planning quality gates fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
 8. Execute one Current TODO. A fresh/rebuilt Executor sees Original Goal only as global context and the Current TODO as the only executable scope.
 9. Review the Current TODO in a fresh read-only session. On a resumable model error, same-session no-tool Review Finalize uses gathered evidence.
 10. PASS advances to the next TODO. Semantic FAIL retries the same TODO using a short same-session continuation containing only new feedback.

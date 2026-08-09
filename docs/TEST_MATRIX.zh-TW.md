@@ -5,7 +5,7 @@ Version: 1.1.1
 ## 主要契約
 - CLI/API request validation 與 YAML script mode。
 - Qwen/OpenCode backend command/session parsing；Qwen stdin-only Prompt + EOF。
-- Planning same-session/fresh fallback、至少 6 TODO、bounded scope、Refiner/Judge fail-soft。
+- Planning same-session/fresh fallback、Judge-before-rewrite、Planner session rewrite reuse、至少 6 TODO、bounded scope、planning quality-gate fail-soft。
 - Executor Fresh/Rebuilt Goal context、same-session short continuation、Current-TODO-only。
 - Review/read-only/finalize。
 - Generic structured result extraction + strict stage schemas。

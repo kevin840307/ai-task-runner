@@ -11,7 +11,7 @@ All in-run same-session continuations reuse the exact same `AgentClient`; do not
 - Understand: fresh session, goal/project root/progress/rules, bounded project read tools, no writes. No precomputed `Project files:` tree is injected.
 - Finalize: same Understand session, no tools, only plan output contract and bounded-TODO rules.
 - Fresh minimal fallback: new no-tool session with goal, project root, progress, validator feedback, and successful inspection summary.
-- Refiner/Judge: fresh no-tool sessions with candidate tasks and required context. Judge prompts include both FAIL and PASS examples.
+- Judge: always fresh and independent. Rewrite: reuse the Planner client/session that produced the current plan; run it only after Judge rejection. If that Planner session has been reset by a severe/session-invalid error, the same client starts fresh using the self-contained rewrite prompt. Judge prompts include both FAIL and PASS examples.
 
 ## Execution
 - Fresh/rebuilt: Original Goal is supplied once as context/global constraints; Current TODO is the only executable scope. The prompt keeps only cross-stage safety boundaries plus executor-specific rules, shared constraints, and relevant validator/review recovery evidence. Scope/session wording is not duplicated inside `Run context`.

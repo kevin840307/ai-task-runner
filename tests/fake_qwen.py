@@ -3,7 +3,7 @@ from __future__ import annotations
 import json, sys
 from pathlib import Path
 prompt = sys.stdin.read(); root = Path.cwd()
-if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
+if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
     cycle2 = '"cycle": 2' in prompt
     if cycle2:
         print(json.dumps({"tasks":[{"title":"Repair final result","description":"Create task-002.done","deliverable":"task-002.done exists","acceptance_criteria":["task-002.done exists"]}]}))

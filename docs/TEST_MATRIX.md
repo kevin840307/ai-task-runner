@@ -5,7 +5,7 @@ Version: 1.1.1
 ## Contract areas
 - CLI/API request validation and YAML script mode.
 - Qwen/OpenCode backend command/session parsing; Qwen stdin-only prompt and EOF.
-- Planning same-session/fresh fallback, minimum TODO count, bounded scope, Refiner/Judge fail-soft.
+- Planning same-session/fresh fallback, Judge-before-rewrite, Planner-session rewrite reuse, minimum TODO count, bounded scope, and planning quality-gate fail-soft.
 - Executor fresh/rebuilt Goal context, same-session short continuation, Current-TODO-only scope.
 - Review/read-only/finalize behavior.
 - Generic structured result extraction and strict stage schemas.

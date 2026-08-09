@@ -28,7 +28,7 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 ## Session 規則
 - Fresh Understand：完整 Goal/context + bounded read tools，禁止寫入。
 - Same-session Plan：只送下一步與輸出契約，不重送靜態 context。
-- Fresh fallback/Refiner/Judge：no-tool，但 context 必須自足。
+- Fresh fallback/Judge：decision context 必須自足。Rewrite 沿用產生目前 plan 的 Planner；若共用 Agent 錯誤策略已重置 session，同一 client 會自然以自足的 rewrite Prompt fresh 重建。
 - Fresh/Rebuilt Executor：Original Goal 只提供 global context；Current TODO 是唯一 executable scope。
 - Same-session Executor retry：短 Continue Prompt，只帶最新 Review/recovery feedback。
 - Fresh Review：只看 Current TODO/evidence，read-only。

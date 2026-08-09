@@ -150,8 +150,8 @@ def build_plan(
         inspection_error = error
 
     tasks: list[Task] | None = None
+    planner = draft_planner
     if draft_planner.session_id:
-        planner = draft_planner
         prompt = plan_finalize_prompt(
             state.goal,
             root,
@@ -170,6 +170,7 @@ def build_plan(
 
     if tasks is None:
         def minimal_plan() -> list[Task]:
+            nonlocal planner
             planner = new_planner()
             prompt = plan_finalize_prompt(
                 state.goal,
@@ -195,28 +196,7 @@ def build_plan(
         )
 
     judge_issues: list[str] = []
-    for rewrite_round in range(1, PLAN_JUDGE_MAX_REWRITES + 1):
-        try:
-            refiner = new_planner()
-            prompt = plan_refine_prompt(
-                state.goal,
-                root,
-                state,
-                tasks,
-                work,
-                judge_issues,
-            )
-            ui.set(
-                "AI 正在重寫任務規劃",
-                f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
-            )
-            tasks = ask_plan(refiner, prompt)
-        except RunnerError as error:
-            ui.set(
-                "AI 重寫規劃異常，保留目前有效規劃",
-                str(error)[-500:],
-            )
-
+    for judge_round in range(PLAN_JUDGE_MAX_REWRITES + 1):
         try:
             judge = new_planner()
             prompt = plan_judge_prompt(
@@ -228,7 +208,7 @@ def build_plan(
             )
             ui.set(
                 "AI 正在審查任務規劃",
-                f"round {rewrite_round}/{PLAN_JUDGE_MAX_REWRITES}",
+                f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES + 1}",
             )
             judgment_text, protected_changed, judge_changed = readonly_ask(
                 judge,
@@ -261,15 +241,44 @@ def build_plan(
         judge_issues = [] if judgment["accepted"] else judgment["issues"]
         if not judge_issues:
             break
-        ui.set(
-            "AI 任務規劃未通過，重新拆分",
-            "; ".join(judge_issues),
+        if judge_round == PLAN_JUDGE_MAX_REWRITES:
+            ui.set(
+                "AI 任務規劃仍有疑慮，交由後續驗證閉環",
+                "; ".join(judge_issues),
+            )
+            break
+
+        prompt = plan_refine_prompt(
+            state.goal,
+            root,
+            state,
+            tasks,
+            work,
+            judge_issues,
         )
-    else:
         ui.set(
-            "AI 任務規劃仍有疑慮，交由後續驗證閉環",
-            "; ".join(judge_issues),
+            "AI 任務規劃未通過，正在重寫",
+            f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES} · "
+            + "; ".join(judge_issues),
         )
+        try:
+            tasks = ask_plan(planner, prompt)
+        except RunnerError as error:
+            if not planner.session_id:
+                ui.set(
+                    "AI 重寫 session 無法使用，改用 fresh 規劃重寫",
+                    str(error)[-500:],
+                )
+                try:
+                    tasks = ask_plan(planner, prompt)
+                    continue
+                except RunnerError as retry_error:
+                    error = retry_error
+            ui.set(
+                "AI 重寫規劃異常，保留目前有效規劃",
+                str(error)[-500:],
+            )
+            break
 
     if project_changed:
         ui.set(

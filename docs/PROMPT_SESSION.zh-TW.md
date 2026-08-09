@@ -11,7 +11,7 @@ Fresh/Rebuilt session 必須針對該 stage 自足；Same-session call 只送新
 - Understand：fresh session，Goal/project root/progress/rules，只有 bounded project read tools，禁止寫入。不再預塞 `Project files:` tree。
 - Finalize：沿用 Understand session、no tools，只送 Plan output contract 與 bounded-TODO rule。
 - Fresh minimal fallback：新 no-tool session，重新帶 Goal、project root、progress、validator feedback、成功 inspection summary。
-- Refiner/Judge：fresh no-tool session，帶 candidate tasks 與必要 context。Judge Prompt 同時示範 FAIL/PASS。
+- Judge：每次都 fresh 且獨立。Rewrite：只有 Judge 拒絕後才執行，並沿用產生目前 plan 的 Planner client/session；若嚴重/session-invalid 錯誤已使該 session 被重置，同一 client 會使用自足 rewrite Prompt fresh 啟動。Judge Prompt 同時示範 FAIL/PASS。
 
 ## Execution
 - Fresh/Rebuilt：Original Goal 只送一次並只作 context/global constraints；Current TODO 是唯一 executable scope。Prompt 只保留跨 stage 安全邊界、Executor 專用規則、shared constraints 與必要的 validator/review recovery evidence；`Run context` 不再重複 scope/session 說明。

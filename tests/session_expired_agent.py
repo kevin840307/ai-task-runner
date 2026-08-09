@@ -21,7 +21,7 @@ def count(name: str) -> int:
 
 
 session = "old-session"
-if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
+if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
     answer = {
         "tasks": [{
             "title": "Create marker",

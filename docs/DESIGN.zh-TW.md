@@ -15,7 +15,7 @@ Version: 1.1.1
 4. Planning Understand：fresh session，bounded read-only inspection。
 5. Planning Finalize：同 session、no tools，產生至少 6 個 bounded implementation TODO。
 6. Planning session/result 失敗時，使用 fresh no-tool minimal plan，重新帶 Goal、inspection summary、progress、validator feedback。
-7. Refiner/Judge：fresh no-tool；異常時 fail-soft，保留最後有效 plan。二元 verdict Prompt 同時提供 FAIL/PASS 範例。
+7. 先用 fresh 獨立 Judge 審查有效 plan；只有被拒絕才沿用原 Planner client/session 重寫，再用新的獨立 Judge 重審。Planning quality gate 異常時 fail-soft，保留最後有效 plan。二元 verdict Prompt 同時提供 FAIL/PASS 範例。
 8. Executor 一次只執行一個 Current TODO。Fresh/Rebuilt session 會收到 Original Goal，但它只用於 global context；Current TODO 才是唯一 executable scope。
 9. Review 使用 fresh read-only session，只審 Current TODO。若模型錯誤但 session 可續，same-session no-tool Review Finalize 直接用已取得 evidence 判斷。
 10. PASS 才進下一個 TODO；semantic FAIL 留在同一 TODO，使用短 Continue Prompt，只帶新 feedback。

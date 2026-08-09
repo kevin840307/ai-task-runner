@@ -22,7 +22,7 @@ def count(name):
     return value + 1
 
 
-if "Plan only the remaining work" in prompt or "independent plan editor" in prompt:
+if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
     if scenario == "multi_task_plan":
         answer = {"tasks": [
             {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"]},

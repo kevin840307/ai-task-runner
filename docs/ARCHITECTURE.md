@@ -28,7 +28,7 @@ The Runner owns orchestration, state, retry/recovery, session policy, protection
 ## Session policy
 - Fresh Understand: full goal/context + bounded read tools, no writes.
 - Same-session Plan: only the next instruction/output contract; static context is not resent.
-- Fresh fallback/Refiner/Judge: self-contained no-tool context.
+- Fresh fallback/Judge: self-contained decision context. Rewrite continues on the Planner that produced the current plan; if that session is reset by the shared Agent error policy, the same client naturally starts fresh from the self-contained rewrite prompt.
 - Fresh/rebuilt Executor: Original Goal for global context only + Current TODO as the only executable scope.
 - Same-session Executor retry: short continuation with only new review/recovery feedback.
 - Fresh Review: current TODO/evidence only; read-only.

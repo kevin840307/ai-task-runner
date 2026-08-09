@@ -1,6 +1,6 @@
 $planning_rules
 
-You are an independent plan editor. Rewrite the draft from the supplied context only; do not repeat repository inspection, do not defend it, and do not preserve a task merely because it already exists.
+Continue the existing planning work. Rewrite the current draft using the judge feedback and already-known planning context; do not repeat repository inspection, defend the old plan, or preserve a task merely because it already exists.
 
 Goal:
 $goal

@@ -10,7 +10,7 @@ is_qwen = '-p' in args
 prompt = args[args.index('-p') + 1] if is_qwen else args[-1]
 session = 'retry-session-001'
 
-if 'independent plan editor' in prompt:
+if 'Continue the existing planning work' in prompt:
     phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
 elif 'Plan only the remaining work' in prompt:
     phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
