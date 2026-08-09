@@ -10,7 +10,7 @@ The Runner owns orchestration, state, retry/recovery, session policy, protection
 - `runner/api.py`: canonical `RunRequest` / `run()` interface for CLI, UI, skills, and Python callers.
 - `runner/core.py`: state-machine/orchestration.
 - `runner/planning.py`: Understand, Plan, fallback, Refiner, Judge.
-- `runner/reviewing.py`: current-TODO review and no-tool finalize.
+- `runner/reviewing.py`: fresh current-TODO review and logical no-tool finalize (with one read-only compatibility tool retained for strict APIs).
 - `runner/validation.py`: deterministic and Final AI validation orchestration.
 - `runner/model_results.py`: one generic JSON-candidate extraction path plus strict stage parsers.
 - `runner/prompting.py`: prompt templates/context composition.

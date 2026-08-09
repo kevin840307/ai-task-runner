@@ -94,6 +94,12 @@ class AgentClient:
     def name(self) -> str:
         return self.backend
 
+    def set_extra_args(self, extra_args: Sequence[str]) -> None:
+        """Switch stage capabilities without replacing this client or session."""
+        values = list(extra_args)
+        self.extra_args = values
+        self._backend.extra_args = values
+
     def _finish_debug(
         self,
         session_id: str,

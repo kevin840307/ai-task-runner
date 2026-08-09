@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Sequence
 
 from .agent import AgentClient
-from .agent_args import planning_agent_args
 from .debug import parse_with_debug
 from .errors import RunnerError, diagnostic_error
 from .models import RunState, Task
@@ -40,23 +39,6 @@ def build_plan(
     min_tasks = MIN_PLANNED_TASKS if state.cycle == 1 else 1
     project_changed: list[str] = []
     debug_dir = work / "debug"
-
-    def new_planner() -> AgentClient:
-        planner = AgentClient(
-            backend=args.backend,
-            command=args.command,
-            root=root,
-            extra_args=planning_agent_args(
-                args.backend,
-                args.agent_arg,
-                allow_project_read=True,
-            ),
-            session_id=main_agent.session_id,
-            timeout=args.planning_timeout,
-            debug_dir=debug_dir,
-        )
-        planner.prepare_project()
-        return planner
 
     def parse_plan(text: str) -> list[Task]:
         return parse_with_debug(
@@ -116,7 +98,7 @@ def build_plan(
                 return salvaged
             raise
 
-    draft_planner = new_planner()
+    draft_planner = main_agent
     inspection_summary = ""
     inspection_error: RunnerError | None = None
     understand_prompt = plan_understand_prompt(
@@ -210,6 +192,7 @@ def build_plan(
                 state,
                 tasks,
                 work,
+                same_session=bool(planner.session_id),
             )
             ui.set(
                 "AI 正在審查任務規劃",
@@ -249,6 +232,7 @@ def build_plan(
             tasks,
             work,
             judge_issues,
+            same_session=bool(planner.session_id),
         )
         ui.set(
             "AI 任務規劃未通過，正在重寫",
@@ -264,7 +248,13 @@ def build_plan(
                     str(error)[-500:],
                 )
                 try:
-                    tasks = ask_plan(planner, prompt)
+                    tasks = ask_plan(
+                        planner,
+                        plan_refine_prompt(
+                            state.goal, root, state, tasks, work, judge_issues,
+                            same_session=False,
+                        ),
+                    )
                     continue
                 except RunnerError as retry_error:
                     error = retry_error
@@ -279,7 +269,6 @@ def build_plan(
             "AI restored project changes made during planning",
             ", ".join(sorted(set(project_changed))),
         )
-    main_agent.session_id = planner.session_id
     return tasks
 
 

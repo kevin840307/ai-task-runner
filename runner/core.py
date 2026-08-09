@@ -12,12 +12,13 @@ from typing import Any
 
 from .agent import AgentClient
 from .agent_args import (
+    planning_agent_args,
     runtime_agent_args,
 )
 from .errors import RunnerError, diagnostic_error
 from .models import RunState, Task
 from .planning import build_plan
-from .reviewing import review_task, skipped_review
+from .reviewing import review_task
 from .policy import protected_paths as policy_protected_paths
 from .prompting import (
     bounded_text,
@@ -216,22 +217,32 @@ class TaskRunner:
             return
 
         self._set_stage("planning")
-        planned = retry_model_call(
-            lambda: build_plan(
-                self.args,
-                self.root,
-                self.work,
-                self.state,
-                self.protected,
-                self.ui,
-                self.agent,
-            ),
-            self.ui,
-            "AI 正在規劃並拆分任務",
-            "",
-            self.args.retry_wait,
-            self.args.retry_max_wait,
+        self.agent.set_extra_args(
+            planning_agent_args(
+                self.args.backend, self.args.agent_arg, allow_project_read=True
+            )
         )
+        try:
+            planned = retry_model_call(
+                lambda: build_plan(
+                    self.args,
+                    self.root,
+                    self.work,
+                    self.state,
+                    self.protected,
+                    self.ui,
+                    self.agent,
+                ),
+                self.ui,
+                "AI 正在規劃並拆分任務",
+                "",
+                self.args.retry_wait,
+                self.args.retry_max_wait,
+            )
+        finally:
+            self.agent.set_extra_args(
+                runtime_agent_args(self.args.backend, self.args.agent_arg)
+            )
         self.state.agent_session_id = self.agent.session_id
         self.state.tasks = planned
         self.state.current = 0
@@ -266,15 +277,8 @@ class TaskRunner:
                 changed_files = changed_project_files(self.root, self.work, project_before)
                 task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
                 self._save_state()
-                if task.changed_files:
-                    self._set_stage("reviewing")
-                    review = self._review_current_task(task, output)
-                else:
-                    self.ui.set(
-                        "沒有專案變更，略過 Review",
-                        f"{task.title} · final validator will decide",
-                    )
-                    review = skipped_review("No project changes; final validator will decide")
+                self._set_stage("reviewing")
+                review = self._review_current_task(task, output)
             except RunnerError as error:
                 result = self._handle_execution_error(
                     task,

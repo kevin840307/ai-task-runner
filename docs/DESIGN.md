@@ -16,11 +16,11 @@ The Runner owns orchestration; project code and validators own application-speci
 2. Load/create Runner state.
 3. Build normalized protected roots.
 4. Planning Understand: fresh, bounded read-only inspection.
-5. Planning Finalize: reuse the exact Understand planner client/session and tool policy; the finalize prompt forbids further tool use and generates >=6 bounded implementation TODOs.
+5. Planning uses the main `AgentClient` and session. Core temporarily applies planning `--yolo` + bounded read-only Qwen args, then restores runtime `--yolo` args before TODO execution. Finalize/Judge/Rewrite use short same-session prompts; rebuilt calls use self-contained prompts.
 6. If planning output fails, retry the same planning session while it remains usable. Only after the session is invalid or repeated attempts cannot recover, clear it and use the same planner client with a fresh full-context plan prompt.
 7. Judge the valid plan in the same planning session. Judge may use bounded read-only inspection when needed; on rejection, rewrite in that same session and judge again. If the quality gate itself cannot produce a usable verdict, fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
 8. Execute one Current TODO. The Executor session survives successful TODO completion; the next TODO resumes that same session with only the new TODO spec and a strict current-scope reminder. Fresh/rebuilt execution receives the Original Goal only as global context.
-9. Review the Current TODO in a fresh read-only session. On a resumable model error, same-session no-tool Review Finalize uses gathered evidence.
+9. Review every normally returned TODO, even when it changed no files, in a fresh read-only session. On a resumable model error, same-session logical no-tool Review Finalize uses gathered evidence; Qwen still keeps `read_file` available for strict non-empty-tools API compatibility.
 10. PASS advances to the next TODO. Semantic FAIL retries the same TODO using a short same-session continuation containing only new feedback.
 11. Repeated no-progress/model failure keeps the current TODO pending; the Runner retries the same session first and rebuilds only after repeated stagnation. Final Validator remains the last step after all TODOs in the cycle have finished.
 12. Deterministic Final Validator runs against the complete project/goal. PASS completes. FAIL creates Repair Planning with validator feedback and starts another bounded cycle. Validator infrastructure failure retries and never fails open.

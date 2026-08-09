@@ -152,7 +152,7 @@ def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monke
     runner._set_stage = lambda *args: None
     seen = []
     runner._execute_current_task = lambda task: seen.append((task.id, runner.agent.session_id)) or "done"
-    runner._review_current_task = lambda *args: (_ for _ in ()).throw(AssertionError("no changes: review must not run"))
+    runner._review_current_task = lambda *args: {"completed": True, "reason": "ok", "missing_items": []}
     monkeypatch.setattr(core, "project_manifest", lambda *args: {})
     monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
     monkeypatch.setattr(core, "show_todo", lambda *args: None)
@@ -161,3 +161,29 @@ def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monke
     assert seen == [("c01-t001", "executor-session"), ("c01-t002", "executor-session")]
     assert runner.agent.session_id == "executor-session"
     assert runner.state.agent_session_id == "executor-session"
+
+
+def test_normal_executor_completion_without_file_change_still_reviews(tmp_path, monkeypatch):
+    import runner.core as core
+
+    task = Task(id="c01-t001", title="check existing result", description="d", deliverable="d", acceptance_criteria=["ok"])
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[task])
+    runner.agent = SimpleNamespace(session_id="s")
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._save_state = lambda: None
+    runner._save_session = lambda: None
+    runner._set_stage = lambda *args: None
+    runner._execute_current_task = lambda task: "already satisfied"
+    seen = []
+    runner._review_current_task = lambda task, output: seen.append((task.id, output)) or {"completed": True, "reason": "ok", "missing_items": []}
+    monkeypatch.setattr(core, "project_manifest", lambda *args: {})
+    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+    monkeypatch.setattr(core, "show_todo", lambda *args: None)
+
+    assert runner._run_pending_tasks() is None
+    assert seen == [("c01-t001", "already satisfied")]
+    assert task.status == "completed"

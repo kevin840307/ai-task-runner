@@ -176,7 +176,12 @@ def plan_refine_prompt(
     tasks: Sequence[Task],
     work: Path | None = None,
     judge_issues: Sequence[str] = (),
+    *,
+    same_session: bool = True,
 ) -> str:
+    feedback = "\n".join(f"- {item}" for item in judge_issues) or "- Re-check and correct the current plan."
+    if same_session:
+        return render_prompt_template("plan_refine.md", {"judge_feedback": feedback})
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
@@ -185,28 +190,18 @@ def plan_refine_prompt(
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
-        "plan_refine.md",
+        "plan_refine_full.md",
         {
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "progress_json": json.dumps(progress, ensure_ascii=False),
-            "tasks_json": json.dumps(
-                {"tasks": [task_spec(task) for task in tasks]},
-                ensure_ascii=False,
-            ),
+            "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
             "minimum_tasks": 6 if state.cycle == 1 else 1,
             "planning_mode": "initial" if state.cycle == 1 else "repair",
-            "judge_feedback": (
-                "\nPlan judge issues that must all be resolved:\n"
-                + "\n".join(f"- {item}" for item in judge_issues)
-                + "\n"
-                if judge_issues
-                else ""
-            ),
+            "judge_feedback": "\nPlan judge issues that must all be resolved:\n" + feedback + "\n",
         },
     )
-
 
 def plan_judge_prompt(
     goal: str,
@@ -214,7 +209,11 @@ def plan_judge_prompt(
     state: RunState,
     tasks: Sequence[Task],
     work: Path | None = None,
+    *,
+    same_session: bool = True,
 ) -> str:
+    if same_session:
+        return render_prompt_template("plan_judge.md", {})
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
@@ -223,22 +222,17 @@ def plan_judge_prompt(
     }
     work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
-        "plan_judge.md",
+        "plan_judge_full.md",
         {
             "planning_rules": planning_rules(work_dir, root),
             "goal": goal,
             "root": root,
             "progress_json": json.dumps(progress, ensure_ascii=False),
-            "tasks_json": json.dumps(
-                {"tasks": [task_spec(task) for task in tasks]},
-                ensure_ascii=False,
-            ),
+            "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
             "minimum_tasks": 6 if state.cycle == 1 else 1,
             "planning_mode": "initial" if state.cycle == 1 else "repair",
         },
     )
-
-
 
 def structured_output_retry_prompt(error: str) -> str:
     """Short same-session correction for malformed structured model output."""

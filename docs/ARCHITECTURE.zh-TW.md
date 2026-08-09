@@ -10,7 +10,7 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 - `runner/api.py`：CLI/UI/Skill/Python 共用的 `RunRequest` / `run()` 正式入口。
 - `runner/core.py`：狀態機與主流程。
 - `runner/planning.py`：Understand、Plan、fallback、Refiner、Judge。
-- `runner/reviewing.py`：Current TODO Review 與 no-tool finalize。
+- `runner/reviewing.py`：fresh Current TODO Review 與 logical no-tool finalize（嚴格 API 相容時仍保留一個 read-only tool）。
 - `runner/validation.py`：Deterministic / Final AI validation orchestration。
 - `runner/model_results.py`：唯一通用 JSON candidate extraction + 各 stage 嚴格 parser。
 - `runner/prompting.py`：Prompt/context 組裝。

@@ -13,7 +13,7 @@ Version: 1.1.1
 2. 載入或建立 Runner state。
 3. 建立 normalized protected roots。
 4. Planning Understand：fresh session，bounded read-only inspection。
-5. Planning Finalize：同 session、no tools，產生至少 6 個 bounded implementation TODO。
+5. Planning 直接沿用主 `AgentClient` 與 session。Core 在 Planning 暫時套用 `--yolo` + bounded read-only Qwen args，進 TODO 前恢復 runtime `--yolo` args；Finalize/Judge/Rewrite 同 session 用短 Prompt，fresh/rebuilt 才補完整 context。
 6. Planning output 失敗時，只要 session 仍可用就先沿用同一 planning session 重試；只有 session invalid 或重複嘗試仍無法恢復時，才清 session，使用同一 planner client 以 fresh full-context Prompt 重建。
 7. Judge 沿用同一 planning client/session 審查有效 plan；context 不足時可 bounded read-only inspect。只有被拒絕才在同 session 重寫並再次 Judge；quality gate 本身無法產生可用 verdict 時 fail-soft 保留最後有效 plan。二元 verdict Prompt 同時提供 FAIL/PASS 範例。
 8. Executor 一次只執行一個 Current TODO。TODO 完成後保留 Executor session；下一個 TODO 以短 Prompt 只送新的 TODO spec 與 scope 提醒。只有 Fresh/Rebuilt session 才重新帶 Original Goal 作為 global context。

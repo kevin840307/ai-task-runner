@@ -47,9 +47,10 @@ def test_fresh_execution_includes_goal_and_next_todo_resume_is_task_only():
     assert "ORIGINAL GOAL" not in next_todo
     assert "context and global constraints only; never executable scope" in fresh
     assert "Current TODO is the only executable scope" in fresh
-    assert "previous TODO is complete" in next_todo
+    assert "Continue in the existing work session" in next_todo
+    assert "Work only on this Current TODO" in next_todo
     assert '"title": "task"' in next_todo
-    assert "Do not revisit completed TODOs" in next_todo
+    assert "Do not redo completed work" in next_todo
 
 
 def test_rebuilt_session_prompt_requires_read_before_modify():

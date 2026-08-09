@@ -155,6 +155,7 @@ def planning_agent_args(
             )
         )
         exclude_qwen_tools(result, excluded)
+        ensure_qwen_compat_tool(result)
     return result
 
 
@@ -163,6 +164,7 @@ def review_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
     result = runtime_agent_args(backend, extra_args)
     if backend == "qwen":
         exclude_qwen_tools(result, QWEN_REVIEW_EXCLUDED_TOOLS)
+        ensure_qwen_compat_tool(result)
     return result
 
 
@@ -177,8 +179,21 @@ def runtime_agent_args(backend: str, extra_args: Sequence[str]) -> list[str]:
         ensure_qwen_yolo(result)
         ensure_qwen_max_tool_calls(result)
         exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
+        ensure_qwen_compat_tool(result)
     return result
 
+
+
+def ensure_qwen_compat_tool(args: list[str]) -> None:
+    """Keep one built-in read-only tool available for strict API schemas."""
+    joined = f"--exclude-tools={QWEN_NO_TOOL_COMPAT_TOOL}"
+    args[:] = [value for value in args if value != joined]
+    index = 0
+    while index < len(args) - 1:
+        if args[index] == "--exclude-tools" and args[index + 1] == QWEN_NO_TOOL_COMPAT_TOOL:
+            del args[index:index + 2]
+            continue
+        index += 1
 
 def ensure_qwen_yolo(args: list[str]) -> None:
     if "--yolo" not in args and "--approval-mode" not in args:

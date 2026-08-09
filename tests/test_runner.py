@@ -977,3 +977,24 @@ def test_initial_planning_schema_requires_six_deliverable_tasks():
     with pytest.raises(RunnerError, match="deliverable"):
         parse_tasks(json.dumps({"tasks": [{**task, "deliverable": ""}] * 6}), 1, min_tasks=6, require_deliverable=True)
     assert len(parse_tasks(json.dumps({"tasks": [task] * 6}), 1, min_tasks=6, require_deliverable=True)) == 6
+
+
+def test_qwen_policies_always_keep_compat_read_tool():
+    from runner import agent_args
+
+    supplied = ["--exclude-tools", "read_file"]
+    policies = (
+        agent_args.planning_agent_args("qwen", supplied),
+        agent_args.planning_agent_args("qwen", supplied, allow_project_read=True),
+        agent_args.no_tool_agent_args("qwen", supplied),
+        agent_args.runtime_agent_args("qwen", supplied),
+        agent_args.review_agent_args("qwen", supplied),
+    )
+    for args in policies:
+        excluded = {
+            args[i + 1]
+            for i, value in enumerate(args[:-1])
+            if value == "--exclude-tools"
+        }
+        assert "read_file" not in excluded
+        assert "--yolo" in args

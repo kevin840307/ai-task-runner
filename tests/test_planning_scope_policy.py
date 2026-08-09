@@ -15,6 +15,20 @@ def judge_payload(*, rejected_index: int | None = None, issue: str = "Task needs
 
 
 
+
+class _StubAgent:
+    def __init__(self, root: Path, session_id: str = ""):
+        self.root = root
+        self.session_id = session_id
+        self.extra_args = []
+
+    def set_extra_args(self, values):
+        self.extra_args = list(values)
+
+    def prepare_project(self):
+        return []
+
+
 def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[Task(
         id="c01-t001",
@@ -62,12 +76,9 @@ def test_plan_refine_continues_existing_planner_contract(tmp_path: Path):
 
     assert "Continue the existing planning work" in prompt
     assert "defend the old plan" in prompt
-    assert "complete replacement task list" in prompt
-    assert "Knowledge, findings" in prompt
-    assert "dedicated planning turn before TODO creation" in prompt
-    assert "implemented, reviewed, verified, retried, or fail independently" in prompt
-    assert "never use file count as the task boundary" in prompt
-    assert "without rereading the original goal or draft plan" in prompt
+    assert "complete replacement task JSON" in prompt
+    assert "do not repeat project-wide inspection" in prompt
+    assert "do not implement or write files" in prompt
 
 
 def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
@@ -84,16 +95,25 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     assert "plan quality judge" in prompt
     assert "bounded read-only project inspection" in prompt
     assert "Do not rewrite the plan" in prompt
-    assert "Never judge from title wording or keyword matching" in prompt
+    assert "identify the affected task or plan-wide defect" in prompt
     assert '"accepted":false' in prompt
     assert '"accepted":true' in prompt
     assert 'FAIL:' in prompt
     assert 'PASS:' in prompt
-    assert 'multiple TODOs may modify the same file' in prompt
-    assert "could be completed entirely by reading, reasoning, deciding, reviewing, or checking" in prompt
-    assert "dedicated planning turn before TODO creation" in prompt
-    assert "Never judge from title wording or keyword matching" in prompt
+    assert "process-only/read-only/check-only" in prompt
+    assert "combines independently actionable changes" in prompt
+    assert "Standalone project-understanding/inspection work is invalid" in prompt
 
+
+
+
+def test_plan_judge_and_refine_fresh_prompts_are_self_contained(tmp_path: Path):
+    state = RunState(run_id="r", goal="UNIQUE GOAL", project_root=str(tmp_path))
+    tasks = [Task(id="c01-t001", title="T", description="D", deliverable="X", acceptance_criteria=["A"])]
+    judge = plan_judge_prompt("UNIQUE GOAL", tmp_path, state, tasks, same_session=False)
+    refine = plan_refine_prompt("UNIQUE GOAL", tmp_path, state, tasks, judge_issues=["UNIQUE ISSUE"], same_session=False)
+    assert "UNIQUE GOAL" in judge and '"title": "T"' in judge
+    assert "UNIQUE GOAL" in refine and '"title": "T"' in refine and "UNIQUE ISSUE" in refine
 
 def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     import runner.core as core
@@ -157,7 +177,7 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     runner.protected = []
-    runner.agent = SimpleNamespace(session_id="")
+    runner.agent = _StubAgent(tmp_path)
     runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
@@ -170,10 +190,9 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
 
     runner._plan_if_needed()
 
-    assert len(created) == 1
-    assert all(agent is created[0] for agent, _ in calls)
-    assert created[0].initial_session_id == ""
-    assert created[0].root == tmp_path
+    assert len(created) == 0
+    assert all(agent is runner.agent for agent, _ in calls)
+    assert runner.agent.root == tmp_path
 
     def excluded_tools(agent):
         return {
@@ -182,13 +201,13 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
             if value == "--exclude-tools"
         }
 
-    assert "read_file" not in excluded_tools(created[0])
-    assert "grep_search" not in excluded_tools(created[0])
-    assert "write_file" in excluded_tools(created[0])
-    assert "run_shell_command" in excluded_tools(created[0])
-    # The same planning session keeps bounded read tools available for judge/refine.
-    assert "read_file" not in excluded_tools(created[0])
-    assert "grep_search" not in excluded_tools(created[0])
+    assert "read_file" not in excluded_tools(runner.agent)
+    assert "grep_search" not in excluded_tools(runner.agent)
+    # Planning finished on the same agent and Core restored runtime capabilities.
+    assert "write_file" not in excluded_tools(runner.agent)
+    assert "run_shell_command" not in excluded_tools(runner.agent)
+    assert "--yolo" in runner.agent.extra_args
+    assert "--safe-mode" not in runner.agent.extra_args
     assert runner.state.tasks[0].title == "Draft 1"
 
 
@@ -264,7 +283,7 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     runner.protected = []
-    runner.agent = SimpleNamespace(session_id="")
+    runner.agent = _StubAgent(tmp_path)
     runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
@@ -277,11 +296,11 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
 
     runner._plan_if_needed()
 
-    assert len(created) == 1
+    assert len(created) == 0
     assert judge_calls == 2
-    assert all(agent is created[0] for agent, _ in calls)
+    assert all(agent is runner.agent for agent, _ in calls)
     assert any("Split the compound deliverable" in prompt for prompt in prompts)
-    assert runner.state.tasks[0].title == "Corrected 1"
+    assert runner.state.tasks[0].title == "Refined 1"
 
 
 def test_parse_plan_judgment_contract():
@@ -365,7 +384,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     runner.protected = []
-    runner.agent = SimpleNamespace(session_id="")
+    runner.agent = _StubAgent(tmp_path)
     runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
@@ -378,7 +397,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
     runner._plan_if_needed()
 
-    assert len(created) == 1
+    assert len(created) == 0
     assert len(runner.state.tasks) == 6
 
 
@@ -440,7 +459,7 @@ def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
         validator_output="failure",
     )
     runner.protected = []
-    runner.agent = SimpleNamespace(session_id="")
+    runner.agent = _StubAgent(tmp_path)
     runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
@@ -474,7 +493,7 @@ def _adaptive_runner(core, tmp_path):
     runner.work.mkdir(exist_ok=True)
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     runner.protected = []
-    runner.agent = SimpleNamespace(session_id="")
+    runner.agent = _StubAgent(tmp_path)
     runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
@@ -536,12 +555,12 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
     runner._plan_if_needed()
 
-    assert [agent.initial_session_id for agent in created] == [""]
-    assert created[0].root == tmp_path
+    assert created == []
+    assert runner.agent.root == tmp_path
     # Same-session finalize reuses the exact planner client/tool policy from Understand.
     excluded = {
-        created[0].extra_args[i + 1]
-        for i, value in enumerate(created[0].extra_args[:-1])
+        runner.agent.extra_args[i + 1]
+        for i, value in enumerate(runner.agent.extra_args[:-1])
         if value == "--exclude-tools"
     }
     assert "read_file" not in excluded
@@ -592,10 +611,8 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
     runner._plan_if_needed()
 
     assert explore_calls == 1
-    assert created[0].root == tmp_path
-    assert len(created) == 1
-    minimal = created[0]
-    assert minimal.initial_session_id == ""
+    assert created == []
+    minimal = runner.agent
     assert minimal.root == tmp_path
     excluded = {
         minimal.extra_args[i + 1]
@@ -774,7 +791,7 @@ def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path
 
     rewrite_agents = [agent for agent, prompt in calls if "Continue the existing planning work" in prompt]
     assert rewrite_calls == 2
-    assert rewrite_agents == [created[0], created[0]]
+    assert rewrite_agents == [runner.agent, runner.agent]
     assert runner.state.tasks[0].title == "Recovered 1"
 
 
@@ -810,6 +827,41 @@ def test_planning_reuses_existing_main_session_when_available(tmp_path: Path, mo
 
     runner._plan_if_needed()
 
-    assert len(created) == 1
-    assert created[0].initial_session_id == "executor-session"
+    assert created == []
     assert runner.agent.session_id == "executor-session"
+
+
+def test_planning_switches_main_agent_args_then_restores_runtime(tmp_path: Path, monkeypatch):
+    import runner.core as core
+
+    runner = core.TaskRunner.__new__(core.TaskRunner)
+    runner.args = SimpleNamespace(
+        backend="qwen", command="fake", agent_arg=[], planning_timeout=1,
+        agent_idle_after_change_timeout=0, retry_wait=0, retry_max_wait=0,
+    )
+    runner.root = tmp_path
+    runner.work = tmp_path / ".ai-task-runner"; runner.work.mkdir()
+    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
+    runner.protected = []
+    runner.agent = _StubAgent(tmp_path)
+    runner.ui = SimpleNamespace(set=lambda *args: None)
+    runner._set_stage = lambda *args: None
+    runner._save_state = lambda: None
+    seen = []
+
+    def fake_build_plan(*args, **kwargs):
+        seen.append(list(runner.agent.extra_args))
+        runner.agent.session_id = "planning-session"
+        return [Task(id="c01-t001", title="T", description="D", deliverable="X", acceptance_criteria=["A"])]
+
+    monkeypatch.setattr(core, "build_plan", fake_build_plan)
+    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
+    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+
+    runner._plan_if_needed()
+
+    assert seen and "--yolo" in seen[0] and "--safe-mode" in seen[0]
+    assert "--exclude-tools" in seen[0]
+    assert runner.agent.session_id == "planning-session"
+    assert "--yolo" in runner.agent.extra_args
+    assert "--safe-mode" not in runner.agent.extra_args
