@@ -49,6 +49,21 @@ def _parse_result(text: str, parser):
             return parser(value)
         except RunnerError as error:
             errors.append(error)
+
+    stripped = text.strip().lstrip("\ufeff")
+    opener = min(
+        (index for index in (stripped.find("{"), stripped.find("[")) if index >= 0),
+        default=-1,
+    )
+    if opener >= 0:
+        try:
+            json.JSONDecoder().raw_decode(stripped, opener)
+        except json.JSONDecodeError as error:
+            raise RunnerError(
+                f"AI response contains malformed or incomplete JSON at "
+                f"line {error.lineno}, column {error.colno}: {error.msg}"
+            ) from error
+
     if errors:
         raise errors[-1]
     if found:
