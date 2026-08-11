@@ -25,5 +25,6 @@ For repair planning, use this authority order:
 - The latest validator failure identifies what is still incorrect.
 - The existing implementation is evidence, not a specification; do not preserve or complete a design merely because it already exists.
 - Inspect only what is needed to explain the unresolved failure and prefer the smallest repair that moves the project back toward the original goal.
+- Keep repair failures partitioned by TODO: each TODO owns only its relevant validator failures and acceptance criteria; do not duplicate unrelated failures or later-TODO work into it.
 
 End with a concise planning summary of the relevant architecture, files, constraints, and concrete changes that appear necessary. Do not output TODO JSON in this turn.

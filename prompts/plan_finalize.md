@@ -17,7 +17,7 @@ Inspection summary when available:
 $inspection_summary
 
 Produce the best concrete $planning_mode plan possible from the evidence already available.
-For repair planning, keep the original goal authoritative, use the latest validator failure to identify the unresolved defect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that returns the project toward the original goal.
+For repair planning, keep the original goal authoritative, use the latest validator failure to identify the unresolved defect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that returns the project toward the original goal. Each repair TODO must own only its relevant validator failures and acceptance criteria; do not duplicate unrelated failures or later-TODO work into it.
 Project-wide understanding is complete for planning purposes. Do not turn project discovery already performed during planning into Executor work.
 Do not create standalone inspection, understanding, analysis, review, or check-only TODOs unless the goal explicitly requests that artifact as an end result.
 Every TODO must create or modify one concrete observable project result requested by the goal.

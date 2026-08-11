@@ -2,7 +2,7 @@ Create the implementation plan now from the project understanding and original g
 
 Do not use tools or inspect more files. Do not restart project analysis.
 Produce the best concrete $planning_mode plan from the evidence already gathered.
-For repair planning, keep the original goal authoritative, use the latest validator failure to identify the unresolved defect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that returns the project toward the original goal.
+For repair planning, keep the original goal authoritative, use the latest validator failure to identify the unresolved defect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that returns the project toward the original goal. Each repair TODO must own only its relevant validator failures and acceptance criteria; do not duplicate unrelated failures or later-TODO work into it.
 Do not create standalone inspection, understanding, analysis, review, or check-only TODOs unless the goal explicitly requests that artifact as an end result.
 Every TODO must create or modify one concrete observable project result requested by the goal.
 Split independently implementable or verifiable changes so a smaller model can complete one coherent step at a time.
