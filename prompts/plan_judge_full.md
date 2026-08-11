@@ -14,6 +14,8 @@ $progress_json
 Candidate task JSON:
 $tasks_json
 
+For repair planning, the original goal is authoritative, the latest validator failure identifies what remains incorrect, and the existing implementation is evidence rather than specification. Reject a plan that preserves or completes an existing design merely because it already exists.
+
 Reject the complete $planning_mode plan if any of these are false:
 1. Every TODO creates or modifies one concrete, observable result requested by the goal. For an implementation/change goal, reject a TODO if its deliverable could be completed entirely by reading, reasoning, deciding, reviewing, or checking without changing a requested project result.
 2. Every TODO has one focused, independently actionable change and an objective stopping point.

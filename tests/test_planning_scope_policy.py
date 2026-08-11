@@ -865,3 +865,64 @@ def test_planning_switches_main_agent_args_then_restores_runtime(tmp_path: Path,
     assert runner.agent.session_id == "planning-session"
     assert "--yolo" in runner.agent.extra_args
     assert "--safe-mode" not in runner.agent.extra_args
+
+
+def test_repair_planning_is_reanchored_to_original_goal(tmp_path: Path):
+    state = RunState(
+        run_id="r",
+        goal="ORIGINAL GOAL",
+        project_root=str(tmp_path),
+        cycle=2,
+        validator_output="LATEST VALIDATOR FAILURE",
+    )
+    understand = plan_understand_prompt("ORIGINAL GOAL", tmp_path, state, [])
+    finalize_same = plan_finalize_prompt(
+        "ORIGINAL GOAL", tmp_path, state, same_session=True
+    )
+    finalize_fresh = plan_finalize_prompt(
+        "ORIGINAL GOAL", tmp_path, state, same_session=False
+    )
+
+    for prompt in (understand, finalize_same, finalize_fresh):
+        assert "original goal" in prompt.lower()
+        assert "existing implementation" in prompt.lower()
+        assert "evidence" in prompt.lower()
+        assert "merely because it already exists" in prompt.lower()
+        assert "smallest repair" in prompt.lower()
+
+    assert "LATEST VALIDATOR FAILURE" in understand
+    assert "LATEST VALIDATOR FAILURE" in finalize_fresh
+
+
+def test_repair_judge_and_refine_reject_existing_design_as_specification(tmp_path: Path):
+    state = RunState(
+        run_id="r",
+        goal="ORIGINAL GOAL",
+        project_root=str(tmp_path),
+        cycle=2,
+        validator_output="LATEST VALIDATOR FAILURE",
+    )
+    tasks = [Task(
+        id="c02-t001",
+        title="Repair result",
+        description="Repair the result",
+        deliverable="result",
+        acceptance_criteria=["result is correct"],
+    )]
+
+    judge = plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks)
+    refine = plan_refine_prompt(
+        "ORIGINAL GOAL", tmp_path, state, tasks, judge_issues=["wrong direction"]
+    )
+    judge_fresh = plan_judge_prompt(
+        "ORIGINAL GOAL", tmp_path, state, tasks, same_session=False
+    )
+    refine_fresh = plan_refine_prompt(
+        "ORIGINAL GOAL", tmp_path, state, tasks,
+        judge_issues=["wrong direction"], same_session=False
+    )
+
+    for prompt in (judge, refine, judge_fresh, refine_fresh):
+        assert "original goal" in prompt.lower()
+        assert "existing" in prompt.lower()
+        assert "merely because it already exists" in prompt.lower()

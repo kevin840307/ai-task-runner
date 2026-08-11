@@ -38,7 +38,7 @@ def test_tasks_do_not_treat_nested_object_as_separate_candidate():
 
 def test_broken_json_is_not_repaired():
     raw = '{"tasks": ['
-    with pytest.raises(RunnerError, match="no valid JSON object"):
+    with pytest.raises(RunnerError, match="malformed or incomplete JSON"):
         parse_tasks(raw, 1, min_tasks=6, require_deliverable=True)
 
 
@@ -53,3 +53,9 @@ def test_judge_review_and_validator_share_candidate_selection():
     assert parse_plan_judgment(prefix + json.dumps({"accepted": True, "issues": []}))["accepted"] is True
     assert parse_review(prefix + json.dumps({"completed": True, "reason": "ok", "missing_items": []}))["completed"] is True
     assert parse_ai_validation(prefix + json.dumps({"passed": True, "reason": "ok", "missing_items": [], "checks_run": [], "suggested_checks": []}))["passed"] is True
+
+
+def test_incomplete_outer_tasks_json_reports_json_error_not_nested_schema_error():
+    raw = '{"tasks": [{"title":"A","description":"x","deliverable":"y","acceptance_criteria":["z"]}'
+    with pytest.raises(RunnerError, match="malformed or incomplete JSON"):
+        parse_tasks(raw, 1)

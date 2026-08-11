@@ -16,6 +16,7 @@ $tasks_json
 $judge_feedback
 
 Return a complete replacement task list for $planning_mode planning.
+For repair planning, keep the original goal authoritative, use the latest validator failure to identify what remains incorrect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that moves the project back toward the original goal.
 
 Quality gate:
 1. Every TODO must create or modify one concrete, observable project result requested by the goal. For an implementation/change goal, remove any TODO whose deliverable can be satisfied without changing a requested project result.

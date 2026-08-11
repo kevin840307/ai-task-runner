@@ -20,6 +20,10 @@ For any project size:
 - Stop once there is enough evidence to make a reliable implementation plan.
 - Do not modify project files.
 
-For repair planning, focus first on current project state and validator feedback, then inspect only what is needed to explain the unresolved failure.
+For repair planning, use this authority order:
+- The original goal and acceptance criteria are authoritative.
+- The latest validator failure identifies what is still incorrect.
+- The existing implementation is evidence, not a specification; do not preserve or complete a design merely because it already exists.
+- Inspect only what is needed to explain the unresolved failure and prefer the smallest repair that moves the project back toward the original goal.
 
 End with a concise planning summary of the relevant architecture, files, constraints, and concrete changes that appear necessary. Do not output TODO JSON in this turn.
