@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.1.1
+Version: 1.2.0
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 
@@ -11,7 +11,8 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--project-root` | writable project boundary | `.` |
 | `--script` | YAML prompt/validator array | exclusive with goal |
 | `--validator` | Python validator path or `ai` | required outside script mode |
-| `--validator-prompt` | extra Final AI validator instructions | empty |
+| `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
+| `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |
 | `--backend` | `qwen` or `opencode` | `qwen` |
 | `--command` | backend executable override | backend default |
 | `--agent-arg` | one extra backend argv element | repeatable |
@@ -26,8 +27,8 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--retry-delay` | logical task retry delay | 2 seconds |
 | `--retry-wait` | initial model-call retry wait | 5 seconds |
 | `--retry-max-wait` | max model-call retry wait | 300 seconds |
-| `--final-ai-validations` | independent Final AI runs | 1 |
-| `--final-ai-required-passes` | required PASS count | 1; <= runs |
+| `--final-ai-validations`, `--ai-validator-count` | independent fresh-session Final AI votes | 1 |
+| `--final-ai-required-passes` | required PASS count | 0 = strict majority; otherwise <= runs |
 | `--work-dir` | Runner state dir inside project root | `.ai-task-runner` |
 | `--json-events` | emit JSON Lines progress | off |
 | `--resume` | resume state | off |

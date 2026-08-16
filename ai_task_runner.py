@@ -50,7 +50,12 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument(
         "--validator-prompt",
         default="",
-        help="extra instructions for AI validation",
+        help="extra instructions when --validator ai is used",
+    )
+    command_parser.add_argument(
+        "--ai-validator-prompt",
+        default="",
+        help="optional Final AI validation instructions after a file validator passes",
     )
     command_parser.add_argument(
         "--backend",
@@ -111,6 +116,8 @@ def parser() -> argparse.ArgumentParser:
     )
     command_parser.add_argument(
         "--final-ai-validations",
+        "--ai-validator-count",
+        dest="final_ai_validations",
         type=int,
         default=DEFAULT_FINAL_AI_VALIDATIONS,
         help="maximum independent Final AI validation runs; each uses a fresh session",
@@ -119,7 +126,7 @@ def parser() -> argparse.ArgumentParser:
         "--final-ai-required-passes",
         type=int,
         default=DEFAULT_FINAL_AI_REQUIRED_PASSES,
-        help="Final AI PASS results required; any explicit FAIL still fails the cycle",
+        help="Final AI PASS results required; 0 uses strict majority (default)",
     )
     command_parser.add_argument(
         "--retry-max-wait",

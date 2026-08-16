@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.1.1
+版本：1.2.0
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
@@ -8,7 +8,7 @@
 舊版 compatibility 名稱可能仍為既有 caller 保留，但不屬於 canonical API，新 integration 不應使用。純 internal、已無 production caller 的 compatibility shim 會直接移除。
 
 ## RunRequest 欄位
-`goal`、`goal_file`、`project_root`、`script`、`validator`、`validator_prompt`、`backend`、`command`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
+`goal`、`goal_file`、`project_root`、`script`、`validator`、`validator_prompt`、`ai_validator_prompt`、`backend`、`command`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
 
 `RunRequest.validate()` 會檢查 goal/script/validator 互斥與必填、backend、work_dir 不可逃出 project root、list element 型別、timeout/retry 範圍、Final AI quorum，以及 resume/force-new 衝突。
 
@@ -20,6 +20,8 @@ result = run(RunRequest(
     goal_file='prompt.md',
     project_root='project',
     validator='validation.py',
+    ai_validator_prompt='檢查架構與通用性。',
+    final_ai_validations=3,
     validator_args=['--fab', 'FAB23'],
     backend='qwen',
 ))
@@ -30,4 +32,4 @@ print(result.exit_code, result.completed)
 `run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
 
 ## YAML script
-`runner.script_runner` 接受非空 YAML array。每筆需要 `prompt` 或 `goal`、`validator` path 或 `ai`，可選 `validator_prompt`。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
+`runner.script_runner` 接受非空 YAML array。每筆需要 `prompt` 或 `goal` 與 `validator` path 或 `ai`；每筆可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`。舊格式仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。

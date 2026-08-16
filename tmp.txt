@@ -1,0 +1,4 @@
+python .\ai_task_runner.py --goal-file "C:\Users\kevin\ai-task-runner\.ai-task-runner\real-qwen-20260804-18\07_auto_config\project\prompt.md" --project-root "C:\Users\kevin\ai-task-runner\.ai-task-runner\real-qwen-20260804-18\07_auto_config\project" --validator "C:\Users\kevin\ai-task-runner\.ai-task-runner\real-qwen-20260804-18\07_auto_config\project\validation.py"
+python .\ai_task_runner.py --goal-file "C:\Users\kevin\ai-task-runner\examples\03_csv_summary_cli\prompt.txt" --project-root "C:\Users\kevin\ai-task-runner\examples\03_csv_summary_cli\project" --validator "C:\Users\kevin\ai-task-runner\examples\03_csv_summary_cli\validator.py"
+
+python ai_task_runner.py --project-root "examples/01_config_template_roundtrip/project" --goal-file "examples/01_config_template_roundtrip/prompt.txt" --validator "examples/01_config_template_roundtrip/validator.py"

@@ -1,3 +1,3 @@
 """Package version shared by API and events."""
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"

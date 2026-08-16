@@ -1,6 +1,6 @@
 # 完整設計
 
-Version: 1.1.1
+Version: 1.2.0
 
 ## 目標
 1. AI 長時間執行時，即使模型/CLI 異常也盡量保留有價值的專案變更。
@@ -21,7 +21,7 @@ Version: 1.1.1
 10. PASS 才進下一個 TODO；下一個 TODO resume 同一 Executor session。Semantic FAIL 留在同一 TODO，使用短 Continue Prompt，只帶新 feedback。
 11. 連續 no-progress / model failure 不會提前完成 TODO 或跳 Final Validator；先沿用同 session 修復，持續無進展才 rebuild，Current TODO 仍保持 pending。Final Validator 永遠是該 cycle 所有 TODO 結束後的最後一步。
 12. Deterministic Final Validator 針對完整 Goal/Project 執行。PASS 完成；FAIL 把 validator feedback 帶入 Repair Planning 再開新 cycle。Validator infrastructure error 只會 retry，不能 fail-open。
-13. Optional Final AI validation 每次 fresh independent session；任何 explicit FAIL 都 veto 該 cycle，AI error 則 abstain。
+13. Optional Final AI validation 每票使用 fresh independent session，預設採嚴格過半投票。File validator 仍是 hard gate；混合驗證時只有 hard gate PASS 才跑 AI 投票，且兩邊都必須 PASS。AI call error 視為 abstain。
 
 ## TODO 設計
 Planning 至少產生 6 個具體 implementation TODO。TODO 必須 bounded、可執行，不能都是 discovery，也不能出現「implement everything / finish the project」這類 umbrella TODO。專案探索由 Planning bounded inspection 做，Executor TODO 專心實作。

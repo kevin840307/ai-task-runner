@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from runner.models import RunState, Task
-from runner.prompting import execution_prompt
+from runner.prompting import execution_prompt, render_prompt_template
 
 
 def state(attempts=1):
@@ -187,3 +187,13 @@ def test_normal_executor_completion_without_file_change_still_reviews(tmp_path, 
     assert runner._run_pending_tasks() is None
     assert seen == [("c01-t001", "already satisfied")]
     assert task.status == "completed"
+
+
+def test_validator_repair_hint_is_scoped_to_current_todo():
+    prompt = render_prompt_template("validator_repair_hint.md", {"repeat_hint": ""})
+    lower = prompt.lower()
+    assert "first reported validator failure" not in lower
+    assert "current todo" in lower
+    assert "relevant" in lower
+    assert "ignore unrelated validator failures" in lower
+    assert "later-todo" in lower

@@ -45,7 +45,7 @@ def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
     assert any(event["type"] == "runner.progress" for event in events)
     assert any(event["type"] == "runner.status" for event in events)
     assert all(event["schema_version"] == 1 for event in events)
-    assert all(event["runner_version"] == "1.1.1" for event in events)
+    assert all(event["runner_version"] == "1.2.0" for event in events)
 
 
 def test_runner_writes_debug_log_file(tmp_path):
@@ -100,7 +100,7 @@ def test_cli_json_events_are_machine_readable_json_lines(tmp_path):
     events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     assert events
     assert all(event["schema_version"] == 1 for event in events)
-    assert all(event["runner_version"] == "1.1.1" for event in events)
+    assert all(event["runner_version"] == "1.2.0" for event in events)
     assert any(event["type"] == "runner.status" for event in events)
     assert events[-1]["status"] == "全部完成"
 

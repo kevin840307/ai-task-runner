@@ -1,0 +1,35 @@
+fab14:
+  endpoint: http://f14p1.example.local/api
+  host: f14p1-db.example.local
+  user: collector_f14p1
+  password: P1-secret
+  timeout: 30
+  retry: 3
+  batch_size: 1000
+  enabled: true
+  database_name: production
+fab14-p2:
+  endpoint: http://f14p2.example.local/api
+  host: f14p2-db.example.local
+  user: collector_f14p2
+  password: P2-secret
+fab20:
+  timeout: 45
+  retry: 5
+  batch_size: 1500
+  endpoint: http://f20p1.example.local/api
+  host: f20p1-db.example.local
+  user: collector_f20p1
+  password: F20P1-secret
+  enabled: true
+  database_name: production
+fab20-p2:
+  enabled: false
+  database_name: staging
+  timeout: 45
+  retry: 5
+  batch_size: 1500
+  endpoint: http://f20p2.example.local/api
+  host: f20p2-db.example.local
+  user: collector_f20p2
+  password: F20P2-secret

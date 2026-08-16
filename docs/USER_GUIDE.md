@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.1.1
+Version: 1.2.0
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,12 +34,23 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires `prompt` (or `goal`) and `validator`, plus optional `validator_prompt`. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires `prompt` (or `goal`) and `validator`. Optional fields include `validator_prompt`, `ai_validator_prompt`, `ai_validator_count`, and `ai_validator_required_passes`. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
+
+```yaml
+- prompt: Implement the requested change.
+  validator: validation.py
+  ai_validator_prompt: >-
+    Check architecture, genericity, and unnecessary complexity.
+  ai_validator_count: 3
+```
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.
 - AI validator: `--validator ai` plus optional `--validator-prompt`.
-- Independent final AI checks can be controlled by `--final-ai-validations` and `--final-ai-required-passes`. Any explicit Final AI FAIL vetoes the cycle.
+- Mixed validation: use a file `--validator` plus `--ai-validator-prompt`. The file validator is the hard gate; AI voting runs only after it passes, and both gates must pass.
+- `--final-ai-validations` (alias `--ai-validator-count`) controls independent fresh-session votes. `--final-ai-required-passes 0` uses strict majority; a positive value explicitly sets the threshold.
+
+Example: `--validator validation.py --ai-validator-prompt "Check architecture and genericity" --ai-validator-count 3` requires the Python validator plus at least 2 of 3 independent AI PASS votes.
 
 ## JSON events / integration
 `--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills.

@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.1.1
+Version: 1.2.0
 
 ## Responsibility boundary
 The Runner owns orchestration; project code and validators own application-specific behavior.
@@ -24,7 +24,7 @@ The Runner owns orchestration; project code and validators own application-speci
 10. PASS advances to the next TODO. Semantic FAIL retries the same TODO using a short same-session continuation containing only new feedback.
 11. Repeated no-progress/model failure keeps the current TODO pending; the Runner retries the same session first and rebuilds only after repeated stagnation. Final Validator remains the last step after all TODOs in the cycle have finished.
 12. Deterministic Final Validator runs against the complete project/goal. PASS completes. FAIL creates Repair Planning with validator feedback and starts another bounded cycle. Validator infrastructure failure retries and never fails open.
-13. Optional Final AI validation uses fresh independent sessions. Any explicit AI FAIL vetoes that cycle; errors abstain.
+13. Optional Final AI validation uses fresh independent sessions and threshold voting (strict majority by default). A file validator remains the hard gate; when mixed validation is configured, AI voting runs only after the file validator passes and both gates must pass. AI call errors abstain.
 
 ## TODO design
 Planning must create at least six concrete implementation TODOs. TODOs are bounded, executable, and should not be pure discovery tasks. Do not create umbrella tasks such as “implement everything” or “finish the project.” Discovery belongs in bounded Planning inspection; implementation belongs in TODOs.

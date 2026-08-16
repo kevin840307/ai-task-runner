@@ -16,7 +16,7 @@ from .version import __version__
 ExecuteOne = Callable[[argparse.Namespace], int]
 
 
-def load_yaml_script(path: Path) -> list[dict[str, str]]:
+def load_yaml_script(path: Path) -> list[dict[str, Any]]:
     try:
         import yaml
     except ImportError as error:
@@ -32,7 +32,7 @@ def load_yaml_script(path: Path) -> list[dict[str, str]]:
     if not isinstance(data, list) or not data:
         raise RunnerError("YAML script must be a non-empty array")
 
-    items: list[dict[str, str]] = []
+    items: list[dict[str, Any]] = []
     for index, item in enumerate(data, 1):
         if not isinstance(item, dict):
             raise RunnerError(f"script item {index} must be an object")
@@ -44,13 +44,21 @@ def load_yaml_script(path: Path) -> list[dict[str, str]]:
             raise RunnerError(
                 f"script item {index} requires validator path or 'ai'"
             )
-        items.append(
-            {
-                "prompt": prompt.strip(),
-                "validator": validator.strip(),
-                "validator_prompt": str(item.get("validator_prompt", "")),
-            }
-        )
+        result = {
+            "prompt": prompt.strip(),
+            "validator": validator.strip(),
+            "validator_prompt": str(item.get("validator_prompt", "")),
+            "ai_validator_prompt": str(item.get("ai_validator_prompt", "")),
+        }
+        for name in ("ai_validator_count", "ai_validator_required_passes"):
+            if name in item:
+                value = item[name]
+                if not isinstance(value, int) or value < 0:
+                    raise RunnerError(
+                        f"script item {index} {name} must be a non-negative integer"
+                    )
+                result[name] = value
+        items.append(result)
     return items
 
 
@@ -86,7 +94,7 @@ def script_event(
     event_type: str,
     index: int,
     total: int,
-    item: dict[str, str],
+    item: dict[str, Any],
     exit_code: int | None = None,
 ) -> None:
     event: dict[str, Any] = {
@@ -131,7 +139,7 @@ def script_event(
 
 def script_item_args(
     args: argparse.Namespace,
-    item: dict[str, str],
+    item: dict[str, Any],
     index: int,
 ) -> argparse.Namespace:
     child = copy.copy(args)
@@ -139,6 +147,19 @@ def script_item_args(
     child.goal = item["prompt"]
     child.validator = item["validator"]
     child.validator_prompt = item["validator_prompt"]
+    child.ai_validator_prompt = item.get("ai_validator_prompt", "")
+    child.final_ai_validations = item.get(
+        "ai_validator_count", child.final_ai_validations
+    )
+    child.final_ai_required_passes = item.get(
+        "ai_validator_required_passes", child.final_ai_required_passes
+    )
+    if child.final_ai_validations < 1:
+        raise RunnerError(f"script item {index} ai_validator_count must be positive")
+    if not 0 <= child.final_ai_required_passes <= child.final_ai_validations:
+        raise RunnerError(
+            f"script item {index} ai_validator_required_passes must be 0 or <= ai_validator_count"
+        )
     child.work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
 
     state_file = (

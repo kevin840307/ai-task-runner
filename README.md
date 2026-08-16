@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.1.1
+Version: 1.2.0
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -8,7 +8,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - Qwen and OpenCode backends; Qwen prompt transport is stdin-only.
 - Adaptive Planning: bounded read-only Understand -> same planning client/session Plan Finalize -> same-session Judge/Rewrite as needed; only an unrecoverable planning session falls back to fresh full-context planning.
 - Bounded TODO execution keeps one Executor session across TODOs; each next-TODO prompt contains only the new TODO and scope reminder. Review remains a fresh read-only session.
-- Deterministic final validator as the hard correctness gate; optional independent Final AI validations.
+- Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
 - Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode.
 - Shared model-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
@@ -24,6 +24,12 @@ Validator-specific arguments are repeatable:
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --validator-arg "--fab" --validator-arg "FAB23"
 ```
 The Runner invokes the validator as `python validation.py --project-root <root> --state-file <state> --fab FAB23`. Do not combine validator arguments into the `--validator` path string.
+
+Mixed hard + AI validation:
+```bat
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt "Check architecture and genericity" --ai-validator-count 3
+```
+The file validator must PASS first; then 3 fresh AI sessions vote independently and strict majority is required by default.
 
 ## Documentation map
 - [Full documentation index](docs/INDEX.md) / [中文索引](docs/INDEX.zh-TW.md)

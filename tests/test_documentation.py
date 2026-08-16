@@ -1,4 +1,4 @@
-"""Documentation must stay aligned with the public v1.1.1 contract."""
+"""Documentation must stay aligned with the public v1.2.0 contract."""
 from __future__ import annotations
 
 from pathlib import Path

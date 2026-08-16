@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.1.1
+版本：1.2.0
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 
@@ -11,7 +11,8 @@
 | `--project-root` | Agent 可工作的專案邊界 | `.` |
 | `--script` | YAML prompt/validator array | 與 goal mode 互斥 |
 | `--validator` | Python validator path 或 `ai` | 非 script mode 必填 |
-| `--validator-prompt` | Final AI validator 額外指示 | 空字串 |
+| `--validator-prompt` | `--validator ai` 的 Final AI 額外指示 | 空字串 |
+| `--ai-validator-prompt` | file validator PASS 後追加的 Final AI 驗證指示 | 空字串/關閉 |
 | `--backend` | `qwen` / `opencode` | `qwen` |
 | `--command` | 覆寫 backend executable | backend default |
 | `--agent-arg` | backend 額外一個 argv | 可重複 |
@@ -26,8 +27,8 @@
 | `--retry-delay` | 邏輯 task retry delay | 2 秒 |
 | `--retry-wait` | model-call 初始 retry wait | 5 秒 |
 | `--retry-max-wait` | model-call 最大 retry wait | 300 秒 |
-| `--final-ai-validations` | 獨立 Final AI 次數 | 1 |
-| `--final-ai-required-passes` | 必要 PASS 數 | 1，不能超過總次數 |
+| `--final-ai-validations`, `--ai-validator-count` | fresh session 的獨立 Final AI 投票數 | 1 |
+| `--final-ai-required-passes` | 必要 PASS 數 | 0 = 嚴格過半；否則不可超過總票數 |
 | `--work-dir` | project root 內 Runner state dir | `.ai-task-runner` |
 | `--json-events` | 輸出 JSON Lines progress | 預設關閉 |
 | `--resume` | Resume state | 預設關閉 |

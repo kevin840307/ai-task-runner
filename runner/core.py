@@ -533,6 +533,7 @@ class TaskRunner:
             "AI · new session"
             if self.ai_validation
             else self.validator.name
+            + (" + AI vote" if getattr(self.args, "ai_validator_prompt", "").strip() else "")
         )
         self._set_stage("validating")
         self.ui.start("正在執行最終驗證", detail)
@@ -573,6 +574,8 @@ class TaskRunner:
         validator_name = (
             "AI FAIL"
             if self.ai_validation
+            else "AI vote FAIL"
+            if output.startswith("FILE_VALIDATION_PASS\n")
             else "file validator FAIL"
         )
         self.ui.set(
@@ -601,6 +604,10 @@ class TaskRunner:
 
     def _run_validator(self) -> tuple[bool, str]:
         if self.ai_validation:
+            ai_prompt = (
+                getattr(self.args, "ai_validator_prompt", "").strip()
+                or self.args.validator_prompt
+            )
             return run_ai_validator(
                 self.args,
                 self.root,
@@ -610,10 +617,11 @@ class TaskRunner:
                 self.ui,
                 runtime_agent_args(self.args.backend, self.args.agent_arg),
                 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
+                ai_prompt,
             )
 
         assert self.validator is not None
-        return run_file_validator(
+        passed, output = run_file_validator(
             self.validator,
             self.root,
             self.state_file,
@@ -621,6 +629,21 @@ class TaskRunner:
             self.args.validator_arg,
             self.protected,
         )
+        ai_prompt = getattr(self.args, "ai_validator_prompt", "")
+        if not passed or not ai_prompt.strip():
+            return passed, output
+        ai_passed, ai_output = run_ai_validator(
+            self.args,
+            self.root,
+            self.work,
+            self.state,
+            self.protected,
+            self.ui,
+            runtime_agent_args(self.args.backend, self.args.agent_arg),
+            MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
+            ai_prompt,
+        )
+        return ai_passed, "FILE_VALIDATION_PASS\n" + ai_output
 
 
 def execute(args: argparse.Namespace) -> int:

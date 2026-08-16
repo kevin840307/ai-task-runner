@@ -35,6 +35,7 @@ class RunRequest:
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
+    ai_validator_prompt: str = ""
     backend: str = DEFAULT_BACKEND
     command: str | None = None
     agent_args: list[str] = field(default_factory=list)
@@ -68,6 +69,7 @@ class RunRequest:
             script=args.script,
             validator=args.validator,
             validator_prompt=args.validator_prompt,
+            ai_validator_prompt=getattr(args, "ai_validator_prompt", ""),
             backend=args.backend,
             command=args.command,
             agent_args=list(args.agent_arg),
@@ -117,6 +119,7 @@ class RunRequest:
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
+            ai_validator_prompt=self.ai_validator_prompt,
             backend=self.backend,
             command=self.command,
             agent_arg=list(self.agent_args),
@@ -160,6 +163,9 @@ class RunRequest:
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script is used")
+        for name in ("validator_prompt", "ai_validator_prompt"):
+            if not isinstance(getattr(self, name), str):
+                raise ValueError(f"{name} must be a string")
         if self.backend not in backend_names():
             raise ValueError(f"unsupported backend: {self.backend}")
         if self.resume and self.force_new:
@@ -197,10 +203,10 @@ class RunRequest:
             raise ValueError("final_ai_validations must be a positive integer")
         if (
             not isinstance(self.final_ai_required_passes, int)
-            or not 1 <= self.final_ai_required_passes <= self.final_ai_validations
+            or not 0 <= self.final_ai_required_passes <= self.final_ai_validations
         ):
             raise ValueError(
-                "final_ai_required_passes must be between 1 and final_ai_validations"
+                "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
             )
         for name in ("retry_delay", "retry_wait", "retry_max_wait"):
             value = getattr(self, name)

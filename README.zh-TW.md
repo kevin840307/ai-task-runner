@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.1.1
+版本：1.2.0
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -8,7 +8,7 @@
 - 支援 Qwen / OpenCode；Qwen Prompt 僅走 stdin，不使用 `-p` 傳完整 Prompt。
 - Adaptive Planning：bounded read-only Understand -> 同一 planning client/session 的 Plan Finalize -> 必要時同 session Judge/Rewrite；只有 planning session 無法恢復時才用 fresh full-context fallback。
 - TODO 隔離執行：Executor 跨 TODO 沿用同一 session，每次只送新的 Current TODO 與 scope 提醒；Review 才使用 fresh read-only session。
-- Deterministic Final Validator 是 hard gate；可額外執行多次獨立 Final AI Validation。
+- Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
@@ -24,6 +24,12 @@ Validator 額外參數可重複指定：
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --validator-arg "--fab" --validator-arg "FAB23"
 ```
 Runner 實際呼叫會是 `python validation.py --project-root <root> --state-file <state> --fab FAB23`。不要把 `--fab FAB23` 塞進 `--validator` 的檔案路徑字串。
+
+Hard + AI 混合驗證：
+```bat
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt "檢查架構與通用性" --ai-validator-count 3
+```
+Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半。
 
 ## 文件地圖
 - [完整文件索引](docs/INDEX.zh-TW.md) / [English index](docs/INDEX.md)

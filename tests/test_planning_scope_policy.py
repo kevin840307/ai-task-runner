@@ -926,3 +926,40 @@ def test_repair_judge_and_refine_reject_existing_design_as_specification(tmp_pat
         assert "original goal" in prompt.lower()
         assert "existing" in prompt.lower()
         assert "merely because it already exists" in prompt.lower()
+
+
+def test_repair_planning_partitions_failures_by_todo(tmp_path: Path):
+    state = RunState(
+        run_id="r",
+        goal="ORIGINAL GOAL",
+        project_root=str(tmp_path),
+        cycle=2,
+        validator_output="E001 unrelated\nE005 current",
+    )
+    tasks = [Task(
+        id="c02-t001",
+        title="Current repair",
+        description="Repair current behavior",
+        deliverable="result",
+        acceptance_criteria=["current result is correct"],
+    )]
+
+    prompts = [
+        plan_understand_prompt("ORIGINAL GOAL", tmp_path, state, []),
+        plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=True),
+        plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=False),
+        plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks),
+        plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks, same_session=False),
+        plan_refine_prompt("ORIGINAL GOAL", tmp_path, state, tasks, judge_issues=["split failures"]),
+        plan_refine_prompt(
+            "ORIGINAL GOAL", tmp_path, state, tasks,
+            judge_issues=["split failures"], same_session=False,
+        ),
+    ]
+
+    for prompt in prompts:
+        lower = prompt.lower()
+        assert "relevant" in lower
+        assert "acceptance criteria" in lower
+        assert "later-todo" in lower
+        assert "unrelated" in lower

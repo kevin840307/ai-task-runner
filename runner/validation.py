@@ -25,9 +25,11 @@ def run_ai_validator(
     ui: LiveUI,
     runtime_args: Sequence[str],
     model_call_errors_before_task_retry: int,
+    custom_prompt: str = "",
 ) -> tuple[bool, str]:
     total = getattr(args, "final_ai_validations", 1)
-    required = getattr(args, "final_ai_required_passes", 1)
+    configured_required = getattr(args, "final_ai_required_passes", 0)
+    required = configured_required or total // 2 + 1
     debug_dir = work / "debug"
     results: list[dict[str, Any]] = []
     passes = 0
@@ -68,7 +70,7 @@ def run_ai_validator(
                     state.goal,
                     root,
                     protected,
-                    args.validator_prompt,
+                    custom_prompt,
                     skipped_review_tasks(state),
                 )
             )
@@ -98,10 +100,7 @@ def run_ai_validator(
             continue
 
         results.append(result)
-        # A concrete blocking finding is never outvoted by other PASS results.
-        if result["passed"] is not True:
-            return False, format_ai_validator_runs(results, required, total)
-        passes += 1
+        passes += result["passed"] is True
 
     return passes >= required, format_ai_validator_runs(results, required, total)
 
@@ -111,10 +110,10 @@ def format_ai_validator_runs(
     required: int,
     total: int,
 ) -> str:
+    required = required or total // 2 + 1
     passes = sum(result.get("passed") is True for result in results)
-    explicit_fail = any(result.get("passed") is False for result in results)
     aggregate = {
-        "passed": passes >= required and not explicit_fail,
+        "passed": passes >= required,
         "passes": passes,
         "required_passes": required,
         "configured_validations": total,
