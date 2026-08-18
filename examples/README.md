@@ -19,3 +19,5 @@ The suite is intentionally small and diagnostic:
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. The validators and prompts live outside each writable project root; `examples.yaml` references each `prompt.md` through `goal_file`.
+All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
+

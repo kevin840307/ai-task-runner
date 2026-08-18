@@ -47,7 +47,9 @@ def test_examples_yaml_runs_01_to_07_with_per_item_project_roots():
     assert isinstance(data, list) and len(data) == 7
     for index, item in enumerate(data, 1):
         prefix = f"{index:02d}_"
-        assert isinstance(item.get("prompt"), str) and item["prompt"].strip()
+        goal_file = item.get("goal_file")
+        assert isinstance(goal_file, str) and goal_file.strip()
+        assert (EXAMPLES / goal_file).is_file()
         project_root = item.get("project_root")
         assert isinstance(project_root, str) and Path(project_root).parent.name.startswith(prefix)
         assert (EXAMPLES / project_root).is_dir()
@@ -140,3 +142,15 @@ def test_todo_cli_validator_checks_state_after_each_mutation():
     text = (ROOT / "smoke" / "qwen_todo_cli" / "validator.py").read_text(encoding="utf-8")
     assert "read_state(root,db,'after '+" in text
     assert "CLI list and stored JSON differ" in text
+
+
+def test_python_example_validators_use_shared_validator_report():
+    validators = sorted((EXAMPLES).glob("*/validation.py"))
+    assert validators
+    for path in validators:
+        text = path.read_text(encoding="utf-8")
+        assert "from ai_task_runner_validator import ValidatorReport" in text, path
+        assert "ValidatorReport(" in text, path
+        assert ".finish()" in text, path
+        assert "print('VALIDATION_PASSED')" not in text, path
+        assert "print('VALIDATION_FAILED')" not in text, path

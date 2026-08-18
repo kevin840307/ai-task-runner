@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse, json, subprocess, sys, tempfile
 from pathlib import Path
+from ai_task_runner_validator import ValidatorReport, parse_json
 
 def call(root,cfg,env,service):
     return subprocess.run([sys.executable,str(root/'route_config.py'),'--config',str(cfg),'--env',env,'--service',service],cwd=root,text=True,capture_output=True,timeout=20)
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--project-root',required=True); p.add_argument('--state-file'); a,_=p.parse_known_args(); root=Path(a.project_root).resolve()
+    report=ValidatorReport(root,'example-05-ai-quality')
     try:
         assert (root/'route_config.py').is_file(),'missing route_config.py'
         with tempfile.TemporaryDirectory() as d:
@@ -13,7 +15,7 @@ def main():
             assert call(root,cfg,'DEV','api').stdout.strip()=='http://dev.local/api','DEV/api output mismatch'
             assert call(root,cfg,'PROD','api').stdout.strip()=='https://prod.local/api','PROD/api output mismatch'
             assert call(root,cfg,'DEV','missing').returncode!=0,'missing service must fail'
-        print('VALIDATION_PASSED'); return 0
     except Exception as e:
-        print('VALIDATION_FAILED'); print(f'[E001] {e}'); return 1
+        report.error('E001','Functional validation failed',[str(e)])
+    return report.finish()
 if __name__=='__main__': raise SystemExit(main())

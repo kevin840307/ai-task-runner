@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-import argparse, json, subprocess, sys, tempfile
+import argparse, subprocess, sys, tempfile
 from pathlib import Path
+from ai_task_runner_validator import ValidatorReport, parse_json
 
 def call(root, db, *args):
     return subprocess.run([sys.executable,str(root/'todo_cli.py'),'--db',str(db),*args],cwd=root,text=True,capture_output=True,timeout=20)
 def load(root,db):
     r=call(root,db,'list','--format','json'); assert r.returncode==0,f'list failed: {r.stdout}{r.stderr}'
-    try:return json.loads(r.stdout)
-    except json.JSONDecodeError as e: raise AssertionError(f'list returned invalid JSON: {r.stdout!r}') from e
+    return parse_json(r.stdout, 'todo list --format json output')
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--project-root',required=True); p.add_argument('--state-file'); a,_=p.parse_known_args(); root=Path(a.project_root).resolve()
+    report=ValidatorReport(root,'example-04-mixed')
     try:
         assert (root/'todo_cli.py').is_file(),'missing todo_cli.py'
         with tempfile.TemporaryDirectory() as d:
@@ -23,7 +24,7 @@ def main():
             assert call(root,db,'delete','1').returncode==0,'delete 1 failed'; assert [x['id'] for x in load(root,db)]==[2,3],'delete removed wrong item'
             assert call(root,db,'add','Next','--priority','low').returncode==0,'add after delete failed'; assert [x['id'] for x in load(root,db)]==[2,3,4],'ID progression is not stable'
             assert call(root,db,'done','999').returncode!=0,'unknown ID must fail'; assert call(root,db,'add','Bad','--priority','urgent').returncode!=0,'invalid priority must fail'
-        print('VALIDATION_PASSED'); return 0
     except Exception as e:
-        print('VALIDATION_FAILED'); print(f'[E001] {e}'); return 1
+        report.error('E001','Functional validation failed',[str(e)])
+    return report.finish()
 if __name__=='__main__': raise SystemExit(main())

@@ -1,6 +1,6 @@
 # Prompt and Session Contract
 
-Version: 1.2.2
+Version: 1.2.3
 
 ## General rule
 Fresh/rebuilt sessions must be self-contained for the stage. Same-session calls should send only new information and the next instruction. This reduces context growth and loop risk while preserving recoverability.
