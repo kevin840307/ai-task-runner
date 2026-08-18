@@ -1,0 +1,14 @@
+"""Shared default values for the 24h runner contract."""
+from __future__ import annotations
+
+DEFAULT_BACKEND = "qwen"
+DEFAULT_QWEN_COMMAND = "qwen.cmd"
+DEFAULT_AGENT_TIMEOUT = 7200
+DEFAULT_PLANNING_TIMEOUT = 600
+DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT = 900
+DEFAULT_VALIDATOR_TIMEOUT = 1200
+DEFAULT_MAX_ATTEMPTS = 0
+DEFAULT_MAX_CYCLES = 0
+DEFAULT_FINAL_AI_VALIDATIONS = 1
+# 0 means strict majority of configured independent AI validations.
+DEFAULT_FINAL_AI_REQUIRED_PASSES = 0

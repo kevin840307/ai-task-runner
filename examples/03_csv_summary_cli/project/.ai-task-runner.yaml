@@ -1,7 +1,0 @@
-protected_paths:
-- input/
-instructions:
-  always: Keep changes minimal. Do not hardcode project-specific values. Work only
-    within the current TODO scope.
-  project: Preserve immutable fixtures and existing behavior. Reuse existing helpers
-    instead of duplicating logic.

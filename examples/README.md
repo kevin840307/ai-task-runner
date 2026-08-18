@@ -1,9 +1,21 @@
 # Examples
 
-Version: 1.1.1
+Run all examples in order on Windows:
 
-Examples demonstrate end-to-end Runner patterns: file generation, structured documents, CLI tools, AI validation, YAML multi-step scripts, and config rendering. Each example project root has its own `.ai-task-runner.yaml`; immutable inputs/reference fixtures are protected while required outputs remain writable. Validators use `validator_interface.py`.
+```bat
+examples\run_examples.bat
+```
 
-Run the provided `run_qwen.ps1` / `run_opencode.ps1` where available, or invoke `ai_task_runner.py` directly with the example prompt/project/validator. For validator-specific CLI inputs, use repeatable `--validator-arg`.
+Pass normal Runner options through the BAT, for example `examples\run_examples.bat --backend qwen --resume`.
 
-Example prompts avoid repeating generic Runner instructions. Deterministic validators mirror explicit requirements and fixture invariants; qualitative guidance stays non-blocking unless the prompt defines a measurable limit.
+The suite is intentionally small and diagnostic:
+
+1. `01_basic_python_validator` — baseline Python hard validation.
+2. `02_repair_cycle` — starter bug intended to exercise Validator FAIL → repair.
+3. `03_ai_validator_voting` — AI-only final validation with 3 independent fresh-session votes.
+4. `04_mixed_validation` — Python hard gate plus AI semantic majority vote.
+5. `05_ai_quality_repair` — hard behavior checks plus an AI genericity/quality gate.
+6. `06_yaml_driven_tool` — a small application that consumes YAML; the outer `examples.yaml` simultaneously exercises Runner YAML batch mode.
+7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
+
+Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. The validators and prompts live outside each writable project root.

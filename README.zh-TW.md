@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.0
+版本：1.2.1
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -9,7 +9,7 @@
 - Adaptive Planning：bounded read-only Understand -> 同一 planning client/session 的 Plan Finalize -> 必要時同 session Judge/Rewrite；只有 planning session 無法恢復時才用 fresh full-context fallback。
 - TODO 隔離執行：Executor 跨 TODO 沿用同一 session，每次只送新的 Current TODO 與 scope 提醒；Review 才使用 fresh read-only session。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
-- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode。
+- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode（可為每筆指定 `project_root`）。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
 - `<project-root>/.ai-task-runner.yaml` 是專案 policy；policy 本身會自動受到保護。

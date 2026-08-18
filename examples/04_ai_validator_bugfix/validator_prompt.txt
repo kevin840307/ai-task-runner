@@ -1,1 +1,0 @@
-Verify the slugify implementation against every stated behavior, inspect and run the automated tests, confirm README has at least three concrete input/output examples, and reject superficial or hardcoded solutions.

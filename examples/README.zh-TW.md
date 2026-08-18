@@ -1,9 +1,21 @@
-# Examples 範例
+# 範例
 
-版本：1.1.1
+Windows 一次依序執行全部範例：
 
-Examples 展示完整 Runner 使用方式：檔案生成、structured Markdown、CLI 工具、AI Validation、YAML multi-step script、config renderer。每個 example project root 都有自己的 `.ai-task-runner.yaml`；immutable input/reference fixture 會 protected，而需求要產生/修改的 target 保持 writable。Validator 統一使用 `validator_interface.py`。
+```bat
+examples\run_examples.bat
+```
 
-可使用案例內 `run_qwen.ps1` / `run_opencode.ps1`，或直接用 `ai_task_runner.py` 搭配 prompt/project/validator。Validator 若需要額外 CLI input，使用可重複的 `--validator-arg`。
+可把一般 Runner 參數直接接在 BAT 後，例如 `examples\run_examples.bat --backend qwen --resume`。
 
-Example Prompt 不重複 Runner 的通用操作指令。Deterministic validator 對齊明確需求與 fixture invariant；主觀品質除非 Prompt 有可量測上限，否則不應變成 hidden hard gate。
+這套範例刻意保持小而容易定位問題：
+
+1. `01_basic_python_validator`：Python 硬性驗證 baseline。
+2. `02_repair_cycle`：內建 starter bug，驗證 Validator FAIL → Repair。
+3. `03_ai_validator_voting`：AI-only Final Validator，3 個獨立 fresh session 投票。
+4. `04_mixed_validation`：Python hard gate + AI semantic majority vote。
+5. `05_ai_quality_repair`：硬性功能驗證 + AI 通用性/品質 gate。
+6. `06_yaml_driven_tool`：小型 YAML 應用；外層 `examples.yaml` 同時驗證 Runner YAML batch mode。
+7. `07_blackbox_medium`：中型黑盒案例，Validator 只驗 CLI output，完全不檢查實作結構。
+
+YAML 每筆 task 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。Validator 與 prompt 放在各 writable project root 外面。

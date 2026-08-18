@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.0
+Version: 1.2.1
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,10 +34,11 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires `prompt` (or `goal`) and `validator`. Optional fields include `validator_prompt`, `ai_validator_prompt`, `ai_validator_count`, and `ai_validator_required_passes`. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires `prompt` (or `goal`) and `validator`. Optional fields include `validator_prompt`, `ai_validator_prompt`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
 
 ```yaml
 - prompt: Implement the requested change.
+  project_root: projects/example-a
   validator: validation.py
   ai_validator_prompt: >-
     Check architecture, genericity, and unnecessary complexity.

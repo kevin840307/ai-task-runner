@@ -9,29 +9,25 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXPECTED = {
-    "01_config_template_roundtrip",
-    "02_structured_markdown_report",
-    "03_csv_summary_cli",
-    "04_ai_validator_bugfix",
-    "05_yaml_release_pipeline",
-    "06_yaml_data_migration_pipeline",
-    "07_auto_config",
+    "01_basic_python_validator",
+    "02_repair_cycle",
+    "03_ai_validator_voting",
+    "04_mixed_validation",
+    "05_ai_quality_repair",
+    "06_yaml_driven_tool",
+    "07_blackbox_medium",
 }
 
 
-def test_example_inventory_and_launchers():
-    found = {p.name for p in EXAMPLES.iterdir() if p.is_dir()}
-    assert found == EXPECTED
+def test_example_inventory_and_batch_launcher():
+    assert {p.name for p in EXAMPLES.iterdir() if p.is_dir()} == EXPECTED
+    assert (EXAMPLES / "examples.yaml").is_file()
+    assert (EXAMPLES / "run_examples.bat").is_file()
     for name in EXPECTED:
         folder = EXAMPLES / name
-        if name == "07_auto_config":
-            assert (folder / "prompt.md").is_file()
-            assert (folder / "validation.py").is_file()
-            assert (folder / "ans").is_dir()
-            continue
         assert (folder / "project").is_dir()
-        assert (folder / "run_qwen.ps1").is_file()
-        assert (folder / "run_opencode.ps1").is_file()
+        assert (folder / "prompt.md").is_file()
+        assert (folder / "project" / ".ai-task-runner.yaml").is_file()
 
 
 def test_example_python_files_compile():
@@ -46,91 +42,83 @@ def test_example_python_files_compile():
         )
 
 
-def test_yaml_examples_have_valid_items_and_paths():
-    for name in ("05_yaml_release_pipeline", "06_yaml_data_migration_pipeline"):
-        path = EXAMPLES / name / "tasks.yaml"
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        assert isinstance(data, list) and len(data) == 3
-        for item in data:
-            assert isinstance(item.get("prompt"), str) and item["prompt"].strip()
-            validator = item.get("validator")
-            assert isinstance(validator, str) and validator.strip()
-            if validator != "ai":
-                assert (ROOT / validator).is_file()
+def test_examples_yaml_runs_01_to_07_with_per_item_project_roots():
+    data = yaml.safe_load((EXAMPLES / "examples.yaml").read_text(encoding="utf-8"))
+    assert isinstance(data, list) and len(data) == 7
+    for index, item in enumerate(data, 1):
+        prefix = f"{index:02d}_"
+        assert isinstance(item.get("prompt"), str) and item["prompt"].strip()
+        project_root = item.get("project_root")
+        assert isinstance(project_root, str) and Path(project_root).parent.name.startswith(prefix)
+        assert (EXAMPLES / project_root).is_dir()
+        validator = item.get("validator")
+        assert isinstance(validator, str) and validator.strip()
+        if validator != "ai":
+            assert (EXAMPLES / validator).is_file()
+    assert data[2]["validator"] == "ai" and data[2]["ai_validator_count"] == 3
+    assert data[3]["ai_validator_count"] == 3 and data[3]["ai_validator_prompt"]
+    assert data[4]["ai_validator_count"] == 3 and data[4]["ai_validator_prompt"]
 
 
-def test_single_prompt_examples_are_not_precompleted():
-    for name in (
-        "01_config_template_roundtrip",
-        "02_structured_markdown_report",
-        "03_csv_summary_cli",
-    ):
-        folder = EXAMPLES / name
-        validator = folder / "validator.py"
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(validator),
-                "--project-root",
-                str(folder / "project"),
-                "--state-file",
-                str(folder / "unused-state.json"),
-            ],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        assert result.returncode != 0, f"starter unexpectedly passed: {name}\n{result.stdout}"
-
-
-def test_auto_config_example_is_not_precompleted():
-    folder = EXAMPLES / "07_auto_config"
-    result = subprocess.run(
+def run_validator(name: str) -> subprocess.CompletedProcess[str]:
+    folder = EXAMPLES / name
+    return subprocess.run(
         [
             sys.executable,
             str(folder / "validation.py"),
             "--project-root",
-            str(folder),
+            str(folder / "project"),
             "--state-file",
             str(folder / "unused-state.json"),
         ],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        timeout=30,
     )
-    assert result.returncode != 0, f"starter unexpectedly passed: 07_auto_config\n{result.stdout}"
 
 
-def test_yaml_file_validators_are_not_precompleted():
-    for name in ("05_yaml_release_pipeline", "06_yaml_data_migration_pipeline"):
-        folder = EXAMPLES / name
-        for validator in sorted((folder / "validators").glob("*.py")):
-            if validator.name == "validator_interface.py":
-                continue
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(validator),
-                    "--project-root",
-                    str(folder / "project"),
-                    "--state-file",
-                    str(folder / "unused-state.json"),
-                ],
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            assert result.returncode != 0, f"starter unexpectedly passed: {validator}\n{result.stdout}"
+def test_starter_states_match_example_purpose():
+    # These cases intentionally start incomplete or broken so the Runner has work to do.
+    for name in (
+        "01_basic_python_validator",
+        "02_repair_cycle",
+        "04_mixed_validation",
+        "06_yaml_driven_tool",
+        "07_blackbox_medium",
+    ):
+        result = run_validator(name)
+        assert result.returncode != 0, f"starter unexpectedly passed: {name}\n{result.stdout}"
+        assert "VALIDATION_FAILED" in result.stdout
+
+    # Example 05 deliberately hard-passes first; its AI semantic gate should catch the sample-specific starter.
+    result = run_validator("05_ai_quality_repair")
+    assert result.returncode == 0, result.stdout
+    assert "VALIDATION_PASSED" in result.stdout
 
 
-def test_all_smoke_and_example_validators_use_local_interface():
+def test_ai_examples_have_visible_custom_prompts():
+    for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_repair"):
+        text = (EXAMPLES / name / "ai_validation.md").read_text(encoding="utf-8")
+        assert len(text.splitlines()) >= 3
+
+
+def test_blackbox_medium_validator_does_not_inspect_implementation_structure():
+    text = (EXAMPLES / "07_blackbox_medium" / "validation.py").read_text(encoding="utf-8")
+    assert "ast." not in text
+    assert "inspect." not in text
+    assert "class " not in text
+    assert "line count" not in text.lower()
+    assert "rglob(" not in text
+
+
+def test_smoke_validators_keep_local_interface_contract():
     entries = []
-    for base in (ROOT / "smoke", ROOT / "examples"):
-        for path in base.rglob("*.py"):
-            if path.name in {"validator_interface.py", "common.py"}:
-                continue
-            if path.name in {"validator.py", "validation.py"} or path.name.endswith("_validator.py"):
-                entries.append(path)
+    for path in (ROOT / "smoke").rglob("*.py"):
+        if path.name in {"validator_interface.py", "common.py"}:
+            continue
+        if path.name in {"validator.py", "validation.py"} or path.name.endswith("_validator.py"):
+            entries.append(path)
     assert entries
     for path in entries:
         text = path.read_text(encoding="utf-8")
@@ -139,8 +127,8 @@ def test_all_smoke_and_example_validators_use_local_interface():
         assert (path.parent / "validator_interface.py").is_file(), path
 
 
-def test_local_validator_interfaces_provide_actionable_json_diagnostics():
-    interfaces = sorted((ROOT / "examples").rglob("validator_interface.py")) + sorted((ROOT / "smoke").rglob("validator_interface.py"))
+def test_smoke_validator_interfaces_provide_actionable_json_diagnostics():
+    interfaces = sorted((ROOT / "smoke").rglob("validator_interface.py"))
     assert interfaces
     for path in interfaces:
         text = path.read_text(encoding="utf-8")

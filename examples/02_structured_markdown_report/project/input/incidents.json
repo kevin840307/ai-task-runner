@@ -1,5 +1,0 @@
-[
-  {"id":"INC-101","severity":"high","service":"orders","title":"Order creation latency","owner":"Mia","action":"Add database latency alert"},
-  {"id":"INC-102","severity":"medium","service":"billing","title":"Duplicate payment callback","owner":"Noah","action":"Add callback idempotency test"},
-  {"id":"INC-103","severity":"low","service":"search","title":"Stale autocomplete cache","owner":"Ava","action":"Document cache refresh procedure"}
-]

@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.2.0
+版本：1.2.1
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
@@ -32,4 +32,4 @@ print(result.exit_code, result.completed)
 `run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
 
 ## YAML script
-`runner.script_runner` 接受非空 YAML array。每筆需要 `prompt` 或 `goal` 與 `validator` path 或 `ai`；每筆可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`。舊格式仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
+`runner.script_runner` 接受非空 YAML array。每筆需要 `prompt` 或 `goal` 與 `validator` path 或 `ai`；每筆可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊格式仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。

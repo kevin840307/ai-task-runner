@@ -1,9 +1,0 @@
-protected_paths:
-- validator_interface.py
-- ans/
-- ans_manifest.json
-instructions:
-  always: Keep changes minimal. Do not hardcode project-specific values. Work only
-    within the current TODO scope.
-  project: This project is configuration-driven. Reuse existing helpers and preserve
-    immutable answer fixtures.

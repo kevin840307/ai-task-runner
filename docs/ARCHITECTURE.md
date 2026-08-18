@@ -1,6 +1,6 @@
 # Architecture
 
-Version: 1.2.0
+Version: 1.2.1
 
 ## Responsibility boundary
 The Runner owns orchestration, state, retry/recovery, session policy, protection, model transport, prompt assembly, result parsing, validation orchestration, UI/events, and diagnostics. The Runner owns orchestration; project code owns application behavior. It must not understand application-specific workflows or business values. Project behavior belongs in the goal, project source, validator, templates, fixtures, and `.ai-task-runner.yaml`.

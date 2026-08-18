@@ -1,7 +1,0 @@
-order_id,region,status,amount
-O-001,North,paid,120.50
-O-002,South,pending,80.00
-O-003,North,paid,19.50
-O-004,West,refunded,50.00
-O-005,South,paid,100.00
-O-006,West,paid,30.00
