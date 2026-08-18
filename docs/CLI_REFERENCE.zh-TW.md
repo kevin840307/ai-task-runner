@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.2.1
+版本：1.2.2
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 
@@ -9,7 +9,7 @@
 | `--goal` | 直接給 Goal | 與 `--goal-file` 互斥 |
 | `--goal-file` | UTF-8 Goal 檔 | 長需求建議使用 |
 | `--project-root` | Agent 可工作的專案邊界 | `.` |
-| `--script` | YAML prompt/validator array | 與 goal mode 互斥 |
+| `--script` | YAML task array；item 可用 `prompt`/`goal` 或 `goal_file` | 與 goal mode 互斥 |
 | `--validator` | Python validator path 或 `ai` | 非 script mode 必填 |
 | `--validator-prompt` | `--validator ai` 的 Final AI 額外指示 | 空字串 |
 | `--ai-validator-prompt` | file validator PASS 後追加的 Final AI 驗證指示 | 空字串/關閉 |

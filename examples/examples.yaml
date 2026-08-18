@@ -1,59 +1,12 @@
-- prompt: |
-    Build a small Python CLI named text_stats.py.
-    
-    Usage:
-      python text_stats.py --input <text-file> --output <json-file>
-    
-    Requirements:
-    - Read UTF-8 text.
-    - Write UTF-8 JSON with keys: lines, words, characters, non_empty_lines.
-    - lines is the number of logical lines (splitlines semantics).
-    - words are whitespace-separated tokens.
-    - characters is len(text), including newlines.
-    - non_empty_lines counts lines whose stripped content is not empty.
-    - Create the output parent directory when needed.
-    - Return non-zero with a useful message when the input file is missing.
-    - Use only the Python standard library.
-    - Keep the implementation simple and avoid sample-specific values.
+- goal_file: 01_basic_python_validator/prompt.md
   project_root: 01_basic_python_validator/project
   validator: 01_basic_python_validator/validation.py
 
-- prompt: |
-    Repair the existing range_summary.py CLI without replacing the project with a different tool.
-    
-    Usage:
-      python range_summary.py <integer> [<integer> ...]
-    
-    It must print exactly one JSON object containing:
-    - count: number of values
-    - min: minimum value
-    - max: maximum value
-    - sum: arithmetic sum
-    - average: arithmetic mean as a JSON number
-    
-    Requirements:
-    - Support negative, zero, and positive integers.
-    - Support one value and repeated values.
-    - Invalid input must return non-zero.
-    - Keep the solution small and use only the standard library.
-    - Fix root causes rather than special-casing validator examples.
+- goal_file: 02_repair_cycle/prompt.md
   project_root: 02_repair_cycle/project
   validator: 02_repair_cycle/validation.py
 
-- prompt: |
-    Create a small Python command-line configuration lookup tool named config_lookup.py.
-    
-    Usage:
-      python config_lookup.py --config <json-file> --key <dot.path>
-    
-    Behavior:
-    - Load any JSON object supplied at runtime.
-    - Resolve nested keys such as database.host or services.api.url.
-    - Print scalar values as text and objects/lists as JSON.
-    - Missing keys or invalid JSON must return non-zero with a useful message.
-    - Do not embed sample environment, service, host, or key names in the implementation.
-    - Use only the standard library.
-    - Prefer a direct, maintainable implementation over unnecessary abstractions.
+- goal_file: 03_ai_validator_voting/prompt.md
   project_root: 03_ai_validator_voting/project
   validator: ai
   validator_prompt: |
@@ -63,27 +16,7 @@
     Return concrete missing_items for real blockers; do not fail for stylistic preferences.
   ai_validator_count: 3
 
-- prompt: |
-    Build todo_cli.py, a persistent JSON Todo CLI.
-    
-    Global option:
-      --db <path>
-    Commands:
-      add <text> --priority low|medium|high
-      list --format json
-      done <id>
-      delete <id>
-    
-    Requirements:
-    - Store a JSON array in the selected --db file.
-    - IDs are stable increasing positive integers; deleting an item must not reuse its ID while higher IDs remain.
-    - New items have done=false.
-    - done marks only the requested item.
-    - delete removes only the requested item.
-    - list --format json prints the full array as valid JSON.
-    - Missing DB starts as an empty list.
-    - Unknown IDs and invalid priority return non-zero.
-    - Keep the code generic, small, and free of validator-specific or sample-data hardcoding.
+- goal_file: 04_mixed_validation/prompt.md
   project_root: 04_mixed_validation/project
   validator: 04_mixed_validation/validation.py
   ai_validator_prompt: |
@@ -92,16 +25,7 @@
     FAIL only for concrete semantic-quality problems that would make the solution brittle or sample-specific.
   ai_validator_count: 3
 
-- prompt: |
-    Improve the existing route_config.py CLI while preserving its simple interface.
-    
-    Usage:
-      python route_config.py --config <json-file> --env <name> --service <name>
-    
-    The JSON file contains an environments object. Each environment contains arbitrary service names mapped to URLs.
-    The CLI must print the selected URL or return non-zero when the environment/service is absent.
-    The implementation must be data-driven: new environment and service names added only to the JSON must work without code changes.
-    Keep the implementation small; do not add a framework or encode known sample names in branches/mappings.
+- goal_file: 05_ai_quality_repair/prompt.md
   project_root: 05_ai_quality_repair/project
   validator: 05_ai_quality_repair/validation.py
   ai_validator_prompt: |
@@ -111,63 +35,10 @@
     Do not require a particular architecture; a small direct solution is preferred. Return only concrete blockers.
   ai_validator_count: 3
 
-- prompt: |
-    Build release_plan.py, a YAML-driven release planning CLI.
-    
-    Usage:
-      python release_plan.py --input <yaml-file> --output <json-file>
-    
-    Input schema:
-    services:
-      - name: string
-        version: string
-        enabled: boolean (optional, default true)
-        wave: integer (optional, default 0)
-    
-    Output is a JSON array containing only enabled services. Each item has name, version, and wave. Sort by wave ascending, then name ascending.
-    Requirements:
-    - Accept arbitrary service names, versions, and waves.
-    - Missing services means an empty output array.
-    - Invalid item shapes/types return non-zero.
-    - Create output parent directories.
-    - Use PyYAML already provided by this project and the Python standard library.
-    - Keep logic data-driven and compact.
+- goal_file: 06_yaml_driven_tool/prompt.md
   project_root: 06_yaml_driven_tool/project
   validator: 06_yaml_driven_tool/validation.py
 
-- prompt: |
-    Build a medium-size black-box CLI named inventory_cli.py. The validator will judge only observable input/output behavior and will not care how you structure the code.
-    
-    Usage:
-      python inventory_cli.py scan --input <folder> --output <folder>
-    
-    Recursively scan .json, .yaml/.yml, and .csv files (case-insensitive extensions). Ignore other files.
-    Each supported file represents records:
-    - JSON: either a list of objects, or {"records": [objects]}.
-    - YAML: same shapes as JSON.
-    - CSV: header row plus records; values are strings.
-    
-    Normalize every record to an object and add two fields:
-    - _source: relative POSIX path from the input folder
-    - _index: zero-based record index inside that source file
-    
-    Write two UTF-8 JSON files:
-    1. records.json: all normalized records sorted by _source then _index.
-    2. summary.json with keys files, records, by_format, errors.
-       - files: count of successfully parsed supported files
-       - records: total normalized record count
-       - by_format: counts of successfully parsed files using keys json, yaml, csv; omit zero-count keys
-       - errors: sorted list of relative paths that could not be parsed or had an invalid top-level/record shape
-    
-    Rules:
-    - A bad supported file is reported in errors and does not abort the whole scan.
-    - Unsupported files are ignored and not counted.
-    - Empty input directory is valid and produces empty outputs.
-    - Create the output directory.
-    - Results must be deterministic across runs.
-    - Do not modify input files.
-    - PyYAML is available.
-    
-    Implementation is intentionally unrestricted: one file or multiple files, functions or classes are all acceptable. Only behavior matters.
+- goal_file: 07_blackbox_medium/prompt.md
   project_root: 07_blackbox_medium/project
   validator: 07_blackbox_medium/validation.py

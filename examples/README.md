@@ -18,4 +18,4 @@ The suite is intentionally small and diagnostic:
 6. `06_yaml_driven_tool` — a small application that consumes YAML; the outer `examples.yaml` simultaneously exercises Runner YAML batch mode.
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 
-Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. The validators and prompts live outside each writable project root.
+Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. The validators and prompts live outside each writable project root; `examples.yaml` references each `prompt.md` through `goal_file`.

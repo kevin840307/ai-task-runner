@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.2.1
+Version: 1.2.2
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 
@@ -9,7 +9,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--goal` | Inline goal | mutually exclusive with `--goal-file` |
 | `--goal-file` | UTF-8 goal file | preferred for long goals |
 | `--project-root` | writable project boundary | `.` |
-| `--script` | YAML prompt/validator array | exclusive with goal |
+| `--script` | YAML task array; items may use `prompt`/`goal` or `goal_file` | exclusive with goal |
 | `--validator` | Python validator path or `ai` | required outside script mode |
 | `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
 | `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |

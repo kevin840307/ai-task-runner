@@ -18,4 +18,4 @@ examples\run_examples.bat
 6. `06_yaml_driven_tool`：小型 YAML 應用；外層 `examples.yaml` 同時驗證 Runner YAML batch mode。
 7. `07_blackbox_medium`：中型黑盒案例，Validator 只驗 CLI output，完全不檢查實作結構。
 
-YAML 每筆 task 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。Validator 與 prompt 放在各 writable project root 外面。
+YAML 每筆 task 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。Validator 與 prompt 放在各 writable project root 外面；`examples.yaml` 使用 `goal_file` 引用每個 `prompt.md`。

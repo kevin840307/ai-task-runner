@@ -1,6 +1,6 @@
 # State 與 Events
 
-版本：1.2.1
+版本：1.2.2
 
 ## State
 Runner state 放在 project-relative work dir（預設 `.ai-task-runner`）。內容包含 run/cycle identity、current task index、task status/attempts/review、session id、progress/recovery metadata 與 Resume 需要的 completion state。實際 JSON 是內部 persistence format；Integration 應優先使用 Public API/Event，不要直接修改 state。

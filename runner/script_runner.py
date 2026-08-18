@@ -37,9 +37,29 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             raise RunnerError(f"script item {index} must be an object")
         prompt = item.get("prompt") or item.get("goal")
+        goal_file = item.get("goal_file")
         validator = item.get("validator")
+        if prompt and goal_file:
+            raise RunnerError(
+                f"script item {index} must use either prompt or goal_file, not both"
+            )
+        if goal_file:
+            if not isinstance(goal_file, str) or not goal_file.strip():
+                raise RunnerError(
+                    f"script item {index} goal_file must be a non-empty string"
+                )
+            goal_path = Path(goal_file).expanduser()
+            if not goal_path.is_absolute():
+                goal_path = path.parent / goal_path
+            try:
+                prompt = goal_path.read_text(encoding="utf-8")
+            except OSError as error:
+                raise RunnerError(
+                    f"script item {index} goal_file not found: {goal_file}"
+                ) from error
+            goal_file = str(goal_path.resolve())
         if not isinstance(prompt, str) or not prompt.strip():
-            raise RunnerError(f"script item {index} requires prompt")
+            raise RunnerError(f"script item {index} requires prompt or goal_file")
         if not isinstance(validator, str) or not validator.strip():
             raise RunnerError(
                 f"script item {index} requires validator path or 'ai'"
@@ -50,6 +70,8 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
             "validator_prompt": str(item.get("validator_prompt", "")),
             "ai_validator_prompt": str(item.get("ai_validator_prompt", "")),
         }
+        if goal_file:
+            result["goal_file"] = goal_file
         if "project_root" in item:
             project_root = item["project_root"]
             if not isinstance(project_root, str) or not project_root.strip():
@@ -152,6 +174,7 @@ def script_item_args(
     child = copy.copy(args)
     child.script = None
     child.goal = item["prompt"]
+    child.goal_file = item.get("goal_file")
     item_root = Path(item["project_root"]) if "project_root" in item else Path(args.project_root)
     if "project_root" in item and not item_root.is_absolute():
         item_root = Path(args.project_root) / item_root

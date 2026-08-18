@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.1
+版本：1.2.2
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,10 +34,10 @@ Protected path 是 project-relative，可指檔案或資料夾；資料夾會保
 - `--plan-only`：只建立/更新 TODO 並保存 state，不執行 TODO。
 
 ## YAML script mode
-`--script tasks.yaml` 依序執行 YAML array。每筆必須有 `prompt`（或 `goal`）與 `validator`；可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root。每個 script item 使用自己的 project root 下 `.ai-task-runner/script/<index>` 隔離 state。
+`--script tasks.yaml` 依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 使用 UTF-8；相對路徑以 YAML 檔案所在目錄為基準。可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root。每個 script item 使用自己的 project root 下 `.ai-task-runner/script/<index>` 隔離 state。
 
 ```yaml
-- prompt: 完成這次需求修改。
+- goal_file: prompts/example-a.md
   project_root: projects/example-a
   validator: validation.py
   ai_validator_prompt: >-

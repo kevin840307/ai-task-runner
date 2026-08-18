@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.1
+Version: 1.2.2
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -9,7 +9,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - Adaptive Planning: bounded read-only Understand -> same planning client/session Plan Finalize -> same-session Judge/Rewrite as needed; only an unrecoverable planning session falls back to fresh full-context planning.
 - Bounded TODO execution keeps one Executor session across TODOs; each next-TODO prompt contains only the new TODO and scope reminder. Review remains a fresh read-only session.
 - Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
-- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode with optional per-item `project_root`.
+- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode with optional per-item `project_root` and `goal_file`.
 - Shared model-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
 - Project policy in `<project-root>/.ai-task-runner.yaml`; the policy file protects itself automatically.
