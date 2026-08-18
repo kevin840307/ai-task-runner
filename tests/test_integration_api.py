@@ -370,6 +370,30 @@ def test_goal_file_is_loaded_by_public_request(tmp_path):
     assert not result.states[0]["goal"].startswith("\ufeff")
 
 
+def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
+    prompt_file = tmp_path / "ai_validation.md"
+    prompt_file.write_bytes(b"\xef\xbb\xbfCheck architecture and genericity.\n")
+    request = RunRequest(
+        goal="build", validator="ai", ai_validator_prompt_file=str(prompt_file)
+    )
+    request.validate()
+    args = request.to_namespace()
+    assert args.ai_validator_prompt == "Check architecture and genericity.\n"
+    assert args.ai_validator_prompt_file == str(prompt_file)
+
+
+def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
+    prompt_file = tmp_path / "ai_validation.md"
+    prompt_file.write_text("check", encoding="utf-8")
+    with pytest.raises(ValueError, match="either ai_validator_prompt or ai_validator_prompt_file"):
+        RunRequest(
+            goal="build",
+            validator="ai",
+            ai_validator_prompt="inline",
+            ai_validator_prompt_file=str(prompt_file),
+        ).validate()
+
+
 @pytest.mark.parametrize(
     ("run_request", "message"),
     [

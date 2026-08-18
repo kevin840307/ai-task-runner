@@ -1,44 +1,33 @@
-- goal_file: 01_basic_python_validator/prompt.md
+- goal_file: 01_basic_python_validator/project/prompt.md
   project_root: 01_basic_python_validator/project
-  validator: 01_basic_python_validator/validation.py
+  validator: 01_basic_python_validator/project/validation.py
 
-- goal_file: 02_repair_cycle/prompt.md
+- goal_file: 02_repair_cycle/project/prompt.md
   project_root: 02_repair_cycle/project
-  validator: 02_repair_cycle/validation.py
+  validator: 02_repair_cycle/project/validation.py
 
-- goal_file: 03_ai_validator_voting/prompt.md
+- goal_file: 03_ai_validator_voting/project/prompt.md
   project_root: 03_ai_validator_voting/project
   validator: ai
-  validator_prompt: |
-    Review the final project as an independent read-only validator.
-    PASS only when the implementation clearly satisfies the requested generic JSON dot-path lookup behavior, contains no sample-specific configuration/key hardcoding, handles errors reasonably, and stays appropriately small.
-    Do not demand a particular class/function structure. Judge observable behavior and obvious implementation quality only.
-    Return concrete missing_items for real blockers; do not fail for stylistic preferences.
+  ai_validator_prompt_file: 03_ai_validator_voting/project/ai_validation.md
   ai_validator_count: 3
 
-- goal_file: 04_mixed_validation/prompt.md
+- goal_file: 04_mixed_validation/project/prompt.md
   project_root: 04_mixed_validation/project
-  validator: 04_mixed_validation/validation.py
-  ai_validator_prompt: |
-    PASS only if the completed Todo CLI is generic, reasonably minimal, and does not hardcode validator data, fixed database paths, task texts, IDs, or command outcomes.
-    The Python validator owns exact functional correctness, so do not invent extra requirements or preferred architecture.
-    FAIL only for concrete semantic-quality problems that would make the solution brittle or sample-specific.
+  validator: 04_mixed_validation/project/validation.py
+  ai_validator_prompt_file: 04_mixed_validation/project/ai_validation.md
   ai_validator_count: 3
 
-- goal_file: 05_ai_quality_repair/prompt.md
+- goal_file: 05_ai_quality_repair/project/prompt.md
   project_root: 05_ai_quality_repair/project
-  validator: 05_ai_quality_repair/validation.py
-  ai_validator_prompt: |
-    Act as the semantic quality gate after the hard validator passes.
-    PASS only if route selection is genuinely data-driven from the supplied JSON and arbitrary new environment/service names work without source changes.
-    FAIL sample-specific branches, fallback tables, duplicated hardcoded URLs, or other code that merely passes known fixtures.
-    Do not require a particular architecture; a small direct solution is preferred. Return only concrete blockers.
+  validator: 05_ai_quality_repair/project/validation.py
+  ai_validator_prompt_file: 05_ai_quality_repair/project/ai_validation.md
   ai_validator_count: 3
 
-- goal_file: 06_yaml_driven_tool/prompt.md
+- goal_file: 06_yaml_driven_tool/project/prompt.md
   project_root: 06_yaml_driven_tool/project
-  validator: 06_yaml_driven_tool/validation.py
+  validator: 06_yaml_driven_tool/project/validation.py
 
-- goal_file: 07_blackbox_medium/prompt.md
+- goal_file: 07_blackbox_medium/project/prompt.md
   project_root: 07_blackbox_medium/project
-  validator: 07_blackbox_medium/validation.py
+  validator: 07_blackbox_medium/project/validation.py

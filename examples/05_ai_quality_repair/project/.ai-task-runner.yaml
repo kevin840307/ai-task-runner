@@ -1,5 +1,11 @@
+protected_paths:
+  - prompt.md
+  - validation.py
+  - ai_validation.md
+
 instructions:
   always: |
     Work only inside this project root.
     Keep the implementation small and generic.
+    Never modify protected task, prompt, validator, or runner-control files.
     Do not modify .ai-task-runner state or validator reports.

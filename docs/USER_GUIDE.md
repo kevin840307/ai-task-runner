@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.3
+Version: 1.2.4
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,24 +34,23 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` is UTF-8 and relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, `ai_validator_prompt`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
 
 ```yaml
 - goal_file: prompts/example-a.md
   project_root: projects/example-a
   validator: validation.py
-  ai_validator_prompt: >-
-    Check architecture, genericity, and unnecessary complexity.
+  ai_validator_prompt_file: ai_validation.md
   ai_validator_count: 3
 ```
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.
 - AI validator: `--validator ai` plus optional `--validator-prompt`.
-- Mixed validation: use a file `--validator` plus `--ai-validator-prompt`. The file validator is the hard gate; AI voting runs only after it passes, and both gates must pass.
+- Mixed validation: use a file `--validator` plus `--ai-validator-prompt` or `--ai-validator-prompt-file`. The file validator is the hard gate; AI voting runs only after it passes, and both gates must pass.
 - `--final-ai-validations` (alias `--ai-validator-count`) controls independent fresh-session votes. `--final-ai-required-passes 0` uses strict majority; a positive value explicitly sets the threshold.
 
-Example: `--validator validation.py --ai-validator-prompt "Check architecture and genericity" --ai-validator-count 3` requires the Python validator plus at least 2 of 3 independent AI PASS votes.
+Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` requires the Python validator plus at least 2 of 3 independent AI PASS votes.
 
 ## JSON events / integration
 `--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills.

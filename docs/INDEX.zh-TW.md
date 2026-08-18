@@ -1,6 +1,6 @@
 # 文件索引
 
-版本：1.2.3
+版本：1.2.4
 
 - `DESIGN.zh-TW.md`：完整流程、Retry/Recovery 設計。
 - `ARCHITECTURE.zh-TW.md`：模組、責任邊界、資料流。

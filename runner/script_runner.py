@@ -64,12 +64,37 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
             raise RunnerError(
                 f"script item {index} requires validator path or 'ai'"
             )
+        ai_prompt = item.get("ai_validator_prompt", "")
+        ai_prompt_file = item.get("ai_validator_prompt_file")
+        if ai_prompt and ai_prompt_file:
+            raise RunnerError(
+                f"script item {index} must use either ai_validator_prompt or ai_validator_prompt_file, not both"
+            )
+        if ai_prompt_file:
+            if not isinstance(ai_prompt_file, str) or not ai_prompt_file.strip():
+                raise RunnerError(
+                    f"script item {index} ai_validator_prompt_file must be a non-empty string"
+                )
+            ai_path = Path(ai_prompt_file).expanduser()
+            if not ai_path.is_absolute():
+                ai_path = path.parent / ai_path
+            try:
+                ai_prompt = ai_path.read_text(encoding="utf-8-sig")
+            except OSError as error:
+                raise RunnerError(
+                    f"script item {index} ai_validator_prompt_file not found: {ai_prompt_file}"
+                ) from error
+            ai_prompt_file = str(ai_path.resolve())
+        if not isinstance(ai_prompt, str):
+            raise RunnerError(f"script item {index} ai_validator_prompt must be a string")
         result = {
             "prompt": prompt.strip(),
             "validator": validator.strip(),
             "validator_prompt": str(item.get("validator_prompt", "")),
-            "ai_validator_prompt": str(item.get("ai_validator_prompt", "")),
+            "ai_validator_prompt": ai_prompt.strip(),
         }
+        if ai_prompt_file:
+            result["ai_validator_prompt_file"] = ai_prompt_file
         if goal_file:
             result["goal_file"] = goal_file
         if "project_root" in item:
@@ -182,6 +207,7 @@ def script_item_args(
     child.validator = item["validator"]
     child.validator_prompt = item["validator_prompt"]
     child.ai_validator_prompt = item.get("ai_validator_prompt", "")
+    child.ai_validator_prompt_file = item.get("ai_validator_prompt_file")
     child.final_ai_validations = item.get(
         "ai_validator_count", child.final_ai_validations
     )

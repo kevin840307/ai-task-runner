@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.3
+Version: 1.2.4
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -27,7 +27,7 @@ The Runner invokes the validator as `python validation.py --project-root <root> 
 
 Mixed hard + AI validation:
 ```bat
-python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt "Check architecture and genericity" --ai-validator-count 3
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
 ```
 The file validator must PASS first; then 3 fresh AI sessions vote independently and strict majority is required by default.
 

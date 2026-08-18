@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.3
+版本：1.2.4
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,24 +34,23 @@ Protected path 是 project-relative，可指檔案或資料夾；資料夾會保
 - `--plan-only`：只建立/更新 TODO 並保存 state，不執行 TODO。
 
 ## YAML script mode
-`--script tasks.yaml` 依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 使用 UTF-8；相對路徑以 YAML 檔案所在目錄為基準。可選 `validator_prompt`、`ai_validator_prompt`、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root。每個 script item 使用自己的 project root 下 `.ai-task-runner/script/<index>` 隔離 state。
+`--script tasks.yaml` 依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root。每個 script item 使用自己的 project root 下 `.ai-task-runner/script/<index>` 隔離 state。
 
 ```yaml
 - goal_file: prompts/example-a.md
   project_root: projects/example-a
   validator: validation.py
-  ai_validator_prompt: >-
-    檢查架構、通用性與不必要的複雜度。
+  ai_validator_prompt_file: ai_validation.md
   ai_validator_count: 3
 ```
 
 ## Validation 模式
 - File validator：`--validator validation.py`。
 - AI validator：`--validator ai`，可加 `--validator-prompt`。
-- 混合驗證：使用 file `--validator` 再加 `--ai-validator-prompt`。Python validator 是硬性 gate，只有 PASS 才執行 AI 投票，而且兩邊都必須 PASS。
+- 混合驗證：使用 file `--validator` 再加 `--ai-validator-prompt` 或 `--ai-validator-prompt-file`。Python validator 是硬性 gate，只有 PASS 才執行 AI 投票，而且兩邊都必須 PASS。
 - `--final-ai-validations`（alias：`--ai-validator-count`）控制 fresh session 的獨立票數；`--final-ai-required-passes 0` 代表嚴格過半，也可指定固定門檻。
 
-範例：`--validator validation.py --ai-validator-prompt "檢查架構與通用性" --ai-validator-count 3` 代表 Python 必須 PASS，且 3 個獨立 AI session 至少 2 票 PASS。
+範例：`--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` 代表 Python 必須 PASS，且 3 個獨立 AI session 至少 2 票 PASS。
 
 ## JSON events / Integration
 `--json-events` 輸出 JSON Lines。Python/UI/Skill 應使用 `runner.api.RunRequest` + `runner.api.run()`，這是正式共用入口。

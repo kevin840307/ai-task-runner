@@ -12,7 +12,7 @@ def base_args(tmp_path: Path) -> argparse.Namespace:
         project_root=str(tmp_path), work_dir='.ai-task-runner', resume=False,
         final_ai_validations=1, final_ai_required_passes=0,
         script='tasks.yaml', goal=None, validator=None, validator_prompt='',
-        ai_validator_prompt='',
+        ai_validator_prompt='', ai_validator_prompt_file=None,
     )
 
 
@@ -89,4 +89,32 @@ def test_yaml_item_goal_file_missing_is_actionable(tmp_path):
     script=tmp_path/'tasks.yaml'
     script.write_text('- goal_file: missing.md\n  validator: ai\n', encoding='utf-8')
     with pytest.raises(RunnerError, match='goal_file not found: missing.md'):
+        load_yaml_script(script)
+
+
+def test_yaml_item_ai_validator_prompt_file_loads_relative_to_script(tmp_path):
+    prompts = tmp_path / 'prompts'; prompts.mkdir()
+    ai_prompt = prompts / 'validate.md'; ai_prompt.write_text('check genericity\n', encoding='utf-8')
+    script = tmp_path / 'tasks.yaml'
+    script.write_text('- prompt: build\n  validator: ai\n  ai_validator_prompt_file: prompts/validate.md\n', encoding='utf-8')
+    item = load_yaml_script(script)[0]
+    assert item['ai_validator_prompt'] == 'check genericity'
+    assert Path(item['ai_validator_prompt_file']) == ai_prompt.resolve()
+    child = script_item_args(base_args(tmp_path), item, 1)
+    assert child.ai_validator_prompt == 'check genericity'
+    assert Path(child.ai_validator_prompt_file) == ai_prompt.resolve()
+
+
+def test_yaml_item_ai_validator_prompt_file_and_inline_are_mutually_exclusive(tmp_path):
+    prompt = tmp_path / 'validate.md'; prompt.write_text('check', encoding='utf-8')
+    script = tmp_path / 'tasks.yaml'
+    script.write_text('- prompt: build\n  validator: ai\n  ai_validator_prompt: inline\n  ai_validator_prompt_file: validate.md\n', encoding='utf-8')
+    with pytest.raises(RunnerError, match='either ai_validator_prompt or ai_validator_prompt_file'):
+        load_yaml_script(script)
+
+
+def test_yaml_item_ai_validator_prompt_file_missing_is_actionable(tmp_path):
+    script = tmp_path / 'tasks.yaml'
+    script.write_text('- prompt: build\n  validator: ai\n  ai_validator_prompt_file: missing.md\n', encoding='utf-8')
+    with pytest.raises(RunnerError, match='ai_validator_prompt_file not found: missing.md'):
         load_yaml_script(script)

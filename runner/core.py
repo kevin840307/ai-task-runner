@@ -140,8 +140,10 @@ class TaskRunner:
 
     def _build_protected_files(self) -> list[Path]:
         goal_file = getattr(self.args, "goal_file", None)
+        ai_prompt_file = getattr(self.args, "ai_validator_prompt_file", None)
         paths = [
             *([Path(goal_file).resolve()] if goal_file else []),
+            *([Path(ai_prompt_file).resolve()] if ai_prompt_file else []),
             *([self.validator] if self.validator else []),
             self.state_file,
             *runner_source_files(),

@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.2.3
+版本：1.2.4
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 
@@ -13,6 +13,7 @@
 | `--validator` | Python validator path 或 `ai` | 非 script mode 必填 |
 | `--validator-prompt` | `--validator ai` 的 Final AI 額外指示 | 空字串 |
 | `--ai-validator-prompt` | file validator PASS 後追加的 Final AI 驗證指示 | 空字串/關閉 |
+| `--ai-validator-prompt-file` | AI 驗證 Prompt UTF-8 檔案；與 `--ai-validator-prompt` 二選一 | 空/關閉 |
 | `--backend` | `qwen` / `opencode` | `qwen` |
 | `--command` | 覆寫 backend executable | backend default |
 | `--agent-arg` | backend 額外一個 argv | 可重複 |

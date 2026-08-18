@@ -48,6 +48,21 @@ def test_runner_merges_yaml_paths_into_existing_protection(tmp_path: Path) -> No
     assert (tmp_path / "locked").resolve() in protected
 
 
+def test_runner_protects_ai_validator_prompt_file(tmp_path: Path) -> None:
+    prompt = tmp_path / "ai_validation.md"
+    prompt.write_text("check", encoding="utf-8")
+    runner = TaskRunner.__new__(TaskRunner)
+    runner.root = tmp_path.resolve()
+    runner.args = SimpleNamespace(
+        goal_file=None, ai_validator_prompt_file=str(prompt), protect_file=[]
+    )
+    runner.validator = None
+    runner.state_file = tmp_path / ".ai-task-runner" / "state.json"
+    runner.backend_files = []
+
+    assert prompt.resolve() in runner._build_protected_files()
+
+
 def test_policy_folder_snapshot_restores_modify_create_and_delete(tmp_path: Path) -> None:
     protected = tmp_path / "locked"
     protected.mkdir()

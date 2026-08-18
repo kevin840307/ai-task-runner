@@ -36,6 +36,7 @@ class RunRequest:
     validator: str | None = None
     validator_prompt: str = ""
     ai_validator_prompt: str = ""
+    ai_validator_prompt_file: str | None = None
     backend: str = DEFAULT_BACKEND
     command: str | None = None
     agent_args: list[str] = field(default_factory=list)
@@ -70,6 +71,7 @@ class RunRequest:
             validator=args.validator,
             validator_prompt=args.validator_prompt,
             ai_validator_prompt=getattr(args, "ai_validator_prompt", ""),
+            ai_validator_prompt_file=getattr(args, "ai_validator_prompt_file", None),
             backend=args.backend,
             command=args.command,
             agent_args=list(args.agent_arg),
@@ -119,7 +121,8 @@ class RunRequest:
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
-            ai_validator_prompt=self.ai_validator_prompt,
+            ai_validator_prompt=self._effective_ai_validator_prompt(),
+            ai_validator_prompt_file=self.ai_validator_prompt_file,
             backend=self.backend,
             command=self.command,
             agent_arg=list(self.agent_args),
@@ -163,6 +166,8 @@ class RunRequest:
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script is used")
+        if self.ai_validator_prompt and self.ai_validator_prompt_file:
+            raise ValueError("use either ai_validator_prompt or ai_validator_prompt_file, not both")
         for name in ("validator_prompt", "ai_validator_prompt"):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"{name} must be a string")
@@ -223,6 +228,16 @@ class RunRequest:
         path = Path(self.goal_file).expanduser()
         if not path.is_file():
             raise ValueError(f"goal_file not found: {self.goal_file}")
+        return path.read_text(encoding="utf-8-sig")
+
+    def _effective_ai_validator_prompt(self) -> str:
+        if self.ai_validator_prompt:
+            return self.ai_validator_prompt
+        if not self.ai_validator_prompt_file:
+            return ""
+        path = Path(self.ai_validator_prompt_file).expanduser()
+        if not path.is_file():
+            raise ValueError(f"ai_validator_prompt_file not found: {self.ai_validator_prompt_file}")
         return path.read_text(encoding="utf-8-sig")
 
 

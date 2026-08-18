@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.2.3
+Version: 1.2.4
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 
@@ -13,6 +13,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--validator` | Python validator path or `ai` | required outside script mode |
 | `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
 | `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |
+| `--ai-validator-prompt-file` | UTF-8 file containing Final AI validation instructions; mutually exclusive with `--ai-validator-prompt` | empty/off |
 | `--backend` | `qwen` or `opencode` | `qwen` |
 | `--command` | backend executable override | backend default |
 | `--agent-arg` | one extra backend argv element | repeatable |

@@ -18,6 +18,6 @@ The suite is intentionally small and diagnostic:
 6. `06_yaml_driven_tool` — a small application that consumes YAML; the outer `examples.yaml` simultaneously exercises Runner YAML batch mode.
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 
-Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. The validators and prompts live outside each writable project root; `examples.yaml` references each `prompt.md` through `goal_file`.
+Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
 

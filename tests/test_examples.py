@@ -26,8 +26,9 @@ def test_example_inventory_and_batch_launcher():
     for name in EXPECTED:
         folder = EXAMPLES / name
         assert (folder / "project").is_dir()
-        assert (folder / "prompt.md").is_file()
-        assert (folder / "project" / ".ai-task-runner.yaml").is_file()
+        project = folder / "project"
+        assert (project / "prompt.md").is_file()
+        assert (project / ".ai-task-runner.yaml").is_file()
 
 
 def test_example_python_files_compile():
@@ -58,8 +59,11 @@ def test_examples_yaml_runs_01_to_07_with_per_item_project_roots():
         if validator != "ai":
             assert (EXAMPLES / validator).is_file()
     assert data[2]["validator"] == "ai" and data[2]["ai_validator_count"] == 3
-    assert data[3]["ai_validator_count"] == 3 and data[3]["ai_validator_prompt"]
-    assert data[4]["ai_validator_count"] == 3 and data[4]["ai_validator_prompt"]
+    for item in data[2:5]:
+        assert item["ai_validator_count"] == 3
+        assert "ai_validator_prompt" not in item
+        prompt_file = item.get("ai_validator_prompt_file")
+        assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
 
 
 def run_validator(name: str) -> subprocess.CompletedProcess[str]:
@@ -67,7 +71,7 @@ def run_validator(name: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
-            str(folder / "validation.py"),
+            str(folder / "project" / "validation.py"),
             "--project-root",
             str(folder / "project"),
             "--state-file",
@@ -101,12 +105,12 @@ def test_starter_states_match_example_purpose():
 
 def test_ai_examples_have_visible_custom_prompts():
     for name in ("03_ai_validator_voting", "04_mixed_validation", "05_ai_quality_repair"):
-        text = (EXAMPLES / name / "ai_validation.md").read_text(encoding="utf-8")
+        text = (EXAMPLES / name / "project" / "ai_validation.md").read_text(encoding="utf-8")
         assert len(text.splitlines()) >= 3
 
 
 def test_blackbox_medium_validator_does_not_inspect_implementation_structure():
-    text = (EXAMPLES / "07_blackbox_medium" / "validation.py").read_text(encoding="utf-8")
+    text = (EXAMPLES / "07_blackbox_medium" / "project" / "validation.py").read_text(encoding="utf-8")
     assert "ast." not in text
     assert "inspect." not in text
     assert "class " not in text
@@ -145,7 +149,7 @@ def test_todo_cli_validator_checks_state_after_each_mutation():
 
 
 def test_python_example_validators_use_shared_validator_report():
-    validators = sorted((EXAMPLES).glob("*/validation.py"))
+    validators = sorted((EXAMPLES).glob("*/project/validation.py"))
     assert validators
     for path in validators:
         text = path.read_text(encoding="utf-8")
@@ -154,3 +158,15 @@ def test_python_example_validators_use_shared_validator_report():
         assert ".finish()" in text, path
         assert "print('VALIDATION_PASSED')" not in text, path
         assert "print('VALIDATION_FAILED')" not in text, path
+
+
+def test_example_project_policies_protect_control_files():
+    for name in EXPECTED:
+        project = EXAMPLES / name / "project"
+        policy = yaml.safe_load((project / ".ai-task-runner.yaml").read_text(encoding="utf-8"))
+        protected = set(policy.get("protected_paths", []))
+        assert "prompt.md" in protected
+        if (project / "validation.py").is_file():
+            assert "validation.py" in protected
+        if (project / "ai_validation.md").is_file():
+            assert "ai_validation.md" in protected

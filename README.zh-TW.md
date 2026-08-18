@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.3
+版本：1.2.4
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -27,7 +27,7 @@ Runner 實際呼叫會是 `python validation.py --project-root <root> --state-fi
 
 Hard + AI 混合驗證：
 ```bat
-python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt "檢查架構與通用性" --ai-validator-count 3
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
 ```
 Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半。
 

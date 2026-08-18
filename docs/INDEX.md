@@ -1,6 +1,6 @@
 # Documentation Index
 
-Version: 1.2.3
+Version: 1.2.4
 
 - `DESIGN.md`: complete behavior and recovery design.
 - `ARCHITECTURE.md`: modules, boundaries, and data flow.

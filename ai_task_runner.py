@@ -58,6 +58,10 @@ def parser() -> argparse.ArgumentParser:
         help="optional Final AI validation instructions after a file validator passes",
     )
     command_parser.add_argument(
+        "--ai-validator-prompt-file",
+        help="UTF-8 file containing Final AI validation instructions; mutually exclusive with --ai-validator-prompt",
+    )
+    command_parser.add_argument(
         "--backend",
         choices=backend_names(),
         default=DEFAULT_BACKEND,
