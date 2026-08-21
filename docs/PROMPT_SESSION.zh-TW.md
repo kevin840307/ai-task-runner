@@ -1,6 +1,6 @@
 # Prompt 與 Session 契約
 
-版本：1.2.4
+版本：1.2.5
 
 ## 通用原則
 Fresh/Rebuilt session 必須針對該 stage 自足；Same-session call 只送新增資訊與下一步。這可降低 context 膨脹與 loop 風險，同時保留可恢復性。

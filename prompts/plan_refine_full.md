@@ -16,7 +16,7 @@ $tasks_json
 $judge_feedback
 
 Return a complete replacement task list for $planning_mode planning.
-For repair planning, keep the original goal authoritative, use the latest validator failure to identify what remains incorrect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that moves the project back toward the original goal. Keep each repair TODO limited to its own relevant validator failures and acceptance criteria; remove unrelated failures and later-TODO work from it.
+For repair planning, keep the original goal authoritative, use the latest validator failure to identify what remains incorrect, and treat the existing implementation only as evidence. Do not preserve or complete an existing design merely because it already exists; prefer the smallest repair that moves the project back toward the original goal. Keep each repair TODO limited to its own relevant validator failures and acceptance criteria; remove unrelated failures and later-TODO work from it. When multiple reported failures share one underlying contract or root cause, prefer one coherent repair TODO for that shared cause instead of separate symptom-level TODOs.
 
 Quality gate:
 1. Every TODO must create or modify one concrete, observable project result requested by the goal. For an implementation/change goal, remove any TODO whose deliverable can be satisfied without changing a requested project result.
@@ -25,7 +25,7 @@ Quality gate:
 4. Small focused changes are valid. Merge only duplicate or process-only tasks, not independent changes that happen to share a file or component.
 5. Each description must contain the task-specific context needed to execute it without rereading the original goal or draft plan.
 6. Each deliverable must state the exact end result. Acceptance criteria must make the stopping point objectively clear.
-7. Remove runner-owned final validation, retry, generic cleanup, read-only inspection, and check-only tasks unless the goal explicitly requests that artifact or changed behavior.
+7. Remove runner-owned final validation, retry, generic cleanup, read-only inspection, and check-only tasks unless the goal explicitly requests that artifact or changed behavior. Never create a TODO whose primary purpose is to run, inspect, or modify the final validator.
 8. Keep dependencies ordered. Return at least $minimum_tasks task(s); reach the minimum by splitting real independently verifiable implementation behavior or project changes, never by preserving or inventing preparation/read/check tasks.
 9. Include genuinely goal-wide compatibility, safety, and non-regression constraints consistently so they can be summarized for execution.
 

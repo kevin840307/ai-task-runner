@@ -963,3 +963,32 @@ def test_repair_planning_partitions_failures_by_todo(tmp_path: Path):
         assert "acceptance criteria" in lower
         assert "later-todo" in lower
         assert "unrelated" in lower
+
+
+def test_planning_excludes_runner_owned_validation_and_merges_shared_repair_causes(tmp_path: Path):
+    state = RunState(
+        run_id="r",
+        goal="ORIGINAL GOAL",
+        project_root=str(tmp_path),
+        cycle=2,
+        validator_output="failure one\nfailure two",
+    )
+    tasks = [Task(
+        id="c02-t001",
+        title="Repair",
+        description="Repair shared behavior",
+        deliverable="result",
+        acceptance_criteria=["result is correct"],
+    )]
+    prompts = [
+        plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=True),
+        plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=False),
+        plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks),
+        plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks, same_session=False),
+        plan_refine_prompt("ORIGINAL GOAL", tmp_path, state, tasks, judge_issues=["repair"], same_session=True),
+        plan_refine_prompt("ORIGINAL GOAL", tmp_path, state, tasks, judge_issues=["repair"], same_session=False),
+    ]
+    for prompt in prompts:
+        lower = prompt.lower()
+        assert "final validation" in lower and "runner" in lower
+        assert "underlying contract or root cause" in lower

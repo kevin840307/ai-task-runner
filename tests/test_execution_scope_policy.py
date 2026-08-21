@@ -197,3 +197,10 @@ def test_validator_repair_hint_is_scoped_to_current_todo():
     assert "relevant" in lower
     assert "ignore unrelated validator failures" in lower
     assert "later-todo" in lower
+
+
+def test_execution_prompt_stops_after_focused_success(tmp_path):
+    prompt = execution_prompt(state(), tmp_path, [], include_goal=True)
+    assert "smallest focused verification" in prompt
+    assert "if it passes, stop immediately" in prompt.lower()
+    assert "Do not repeat the same inspection or test hypothesis without new evidence" in prompt
