@@ -118,3 +118,29 @@ def test_yaml_item_ai_validator_prompt_file_missing_is_actionable(tmp_path):
     script.write_text('- prompt: build\n  validator: ai\n  ai_validator_prompt_file: missing.md\n', encoding='utf-8')
     with pytest.raises(RunnerError, match='ai_validator_prompt_file not found: missing.md'):
         load_yaml_script(script)
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["ai_validator_count", "ai_validator_required_passes"],
+)
+def test_yaml_item_numeric_counts_reject_booleans(tmp_path, field_name):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        f"- prompt: build\n  validator: ai\n  {field_name}: true\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RunnerError, match=field_name):
+        load_yaml_script(script)
+
+
+def test_yaml_item_validator_prompt_must_be_a_string(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: ai\n  validator_prompt: [invalid]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RunnerError, match="validator_prompt must be a string"):
+        load_yaml_script(script)

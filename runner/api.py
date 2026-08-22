@@ -24,6 +24,7 @@ from .defaults import (
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
+from .value_checks import is_integer, is_number
 from .version import __version__
 
 
@@ -215,14 +216,14 @@ class RunRequest:
                 raise ValueError(f"{name} must be a list of non-empty strings")
 
     def _validate_timeouts_and_limits(self) -> None:
-        if not isinstance(self.validator_timeout, int) or self.validator_timeout <= 0:
+        if not is_integer(self.validator_timeout) or self.validator_timeout <= 0:
             raise ValueError("validator_timeout must be a positive integer")
-        if not isinstance(self.agent_timeout, int) or self.agent_timeout < 0:
+        if not is_integer(self.agent_timeout) or self.agent_timeout < 0:
             raise ValueError("agent_timeout must be a non-negative integer")
-        if not isinstance(self.planning_timeout, int) or self.planning_timeout < 0:
+        if not is_integer(self.planning_timeout) or self.planning_timeout < 0:
             raise ValueError("planning_timeout must be a non-negative integer")
         if (
-            not isinstance(self.agent_idle_after_change_timeout, (int, float))
+            not is_number(self.agent_idle_after_change_timeout)
             or self.agent_idle_after_change_timeout < 0
         ):
             raise ValueError(
@@ -230,12 +231,12 @@ class RunRequest:
             )
         for name in ("max_attempts", "max_cycles"):
             value = getattr(self, name)
-            if not isinstance(value, int) or value < 0:
+            if not is_integer(value) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
-        if not isinstance(self.final_ai_validations, int) or self.final_ai_validations < 1:
+        if not is_integer(self.final_ai_validations) or self.final_ai_validations < 1:
             raise ValueError("final_ai_validations must be a positive integer")
         if (
-            not isinstance(self.final_ai_required_passes, int)
+            not is_integer(self.final_ai_required_passes)
             or not 0 <= self.final_ai_required_passes <= self.final_ai_validations
         ):
             raise ValueError(
@@ -245,14 +246,14 @@ class RunRequest:
     def _validate_retry_and_context_settings(self) -> None:
         for name in ("retry_delay", "retry_wait", "retry_max_wait"):
             value = getattr(self, name)
-            if not isinstance(value, (int, float)) or value < 0:
+            if not is_number(value) or value < 0:
                 raise ValueError(f"{name} must be a non-negative number")
         if self.retry_max_wait < self.retry_wait:
             raise ValueError("retry_max_wait must be greater than or equal to retry_wait")
         if not isinstance(self.loop_context_compress, bool):
             raise ValueError("loop_context_compress must be a boolean")
         if (
-            not isinstance(self.loop_context_compress_threshold, (int, float))
+            not is_number(self.loop_context_compress_threshold)
             or not 0 <= self.loop_context_compress_threshold <= 100
         ):
             raise ValueError("loop_context_compress_threshold must be between 0 and 100")

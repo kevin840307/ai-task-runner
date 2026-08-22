@@ -11,9 +11,21 @@ from typing import Any
 
 from .config import RuntimeConfig
 from .errors import RunnerError
+from .value_checks import is_integer, is_number
 from .version import __version__
 
 ExecuteOne = Callable[[RuntimeConfig], int]
+
+
+def _script_string(
+    item: dict[str, Any],
+    index: int,
+    field_name: str,
+) -> str:
+    value = item.get(field_name, "")
+    if not isinstance(value, str):
+        raise RunnerError(f"script item {index} {field_name} must be a string")
+    return value.strip()
 
 
 def _read_item_file(
@@ -65,7 +77,7 @@ def _script_ai_prompt(
     item: dict[str, Any],
     index: int,
 ) -> tuple[str, str | None]:
-    prompt = item.get("ai_validator_prompt", "")
+    prompt = _script_string(item, index, "ai_validator_prompt")
     prompt_file = item.get("ai_validator_prompt_file")
     if prompt and prompt_file:
         raise RunnerError(
@@ -80,10 +92,6 @@ def _script_ai_prompt(
     )
     if prompt_input:
         prompt, prompt_file = prompt_input
-    if not isinstance(prompt, str):
-        raise RunnerError(
-            f"script item {index} ai_validator_prompt must be a string"
-        )
     return prompt.strip(), prompt_file
 
 
@@ -106,8 +114,7 @@ def _script_options(item: dict[str, Any], index: int) -> dict[str, Any]:
     if "loop_context_compress_threshold" in item:
         value = item["loop_context_compress_threshold"]
         if (
-            not isinstance(value, (int, float))
-            or isinstance(value, bool)
+            not is_number(value)
             or not 0 <= value <= 100
         ):
             raise RunnerError(
@@ -118,7 +125,7 @@ def _script_options(item: dict[str, Any], index: int) -> dict[str, Any]:
         if name not in item:
             continue
         value = item[name]
-        if not isinstance(value, int) or value < 0:
+        if not is_integer(value) or value < 0:
             raise RunnerError(
                 f"script item {index} {name} must be a non-negative integer"
             )
@@ -138,10 +145,11 @@ def _parse_script_item(
     if not isinstance(validator, str) or not validator.strip():
         raise RunnerError(f"script item {index} requires validator path or 'ai'")
     ai_prompt, ai_prompt_file = _script_ai_prompt(script, item, index)
+    validator_prompt = _script_string(item, index, "validator_prompt")
     result = {
         "prompt": prompt,
         "validator": validator.strip(),
-        "validator_prompt": str(item.get("validator_prompt", "")),
+        "validator_prompt": validator_prompt,
         "ai_validator_prompt": ai_prompt,
         **_script_options(item, index),
     }

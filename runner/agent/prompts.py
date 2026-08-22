@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from importlib.resources import files
 from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any
@@ -12,7 +13,7 @@ from ..errors import RunnerError
 from ..models import RunState, Task
 from ..safety.policy import instructions
 
-PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts"
+PROMPT_DIR = files("runner.agent.prompt_templates")
 MAX_PROMPT_HISTORY_ITEMS = 20
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Literal, TypedDict
 
+from .value_checks import is_integer, is_number
+
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
 RunStage = Literal[
@@ -83,7 +85,7 @@ class Task:
             raise ValueError(f"{prefix}.changed_files must be strings")
         for name in ("attempts", "stagnant_attempts"):
             value = getattr(self, name)
-            if not isinstance(value, int) or value < 0:
+            if not is_integer(value) or value < 0:
                 raise ValueError(f"{prefix}.{name} must be non-negative")
 
 
@@ -113,9 +115,9 @@ class RunState:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"state.{name} must be a non-empty string")
-        if not isinstance(self.cycle, int) or self.cycle < 1:
+        if not is_integer(self.cycle) or self.cycle < 1:
             raise ValueError("state.cycle must be a positive integer")
-        if not isinstance(self.current, int) or not 0 <= self.current <= len(self.tasks):
+        if not is_integer(self.current) or not 0 <= self.current <= len(self.tasks):
             raise ValueError("state.current is outside the task list")
         if not isinstance(self.completed, bool):
             raise ValueError("state.completed must be boolean")
@@ -125,10 +127,10 @@ class RunState:
                 raise ValueError(f"state.{name} must be a string")
         for name in ("stage_started_at", "last_activity_at"):
             value = getattr(self, name)
-            if not isinstance(value, (int, float)) or value < 0:
+            if not is_number(value) or value < 0:
                 raise ValueError(f"state.{name} must be a non-negative number")
         if (
-            not isinstance(self.validator_failure_count, int)
+            not is_integer(self.validator_failure_count)
             or self.validator_failure_count < 0
         ):
             raise ValueError("state.validator_failure_count must be non-negative")

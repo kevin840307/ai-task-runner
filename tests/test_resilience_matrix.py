@@ -161,6 +161,45 @@ def test_run_state_rejects_invalid_persisted_values():
         })
 
 
+@pytest.mark.parametrize(
+    ("field_name", "message"),
+    [
+        ("cycle", "state.cycle"),
+        ("current", "state.current"),
+        ("stage_started_at", "state.stage_started_at"),
+        ("last_activity_at", "state.last_activity_at"),
+        ("validator_failure_count", "state.validator_failure_count"),
+    ],
+)
+def test_run_state_numeric_fields_reject_booleans(field_name, message):
+    payload = {
+        "run_id": "r",
+        "goal": "g",
+        "project_root": "/p",
+        field_name: True,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        RunState.load(payload)
+
+
+def test_task_attempt_counts_reject_booleans():
+    with pytest.raises(ValueError, match=r"tasks\[1\].attempts"):
+        RunState.load({
+            "run_id": "r",
+            "goal": "g",
+            "project_root": "/p",
+            "tasks": [
+                {
+                    "id": "t",
+                    "title": "x",
+                    "description": "y",
+                    "attempts": False,
+                },
+            ],
+        })
+
+
 def test_readonly_guard_restores_create_modify_delete_and_rename(tmp_path):
     work = tmp_path / ".ai-task-runner"
     keep = tmp_path / "keep.txt"

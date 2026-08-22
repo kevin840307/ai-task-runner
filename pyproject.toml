@@ -16,6 +16,7 @@ dependencies = [
 packages = [
     "runner",
     "runner.agent",
+    "runner.agent.prompt_templates",
     "runner.backends",
     "runner.safety",
     "runner.workflow",
@@ -25,3 +26,6 @@ py-modules = [
     "ai_task_runner",
     "ai_task_runner_validator",
 ]
+
+[tool.setuptools.package-data]
+"runner.agent.prompt_templates" = ["*.md"]

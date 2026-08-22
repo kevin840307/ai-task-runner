@@ -19,7 +19,7 @@ These rules are mandatory for changes to this repository.
 - Review judges only the current TODO. Final Validator judges the complete goal.
 
 ## Structured model output
-- All final model structured results must use the shared generic JSON candidate extraction path in `runner/model_results.py`.
+- All final model structured results must use the shared generic JSON candidate extraction path in `runner/agent/results.py`.
 - Envelope parsing may tolerate prose/Markdown/multiple JSON candidates; payload/schema validation remains strict.
 - Do not guess, repair, or silently reinterpret malformed JSON or invalid schemas.
 

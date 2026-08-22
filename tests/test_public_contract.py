@@ -175,3 +175,27 @@ def test_agent_timeout_is_part_of_public_request_contract():
         RunRequest(goal="x", validator="ai", planning_timeout=-1).validate()
     with pytest.raises(ValueError, match="agent_idle_after_change_timeout"):
         RunRequest(goal="x", validator="ai", agent_idle_after_change_timeout=-1).validate()
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "validator_timeout",
+        "agent_timeout",
+        "planning_timeout",
+        "agent_idle_after_change_timeout",
+        "max_attempts",
+        "max_cycles",
+        "final_ai_validations",
+        "final_ai_required_passes",
+        "retry_delay",
+        "retry_wait",
+        "retry_max_wait",
+        "loop_context_compress_threshold",
+    ],
+)
+def test_public_numeric_options_reject_booleans(field_name):
+    request = RunRequest(goal="x", validator="ai", **{field_name: True})
+
+    with pytest.raises(ValueError, match=field_name):
+        request.validate()
