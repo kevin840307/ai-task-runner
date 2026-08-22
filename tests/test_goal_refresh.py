@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from runner.models import RunState, Task
-from runner.prompting import execution_prompt, should_refresh_goal
+from runner.agent.prompts import execution_prompt, should_refresh_goal
 
 
 def state(cycle=1):

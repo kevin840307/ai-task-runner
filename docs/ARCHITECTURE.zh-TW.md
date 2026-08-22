@@ -5,22 +5,21 @@
 ## 責任邊界
 Runner 只負責 orchestration、state、retry/recovery、session policy、保護、模型傳輸、Prompt 組裝、result parsing、validation orchestration、UI/events 與 diagnostics。Runner 不應理解應用程式 workflow、FAB、ENV、版本或 business value。專案需求應存在 Goal、專案程式碼、Validator、Template、Fixture 與 `.ai-task-runner.yaml`。
 
-## 模組
+## Package 分區
 - `ai_task_runner.py`：CLI adapter。
 - `runner/api.py`：CLI/UI/Skill/Python 共用的 `RunRequest` / `run()` 正式入口。
 - `runner/core.py`：狀態機與主流程。
-- `runner/planning.py`：Understand、Plan、fallback、Refiner、Judge。
-- `runner/reviewing.py`：fresh Current TODO Review 與 logical no-tool finalize（嚴格 API 相容時仍保留一個 read-only tool）。
-- `runner/validation.py`：Deterministic / Final AI validation orchestration。
-- `runner/model_results.py`：唯一通用 JSON candidate extraction + 各 stage 嚴格 parser。
-- `runner/prompting.py`：Prompt/context 組裝。
-- `runner/policy.py`：project-root policy。
-- `runner/support.py`：共用 state/filesystem/retry/protection helper。
-- `runner/debug.py`：current/last/history diagnostics。
+- `runner/workflow/`：Planning、Review、AI/File Validation 等執行階段。
+- `runner/agent/`：AgentClient/Factory、stage arguments、Prompt、模型 retry、structured results 與 diagnostics。
+- `runner/backends/`：可替換的 Qwen/OpenCode transport 與 backend-specific argument policy。
+- `runner/safety/`：project policy、protected/read-only guard 與 child-process Git publication guard。
+- `runner/state_store.py`：state 載入、原子儲存與外部備份恢復。
 - `runner/process_control.py`：subprocess timeout/idle/watchdog。
-- `runner/git_guard.py`：阻擋 AI child process 的 `git add/commit/push`。
-- `runner/backends/`：Qwen/OpenCode transport。
+- `runner/script_runner.py`：YAML batch orchestration。
 - `runner/ui.py`：Terminal UI 與 JSON events。
+- 每項功能只保留一個正式 module path，不再發佈過時的頂層相容模組。
+
+依賴方向固定為 `api -> core -> workflow -> agent/safety -> backends/process/state`，底層不得反向 import `core` 或 workflow stage。
 
 ## 資料流
 `RunRequest -> request validation -> state -> protected roots -> Planning -> TODO Executor -> Review -> 下一個 TODO -> Deterministic Final Validator -> optional Final AI Validator -> 完成或 Repair Planning`。
@@ -36,7 +35,7 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 - Final AI Validator：fresh independent session，驗完整 Goal。
 
 ## Structured output
-所有模型最終 structured result 都走 `runner/model_results.py` 同一套 extractor。允許乾淨 JSON、Markdown fence、前後自然語言、或多個 top-level JSON candidate；之後由各 stage 嚴格驗 schema。JSON 壞掉、欄位型別錯、必要欄位缺少、TODO 數不足或語意不合法都必須 FAIL，Runner 不猜、不補、不偷偷修 payload。
+所有模型最終 structured result 都走 `runner/agent/results.py` 同一套 extractor。允許乾淨 JSON、Markdown fence、前後自然語言、或多個 top-level JSON candidate；之後由各 stage 嚴格驗 schema。JSON 壞掉、欄位型別錯、必要欄位缺少、TODO 數不足或語意不合法都必須 FAIL，Runner 不猜、不補、不偷偷修 payload。
 
 ## 保護模型
 Protected path 會正規化成 root；保護資料夾即保護 subtree。來源包含 Runner source、goal/validator、backend files、CLI `--protect-file` 與 project-root `.ai-task-runner.yaml`。Policy 本身自動保護。AI 違規修改會依 snapshot 偵測並還原。

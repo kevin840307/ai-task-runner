@@ -26,17 +26,6 @@ from runner.api import RunRequest, run
 from runner.version import __version__
 from runner.backends import backend_names
 
-# Compatibility exports for existing callers; new integrations should use runner.run.
-from runner.errors import RunnerError
-from runner.models import RunState, State, Task
-from runner.prompting import (
-    ai_validator_prompt,
-    execution_prompt,
-    plan_understand_prompt as plan_prompt,
-    review_prompt,
-)
-from runner.support import parse_tasks
-
 
 def parser() -> argparse.ArgumentParser:
     command_parser = argparse.ArgumentParser(description="Reusable AI task runner")

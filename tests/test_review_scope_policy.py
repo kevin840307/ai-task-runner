@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from runner.models import RunState, Task
-from runner.prompting import review_finalize_prompt, review_prompt
+from runner.agent.prompts import review_finalize_prompt, review_prompt
 
 
 def test_review_prompt_limits_decision_to_current_task(tmp_path: Path):

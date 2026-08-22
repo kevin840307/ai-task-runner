@@ -12,17 +12,20 @@ from runner.defaults import (
     NO_PROGRESS_LIMIT,
 )
 
-from .agent_factory import AgentFactory
-from .ai_validation import run_ai_validator
+from .agent.calls import retry_model_call
+from .agent.factory import AgentFactory
+from .agent.prompts import (
+    bounded_text,
+    execution_prompt,
+    render_prompt_template,
+    should_refresh_goal,
+)
 from .config import RuntimeConfig
 from .errors import RunnerError, backend_diagnostic_parts
 from .errors import diagnostic_error as diagnostic_error  # Compatibility export.
-from .file_validation import run_file_validator
-from .model_call import retry_model_call
 from .models import ReviewResult, RunStage, Task
-from .planning import build_plan
-from .policy import protected_paths as policy_protected_paths
-from .project_guard import (
+from .safety.policy import protected_paths as policy_protected_paths
+from .safety.project_guard import (
     changed_project_files,
     cleanup_stale_artifacts,
     normalize_protected_paths,
@@ -32,16 +35,13 @@ from .project_guard import (
     protected_ask,
     runner_source_files,
 )
-from .prompting import (
-    bounded_text,
-    execution_prompt,
-    render_prompt_template,
-    should_refresh_goal,
-)
-from .reviewing import review_task
 from .script_runner import execute_script as execute_yaml_script
 from .state_store import StateStore
 from .ui import LiveUI, show_todo
+from .workflow.planning import build_plan
+from .workflow.reviewing import review_task
+from .workflow.validation.ai import run_ai_validator
+from .workflow.validation.file import run_file_validator
 
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3

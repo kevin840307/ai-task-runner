@@ -4,111 +4,55 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+ORCHESTRATION = {
+    "runner.api",
+    "runner.core",
+    "runner.script_runner",
+    "runner.workflow.planning",
+    "runner.workflow.reviewing",
+    "runner.workflow.validation.ai",
+    "runner.workflow.validation.file",
+}
+
 FORBIDDEN_IMPORTS = {
-    "runner/state_store.py": {
-        "runner.core",
-        "runner.planning",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.validation",
-    },
-    "runner/ai_validation.py": {
-        "runner.core",
-        "runner.file_validation",
-        "runner.planning",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.validation",
-    },
-    "runner/file_validation.py": {
-        "runner.ai_validation",
-        "runner.core",
-        "runner.planning",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.validation",
-    },
-    "runner/config.py": {
-        "runner.agent",
-        "runner.core",
-        "runner.planning",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.validation",
-    },
-    "runner/agent_factory.py": {
-        "runner.core",
-        "runner.planning",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.validation",
-    },
-    "runner/agent_args.py": {
-        "runner.planning",
-        "runner.prompting",
-        "runner.core",
-        "runner.support",
-        "runner.script_runner",
-        "runner.ui",
-        "runner.validation",
-    },
-    "runner/backends/qwen_args.py": {
-        "runner.core",
-        "runner.planning",
-        "runner.prompting",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.support",
-        "runner.ui",
-        "runner.validation",
-    },
-    "runner/script_runner.py": {
-        "runner.planning",
-        "runner.prompting",
-        "runner.core",
-        "runner.support",
-        "runner.ui",
-        "runner.validation",
-    },
-    "runner/planning.py": {
+    "runner/config.py": ORCHESTRATION | {"runner.agent"},
+    "runner/state_store.py": ORCHESTRATION,
+    "runner/agent/arguments.py": ORCHESTRATION,
+    "runner/agent/calls.py": ORCHESTRATION,
+    "runner/agent/debug.py": ORCHESTRATION,
+    "runner/agent/prompts.py": ORCHESTRATION,
+    "runner/agent/results.py": ORCHESTRATION,
+    "runner/backends/qwen_args.py": ORCHESTRATION,
+    "runner/safety/git_guard.py": ORCHESTRATION,
+    "runner/safety/policy.py": ORCHESTRATION,
+    "runner/safety/project_guard.py": ORCHESTRATION,
+    "runner/workflow/planning.py": {
         "runner.core",
         "runner.script_runner",
-        "runner.validation",
+        "runner.workflow.reviewing",
+        "runner.workflow.validation.ai",
+        "runner.workflow.validation.file",
     },
-    "runner/reviewing.py": {
+    "runner/workflow/reviewing.py": {
         "runner.core",
         "runner.script_runner",
-        "runner.validation",
+        "runner.workflow.planning",
+        "runner.workflow.validation.ai",
+        "runner.workflow.validation.file",
     },
-    "runner/model_results.py": {
-        "runner.core",
-        "runner.planning",
-        "runner.prompting",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.support",
-        "runner.ui",
-        "runner.validation",
-    },
-    "runner/prompting.py": {
-        "runner.core",
-        "runner.support",
-        "runner.script_runner",
-        "runner.ui",
-        "runner.validation",
-    },
-    "runner/validation.py": {
-        "runner.planning",
+    "runner/workflow/validation/ai.py": {
         "runner.core",
         "runner.script_runner",
+        "runner.workflow.planning",
+        "runner.workflow.reviewing",
+        "runner.workflow.validation.file",
     },
-    "runner/ui.py": {
-        "runner.planning",
-        "runner.prompting",
+    "runner/workflow/validation/file.py": {
         "runner.core",
-        "runner.support",
         "runner.script_runner",
-        "runner.validation",
+        "runner.workflow.planning",
+        "runner.workflow.reviewing",
+        "runner.workflow.validation.ai",
     },
 }
 
@@ -120,36 +64,34 @@ def module_imports(filename: str) -> set[str]:
     modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            modules.update(alias.name.split(".")[0] for alias in node.names)
+            modules.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             if node.level:
                 base = package_parts[: max(0, len(package_parts) - node.level + 1)]
                 modules.add(".".join([*base, node.module]))
             else:
-                parts = node.module.split(".")
-                modules.add(".".join(parts[:2]) if parts[0] == "runner" and len(parts) > 1 else parts[0])
+                modules.add(node.module)
     return modules
 
 
-def test_helper_modules_do_not_import_back_into_orchestration():
+def test_lower_layers_do_not_import_back_into_orchestration():
     for filename, forbidden in FORBIDDEN_IMPORTS.items():
         imports = module_imports(filename)
         assert not imports.intersection(forbidden), filename
 
 
-def test_core_depends_on_feature_modules():
+def test_core_depends_on_feature_packages():
     imports = module_imports("runner/core.py")
     assert {
-        "runner.agent_factory",
-        "runner.ai_validation",
-        "runner.config",
-        "runner.file_validation",
-        "runner.planning",
-        "runner.prompting",
-        "runner.reviewing",
-        "runner.script_runner",
-        "runner.ui",
-        "runner.state_store",
+        "runner.agent.calls",
+        "runner.agent.factory",
+        "runner.agent.prompts",
+        "runner.safety.policy",
+        "runner.safety.project_guard",
+        "runner.workflow.planning",
+        "runner.workflow.reviewing",
+        "runner.workflow.validation.ai",
+        "runner.workflow.validation.file",
     } <= imports
 
 
@@ -161,11 +103,10 @@ def test_root_python_files_stay_minimal():
 
 
 def test_in_run_resume_never_builds_a_new_client_from_an_existing_session():
-    root = Path(__file__).resolve().parents[1]
     production = [
-        root / "runner" / "planning.py",
-        root / "runner" / "reviewing.py",
-        root / "runner" / "ai_validation.py",
+        ROOT / "runner" / "workflow" / "planning.py",
+        ROOT / "runner" / "workflow" / "reviewing.py",
+        ROOT / "runner" / "workflow" / "validation" / "ai.py",
     ]
     source = "\n".join(path.read_text(encoding="utf-8") for path in production)
     assert "session_id=reviewer.session_id" not in source

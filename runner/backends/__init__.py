@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from runner.defaults import DEFAULT_AGENT_TIMEOUT
-from .base import AgentBackend, AgentMode, Backend, BackendError, BackendResult
+from .base import AgentBackend, AgentMode, BackendError, BackendResult
 from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules
 
@@ -68,7 +68,6 @@ def create_backend(
 __all__ = [
     "AgentBackend",
     "AgentMode",
-    "Backend",
     "BackendError",
     "BackendResult",
     "BACKENDS",

@@ -8,10 +8,10 @@ import pytest
 
 from runner.core import TaskRunner
 from runner.errors import RunnerError
-from runner.git_guard import git_subcommand
-from runner.policy import POLICY_FILENAME, protected_paths
+from runner.safety.git_guard import git_subcommand
+from runner.safety.policy import POLICY_FILENAME, protected_paths
 from runner.process_control import run_process
-from runner.support import normalize_protected_paths, restore_changed, snapshot
+from runner.safety.project_guard import normalize_protected_paths, restore_changed, snapshot
 
 
 def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
@@ -120,7 +120,7 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_pat
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
-    from runner.policy import instructions
+    from runner.safety.policy import instructions
 
     (tmp_path / POLICY_FILENAME).write_text(
         "instructions:\n"

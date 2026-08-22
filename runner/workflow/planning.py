@@ -4,22 +4,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from .agent import AgentClient
-from .config import RuntimeConfig
-from .debug import parse_with_debug
-from .errors import RunnerError, diagnostic_error
-from .models import RunState, Task
-from .prompting import (
+from ..agent import AgentClient
+from ..agent.calls import recover_structured_output, retry_model_call
+from ..agent.debug import parse_with_debug
+from ..agent.prompts import (
     plan_finalize_prompt,
     plan_judge_prompt,
     plan_refine_prompt,
     plan_understand_prompt,
     structured_output_retry_prompt,
 )
-from .model_results import parse_plan_judgment, parse_tasks
-from .model_call import recover_structured_output, retry_model_call
-from .project_guard import readonly_ask
-from .ui import LiveUI
+from ..agent.results import parse_plan_judgment, parse_tasks
+from ..config import RuntimeConfig
+from ..errors import RunnerError, diagnostic_error
+from ..models import RunState, Task
+from ..safety.project_guard import readonly_ask
+from ..ui import LiveUI
 
 
 MIN_PLANNED_TASKS = 6

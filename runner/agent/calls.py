@@ -4,8 +4,8 @@ from __future__ import annotations
 import time
 from typing import Callable, TypeVar
 
-from .errors import RunnerError, diagnostic_detail
-from .ui import LiveUI
+from ..errors import RunnerError, diagnostic_detail
+from ..ui import LiveUI
 
 T = TypeVar("T")
 
@@ -59,3 +59,6 @@ def retry_model_call(
                 delay = min(max_wait, max(wait, delay * 2))
         finally:
             ui.stop()
+
+
+__all__ = ["recover_structured_output", "retry_model_call"]

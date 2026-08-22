@@ -1,6 +1,3 @@
-from argparse import Namespace
-from pathlib import Path
-
 import pytest
 
 from ai_task_runner import parser
@@ -9,7 +6,7 @@ from runner.defaults import (
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
 )
-from runner.validation import format_ai_validator_runs
+from runner.workflow.validation.ai import format_ai_validator_runs
 
 
 def test_final_ai_defaults_and_cli_options():
@@ -72,7 +69,7 @@ def test_majority_outvotes_one_explicit_fail():
 def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import ai_validation
+    from runner.workflow.validation import ai as ai_validation
     from runner.models import RunState
 
     sessions = []
@@ -121,7 +118,7 @@ def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
 def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import ai_validation
+    from runner.workflow.validation import ai as ai_validation
     from runner.models import RunState
 
     sessions = []

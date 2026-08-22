@@ -268,10 +268,6 @@ def _read_text_file(filename: str, field_name: str) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
-# Backward-compatible name used by the previous release.
-RunConfig = RunRequest
-
-
 @dataclass(frozen=True)
 class RunResult:
     exit_code: int
@@ -321,7 +317,6 @@ def _read_state(path: Path) -> dict[str, Any]:
 __all__ = [
     "__version__",
     "EventHandler",
-    "RunConfig",
     "RunRequest",
     "RunResult",
     "run",

@@ -10,8 +10,8 @@ import time
 from pathlib import Path
 from typing import Callable, Sequence, TypeVar
 
-from .agent import AgentClient
-from .errors import RunnerError
+from ..agent import AgentClient
+from ..errors import RunnerError
 
 T = TypeVar("T")
 ProtectedData = bytes | Path | None
@@ -23,7 +23,7 @@ STALE_TEMP_SECONDS = 7 * 24 * 60 * 60
 
 def runner_source_files() -> list[Path]:
     """Return protected runner source roots (files or directory subtrees)."""
-    package_root = Path(__file__).resolve().parent
+    package_root = Path(__file__).resolve().parents[1]
     root = package_root.parent
     return [
         *(path for name in ("ai_task_runner.py", "ai_task_runner_validator.py")
@@ -360,3 +360,25 @@ def cleanup_stale_artifacts(
                 _remove_path(path)
         except OSError:
             continue
+
+
+__all__ = [
+    "READONLY_EXCLUDE_DIRS",
+    "STALE_TEMP_SECONDS",
+    "changed_project_files",
+    "changed_snapshot_paths",
+    "cleanup_stale_artifacts",
+    "digest",
+    "normalize_protected_paths",
+    "progress_key",
+    "project_fingerprint",
+    "project_manifest",
+    "protected_ask",
+    "protected_change_detector",
+    "readonly_ask",
+    "readonly_project_call",
+    "require_unchanged_project",
+    "restore_changed",
+    "runner_source_files",
+    "snapshot",
+]

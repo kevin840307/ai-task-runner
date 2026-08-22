@@ -1,4 +1,4 @@
-from runner.prompting import structured_output_retry_prompt
+from runner.agent.prompts import structured_output_retry_prompt
 
 
 def test_structured_output_retry_prompt_substitutes_parser_error():

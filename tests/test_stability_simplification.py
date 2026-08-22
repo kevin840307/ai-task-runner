@@ -129,7 +129,7 @@ def test_planning_can_preserve_loop_session_for_no_tool_finalize():
 
 def test_prompt_history_is_bounded_to_recent_items(tmp_path):
     from runner.models import RunState, Task
-    from runner.prompting import MAX_PROMPT_HISTORY_ITEMS, completed_titles
+    from runner.agent.prompts import MAX_PROMPT_HISTORY_ITEMS, completed_titles
 
     state = RunState(
         run_id="r",

@@ -33,7 +33,7 @@ def test_legacy_review_counter_fields_are_ignored_when_loading_state():
 
 def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_path, monkeypatch):
     import runner.core as core
-    import runner.reviewing as reviewing
+    import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 
     created_clients = []
@@ -99,7 +99,7 @@ def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_
 
 def test_review_explicit_fail_is_not_skipped(tmp_path, monkeypatch):
     import runner.core as core
-    import runner.reviewing as reviewing
+    import runner.workflow.reviewing as reviewing
 
     class FakeAgent:
         def __init__(self, **kwargs):
@@ -152,7 +152,7 @@ def test_review_explicit_fail_is_not_skipped(tmp_path, monkeypatch):
 
 
 def test_qwen_review_args_disable_mutating_tools():
-    from runner.agent_args import review_agent_args
+    from runner.agent.arguments import review_agent_args
 
     args = review_agent_args("qwen", [])
 
@@ -163,7 +163,7 @@ def test_qwen_review_args_disable_mutating_tools():
 
 def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch):
     import runner.core as core
-    import runner.reviewing as reviewing
+    import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 
     agents = []
@@ -230,7 +230,7 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
 
 def test_review_finalize_error_still_skips_to_final_validator(tmp_path, monkeypatch):
     import runner.core as core
-    import runner.reviewing as reviewing
+    import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 
     class FakeAgent:

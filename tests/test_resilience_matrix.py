@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -15,22 +14,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from runner.agent import SESSION_INVALID_MARKERS, is_session_invalid_error
-from runner.backends.base import AgentBackend, BackendError, BackendResult
+from runner.agent.calls import retry_model_call
+from runner.agent.results import parse_ai_validation, parse_json, parse_review, parse_tasks
 from runner.errors import RunnerError
 from runner.process_control import run_process
 from runner.api import RunRequest, run
 from runner.models import RunState, Task
-from runner.support import (
-    LiveUI,
-    parse_ai_validation,
-    parse_json,
-    parse_review,
-    parse_tasks,
-    protected_ask,
-    readonly_project_call,
-    retry_model_call,
-    run_file_validator,
-)
+from runner.safety.project_guard import protected_ask, readonly_project_call
+from runner.ui import LiveUI
+from runner.workflow.validation.file import run_file_validator
 
 
 def _fake_command(name: str = "fake_agent.py") -> str:
@@ -619,8 +611,8 @@ def test_file_validator_clears_previous_reports_before_run(tmp_path):
 
 
 def test_file_validator_large_output_keeps_summary_and_report_reference(tmp_path):
-    from runner.prompting import bounded_text
-    from runner.support import MAX_VALIDATOR_OUTPUT_CHARS
+    from runner.agent.prompts import bounded_text
+    from runner.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from runner.agent import AgentClient
 from runner.backends.base import BackendError, BackendResult
-from runner.debug import begin_model_call, note_parse_error
+from runner.agent.debug import begin_model_call, note_parse_error
 from runner.errors import RunnerError
 
 
@@ -43,7 +43,7 @@ class FailingBackend(FakeBackend):
 
 
 def _client(tmp_path: Path, monkeypatch, backend) -> AgentClient:
-    import runner.agent as agent_module
+    import runner.agent.client as agent_module
 
     monkeypatch.setattr(agent_module, "create_backend", lambda *args, **kwargs: backend)
     return AgentClient(
@@ -211,7 +211,7 @@ def test_parse_error_updates_matching_latest_history_result(tmp_path, monkeypatc
 
 
 def test_history_entry_is_bounded_but_last_result_stays_complete(tmp_path, monkeypatch):
-    import runner.debug as debug_module
+    import runner.agent.debug as debug_module
 
     monkeypatch.setattr(debug_module, "_HISTORY_MAX_ENTRY_BYTES", 160)
     backend = FakeBackend(tmp_path)
@@ -228,7 +228,7 @@ def test_history_entry_is_bounded_but_last_result_stays_complete(tmp_path, monke
 
 
 def test_history_rotation_removes_oldest_pairs(tmp_path, monkeypatch):
-    import runner.debug as debug_module
+    import runner.agent.debug as debug_module
 
     monkeypatch.setattr(debug_module, "_HISTORY_MAX_CALLS", 2)
     monkeypatch.setattr(debug_module, "_HISTORY_MAX_BYTES", 10_000_000)
@@ -248,7 +248,7 @@ def test_history_rotation_removes_oldest_pairs(tmp_path, monkeypatch):
 
 
 def test_history_total_size_rotation_removes_oldest_pairs(tmp_path, monkeypatch):
-    import runner.debug as debug_module
+    import runner.agent.debug as debug_module
 
     monkeypatch.setattr(debug_module, "_HISTORY_MAX_CALLS", 100)
     monkeypatch.setattr(debug_module, "_HISTORY_MAX_BYTES", 1200)

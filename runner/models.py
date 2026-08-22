@@ -158,15 +158,11 @@ class RunState:
         return state
 
 
-# Backward-compatible alias used by releases before v1.0.
-State = RunState
-
 __all__ = [
     "AIValidationResult",
     "PlanJudgment",
     "ReviewResult",
     "RunStage",
     "RunState",
-    "State",
     "Task",
 ]

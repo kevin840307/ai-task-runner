@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
-from .agent import AgentClient
-from .backends import AgentMode, configure_agent_args
-from .config import RuntimeConfig
-from .defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+from .client import AgentClient
+from ..backends import AgentMode, configure_agent_args
+from ..config import RuntimeConfig
+from ..defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 
 AgentConstructor = Callable[..., AgentClient]
 

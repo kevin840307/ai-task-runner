@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from .errors import RunnerError
-from .process_control import run_process
-from .project_guard import restore_changed, snapshot
+from ...errors import RunnerError
+from ...process_control import run_process
+from ...safety.project_guard import restore_changed, snapshot
 
 
 def run_file_validator(

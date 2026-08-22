@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .errors import RunnerError
+from ..errors import RunnerError
 
 
 _HISTORY_MAX_CALLS = 100

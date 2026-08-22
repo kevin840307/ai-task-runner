@@ -1,28 +1,25 @@
 # Architecture
 
-Version: 1.2.10
+Version: 1.2.12
 
 ## Responsibility boundary
 The Runner owns orchestration, state, retry/recovery, session policy, protection, model transport, prompt assembly, result parsing, validation orchestration, UI/events, and diagnostics. The Runner owns orchestration; project code owns application behavior. It must not understand application-specific workflows or business values. Project behavior belongs in the goal, project source, validator, templates, fixtures, and `.ai-task-runner.yaml`.
 
-## Module map
+## Package map
 - `ai_task_runner.py`: CLI adapter.
 - `runner/api.py`: canonical `RunRequest` / `run()` interface for CLI, UI, skills, and Python callers.
 - `runner/core.py`: state-machine/orchestration.
-- `runner/planning.py`: Understand, Plan, fallback, Refiner, Judge.
-- `runner/reviewing.py`: fresh current-TODO review and logical no-tool finalize (with one read-only compatibility tool retained for strict APIs).
-- `runner/validation.py`: deterministic and Final AI validation orchestration.
-- `runner/model_results.py`: one generic JSON-candidate extraction path plus strict stage parsers.
-- `runner/prompting.py`: prompt templates/context composition.
-- `runner/policy.py`: project-root policy loading.
-- `runner/project_guard.py`: project snapshots, protected restore, read-only sandboxing, and project fingerprints.
-- `runner/model_call.py`: generic model retry and structured-output recovery.
-- `runner/support.py`: small generic utilities plus backward-compatible re-exports.
-- `runner/debug.py`: current/last/bounded-history diagnostics.
+- `runner/workflow/`: planning, review, and AI/file validation stages.
+- `runner/agent/`: AgentClient/factory, stage arguments, prompts, model-call retry, structured results, and diagnostics.
+- `runner/backends/`: replaceable Qwen/OpenCode transport adapters and backend-specific argument policy.
+- `runner/safety/`: project policy, protected-file/read-only guards, and the child-process Git publication guard.
+- `runner/state_store.py`: state loading, atomic persistence, and external backup recovery.
 - `runner/process_control.py`: subprocess timeout/idle/watchdog handling.
-- `runner/git_guard.py`: blocks AI child-process `git add/commit/push`.
-- `runner/backends/`: Qwen/OpenCode transport adapters.
+- `runner/script_runner.py`: YAML batch orchestration.
 - `runner/ui.py`: human terminal rendering and JSON events.
+- Feature implementations have one canonical module path; obsolete top-level compatibility modules are intentionally not shipped.
+
+Dependency direction is `api -> core -> workflow -> agent/safety -> backends/process/state`. Lower layers must not import `core` or workflow stages.
 
 ## Data flow
 `RunRequest -> validate request -> load/create state -> build protected roots -> Planning -> TODO Executor -> Review -> next TODO -> deterministic Final Validator -> optional Final AI Validator -> complete or Repair Planning`.
@@ -38,7 +35,7 @@ The Runner owns orchestration, state, retry/recovery, session policy, protection
 - Final AI Validator: fresh independent session judging the complete goal.
 
 ## Structured output
-All final structured model results go through one extractor in `runner/model_results.py`. It accepts a clean JSON response, fenced JSON, prose around JSON, or multiple top-level candidates. Each stage then validates its own schema. Malformed JSON, wrong field types, missing required fields, insufficient TODO count, or invalid semantics are rejected; the Runner does not guess or repair payload meaning.
+All final structured model results go through one extractor in `runner/agent/results.py`. The extractor accepts a clean JSON response, fenced JSON, prose around JSON, or multiple top-level candidates. Each stage then validates its own schema. Malformed JSON, wrong field types, missing required fields, insufficient TODO count, or invalid semantics are rejected; the Runner does not guess or repair payload meaning.
 
 ## Protection model
 Protected paths are normalized roots; protecting a directory protects its subtree. Sources include Runner source, goal/validator files, backend files, CLI `--protect-file`, and project-root `.ai-task-runner.yaml`. The policy file is automatically protected. AI mutations are compared against snapshots and restored on violation.

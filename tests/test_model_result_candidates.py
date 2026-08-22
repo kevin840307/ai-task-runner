@@ -3,7 +3,7 @@ import json
 import pytest
 
 from runner.errors import RunnerError
-from runner.model_results import (
+from runner.agent.results import (
     parse_ai_validation,
     parse_plan_judgment,
     parse_review,

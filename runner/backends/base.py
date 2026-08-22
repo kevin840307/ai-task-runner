@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Literal, Sequence
 
 from runner.errors import RunnerError
-from runner.policy import instructions
+from runner.safety.policy import instructions
 from runner.process_control import ProcessResult, run_process
 
 AgentMode = Literal["planning", "review", "no_tool", "runtime"]
@@ -359,13 +359,9 @@ class AgentBackend(ABC):
             )
 
 
-# Backward-compatible alias used by releases before v1.0.
-Backend = AgentBackend
-
 __all__ = [
     "AgentBackend",
     "AgentMode",
-    "Backend",
     "BackendError",
     "BackendResult",
     "ensure_project_rules",

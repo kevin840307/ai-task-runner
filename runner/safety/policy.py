@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from .errors import RunnerError
+from ..errors import RunnerError
 
 POLICY_FILENAME = ".ai-task-runner.yaml"
 
@@ -79,3 +79,6 @@ def protected_paths(root: Path) -> list[Path]:
             )
         result.append(path)
     return list(dict.fromkeys(result))
+
+
+__all__ = ["POLICY_FILENAME", "instructions", "protected_paths"]

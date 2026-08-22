@@ -1,4 +1,4 @@
-"""Public naming, compatibility, and long-running control-loop tests."""
+"""Public naming and long-running control-loop tests."""
 from __future__ import annotations
 
 import json
@@ -10,11 +10,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner.agent import Agent, AgentClient
-from runner.backends import AgentBackend, Backend, default_command
+from runner.agent import AgentClient
+from runner.backends import AgentBackend, default_command
 from runner.defaults import DEFAULT_QWEN_COMMAND
 from runner.api import RunRequest, __version__, run
-from runner.models import RunState, State, Task
+from runner.models import RunState, Task
 from ai_task_runner_validator import ValidatorReport
 
 
@@ -35,16 +35,24 @@ def _validator(path: Path) -> Path:
 
 def test_canonical_public_names_are_stable():
     assert __version__ == "1.2.12"
-    assert State is RunState
-    assert Agent is AgentClient
-    assert Backend is AgentBackend
+    assert RunState.__name__ == "RunState"
+    assert AgentClient.__name__ == "AgentClient"
+    assert AgentBackend.__name__ == "AgentBackend"
     assert ValidatorReport.__name__ == "ValidatorReport"
 
 
 def test_validator_helper_is_installable_public_module():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'name = "ai-task-runner"' in pyproject
-    assert 'packages = ["runner", "runner.backends"]' in pyproject
+    for package in (
+        "runner",
+        "runner.agent",
+        "runner.backends",
+        "runner.safety",
+        "runner.workflow",
+        "runner.workflow.validation",
+    ):
+        assert f'"{package}"' in pyproject
     assert '"ai_task_runner_validator"' in pyproject
     assert '"ai_task_runner"' in pyproject
 
@@ -104,7 +112,8 @@ def test_same_python_process_can_run_multiple_complete_jobs(tmp_path):
 
 def test_retry_loop_is_iterative_across_one_thousand_failures():
     from runner.errors import RunnerError
-    from runner.support import LiveUI, retry_model_call
+    from runner.agent.calls import retry_model_call
+    from runner.ui import LiveUI
 
     attempts = 0
 
@@ -128,24 +137,21 @@ def test_retry_loop_is_iterative_across_one_thousand_failures():
 
 def test_core_uses_descriptive_canonical_names():
     core = (ROOT / "runner" / "core.py").read_text(encoding="utf-8")
-    support = (ROOT / "runner" / "support.py").read_text(encoding="utf-8")
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
 
     assert "from .models import ReviewResult, RunStage, Task" in core
-    assert "from .agent_factory import AgentFactory" in core
-    assert "from .model_results import (" in support
-    assert "from .prompting import (" not in support
-    assert "from runner.prompting import (" in cli
+    assert "from .agent.factory import AgentFactory" in core
+    assert not (ROOT / "runner" / "support.py").exists()
+    assert "from runner.agent.prompts import" not in cli
     assert "from runner.api import RunRequest, run" in cli
 
 
-def test_support_keeps_model_result_import_compatibility():
-    from runner import model_results
-    from runner import support
+def test_structured_results_have_one_canonical_module():
+    from runner.agent import results
 
-    assert support.parse_tasks is model_results.parse_tasks
-    assert support.parse_review is model_results.parse_review
-    assert support.parse_ai_validation is model_results.parse_ai_validation
+    assert results.parse_tasks.__module__ == "runner.agent.results"
+    assert results.parse_review.__module__ == "runner.agent.results"
+    assert results.parse_ai_validation.__module__ == "runner.agent.results"
 
 
 def test_agent_timeout_is_part_of_public_request_contract():

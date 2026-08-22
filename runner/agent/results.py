@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Iterator, TypeVar
 
-from .errors import RunnerError
-from .models import AIValidationResult, PlanJudgment, ReviewResult, Task
+from ..errors import RunnerError
+from ..models import AIValidationResult, PlanJudgment, ReviewResult, Task
 
 
 MAX_RESULT_REASON_CHARS = 4_000

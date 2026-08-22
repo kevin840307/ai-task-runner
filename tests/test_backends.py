@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from runner.agent_args import planning_agent_args
-from runner.backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
+from runner.agent.arguments import planning_agent_args
+from runner.backends import BACKENDS, AgentBackend, backend_names, create_backend
 from runner.backends.base import BackendError, BackendResult, split_command
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.backends.qwen import QwenBackend, ensure_qwen_rules
-from runner.support import runner_source_files
+from runner.safety.project_guard import runner_source_files
 
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
@@ -171,7 +171,8 @@ def test_zero_backend_timeout_disables_limit(tmp_path):
 
 
 def test_timeout_uses_existing_retry_loop(tmp_path):
-    from runner.support import LiveUI, retry_model_call
+    from runner.agent.calls import retry_model_call
+    from runner.ui import LiveUI
 
     counter = tmp_path / "count.txt"
 
@@ -287,7 +288,7 @@ def test_qwen_ask_passes_exact_prompt_through_stdin_only(tmp_path, monkeypatch):
 
 
 def test_qwen_long_todo_split_prompt_uses_exact_stdin(tmp_path):
-    from runner.agent_args import no_tool_agent_args
+    from runner.agent.arguments import no_tool_agent_args
 
     prompt = "\n".join(
         ["Plan only the remaining work. Return JSON only."]

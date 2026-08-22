@@ -1,59 +1,66 @@
 from pathlib import Path
 
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_support_is_compatibility_facade_not_project_guard_or_model_retry_owner():
-    support = (ROOT / "runner" / "support.py").read_text(encoding="utf-8")
-    project_guard = (ROOT / "runner" / "project_guard.py").read_text(encoding="utf-8")
-    model_call = (ROOT / "runner" / "model_call.py").read_text(encoding="utf-8")
-    validation = (ROOT / "runner" / "validation.py").read_text(encoding="utf-8")
-    file_validation = (ROOT / "runner" / "file_validation.py").read_text(
-        encoding="utf-8"
-    )
-    assert "def snapshot(" not in support
-    assert "def readonly_project_call(" not in support
-    assert "def retry_model_call(" not in support
-    assert "def snapshot(" in project_guard
-    assert "def readonly_project_call(" in project_guard
-    assert "def retry_model_call(" in model_call
-    assert "def run_file_validator(" not in validation
-    assert "def run_file_validator(" in file_validation
+def test_obsolete_top_level_feature_modules_are_absent():
+    obsolete = {
+        "agent_args.py",
+        "agent_factory.py",
+        "ai_validation.py",
+        "debug.py",
+        "file_validation.py",
+        "git_guard.py",
+        "model_call.py",
+        "model_results.py",
+        "planning.py",
+        "policy.py",
+        "project_guard.py",
+        "prompting.py",
+        "reviewing.py",
+        "support.py",
+        "validation.py",
+    }
+    assert not {path.name for path in (ROOT / "runner").glob("*.py")} & obsolete
 
 
-def test_internal_modules_use_responsibility_modules_directly():
+def test_internal_modules_use_feature_owners_directly():
     core = (ROOT / "runner" / "core.py").read_text(encoding="utf-8")
-    planning = (ROOT / "runner" / "planning.py").read_text(encoding="utf-8")
-    reviewing = (ROOT / "runner" / "reviewing.py").read_text(encoding="utf-8")
-    ai_validation = (ROOT / "runner" / "ai_validation.py").read_text(
+    planning = (ROOT / "runner" / "workflow" / "planning.py").read_text(
         encoding="utf-8"
     )
-    file_validation = (ROOT / "runner" / "file_validation.py").read_text(
+    reviewing = (ROOT / "runner" / "workflow" / "reviewing.py").read_text(
         encoding="utf-8"
     )
-    assert "from .project_guard import (" in core
-    assert "from .model_call import retry_model_call" in core
-    assert "from .ai_validation import run_ai_validator" in core
-    assert "from .file_validation import run_file_validator" in core
-    assert "from .state_store import StateStore" in core
-    assert "from .model_call import recover_structured_output, retry_model_call" in planning
-    assert "from .project_guard import readonly_ask" in planning
-    assert "from .model_call import recover_structured_output, retry_model_call" in reviewing
-    assert "from .project_guard import readonly_ask" in reviewing
-    assert "from .process_control import run_process" in file_validation
-    assert "def run_ai_validator(" in ai_validation
+    file_validation = (
+        ROOT / "runner" / "workflow" / "validation" / "file.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from .agent.factory import AgentFactory" in core
+    assert "from .workflow.planning import build_plan" in core
+    assert "from .workflow.reviewing import review_task" in core
+    assert "from .safety.project_guard import (" in core
+    assert "from ..agent.calls import" in planning
+    assert "from ..safety.project_guard import readonly_ask" in planning
+    assert "from ..agent.calls import" in reviewing
+    assert "from ..safety.project_guard import" in reviewing
+    assert "from ...process_control import run_process" in file_validation
 
 
-def test_validation_facade_keeps_existing_import_contract():
-    from runner import ai_validation, file_validation, validation
+def test_feature_packages_expose_canonical_modules():
+    from runner.agent import arguments, prompts, results
+    from runner.safety import git_guard, policy, project_guard
+    from runner.workflow import planning, reviewing
+    from runner.workflow.validation import ai, file
 
-    assert validation.run_ai_validator is ai_validation.run_ai_validator
-    assert (
-        validation.format_ai_validator_runs
-        is ai_validation.format_ai_validator_runs
-    )
-    assert validation.run_file_validator is file_validation.run_file_validator
-    assert (
-        validation.clear_validator_reports
-        is file_validation.clear_validator_reports
-    )
+    assert arguments.planning_agent_args.__module__ == "runner.agent.arguments"
+    assert prompts.execution_prompt.__module__ == "runner.agent.prompts"
+    assert results.parse_tasks.__module__ == "runner.agent.results"
+    assert planning.build_plan.__module__ == "runner.workflow.planning"
+    assert reviewing.review_task.__module__ == "runner.workflow.reviewing"
+    assert ai.run_ai_validator.__module__ == "runner.workflow.validation.ai"
+    assert file.run_file_validator.__module__ == "runner.workflow.validation.file"
+    assert policy.protected_paths.__module__ == "runner.safety.policy"
+    assert project_guard.snapshot.__module__ == "runner.safety.project_guard"
+    assert git_guard.git_subcommand.__module__ == "runner.safety.git_guard"

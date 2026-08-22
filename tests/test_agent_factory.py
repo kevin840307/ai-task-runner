@@ -1,4 +1,4 @@
-from runner.agent_factory import AgentFactory
+from runner.agent.factory import AgentFactory
 from runner.api import RunRequest
 from runner.config import RuntimeConfig
 

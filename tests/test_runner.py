@@ -3,7 +3,8 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner import support
+from runner import state_store
+from runner.safety import project_guard
 
 
 def test_write_json_retries_transient_permission_error(tmp_path, monkeypatch):
@@ -17,10 +18,10 @@ def test_write_json_retries_transient_permission_error(tmp_path, monkeypatch):
             raise PermissionError("temporarily locked")
         return real_replace(source, destination)
 
-    monkeypatch.setattr(support.os, "replace", flaky_replace)
-    monkeypatch.setattr(support.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(state_store.os, "replace", flaky_replace)
+    monkeypatch.setattr(state_store.time, "sleep", lambda _seconds: None)
 
-    support.write_json(target, {"ok": True})
+    state_store._write_json(target, {"ok": True})
 
     assert calls["count"] == 2
     assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
@@ -30,12 +31,12 @@ def test_protected_directory_snapshot_restores_changes(tmp_path):
     protected = tmp_path / "ans"
     protected.mkdir()
     (protected / "keep.txt").write_text("original", encoding="utf-8")
-    saved = support.snapshot([protected])
+    saved = project_guard.snapshot([protected])
 
     (protected / "keep.txt").write_text("changed", encoding="utf-8")
     (protected / "extra.txt").write_text("extra", encoding="utf-8")
 
-    changed = support.restore_changed(saved)
+    changed = project_guard.restore_changed(saved)
 
     assert changed == [str(protected)]
     assert (protected / "keep.txt").read_text(encoding="utf-8") == "original"
@@ -187,14 +188,11 @@ def test_model_calls_have_configurable_python_timeout():
 
 
 def test_task_schema_is_strict():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("ai_task_runner_schema", ROOT / "ai_task_runner.py")
-    runner = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    from runner.agent.results import parse_tasks
+    from runner.errors import RunnerError
 
     valid = '{"tasks":[{"title":"A","description":"B","acceptance_criteria":["C"]}]}'
-    assert runner.parse_tasks(valid, 1)[0].title == "A"
+    assert parse_tasks(valid, 1)[0].title == "A"
 
     invalid_values = [
         '{"tasks":[{"title":1,"description":"B","acceptance_criteria":["C"]}]}',
@@ -203,22 +201,18 @@ def test_task_schema_is_strict():
     ]
     for value in invalid_values:
         try:
-            runner.parse_tasks(value, 1)
-        except runner.RunnerError:
+            parse_tasks(value, 1)
+        except RunnerError:
             pass
         else:
             raise AssertionError(f"schema accepted invalid value: {value}")
 
 
 def test_task_schema_accepts_common_criteria_alias():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("ai_task_runner_schema_alias", ROOT / "ai_task_runner.py")
-    runner = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    from runner.agent.results import parse_tasks
 
     value = '{"tasks":[{"title":"A","description":"B","accept_criteria":["C"]}]}'
-    task = runner.parse_tasks(value, 1)[0]
+    task = parse_tasks(value, 1)[0]
     assert task.acceptance_criteria == ["C"]
 
 
@@ -230,21 +224,23 @@ def test_task_completion_requires_successful_execution_and_ai_review():
 
 
 def test_prompts_forbid_questions_and_omit_runtime_fields():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("runner_prompts", ROOT / "ai_task_runner.py")
-    runner = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    from runner.agent.prompts import (
+        ai_validator_prompt,
+        execution_prompt,
+        plan_understand_prompt,
+        review_prompt,
+    )
+    from runner.models import RunState, Task
 
     root = Path("/project")
-    task = runner.Task("id", "Title", "Description", ["Done"], attempts=9, last_output="large output")
-    state = runner.State("run", "goal", str(root), tasks=[task])
+    task = Task("id", "Title", "Description", ["Done"], attempts=9, last_output="large output")
+    state = RunState("run", "goal", str(root), tasks=[task])
     protected = [root / "state.json"]
     prompts = [
-        runner.plan_prompt("goal", root, state, protected),
-        runner.execution_prompt(state, root, protected),
-        runner.review_prompt(state, root, protected, "report"),
-        runner.ai_validator_prompt("goal", root, protected),
+        plan_understand_prompt("goal", root, state, protected),
+        execution_prompt(state, root, protected),
+        review_prompt(state, root, protected, "report"),
+        ai_validator_prompt("goal", root, protected),
     ]
     # Interactive stages must not pause for user input. Review is a bounded verdict stage.
     assert all("ask questions" in prompt.lower() for prompt in (prompts[0], prompts[1], prompts[3]))
@@ -261,7 +257,7 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert '"checks_run"' in prompts[3]
     assert '"suggested_checks"' in prompts[3]
     assert "Run reasonable local checks" in prompts[3]
-    prompt_with_legacy_hint = runner.execution_prompt(
+    prompt_with_legacy_hint = execution_prompt(
         state,
         root,
         protected,
@@ -277,7 +273,7 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert "Treat validator feedback as authoritative" in prompt_with_legacy_hint
 
     state.validator_output = "unexpected file content"
-    review_with_feedback = runner.review_prompt(state, root, protected, "report")
+    review_with_feedback = review_prompt(state, root, protected, "report")
     assert "Latest validator feedback to consider" in review_with_feedback
     assert "later-task or whole-project feedback must not block this task" in review_with_feedback
 
@@ -574,7 +570,7 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
 
 
 def test_ai_validator_failure_output_becomes_repair_findings():
-    import runner.validation as validation
+    import runner.workflow.validation as validation
 
     output = validation.format_ai_validator_runs([{
         "passed": False,
@@ -672,7 +668,7 @@ def test_loop_detection_session_is_replaced_and_work_continues(tmp_path):
 
 
 def test_readonly_guard_ignores_build_and_dependency_directories(tmp_path):
-    from runner.support import readonly_project_call
+    from runner.safety.project_guard import readonly_project_call
 
     work = tmp_path / ".ai-task-runner"
     source = tmp_path / "source.txt"
@@ -699,7 +695,7 @@ def test_readonly_guard_ignores_build_and_dependency_directories(tmp_path):
 
 
 def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
-    from runner.support import cleanup_stale_artifacts
+    from runner.safety.project_guard import cleanup_stale_artifacts
 
     work = tmp_path / "work"
     work.mkdir()
@@ -722,8 +718,8 @@ def test_cleanup_removes_interrupted_writes_and_old_readonly_backups(tmp_path):
 
 
 def test_review_and_validator_results_are_bounded():
-    from runner.prompting import bounded_text
-    from runner.support import (
+    from runner.agent.prompts import bounded_text
+    from runner.agent.results import (
         MAX_MISSING_ITEM_CHARS,
         MAX_MISSING_ITEMS,
         MAX_RESULT_REASON_CHARS,
@@ -763,9 +759,9 @@ def test_review_and_validator_results_are_bounded():
 
 
 def test_old_state_without_24h_fields_still_loads():
-    from runner.models import State
+    from runner.models import RunState
 
-    state = State.load({
+    state = RunState.load({
         "run_id": "run",
         "goal": "goal",
         "project_root": "/project",
@@ -782,10 +778,10 @@ def test_old_state_without_24h_fields_still_loads():
 
 
 def test_prompts_require_project_understanding_and_minimal_compatible_changes(tmp_path):
-    import runner.prompting as prompting
-    from runner.models import State, Task
+    import runner.agent.prompts as prompting
+    from runner.models import RunState, Task
 
-    state = State(
+    state = RunState(
         run_id="test-run",
         goal="add feature",
         project_root=str(tmp_path),
@@ -814,13 +810,13 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
 
 def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
-    import runner.prompting as prompting
-    from runner.models import State
+    import runner.agent.prompts as prompting
+    from runner.models import RunState
 
     (tmp_path / "README.md").write_text("fixture", encoding="utf-8")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "app.py").write_text("print('hi')", encoding="utf-8")
-    state = State("run", "goal", str(tmp_path))
+    state = RunState("run", "goal", str(tmp_path))
 
     prompt = prompting.plan_understand_prompt(
         state.goal,
@@ -851,7 +847,7 @@ def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tm
 
 
 def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
-    import runner.prompting as prompting
+    import runner.agent.prompts as prompting
 
     feedback = prompting.format_validator_feedback(
         "report_dir: .ai-task-runner/validator-reports/folder-compare\n"
@@ -867,7 +863,8 @@ def test_validator_feedback_prompt_points_to_report_summary(tmp_path):
 
 
 def test_qwen_planning_args_preserve_yolo():
-    import runner.agent_args as agent_args
+    import runner.agent.arguments as agent_args
+    from runner.backends import qwen_args
 
     args = [
         "--approval-mode",
@@ -879,8 +876,8 @@ def test_qwen_planning_args_preserve_yolo():
     ]
 
     expected = [*args, "--safe-mode"]
-    for tool_name in agent_args.QWEN_PLANNING_EXCLUDED_TOOLS:
-        if tool_name != agent_args.QWEN_NO_TOOL_COMPAT_TOOL:
+    for tool_name in qwen_args.QWEN_PLANNING_EXCLUDED_TOOLS:
+        if tool_name != qwen_args.QWEN_NO_TOOL_COMPAT_TOOL:
             expected.extend(["--exclude-tools", tool_name])
     assert agent_args.planning_agent_args("qwen", args) == expected
     planning_args = agent_args.planning_agent_args("qwen", [])
@@ -909,7 +906,8 @@ def test_qwen_planning_args_preserve_yolo():
 
 
 def test_qwen_no_tool_args_keep_one_read_only_compatibility_tool():
-    import runner.agent_args as agent_args
+    import runner.agent.arguments as agent_args
+    from runner.backends import qwen_args
 
     args = agent_args.no_tool_agent_args("qwen", [])
     excluded = {
@@ -919,7 +917,7 @@ def test_qwen_no_tool_args_keep_one_read_only_compatibility_tool():
     }
 
     assert "--safe-mode" in args
-    assert agent_args.QWEN_NO_TOOL_COMPAT_TOOL == "read_file"
+    assert qwen_args.QWEN_NO_TOOL_COMPAT_TOOL == "read_file"
     assert "read_file" not in excluded
     assert "write_file" in excluded
     assert "edit" in excluded
@@ -929,15 +927,16 @@ def test_qwen_no_tool_args_keep_one_read_only_compatibility_tool():
     assert agent_args.no_tool_agent_args("opencode", ["--x"]) == ["--x"]
 
 def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
-    import runner.agent_args as agent_args
+    import runner.agent.arguments as agent_args
+    from runner.backends import qwen_args
 
     args = ["--approval-mode", "yolo"]
 
     expected = [
         *args,
-        "--max-tool-calls", agent_args.QWEN_DEFAULT_MAX_TOOL_CALLS,
+        "--max-tool-calls", qwen_args.QWEN_DEFAULT_MAX_TOOL_CALLS,
     ]
-    for tool_name in agent_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
+    for tool_name in qwen_args.QWEN_RUNTIME_EXCLUDED_TOOLS:
         expected.extend(["--exclude-tools", tool_name])
     assert agent_args.runtime_agent_args("qwen", args) == expected
     custom = ["--max-tool-calls", "20", "--max-wall-time", "30"]
@@ -946,7 +945,7 @@ def test_qwen_runtime_args_exclude_runner_owned_todo_tool():
 
 
 def test_qwen_args_default_to_yolo():
-    import runner.agent_args as agent_args
+    import runner.agent.arguments as agent_args
 
     assert agent_args.planning_agent_args("qwen", [])[0] == "--yolo"
     assert "--safe-mode" in agent_args.planning_agent_args("qwen", [])
@@ -963,7 +962,7 @@ def test_qwen_args_default_to_yolo():
 def test_initial_planning_schema_requires_six_deliverable_tasks():
     import json
     import pytest
-    from runner.support import parse_tasks
+    from runner.agent.results import parse_tasks
     from runner.errors import RunnerError
 
     task = {
@@ -980,7 +979,7 @@ def test_initial_planning_schema_requires_six_deliverable_tasks():
 
 
 def test_qwen_policies_always_keep_compat_read_tool():
-    from runner import agent_args
+    from runner.agent import arguments as agent_args
 
     supplied = ["--exclude-tools", "read_file"]
     policies = (

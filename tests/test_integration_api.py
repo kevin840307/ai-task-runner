@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner.api import RunConfig, RunRequest, run
+from runner.api import RunRequest, run
 
 
 def _validator(path: Path) -> Path:
@@ -28,7 +28,7 @@ def _fake_command() -> str:
 def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
     events = []
     result = run(
-        RunConfig(
+        RunRequest(
             goal="x",
             project_root=str(tmp_path),
             validator=str(_validator(tmp_path / "validator.py")),
@@ -50,7 +50,7 @@ def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
 
 def test_runner_writes_debug_log_file(tmp_path):
     result = run(
-        RunConfig(
+        RunRequest(
             goal="x",
             project_root=str(tmp_path),
             validator=str(_validator(tmp_path / "validator.py")),
@@ -111,7 +111,7 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
     events = []
 
     result = run(
-        RunConfig(
+        RunRequest(
             project_root=str(tmp_path),
             script=str(script),
             backend="qwen",
@@ -131,7 +131,8 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
 
 def test_retry_loop_survives_many_transient_failures():
     from runner.errors import RunnerError
-    from runner.support import LiveUI, retry_model_call
+    from runner.agent.calls import retry_model_call
+    from runner.ui import LiveUI
 
     attempts = 0
 
@@ -159,7 +160,7 @@ def test_event_callback_failure_does_not_stop_runner(tmp_path):
         raise RuntimeError("UI disconnected")
 
     result = run(
-        RunConfig(
+        RunRequest(
             goal="x",
             project_root=str(tmp_path),
             validator=str(_validator(tmp_path / "validator.py")),
@@ -180,7 +181,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
         raise RuntimeError("UI disconnected")
 
     result = run(
-        RunConfig(
+        RunRequest(
             project_root=str(tmp_path),
             script=str(script),
             backend="qwen",
@@ -193,7 +194,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
 
 
 def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
@@ -206,7 +207,7 @@ def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
 
 def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
     from runner.models import RunState, Task
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -243,7 +244,7 @@ def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
     import os
 
     from runner.models import RunState, Task
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     monkeypatch.setattr(
         "runner.ui.shutil.get_terminal_size",
@@ -272,7 +273,7 @@ def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
 
 def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
     from runner.models import RunState, Task
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -457,7 +458,7 @@ def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
     import os
 
     from runner.models import RunState, Task
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -495,7 +496,7 @@ def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
 
 
 def test_terminal_fit_keeps_short_cjk_line():
-    from runner.support import LiveUI
+    from runner.ui import LiveUI
 
     line = "AI 正在處理目前任務"
     assert LiveUI._fit_terminal_line(line, 80) == line

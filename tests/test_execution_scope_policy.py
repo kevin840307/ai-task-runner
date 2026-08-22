@@ -1,8 +1,7 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 from runner.models import RunState, Task
-from runner.prompting import execution_prompt, render_prompt_template
+from runner.agent.prompts import execution_prompt, render_prompt_template
 
 
 def state(attempts=1):

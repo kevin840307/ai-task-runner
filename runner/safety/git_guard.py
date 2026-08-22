@@ -8,7 +8,7 @@ import stat
 import sys
 import tempfile
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 BLOCKED_GIT_SUBCOMMANDS = frozenset({"add", "commit", "push"})
 _VALUE_OPTIONS = frozenset({
@@ -44,16 +44,33 @@ def guarded_environment(base: Mapping[str, str] | None = None) -> dict[str, str]
     return env
 
 
+def guarded_command(
+    command: Sequence[str],
+    environment: Mapping[str, str],
+) -> list[str]:
+    """Resolve Windows Git calls to the guard wrapper prepended to PATH."""
+    values = list(command)
+    if os.name != "nt" or not values:
+        return values
+    if Path(values[0]).name.lower() not in {"git", "git.exe", "git.cmd"}:
+        return values
+    guard_root = environment.get("PATH", "").split(os.pathsep, 1)[0]
+    wrapper = Path(guard_root) / "git.cmd"
+    if wrapper.is_file():
+        values[0] = str(wrapper)
+    return values
+
+
 def _guard_dir(real_git: Path) -> Path:
     key = str(abs(hash((str(real_git), sys.executable))))
     root = Path(tempfile.gettempdir()) / f"ai-task-runner-git-guard-{key}"
     root.mkdir(parents=True, exist_ok=True)
     helper = root / "guard.py"
-    package_root = Path(__file__).resolve().parents[1]
+    package_root = Path(__file__).resolve().parents[2]
     helper.write_text(
         "import sys\n"
         f"sys.path.insert(0, {str(package_root)!r})\n"
-        "from runner.git_guard import _guard_main\n"
+        "from runner.safety.git_guard import _guard_main\n"
         "if __name__ == '__main__': raise SystemExit(_guard_main())\n",
         encoding="utf-8",
     )
@@ -93,3 +110,12 @@ def _guard_main() -> int:
         )
         return 126
     return subprocess.run([real_git, *args], check=False).returncode
+
+
+__all__ = [
+    "BLOCKED_GIT_SUBCOMMANDS",
+    "_guard_main",
+    "git_subcommand",
+    "guarded_command",
+    "guarded_environment",
+]

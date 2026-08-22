@@ -1,6 +1,6 @@
 from runner.backends.base import BackendError
 from runner.errors import backend_diagnostic_parts, diagnostic_detail
-from runner.support import retry_model_call
+from runner.agent.calls import retry_model_call
 
 
 class UI:

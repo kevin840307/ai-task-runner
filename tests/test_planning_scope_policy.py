@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import json
 
 from runner.models import RunState, Task
-from runner.prompting import plan_finalize_prompt, plan_judge_prompt, plan_understand_prompt, plan_refine_prompt
+from runner.agent.prompts import plan_finalize_prompt, plan_judge_prompt, plan_understand_prompt, plan_refine_prompt
 
 
 def judge_payload(*, rejected_index: int | None = None, issue: str = "Task needs revision"):
@@ -39,7 +39,7 @@ def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
     )])
 
     plan = plan_understand_prompt("g", tmp_path, state, [])
-    from runner.prompting import execution_prompt
+    from runner.agent.prompts import execution_prompt
     execute = execution_prompt(state, tmp_path, [])
 
     assert "dedicated project-understanding turn" in plan
@@ -117,7 +117,7 @@ def test_plan_judge_and_refine_fresh_prompts_are_self_contained(tmp_path: Path):
 
 def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     created = []
     calls = []
@@ -213,7 +213,7 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
 
 def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     created = []
     prompts = []
@@ -306,7 +306,7 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
 def test_parse_plan_judgment_contract():
     import pytest
     from runner.errors import RunnerError
-    from runner.support import parse_plan_judgment
+    from runner.agent.results import parse_plan_judgment
 
     assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}))["accepted"] is True
     rejected = parse_plan_judgment(
@@ -318,7 +318,7 @@ def test_parse_plan_judgment_contract():
 
 
 def test_plan_judge_gate_rejects_task_and_plan_failures():
-    from runner.support import parse_plan_judgment
+    from runner.agent.results import parse_plan_judgment
 
     payload = {
         "accepted": False,
@@ -334,7 +334,7 @@ def test_plan_judge_gate_rejects_task_and_plan_failures():
 
 def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     created = []
 
@@ -403,7 +403,7 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
 
 def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     class FakeAgent:
         def __init__(self, **kwargs):
@@ -519,7 +519,7 @@ def _six_tasks(prefix="Plan"):
 
 def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
     from runner.errors import RunnerError
 
     created = []
@@ -570,7 +570,7 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
 
 def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reexplore(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
     from runner.errors import RunnerError
 
     created = []
@@ -625,7 +625,7 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
 
 def test_successful_understanding_without_session_is_carried_into_minimal_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     prompts = []
 
@@ -659,7 +659,7 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
 
 def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
     from runner.errors import RunnerError
 
     class FakeAgent:
@@ -691,7 +691,7 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
 
 def test_judge_error_uses_last_valid_plan(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
     from runner.errors import RunnerError
 
     class FakeAgent:
@@ -745,7 +745,7 @@ def test_same_session_finalize_is_compact_but_fresh_fallback_is_self_contained(t
 
 def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
     from runner.errors import RunnerError
 
     created = []
@@ -797,7 +797,7 @@ def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path
 
 def test_planning_reuses_existing_main_session_when_available(tmp_path: Path, monkeypatch):
     import runner.core as core
-    import runner.planning as planning
+    import runner.workflow.planning as planning
 
     created = []
 

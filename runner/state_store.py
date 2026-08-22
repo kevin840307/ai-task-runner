@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,8 +14,29 @@ from typing import Any
 from .defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from .errors import RunnerError
 from .models import RunState
-from .prompting import bounded_text
-from .support import write_json
+from .agent.prompts import bounded_text
+
+
+JSON_WRITE_RETRIES = 10
+JSON_WRITE_RETRY_DELAY = 0.05
+
+
+def _write_json(path: Path, data: Any) -> None:
+    """Atomically write indented UTF-8 JSON with Windows lock tolerance."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    for attempt in range(JSON_WRITE_RETRIES):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == JSON_WRITE_RETRIES - 1:
+                raise
+            time.sleep(JSON_WRITE_RETRY_DELAY * (attempt + 1))
 
 
 @dataclass(frozen=True)
@@ -59,8 +82,8 @@ class StateStore:
 
     def save(self, state: RunState) -> None:
         data = state.dump()
-        write_json(self.path, data)
-        write_json(self.backup_path, data)
+        _write_json(self.path, data)
+        _write_json(self.backup_path, data)
 
     def restore_backup(self) -> None:
         loaded = self._read_state(self.backup_path, strict=False)
@@ -68,7 +91,7 @@ class StateStore:
             return
         payload, state = loaded
         if Path(state.project_root).resolve() == self.root:
-            write_json(self.path, payload)
+            _write_json(self.path, payload)
 
     def _load_resume_state(self) -> RunState:
         if not self.path.is_file():

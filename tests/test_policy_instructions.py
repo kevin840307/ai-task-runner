@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from runner.models import RunState, Task
-from runner.prompting import (
+from runner.agent.prompts import (
     ai_validator_prompt,
     execution_prompt,
     plan_finalize_prompt,
@@ -40,8 +40,8 @@ def test_always_instructions_are_injected_into_every_ai_prompt_family(tmp_path: 
     fresh_prompts = [
         plan_understand_prompt("g", tmp_path, state, []),
         plan_finalize_prompt("g", tmp_path, state, same_session=False),
-        plan_refine_prompt("g", tmp_path, state, task),
-        plan_judge_prompt("g", tmp_path, state, task),
+        plan_refine_prompt("g", tmp_path, state, task, same_session=False),
+        plan_judge_prompt("g", tmp_path, state, task, same_session=False),
         execution_prompt(state, tmp_path, [], include_goal=True),
         review_prompt(state, tmp_path, [], "done"),
         review_finalize_prompt(tmp_path),

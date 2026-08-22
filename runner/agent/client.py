@@ -7,7 +7,7 @@ from typing import Callable, NoReturn, Sequence
 from runner.backends import BackendError, create_backend
 from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from .debug import begin_model_call, finish_model_call
-from .errors import RunnerError, diagnostic_detail
+from ..errors import RunnerError, diagnostic_detail
 
 
 SESSION_INVALID_MARKERS = (
@@ -287,12 +287,8 @@ class AgentClient:
         return result.text
 
 
-# Backward-compatible alias used by releases before v1.0.
-Agent = AgentClient
-
 __all__ = [
     "AgentClient",
-    "Agent",
     "AgentError",
     "SESSION_INVALID_MARKERS",
     "SESSION_RESET_MARKERS",

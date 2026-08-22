@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from runner.agent import AgentError
 from runner.errors import RunnerError
-from runner.support import recover_structured_output, retry_model_call
+from runner.agent.calls import recover_structured_output, retry_model_call
 
 
 def test_structured_output_retries_with_short_same_session_correction():
