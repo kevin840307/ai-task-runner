@@ -49,6 +49,12 @@ def review_task(
         session_id="",
         timeout=args.planning_timeout,
         debug_dir=debug_dir,
+        loop_context_compress=getattr(args, "loop_context_compress", False),
+        loop_context_compress_threshold=getattr(
+            args,
+            "loop_context_compress_threshold",
+            DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+        ),
     )
 
     def ask_raw(agent: AgentClient, prompt: str) -> str:

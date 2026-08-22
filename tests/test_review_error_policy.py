@@ -36,12 +36,12 @@ def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_
     import runner.reviewing as reviewing
     from runner.errors import RunnerError
 
-    created_sessions = []
+    created_clients = []
 
     class FakeAgent:
         def __init__(self, **kwargs):
             self.session_id = kwargs["session_id"]
-            created_sessions.append(self.session_id)
+            created_clients.append(kwargs)
 
     def fake_readonly_ask(*args, **kwargs):
         raise RunnerError("review unavailable")
@@ -71,6 +71,8 @@ def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_
         agent_idle_after_change_timeout=0,
         retry_wait=0,
         retry_max_wait=0,
+        loop_context_compress=True,
+        loop_context_compress_threshold=65.0,
     )
     runner.root = tmp_path
     runner.work = tmp_path / ".ai-task-runner"
@@ -88,7 +90,10 @@ def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_
 
     assert result["completed"] is True
     assert result["review_skipped"] is True
-    assert created_sessions == [""]
+    assert len(created_clients) == 1
+    assert created_clients[0]["session_id"] == ""
+    assert created_clients[0]["loop_context_compress"] is True
+    assert created_clients[0]["loop_context_compress_threshold"] == 65.0
     assert task.review_skip_reason.endswith("review unavailable")
 
 
