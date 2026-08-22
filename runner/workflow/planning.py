@@ -22,7 +22,7 @@ from ..models import PlanJudgment, RunState, Task
 from ..safety.project_guard import readonly_ask
 from ..ui import LiveUI
 
-MIN_PLANNED_TASKS = 6
+MIN_PLANNED_TASKS = 1
 PLAN_JUDGE_MAX_REWRITES = 2
 
 
