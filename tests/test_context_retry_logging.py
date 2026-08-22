@@ -1,5 +1,5 @@
 from runner.backends.base import BackendError
-from runner.errors import diagnostic_detail
+from runner.errors import backend_diagnostic_parts, diagnostic_detail
 from runner.support import retry_model_call
 
 
@@ -53,3 +53,24 @@ def test_retry_log_preserves_loop_context_diagnostics_only():
 def test_diagnostic_detail_without_backend_data_stays_plain():
     from runner.errors import RunnerError
     assert diagnostic_detail(RunnerError("plain failure")) == "plain failure"
+
+
+def test_backend_diagnostic_parts_include_process_metadata_and_optional_output():
+    backend = BackendError(
+        "backend failed",
+        return_code=2,
+        elapsed=3.25,
+        output="line one\nline two",
+        command_mode="resume",
+        session_source_event="event[3]",
+    )
+    wrapped = RuntimeError("wrapped")
+    wrapped.__cause__ = backend
+
+    assert backend_diagnostic_parts(wrapped, include_output=True) == [
+        "exit_code=2",
+        "elapsed_seconds=3.2",
+        "command_mode=resume",
+        "session_source_event=event[3]",
+        "stderr_tail=line one line two",
+    ]

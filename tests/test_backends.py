@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from runner.agent_args import planning_agent_args
 from runner.backends import BACKENDS, AgentBackend, Backend, backend_names, create_backend
 from runner.backends.base import BackendError, BackendResult, split_command
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
@@ -30,6 +31,36 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     protected_names = {path.name for path in protected}
     assert {"ai_task_runner.py", "ai_task_runner_validator.py", "runner"} == protected_names
     assert next(path for path in protected if path.name == "runner").is_dir()
+
+
+def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatch):
+    class CustomBackend(AgentBackend):
+        name = "custom"
+        default_command = "custom"
+
+        @classmethod
+        def configure_args(
+            cls,
+            mode,
+            extra_args,
+            *,
+            allow_project_read=False,
+        ):
+            return [*extra_args, f"--mode={mode}", f"--read={allow_project_read}"]
+
+        def build_command(self, prompt, session_id):
+            return []
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, CustomBackend.name, CustomBackend)
+
+    assert planning_agent_args("custom", ["--existing"], True) == [
+        "--existing",
+        "--mode=planning",
+        "--read=True",
+    ]
 
 
 def test_core_has_no_backend_specific_command_logic():
@@ -384,4 +415,3 @@ def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
     assert backend.compress_session("session-123") == "Compressed session"
     assert calls[0][:3] == [sys.executable, "-p", "/compress-fast"]
     assert calls[0][calls[0].index("--resume") + 1] == "session-123"
-

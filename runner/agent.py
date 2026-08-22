@@ -168,8 +168,7 @@ class AgentClient:
                     ))
                     diagnostics["context_compress_enabled"] = enabled
                     diagnostics["context_compress_threshold"] = threshold
-                    usage_reader = getattr(self._backend, "context_usage_percent", None)
-                    usage = usage_reader(snapshot) if usage_reader else None
+                    usage = self._backend.context_usage_percent(snapshot)
                     if usage is None:
                         diagnostics["context_compress_status"] = "skipped"
                         diagnostics["context_compress_reason"] = "context_usage_unknown"
@@ -184,8 +183,9 @@ class AgentClient:
                         else:
                             diagnostics["context_compress_status"] = "started"
                             try:
-                                compressor = getattr(self._backend, "compress_session", None)
-                                compression = compressor(snapshot_session) if compressor else ""
+                                compression = self._backend.compress_session(
+                                    snapshot_session
+                                )
                             except Exception as compression_error:
                                 compression = f"ERROR: {type(compression_error).__name__}: {compression_error}"
                             diagnostics["context_compression"] = compression or "OK"

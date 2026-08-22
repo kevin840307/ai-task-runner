@@ -13,12 +13,17 @@ from typing import Any, Mapping, Sequence
 from .agent import AgentClient
 from .debug import parse_with_debug
 from .errors import RunnerError
-from .models import RunState
+from .models import AIValidationResult, RunState
 from .ui import LiveUI
 from .prompting import ai_validator_prompt, skipped_review_tasks, structured_output_retry_prompt
 from .model_results import parse_ai_validation
 from .model_call import recover_structured_output, retry_model_call
-from .project_guard import readonly_ask, restore_changed, snapshot
+from .project_guard import (
+    readonly_ask,
+    require_unchanged_project,
+    restore_changed,
+    snapshot,
+)
 from .process_control import run_process
 
 
@@ -37,7 +42,7 @@ def run_ai_validator(
     configured_required = getattr(args, "final_ai_required_passes", 0)
     required = configured_required or total // 2 + 1
     debug_dir = work / "debug"
-    results: list[dict[str, Any]] = []
+    results: list[Mapping[str, Any]] = []
     passes = 0
 
     for index in range(1, total + 1):
@@ -64,15 +69,14 @@ def run_ai_validator(
                 timeout=args.agent_timeout,
                 idle_timeout=args.agent_idle_after_change_timeout,
             )
-            changed = [*protected_changed, *project_changed]
-            if changed:
-                raise RunnerError(
-                    "AI validator modified files and they were restored: "
-                    + ", ".join(changed)
-                )
+            require_unchanged_project(
+                protected_changed,
+                project_changed,
+                "AI validator",
+            )
             return raw
 
-        def call() -> dict[str, Any]:
+        def call() -> AIValidationResult:
             raw = ask_raw(
                 ai_validator_prompt(
                     state.goal,

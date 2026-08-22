@@ -72,6 +72,12 @@ def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
             assert session_id == "loop-session"
             return "## Context Usage\nContext window: 100.0k tokens"
 
+        def context_usage_percent(self, snapshot):
+            return None
+
+        def compress_session(self, session_id):
+            return ""
+
         def decode(self, raw):
             raise AssertionError("not used")
 

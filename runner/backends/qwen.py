@@ -7,12 +7,33 @@ from typing import Any, Sequence
 
 from runner.defaults import DEFAULT_QWEN_COMMAND
 from runner.process_control import run_process
-from .base import AgentBackend, BackendError, BackendResult, ensure_project_rules
+from .base import (
+    AgentBackend,
+    AgentMode,
+    BackendError,
+    BackendResult,
+    ensure_project_rules,
+)
+from .qwen_args import configure_qwen_args
 
 
 class QwenBackend(AgentBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
+
+    @classmethod
+    def configure_args(
+        cls,
+        mode: AgentMode,
+        extra_args: Sequence[str],
+        *,
+        allow_project_read: bool = False,
+    ) -> list[str]:
+        return configure_qwen_args(
+            mode,
+            extra_args,
+            allow_project_read=allow_project_read,
+        )
 
     def build_command(self, prompt: str, session_id: str) -> list[str]:
         if not prompt.strip():

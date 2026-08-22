@@ -2,10 +2,45 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
+
+RunStage = Literal[
+    "created",
+    "planning",
+    "executing",
+    "reviewing",
+    "task_retry_wait",
+    "validating",
+    "validator_retry_wait",
+    "validator_failed",
+    "completed",
+]
+
+
+class PlanJudgment(TypedDict):
+    accepted: bool
+    issues: list[str]
+
+
+class _ReviewResultRequired(TypedDict):
+    completed: bool
+    reason: str
+    missing_items: list[str]
+
+
+class ReviewResult(_ReviewResultRequired, total=False):
+    review_skipped: bool
+
+
+class AIValidationResult(TypedDict):
+    passed: bool
+    reason: str
+    missing_items: list[str]
+    checks_run: list[str]
+    suggested_checks: list[str]
 
 
 @dataclass
@@ -18,7 +53,7 @@ class Task:
     status: str = "pending"
     attempts: int = 0
     last_output: str = ""
-    last_review: dict[str, Any] | None = None
+    last_review: ReviewResult | None = None
     progress_key: str = ""
     stagnant_attempts: int = 0
     review_skipped: bool = False
@@ -64,7 +99,7 @@ class RunState:
     validator_output: str = ""
     completed: bool = False
     agent_session_id: str = ""
-    stage: str = "created"
+    stage: RunStage = "created"
     stage_started_at: float = 0.0
     last_activity_at: float = 0.0
     last_error: str = ""
@@ -126,4 +161,12 @@ class RunState:
 # Backward-compatible alias used by releases before v1.0.
 State = RunState
 
-__all__ = ["RunState", "State", "Task"]
+__all__ = [
+    "AIValidationResult",
+    "PlanJudgment",
+    "ReviewResult",
+    "RunStage",
+    "RunState",
+    "State",
+    "Task",
+]

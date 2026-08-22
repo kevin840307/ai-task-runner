@@ -329,6 +329,19 @@ def readonly_ask(
         protected_changed = restore_changed(file_snapshot)
     return output, protected_changed, project_changed
 
+
+def require_unchanged_project(
+    protected_changed: Sequence[str],
+    project_changed: Sequence[str],
+    actor: str,
+) -> None:
+    """Reject and report file changes restored after a read-only model call."""
+    changed = [*protected_changed, *project_changed]
+    if changed:
+        raise RunnerError(
+            f"{actor} modified files and they were restored: " + ", ".join(changed)
+        )
+
 def cleanup_stale_artifacts(
     work: Path,
     temp_root: Path | None = None,

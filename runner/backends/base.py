@@ -9,11 +9,13 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Sequence
+from typing import Any, Callable, ClassVar, Literal, Sequence
 
 from runner.errors import RunnerError
 from runner.policy import instructions
 from runner.process_control import ProcessResult, run_process
+
+AgentMode = Literal["planning", "review", "no_tool", "runtime"]
 
 
 class BackendError(RunnerError):
@@ -203,6 +205,17 @@ class AgentBackend(ABC):
         """Create optional backend-specific project files and return them."""
         return []
 
+    @classmethod
+    def configure_args(
+        cls,
+        mode: AgentMode,
+        extra_args: Sequence[str],
+        *,
+        allow_project_read: bool = False,
+    ) -> list[str]:
+        """Return backend-specific arguments for one runner stage."""
+        return list(extra_args)
+
     def update_goal_reference(self, goal_file: str | None) -> None:
         """Optionally expose the original goal file through backend project metadata."""
 
@@ -351,6 +364,7 @@ Backend = AgentBackend
 
 __all__ = [
     "AgentBackend",
+    "AgentMode",
     "Backend",
     "BackendError",
     "BackendResult",

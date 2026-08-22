@@ -27,15 +27,44 @@ def diagnostic_error(error: BaseException) -> BaseException | None:
     return None
 
 
-def diagnostic_detail(error: BaseException, limit: int = 2000) -> str:
-    """Format existing backend diagnostics for logs without changing recovery behavior."""
-    parts = [str(error)]
+def backend_diagnostic_parts(
+    error: BaseException,
+    *,
+    include_output: bool = False,
+) -> list[str]:
+    """Return normalized backend metadata from a wrapped error chain."""
+    parts: list[str] = []
     cause = diagnostic_error(error)
-    diagnostics = getattr(cause, "diagnostics", {}) if cause is not None else {}
+    if cause is None:
+        return parts
+
+    return_code = getattr(cause, "return_code", None)
+    if return_code is not None:
+        parts.append(f"exit_code={return_code}")
+    elapsed = getattr(cause, "elapsed", 0.0)
+    if elapsed:
+        parts.append(f"elapsed_seconds={elapsed:.1f}")
+    command_mode = getattr(cause, "command_mode", "")
+    if command_mode:
+        parts.append(f"command_mode={command_mode}")
+    source_event = getattr(cause, "session_source_event", "")
+    if source_event:
+        parts.append(f"session_source_event={source_event}")
+
+    diagnostics = getattr(cause, "diagnostics", {})
     if diagnostics:
         for name in (
-            "loop_type", "num_turns", "input_tokens", "context_used_percent",
-            "cache_read_input_tokens", "output_tokens", "total_tokens",
+            "loop_type",
+            "num_turns",
+            "context_used_percent",
+            "context_compress_enabled",
+            "context_compress_threshold",
+            "context_compress_status",
+            "context_compress_reason",
+            "input_tokens",
+            "cache_read_input_tokens",
+            "output_tokens",
+            "total_tokens",
         ):
             value = diagnostics.get(name)
             if value not in (None, ""):
@@ -46,18 +75,31 @@ def diagnostic_detail(error: BaseException, limit: int = 2000) -> str:
             parts.append("token_scope=backend_reported_not_current_context")
         snapshot = diagnostics.get("context_snapshot")
         if snapshot:
-            parts.append("context_snapshot=" + " ".join(str(snapshot).split()))
-        for name in (
-            "context_compress_enabled", "context_compress_threshold",
-            "context_compress_status", "context_compress_reason",
-        ):
-            value = diagnostics.get(name)
-            if value not in (None, ""):
-                parts.append(f"{name}={value}")
+            parts.append(
+                "context_snapshot=" + " ".join(str(snapshot).split())[-2000:]
+            )
         compression = diagnostics.get("context_compression")
         if compression:
-            parts.append("context_compression=" + " ".join(str(compression).split()))
+            parts.append(
+                "context_compression=" + " ".join(str(compression).split())[-1000:]
+            )
+
+    if include_output:
+        output = getattr(cause, "output", "")
+        if output:
+            parts.append("stderr_tail=" + " ".join(str(output).split())[-1000:])
+    return parts
+
+
+def diagnostic_detail(error: BaseException, limit: int = 2000) -> str:
+    """Format existing backend diagnostics for logs without changing recovery behavior."""
+    parts = [str(error), *backend_diagnostic_parts(error)]
     return " | ".join(parts)[-limit:]
 
 
-__all__ = ["RunnerError", "diagnostic_error", "diagnostic_detail"]
+__all__ = [
+    "RunnerError",
+    "backend_diagnostic_parts",
+    "diagnostic_detail",
+    "diagnostic_error",
+]

@@ -14,6 +14,16 @@ FORBIDDEN_IMPORTS = {
         "runner.ui",
         "runner.validation",
     },
+    "runner/backends/qwen_args.py": {
+        "runner.core",
+        "runner.planning",
+        "runner.prompting",
+        "runner.reviewing",
+        "runner.script_runner",
+        "runner.support",
+        "runner.ui",
+        "runner.validation",
+    },
     "runner/script_runner.py": {
         "runner.planning",
         "runner.prompting",

@@ -2,18 +2,19 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable, Iterator, TypeVar
 
 from .errors import RunnerError
-from .models import Task
+from .models import AIValidationResult, PlanJudgment, ReviewResult, Task
 
 
 MAX_RESULT_REASON_CHARS = 4_000
 MAX_MISSING_ITEMS = 100
 MAX_MISSING_ITEM_CHARS = 1_000
+T = TypeVar("T")
 
 
-def _json_candidates(text: str):
+def _json_candidates(text: str) -> Iterator[Any]:
     """Yield valid JSON values embedded in model output without repairing them."""
     text = text.strip().lstrip("\ufeff")
     if not text:
@@ -39,7 +40,7 @@ def _json_candidates(text: str):
         index = end
 
 
-def _parse_result(text: str, parser):
+def _parse_result(text: str, parser: Callable[[Any], T]) -> T:
     """Return the first JSON candidate accepted by one stage-specific parser."""
     errors = []
     found = False
@@ -153,8 +154,8 @@ def parse_tasks(
     return _parse_result(text, parse)
 
 
-def parse_plan_judgment(text: str) -> dict[str, Any]:
-    def parse(value: Any) -> dict[str, Any]:
+def parse_plan_judgment(text: str) -> PlanJudgment:
+    def parse(value: Any) -> PlanJudgment:
         value = _require_object(value)
         if not isinstance(value.get("accepted"), bool):
             raise RunnerError("plan_judge.accepted must be boolean")
@@ -182,8 +183,8 @@ def _bounded_missing_items(value: Any, field_name: str) -> list[str]:
     return [item[:MAX_MISSING_ITEM_CHARS] for item in items]
 
 
-def parse_review(text: str) -> dict[str, Any]:
-    def parse(value: Any) -> dict[str, Any]:
+def parse_review(text: str) -> ReviewResult:
+    def parse(value: Any) -> ReviewResult:
         value = _require_object(value)
         if not isinstance(value.get("completed"), bool):
             raise RunnerError("review.completed must be boolean")
@@ -204,8 +205,8 @@ def parse_review(text: str) -> dict[str, Any]:
     return _parse_result(text, parse)
 
 
-def parse_ai_validation(text: str) -> dict[str, Any]:
-    def parse(value: Any) -> dict[str, Any]:
+def parse_ai_validation(text: str) -> AIValidationResult:
+    def parse(value: Any) -> AIValidationResult:
         value = _require_object(value)
         if not isinstance(value.get("passed"), bool):
             raise RunnerError("validator.passed must be boolean")

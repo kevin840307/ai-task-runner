@@ -11,15 +11,15 @@ from .agent import AgentClient
 from .agent_args import review_agent_args
 from .debug import parse_with_debug
 from .errors import RunnerError
-from .models import RunState, Task
+from .models import ReviewResult, RunState, Task
 from .prompting import review_finalize_prompt, review_prompt, structured_output_retry_prompt
 from .model_results import parse_review
 from .model_call import recover_structured_output, retry_model_call
-from .project_guard import readonly_ask
+from .project_guard import readonly_ask, require_unchanged_project
 from .ui import LiveUI
 
 
-def skipped_review(reason: str) -> dict[str, object]:
+def skipped_review(reason: str) -> ReviewResult:
     """Return the canonical provisional-review result used before Final Validator."""
     return {
         "completed": True,
@@ -38,7 +38,7 @@ def review_task(
     ui: LiveUI,
     task: Task,
     output: str,
-) -> dict[str, object]:
+) -> ReviewResult:
     """Review one changed task without changing retry or fallback semantics."""
     debug_dir = work / "debug"
     reviewer = AgentClient(
@@ -61,15 +61,14 @@ def review_task(
             timeout=args.planning_timeout,
             idle_timeout=args.agent_idle_after_change_timeout,
         )
-        changed = [*protected_changed, *project_changed_during_review]
-        if changed:
-            raise RunnerError(
-                "review modified files and they were restored: "
-                + ", ".join(changed)
-            )
+        require_unchanged_project(
+            protected_changed,
+            project_changed_during_review,
+            "review",
+        )
         return raw
 
-    def ask_review(agent: AgentClient, prompt: str) -> dict[str, object]:
+    def ask_review(agent: AgentClient, prompt: str) -> ReviewResult:
         raw = ask_raw(agent, prompt)
         return recover_structured_output(
             raw,

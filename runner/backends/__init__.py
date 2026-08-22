@@ -2,8 +2,8 @@
 
 To add a backend:
 1. Create one module implementing AgentBackend.
-2. Import the class here.
-3. Add one registry entry.
+2. Override configure_args only when the CLI needs stage-specific policy.
+3. Import the class here and add one registry entry.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from runner.defaults import DEFAULT_AGENT_TIMEOUT
-from .base import AgentBackend, Backend, BackendError, BackendResult
+from .base import AgentBackend, AgentMode, Backend, BackendError, BackendResult
 from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules
 
@@ -28,6 +28,24 @@ def backend_names() -> tuple[str, ...]:
 
 def default_command(name: str) -> str:
     return BACKENDS[name].default_command
+
+
+def configure_agent_args(
+    name: str,
+    mode: AgentMode,
+    extra_args: Sequence[str],
+    *,
+    allow_project_read: bool = False,
+) -> list[str]:
+    try:
+        backend_type = BACKENDS[name]
+    except KeyError as error:
+        raise BackendError(f"unsupported backend: {name}") from error
+    return backend_type.configure_args(
+        mode,
+        extra_args,
+        allow_project_read=allow_project_read,
+    )
 
 
 def create_backend(
@@ -48,11 +66,13 @@ def create_backend(
 
 __all__ = [
     "AgentBackend",
+    "AgentMode",
     "Backend",
     "BackendError",
     "BackendResult",
     "BACKENDS",
     "backend_names",
+    "configure_agent_args",
     "create_backend",
     "default_command",
     "ensure_opencode_rules",

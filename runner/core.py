@@ -15,15 +15,15 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
-from typing import Any
 
 from .agent import AgentClient
 from .agent_args import (
     planning_agent_args,
     runtime_agent_args,
 )
-from .errors import RunnerError, diagnostic_error
+from .errors import RunnerError, backend_diagnostic_parts, diagnostic_error
 from .models import RunState, Task
+from .models import ReviewResult, RunStage
 from .planning import build_plan
 from .reviewing import review_task
 from .policy import protected_paths as policy_protected_paths
@@ -126,7 +126,7 @@ class TaskRunner:
                 return validation_code
         return 0
 
-    def _set_stage(self, stage: str, detail: str = "") -> None:
+    def _set_stage(self, stage: RunStage, detail: str = "") -> None:
         now = time.time()
         if self.state.stage != stage:
             self.state.stage = stage
@@ -341,58 +341,7 @@ class TaskRunner:
             f"stagnant_attempts={task.stagnant_attempts}",
             f"failure_signature={task.progress_key[:12] or '-'}",
         ]
-        cause = diagnostic_error(error)
-        if cause is not None:
-            return_code = getattr(cause, "return_code", None)
-            elapsed = getattr(cause, "elapsed", 0.0)
-            if return_code is not None:
-                details.append(f"exit_code={return_code}")
-            if elapsed:
-                details.append(f"elapsed_seconds={elapsed:.1f}")
-            command_mode = getattr(cause, "command_mode", "")
-            if command_mode:
-                details.append(f"command_mode={command_mode}")
-            source_event = getattr(cause, "session_source_event", "")
-            if source_event:
-                details.append(f"session_source_event={source_event}")
-            diagnostics = getattr(cause, "diagnostics", {})
-            if diagnostics:
-                for name in (
-                    "loop_type",
-                    "num_turns",
-                    "context_used_percent",
-                    "context_compress_enabled",
-                    "context_compress_threshold",
-                    "context_compress_status",
-                    "context_compress_reason",
-                    "input_tokens",
-                    "cache_read_input_tokens",
-                    "output_tokens",
-                    "total_tokens",
-                ):
-                    value = diagnostics.get(name)
-                    if value not in (None, ""):
-                        details.append(f"{name}={value}")
-                if any(name in diagnostics for name in (
-                    "input_tokens", "cache_read_input_tokens", "total_tokens"
-                )):
-                    details.append("token_scope=backend_reported_not_current_context")
-                snapshot = diagnostics.get("context_snapshot")
-                if snapshot:
-                    details.append(
-                        "context_snapshot="
-                        + " ".join(str(snapshot).split())[-2000:]
-                    )
-                compression = diagnostics.get("context_compression")
-                if compression:
-                    details.append(
-                        "context_compression="
-                        + " ".join(str(compression).split())[-1000:]
-                    )
-            output = getattr(cause, "output", "")
-            if output:
-                tail = " ".join(str(output).split())[-1000:]
-                details.append(f"stderr_tail={tail}")
+        details.extend(backend_diagnostic_parts(error, include_output=True))
         details.append(str(error)[-1000:])
         self.ui.set(
             "模型階段失敗，準備重試任務",
@@ -416,7 +365,7 @@ class TaskRunner:
     def _handle_review_result(
         self,
         task: Task,
-        review: dict[str, Any],
+        review: ReviewResult,
     ) -> int | None:
         task.last_review = review
         self._save_session()
@@ -444,7 +393,7 @@ class TaskRunner:
     def _record_no_progress(
         self,
         task: Task,
-        review: dict[str, Any],
+        review: ReviewResult,
     ) -> None:
         key = progress_key(
             self.root,
@@ -553,7 +502,7 @@ class TaskRunner:
         self,
         task: Task,
         output: str,
-    ) -> dict[str, Any]:
+    ) -> ReviewResult:
         review = review_task(
             self.args,
             self.root,
