@@ -1,10 +1,9 @@
 """Qwen-specific capability and tool argument policy."""
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from .base import AgentMode
-
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
 QWEN_COMPUTER_USE_TOOLS = (

@@ -5,13 +5,13 @@ import copy
 import json
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .config import RuntimeConfig
 from .errors import RunnerError
 from .version import __version__
-
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
@@ -41,6 +41,117 @@ def _read_item_file(
         ) from error
 
 
+def _script_goal(
+    script: Path,
+    item: dict[str, Any],
+    index: int,
+) -> tuple[str, str | None]:
+    prompt = item.get("prompt") or item.get("goal")
+    goal_file = item.get("goal_file")
+    if prompt and goal_file:
+        raise RunnerError(
+            f"script item {index} must use either prompt or goal_file, not both"
+        )
+    goal_input = _read_item_file(script, item, index, "goal_file")
+    if goal_input:
+        prompt, goal_file = goal_input
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise RunnerError(f"script item {index} requires prompt or goal_file")
+    return prompt.strip(), goal_file
+
+
+def _script_ai_prompt(
+    script: Path,
+    item: dict[str, Any],
+    index: int,
+) -> tuple[str, str | None]:
+    prompt = item.get("ai_validator_prompt", "")
+    prompt_file = item.get("ai_validator_prompt_file")
+    if prompt and prompt_file:
+        raise RunnerError(
+            f"script item {index} must use either ai_validator_prompt or ai_validator_prompt_file, not both"
+        )
+    prompt_input = _read_item_file(
+        script,
+        item,
+        index,
+        "ai_validator_prompt_file",
+        "utf-8-sig",
+    )
+    if prompt_input:
+        prompt, prompt_file = prompt_input
+    if not isinstance(prompt, str):
+        raise RunnerError(
+            f"script item {index} ai_validator_prompt must be a string"
+        )
+    return prompt.strip(), prompt_file
+
+
+def _script_options(item: dict[str, Any], index: int) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    if "project_root" in item:
+        project_root = item["project_root"]
+        if not isinstance(project_root, str) or not project_root.strip():
+            raise RunnerError(
+                f"script item {index} project_root must be a non-empty string"
+            )
+        result["project_root"] = project_root.strip()
+    if "loop_context_compress" in item:
+        value = item["loop_context_compress"]
+        if not isinstance(value, bool):
+            raise RunnerError(
+                f"script item {index} loop_context_compress must be a boolean"
+            )
+        result["loop_context_compress"] = value
+    if "loop_context_compress_threshold" in item:
+        value = item["loop_context_compress_threshold"]
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not 0 <= value <= 100
+        ):
+            raise RunnerError(
+                f"script item {index} loop_context_compress_threshold must be between 0 and 100"
+            )
+        result["loop_context_compress_threshold"] = float(value)
+    for name in ("ai_validator_count", "ai_validator_required_passes"):
+        if name not in item:
+            continue
+        value = item[name]
+        if not isinstance(value, int) or value < 0:
+            raise RunnerError(
+                f"script item {index} {name} must be a non-negative integer"
+            )
+        result[name] = value
+    return result
+
+
+def _parse_script_item(
+    script: Path,
+    item: Any,
+    index: int,
+) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise RunnerError(f"script item {index} must be an object")
+    prompt, goal_file = _script_goal(script, item, index)
+    validator = item.get("validator")
+    if not isinstance(validator, str) or not validator.strip():
+        raise RunnerError(f"script item {index} requires validator path or 'ai'")
+    ai_prompt, ai_prompt_file = _script_ai_prompt(script, item, index)
+    result = {
+        "prompt": prompt,
+        "validator": validator.strip(),
+        "validator_prompt": str(item.get("validator_prompt", "")),
+        "ai_validator_prompt": ai_prompt,
+        **_script_options(item, index),
+    }
+    if ai_prompt_file:
+        result["ai_validator_prompt_file"] = ai_prompt_file
+    if goal_file:
+        result["goal_file"] = goal_file
+    return result
+
+
 def load_yaml_script(path: Path) -> list[dict[str, Any]]:
     try:
         import yaml
@@ -57,80 +168,10 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
     if not isinstance(data, list) or not data:
         raise RunnerError("YAML script must be a non-empty array")
 
-    items: list[dict[str, Any]] = []
-    for index, item in enumerate(data, 1):
-        if not isinstance(item, dict):
-            raise RunnerError(f"script item {index} must be an object")
-        prompt = item.get("prompt") or item.get("goal")
-        goal_file = item.get("goal_file")
-        validator = item.get("validator")
-        if prompt and goal_file:
-            raise RunnerError(
-                f"script item {index} must use either prompt or goal_file, not both"
-            )
-        goal_input = _read_item_file(path, item, index, "goal_file")
-        if goal_input:
-            prompt, goal_file = goal_input
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise RunnerError(f"script item {index} requires prompt or goal_file")
-        if not isinstance(validator, str) or not validator.strip():
-            raise RunnerError(
-                f"script item {index} requires validator path or 'ai'"
-            )
-        ai_prompt = item.get("ai_validator_prompt", "")
-        ai_prompt_file = item.get("ai_validator_prompt_file")
-        if ai_prompt and ai_prompt_file:
-            raise RunnerError(
-                f"script item {index} must use either ai_validator_prompt or ai_validator_prompt_file, not both"
-            )
-        ai_prompt_input = _read_item_file(
-            path,
-            item,
-            index,
-            "ai_validator_prompt_file",
-            "utf-8-sig",
-        )
-        if ai_prompt_input:
-            ai_prompt, ai_prompt_file = ai_prompt_input
-        if not isinstance(ai_prompt, str):
-            raise RunnerError(f"script item {index} ai_validator_prompt must be a string")
-        result = {
-            "prompt": prompt.strip(),
-            "validator": validator.strip(),
-            "validator_prompt": str(item.get("validator_prompt", "")),
-            "ai_validator_prompt": ai_prompt.strip(),
-        }
-        if ai_prompt_file:
-            result["ai_validator_prompt_file"] = ai_prompt_file
-        if goal_file:
-            result["goal_file"] = goal_file
-        if "project_root" in item:
-            project_root = item["project_root"]
-            if not isinstance(project_root, str) or not project_root.strip():
-                raise RunnerError(
-                    f"script item {index} project_root must be a non-empty string"
-                )
-            result["project_root"] = project_root.strip()
-        if "loop_context_compress" in item:
-            value = item["loop_context_compress"]
-            if not isinstance(value, bool):
-                raise RunnerError(f"script item {index} loop_context_compress must be a boolean")
-            result["loop_context_compress"] = value
-        if "loop_context_compress_threshold" in item:
-            value = item["loop_context_compress_threshold"]
-            if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 100:
-                raise RunnerError(f"script item {index} loop_context_compress_threshold must be between 0 and 100")
-            result["loop_context_compress_threshold"] = float(value)
-        for name in ("ai_validator_count", "ai_validator_required_passes"):
-            if name in item:
-                value = item[name]
-                if not isinstance(value, int) or value < 0:
-                    raise RunnerError(
-                        f"script item {index} {name} must be a non-negative integer"
-                    )
-                result[name] = value
-        items.append(result)
-    return items
+    return [
+        _parse_script_item(path, item, index)
+        for index, item in enumerate(data, 1)
+    ]
 
 
 def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:

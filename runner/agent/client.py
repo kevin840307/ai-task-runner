@@ -1,14 +1,15 @@
 """Session-aware facade over a registered backend."""
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, NoReturn, Sequence
+from typing import NoReturn
 
 from runner.backends import BackendError, create_backend
 from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
-from .debug import begin_model_call, finish_model_call
-from ..errors import RunnerError, diagnostic_detail
 
+from ..errors import RunnerError, diagnostic_detail
+from .debug import begin_model_call, finish_model_call
 
 SESSION_INVALID_MARKERS = (
     "session not found",
@@ -275,10 +276,6 @@ class AgentClient:
     def update_goal_reference(self, goal_file: str | None) -> None:
         self._backend.update_goal_reference(goal_file)
 
-    def _build_command(self, prompt: str) -> list[str]:
-        """Compatibility delegate for existing integrations/tests."""
-        return self._backend.build_command(prompt, self.session_id)
-
     def _decode(self, raw: str) -> str:
         """Compatibility delegate for existing integrations/tests."""
         result = self._backend.decode(raw)
@@ -288,12 +285,12 @@ class AgentClient:
 
 
 __all__ = [
+    "SESSION_INVALID_MARKERS",
+    "SESSION_RECOVERABLE_FAILURES_BEFORE_RESET",
+    "SESSION_RESET_MARKERS",
+    "TRANSIENT_SERVICE_MARKERS",
     "AgentClient",
     "AgentError",
-    "SESSION_INVALID_MARKERS",
-    "SESSION_RESET_MARKERS",
-    "SESSION_RECOVERABLE_FAILURES_BEFORE_RESET",
-    "TRANSIENT_SERVICE_MARKERS",
     "is_session_invalid_error",
     "is_transient_service_error",
     "should_reset_session",

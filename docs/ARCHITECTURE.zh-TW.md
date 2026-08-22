@@ -9,7 +9,7 @@ Runner 只負責 orchestration、state、retry/recovery、session policy、保�
 - `ai_task_runner.py`：CLI adapter。
 - `runner/api.py`：CLI/UI/Skill/Python 共用的 `RunRequest` / `run()` 正式入口。
 - `runner/core.py`：狀態機與主流程。
-- `runner/workflow/`：Planning、Review、AI/File Validation 等執行階段。
+- `runner/workflow/`：Planning、Review、AI/File Validation，以及決策階段共用的唯讀 structured-call 邊界。
 - `runner/agent/`：AgentClient/Factory、stage arguments、Prompt、模型 retry、structured results 與 diagnostics。
 - `runner/backends/`：可替換的 Qwen/OpenCode transport 與 backend-specific argument policy。
 - `runner/safety/`：project policy、protected/read-only guard 與 child-process Git publication guard。

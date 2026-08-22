@@ -8,8 +8,9 @@ import sys
 import threading
 import time
 import unicodedata
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 from .models import RunState, Task
 from .version import __version__

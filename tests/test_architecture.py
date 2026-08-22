@@ -1,7 +1,6 @@
 import ast
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 ORCHESTRATION = {
@@ -10,6 +9,7 @@ ORCHESTRATION = {
     "runner.script_runner",
     "runner.workflow.planning",
     "runner.workflow.reviewing",
+    "runner.workflow.structured",
     "runner.workflow.validation.ai",
     "runner.workflow.validation.file",
 }
@@ -37,6 +37,14 @@ FORBIDDEN_IMPORTS = {
         "runner.core",
         "runner.script_runner",
         "runner.workflow.planning",
+        "runner.workflow.validation.ai",
+        "runner.workflow.validation.file",
+    },
+    "runner/workflow/structured.py": {
+        "runner.core",
+        "runner.script_runner",
+        "runner.workflow.planning",
+        "runner.workflow.reviewing",
         "runner.workflow.validation.ai",
         "runner.workflow.validation.file",
     },

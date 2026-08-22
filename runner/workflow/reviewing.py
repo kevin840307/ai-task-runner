@@ -1,24 +1,20 @@
 """Read-only task review flow, including adaptive no-tool finalization."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ..agent import AgentClient
-from ..agent.calls import recover_structured_output, retry_model_call
-from ..agent.debug import parse_with_debug
+from ..agent.calls import retry_model_call
 from ..agent.factory import AgentFactory
-from ..agent.prompts import (
-    review_finalize_prompt,
-    review_prompt,
-    structured_output_retry_prompt,
-)
+from ..agent.prompts import review_finalize_prompt, review_prompt
 from ..agent.results import parse_review
 from ..config import RuntimeConfig
 from ..errors import RunnerError
 from ..models import ReviewResult, RunState, Task
-from ..safety.project_guard import readonly_ask, require_unchanged_project
+from ..safety.project_guard import readonly_ask
 from ..ui import LiveUI
+from .structured import readonly_structured_call
 
 
 def skipped_review(reason: str) -> ReviewResult:
@@ -55,31 +51,19 @@ def review_task(
         timeout=args.planning_timeout,
     )
 
-    def ask_raw(agent: AgentClient, prompt: str) -> str:
-        raw, protected_changed, project_changed_during_review = readonly_ask(
+    def ask_review(agent: AgentClient, prompt: str) -> ReviewResult:
+        return readonly_structured_call(
             agent,
             prompt,
-            root,
-            work,
-            protected,
+            parse_review,
+            debug_dir=debug_dir,
+            root=root,
+            work=work,
+            protected=protected,
+            stage="review",
             timeout=args.planning_timeout,
             idle_timeout=args.agent_idle_after_change_timeout,
-        )
-        require_unchanged_project(
-            protected_changed,
-            project_changed_during_review,
-            "review",
-        )
-        return raw
-
-    def ask_review(agent: AgentClient, prompt: str) -> ReviewResult:
-        raw = ask_raw(agent, prompt)
-        return recover_structured_output(
-            raw,
-            lambda text: parse_with_debug(debug_dir, parse_review, text),
-            lambda error: ask_raw(
-                agent, structured_output_retry_prompt(error)
-            ),
+            ask=readonly_ask,
         )
 
     try:

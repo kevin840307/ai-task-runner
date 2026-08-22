@@ -22,7 +22,6 @@ from .agent.prompts import (
 )
 from .config import RuntimeConfig
 from .errors import RunnerError, backend_diagnostic_parts
-from .errors import diagnostic_error as diagnostic_error  # Compatibility export.
 from .models import ReviewResult, RunStage, Task
 from .safety.policy import protected_paths as policy_protected_paths
 from .safety.project_guard import (
@@ -42,7 +41,6 @@ from .workflow.planning import build_plan
 from .workflow.reviewing import review_task
 from .workflow.validation.ai import run_ai_validator
 from .workflow.validation.file import run_file_validator
-
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
@@ -68,7 +66,6 @@ class TaskRunner:
         self.work = self.root / args.work_dir
         self.state_store = StateStore(self.root, self.work)
         self.state_file = self.state_store.path
-        self.state_backup_file = self.state_store.backup_path
 
         self._validate_paths()
         cleanup_stale_artifacts(self.work)
@@ -88,18 +85,18 @@ class TaskRunner:
             timeout=args.agent_timeout,
         )
         self.backend_files = self.agent.prepare_project()
-        self.agent.update_goal_reference(getattr(args, "goal_file", None))
+        self.agent.update_goal_reference(args.goal_file)
         if not args.resume:
             self._save_state()
         self.protected = self._build_protected_files()
         context = {
-            "script_index": getattr(args, "script_index", None),
-            "script_total": getattr(args, "script_total", None),
+            "script_index": args.script_index,
+            "script_total": args.script_total,
         }
         self.ui = LiveUI(
-            event_callback=getattr(args, "event_callback", None),
-            json_events=getattr(args, "json_events", False),
-            human_output=getattr(args, "human_output", True),
+            event_callback=args.event_callback,
+            json_events=args.json_events,
+            human_output=args.human_output,
             log_path=self.work / "log.txt",
             context={
                 key: value
@@ -470,7 +467,11 @@ class TaskRunner:
             "AI · new session"
             if self.ai_validation
             else self.validator.name
-            + (" + AI vote" if getattr(self.args, "ai_validator_prompt", "").strip() else "")
+            + (
+                " + AI vote"
+                if getattr(self.args, "ai_validator_prompt", "").strip()
+                else ""
+            )
         )
         self._set_stage("validating")
         self.ui.start("正在執行最終驗證", detail)

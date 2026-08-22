@@ -7,8 +7,8 @@ import shutil
 import stat
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 BLOCKED_GIT_SUBCOMMANDS = frozenset({"add", "commit", "push"})
 _VALUE_OPTIONS = frozenset({

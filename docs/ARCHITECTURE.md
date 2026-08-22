@@ -9,7 +9,7 @@ The Runner owns orchestration, state, retry/recovery, session policy, protection
 - `ai_task_runner.py`: CLI adapter.
 - `runner/api.py`: canonical `RunRequest` / `run()` interface for CLI, UI, skills, and Python callers.
 - `runner/core.py`: state-machine/orchestration.
-- `runner/workflow/`: planning, review, and AI/file validation stages.
+- `runner/workflow/`: planning, review, AI/file validation, and the shared read-only structured-call boundary used by decision stages.
 - `runner/agent/`: AgentClient/factory, stage arguments, prompts, model-call retry, structured results, and diagnostics.
 - `runner/backends/`: replaceable Qwen/OpenCode transport adapters and backend-specific argument policy.
 - `runner/safety/`: project policy, protected-file/read-only guards, and the child-process Git publication guard.

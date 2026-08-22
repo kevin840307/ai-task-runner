@@ -11,11 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .agent.prompts import bounded_text
 from .defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from .errors import RunnerError
 from .models import RunState
-from .agent.prompts import bounded_text
-
 
 JSON_WRITE_RETRIES = 10
 JSON_WRITE_RETRY_DELAY = 0.05

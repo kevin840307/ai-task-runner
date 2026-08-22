@@ -7,14 +7,14 @@ To add a backend:
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from runner.defaults import DEFAULT_AGENT_TIMEOUT
+
 from .base import AgentBackend, AgentMode, BackendError, BackendResult
 from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules
-
 
 BACKENDS: dict[str, type[AgentBackend]] = {
     QwenBackend.name: QwenBackend,
@@ -66,11 +66,11 @@ def create_backend(
 
 
 __all__ = [
+    "BACKENDS",
     "AgentBackend",
     "AgentMode",
     "BackendError",
     "BackendResult",
-    "BACKENDS",
     "backend_names",
     "configure_agent_args",
     "create_backend",

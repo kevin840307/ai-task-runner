@@ -10,21 +10,21 @@ import traceback
 from collections.abc import Sequence
 from pathlib import Path
 
+from runner.api import RunRequest, run
+from runner.backends import backend_names
 from runner.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
     DEFAULT_BACKEND,
+    DEFAULT_FINAL_AI_REQUIRED_PASSES,
+    DEFAULT_FINAL_AI_VALIDATIONS,
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
-    DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
 )
-from runner.api import RunRequest, run
 from runner.version import __version__
-from runner.backends import backend_names
 
 
 def parser() -> argparse.ArgumentParser:

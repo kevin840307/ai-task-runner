@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from string import Template as PromptTemplate
-from typing import Any, Sequence
+from typing import Any
 
 from ..errors import RunnerError
 from ..models import RunState, Task
 from ..safety.policy import instructions
-
 
 PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts"
 MAX_PROMPT_HISTORY_ITEMS = 20
@@ -96,6 +96,30 @@ def skipped_review_tasks(state: RunState) -> list[dict[str, Any]]:
     ][-MAX_PROMPT_HISTORY_ITEMS:]
 
 
+def _planning_context(
+    goal: str,
+    root: Path,
+    state: RunState,
+    work: Path | None,
+) -> dict[str, Any]:
+    work_dir = work or root / ".ai-task-runner"
+    progress = {
+        "cycle": state.cycle,
+        "validator_feedback": state.validator_output[-8000:],
+        "completed_tasks": completed_titles(state),
+        "review_skipped_tasks": skipped_review_tasks(state),
+    }
+    return {
+        "planning_rules": planning_rules(work_dir, root),
+        "goal": goal,
+        "root": root,
+        "progress_json": json.dumps(progress, ensure_ascii=False),
+        "work_dir": work_dir,
+        "minimum_tasks": 6 if state.cycle == 1 else 1,
+        "planning_mode": "initial" if state.cycle == 1 else "repair",
+    }
+
+
 def plan_understand_prompt(
     goal: str,
     root: Path,
@@ -104,24 +128,12 @@ def plan_understand_prompt(
     work: Path | None = None,
     planning_feedback: str = "",
 ) -> str:
-    progress = {
-        "cycle": state.cycle,
-        "validator_feedback": state.validator_output[-8000:],
-        "completed_tasks": completed_titles(state),
-        "review_skipped_tasks": skipped_review_tasks(state),
-    }
-    work_dir = work or root / ".ai-task-runner"
+    context = _planning_context(goal, root, state, work)
     return render_prompt_template(
         "plan_understand.md",
         {
-            "planning_rules": planning_rules(work_dir, root),
-            "goal": goal,
-            "root": root,
-            "progress_json": json.dumps(progress, ensure_ascii=False),
-            "work_dir": work_dir,
+            **context,
             "planning_feedback": planning_feedback_section(planning_feedback),
-            "minimum_tasks": 6 if state.cycle == 1 else 1,
-            "planning_mode": "initial" if state.cycle == 1 else "repair",
         },
     )
 
@@ -135,36 +147,26 @@ def plan_finalize_prompt(
     same_session: bool,
     inspection_summary: str = "",
 ) -> str:
-    minimum_tasks = 6 if state.cycle == 1 else 1
-    planning_mode = "initial" if state.cycle == 1 else "repair"
+    context = _planning_context(goal, root, state, work)
     if same_session:
         return render_prompt_template(
             "plan_finalize_same_session.md",
-            {"minimum_tasks": minimum_tasks, "planning_mode": planning_mode},
+            {
+                "minimum_tasks": context["minimum_tasks"],
+                "planning_mode": context["planning_mode"],
+            },
         )
 
-    progress = {
-        "cycle": state.cycle,
-        "validator_feedback": state.validator_output[-8000:],
-        "completed_tasks": completed_titles(state),
-        "review_skipped_tasks": skipped_review_tasks(state),
-    }
-    work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
         "plan_finalize.md",
         {
-            "planning_rules": planning_rules(work_dir, root),
-            "goal": goal,
-            "root": root,
-            "progress_json": json.dumps(progress, ensure_ascii=False),
+            **context,
             "source_instruction": (
                 "This is a fresh no-tool fallback. Use only the supplied goal, progress, "
                 "validator feedback, and inspection summary; do not "
                 "inspect the repository."
             ),
             "inspection_summary": bounded_text(inspection_summary, 12000),
-            "minimum_tasks": minimum_tasks,
-            "planning_mode": planning_mode,
         },
     )
 
@@ -182,23 +184,11 @@ def plan_refine_prompt(
     feedback = "\n".join(f"- {item}" for item in judge_issues) or "- Re-check and correct the current plan."
     if same_session:
         return render_prompt_template("plan_refine.md", {"judge_feedback": feedback})
-    progress = {
-        "cycle": state.cycle,
-        "validator_feedback": state.validator_output[-8000:],
-        "completed_tasks": completed_titles(state),
-        "review_skipped_tasks": skipped_review_tasks(state),
-    }
-    work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
         "plan_refine_full.md",
         {
-            "planning_rules": planning_rules(work_dir, root),
-            "goal": goal,
-            "root": root,
-            "progress_json": json.dumps(progress, ensure_ascii=False),
+            **_planning_context(goal, root, state, work),
             "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
-            "minimum_tasks": 6 if state.cycle == 1 else 1,
-            "planning_mode": "initial" if state.cycle == 1 else "repair",
             "judge_feedback": "\nPlan judge issues that must all be resolved:\n" + feedback + "\n",
         },
     )
@@ -214,23 +204,11 @@ def plan_judge_prompt(
 ) -> str:
     if same_session:
         return render_prompt_template("plan_judge.md", {})
-    progress = {
-        "cycle": state.cycle,
-        "validator_feedback": state.validator_output[-8000:],
-        "completed_tasks": completed_titles(state),
-        "review_skipped_tasks": skipped_review_tasks(state),
-    }
-    work_dir = work or root / ".ai-task-runner"
     return render_prompt_template(
         "plan_judge_full.md",
         {
-            "planning_rules": planning_rules(work_dir, root),
-            "goal": goal,
-            "root": root,
-            "progress_json": json.dumps(progress, ensure_ascii=False),
+            **_planning_context(goal, root, state, work),
             "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
-            "minimum_tasks": 6 if state.cycle == 1 else 1,
-            "planning_mode": "initial" if state.cycle == 1 else "repair",
         },
     )
 

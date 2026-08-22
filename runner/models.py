@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Literal, TypedDict
 
-
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
 RunStage = Literal[
@@ -139,7 +138,7 @@ class RunState:
             raise ValueError("completed state contains pending tasks")
 
     @classmethod
-    def load(cls, data: dict[str, Any]) -> "RunState":
+    def load(cls, data: dict[str, Any]) -> RunState:
         if not isinstance(data, dict):
             raise ValueError("state must be a JSON object")
         values = dict(data)

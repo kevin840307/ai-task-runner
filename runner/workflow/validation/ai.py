@@ -2,24 +2,25 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
+from functools import partial
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from ...agent import AgentClient
-from ...agent.calls import recover_structured_output, retry_model_call
-from ...agent.debug import parse_with_debug
+from ...agent.calls import retry_model_call
 from ...agent.factory import AgentFactory
 from ...agent.prompts import (
     ai_validator_prompt,
     skipped_review_tasks,
-    structured_output_retry_prompt,
 )
 from ...agent.results import parse_ai_validation
 from ...config import RuntimeConfig
 from ...errors import RunnerError
-from ...models import AIValidationResult, RunState
-from ...safety.project_guard import readonly_ask, require_unchanged_project
+from ...models import RunState
+from ...safety.project_guard import readonly_ask
 from ...ui import LiveUI
+from ..structured import readonly_structured_call
 
 
 def run_ai_validator(
@@ -34,8 +35,8 @@ def run_ai_validator(
     custom_prompt: str = "",
     agent_factory: AgentFactory | None = None,
 ) -> tuple[bool, str]:
-    total = getattr(args, "final_ai_validations", 1)
-    configured_required = getattr(args, "final_ai_required_passes", 0)
+    total = args.final_ai_validations
+    configured_required = args.final_ai_required_passes
     required = configured_required or total // 2 + 1
     debug_dir = work / "debug"
     results: list[Mapping[str, Any]] = []
@@ -55,42 +56,22 @@ def run_ai_validator(
             extra_args=runtime_args,
         )
 
-        def ask_raw(prompt: str) -> str:
-            raw, protected_changed, project_changed = readonly_ask(
-                validator,
-                prompt,
-                root,
-                work,
-                protected,
-                timeout=args.agent_timeout,
-                idle_timeout=args.agent_idle_after_change_timeout,
-            )
-            require_unchanged_project(
-                protected_changed,
-                project_changed,
-                "AI validator",
-            )
-            return raw
-
-        def call() -> AIValidationResult:
-            raw = ask_raw(
-                ai_validator_prompt(
-                    state.goal,
-                    root,
-                    protected,
-                    custom_prompt,
-                    skipped_review_tasks(state),
-                )
-            )
-            return recover_structured_output(
-                raw,
-                lambda text: parse_with_debug(
-                    debug_dir, parse_ai_validation, text
-                ),
-                lambda error: ask_raw(
-                    structured_output_retry_prompt(error)
-                ),
-            )
+        call = partial(
+            readonly_structured_call,
+            validator,
+            ai_validator_prompt(
+                state.goal, root, protected, custom_prompt, skipped_review_tasks(state)
+            ),
+            parse_ai_validation,
+            debug_dir=debug_dir,
+            root=root,
+            work=work,
+            protected=protected,
+            stage="AI validator",
+            timeout=args.agent_timeout,
+            idle_timeout=args.agent_idle_after_change_timeout,
+            ask=readonly_ask,
+        )
 
         try:
             result = retry_model_call(

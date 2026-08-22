@@ -1,12 +1,14 @@
 """Qwen CLI backend."""
 from __future__ import annotations
 
-from pathlib import Path
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
 
 from runner.defaults import DEFAULT_QWEN_COMMAND
 from runner.process_control import run_process
+
 from .base import (
     AgentBackend,
     AgentMode,

@@ -7,8 +7,9 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence, TypeVar
+from typing import TypeVar
 
 from ..agent import AgentClient
 from ..errors import RunnerError
@@ -70,7 +71,7 @@ def digest(path: Path) -> str | None:
         return None
     if path.is_symlink():
         target = os.readlink(path)
-        return hashlib.sha256(f"link\0{target}".encode("utf-8")).hexdigest()
+        return hashlib.sha256(f"link\0{target}".encode()).hexdigest()
     if path.is_dir():
         return _directory_digest(path)
     return hashlib.sha256(path.read_bytes()).hexdigest()

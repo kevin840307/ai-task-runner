@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -43,8 +42,7 @@ def test_internal_modules_use_feature_owners_directly():
     assert "from .safety.project_guard import (" in core
     assert "from ..agent.calls import" in planning
     assert "from ..safety.project_guard import readonly_ask" in planning
-    assert "from ..agent.calls import" in reviewing
-    assert "from ..safety.project_guard import" in reviewing
+    assert "from .structured import readonly_structured_call" in reviewing
     assert "from ...process_control import run_process" in file_validation
 
 

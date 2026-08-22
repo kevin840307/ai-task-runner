@@ -1,14 +1,14 @@
 """Consistent construction and stage configuration for agent clients."""
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
 
-from .client import AgentClient
 from ..backends import AgentMode, configure_agent_args
 from ..config import RuntimeConfig
 from ..defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+from .client import AgentClient
 
 AgentConstructor = Callable[..., AgentClient]
 

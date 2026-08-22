@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
@@ -63,7 +64,7 @@ class RuntimeConfig:
     script_total: int | None = None
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> "RuntimeConfig":
+    def from_namespace(cls, args: argparse.Namespace) -> RuntimeConfig:
         """Adapt legacy internal Namespace callers without weakening defaults."""
         json_events = bool(getattr(args, "json_events", False))
         return cls(

@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import os
-from itertools import count
+from collections.abc import Callable
 from datetime import datetime, timezone
+from itertools import count
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ..errors import RunnerError
-
 
 _HISTORY_MAX_CALLS = 100
 _HISTORY_MAX_BYTES = 50 * 1024 * 1024
@@ -54,7 +54,7 @@ def _bounded_text(text: str, max_bytes: int | None = None) -> str:
     data = text.encode("utf-8")
     if len(data) <= max_bytes:
         return text
-    marker = f"\n\n--- TRUNCATED: original_bytes={len(data)} ---\n\n".encode("utf-8")
+    marker = f"\n\n--- TRUNCATED: original_bytes={len(data)} ---\n\n".encode()
     budget = max(0, max_bytes - len(marker))
     head = budget // 2
     tail = budget - head

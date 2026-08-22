@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Iterator, TypeVar
+from collections.abc import Callable, Iterator
+from typing import Any, TypeVar
 
 from ..errors import RunnerError
 from ..models import AIValidationResult, PlanJudgment, ReviewResult, Task
-
 
 MAX_RESULT_REASON_CHARS = 4_000
 MAX_MISSING_ITEMS = 100
@@ -126,11 +126,7 @@ def parse_tasks(
                 item.get("description"), f"tasks[{index}].description"
             )
             deliverable = item.get("deliverable", "")
-            if require_deliverable:
-                deliverable = require_non_empty_string(
-                    deliverable, f"tasks[{index}].deliverable"
-                )
-            elif deliverable:
+            if require_deliverable or deliverable:
                 deliverable = require_non_empty_string(
                     deliverable, f"tasks[{index}].deliverable"
                 )
@@ -234,8 +230,8 @@ def parse_ai_validation(text: str) -> AIValidationResult:
 
 
 __all__ = [
-    "MAX_MISSING_ITEM_CHARS",
     "MAX_MISSING_ITEMS",
+    "MAX_MISSING_ITEM_CHARS",
     "MAX_RESULT_REASON_CHARS",
     "parse_ai_validation",
     "parse_json",

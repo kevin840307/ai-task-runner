@@ -1,7 +1,7 @@
 """Generic stage-to-backend argument policy adapter."""
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..backends import configure_agent_args
 

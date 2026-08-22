@@ -3,26 +3,27 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .backends import backend_names
 from .config import EventHandler, RuntimeConfig
+from .core import execute
 from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
     DEFAULT_BACKEND,
+    DEFAULT_FINAL_AI_REQUIRED_PASSES,
+    DEFAULT_FINAL_AI_VALIDATIONS,
+    DEFAULT_LOOP_CONTEXT_COMPRESS,
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
-    DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
-    DEFAULT_LOOP_CONTEXT_COMPRESS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
 )
-from .core import execute
 from .version import __version__
 
 
@@ -64,7 +65,7 @@ class RunRequest:
     json_events: bool = False
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> "RunRequest":
+    def from_namespace(cls, args: argparse.Namespace) -> RunRequest:
         """Convert CLI arguments into the canonical request model."""
         return cls(
             goal=args.goal,
@@ -108,7 +109,7 @@ class RunRequest:
         )
 
     @classmethod
-    def from_mapping(cls, values: Mapping[str, Any]) -> "RunRequest":
+    def from_mapping(cls, values: Mapping[str, Any]) -> RunRequest:
         """Build a request from JSON-like data while rejecting unknown keys."""
         allowed = {item.name for item in fields(cls)}
         unknown = sorted(set(values) - allowed)
@@ -166,6 +167,13 @@ class RunRequest:
 
     def validate(self) -> None:
         """Fail fast with clear errors for every integration surface."""
+        self._validate_request_source()
+        self._validate_mode_options()
+        self._validate_paths_and_collections()
+        self._validate_timeouts_and_limits()
+        self._validate_retry_and_context_settings()
+
+    def _validate_request_source(self) -> None:
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
         if self.goal and self.goal_file:
@@ -182,6 +190,8 @@ class RunRequest:
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script is used")
+
+    def _validate_mode_options(self) -> None:
         if self.ai_validator_prompt and self.ai_validator_prompt_file:
             raise ValueError("use either ai_validator_prompt or ai_validator_prompt_file, not both")
         for name in ("validator_prompt", "ai_validator_prompt"):
@@ -192,6 +202,7 @@ class RunRequest:
         if self.resume and self.force_new:
             raise ValueError("resume and force_new cannot both be true")
 
+    def _validate_paths_and_collections(self) -> None:
         work = Path(self.work_dir)
         if not self.work_dir or work.is_absolute() or ".." in work.parts:
             raise ValueError("work_dir must stay inside project_root")
@@ -203,6 +214,7 @@ class RunRequest:
             ):
                 raise ValueError(f"{name} must be a list of non-empty strings")
 
+    def _validate_timeouts_and_limits(self) -> None:
         if not isinstance(self.validator_timeout, int) or self.validator_timeout <= 0:
             raise ValueError("validator_timeout must be a positive integer")
         if not isinstance(self.agent_timeout, int) or self.agent_timeout < 0:
@@ -229,6 +241,8 @@ class RunRequest:
             raise ValueError(
                 "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
             )
+
+    def _validate_retry_and_context_settings(self) -> None:
         for name in ("retry_delay", "retry_wait", "retry_max_wait"):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or value < 0:
@@ -315,9 +329,9 @@ def _read_state(path: Path) -> dict[str, Any]:
 
 
 __all__ = [
-    "__version__",
     "EventHandler",
     "RunRequest",
     "RunResult",
+    "__version__",
     "run",
 ]

@@ -1,6 +1,5 @@
 from runner.backends.base import BackendError
-from runner.core import diagnostic_error
-from runner.errors import RunnerError
+from runner.errors import RunnerError, diagnostic_error
 
 
 def test_diagnostic_error_finds_nested_backend_error():
