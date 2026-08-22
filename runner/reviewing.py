@@ -1,21 +1,23 @@
 """Read-only task review flow, including adaptive no-tool finalization."""
 from __future__ import annotations
 
-import argparse
-
-from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from pathlib import Path
 from typing import Sequence
 
 from .agent import AgentClient
-from .agent_args import review_agent_args
+from .agent_factory import AgentFactory
+from .config import RuntimeConfig
 from .debug import parse_with_debug
 from .errors import RunnerError
-from .models import ReviewResult, RunState, Task
-from .prompting import review_finalize_prompt, review_prompt, structured_output_retry_prompt
-from .model_results import parse_review
 from .model_call import recover_structured_output, retry_model_call
+from .model_results import parse_review
+from .models import ReviewResult, RunState, Task
 from .project_guard import readonly_ask, require_unchanged_project
+from .prompting import (
+    review_finalize_prompt,
+    review_prompt,
+    structured_output_retry_prompt,
+)
 from .ui import LiveUI
 
 
@@ -30,7 +32,7 @@ def skipped_review(reason: str) -> ReviewResult:
 
 
 def review_task(
-    args: argparse.Namespace,
+    args: RuntimeConfig,
     root: Path,
     work: Path,
     state: RunState,
@@ -38,23 +40,19 @@ def review_task(
     ui: LiveUI,
     task: Task,
     output: str,
+    agent_factory: AgentFactory | None = None,
 ) -> ReviewResult:
     """Review one changed task without changing retry or fallback semantics."""
     debug_dir = work / "debug"
-    reviewer = AgentClient(
-        backend=args.backend,
-        command=args.command,
-        root=root,
-        extra_args=review_agent_args(args.backend, args.agent_arg),
-        session_id="",
+    factory = agent_factory or AgentFactory(
+        args,
+        root,
+        debug_dir,
+        constructor=AgentClient,
+    )
+    reviewer = factory.create(
+        "review",
         timeout=args.planning_timeout,
-        debug_dir=debug_dir,
-        loop_context_compress=getattr(args, "loop_context_compress", False),
-        loop_context_compress_threshold=getattr(
-            args,
-            "loop_context_compress_threshold",
-            DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-        ),
     )
 
     def ask_raw(agent: AgentClient, prompt: str) -> str:

@@ -131,8 +131,8 @@ def test_core_uses_descriptive_canonical_names():
     support = (ROOT / "runner" / "support.py").read_text(encoding="utf-8")
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
 
-    assert "from .models import RunState, Task" in core
-    assert "from .agent import AgentClient" in core
+    assert "from .models import ReviewResult, RunStage, Task" in core
+    assert "from .agent_factory import AgentFactory" in core
     assert "from .model_results import (" in support
     assert "from .prompting import (" not in support
     assert "from runner.prompting import (" in cli

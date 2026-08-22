@@ -1,11 +1,11 @@
 """Planning flow: inspect, finalize, refine, and judge one task plan."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 from typing import Sequence
 
 from .agent import AgentClient
+from .config import RuntimeConfig
 from .debug import parse_with_debug
 from .errors import RunnerError, diagnostic_error
 from .models import RunState, Task
@@ -28,7 +28,7 @@ PLAN_JUDGE_MAX_REWRITES = 2
 
 
 def build_plan(
-    args: argparse.Namespace,
+    args: RuntimeConfig,
     root: Path,
     work: Path,
     state: RunState,

@@ -1,7 +1,6 @@
 """YAML batch mode orchestration."""
 from __future__ import annotations
 
-import argparse
 import copy
 import json
 import sys
@@ -9,11 +8,37 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .config import RuntimeConfig
 from .errors import RunnerError
 from .version import __version__
 
 
-ExecuteOne = Callable[[argparse.Namespace], int]
+ExecuteOne = Callable[[RuntimeConfig], int]
+
+
+def _read_item_file(
+    script: Path,
+    item: dict[str, Any],
+    index: int,
+    field_name: str,
+    encoding: str = "utf-8",
+) -> tuple[str, str] | None:
+    value = item.get(field_name)
+    if not value:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RunnerError(
+            f"script item {index} {field_name} must be a non-empty string"
+        )
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = script.parent / path
+    try:
+        return path.read_text(encoding=encoding), str(path.resolve())
+    except OSError as error:
+        raise RunnerError(
+            f"script item {index} {field_name} not found: {value}"
+        ) from error
 
 
 def load_yaml_script(path: Path) -> list[dict[str, Any]]:
@@ -43,21 +68,9 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
             raise RunnerError(
                 f"script item {index} must use either prompt or goal_file, not both"
             )
-        if goal_file:
-            if not isinstance(goal_file, str) or not goal_file.strip():
-                raise RunnerError(
-                    f"script item {index} goal_file must be a non-empty string"
-                )
-            goal_path = Path(goal_file).expanduser()
-            if not goal_path.is_absolute():
-                goal_path = path.parent / goal_path
-            try:
-                prompt = goal_path.read_text(encoding="utf-8")
-            except OSError as error:
-                raise RunnerError(
-                    f"script item {index} goal_file not found: {goal_file}"
-                ) from error
-            goal_file = str(goal_path.resolve())
+        goal_input = _read_item_file(path, item, index, "goal_file")
+        if goal_input:
+            prompt, goal_file = goal_input
         if not isinstance(prompt, str) or not prompt.strip():
             raise RunnerError(f"script item {index} requires prompt or goal_file")
         if not isinstance(validator, str) or not validator.strip():
@@ -70,21 +83,15 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
             raise RunnerError(
                 f"script item {index} must use either ai_validator_prompt or ai_validator_prompt_file, not both"
             )
-        if ai_prompt_file:
-            if not isinstance(ai_prompt_file, str) or not ai_prompt_file.strip():
-                raise RunnerError(
-                    f"script item {index} ai_validator_prompt_file must be a non-empty string"
-                )
-            ai_path = Path(ai_prompt_file).expanduser()
-            if not ai_path.is_absolute():
-                ai_path = path.parent / ai_path
-            try:
-                ai_prompt = ai_path.read_text(encoding="utf-8-sig")
-            except OSError as error:
-                raise RunnerError(
-                    f"script item {index} ai_validator_prompt_file not found: {ai_prompt_file}"
-                ) from error
-            ai_prompt_file = str(ai_path.resolve())
+        ai_prompt_input = _read_item_file(
+            path,
+            item,
+            index,
+            "ai_validator_prompt_file",
+            "utf-8-sig",
+        )
+        if ai_prompt_input:
+            ai_prompt, ai_prompt_file = ai_prompt_input
         if not isinstance(ai_prompt, str):
             raise RunnerError(f"script item {index} ai_validator_prompt must be a string")
         result = {
@@ -126,7 +133,7 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
     return items
 
 
-def execute_script(args: argparse.Namespace, execute_one: ExecuteOne) -> int:
+def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
     script = Path(args.script).resolve()
     if not script.is_file():
         raise RunnerError("invalid YAML script")
@@ -154,7 +161,7 @@ def execute_script(args: argparse.Namespace, execute_one: ExecuteOne) -> int:
 
 
 def script_event(
-    args: argparse.Namespace,
+    args: RuntimeConfig,
     event_type: str,
     index: int,
     total: int,
@@ -202,10 +209,10 @@ def script_event(
 
 
 def script_item_args(
-    args: argparse.Namespace,
+    args: RuntimeConfig,
     item: dict[str, Any],
     index: int,
-) -> argparse.Namespace:
+) -> RuntimeConfig:
     child = copy.copy(args)
     child.script = None
     child.goal = item["prompt"]

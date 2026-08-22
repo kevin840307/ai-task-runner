@@ -2,40 +2,26 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import time
+from pathlib import Path
 
 from runner.defaults import (
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     MAX_TASK_OUTPUT_CHARS,
     MAX_VALIDATOR_OUTPUT_CHARS,
     NO_PROGRESS_LIMIT,
 )
-import hashlib
-import json
-import tempfile
-import time
-import uuid
-from pathlib import Path
 
-from .agent import AgentClient
-from .agent_args import (
-    planning_agent_args,
-    runtime_agent_args,
-)
-from .errors import RunnerError, backend_diagnostic_parts, diagnostic_error
-from .models import RunState, Task
-from .models import ReviewResult, RunStage
-from .planning import build_plan
-from .reviewing import review_task
-from .policy import protected_paths as policy_protected_paths
-from .prompting import (
-    bounded_text,
-    execution_prompt,
-    should_refresh_goal,
-    render_prompt_template,
-)
-from .ui import LiveUI, show_todo
-from .support import write_json
+from .agent_factory import AgentFactory
+from .ai_validation import run_ai_validator
+from .config import RuntimeConfig
+from .errors import RunnerError, backend_diagnostic_parts
+from .errors import diagnostic_error as diagnostic_error  # Compatibility export.
+from .file_validation import run_file_validator
 from .model_call import retry_model_call
+from .models import ReviewResult, RunStage, Task
+from .planning import build_plan
+from .policy import protected_paths as policy_protected_paths
 from .project_guard import (
     changed_project_files,
     cleanup_stale_artifacts,
@@ -46,10 +32,16 @@ from .project_guard import (
     protected_ask,
     runner_source_files,
 )
-from .validation import run_ai_validator, run_file_validator
-from .script_runner import (
-    execute_script as execute_yaml_script,
+from .prompting import (
+    bounded_text,
+    execution_prompt,
+    render_prompt_template,
+    should_refresh_goal,
 )
+from .reviewing import review_task
+from .script_runner import execute_script as execute_yaml_script
+from .state_store import StateStore
+from .ui import LiveUI, show_todo
 
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
@@ -60,11 +52,12 @@ VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 class TaskRunner:
     """Owns one goal, one main model session, and one state file."""
 
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(self, args: RuntimeConfig | argparse.Namespace) -> None:
+        if not isinstance(args, RuntimeConfig):
+            args = RuntimeConfig.from_namespace(args)
+        self.args = args
         if not args.validator:
             raise RunnerError("--validator is required unless --script is used")
-
-        self.args = args
         self.root = Path(args.project_root).resolve()
         self.ai_validation = args.validator.lower() == "ai"
         self.validator = (
@@ -73,22 +66,26 @@ class TaskRunner:
             else Path(args.validator).resolve()
         )
         self.work = self.root / args.work_dir
-        self.state_file = self.work / "state.json"
-        self.state_backup_file = self._state_backup_file()
+        self.state_store = StateStore(self.root, self.work)
+        self.state_file = self.state_store.path
+        self.state_backup_file = self.state_store.backup_path
 
         self._validate_paths()
         cleanup_stale_artifacts(self.work)
-        self.state = self._load_or_create_state()
-        self.agent = AgentClient(
-            backend=args.backend,
-            command=args.command,
-            root=self.root,
-            extra_args=runtime_agent_args(args.backend, args.agent_arg),
+        self.state = self.state_store.load_or_create(
+            args.goal,
+            resume=args.resume,
+            force_new=args.force_new,
+        )
+        self.agent_factory = AgentFactory(
+            args,
+            self.root,
+            self.work / "debug",
+        )
+        self.agent = self.agent_factory.create(
+            "runtime",
             session_id=self.state.agent_session_id,
             timeout=args.agent_timeout,
-            debug_dir=self.work / "debug",
-            loop_context_compress=getattr(args, "loop_context_compress", False),
-            loop_context_compress_threshold=getattr(args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD),
         )
         self.backend_files = self.agent.prepare_project()
         self.agent.update_goal_reference(getattr(args, "goal_file", None))
@@ -156,62 +153,8 @@ class TaskRunner:
         ]
         return normalize_protected_paths(paths)
 
-    def _load_or_create_state(self) -> RunState:
-        if self.args.resume:
-            self._restore_state_backup()
-            if not self.state_file.is_file():
-                raise RunnerError(
-                    f"resume state not found: {self.state_file}"
-                )
-            try:
-                payload = json.loads(
-                    self.state_file.read_text(encoding="utf-8")
-                )
-                state = RunState.load(payload)
-            except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
-                raise RunnerError(f"invalid resume state: {error}") from error
-            if Path(state.project_root).resolve() != self.root:
-                raise RunnerError(
-                    "resume state belongs to a different project_root"
-                )
-            state.validator_output = bounded_text(
-                state.validator_output,
-                MAX_VALIDATOR_OUTPUT_CHARS,
-            )
-            for task in state.tasks:
-                task.last_output = task.last_output[-MAX_TASK_OUTPUT_CHARS:]
-            return state
-        if not self.args.goal:
-            raise RunnerError("--goal is required")
-        if self.state_file.exists() and not self.args.force_new:
-            raise RunnerError("state exists; use --resume or --force-new")
-
-        return RunState(
-            run_id=str(uuid.uuid4()),
-            goal=self.args.goal,
-            project_root=str(self.root),
-        )
-
     def _save_state(self) -> None:
-        data = self.state.dump()
-        write_json(self.state_file, data)
-        write_json(self.state_backup_file, data)
-
-    def _state_backup_file(self) -> Path:
-        key = hashlib.sha256(str(self.work).lower().encode("utf-8")).hexdigest()[:24]
-        return Path(tempfile.gettempdir()) / "ai-task-runner-state" / key / "state.json"
-
-    def _restore_state_backup(self) -> None:
-        if not self.state_backup_file.is_file():
-            return
-        try:
-            payload = json.loads(self.state_backup_file.read_text(encoding="utf-8"))
-            state = RunState.load(payload)
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            return
-        if Path(state.project_root).resolve() != self.root:
-            return
-        write_json(self.state_file, payload)
+        self.state_store.save(self.state)
 
     def _save_session(self) -> None:
         self.state.agent_session_id = self.agent.session_id
@@ -222,10 +165,15 @@ class TaskRunner:
             return
 
         self._set_stage("planning")
-        self.agent.set_extra_args(
-            planning_agent_args(
-                self.args.backend, self.args.agent_arg, allow_project_read=True
-            )
+        agent_factory = getattr(self, "agent_factory", None) or AgentFactory(
+            self.args,
+            self.root,
+            self.work / "debug",
+        )
+        agent_factory.configure(
+            self.agent,
+            "planning",
+            allow_project_read=True,
         )
         try:
             planned = retry_model_call(
@@ -245,9 +193,7 @@ class TaskRunner:
                 self.args.retry_max_wait,
             )
         finally:
-            self.agent.set_extra_args(
-                runtime_agent_args(self.args.backend, self.args.agent_arg)
-            )
+            agent_factory.configure(self.agent, "runtime")
         self.state.agent_session_id = self.agent.session_id
         self.state.tasks = planned
         self.state.current = 0
@@ -512,6 +458,7 @@ class TaskRunner:
             self.ui,
             task,
             output,
+            getattr(self, "agent_factory", None),
         )
         if review.get("review_skipped"):
             task.review_skip_reason = str(review.get("reason", ""))
@@ -605,9 +552,10 @@ class TaskRunner:
                 self.state,
                 self.protected,
                 self.ui,
-                runtime_agent_args(self.args.backend, self.args.agent_arg),
+                None,
                 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
                 ai_prompt,
+                agent_factory=getattr(self, "agent_factory", None),
             )
 
         assert self.validator is not None
@@ -629,19 +577,22 @@ class TaskRunner:
             self.state,
             self.protected,
             self.ui,
-            runtime_agent_args(self.args.backend, self.args.agent_arg),
+            None,
             MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
             ai_prompt,
+            agent_factory=getattr(self, "agent_factory", None),
         )
         return ai_passed, "FILE_VALIDATION_PASS\n" + ai_output
 
 
-def execute(args: argparse.Namespace) -> int:
+def execute(args: RuntimeConfig | argparse.Namespace) -> int:
+    if not isinstance(args, RuntimeConfig):
+        args = RuntimeConfig.from_namespace(args)
     if args.script:
         return execute_script(args)
     return TaskRunner(args).run()
 
 
-def execute_script(args: argparse.Namespace) -> int:
+def execute_script(args: RuntimeConfig) -> int:
     """Compatibility wrapper for callers that import script mode directly."""
     return execute_yaml_script(args, execute)

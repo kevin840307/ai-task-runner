@@ -176,23 +176,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
             return 130
         except Exception as error:
-            log = Path(request.project_root, request.work_dir, "exception.log").resolve()
-            log.parent.mkdir(parents=True, exist_ok=True)
-            with log.open("a", encoding="utf-8") as file:
-                file.write(
-                    f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-                    f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
-                )
-            state_file = Path(
-                request.project_root, request.work_dir, "state.json"
-            ).resolve()
-            if state_file.is_file():
-                request.resume, request.force_new = True, False
-                detail = f"{error}; retrying from state"
-            else:
-                detail = f"{error}; retrying original request"
-            _report_error(request, "runner.retry", detail, 0)
-            time.sleep(max(1, request.retry_delay))
+            _recover_from_unexpected_error(request, error)
+
+
+def _recover_from_unexpected_error(
+    request: RunRequest,
+    error: BaseException,
+) -> None:
+    log = Path(request.project_root, request.work_dir, "exception.log").resolve()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a", encoding="utf-8") as file:
+        file.write(
+            f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
+        )
+
+    state_file = Path(request.project_root, request.work_dir, "state.json").resolve()
+    if state_file.is_file():
+        request.resume, request.force_new = True, False
+        detail = f"{error}; retrying from state"
+    else:
+        detail = f"{error}; retrying original request"
+    _report_error(request, "runner.retry", detail, 0)
+    time.sleep(max(1, request.retry_delay))
 
 
 def _report_error(

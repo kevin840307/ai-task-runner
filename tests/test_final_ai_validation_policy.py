@@ -72,7 +72,7 @@ def test_majority_outvotes_one_explicit_fail():
 def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import validation
+    from runner import ai_validation
     from runner.models import RunState
 
     sessions = []
@@ -86,14 +86,14 @@ def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
         def __init__(self, **kwargs):
             sessions.append(kwargs["session_id"])
 
-    monkeypatch.setattr(validation, "AgentClient", FakeAgent)
+    monkeypatch.setattr(ai_validation, "AgentClient", FakeAgent)
     monkeypatch.setattr(
-        validation,
+        ai_validation,
         "readonly_ask",
         lambda *args, **kwargs: (next(replies), [], []),
     )
     monkeypatch.setattr(
-        validation,
+        ai_validation,
         "retry_model_call",
         lambda call, *args, **kwargs: call(),
     )
@@ -109,7 +109,7 @@ def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
         final_ai_required_passes=2,
     )
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    passed, output = validation.run_ai_validator(
+    passed, output = ai_validation.run_ai_validator(
         args, tmp_path, tmp_path / ".work", state, [], object(), [], 1
     )
 
@@ -121,7 +121,7 @@ def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
 def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import validation
+    from runner import ai_validation
     from runner.models import RunState
 
     sessions = []
@@ -135,9 +135,17 @@ def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_p
         def __init__(self, **kwargs):
             sessions.append(kwargs["session_id"])
 
-    monkeypatch.setattr(validation, "AgentClient", FakeAgent)
-    monkeypatch.setattr(validation, "readonly_ask", lambda *a, **k: (next(replies), [], []))
-    monkeypatch.setattr(validation, "retry_model_call", lambda call, *a, **k: call())
+    monkeypatch.setattr(ai_validation, "AgentClient", FakeAgent)
+    monkeypatch.setattr(
+        ai_validation,
+        "readonly_ask",
+        lambda *a, **k: (next(replies), [], []),
+    )
+    monkeypatch.setattr(
+        ai_validation,
+        "retry_model_call",
+        lambda call, *a, **k: call(),
+    )
 
     args = SimpleNamespace(
         backend="qwen", command=None, agent_timeout=0,
@@ -145,7 +153,7 @@ def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_p
         final_ai_validations=3, final_ai_required_passes=0,
     )
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    passed, output = validation.run_ai_validator(
+    passed, output = ai_validation.run_ai_validator(
         args, tmp_path, tmp_path / ".work", state, [], object(), [], 1, "custom"
     )
 

@@ -30,6 +30,13 @@ def default_command(name: str) -> str:
     return BACKENDS[name].default_command
 
 
+def _backend_type(name: str) -> type[AgentBackend]:
+    try:
+        return BACKENDS[name]
+    except KeyError as error:
+        raise BackendError(f"unsupported backend: {name}") from error
+
+
 def configure_agent_args(
     name: str,
     mode: AgentMode,
@@ -37,10 +44,7 @@ def configure_agent_args(
     *,
     allow_project_read: bool = False,
 ) -> list[str]:
-    try:
-        backend_type = BACKENDS[name]
-    except KeyError as error:
-        raise BackendError(f"unsupported backend: {name}") from error
+    backend_type = _backend_type(name)
     return backend_type.configure_args(
         mode,
         extra_args,
@@ -55,10 +59,7 @@ def create_backend(
     extra_args: Sequence[str],
     timeout: int = DEFAULT_AGENT_TIMEOUT,
 ) -> AgentBackend:
-    try:
-        backend_type = BACKENDS[name]
-    except KeyError as error:
-        raise BackendError(f"unsupported backend: {name}") from error
+    backend_type = _backend_type(name)
     return backend_type(
         command or backend_type.default_command, root, extra_args, timeout
     )

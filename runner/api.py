@@ -5,9 +5,10 @@ import argparse
 import json
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
-from runner.backends import backend_names
+from .backends import backend_names
+from .config import EventHandler, RuntimeConfig
 from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
@@ -23,8 +24,6 @@ from .defaults import (
 )
 from .core import execute
 from .version import __version__
-
-EventHandler = Callable[[dict[str, Any]], None]
 
 
 @dataclass
@@ -121,8 +120,15 @@ class RunRequest:
         self,
         on_event: EventHandler | None = None,
     ) -> argparse.Namespace:
-        """Adapt the public request to the existing core execution contract."""
-        return argparse.Namespace(
+        """Compatibility adapter for integrations expecting argparse fields."""
+        return self.to_runtime_config(on_event).to_namespace()
+
+    def to_runtime_config(
+        self,
+        on_event: EventHandler | None = None,
+    ) -> RuntimeConfig:
+        """Resolve public request inputs into the typed execution contract."""
+        return RuntimeConfig(
             goal=self._effective_goal(),
             goal_file=self.goal_file,
             project_root=self.project_root,
@@ -242,20 +248,24 @@ class RunRequest:
             return self.goal
         if not self.goal_file:
             return ""
-        path = Path(self.goal_file).expanduser()
-        if not path.is_file():
-            raise ValueError(f"goal_file not found: {self.goal_file}")
-        return path.read_text(encoding="utf-8-sig")
+        return _read_text_file(self.goal_file, "goal_file")
 
     def _effective_ai_validator_prompt(self) -> str:
         if self.ai_validator_prompt:
             return self.ai_validator_prompt
         if not self.ai_validator_prompt_file:
             return ""
-        path = Path(self.ai_validator_prompt_file).expanduser()
-        if not path.is_file():
-            raise ValueError(f"ai_validator_prompt_file not found: {self.ai_validator_prompt_file}")
-        return path.read_text(encoding="utf-8-sig")
+        return _read_text_file(
+            self.ai_validator_prompt_file,
+            "ai_validator_prompt_file",
+        )
+
+
+def _read_text_file(filename: str, field_name: str) -> str:
+    path = Path(filename).expanduser()
+    if not path.is_file():
+        raise ValueError(f"{field_name} not found: {filename}")
+    return path.read_text(encoding="utf-8-sig")
 
 
 # Backward-compatible name used by the previous release.
@@ -284,8 +294,8 @@ def run(
         request = RunRequest.from_mapping(request)
 
     request.validate()
-    args = request.to_namespace(on_event)
-    exit_code = execute(args)
+    config = request.to_runtime_config(on_event)
+    exit_code = execute(config)
     state_files = _state_files(request)
     states = tuple(_read_state(path) for path in state_files if path.is_file())
     return RunResult(
