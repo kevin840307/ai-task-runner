@@ -21,12 +21,12 @@ For repair planning, keep the original goal authoritative, use the latest valida
 Quality gate:
 1. Every TODO must create or modify one concrete, observable project result requested by the goal. For an implementation/change goal, remove any TODO whose deliverable can be satisfied without changing a requested project result.
 2. Project-wide understanding was already completed in a dedicated planning turn before TODO creation. Treat any standalone task whose purpose is to obtain that understanding as invalid even if the draft contains it. Knowledge, findings, design decisions, review decisions, and existing checks are supporting steps, not standalone deliverables. Put any remaining task-specific inspection inside the concrete TODO that uses it unless the goal explicitly requests its artifact as an end result.
-3. Split changes whenever they can be implemented, reviewed, verified, retried, or fail independently. Multiple TODOs may modify the same file; never use file count as the task boundary.
-4. Small focused changes are valid. Merge only duplicate or process-only tasks, not independent changes that happen to share a file or component.
+3. Split changes only when each part produces an independently valuable observable result and can be completed and reviewed without relying on another part's unfinished behavior. Multiple TODOs may modify the same file; never use file count as the task boundary.
+4. Keep one coherent behavior together with its required error handling and edge cases. Merge fragmented, duplicate, or process-only tasks; do not merge genuinely independent deliverables merely because they share a file or component.
 5. Each description must contain the task-specific context needed to execute it without rereading the original goal or draft plan.
 6. Each deliverable must state the exact end result. Acceptance criteria must make the stopping point objectively clear.
 7. Remove runner-owned final validation, retry, generic cleanup, read-only inspection, and check-only tasks unless the goal explicitly requests that artifact or changed behavior. Never create a TODO whose primary purpose is to run, inspect, or modify the final validator.
-8. Keep dependencies ordered. Return at least $minimum_tasks task(s); reach the minimum by splitting real independently verifiable implementation behavior or project changes, never by preserving or inventing preparation/read/check tasks.
+8. Keep dependencies ordered. Return at least $minimum_tasks task(s), using only as many tasks as the real deliverables require. Never split work to reach a target count or preserve/invent preparation/read/check tasks.
 9. Include genuinely goal-wide compatibility, safety, and non-regression constraints consistently so they can be summarized for execution.
 
 Before returning, independently reject and rewrite the plan if any TODO can finish without producing its requested project result, exists only to gather knowledge/check work, duplicates another TODO, or combines independently implementable or verifiable changes.

@@ -13,7 +13,7 @@ Expected/reference/golden/snapshot/fixture files are read-only unless the user e
 After any tool error, change the next action or arguments; never immediately repeat the identical tool call. Do not repeat the same inspection or test hypothesis without new evidence. Stop when the TODO is satisfied or safely improved; do not continue exploring or work on later TODOs.
 Do not ask questions or wait for input. Make the safest reasonable assumption within the current TODO.
 Work directly in this session; do not delegate to subagents or use computer-use, browser, desktop, app-launch, background, or scaffolding tools.
-Do not create scratch, diagnostic, runner-state, or sidecar files unless they are required deliverables.
+Do not leave scratch, diagnostic, runner-state, sidecar, or ad hoc verification files in the project unless they are required deliverables. Use an existing temporary location for disposable checks and remove any temporary artifacts before finishing.
 
 Run context:
 $context_json

@@ -1,9 +1,14 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
-import json
 
+from runner.agent.prompts import (
+    plan_finalize_prompt,
+    plan_judge_prompt,
+    plan_refine_prompt,
+    plan_understand_prompt,
+)
 from runner.models import RunState, Task
-from runner.agent.prompts import plan_finalize_prompt, plan_judge_prompt, plan_understand_prompt, plan_refine_prompt
 
 
 def judge_payload(*, rejected_index: int | None = None, issue: str = "Task needs revision"):
@@ -53,11 +58,11 @@ def test_planner_requires_self_contained_bounded_tasks(tmp_path: Path):
 
     assert "concrete observable project result" in prompt
     assert "local inspection needed for that task" in prompt
-    assert "real deliverables" in prompt
-    assert "Return at least 6 ordered task(s)" in prompt
-    assert "Split independently implementable or verifiable changes" in prompt
+    assert "independently valuable observable result" in prompt
+    assert "Return at least 1 ordered task(s)" in prompt
+    assert "Keep an operation together with its required error handling and edge cases" in prompt
     assert "Do not create standalone inspection" in prompt
-    assert "never manufacture preparation/read/check tasks" in prompt
+    assert "Never split work to target a task count" in prompt
     assert "Do not create umbrella TODOs" in prompt
     assert "Goal:" not in prompt
     assert "Project root:" not in prompt
@@ -101,7 +106,8 @@ def test_plan_judge_is_semantic_and_read_only(tmp_path: Path):
     assert 'FAIL:' in prompt
     assert 'PASS:' in prompt
     assert "process-only/read-only/check-only" in prompt
-    assert "combines independently actionable changes" in prompt
+    assert "combines multiple independently valuable observable changes" in prompt
+    assert "fragments one coherent behavior" in prompt
     assert "Standalone project-understanding/inspection work is invalid" in prompt
 
 
@@ -305,8 +311,9 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
 
 def test_parse_plan_judgment_contract():
     import pytest
-    from runner.errors import RunnerError
+
     from runner.agent.results import parse_plan_judgment
+    from runner.errors import RunnerError
 
     assert parse_plan_judgment(json.dumps({"accepted": True, "issues": []}))["accepted"] is True
     rejected = parse_plan_judgment(

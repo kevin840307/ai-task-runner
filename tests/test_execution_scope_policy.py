@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from runner.models import RunState, Task
 from runner.agent.prompts import execution_prompt, render_prompt_template
+from runner.models import RunState, Task
 
 
 def state(attempts=1):
@@ -27,7 +27,8 @@ def test_fresh_execution_prompt_embeds_goal_as_context_not_completed_task_list(t
     assert "Current TODO is the only executable scope" in prompt
     assert "Do not run the final project validator" in prompt
     assert "satisfied or safely improved" in prompt
-    assert "scratch, diagnostic, runner-state, or sidecar files" in prompt
+    assert "ad hoc verification files" in prompt
+    assert "remove any temporary artifacts before finishing" in prompt
     assert "Make the smallest maintainable change that satisfies the deliverable and acceptance criteria" in prompt
     assert "If no project change is required, do not modify files" in prompt
 
@@ -66,6 +67,32 @@ def _runner(tmp_path, task):
     runner._save_session = lambda: None
     runner._set_stage = lambda *args: None
     return runner
+
+
+def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
+    import runner.core as core
+
+    task = Task(
+        id="c01-t001",
+        title="Focused change",
+        description="Do work",
+        deliverable="result",
+        acceptance_criteria=["result exists"],
+    )
+    runner = _runner(tmp_path, task)
+    events = []
+    runner.ui = SimpleNamespace(set=lambda *args: events.append(args))
+    monkeypatch.setattr(
+        core,
+        "show_todo",
+        lambda *args: events.append(("duplicate progress",)),
+    )
+
+    core.TaskRunner._complete_current_task(runner, task)
+
+    assert task.status == "completed"
+    assert runner.state.current == 1
+    assert events == [("任務完成", "Focused change")]
 
 
 def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monkeypatch):

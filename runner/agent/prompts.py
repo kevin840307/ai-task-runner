@@ -7,6 +7,7 @@ from pathlib import Path
 from string import Template as PromptTemplate
 from typing import Any
 
+from ..defaults import MIN_PLANNED_TASKS
 from ..errors import RunnerError
 from ..models import RunState, Task
 from ..safety.policy import instructions
@@ -115,7 +116,7 @@ def _planning_context(
         "root": root,
         "progress_json": json.dumps(progress, ensure_ascii=False),
         "work_dir": work_dir,
-        "minimum_tasks": 6 if state.cycle == 1 else 1,
+        "minimum_tasks": MIN_PLANNED_TASKS,
         "planning_mode": "initial" if state.cycle == 1 else "repair",
     }
 

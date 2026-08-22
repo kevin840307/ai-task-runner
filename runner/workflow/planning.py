@@ -17,12 +17,12 @@ from ..agent.prompts import (
 )
 from ..agent.results import parse_plan_judgment, parse_tasks
 from ..config import RuntimeConfig
+from ..defaults import MIN_PLANNED_TASKS
 from ..errors import RunnerError, diagnostic_error
 from ..models import PlanJudgment, RunState, Task
 from ..safety.project_guard import readonly_ask
 from ..ui import LiveUI
 
-MIN_PLANNED_TASKS = 1
 PLAN_JUDGE_MAX_REWRITES = 2
 
 
@@ -43,13 +43,12 @@ class _PlanningFlow:
         return self.work / "debug"
 
     def parse_plan(self, text: str) -> list[Task]:
-        min_tasks = MIN_PLANNED_TASKS if self.state.cycle == 1 else 1
         return parse_with_debug(
             self.debug_dir,
             parse_tasks,
             text,
             self.state.cycle,
-            min_tasks=min_tasks,
+            min_tasks=MIN_PLANNED_TASKS,
             require_deliverable=True,
         )
 

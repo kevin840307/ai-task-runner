@@ -376,7 +376,6 @@ class TaskRunner:
         self.state.current += 1
         self._save_state()
         self.ui.set("任務完成", task.title)
-        show_todo(self.state, self.ui)
 
     def _validator_repair_hint(self) -> str:
         if not self.state.validator_output.strip():
