@@ -1,6 +1,6 @@
 # 系統架構
 
-版本：1.2.5
+版本：1.2.12
 
 ## 責任邊界
 Runner 只負責 orchestration、state、retry/recovery、session policy、保護、模型傳輸、Prompt 組裝、result parsing、validation orchestration、UI/events 與 diagnostics。Runner 不應理解應用程式 workflow、FAB、ENV、版本或 business value。專案需求應存在 Goal、專案程式碼、Validator、Template、Fixture 與 `.ai-task-runner.yaml`。

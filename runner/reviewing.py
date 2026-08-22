@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+
+from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from pathlib import Path
 from typing import Sequence
 
@@ -12,7 +14,8 @@ from .errors import RunnerError
 from .models import RunState, Task
 from .prompting import review_finalize_prompt, review_prompt, structured_output_retry_prompt
 from .model_results import parse_review
-from .support import recover_structured_output, readonly_ask, retry_model_call
+from .model_call import recover_structured_output, retry_model_call
+from .project_guard import readonly_ask
 from .ui import LiveUI
 
 

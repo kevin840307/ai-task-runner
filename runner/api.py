@@ -18,6 +18,8 @@ from .defaults import (
     DEFAULT_FINAL_AI_VALIDATIONS,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
+    DEFAULT_LOOP_CONTEXT_COMPRESS,
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
 )
 from .core import execute
 from .version import __version__
@@ -53,6 +55,8 @@ class RunRequest:
     retry_max_wait: float = 300
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
+    loop_context_compress: bool = DEFAULT_LOOP_CONTEXT_COMPRESS
+    loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
@@ -91,6 +95,10 @@ class RunRequest:
             ),
             final_ai_required_passes=getattr(
                 args, "final_ai_required_passes", DEFAULT_FINAL_AI_REQUIRED_PASSES
+            ),
+            loop_context_compress=getattr(args, "loop_context_compress", False),
+            loop_context_compress_threshold=getattr(
+                args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
             ),
             work_dir=args.work_dir,
             resume=args.resume,
@@ -139,6 +147,8 @@ class RunRequest:
             retry_max_wait=self.retry_max_wait,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
+            loop_context_compress=self.loop_context_compress,
+            loop_context_compress_threshold=self.loop_context_compress_threshold,
             work_dir=self.work_dir,
             resume=self.resume,
             force_new=self.force_new,
@@ -219,6 +229,13 @@ class RunRequest:
                 raise ValueError(f"{name} must be a non-negative number")
         if self.retry_max_wait < self.retry_wait:
             raise ValueError("retry_max_wait must be greater than or equal to retry_wait")
+        if not isinstance(self.loop_context_compress, bool):
+            raise ValueError("loop_context_compress must be a boolean")
+        if (
+            not isinstance(self.loop_context_compress_threshold, (int, float))
+            or not 0 <= self.loop_context_compress_threshold <= 100
+        ):
+            raise ValueError("loop_context_compress_threshold must be between 0 and 100")
 
     def _effective_goal(self) -> str:
         if isinstance(self.goal, str):

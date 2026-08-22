@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.5
+Version: 1.2.12
 
 ## Responsibility boundary
 The Runner owns orchestration; project code and validators own application-specific behavior.

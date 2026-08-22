@@ -39,6 +39,8 @@ def test_core_has_no_backend_specific_command_logic():
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
     assert 'backend == "opencode"' not in source
+    assert 'backend == "qwen"' not in source
+    assert 'runner.backends.qwen' not in source
 
 
 def test_windows_quoted_command_path_is_unwrapped():
@@ -318,4 +320,68 @@ def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
     assert result.return_code == 0
     assert f"LEN={len(prompt)}" in result.output
     assert "EOF" in result.output
+
+
+
+def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
+    from runner.process_control import ProcessResult
+    import runner.backends.qwen as qwen_module
+
+    backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
+    captured = {}
+
+    def fake_run(command, cwd, timeout, *args, **kwargs):
+        captured["command"] = list(command)
+        captured["cwd"] = cwd
+        captured["timeout"] = timeout
+        return ProcessResult(
+            "## Context Usage\nModel: Qwen3.5-4B  Context window: 100.0k tokens\n",
+            0,
+        )
+
+    monkeypatch.setattr(qwen_module, "run_process", fake_run)
+    snapshot = backend.context_snapshot("session-123")
+
+    assert snapshot.startswith("## Context Usage")
+    assert captured["command"][:3] == [sys.executable, "-p", "/context"]
+    assert captured["command"][captured["command"].index("--resume") + 1] == "session-123"
+    assert "--output-format" not in captured["command"]
+    assert captured["command"][-2:] == ["--model", "local"]
+    assert captured["cwd"] == tmp_path
+    assert captured["timeout"] <= 30
+
+
+def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
+    from runner.process_control import ProcessResult
+    import runner.backends.qwen as qwen_module
+
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    monkeypatch.setattr(
+        qwen_module,
+        "run_process",
+        lambda *args, **kwargs: ProcessResult("cannot resume", 1),
+    )
+
+    assert backend.context_snapshot("session-123") == "ERROR: /context exit 1 | cannot resume"
+
+
+def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
+    from runner.process_control import ProcessResult
+    import runner.backends.qwen as qwen_module
+
+    backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
+    calls = []
+
+    def fake_run(command, cwd, timeout, *args, **kwargs):
+        calls.append(list(command))
+        return ProcessResult("Compressed session", 0)
+
+    monkeypatch.setattr(qwen_module, "run_process", fake_run)
+    assert backend.context_usage_percent(
+        "## Context Usage\nUsed 54.6k tokens (54.6%)\n"
+    ) == 54.6
+    assert backend.context_usage_percent("No API response yet") is None
+    assert backend.compress_session("session-123") == "Compressed session"
+    assert calls[0][:3] == [sys.executable, "-p", "/compress-fast"]
+    assert calls[0][calls[0].index("--resume") + 1] == "session-123"
 

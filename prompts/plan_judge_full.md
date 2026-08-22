@@ -26,7 +26,7 @@ Reject the complete $planning_mode plan if any of these are false:
 7. The plan contains at least $minimum_tasks ordered task(s), with the minimum satisfied by real independently verifiable implementation behavior or project changes rather than preparation/read/check tasks.
 
 Never judge from title wording or keyword matching. Judge the descriptions, deliverables, acceptance criteria, goal, and ordering.
-When rejecting, issues must identify the affected task number or plan-wide defect and state the required correction.
+When rejecting, issues must identify the affected task number or plan-wide defect and state the required correction. Do not reverse an earlier split/merge correction in the same planning session unless new concrete evidence makes the prior correction invalid.
 
 Return only valid JSON, without Markdown or explanation.
 

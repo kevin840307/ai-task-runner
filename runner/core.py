@@ -2,6 +2,13 @@
 from __future__ import annotations
 
 import argparse
+
+from runner.defaults import (
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+    MAX_TASK_OUTPUT_CHARS,
+    MAX_VALIDATOR_OUTPUT_CHARS,
+    NO_PROGRESS_LIMIT,
+)
 import hashlib
 import json
 import tempfile
@@ -27,24 +34,19 @@ from .prompting import (
     render_prompt_template,
 )
 from .ui import LiveUI, show_todo
-from .support import (
-    MAX_TASK_OUTPUT_CHARS,
-    MAX_VALIDATOR_OUTPUT_CHARS,
-    NO_PROGRESS_LIMIT,
+from .support import write_json
+from .model_call import retry_model_call
+from .project_guard import (
     changed_project_files,
     cleanup_stale_artifacts,
+    normalize_protected_paths,
+    progress_key,
     project_fingerprint,
     project_manifest,
     protected_ask,
-    progress_key,
-    retry_model_call,
-    run_file_validator,
-    normalize_protected_paths,
     runner_source_files,
-    write_json,
 )
-from .validation import run_ai_validator
-from .backends.qwen import update_qwen_goal_reference
+from .validation import run_ai_validator, run_file_validator
 from .script_runner import (
     execute_script as execute_yaml_script,
 )
@@ -85,10 +87,11 @@ class TaskRunner:
             session_id=self.state.agent_session_id,
             timeout=args.agent_timeout,
             debug_dir=self.work / "debug",
+            loop_context_compress=getattr(args, "loop_context_compress", False),
+            loop_context_compress_threshold=getattr(args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD),
         )
         self.backend_files = self.agent.prepare_project()
-        if args.backend == "qwen":
-            update_qwen_goal_reference(self.root, getattr(args, "goal_file", None))
+        self.agent.update_goal_reference(getattr(args, "goal_file", None))
         if not args.resume:
             self._save_state()
         self.protected = self._build_protected_files()
@@ -335,6 +338,8 @@ class TaskRunner:
             f"session={self.agent.session_id or '-'}",
             f"changed_files={len(changed_files)}:{changed_detail}",
             f"task_changed_files={len(task.changed_files)}",
+            f"stagnant_attempts={task.stagnant_attempts}",
+            f"failure_signature={task.progress_key[:12] or '-'}",
         ]
         cause = diagnostic_error(error)
         if cause is not None:
@@ -350,6 +355,40 @@ class TaskRunner:
             source_event = getattr(cause, "session_source_event", "")
             if source_event:
                 details.append(f"session_source_event={source_event}")
+            diagnostics = getattr(cause, "diagnostics", {})
+            if diagnostics:
+                for name in (
+                    "loop_type",
+                    "num_turns",
+                    "context_used_percent",
+                    "context_compress_enabled",
+                    "context_compress_threshold",
+                    "context_compress_status",
+                    "context_compress_reason",
+                    "input_tokens",
+                    "cache_read_input_tokens",
+                    "output_tokens",
+                    "total_tokens",
+                ):
+                    value = diagnostics.get(name)
+                    if value not in (None, ""):
+                        details.append(f"{name}={value}")
+                if any(name in diagnostics for name in (
+                    "input_tokens", "cache_read_input_tokens", "total_tokens"
+                )):
+                    details.append("token_scope=backend_reported_not_current_context")
+                snapshot = diagnostics.get("context_snapshot")
+                if snapshot:
+                    details.append(
+                        "context_snapshot="
+                        + " ".join(str(snapshot).split())[-2000:]
+                    )
+                compression = diagnostics.get("context_compression")
+                if compression:
+                    details.append(
+                        "context_compression="
+                        + " ".join(str(compression).split())[-1000:]
+                    )
             output = getattr(cause, "output", "")
             if output:
                 tail = " ".join(str(output).split())[-1000:]

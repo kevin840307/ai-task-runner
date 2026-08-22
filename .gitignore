@@ -4,3 +4,4 @@ __pycache__/
 .qwen/
 .ai-task*/
 .pytest_cache/
+examples/

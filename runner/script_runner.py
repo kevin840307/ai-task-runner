@@ -104,6 +104,16 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
                     f"script item {index} project_root must be a non-empty string"
                 )
             result["project_root"] = project_root.strip()
+        if "loop_context_compress" in item:
+            value = item["loop_context_compress"]
+            if not isinstance(value, bool):
+                raise RunnerError(f"script item {index} loop_context_compress must be a boolean")
+            result["loop_context_compress"] = value
+        if "loop_context_compress_threshold" in item:
+            value = item["loop_context_compress_threshold"]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 100:
+                raise RunnerError(f"script item {index} loop_context_compress_threshold must be between 0 and 100")
+            result["loop_context_compress_threshold"] = float(value)
         for name in ("ai_validator_count", "ai_validator_required_passes"):
             if name in item:
                 value = item[name]
@@ -213,6 +223,12 @@ def script_item_args(
     )
     child.final_ai_required_passes = item.get(
         "ai_validator_required_passes", child.final_ai_required_passes
+    )
+    child.loop_context_compress = item.get(
+        "loop_context_compress", getattr(child, "loop_context_compress", False)
+    )
+    child.loop_context_compress_threshold = item.get(
+        "loop_context_compress_threshold", getattr(child, "loop_context_compress_threshold", 50.0)
     )
     if child.final_ai_validations < 1:
         raise RunnerError(f"script item {index} ai_validator_count must be positive")

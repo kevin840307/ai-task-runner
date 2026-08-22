@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Sequence
 
 from runner.defaults import DEFAULT_QWEN_COMMAND
+from runner.process_control import run_process
 from .base import AgentBackend, BackendError, BackendResult, ensure_project_rules
 
 
@@ -49,6 +51,39 @@ class QwenBackend(AgentBackend):
 
     def prepare_project(self) -> list[Path]:
         return [ensure_qwen_rules(self.root)]
+
+    def update_goal_reference(self, goal_file: str | None) -> None:
+        update_qwen_goal_reference(self.root, goal_file)
+
+    def context_snapshot(self, session_id: str) -> str:
+        """Run Qwen's read-only /context display command for diagnostics only."""
+        return self._session_command(session_id, "/context", timeout=30)
+
+    def context_usage_percent(self, snapshot: str) -> float | None:
+        match = re.search(r"Used\s+[0-9.]+[kKmM]?\s+tokens\s+\(([0-9.]+)%\)", snapshot)
+        return float(match.group(1)) if match else None
+
+    def compress_session(self, session_id: str) -> str:
+        """Use Qwen's non-AI fast compaction on an existing session."""
+        return self._session_command(session_id, "/compress-fast", timeout=60)
+
+    def _session_command(self, session_id: str, command: str, timeout: int) -> str:
+        if not session_id:
+            return ""
+        try:
+            result = run_process(
+                [*self.base_command, "-p", command, "--resume", session_id, *self.extra_args],
+                self.root,
+                min(self.timeout, timeout),
+            )
+        except Exception as error:
+            return f"ERROR: {type(error).__name__}: {error}"
+        output = result.output.strip()
+        if result.timed_out:
+            return f"ERROR: {command} timed out | {output}".strip()
+        if result.return_code:
+            return f"ERROR: {command} exit {result.return_code} | {output}".strip()
+        return output
 
     @staticmethod
     def _find_result(values: Sequence[Any]) -> str | None:

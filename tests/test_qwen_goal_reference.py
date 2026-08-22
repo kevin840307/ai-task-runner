@@ -34,3 +34,16 @@ def test_inline_goal_removes_managed_reference(tmp_path: Path):
     text = path.read_text(encoding="utf-8")
     assert GOAL_REFERENCE_START not in text
     assert "# AI Task Runner Rules" in text
+
+
+def test_qwen_backend_goal_reference_hook(tmp_path):
+    from runner.backends.qwen import QwenBackend
+
+    goal = tmp_path / "goal.md"
+    goal.write_text("goal", encoding="utf-8")
+    import sys
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    backend.update_goal_reference(str(goal))
+
+    text = (tmp_path / "QWEN.md").read_text(encoding="utf-8")
+    assert goal.resolve().as_posix() in text

@@ -29,6 +29,7 @@ class BackendError(RunnerError):
         output: str = "",
         command_mode: str = "",
         session_source_event: str = "",
+        diagnostics: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.session_id = session_id
@@ -37,6 +38,7 @@ class BackendError(RunnerError):
         self.output = output
         self.command_mode = command_mode
         self.session_source_event = session_source_event
+        self.diagnostics = dict(diagnostics or {})
 
 
 @dataclass(frozen=True)
@@ -162,6 +164,7 @@ class AgentBackend(ABC):
                 output=output,
                 command_mode=command_mode,
                 session_source_event=self.find_session_source_event(events),
+                diagnostics=self.extract_diagnostics(events, failure_output),
             )
         decoded = self.decode(output)
         if not decoded.text.strip():
@@ -200,6 +203,21 @@ class AgentBackend(ABC):
         """Create optional backend-specific project files and return them."""
         return []
 
+    def update_goal_reference(self, goal_file: str | None) -> None:
+        """Optionally expose the original goal file through backend project metadata."""
+
+    def context_snapshot(self, session_id: str) -> str:
+        """Return optional read-only backend context diagnostics for logging."""
+        return ""
+
+    def context_usage_percent(self, snapshot: str) -> float | None:
+        """Extract current context usage from a backend snapshot when supported."""
+        return None
+
+    def compress_session(self, session_id: str) -> str:
+        """Optionally compact a backend session and return diagnostic text."""
+        return ""
+
     def stdin_prompt(self, prompt: str) -> str | None:
         """Return a prompt payload for stdin, or None when argv carries the prompt."""
         return None
@@ -230,6 +248,44 @@ class AgentBackend(ABC):
                 continue
         return events
 
+
+
+    @staticmethod
+    def extract_diagnostics(values: Sequence[Any], error_text: str = "") -> dict[str, Any]:
+        """Extract backend-reported execution telemetry for logging only."""
+        diagnostics: dict[str, Any] = {}
+        text = error_text.lower()
+        if "consecutive_identical_tool_calls" in text:
+            diagnostics["loop_type"] = "consecutive_identical_tool_calls"
+        elif "turn_tool_call_cap" in text:
+            diagnostics["loop_type"] = "turn_tool_call_cap"
+        elif "loop detection" in text:
+            diagnostics["loop_type"] = "loop_detection"
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                if "num_turns" in value and isinstance(value.get("num_turns"), (int, float)):
+                    diagnostics["num_turns"] = int(value["num_turns"])
+                usage = value.get("usage")
+                if isinstance(usage, dict):
+                    for source, target in (
+                        ("input_tokens", "input_tokens"),
+                        ("output_tokens", "output_tokens"),
+                        ("cache_read_input_tokens", "cache_read_input_tokens"),
+                        ("total_tokens", "total_tokens"),
+                    ):
+                        token_value = usage.get(source)
+                        if isinstance(token_value, (int, float)):
+                            diagnostics[target] = int(token_value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        for value in values:
+            visit(value)
+        return diagnostics
 
     @staticmethod
     def find_session_source_event(values: Sequence[Any]) -> str:

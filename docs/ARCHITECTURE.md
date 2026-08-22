@@ -1,6 +1,6 @@
 # Architecture
 
-Version: 1.2.5
+Version: 1.2.10
 
 ## Responsibility boundary
 The Runner owns orchestration, state, retry/recovery, session policy, protection, model transport, prompt assembly, result parsing, validation orchestration, UI/events, and diagnostics. The Runner owns orchestration; project code owns application behavior. It must not understand application-specific workflows or business values. Project behavior belongs in the goal, project source, validator, templates, fixtures, and `.ai-task-runner.yaml`.
@@ -15,7 +15,9 @@ The Runner owns orchestration, state, retry/recovery, session policy, protection
 - `runner/model_results.py`: one generic JSON-candidate extraction path plus strict stage parsers.
 - `runner/prompting.py`: prompt templates/context composition.
 - `runner/policy.py`: project-root policy loading.
-- `runner/support.py`: shared filesystem/state/retry/protection helpers.
+- `runner/project_guard.py`: project snapshots, protected restore, read-only sandboxing, and project fingerprints.
+- `runner/model_call.py`: generic model retry and structured-output recovery.
+- `runner/support.py`: small generic utilities plus backward-compatible re-exports.
 - `runner/debug.py`: current/last/bounded-history diagnostics.
 - `runner/process_control.py`: subprocess timeout/idle/watchdog handling.
 - `runner/git_guard.py`: blocks AI child-process `git add/commit/push`.

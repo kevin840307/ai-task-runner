@@ -17,7 +17,8 @@ from .prompting import (
     structured_output_retry_prompt,
 )
 from .model_results import parse_plan_judgment, parse_tasks
-from .support import recover_structured_output, readonly_ask, retry_model_call
+from .model_call import recover_structured_output, retry_model_call
+from .project_guard import readonly_ask
 from .ui import LiveUI
 
 

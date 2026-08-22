@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.5
+Version: 1.2.12
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -60,3 +60,10 @@ Validator feedback stored in state is capped at 20,000 characters, preserving bo
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
+
+### Optional Loop context compression
+Disabled by default. Enable only for Loop Detection recovery:
+`--loop-context-compress --loop-context-compress-threshold 50`
+The threshold is a context-usage percentage (0-100). If the backend cannot report current context usage, compression is skipped. Qwen uses its session `/compress-fast` capability; normal retries and transient API errors do not trigger it.
+
+YAML task items may also set `loop_context_compress: true` and `loop_context_compress_threshold: 50`.

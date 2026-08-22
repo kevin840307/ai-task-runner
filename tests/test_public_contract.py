@@ -34,7 +34,7 @@ def _validator(path: Path) -> Path:
 
 
 def test_canonical_public_names_are_stable():
-    assert __version__ == "1.2.5"
+    assert __version__ == "1.2.12"
     assert State is RunState
     assert Agent is AgentClient
     assert Backend is AgentBackend

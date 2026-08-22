@@ -20,6 +20,7 @@ from runner.defaults import (
     DEFAULT_FINAL_AI_VALIDATIONS,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_VALIDATOR_TIMEOUT,
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
 )
 from runner.api import RunRequest, run
 from runner.version import __version__
@@ -137,6 +138,18 @@ def parser() -> argparse.ArgumentParser:
         type=float,
         default=300,
         help="maximum model-call retry wait",
+    )
+    command_parser.add_argument(
+        "--loop-context-compress",
+        action="store_true",
+        help="on Loop Detection, compact the session when current context usage reaches the configured threshold",
+    )
+    command_parser.add_argument(
+        "--loop-context-compress-threshold",
+        type=float,
+        default=DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+        metavar="PERCENT",
+        help="context usage percent required for Loop Detection compression (default: 50)",
     )
     command_parser.add_argument("--work-dir", default=".ai-task-runner")
     command_parser.add_argument(

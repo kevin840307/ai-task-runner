@@ -1,4 +1,4 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-python "..\..\ai_task_runner.py" --project-root "." --script "example.yaml" %*
+python "..\..\ai_task_runner.py" --loop-context-compress --project-root "." --script "example.yaml" %*

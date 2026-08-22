@@ -1,6 +1,6 @@
 # Protection and Safety Model
 
-Version: 1.2.5
+Version: 1.2.12
 
 ## Project root
 The project root is the task workspace boundary. Project policy is read only from `<project-root>/.ai-task-runner.yaml`; parent directories are not searched.

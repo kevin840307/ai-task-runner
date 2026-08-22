@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.5
+版本：1.2.12
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -51,3 +51,8 @@ Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，�
 
 ## 維護契約
 請遵守 `AGENTS.md` 與 `QWEN.md`：禁止 project-specific hardcode；同類行為只保留一個共用 implementation/function；以最小程式碼解決已證明的問題；程式碼必須精簡、清楚、容易維護。
+
+### 可選的 Loop context 壓縮
+預設關閉。只有明確開啟 `--loop-context-compress` 後，Loop Detection 且目前 context 使用率達 `--loop-context-compress-threshold 50` 才會嘗試壓縮。拿不到實際 context 使用率就跳過；一般 retry、API timeout/429/5xx 不會觸發。Qwen backend 使用 session `/compress-fast`。
+
+YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_threshold: 50`。

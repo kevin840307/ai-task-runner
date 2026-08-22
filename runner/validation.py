@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+import sys
+
+from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -13,7 +17,9 @@ from .models import RunState
 from .ui import LiveUI
 from .prompting import ai_validator_prompt, skipped_review_tasks, structured_output_retry_prompt
 from .model_results import parse_ai_validation
-from .support import recover_structured_output, readonly_ask, retry_model_call
+from .model_call import recover_structured_output, retry_model_call
+from .project_guard import readonly_ask, restore_changed, snapshot
+from .process_control import run_process
 
 
 def run_ai_validator(
@@ -44,6 +50,8 @@ def run_ai_validator(
             session_id="",
             timeout=args.agent_timeout,
             debug_dir=debug_dir,
+            loop_context_compress=getattr(args, "loop_context_compress", False),
+            loop_context_compress_threshold=getattr(args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD),
         )
 
         def ask_raw(prompt: str) -> str:
@@ -162,3 +170,60 @@ def clean_string_items(value: Any) -> list[str]:
         for item in value
         if str(item).strip()
     ]
+
+
+def run_file_validator(
+    path: Path,
+    root: Path,
+    state_file: Path,
+    timeout: int,
+    extra_args: Sequence[str],
+    protected: Sequence[Path],
+) -> tuple[bool, str]:
+    file_snapshot = snapshot(protected)
+    clear_validator_reports(root)
+    command = [
+        sys.executable,
+        str(path),
+        "--project-root",
+        str(root),
+        "--state-file",
+        str(state_file),
+        *extra_args,
+    ]
+    try:
+        result = run_process(command, root, timeout)
+    except OSError as error:
+        restore_changed(file_snapshot)
+        raise RunnerError(f"validator failed: {error}") from error
+
+    changed = restore_changed(file_snapshot)
+    changed_message = (
+        "Protected file changed during validation and was restored: "
+        + ", ".join(changed)
+        if changed
+        else ""
+    )
+    if result.timed_out:
+        details = [
+            f"validator timeout after {timeout} seconds",
+            result.output[-4000:].strip(),
+            changed_message,
+        ]
+        raise RunnerError("\n".join(item for item in details if item))
+    if changed_message:
+        raise RunnerError(changed_message)
+    return result.return_code == 0, result.output
+
+
+def clear_validator_reports(root: Path) -> None:
+    reports = root / ".ai-task-runner" / "validator-reports"
+    if not reports.exists() and not reports.is_symlink():
+        return
+    try:
+        if reports.is_symlink() or reports.is_file():
+            reports.unlink()
+        else:
+            shutil.rmtree(reports)
+    except OSError as error:
+        raise RunnerError(f"failed to clear validator reports: {error}") from error
