@@ -190,7 +190,7 @@ class LiveUI:
 
     @classmethod
     def _fit_terminal_line(cls, line: str, width: int) -> str:
-        limit = max(1, width - 1)
+        limit = max(1, width - 6)
         if cls._display_width(line) <= limit:
             return line
         suffix = "..."
