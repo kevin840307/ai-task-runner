@@ -81,7 +81,10 @@ def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
     )
     runner = _runner(tmp_path, task)
     events = []
-    runner.ui = SimpleNamespace(set=lambda *args: events.append(args))
+    runner.ui = SimpleNamespace(
+        set=lambda *args: events.append(args),
+        bind=lambda *args: None,
+    )
     monkeypatch.setattr(
         core,
         "show_todo",
@@ -104,6 +107,8 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monk
         deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
+    events = []
+    runner.ui = SimpleNamespace(set=lambda *args: events.append(args))
     runner._review_current_task = lambda *args: {
         "completed": True, "reason": "saved work satisfies the task", "missing_items": []
     }
@@ -115,6 +120,7 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monk
     assert result == 77
     assert task.changed_files == ["result.txt"]
     assert runner.agent.session_id == "old-session"
+    assert "task_recovery_action=review_changed_work" in events[0][1]
 
 
 def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path, monkeypatch):
@@ -127,6 +133,11 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
         changed_files=["saved-from-previous-attempt.txt"],
     )
     runner = _runner(tmp_path, task)
+    events = []
+    runner.ui = SimpleNamespace(
+        set=lambda *args: events.append(args),
+        bind=lambda *args: None,
+    )
     runner._review_current_task = lambda *args: (_ for _ in ()).throw(AssertionError("must not review"))
     monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
 
@@ -136,6 +147,7 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
     assert task.status == "pending"
     assert task.stagnant_attempts == 1
     assert runner.agent.session_id == "old-session"
+    assert "task_recovery_action=retry_task" in events[0][1]
 
 
 def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp_path, monkeypatch):

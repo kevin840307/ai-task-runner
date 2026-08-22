@@ -55,6 +55,7 @@ def backend_diagnostic_parts(
     if diagnostics:
         for name in (
             "loop_type",
+            "session_recovery_action",
             "num_turns",
             "context_used_percent",
             "context_compress_enabled",

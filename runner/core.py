@@ -283,6 +283,9 @@ class TaskRunner:
             f"task_changed_files={len(task.changed_files)}",
             f"stagnant_attempts={task.stagnant_attempts}",
             f"failure_signature={task.progress_key[:12] or '-'}",
+            "task_recovery_action=" + (
+                "review_changed_work" if changed else "retry_task"
+            ),
         ]
         details.extend(backend_diagnostic_parts(error, include_output=True))
         details.append(str(error)[-1000:])

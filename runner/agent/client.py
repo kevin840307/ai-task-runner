@@ -133,19 +133,17 @@ class AgentClient:
         except Exception as error:
             return f"ERROR: {type(error).__name__}: {error}"
 
-    def _enrich_loop_diagnostics(self, error: BackendError) -> None:
+    def _enrich_loop_diagnostics(
+        self,
+        error: BackendError,
+        *,
+        allow_context_recovery: bool = True,
+    ) -> None:
         snapshot_session = error.session_id or self.session_id
         if not error.diagnostics.get("loop_type") or not snapshot_session:
             return
 
-        snapshot = self._diagnostic_call(
-            lambda: self._backend.context_snapshot(snapshot_session)
-        )
-        if not snapshot:
-            return
-
         diagnostics = error.diagnostics
-        diagnostics["context_snapshot"] = snapshot
         enabled = bool(getattr(self, "loop_context_compress", False))
         threshold = float(
             getattr(
@@ -156,6 +154,18 @@ class AgentClient:
         )
         diagnostics["context_compress_enabled"] = enabled
         diagnostics["context_compress_threshold"] = threshold
+        if not allow_context_recovery:
+            diagnostics["context_compress_status"] = "skipped"
+            diagnostics["context_compress_reason"] = "session_reset"
+            return
+
+        snapshot = self._diagnostic_call(
+            lambda: self._backend.context_snapshot(snapshot_session)
+        )
+        if not snapshot:
+            return
+
+        diagnostics["context_snapshot"] = snapshot
         usage = self._backend.context_usage_percent(snapshot)
         if usage is None:
             diagnostics["context_compress_status"] = "skipped"
@@ -179,6 +189,37 @@ class AgentClient:
                 "failed" if compression.startswith("ERROR:") else "done"
             )
 
+    def _prepare_session_recovery(self, error: BackendError, message: str) -> None:
+        diagnostics = error.diagnostics
+        loop_detected = bool(diagnostics.get("loop_type")) or should_reset_session(message)
+        if not loop_detected:
+            self._recoverable_session_failures = 0
+            return
+
+        if not self.session_id:
+            self._recoverable_session_failures = 0
+            diagnostics["session_recovery_action"] = "retry_fresh_session"
+            return
+
+        failures = getattr(self, "_recoverable_session_failures", 0) + 1
+        reset_session = failures >= SESSION_RECOVERABLE_FAILURES_BEFORE_RESET
+        self._enrich_loop_diagnostics(
+            error,
+            allow_context_recovery=not reset_session,
+        )
+        if reset_session:
+            diagnostics["session_recovery_action"] = "reset_session"
+            self.session_id = ""
+            self._recoverable_session_failures = 0
+            return
+
+        diagnostics["session_recovery_action"] = (
+            "compress_and_retry"
+            if diagnostics.get("context_compress_status") == "done"
+            else "retry_same_session"
+        )
+        self._recoverable_session_failures = failures
+
     def _error_result(self, error: BackendError) -> str:
         if not error.output:
             return ""
@@ -194,7 +235,18 @@ class AgentClient:
         call_session_id: str,
         debug_call_id: str,
     ) -> NoReturn:
-        self._enrich_loop_diagnostics(error)
+        if error.session_id and not self.session_id:
+            self.session_id = error.session_id
+
+        message = str(error)
+        expired_session = ""
+        if self.session_id and is_session_invalid_error(message):
+            expired_session = self.session_id
+            self.session_id = ""
+            self._recoverable_session_failures = 0
+            error.diagnostics["session_recovery_action"] = "reset_session"
+        else:
+            self._prepare_session_recovery(error, message)
         self._finish_debug(
             call_session_id,
             prompt,
@@ -202,26 +254,11 @@ class AgentClient:
             debug_call_id,
             diagnostic_detail(error),
         )
-        if error.session_id and not self.session_id:
-            self.session_id = error.session_id
-
-        message = str(error)
-        if self.session_id and is_session_invalid_error(message):
-            expired_session = self.session_id
-            self.session_id = ""
+        if expired_session:
             raise AgentError(
                 f"session {expired_session} is unavailable; "
                 "a new session will continue from runner state"
             ) from error
-
-        if self.session_id and should_reset_session(message):
-            failures = getattr(self, "_recoverable_session_failures", 0) + 1
-            self._recoverable_session_failures = failures
-            if failures >= SESSION_RECOVERABLE_FAILURES_BEFORE_RESET:
-                self.session_id = ""
-                self._recoverable_session_failures = 0
-        else:
-            self._recoverable_session_failures = 0
         raise AgentError(
             message,
             transient=is_transient_service_error(message),
