@@ -24,6 +24,7 @@ from runner.defaults import (
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_VALIDATOR_TIMEOUT,
 )
+from runner.errors import ConfigurationError
 from runner.version import __version__
 
 
@@ -164,6 +165,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except KeyboardInterrupt:
             _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
             return 130
+        except (ConfigurationError, ValueError) as error:
+            _report_error(request, "runner.failed", str(error), 1)
+            return 1
         except Exception as error:
             _recover_from_unexpected_error(request, error)
 

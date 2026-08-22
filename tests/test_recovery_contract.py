@@ -36,3 +36,29 @@ def test_transient_service_errors_do_not_exhaust_model_error_budget():
 
     assert retry_model_call(action, ui, "s", "d", 0, 0, max_errors=1) == "ok"
     assert calls == 3
+
+
+def test_attempt_limit_returns_transient_execution_error_to_task_flow():
+    import pytest
+
+    calls = 0
+    ui = SimpleNamespace(start=lambda *a, **k: None, stop=lambda *a, **k: None)
+
+    def action():
+        nonlocal calls
+        calls += 1
+        raise AgentError("API timeout", transient=True)
+
+    with pytest.raises(RunnerError, match="after 1 attempt"):
+        retry_model_call(
+            action,
+            ui,
+            "execute",
+            "",
+            0,
+            0,
+            max_errors=1,
+            max_attempts=1,
+        )
+
+    assert calls == 1

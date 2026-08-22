@@ -26,7 +26,7 @@ def test_review_prompt_limits_decision_to_current_task(tmp_path: Path):
             ),
         ],
     )
-    prompt = review_prompt(state, tmp_path, [], "created report")
+    prompt = review_prompt(state, tmp_path, "created report")
     assert "current task is the only PASS/FAIL scope" in prompt
     assert "Do not require completion of later tasks" in prompt
     assert "Never include later-task or whole-project work" in prompt
@@ -46,7 +46,7 @@ def test_review_prompt_limits_validator_feedback_to_current_task(tmp_path: Path)
             acceptance_criteria=["Existing structure is documented"],
         )],
     )
-    prompt = review_prompt(state, tmp_path, [], "created report")
+    prompt = review_prompt(state, tmp_path, "created report")
     assert "use only the parts relevant to the current task" in prompt
     assert "must not block this task" in prompt
 
@@ -76,7 +76,7 @@ def test_review_prompt_uses_minimal_evidence_and_does_not_embed_full_goal_or_cha
         ],
     )
 
-    prompt = review_prompt(state, tmp_path, [], "focused check passed")
+    prompt = review_prompt(state, tmp_path, "focused check passed")
 
     assert "Build every feature in the full application" not in prompt
     assert "Files changed during this TODO" not in prompt

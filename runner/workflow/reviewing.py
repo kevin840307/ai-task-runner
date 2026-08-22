@@ -70,7 +70,7 @@ def review_task(
         return retry_model_call(
             lambda: ask_review(
                 reviewer,
-                review_prompt(state, root, protected, output),
+                review_prompt(state, root, output),
             ),
             ui,
             "AI 正在確認任務是否完成",

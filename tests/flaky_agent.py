@@ -2,27 +2,31 @@
 import json, sys
 from pathlib import Path
 
+from fake_agent_io import prompt_stage, read_prompt
+
 args = sys.argv[1:]
 root = Path.cwd()
 state_dir = Path(__import__('os').environ.get('FLAKY_STATE_DIR', root))
 state_dir.mkdir(parents=True, exist_ok=True)
-is_qwen = '-p' in args
-prompt = args[args.index('-p') + 1] if is_qwen else args[-1]
+is_qwen, prompt = read_prompt(args)
+stage = prompt_stage(prompt)
 session = 'retry-session-001'
 
-if 'Continue the existing planning work' in prompt:
+if stage == 'plan_understand':
+    phase, answer = 'plan', 'relevant project evidence gathered'
+elif stage == 'plan_refine':
     phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
-elif 'Plan only the remaining work' in prompt:
+elif stage == 'plan_finalize':
     phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
-elif 'plan quality judge' in prompt:
+elif stage == 'plan_judge':
     phase = 'plan_judge'
     n = max(1, prompt.count('\"title\"'))
     answer = {"accepted": True, "issues": []}
-elif 'Execute only the current task' in prompt or 'Complete only the current TODO' in prompt:
+elif stage == 'execute':
     phase, answer = 'execute', 'created done.txt'
-elif 'review only' in prompt.lower():
+elif stage == 'review':
     phase, answer = 'review', {'completed':True,'reason':'checked','missing_items':[]}
-elif 'fresh independent session' in prompt:
+elif stage == 'validator':
     phase, answer = 'validator', {'passed':True,'reason':'checked','missing_items':[]}
     session = 'retry-validator-session-001'
 else:

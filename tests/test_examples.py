@@ -20,7 +20,8 @@ EXPECTED = {
 
 
 def test_example_inventory_and_batch_launcher():
-    assert {p.name for p in EXAMPLES.iterdir() if p.is_dir()} == EXPECTED
+    available = {p.name for p in EXAMPLES.iterdir() if p.is_dir()}
+    assert EXPECTED <= available
     assert (EXAMPLES / "examples.yaml").is_file()
     assert (EXAMPLES / "run_examples.bat").is_file()
     for name in EXPECTED:

@@ -4,13 +4,14 @@ import os
 import sys
 from pathlib import Path
 
-from fake_agent_io import read_prompt
+from fake_agent_io import prompt_stage, read_prompt
 
 args = sys.argv[1:]
 root = Path.cwd()
 state_dir = Path(os.environ["SESSION_TEST_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 is_qwen, prompt = read_prompt(args)
+stage = prompt_stage(prompt)
 
 
 def count(name: str) -> int:
@@ -21,7 +22,9 @@ def count(name: str) -> int:
 
 
 session = "old-session"
-if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
+if stage == "plan_understand":
+    answer = "Relevant project evidence gathered"
+elif stage in {"plan_finalize", "plan_refine"}:
     answer = {
         "tasks": [{
             "title": "Create marker",
@@ -30,10 +33,10 @@ if "Plan only the remaining work" in prompt or "Continue the existing planning w
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
-elif "plan quality judge" in prompt:
+elif stage == "plan_judge":
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}
-elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
+elif stage == "execute":
     attempt = count("execute")
     has_old_session = (
         (is_qwen and "--resume" in args and args[args.index("--resume") + 1] == "old-session")
@@ -45,14 +48,14 @@ elif "Execute only the current task" in prompt or "Complete only the current TOD
     session = "new-session"
     (root / "done.txt").write_text("done", encoding="utf-8")
     answer = "created done.txt"
-elif "Review only" in prompt:
+elif stage == "review":
     session = "new-session"
     answer = {
         "completed": (root / "done.txt").exists(),
         "reason": "checked",
         "missing_items": [],
     }
-elif "fresh independent session" in prompt:
+elif stage == "validator":
     session = "validator-session"
     answer = {
         "passed": (root / "done.txt").exists(),

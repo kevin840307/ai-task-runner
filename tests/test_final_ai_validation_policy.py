@@ -66,7 +66,7 @@ def test_majority_outvotes_one_explicit_fail():
     assert '"passed": true' in output
 
 
-def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
+def test_ai_validation_stops_after_quorum_in_independent_sessions(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
     from runner.workflow.validation import ai as ai_validation
@@ -107,12 +107,13 @@ def test_each_final_ai_validation_uses_new_session(monkeypatch, tmp_path):
     )
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     passed, output = ai_validation.run_ai_validator(
-        args, tmp_path, tmp_path / ".work", state, [], object(), [], 1
+        args, tmp_path, tmp_path / ".work", state, [], object(), 1
     )
 
     assert passed is True
-    assert sessions == ["", "", ""]
-    assert '"passes": 3' in output
+    assert sessions == ["", ""]
+    assert '"passes": 2' in output
+    assert '"completed_validations": 2' in output
 
 
 def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_path):
@@ -151,12 +152,61 @@ def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_p
     )
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
     passed, output = ai_validation.run_ai_validator(
-        args, tmp_path, tmp_path / ".work", state, [], object(), [], 1, "custom"
+        args, tmp_path, tmp_path / ".work", state, [], object(), 1, "custom"
     )
 
     assert passed is True
     assert sessions == ["", "", ""]
     assert '"required_passes": 2' in output
+
+
+def test_ai_validation_stops_when_quorum_is_impossible(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from runner.models import RunState
+    from runner.workflow.validation import ai as ai_validation
+
+    sessions = []
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            sessions.append(kwargs["session_id"])
+
+    monkeypatch.setattr(ai_validation, "AgentClient", FakeAgent)
+    monkeypatch.setattr(
+        ai_validation,
+        "readonly_ask",
+        lambda *args, **kwargs: (
+            '{"passed":false,"reason":"issue","missing_items":["x"],'
+            '"checks_run":[],"suggested_checks":[]}',
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        ai_validation,
+        "retry_model_call",
+        lambda call, *args, **kwargs: call(),
+    )
+    args = SimpleNamespace(
+        backend="qwen",
+        command=None,
+        agent_timeout=0,
+        agent_idle_after_change_timeout=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        final_ai_validations=3,
+        final_ai_required_passes=2,
+    )
+    state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
+
+    passed, output = ai_validation.run_ai_validator(
+        args, tmp_path, tmp_path / ".work", state, [], object(), 1
+    )
+
+    assert passed is False
+    assert sessions == ["", ""]
+    assert '"completed_validations": 2' in output
 
 
 def test_mixed_validation_runs_hard_gate_then_ai_vote(monkeypatch, tmp_path):

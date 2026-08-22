@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner.api import RunRequest, run
+from runner.api import RunRequest, __version__, run
 
 
 def _validator(path: Path) -> Path:
@@ -45,7 +45,7 @@ def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
     assert any(event["type"] == "runner.progress" for event in events)
     assert any(event["type"] == "runner.status" for event in events)
     assert all(event["schema_version"] == 1 for event in events)
-    assert all(event["runner_version"] == "1.2.0" for event in events)
+    assert all(event["runner_version"] == __version__ for event in events)
 
 
 def test_runner_writes_debug_log_file(tmp_path):
@@ -100,7 +100,7 @@ def test_cli_json_events_are_machine_readable_json_lines(tmp_path):
     events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     assert events
     assert all(event["schema_version"] == 1 for event in events)
-    assert all(event["runner_version"] == "1.2.0" for event in events)
+    assert all(event["runner_version"] == __version__ for event in events)
     assert any(event["type"] == "runner.status" for event in events)
     assert events[-1]["status"] == "全部完成"
 
@@ -426,7 +426,10 @@ def test_shared_entry_rejects_invalid_requests_early(run_request, message):
         run(run_request)
 
 
-def test_cli_logs_unexpected_exception_and_resumes(monkeypatch, tmp_path):
+def test_cli_logs_unexpected_exception_and_retries_original_without_state(
+    monkeypatch,
+    tmp_path,
+):
     import ai_task_runner
     from runner.api import RunResult
 
@@ -435,7 +438,7 @@ def test_cli_logs_unexpected_exception_and_resumes(monkeypatch, tmp_path):
     def fake_run(request, on_event=None):
         requests.append(request.resume)
         if len(requests) == 1:
-            raise ValueError("boom")
+            raise RuntimeError("boom")
         return RunResult(exit_code=0, state_files=(), states=())
 
     monkeypatch.setattr(ai_task_runner, "run", fake_run)
@@ -449,9 +452,33 @@ def test_cli_logs_unexpected_exception_and_resumes(monkeypatch, tmp_path):
     ])
 
     assert code == 0
-    assert requests == [False, True]
+    assert requests == [False, False]
     log = tmp_path / ".ai-task-runner" / "exception.log"
-    assert "ValueError: boom" in log.read_text(encoding="utf-8")
+    assert "RuntimeError: boom" in log.read_text(encoding="utf-8")
+
+
+def test_cli_does_not_retry_configuration_error(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.errors import ConfigurationError
+
+    calls = 0
+
+    def fake_run(request, on_event=None):
+        nonlocal calls
+        calls += 1
+        raise ConfigurationError("invalid fixed input")
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--backend", "opencode",
+    ])
+
+    assert code == 1
+    assert calls == 1
 
 
 def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):

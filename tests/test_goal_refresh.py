@@ -17,25 +17,9 @@ def state(cycle=1):
     )
 
 
-def test_full_goal_only_for_new_session_in_initial_cycle():
-    run = state()
-    assert should_refresh_goal(run, False)
-    assert not should_refresh_goal(run, True)
-    run.current = 1
-    assert not should_refresh_goal(run, True)
-    run.current = 3
-    assert not should_refresh_goal(run, True)
-
-
-def test_retry_does_not_repeat_full_goal_in_existing_session():
-    run = state()
-    run.tasks[0].attempts = 2
-    assert not should_refresh_goal(run, True)
-
-
-def test_first_repair_task_reuses_existing_session_context():
-    run = state(cycle=2)
-    assert not should_refresh_goal(run, True)
+def test_full_goal_only_for_new_session():
+    assert should_refresh_goal(False)
+    assert not should_refresh_goal(True)
 
 
 def test_fresh_execution_includes_goal_and_next_todo_resume_is_task_only():

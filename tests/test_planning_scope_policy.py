@@ -43,7 +43,7 @@ def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
         acceptance_criteria=["result exists"],
     )])
 
-    plan = plan_understand_prompt("g", tmp_path, state, [])
+    plan = plan_understand_prompt("g", tmp_path, state)
     from runner.agent.prompts import execution_prompt
     execute = execution_prompt(state, tmp_path, [])
 
@@ -882,7 +882,7 @@ def test_repair_planning_is_reanchored_to_original_goal(tmp_path: Path):
         cycle=2,
         validator_output="LATEST VALIDATOR FAILURE",
     )
-    understand = plan_understand_prompt("ORIGINAL GOAL", tmp_path, state, [])
+    understand = plan_understand_prompt("ORIGINAL GOAL", tmp_path, state)
     finalize_same = plan_finalize_prompt(
         "ORIGINAL GOAL", tmp_path, state, same_session=True
     )
@@ -952,7 +952,7 @@ def test_repair_planning_partitions_failures_by_todo(tmp_path: Path):
     )]
 
     prompts = [
-        plan_understand_prompt("ORIGINAL GOAL", tmp_path, state, []),
+        plan_understand_prompt("ORIGINAL GOAL", tmp_path, state),
         plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=True),
         plan_finalize_prompt("ORIGINAL GOAL", tmp_path, state, same_session=False),
         plan_judge_prompt("ORIGINAL GOAL", tmp_path, state, tasks),

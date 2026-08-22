@@ -103,7 +103,6 @@ class _PlanningFlow:
             self.state.goal,
             self.root,
             self.state,
-            self.protected,
             self.work,
         )
         self.ui.set("AI 正在理解專案", "bounded read-only planning inspection")

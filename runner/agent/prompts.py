@@ -126,7 +126,6 @@ def plan_understand_prompt(
     goal: str,
     root: Path,
     state: RunState,
-    protected: Sequence[Path],
     work: Path | None = None,
     planning_feedback: str = "",
 ) -> str:
@@ -149,16 +148,16 @@ def plan_finalize_prompt(
     same_session: bool,
     inspection_summary: str = "",
 ) -> str:
-    context = _planning_context(goal, root, state, work)
     if same_session:
         return render_prompt_template(
             "plan_finalize_same_session.md",
             {
-                "minimum_tasks": context["minimum_tasks"],
-                "planning_mode": context["planning_mode"],
+                "minimum_tasks": MIN_PLANNED_TASKS,
+                "planning_mode": "initial" if state.cycle == 1 else "repair",
             },
         )
 
+    context = _planning_context(goal, root, state, work)
     return render_prompt_template(
         "plan_finalize.md",
         {
@@ -226,7 +225,7 @@ def planning_feedback_section(feedback: str) -> str:
     return f"\nPlanning feedback:\n{text}\n" if text else ""
 
 
-def should_refresh_goal(state: RunState, has_session: bool) -> bool:
+def should_refresh_goal(has_session: bool) -> bool:
     """Full goal context is needed only when no usable session exists."""
     return not has_session
 
@@ -333,7 +332,6 @@ def execution_prompt(
 def review_prompt(
     state: RunState,
     root: Path,
-    protected: Sequence[Path],
     output: str,
 ) -> str:
     task = state.tasks[state.current]

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import RuntimeConfig
-from .errors import RunnerError
+from .errors import ConfigurationError, RunnerError
 from .value_checks import is_integer, is_number
 from .version import __version__
 
@@ -185,9 +185,12 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
 def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
     script = Path(args.script).resolve()
     if not script.is_file():
-        raise RunnerError("invalid YAML script")
+        raise ConfigurationError("invalid YAML script")
 
-    items = load_yaml_script(script)
+    try:
+        items = load_yaml_script(script)
+    except RunnerError as error:
+        raise ConfigurationError(str(error)) from error
     total = len(items)
     for index, item in enumerate(items, 1):
         script_event(args, "script.item_started", index, total, item)

@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from fake_agent_io import read_prompt
+from fake_agent_io import prompt_stage, read_prompt, record_prompt
 
 args = sys.argv[1:]
 root = Path.cwd()
@@ -13,6 +13,8 @@ session = "scenario-session-001"
 scenario = os.environ.get("SCENARIO", "")
 state_dir = Path(os.environ["SCENARIO_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
+stage = prompt_stage(prompt)
+record_prompt(state_dir, stage, prompt, args)
 
 
 def count(name):
@@ -22,7 +24,9 @@ def count(name):
     return value + 1
 
 
-if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
+if stage == "plan_understand":
+    answer = "Relevant project evidence gathered"
+elif stage in {"plan_finalize", "plan_refine"}:
     if scenario == "multi_task_plan":
         answer = {"tasks": [
             {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"]},
@@ -30,10 +34,10 @@ if "Plan only the remaining work" in prompt or "Continue the existing planning w
         ]}
     else:
         answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "deliverable": "done.txt exists", "acceptance_criteria": ["done.txt exists"]}]}
-elif "plan quality judge" in prompt:
+elif stage == "plan_judge":
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}
-elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
+elif stage == "execute":
     n = count("execute")
     if scenario == "multi_task_plan":
         log = state_dir / "order.log"
@@ -71,15 +75,10 @@ elif "Execute only the current task" in prompt or "Complete only the current TOD
     if scenario == "stagnation" and "Previous attempts made no effective progress" in prompt:
         (state_dir / "strategy_seen.txt").write_text("yes", encoding="utf-8")
     if scenario == "validator_repair" and "Validator repair mode" in prompt:
-        if "--resume" not in args:
-            (state_dir / "fresh_repair_session_seen.txt").write_text(
-                "yes",
-                encoding="utf-8",
-            )
         (root / "repaired.txt").write_text("done", encoding="utf-8")
     if scenario != "stagnation" and scenario != "multi_task_plan":
         (root / "done.txt").write_text("done", encoding="utf-8")
-elif "Review only" in prompt:
+elif stage == "review":
     n = count("review")
     if scenario == "multi_task_plan":
         log = state_dir / "order.log"
@@ -108,7 +107,7 @@ elif "Review only" in prompt:
             completed = not (scenario == "review_retry" and n == 1)
             missing = [] if completed else ["retry once"]
             answer = {"completed": completed, "reason": "checked", "missing_items": missing}
-elif "fresh independent session" in prompt:
+elif stage == "validator":
     n = count("validator")
     session = "scenario-validator-session-001"
     if scenario == "readonly" and n == 1:

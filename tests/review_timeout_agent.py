@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from fake_agent_io import read_prompt
+from fake_agent_io import prompt_stage, read_prompt
 
 
 args = sys.argv[1:]
@@ -17,9 +17,13 @@ is_qwen, prompt = read_prompt(args)
 state_dir = Path(os.environ["REVIEW_TIMEOUT_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "review-timeout-session"
+prompt_kind = prompt_stage(prompt)
 
-if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
-    stage = "plan_refine" if "Continue the existing planning work" in prompt else "plan"
+if prompt_kind == "plan_understand":
+    stage = "plan_understand"
+    answer = "Relevant project evidence gathered"
+elif prompt_kind in {"plan_finalize", "plan_refine"}:
+    stage = prompt_kind
     answer = {
         "tasks": [{
             "title": "Create marker",
@@ -28,22 +32,22 @@ if "Plan only the remaining work" in prompt or "Continue the existing planning w
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
-elif "plan quality judge" in prompt:
+elif prompt_kind == "plan_judge":
     stage = "plan_judge"
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}
-elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
+elif prompt_kind == "execute":
     stage = "execute"
     (root / "done.txt").write_text("done", encoding="utf-8")
     answer = "created done.txt"
-elif "Review only" in prompt:
+elif prompt_kind == "review":
     stage = "review"
     answer = {
         "completed": (root / "done.txt").exists(),
         "reason": "checked",
         "missing_items": [],
     }
-elif "fresh independent session" in prompt:
+elif prompt_kind == "validator":
     stage = "validator"
     answer = {
         "passed": (root / "done.txt").exists(),

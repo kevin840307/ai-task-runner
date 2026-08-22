@@ -30,7 +30,6 @@ def run_ai_validator(
     state: RunState,
     protected: Sequence[Path],
     ui: LiveUI,
-    runtime_args: Sequence[str] | None,
     model_call_errors_before_task_retry: int,
     custom_prompt: str = "",
     agent_factory: AgentFactory | None = None,
@@ -53,7 +52,6 @@ def run_ai_validator(
         validator = factory.create(
             "runtime",
             timeout=args.agent_timeout,
-            extra_args=runtime_args,
         )
 
         call = partial(
@@ -86,10 +84,13 @@ def run_ai_validator(
         except RunnerError as error:
             # An unavailable validator abstains instead of passing or failing.
             results.append({"error": str(error)[-1000:]})
-            continue
+        else:
+            results.append(result)
+            passes += result["passed"] is True
 
-        results.append(result)
-        passes += result["passed"] is True
+        remaining = total - index
+        if passes >= required or passes + remaining < required:
+            break
 
     return passes >= required, format_ai_validator_runs(results, required, total)
 

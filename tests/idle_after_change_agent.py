@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from fake_agent_io import read_prompt
+from fake_agent_io import prompt_stage, read_prompt
 
 args = sys.argv[1:]
 root = Path.cwd()
@@ -16,6 +16,7 @@ is_qwen, prompt = read_prompt(args)
 state_dir = Path(os.environ["IDLE_AFTER_CHANGE_STATE_DIR"])
 state_dir.mkdir(parents=True, exist_ok=True)
 session = "idle-main-session"
+stage = prompt_stage(prompt)
 
 
 def count(name: str) -> int:
@@ -25,7 +26,10 @@ def count(name: str) -> int:
     return value
 
 
-if "Plan only the remaining work" in prompt or "Continue the existing planning work" in prompt:
+if stage == "plan_understand":
+    count("plan")
+    answer = "Relevant project evidence gathered"
+elif stage in {"plan_finalize", "plan_refine"}:
     count("plan")
     answer = {
         "tasks": [{
@@ -35,23 +39,23 @@ if "Plan only the remaining work" in prompt or "Continue the existing planning w
             "acceptance_criteria": ["done.txt exists"],
         }]
     }
-elif "plan quality judge" in prompt:
+elif stage == "plan_judge":
     count("judge")
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}
-elif "Execute only the current task" in prompt or "Complete only the current TODO" in prompt:
+elif stage == "execute":
     count("execute")
     (root / "done.txt").write_text("done", encoding="utf-8")
     time.sleep(30)
     answer = "created done.txt"
-elif "Review only" in prompt:
+elif stage == "review":
     count("review")
     answer = {
         "completed": (root / "done.txt").exists(),
         "reason": "checked",
         "missing_items": [],
     }
-elif "fresh independent session" in prompt:
+elif stage == "validator":
     count("validator")
     session = "idle-validator-session"
     answer = {

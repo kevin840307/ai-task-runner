@@ -38,12 +38,12 @@ def test_always_instructions_are_injected_into_every_ai_prompt_family(tmp_path: 
     task = state.tasks
 
     fresh_prompts = [
-        plan_understand_prompt("g", tmp_path, state, []),
+        plan_understand_prompt("g", tmp_path, state),
         plan_finalize_prompt("g", tmp_path, state, same_session=False),
         plan_refine_prompt("g", tmp_path, state, task, same_session=False),
         plan_judge_prompt("g", tmp_path, state, task, same_session=False),
         execution_prompt(state, tmp_path, [], include_goal=True),
-        review_prompt(state, tmp_path, [], "done"),
+        review_prompt(state, tmp_path, "done"),
         review_finalize_prompt(tmp_path),
         ai_validator_prompt("g", tmp_path, []),
     ]
@@ -62,4 +62,4 @@ def test_project_instructions_are_not_duplicated_into_direct_prompts(tmp_path: P
     state = _state(tmp_path)
 
     assert marker not in execution_prompt(state, tmp_path, [])
-    assert marker not in plan_understand_prompt("g", tmp_path, state, [])
+    assert marker not in plan_understand_prompt("g", tmp_path, state)

@@ -406,7 +406,7 @@ class TaskRunner:
                     self.protected,
                     self._validator_repair_hint(),
                     str(self.validator) if self.validator else "",
-                    should_refresh_goal(self.state, bool(self.agent.session_id)),
+                    should_refresh_goal(bool(self.agent.session_id)),
                     task.attempts > 1 and not bool(self.agent.session_id),
                 ),
                 self.protected,
@@ -428,6 +428,7 @@ class TaskRunner:
             self.args.retry_wait,
             self.args.retry_max_wait,
             EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW,
+            max_attempts=1,
         )
 
     def _project_change_detector(self):
@@ -555,7 +556,6 @@ class TaskRunner:
                 self.state,
                 self.protected,
                 self.ui,
-                None,
                 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
                 ai_prompt,
                 agent_factory=getattr(self, "agent_factory", None),
@@ -580,7 +580,6 @@ class TaskRunner:
             self.state,
             self.protected,
             self.ui,
-            None,
             MODEL_CALL_ERRORS_BEFORE_TASK_RETRY,
             ai_prompt,
             agent_factory=getattr(self, "agent_factory", None),

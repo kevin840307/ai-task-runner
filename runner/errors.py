@@ -6,6 +6,10 @@ class RunnerError(RuntimeError):
     """Recoverable orchestration failure."""
 
 
+class ConfigurationError(RunnerError):
+    """Deterministic input or configuration failure that retrying cannot fix."""
+
+
 def diagnostic_error(error: BaseException) -> BaseException | None:
     """Find backend diagnostics through wrapped exception chains."""
     seen: set[int] = set()

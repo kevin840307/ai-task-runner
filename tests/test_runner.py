@@ -161,11 +161,12 @@ def test_all_model_phases_retry_and_finish(tmp_path):
           '--retry-delay','0','--retry-wait','0','--retry-max-wait','0']
     r=subprocess.run(args,capture_output=True,text=True,env=env)
     assert r.returncode==0,r.stdout+r.stderr
-    for phase in ('plan','execute','review','validator'):
-        assert (state_dir/f'.{phase}.count').read_text() == '2'
+    expected = {"plan": "2", "execute": "2", "review": "1", "validator": "2"}
+    for phase, count in expected.items():
+        assert (state_dir / f".{phase}.count").read_text() == count
     state=json.loads((tmp_path/'.ai-task-runner/state.json').read_text())
     assert state['completed'] is True
-    assert state['agent_session_id']=='retry-session-001'
+    assert state['agent_session_id'] == ''
 
 
 def test_model_calls_have_configurable_python_timeout():
@@ -237,9 +238,9 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     state = RunState("run", "goal", str(root), tasks=[task])
     protected = [root / "state.json"]
     prompts = [
-        plan_understand_prompt("goal", root, state, protected),
+        plan_understand_prompt("goal", root, state),
         execution_prompt(state, root, protected),
-        review_prompt(state, root, protected, "report"),
+        review_prompt(state, root, "report"),
         ai_validator_prompt("goal", root, protected),
     ]
     # Interactive stages must not pause for user input. Review is a bounded verdict stage.
@@ -273,7 +274,7 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
     assert "Treat validator feedback as authoritative" in prompt_with_legacy_hint
 
     state.validator_output = "unexpected file content"
-    review_with_feedback = review_prompt(state, root, protected, "report")
+    review_with_feedback = review_prompt(state, root, "report")
     assert "Latest validator feedback to consider" in review_with_feedback
     assert "later-task or whole-project feedback must not block this task" in review_with_feedback
 
@@ -320,8 +321,16 @@ def test_review_and_ai_validator_restore_project_changes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert not (tmp_path / "review_mutation.txt").exists()
     assert not (tmp_path / "validator_mutation.txt").exists()
-    assert (state_dir / "review.count").read_text() == "2"
+    assert (state_dir / "review.count").read_text() == "1"
     assert (state_dir / "validator.count").read_text() == "2"
+    stages = [
+        json.loads(line)["stage"]
+        for line in (state_dir / "prompt-log.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert stages.count("review") == 1
+    assert stages.count("review_finalize") == 1
 
 
 def test_review_incomplete_reexecutes_current_task(tmp_path):
@@ -424,7 +433,7 @@ def test_invalid_ai_review_is_skipped_to_final_validator(tmp_path):
     assert state["completed"] is True
 
 
-def test_execution_error_after_project_change_retries_without_review(tmp_path):
+def test_execution_error_after_project_change_reviews_without_reexecution(tmp_path):
     env, state_dir = _scenario_env(tmp_path, "execution_error_after_change")
     result = subprocess.run(
         _scenario_args(
@@ -434,13 +443,13 @@ def test_execution_error_after_project_change_retries_without_review(tmp_path):
         ),
         capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert (state_dir / "execute.count").read_text() == "2"
-    assert not (state_dir / "review.count").exists()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (state_dir / "execute.count").read_text() == "1"
+    assert (state_dir / "review.count").read_text() == "1"
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["tasks"][0]["attempts"] == 2
-    assert state["tasks"][0]["status"] == "pending"
-    assert state["completed"] is False
+    assert state["tasks"][0]["attempts"] == 1
+    assert state["tasks"][0]["status"] == "completed"
+    assert state["completed"] is True
 
 
 def test_protected_file_change_is_restored_and_retried(tmp_path):
@@ -515,9 +524,16 @@ print('PASS')
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "repaired.txt").read_text(encoding="utf-8") == "done"
     assert (state_dir / "execute.count").read_text() == "3"
-    assert (state_dir / "fresh_repair_session_seen.txt").read_text(
-        encoding="utf-8"
-    ) == "yes"
+    prompt_records = [
+        json.loads(line)
+        for line in (state_dir / "prompt-log.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    planning_sessions = [
+        record["resumed"]
+        for record in prompt_records
+        if record["stage"] == "plan_understand"
+    ]
+    assert planning_sessions == [False, True, False]
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["completed"] is True
     assert state["stage"] == "completed"
@@ -564,7 +580,7 @@ def test_ai_validator_failure_replans_and_then_passes(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["cycle"] == 2
-    assert len(state["tasks"]) == 2
+    assert len(state["tasks"]) == 1
     assert all(task["status"] == "completed" for task in state["tasks"])
     assert (state_dir / "validator.count").read_text() == "2"
 
@@ -652,7 +668,8 @@ def _run_session_replacement_case(tmp_path, failure_message: str = ""):
     result = subprocess.run(args, capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
-    assert state["agent_session_id"] == "new-session"
+    assert state["agent_session_id"] == ""
+    assert state["completed"] is True
     assert (state_dir / "execute.count").read_text() == "2"
 
 
@@ -790,20 +807,19 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
     state.validator_output = "unexpected output:\nold value"
     protected = [tmp_path / ".ai-task-runner" / "state.json"]
 
-    plan = prompting.plan_understand_prompt(state.goal, tmp_path, state, protected)
+    plan = prompting.plan_understand_prompt(state.goal, tmp_path, state)
     execute = prompting.execution_prompt(state, tmp_path, protected)
-    review = prompting.review_prompt(state, tmp_path, protected, "done")
+    review = prompting.review_prompt(state, tmp_path, "done")
 
-    for prompt in (plan, execute, review):
-        assert "relevant project structure" in prompt
-        assert "smallest maintainable change" in prompt
-        assert "Preserve existing behavior, public interfaces, file formats, and dependencies" in prompt
-        assert "Preserve unrelated behavior and public interfaces" in prompt
-
-    assert "entry points, dependencies, public interfaces, conventions, and existing tests" in plan
+    assert "identify only the areas likely relevant to the goal" in plan
+    assert "entry points, interfaces, configuration, tests" in plan
     assert "dedicated project-understanding turn" in plan
     assert "Do not try to read the whole repository" in plan
-    assert "This inspection is preparation inside the TODO and never completes the TODO by itself" in execute
+    assert "Make the smallest maintainable change" in execute
+    assert "Current TODO is the only executable scope" in execute
+    assert "smallest directly related file subset" in review
+    assert "current task is the only PASS/FAIL scope" in review
+    assert "inspect only the project files directly needed for this TODO" in execute
     assert "Review only. You are a read-only task reviewer" in review
     assert "the actual bad value to change away from" in execute
     assert "fix the program behavior that produces it" in execute
@@ -822,7 +838,6 @@ def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tm
         state.goal,
         tmp_path,
         state,
-        [tmp_path / ".ai-task-runner" / "state.json"],
     )
     task_prompt = prompting.plan_finalize_prompt(
         state.goal,
@@ -840,7 +855,8 @@ def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tm
     assert "dedicated project-understanding turn" in prompt
     assert "Do not try to read the whole repository" in prompt
     assert "Do not output TODO JSON" in prompt
-    assert "smaller model can complete one coherent step at a time" in task_prompt
+    assert "Each TODO must be one coherent implementation increment" in task_prompt
+    assert "small enough to complete and review in one focused execution turn" in task_prompt
     assert "minimum code, clean code, low coupling" in task_prompt
     assert "Return only valid JSON" in task_prompt
     assert ".ai-task-runner/state.json" not in prompt
