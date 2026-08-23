@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from runner.agent.prompts import execution_prompt, render_prompt_template
 from runner.engine.models import RunState, Task
+from runner.engine.recovery import execution_outcome, record_execution_progress, should_review
 
 
 def state(attempts=1):
@@ -98,8 +99,7 @@ def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
     assert events == [("任務完成", "Focused change")]
 
 
-def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monkeypatch):
-    import runner.engine.core as core
+def test_execution_error_with_current_changes_reviews_immediately(tmp_path):
     from runner.errors import RunnerError
 
     task = Task(
@@ -107,24 +107,15 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monk
         deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
-    events = []
-    runner.ui = SimpleNamespace(set=lambda *args: events.append(args))
-    runner._review_current_task = lambda *args: {
-        "completed": True, "reason": "saved work satisfies the task", "missing_items": []
-    }
-    runner._handle_review_result = lambda *args: 77
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: ["result.txt"])
+    outcome = execution_outcome(
+        error=RunnerError("failed"), changed_files=["result.txt"]
+    )
 
-    result = core.TaskRunner._handle_execution_error(runner, task, RunnerError("failed"), {})
-
-    assert result == 77
-    assert task.changed_files == ["result.txt"]
-    assert runner.agent.session_id == "old-session"
-    assert "task_recovery_action=review_changed_work" in events[0][1]
+    assert should_review(outcome) is True
+    assert outcome.status == "execution_error"
 
 
-def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path, monkeypatch):
-    import runner.engine.core as core
+def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path):
     from runner.errors import RunnerError
 
     task = Task(
@@ -133,25 +124,19 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
         changed_files=["saved-from-previous-attempt.txt"],
     )
     runner = _runner(tmp_path, task)
-    events = []
-    runner.ui = SimpleNamespace(
-        set=lambda *args: events.append(args),
-        bind=lambda *args: None,
-    )
-    runner._review_current_task = lambda *args: (_ for _ in ()).throw(AssertionError("must not review"))
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+    error = RunnerError("same failure")
+    record_execution_progress(task, error, changed=False)
+    outcome = execution_outcome(error=error, changed_files=[])
 
-    result = core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {})
+    result = runner._recover_execution(task, outcome)
 
     assert result is None
     assert task.status == "pending"
     assert task.stagnant_attempts == 1
     assert runner.agent.session_id == "old-session"
-    assert "task_recovery_action=retry_task" in events[0][1]
 
 
-def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp_path, monkeypatch):
-    import runner.engine.core as core
+def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp_path):
     from runner.errors import RunnerError
 
     task = Task(
@@ -159,17 +144,39 @@ def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp
         deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
+    error = RunnerError("same failure")
+    outcome = execution_outcome(error=error, changed_files=[])
 
-    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
-    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
+    for _ in range(2):
+        record_execution_progress(task, error, changed=False)
+        assert runner._recover_execution(task, outcome) is None
     assert runner.agent.session_id == "old-session"
-    assert core.TaskRunner._handle_execution_error(runner, task, RunnerError("same failure"), {}) is None
+
+    record_execution_progress(task, error, changed=False)
+    assert runner._recover_execution(task, outcome) is None
 
     assert task.status == "pending"
     assert task.review_skipped is False
     assert runner.agent.session_id == ""
     assert task.stagnant_attempts == 0
+
+
+def test_transient_service_error_is_separate_and_does_not_mark_stagnation(tmp_path):
+    from runner.agent.client import AgentError
+
+    task = Task(
+        id="c01-t001", title="Current task", description="Do work",
+        deliverable="result", acceptance_criteria=["result exists"],
+    )
+    error = AgentError("HTTP 503 service unavailable", transient=True)
+    outcome = execution_outcome(error=error, changed_files=[])
+
+    record_execution_progress(task, error, changed=False)
+
+    assert outcome.status == "service_error"
+    assert should_review(outcome) is False
+    assert task.stagnant_attempts == 0
+    assert task.progress_key == ""
 
 
 def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monkeypatch):

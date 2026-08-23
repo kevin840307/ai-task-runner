@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Literal, TypedDict
 
 from ..config.validation import is_integer, is_number
+from ..errors import RunnerError
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
@@ -34,6 +35,17 @@ class _ReviewResultRequired(TypedDict):
 
 class ReviewResult(_ReviewResultRequired, total=False):
     review_skipped: bool
+
+
+ExecutionStatus = Literal["normal", "service_error", "execution_error"]
+
+
+@dataclass
+class ExecutionOutcome:
+    status: ExecutionStatus
+    output: str = ""
+    error: RunnerError | None = None
+    changed_files: list[str] = field(default_factory=list)
 
 
 class AIValidationResult(TypedDict):
@@ -161,6 +173,8 @@ class RunState:
 
 __all__ = [
     "AIValidationResult",
+    "ExecutionOutcome",
+    "ExecutionStatus",
     "PlanJudgment",
     "ReviewResult",
     "RunStage",

@@ -8,6 +8,7 @@ from pathlib import Path
 from ..config.defaults import (
     MAX_TASK_OUTPUT_CHARS,
     MAX_VALIDATOR_OUTPUT_CHARS,
+    REPAIR_FULL_PLAN_AFTER_SAME_FAILURES,
 )
 
 from ..agent.calls import retry_model_call
@@ -19,8 +20,8 @@ from ..agent.prompts import (
     should_refresh_goal,
 )
 from ..config import RuntimeConfig
-from ..errors import RunnerError, backend_diagnostic_parts
-from .models import ReviewResult, RunStage, Task
+from ..errors import ConfigurationError, RunnerError, backend_diagnostic_parts
+from .models import ExecutionOutcome, ReviewResult, RunStage, Task
 from ..safety.policy import protected_paths as policy_protected_paths
 from ..safety.project_guard import (
     changed_project_files,
@@ -34,9 +35,11 @@ from ..safety.project_guard import (
 from ..app.script_runner import execute_script as execute_yaml_script
 from .state_store import StateStore
 from .recovery import (
+    execution_outcome,
     record_execution_progress,
     record_review_progress,
     should_rebuild_session,
+    should_review,
     task_attempts_exhausted,
     validator_failure_key,
 )
@@ -55,7 +58,6 @@ from ..workflow.validation.file import run_file_validator
 
 MODEL_CALL_ERRORS_BEFORE_TASK_RETRY = 3
 EXECUTION_MODEL_ERRORS_BEFORE_TASK_FLOW = 1
-VALIDATOR_REPAIR_AFTER_SAME_FAILURES = 2
 
 
 class TaskRunner:
@@ -220,86 +222,94 @@ class TaskRunner:
             self._save_state()
             show_todo(self.state, self.ui)
 
-            project_before = project_manifest(self.root, self.work)
-            try:
-                self._set_stage("executing")
-                output = self._execute_current_task(task)
-                task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
-                self._save_session()
-
-                changed_files = changed_project_files(self.root, self.work, project_before)
-                task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
-                self._save_state()
-                self._set_stage("reviewing")
-                review = self._review_current_task(task, output)
-            except RunnerError as error:
-                result = self._handle_execution_error(
+            outcome = self._execute_outcome(task)
+            review_outcome = should_review(outcome)
+            if outcome.error is not None:
+                self._log_execution_outcome(
                     task,
-                    error,
-                    project_before,
+                    outcome,
+                    "review_changed_work" if review_outcome else "retry_task",
                 )
-                if result is not None:
-                    return result
-                continue
-
-            result = self._handle_review_result(task, review)
+            if review_outcome:
+                self._set_stage("reviewing")
+                if outcome.status != "normal":
+                    self.ui.set(
+                        "Executor 異常但已有檔案變更，先執行 Review",
+                        task.title,
+                    )
+                review = self._review_current_task(task, task.last_output)
+                result = self._handle_review_result(task, review)
+            else:
+                result = self._recover_execution(task, outcome)
             if result is not None:
                 return result
-            continue
         return None
 
-    def _handle_execution_error(
+    def _execute_outcome(self, task: Task) -> ExecutionOutcome:
+        project_before = project_manifest(self.root, self.work)
+        self._set_stage("executing")
+        try:
+            output = self._execute_current_task(task)
+            error = None
+        except ConfigurationError:
+            raise
+        except RunnerError as current:
+            output = ""
+            error = current
+
+        changed_files = changed_project_files(self.root, self.work, project_before)
+        outcome = execution_outcome(
+            output=output,
+            error=error,
+            changed_files=changed_files,
+        )
+        task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
+        if error is None:
+            task.last_output = output[-MAX_TASK_OUTPUT_CHARS:]
+        else:
+            task.status = "pending"
+            task.last_output = (
+                "Previous model call failed before task completion"
+                + (" after changing project files" if changed_files else "")
+                + ":\n"
+                + str(error)[-MAX_TASK_OUTPUT_CHARS:]
+            )
+            record_execution_progress(task, error, bool(changed_files))
+        self._save_session()
+        return outcome
+
+    def _log_execution_outcome(
         self,
         task: Task,
-        error: RunnerError,
-        project_before: dict[str, tuple[str, str | None]],
-    ) -> int | None:
-        changed_files = changed_project_files(self.root, self.work, project_before)
-        changed = bool(changed_files)
-        task.changed_files = list(dict.fromkeys([*task.changed_files, *changed_files]))
-        task.last_output = (
-            "Previous model call failed before task completion"
-            + (" after changing project files" if changed else "")
-            + ":\n"
-            + str(error)[-MAX_TASK_OUTPUT_CHARS:]
-        )
-        task.status = "pending"
-        record_execution_progress(task, error, changed)
-        self.state.agent_session_id = self.agent.session_id
-        self._save_state()
-        shown_files = changed_files[:20]
+        outcome: ExecutionOutcome,
+        action: str,
+    ) -> None:
+        assert outcome.error is not None
+        shown_files = outcome.changed_files[:20]
         changed_detail = ",".join(shown_files) if shown_files else "-"
-        if len(changed_files) > len(shown_files):
-            changed_detail += f",...(+{len(changed_files) - len(shown_files)})"
+        if len(outcome.changed_files) > len(shown_files):
+            changed_detail += f",...(+{len(outcome.changed_files) - len(shown_files)})"
         details = [
+            f"outcome={outcome.status}",
             f"session={self.agent.session_id or '-'}",
-            f"changed_files={len(changed_files)}:{changed_detail}",
+            f"changed_files={len(outcome.changed_files)}:{changed_detail}",
             f"task_changed_files={len(task.changed_files)}",
             f"stagnant_attempts={task.stagnant_attempts}",
             f"failure_signature={task.progress_key[:12] or '-'}",
-            "task_recovery_action=" + (
-                "review_changed_work" if changed else "retry_task"
-            ),
+            f"task_recovery_action={action}",
         ]
-        details.extend(backend_diagnostic_parts(error, include_output=True))
-        details.append(str(error)[-1000:])
-        self.ui.set(
-            "模型階段失敗，準備重試任務",
-            " | ".join(details),
-        )
-        if changed:
-            self.ui.set(
-                "Executor 異常但已有檔案變更，先執行 Review",
-                task.title,
-            )
-            self._save_session()
-            self._set_stage("reviewing")
-            review = self._review_current_task(task, task.last_output)
-            return self._handle_review_result(task, review)
+        details.extend(backend_diagnostic_parts(outcome.error, include_output=True))
+        details.append(str(outcome.error)[-1000:])
+        self.ui.set("模型階段失敗，準備重試任務", " | ".join(details))
 
-        self._save_session()
-        self._rebuild_stagnant_session(task)
-        self._set_stage("task_retry_wait", str(error))
+    def _recover_execution(
+        self,
+        task: Task,
+        outcome: ExecutionOutcome,
+    ) -> int | None:
+        assert outcome.error is not None
+        self._rebuild_stagnant_session(task, outcome.error)
+        self._set_stage("task_retry_wait", str(outcome.error))
         return self._prepare_task_retry(task)
 
     def _handle_review_result(
@@ -338,8 +348,10 @@ class TaskRunner:
         record_review_progress(task, self.root, self.work, review["missing_items"])
 
 
-    def _rebuild_stagnant_session(self, task: Task) -> None:
-        if not should_rebuild_session(task):
+    def _rebuild_stagnant_session(
+        self, task: Task, error: RunnerError | None = None
+    ) -> None:
+        if not should_rebuild_session(task, error):
             return
         self.agent.session_id = ""
         self.state.agent_session_id = ""
@@ -365,7 +377,7 @@ class TaskRunner:
         if not self.state.validator_output.strip():
             return ""
         repeat_hint = ""
-        if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+        if self.state.validator_failure_count >= REPAIR_FULL_PLAN_AFTER_SAME_FAILURES:
             repeat_hint = render_prompt_template(
                 "validator_repair_repeat_hint.md",
                 {"failure_count": self.state.validator_failure_count},
@@ -484,7 +496,7 @@ class TaskRunner:
             return 0
 
         self._record_validator_failure(output)
-        if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
+        if self.state.validator_failure_count >= REPAIR_FULL_PLAN_AFTER_SAME_FAILURES:
             self.agent.session_id = ""
             self.state.agent_session_id = ""
         prepare_repair_cycle(self.state)

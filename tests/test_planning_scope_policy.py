@@ -999,3 +999,54 @@ def test_planning_excludes_runner_owned_validation_and_merges_shared_repair_caus
         lower = prompt.lower()
         assert "final validation" in lower and "runner" in lower
         assert "underlying contract or root cause" in lower
+
+
+def test_first_validator_failure_uses_minimal_repair_without_inspect_or_judge(tmp_path, monkeypatch):
+    import runner.workflow.planning as planning
+
+    state = RunState(
+        run_id="r", goal="g", project_root=str(tmp_path), cycle=2,
+        validator_output="one concrete failure", validator_failure_count=1,
+    )
+    flow = planning._PlanningFlow(
+        SimpleNamespace(planning_timeout=1, agent_idle_after_change_timeout=0,
+                        retry_wait=0, retry_max_wait=0),
+        tmp_path, tmp_path / ".ai-task-runner", state, [],
+        SimpleNamespace(set=lambda *args: None),
+        SimpleNamespace(session_id="executor-session"),
+    )
+    task = Task(id="c02-t001", title="repair", description="d", deliverable="x",
+                acceptance_criteria=["fixed"])
+    calls = []
+    monkeypatch.setattr(flow, "create_minimal_repair_plan", lambda: calls.append("minimal") or [task])
+    monkeypatch.setattr(flow, "inspect_project", lambda: (_ for _ in ()).throw(AssertionError("must not inspect")))
+    monkeypatch.setattr(flow, "judge_and_refine", lambda tasks: (_ for _ in ()).throw(AssertionError("must not judge")))
+
+    assert flow.run() == [task]
+    assert calls == ["minimal"]
+
+
+def test_repeated_same_validator_failure_falls_back_to_full_planning(tmp_path, monkeypatch):
+    import runner.workflow.planning as planning
+
+    state = RunState(
+        run_id="r", goal="g", project_root=str(tmp_path), cycle=3,
+        validator_output="same failure", validator_failure_count=2,
+    )
+    flow = planning._PlanningFlow(
+        SimpleNamespace(planning_timeout=1, agent_idle_after_change_timeout=0,
+                        retry_wait=0, retry_max_wait=0),
+        tmp_path, tmp_path / ".ai-task-runner", state, [],
+        SimpleNamespace(set=lambda *args: None),
+        SimpleNamespace(session_id="executor-session"),
+    )
+    task = Task(id="c03-t001", title="repair", description="d", deliverable="x",
+                acceptance_criteria=["fixed"])
+    calls = []
+    monkeypatch.setattr(flow, "create_minimal_repair_plan", lambda: (_ for _ in ()).throw(AssertionError("must not use minimal")))
+    monkeypatch.setattr(flow, "inspect_project", lambda: calls.append("inspect") or ("summary", None))
+    monkeypatch.setattr(flow, "create_initial_plan", lambda *args: calls.append("plan") or [task])
+    monkeypatch.setattr(flow, "judge_and_refine", lambda tasks: calls.append("judge") or tasks)
+
+    assert flow.run() == [task]
+    assert calls == ["inspect", "plan", "judge"]

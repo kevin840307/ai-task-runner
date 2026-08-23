@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.15
+Version: 1.2.16
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 

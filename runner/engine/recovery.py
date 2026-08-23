@@ -7,7 +7,7 @@ from pathlib import Path
 from ..config.defaults import NO_PROGRESS_LIMIT
 from ..errors import RunnerError
 from ..safety.project_guard import progress_key
-from .models import Task
+from .models import ExecutionOutcome, Task
 
 
 def _digest(text: str) -> str:
@@ -26,11 +26,52 @@ def validator_failure_key(output: str) -> str:
     return _digest(normalized)
 
 
+
+def is_service_error(error: BaseException) -> bool:
+    """Return True for transient external service/API failures in an error chain."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if bool(getattr(current, "transient", False)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def execution_outcome(
+    *,
+    output: str = "",
+    error: RunnerError | None = None,
+    changed_files: list[str] | None = None,
+) -> ExecutionOutcome:
+    """Normalize executor completion without encoding backend-specific error kinds."""
+    return ExecutionOutcome(
+        status=(
+            "normal"
+            if error is None
+            else "service_error"
+            if is_service_error(error)
+            else "execution_error"
+        ),
+        output=output,
+        error=error,
+        changed_files=list(changed_files or []),
+    )
+
+
+def should_review(outcome: ExecutionOutcome) -> bool:
+    """Review successful execution or any failed execution that changed the project."""
+    return outcome.status == "normal" or bool(outcome.changed_files)
+
+
 def record_execution_progress(task: Task, error: RunnerError, changed: bool) -> None:
     """Record whether a failed executor attempt produced new evidence/progress."""
     if changed:
         task.progress_key = ""
         task.stagnant_attempts = 0
+        return
+    if is_service_error(error):
         return
     key = error_failure_key(error)
     if key == task.progress_key:
@@ -54,8 +95,9 @@ def record_review_progress(
         task.stagnant_attempts = 1
 
 
-def should_rebuild_session(task: Task) -> bool:
-    return task.stagnant_attempts >= NO_PROGRESS_LIMIT
+def should_rebuild_session(task: Task, error: RunnerError | None = None) -> bool:
+    # External service/API outages are not evidence that the coding session is bad.
+    return not (error and is_service_error(error)) and task.stagnant_attempts >= NO_PROGRESS_LIMIT
 
 
 def task_attempts_exhausted(task: Task, max_attempts: int) -> bool:
@@ -64,9 +106,12 @@ def task_attempts_exhausted(task: Task, max_attempts: int) -> bool:
 
 __all__ = [
     "error_failure_key",
+    "execution_outcome",
+    "is_service_error",
     "record_execution_progress",
     "record_review_progress",
     "should_rebuild_session",
+    "should_review",
     "task_attempts_exhausted",
     "validator_failure_key",
 ]

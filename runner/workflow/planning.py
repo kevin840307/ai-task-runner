@@ -16,7 +16,7 @@ from ..agent.prompts import (
 )
 from ..agent.results import parse_plan_judgment, parse_tasks
 from ..config import RuntimeConfig
-from ..config.defaults import MIN_PLANNED_TASKS
+from ..config.defaults import MIN_PLANNED_TASKS, REPAIR_FULL_PLAN_AFTER_SAME_FAILURES
 from ..errors import RunnerError, diagnostic_error
 from ..engine.models import PlanJudgment, RunState, Task
 from ..safety.project_guard import readonly_ask
@@ -92,6 +92,31 @@ class _PlanningFlow:
                 "using usable model output",
             )
             return salvaged
+
+
+    def create_minimal_repair_plan(self) -> list[Task]:
+        """Build the smallest repair directly from validator evidence first."""
+        self.planner.session_id = ""
+        self.ui.set(
+            "AI 正在建立最小修復規劃",
+            "validator evidence first · skip inspect/judge when sufficient",
+        )
+        return self.ask_plan(
+            plan_finalize_prompt(
+                self.state.goal,
+                self.root,
+                self.state,
+                self.work,
+                same_session=False,
+            )
+        )
+
+    def should_try_minimal_repair(self) -> bool:
+        return bool(
+            self.state.cycle > 1
+            and self.state.validator_output.strip()
+            and self.state.validator_failure_count < REPAIR_FULL_PLAN_AFTER_SAME_FAILURES
+        )
 
     def inspect_project(self) -> tuple[str, RunnerError | None]:
         prompt = plan_understand_prompt(
@@ -248,6 +273,15 @@ class _PlanningFlow:
             return None
 
     def run(self) -> list[Task]:
+        if self.should_try_minimal_repair():
+            try:
+                return self.create_minimal_repair_plan()
+            except RunnerError as error:
+                self.ui.set(
+                    "最小修復規劃不足，改用完整規劃",
+                    str(error)[-500:],
+                )
+
         inspection_summary, inspection_error = self.inspect_project()
         tasks = self.create_initial_plan(inspection_summary, inspection_error)
         tasks = self.judge_and_refine(tasks)

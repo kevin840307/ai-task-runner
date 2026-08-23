@@ -101,9 +101,9 @@ def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypat
             "validator": 1,
         },
         "ai_replan": {
-            "plan_understand": 2,
+            "plan_understand": 1,
             "plan_finalize": 2,
-            "plan_judge": 2,
+            "plan_judge": 1,
             "execute": 2,
             "review": 2,
             "validator": 2,

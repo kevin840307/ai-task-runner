@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-task-runner"
-version = "1.2.15"
+version = "1.2.16"
 description = "Small retry/review/validator loop around coding agents."
 requires-python = ">=3.10"
 dependencies = [

@@ -533,7 +533,7 @@ print('PASS')
         for record in prompt_records
         if record["stage"] == "plan_understand"
     ]
-    assert planning_sessions == [False, True, False]
+    assert planning_sessions == [False, False]
     state = json.loads((tmp_path / ".ai-task-runner/state.json").read_text())
     assert state["completed"] is True
     assert state["stage"] == "completed"
