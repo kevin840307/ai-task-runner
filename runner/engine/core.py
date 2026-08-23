@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import time
 from pathlib import Path
 
 from ..config.defaults import (
     MAX_TASK_OUTPUT_CHARS,
     MAX_VALIDATOR_OUTPUT_CHARS,
-    NO_PROGRESS_LIMIT,
 )
 
 from ..agent.calls import retry_model_call
@@ -28,7 +26,6 @@ from ..safety.project_guard import (
     changed_project_files,
     cleanup_stale_artifacts,
     normalize_protected_paths,
-    progress_key,
     project_fingerprint,
     project_manifest,
     protected_ask,
@@ -36,6 +33,20 @@ from ..safety.project_guard import (
 )
 from ..app.script_runner import execute_script as execute_yaml_script
 from .state_store import StateStore
+from .recovery import (
+    record_execution_progress,
+    record_review_progress,
+    should_rebuild_session,
+    task_attempts_exhausted,
+    validator_failure_key,
+)
+from .transitions import (
+    complete_run,
+    complete_task,
+    install_plan,
+    prepare_repair_cycle,
+    set_stage,
+)
 from ..app.ui import LiveUI, show_todo
 from ..workflow.planning import build_plan
 from ..workflow.reviewing import review_task
@@ -121,13 +132,9 @@ class TaskRunner:
         return 0
 
     def _set_stage(self, stage: RunStage, detail: str = "") -> None:
-        now = time.time()
-        if self.state.stage != stage:
-            self.state.stage = stage
-            self.state.stage_started_at = now
-        self.state.last_activity_at = now
-        self.state.last_error = detail[-1000:] if detail else ""
+        set_stage(self.state, stage, detail)
         self._save_state()
+
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir():
@@ -191,9 +198,7 @@ class TaskRunner:
             )
         finally:
             agent_factory.configure(self.agent, "runtime")
-        self.state.agent_session_id = self.agent.session_id
-        self.state.tasks = planned
-        self.state.current = 0
+        install_plan(self.state, planned, self.agent.session_id)
         self._save_state()
         show_todo(self.state, self.ui)
 
@@ -259,18 +264,7 @@ class TaskRunner:
             + str(error)[-MAX_TASK_OUTPUT_CHARS:]
         )
         task.status = "pending"
-        if changed:
-            task.progress_key = ""
-            task.stagnant_attempts = 0
-        else:
-            lines = [line.strip() for line in str(error).splitlines() if line.strip()]
-            signature = lines[-1] if lines else type(error).__name__
-            key = hashlib.sha256(signature.encode("utf-8")).hexdigest()
-            if key == task.progress_key:
-                task.stagnant_attempts += 1
-            else:
-                task.progress_key = key
-                task.stagnant_attempts = 1
+        record_execution_progress(task, error, changed)
         self.state.agent_session_id = self.agent.session_id
         self._save_state()
         shown_files = changed_files[:20]
@@ -330,7 +324,7 @@ class TaskRunner:
 
     def _prepare_task_retry(self, task: Task) -> int | None:
         show_todo(self.state, self.ui)
-        if self.args.max_attempts and task.attempts >= self.args.max_attempts:
+        if task_attempts_exhausted(task, self.args.max_attempts):
             return 2
         if self.args.retry_delay:
             time.sleep(self.args.retry_delay)
@@ -341,19 +335,11 @@ class TaskRunner:
         task: Task,
         review: ReviewResult,
     ) -> None:
-        key = progress_key(
-            self.root,
-            self.work,
-            review["missing_items"],
-        )
-        if key == task.progress_key:
-            task.stagnant_attempts += 1
-        else:
-            task.progress_key = key
-            task.stagnant_attempts = 1
+        record_review_progress(task, self.root, self.work, review["missing_items"])
+
 
     def _rebuild_stagnant_session(self, task: Task) -> None:
-        if task.stagnant_attempts < NO_PROGRESS_LIMIT:
+        if not should_rebuild_session(task):
             return
         self.agent.session_id = ""
         self.state.agent_session_id = ""
@@ -371,12 +357,7 @@ class TaskRunner:
         )
 
     def _complete_current_task(self, task: Task) -> None:
-        task.status = "completed"
-        task.last_output = ""
-        task.progress_key = ""
-        task.stagnant_attempts = 0
-        self.state.agent_session_id = self.agent.session_id
-        self.state.current += 1
+        complete_task(self.state, task, self.agent.session_id)
         self._save_state()
         self.ui.set("任務完成", task.title)
 
@@ -495,11 +476,8 @@ class TaskRunner:
 
         self.state.validator_output = bounded_text(output, MAX_VALIDATOR_OUTPUT_CHARS)
         if passed:
-            self.state.validator_failure_key = ""
-            self.state.validator_failure_count = 0
             self.agent.session_id = ""
-            self.state.agent_session_id = ""
-            self.state.completed = True
+            complete_run(self.state)
             self._set_stage("completed")
             self._save_state()
             self.ui.set("全部完成", "Validator PASS")
@@ -509,8 +487,7 @@ class TaskRunner:
         if self.state.validator_failure_count >= VALIDATOR_REPAIR_AFTER_SAME_FAILURES:
             self.agent.session_id = ""
             self.state.agent_session_id = ""
-        self.state.cycle += 1
-        self.state.current = len(self.state.tasks)
+        prepare_repair_cycle(self.state)
         self._save_state()
         validator_name = (
             "AI FAIL"
@@ -532,10 +509,7 @@ class TaskRunner:
         return None
 
     def _record_validator_failure(self, output: str) -> None:
-        key = hashlib.sha256(
-            "\n".join(line.strip() for line in output.splitlines() if line.strip())
-            .encode("utf-8")
-        ).hexdigest()
+        key = validator_failure_key(output)
         if key == self.state.validator_failure_key:
             self.state.validator_failure_count += 1
         else:

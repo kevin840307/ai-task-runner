@@ -1,12 +1,12 @@
 # Protection and Safety Model
 
-Version: 1.2.13
+Version: 1.2.15
 
 ## Project root
 The project root is the task workspace boundary. Project policy is read only from `<project-root>/.ai-task-runner.yaml`; parent directories are not searched.
 
 ## Protected paths
-`protected_paths` entries are project-relative files or directories. Directory entries protect the whole subtree. Paths are normalized and descendant entries are collapsed when a protected parent already exists. Absolute paths and `..` escapes are rejected. The policy file itself is always protected automatically.
+`protected_paths` entries are project-relative files or directories. Directory entries protect the whole subtree. Paths are normalized and descendant entries are collapsed when a protected parent already exists. Absolute paths and `..` escapes are rejected. The policy file itself is always protected automatically. External Python-validator projects should also protect `ai_task_runner_validator.py`; source-mode runs may place this shared helper beside `validation.py`.
 
 Protected-path snapshots detect modification, deletion, creation under protected directory roots, and restore violations. CLI `--protect-file` can add ad-hoc protection; project policy is preferred for stable rules.
 

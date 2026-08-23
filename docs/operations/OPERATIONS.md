@@ -1,6 +1,6 @@
 # Operations and Troubleshooting
 
-Version: 1.2.13
+Version: 1.2.15
 
 ## Long-running behavior
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Count limits default to zero (unbounded by count). Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.

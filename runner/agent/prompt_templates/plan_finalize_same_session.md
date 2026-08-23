@@ -10,7 +10,3 @@ Split work only when each part has independent delivery value and can be complet
 Do not create umbrella TODOs that implement the whole goal or absorb work that belongs to later TODOs.
 Return at least $minimum_tasks ordered task(s), using only as many tasks as the goal's real deliverables require. Never split work to target a task count or manufacture preparation/read/check tasks.
 Keep each TODO self-contained so its Executor can perform only the local inspection needed for that task.
-Every task must include this acceptance criterion: Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior.
-
-Return only valid JSON in this shape, without Markdown or explanation:
-{"tasks":[{"title":"Deliverable","description":"Task-specific context and one focused change.","deliverable":"The exact observable project result.","acceptance_criteria":["Objective completion evidence","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]}]}

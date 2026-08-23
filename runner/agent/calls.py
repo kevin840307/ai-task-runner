@@ -51,7 +51,6 @@ def retry_model_call(
             transient = bool(getattr(error, "transient", False))
             if not transient:
                 errors += 1
-            ui.stop("模型呼叫異常，將自動重試", diagnostic_detail(error))
             limit_reached = (
                 max_attempts and attempts >= max_attempts
             ) or (
@@ -63,6 +62,7 @@ def retry_model_call(
                     "retrying from the runner task flow: "
                     f"{str(error)[-1000:]}"
                 ) from error
+            ui.stop("模型呼叫異常，將自動重試", diagnostic_detail(error))
             if delay:
                 time.sleep(delay)
                 delay = min(max_wait, max(wait, delay * 2))

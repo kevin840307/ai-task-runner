@@ -41,6 +41,7 @@ class LiveUI:
         self.detail = ""
         self._line_width = 0
         self._task_list_snapshot: tuple[tuple[str, str, str], ...] = ()
+        self._last_progress_snapshot: tuple[Any, ...] | None = None
         self._frame = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -49,6 +50,16 @@ class LiveUI:
     def bind(self, state: RunState) -> None:
         self.state = state
         self.draw()
+        snapshot: tuple[Any, ...] = (
+            state.run_id,
+            state.cycle,
+            state.current,
+            state.completed,
+            tuple((task.id, task.title, task.status, task.attempts) for task in state.tasks),
+        )
+        if snapshot == self._last_progress_snapshot:
+            return
+        self._last_progress_snapshot = snapshot
         self._emit("runner.progress", include_detail=False)
 
     def set(self, status: str, detail: str = "") -> None:

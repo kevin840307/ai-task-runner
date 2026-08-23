@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.13
+Version: 1.2.15
 
 ## Mandatory maintenance rules
 1. No project-specific hardcode in generic Runner code. Never branch on sample project names, FAB/ENV/version values, filenames, business fields, or a specific model identity to solve one case.

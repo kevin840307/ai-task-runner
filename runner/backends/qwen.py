@@ -100,6 +100,8 @@ class QwenBackend(AgentBackend):
     def _session_command(self, session_id: str, command: str, timeout: int) -> str:
         if not session_id:
             return ""
+        if any(value in self.sandbox_flags for value in self.extra_args):
+            bridge_sandbox_session(self.root, session_id)
         try:
             result = run_process(
                 [*self.base_command, "-p", command, "--resume", session_id, *self.extra_args],

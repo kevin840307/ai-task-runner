@@ -14,7 +14,7 @@ from ..errors import RunnerError
 from ..engine.models import ReviewResult, RunState, Task
 from ..safety.project_guard import readonly_ask
 from ..app.ui import LiveUI
-from .structured import readonly_structured_call
+from .model_calls import readonly_structured_call
 
 
 def skipped_review(reason: str) -> ReviewResult:

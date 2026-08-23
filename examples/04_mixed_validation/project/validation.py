@@ -1,7 +1,19 @@
 #!/usr/bin/env python3
 import argparse, subprocess, sys, tempfile
 from pathlib import Path
-from ai_task_runner_validator import ValidatorReport, parse_json
+try:
+    from ai_task_runner_validator import ValidatorReport, parse_json
+except ModuleNotFoundError:
+    import importlib.util as _importlib_util
+    from pathlib import Path as _HelperPath
+
+    _helper_path = _HelperPath(__file__).with_name("ai_task_runner_validator.py")
+    _spec = _importlib_util.spec_from_file_location("_atr_validator_helper", _helper_path)
+    if _spec is None or _spec.loader is None:
+        raise
+    _helper = _importlib_util.module_from_spec(_spec)
+    _spec.loader.exec_module(_helper)
+    ValidatorReport, parse_json = _helper.ValidatorReport, _helper.parse_json
 
 def call(root, db, *args):
     return subprocess.run([sys.executable,str(root/'todo_cli.py'),'--db',str(db),*args],cwd=root,text=True,capture_output=True,timeout=20)

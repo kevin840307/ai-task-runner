@@ -171,9 +171,9 @@ def test_all_model_phases_retry_and_finish(tmp_path):
 
 def test_model_calls_have_configurable_python_timeout():
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
-    api = (ROOT / "runner" / "api.py").read_text(encoding="utf-8")
+    api = (ROOT / "runner" / "app" / "api.py").read_text(encoding="utf-8")
     backend = (ROOT / "runner" / "backends" / "base.py").read_text(encoding="utf-8")
-    process_control = (ROOT / "runner" / "process_control.py").read_text(encoding="utf-8")
+    process_control = (ROOT / "runner" / "runtime" / "process_control.py").read_text(encoding="utf-8")
 
     assert '"--agent-timeout"' in cli
     assert "DEFAULT_AGENT_TIMEOUT" in api

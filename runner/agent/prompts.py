@@ -40,6 +40,14 @@ def render_prompt_template(name: str, values: dict[str, Any]) -> str:
     )
 
 
+def _prompt_fragment(name: str) -> str:
+    return render_prompt_template(name, {}).strip()
+
+
+def _with_fragment(prompt: str, name: str) -> str:
+    return prompt.rstrip() + "\n\n" + _prompt_fragment(name) + "\n"
+
+
 def _always_instructions(root: Path) -> str:
     text = instructions(root, "always")
     return f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
@@ -149,26 +157,31 @@ def plan_finalize_prompt(
     inspection_summary: str = "",
 ) -> str:
     if same_session:
-        return render_prompt_template(
-            "plan_finalize_same_session.md",
-            {
-                "minimum_tasks": MIN_PLANNED_TASKS,
-                "planning_mode": "initial" if state.cycle == 1 else "repair",
-            },
+        return _with_fragment(
+            render_prompt_template(
+                "plan_finalize_same_session.md",
+                {
+                    "minimum_tasks": MIN_PLANNED_TASKS,
+                    "planning_mode": "initial" if state.cycle == 1 else "repair",
+                },
+            ),
+            "plan_output_contract.md",
         )
 
     context = _planning_context(goal, root, state, work)
-    return render_prompt_template(
-        "plan_finalize.md",
-        {
-            **context,
-            "source_instruction": (
-                "This is a fresh no-tool fallback. Use only the supplied goal, progress, "
-                "validator feedback, and inspection summary; do not "
-                "inspect the repository."
-            ),
-            "inspection_summary": bounded_text(inspection_summary, 12000),
-        },
+    return _with_fragment(
+        render_prompt_template(
+            "plan_finalize.md",
+            {
+                **context,
+                "source_instruction": (
+                    "This is a fresh no-tool fallback. Use only the supplied goal, progress, "
+                    "validator feedback, and inspection summary; do not inspect the repository."
+                ),
+                "inspection_summary": bounded_text(inspection_summary, 12000),
+            },
+        ),
+        "plan_output_contract.md",
     )
 
 
@@ -185,13 +198,16 @@ def plan_refine_prompt(
     feedback = "\n".join(f"- {item}" for item in judge_issues) or "- Re-check and correct the current plan."
     if same_session:
         return render_prompt_template("plan_refine.md", {"judge_feedback": feedback})
-    return render_prompt_template(
-        "plan_refine_full.md",
-        {
-            **_planning_context(goal, root, state, work),
-            "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
-            "judge_feedback": "\nPlan judge issues that must all be resolved:\n" + feedback + "\n",
-        },
+    return _with_fragment(
+        render_prompt_template(
+            "plan_refine_full.md",
+            {
+                **_planning_context(goal, root, state, work),
+                "tasks_json": json.dumps({"tasks": [task_spec(task) for task in tasks]}, ensure_ascii=False),
+                "judge_feedback": "\nPlan judge issues that must all be resolved:\n" + feedback + "\n",
+            },
+        ),
+        "plan_output_contract.md",
     )
 
 def plan_judge_prompt(
@@ -272,7 +288,7 @@ def execution_prompt(
         values = {"feedback": _execution_feedback(state, strategy_note)}
         if task.attempts <= 1:
             values["task_json"] = json.dumps(task_spec(task), ensure_ascii=False)
-        return render_prompt_template(template, values)
+        return _with_fragment(render_prompt_template(template, values), "execution_finish.md")
 
     context = {
         "validator_feedback": format_validator_feedback(
@@ -313,19 +329,22 @@ def execution_prompt(
         if validator_hint
         else ""
     )
-    return render_prompt_template(
-        "execution.md",
-        {
-            "rules": rules(root, protected),
-            "goal": state.goal,
-            "context_json": json.dumps(context, ensure_ascii=False),
-            "validator_reference": validator_reference,
-            "task_json": json.dumps(task_spec(task), ensure_ascii=False),
-            "previous": previous,
-            "review_feedback": review_feedback,
-            "strategy": strategy,
-            "rebuilt_session_note": rebuilt_session_note,
-        },
+    return _with_fragment(
+        render_prompt_template(
+            "execution.md",
+            {
+                "rules": rules(root, protected),
+                "goal": state.goal,
+                "context_json": json.dumps(context, ensure_ascii=False),
+                "validator_reference": validator_reference,
+                "task_json": json.dumps(task_spec(task), ensure_ascii=False),
+                "previous": previous,
+                "review_feedback": review_feedback,
+                "strategy": strategy,
+                "rebuilt_session_note": rebuilt_session_note,
+            },
+        ),
+        "execution_finish.md",
     )
 
 
@@ -341,22 +360,28 @@ def review_prompt(
         if feedback
         else ""
     )
-    return render_prompt_template(
-        "review.md",
-        {
-            "always_instructions": _always_instructions(root),
-            "global_constraints_json": json.dumps(
-                shared_task_constraints(state), ensure_ascii=False
-            ),
-            "task_json": json.dumps(task_spec(task), ensure_ascii=False),
-            "output": output[-3000:],
-            "validator_section": validator_section,
-        },
+    return _with_fragment(
+        render_prompt_template(
+            "review.md",
+            {
+                "always_instructions": _always_instructions(root),
+                "global_constraints_json": json.dumps(
+                    shared_task_constraints(state), ensure_ascii=False
+                ),
+                "task_json": json.dumps(task_spec(task), ensure_ascii=False),
+                "output": output[-3000:],
+                "validator_section": validator_section,
+            },
+        ),
+        "review_output_contract.md",
     )
 
 
 def review_finalize_prompt(root: Path | None = None) -> str:
-    prompt = render_prompt_template("review_finalize.md", {})
+    prompt = _with_fragment(
+        render_prompt_template("review_finalize.md", {}),
+        "review_output_contract.md",
+    )
     return prompt + (_always_instructions(root) if root is not None else "")
 
 

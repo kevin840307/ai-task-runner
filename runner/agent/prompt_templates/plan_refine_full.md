@@ -31,7 +31,3 @@ Quality gate:
 
 Before returning, independently reject and rewrite the plan if any TODO can finish without producing its requested project result, exists only to gather knowledge/check work, duplicates another TODO, or combines independently implementable or verifiable changes.
 Do not implement, ask questions, use tools, or write files during planning.
-Every task must include this acceptance criterion: Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior.
-
-Return only valid JSON in this shape, without Markdown or explanation:
-{"tasks":[{"title":"Deliverable","description":"Task-specific context and one focused change.","deliverable":"The exact observable project result.","acceptance_criteria":["Objective completion evidence","Use the current architecture, minimum code, clean code, low coupling, and preserve existing behavior"]}]}

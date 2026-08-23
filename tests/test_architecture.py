@@ -9,7 +9,7 @@ ORCHESTRATION = {
     "runner.app.script_runner",
     "runner.workflow.planning",
     "runner.workflow.reviewing",
-    "runner.workflow.structured",
+    "runner.workflow.model_calls",
     "runner.workflow.validation.ai",
     "runner.workflow.validation.file",
 }
@@ -40,7 +40,7 @@ FORBIDDEN_IMPORTS = {
         "runner.workflow.validation.ai",
         "runner.workflow.validation.file",
     },
-    "runner/workflow/structured.py": {
+    "runner/workflow/model_calls.py": {
         "runner.engine.core",
         "runner.app.script_runner",
         "runner.workflow.planning",

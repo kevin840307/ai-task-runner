@@ -169,5 +169,6 @@ def test_example_project_policies_protect_control_files():
         assert "prompt.md" in protected
         if (project / "validation.py").is_file():
             assert "validation.py" in protected
+            assert "ai_task_runner_validator.py" in protected
         if (project / "ai_validation.md").is_file():
             assert "ai_validation.md" in protected

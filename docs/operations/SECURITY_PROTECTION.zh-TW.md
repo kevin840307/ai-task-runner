@@ -1,12 +1,12 @@
 # 保護與安全模型
 
-版本：1.2.13
+版本：1.2.15
 
 ## Project root
 Project root 是 task workspace boundary。Project policy 只從 `<project-root>/.ai-task-runner.yaml` 讀取，不會往 parent directory 搜尋。
 
 ## Protected paths
-`protected_paths` 是 project-relative file/directory。Directory 會保護整個 subtree。Path 會 normalize；已有 protected parent 時 descendant 會折疊。Absolute path 與 `..` escape 會被拒絕。Policy 本身永遠自動 protected。
+`protected_paths` 是 project-relative file/directory。Directory 會保護整個 subtree。Path 會 normalize；已有 protected parent 時 descendant 會折疊。Absolute path 與 `..` escape 會被拒絕。Policy 本身永遠自動 protected。 使用 external Python validator 的 project 也應保護 `ai_task_runner_validator.py`；source-mode 執行時 Runner 可能會把這個共用 helper 放在 `validation.py` 同目錄。
 
 Protected-path snapshot 可偵測修改、刪除，以及 protected directory 底下的新檔，並還原違規變更。CLI `--protect-file` 可臨時增加保護；長期規則建議放 project policy。
 

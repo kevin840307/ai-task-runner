@@ -6,14 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..agent import AgentClient
-from ..agent.calls import recover_structured_output, retry_model_call
+from ..agent.calls import retry_model_call
 from ..agent.debug import parse_with_debug
 from ..agent.prompts import (
     plan_finalize_prompt,
     plan_judge_prompt,
     plan_refine_prompt,
     plan_understand_prompt,
-    structured_output_retry_prompt,
 )
 from ..agent.results import parse_plan_judgment, parse_tasks
 from ..config import RuntimeConfig
@@ -22,6 +21,7 @@ from ..errors import RunnerError, diagnostic_error
 from ..engine.models import PlanJudgment, RunState, Task
 from ..safety.project_guard import readonly_ask
 from ..app.ui import LiveUI
+from .model_calls import structured_call
 
 PLAN_JUDGE_MAX_REWRITES = 2
 
@@ -82,12 +82,7 @@ class _PlanningFlow:
 
     def ask_plan(self, prompt: str) -> list[Task]:
         try:
-            output = self.ask_raw(prompt)
-            return recover_structured_output(
-                output,
-                self.parse_plan,
-                lambda error: self.ask_raw(structured_output_retry_prompt(error)),
-            )
+            return structured_call(prompt, self.parse_plan, self.ask_raw)
         except RunnerError as error:
             salvaged = self.salvage_plan(error)
             if salvaged is None:
@@ -112,53 +107,49 @@ class _PlanningFlow:
         except RunnerError as error:
             return "", error
 
+    def _same_session_plan(self, prompt: str) -> tuple[list[Task] | None, RunnerError | None]:
+        error: RunnerError | None = None
+        for _ in range(2):
+            if not self.planner.session_id:
+                break
+            try:
+                return self.ask_plan(prompt), None
+            except RunnerError as current:
+                error = current
+        return None, error
+
     def create_initial_plan(
         self,
         inspection_summary: str,
         inspection_error: RunnerError | None,
     ) -> list[Task]:
-        tasks: list[Task] | None = None
         if self.planner.session_id:
             prompt = plan_finalize_prompt(
-                self.state.goal,
-                self.root,
-                self.state,
-                self.work,
-                same_session=True,
+                self.state.goal, self.root, self.state, self.work, same_session=True
             )
             self.ui.set(
                 "AI 正在產生任務規劃",
                 "reuse completed planning inspection without tools",
             )
-            try:
-                tasks = self.ask_plan(prompt)
-            except RunnerError as error:
-                inspection_error = error
-                if self.planner.session_id:
-                    try:
-                        tasks = self.ask_plan(prompt)
-                    except RunnerError as retry_error:
-                        inspection_error = retry_error
-
-        if tasks is not None:
-            return tasks
+            tasks, error = self._same_session_plan(prompt)
+            if tasks is not None:
+                return tasks
+            inspection_error = error or inspection_error
 
         self.planner.session_id = ""
 
         def minimal_plan() -> list[Task]:
-            prompt = plan_finalize_prompt(
-                self.state.goal,
-                self.root,
-                self.state,
-                self.work,
-                same_session=False,
-                inspection_summary=inspection_summary,
+            self.ui.set("AI 正在建立最小任務規劃", "fresh full-context fallback")
+            return self.ask_plan(
+                plan_finalize_prompt(
+                    self.state.goal,
+                    self.root,
+                    self.state,
+                    self.work,
+                    same_session=False,
+                    inspection_summary=inspection_summary,
+                )
             )
-            self.ui.set(
-                "AI 正在建立最小任務規劃",
-                "fresh full-context fallback",
-            )
-            return self.ask_plan(prompt)
 
         return retry_model_call(
             minimal_plan,
@@ -208,13 +199,12 @@ class _PlanningFlow:
             "AI 正在審查任務規劃",
             f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES + 1}",
         )
-        judgment_text = self.ask_raw(prompt)
-        return recover_structured_output(
-            judgment_text,
+        return structured_call(
+            prompt,
             lambda raw: parse_with_debug(
                 self.debug_dir, parse_plan_judgment, raw
             ),
-            lambda error: self.ask_raw(structured_output_retry_prompt(error)),
+            self.ask_raw,
         )
 
     def _refine(
@@ -248,21 +238,13 @@ class _PlanningFlow:
                 try:
                     return self.ask_plan(
                         plan_refine_prompt(
-                            self.state.goal,
-                            self.root,
-                            self.state,
-                            tasks,
-                            self.work,
-                            judge_issues,
-                            same_session=False,
+                            self.state.goal, self.root, self.state, tasks, self.work,
+                            judge_issues, same_session=False,
                         )
                     )
-                except RunnerError as retry_error:
-                    error = retry_error
-            self.ui.set(
-                "AI 重寫規劃異常，保留目前有效規劃",
-                str(error)[-500:],
-            )
+                except RunnerError as fresh_error:
+                    error = fresh_error
+            self.ui.set("AI 重寫規劃異常，保留目前有效規劃", str(error)[-500:])
             return None
 
     def run(self) -> list[Task]:

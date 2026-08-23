@@ -30,10 +30,4 @@ Decision rules:
 - Never include later-task or whole-project work in `missing_items`.
 - For FAIL, `missing_items` must contain concrete actionable missing results.
 - Do not return FAIL with an empty `missing_items` array.
-- Return exactly one JSON object with no Markdown or commentary.
-
-FAIL:
-{"completed":false,"reason":"One or more acceptance criteria are not satisfied.","missing_items":["Describe the specific missing or incorrect result."]}
-
-PASS:
-{"completed":true,"reason":"All acceptance criteria are satisfied.","missing_items":[]}
+-

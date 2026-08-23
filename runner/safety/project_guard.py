@@ -27,7 +27,7 @@ def runner_source_files() -> list[Path]:
     package_root = Path(__file__).resolve().parents[1]
     root = package_root.parent
     return [
-        *(path for name in ("ai_task_runner.py", "ai_task_runner_validator.py")
+        *(path for name in ("ai_task_runner.py",)
           if (path := root / name).is_file()),
         package_root,
     ]

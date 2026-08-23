@@ -25,4 +25,3 @@ $previous
 $review_feedback
 $rebuilt_session_note
 $strategy
-Finish with a factual summary of changed files and checks.

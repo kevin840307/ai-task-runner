@@ -49,7 +49,7 @@ def test_internal_modules_use_feature_owners_directly():
     assert "from ..safety.project_guard import (" in core
     assert "from ..agent.calls import" in planning
     assert "from ..safety.project_guard import readonly_ask" in planning
-    assert "from .structured import readonly_structured_call" in reviewing
+    assert "from .model_calls import readonly_structured_call" in reviewing
     assert "from ...runtime.process_control import run_process" in file_validation
 
 

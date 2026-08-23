@@ -36,7 +36,7 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert "--session" in opencode.build_command("prompt", "session-1")
     protected = runner_source_files()
     protected_names = {path.name for path in protected}
-    assert {"ai_task_runner.py", "ai_task_runner_validator.py", "runner"} == protected_names
+    assert {"ai_task_runner.py", "runner"} == protected_names
     assert next(path for path in protected if path.name == "runner").is_dir()
 
 
