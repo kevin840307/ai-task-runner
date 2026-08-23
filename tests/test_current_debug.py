@@ -43,7 +43,7 @@ class FailingBackend(FakeBackend):
 
 
 def _client(tmp_path: Path, monkeypatch, backend) -> AgentClient:
-    import runner.agent.client as agent_module
+    import runner.agent.agent as agent_module
 
     monkeypatch.setattr(agent_module, "create_backend", lambda *args, **kwargs: backend)
     return AgentClient(

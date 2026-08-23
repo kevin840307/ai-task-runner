@@ -168,7 +168,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     request = RunRequest.from_namespace(parser().parse_args(argv))
     while True:
         try:
-            return run(request).exit_code
+            result = run(request)
+            if request.plan_only or result.completed:
+                return result.exit_code
+            _continue_unfinished_run(request, result.state_files)
         except KeyboardInterrupt:
             _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
             return 130
@@ -177,6 +180,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         except Exception as error:
             _recover_from_unexpected_error(request, error)
+
+
+
+def _continue_unfinished_run(
+    request: RunRequest,
+    state_files: Sequence[str],
+) -> None:
+    """Never trust a normal return as completion unless persisted state confirms it."""
+    if any(Path(path).is_file() for path in state_files):
+        request.resume, request.force_new = True, False
+        detail = "run returned before Final Validator completion; resuming saved state"
+    else:
+        request.resume, request.force_new = False, False
+        detail = "run returned without completed state; continuing original request"
+    _report_error(request, "runner.retry", detail, 0)
+    if request.retry_delay:
+        time.sleep(request.retry_delay)
 
 
 def _recover_from_unexpected_error(

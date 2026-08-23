@@ -70,32 +70,28 @@ def _runner(tmp_path, task):
     return runner
 
 
-def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
-    import runner.engine.core as core
+def test_review_advance_completes_one_task_and_preserves_session(tmp_path):
+    from runner.engine import core
+    from runner.workflow.stages import StageContext
 
     task = Task(
-        id="c01-t001",
-        title="Focused change",
-        description="Do work",
-        deliverable="result",
-        acceptance_criteria=["result exists"],
+        id="c01-t001", title="Focused change", description="Do work",
+        deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
+    runner.context = SimpleNamespace(task=task)
     events = []
-    runner.ui = SimpleNamespace(
-        set=lambda *args: events.append(args),
-        bind=lambda *args: None,
-    )
-    monkeypatch.setattr(
-        core,
-        "show_todo",
-        lambda *args: events.append(("duplicate progress",)),
-    )
-
-    core.TaskRunner._complete_current_task(runner, task)
+    monkey_status = __import__("runner.runtime.status", fromlist=["set_status"])
+    old = monkey_status.set_status
+    monkey_status.set_status = lambda *args: events.append(args)
+    try:
+        runner._apply("review", Outcome("review", "pass"), decide(Outcome("review", "pass"), task=task, threshold=0))
+    finally:
+        monkey_status.set_status = old
 
     assert task.status == "completed"
     assert runner.state.current == 1
+    assert runner.agent.session_id == "old-session"
     assert events == [("任務完成", "Focused change")]
 
 
@@ -182,59 +178,31 @@ def test_transient_service_error_is_separate_and_does_not_mark_stagnation(tmp_pa
     assert task.progress_key == ""
 
 
-def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monkeypatch):
-    import runner.engine.core as core
+def test_graph_routes_review_advance_to_next_execute_then_validate():
+    from runner.workflow.flow import default_flow
 
+    class S:
+        def __init__(self, name): self.name = name
+
+    planning, execute, review, validate = (S(name) for name in ("planning", "execute", "review", "validate"))
+    flow = default_flow(planning, execute, review, validate)
     tasks = [
-        Task(id="c01-t001", title="one", description="d", deliverable="a", acceptance_criteria=["a"]),
+        Task(id="c01-t001", title="one", description="d", deliverable="a", acceptance_criteria=["a"], status="completed"),
         Task(id="c01-t002", title="two", description="d", deliverable="b", acceptance_criteria=["b"]),
     ]
-    runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=tasks)
-    runner.agent = SimpleNamespace(session_id="executor-session")
-    runner.ui = SimpleNamespace(set=lambda *args: None)
-    runner._save_state = lambda: None
-    runner._set_stage = lambda *args: None
-    seen = []
-    runner._execute_current_task = lambda task: seen.append((task.id, runner.agent.session_id)) or "done"
-    runner._review_current_task = lambda *args: {"completed": True, "reason": "ok", "missing_items": []}
-    monkeypatch.setattr(core, "project_manifest", lambda *args: {})
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
-    monkeypatch.setattr(core, "show_todo", lambda *args: None)
-
-    assert runner._run_pending_tasks() is None
-    assert seen == [("c01-t001", "executor-session"), ("c01-t002", "executor-session")]
-    assert runner.agent.session_id == "executor-session"
-    assert runner.state.agent_session_id == "executor-session"
+    current = RunState(run_id="r", goal="g", project_root=".", tasks=tasks, current=1)
+    ctx = SimpleNamespace(state=current)
+    assert flow.next("review", "advance", ctx) == "execute"
+    tasks[1].status = "completed"
+    current.current = 2
+    assert flow.next("review", "advance", ctx) == "validate"
 
 
-def test_normal_executor_completion_without_file_change_still_reviews(tmp_path, monkeypatch):
-    import runner.engine.core as core
-
-    task = Task(id="c01-t001", title="check existing result", description="d", deliverable="d", acceptance_criteria=["ok"])
-    runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[task])
-    runner.agent = SimpleNamespace(session_id="s")
-    runner.ui = SimpleNamespace(set=lambda *args: None)
-    runner._save_state = lambda: None
-    runner._save_session = lambda: None
-    runner._set_stage = lambda *args: None
-    runner._execute_current_task = lambda task: "already satisfied"
-    seen = []
-    runner._review_current_task = lambda task, output: seen.append((task.id, output)) or {"completed": True, "reason": "ok", "missing_items": []}
-    monkeypatch.setattr(core, "project_manifest", lambda *args: {})
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
-    monkeypatch.setattr(core, "show_todo", lambda *args: None)
-
-    assert runner._run_pending_tasks() is None
-    assert seen == [("c01-t001", "already satisfied")]
-    assert task.status == "completed"
+def test_execute_success_advances_to_review_even_without_changed_files():
+    task = Task(id="c01-t001", title="check existing result", description="d", deliverable="d", acceptance_criteria=["ok"] )
+    outcome = Outcome("execute", "pass", changed_files=[])
+    decision = decide(outcome, task=task, threshold=0)
+    assert decision.action == "advance"
 
 
 def test_validator_repair_hint_is_scoped_to_current_todo():

@@ -1,4 +1,4 @@
-"""Small state transitions used by the core orchestration loop."""
+"""Small state mutations used by the core orchestration loop."""
 from __future__ import annotations
 
 import time
@@ -46,26 +46,42 @@ def complete_run(state: RunState) -> None:
     state.completed = True
 
 
-
-def prepare_task_replan(state: RunState, feedback: str) -> None:
-    """Discard only the stale plan; keep project progress and replan the original goal."""
+def invalidate_plan(state: RunState, feedback: str = "") -> None:
+    """Preserve project/task evidence but make the outer loop naturally plan again."""
     state.cycle += 1
     state.current = len(state.tasks)
-    state.agent_session_id = ""
+    state.completed = False
     state.replan_feedback = feedback[-4000:]
 
 
-def prepare_repair_cycle(state: RunState, *, full_replan: bool = False) -> None:
-    state.cycle += 1
-    state.current = len(state.tasks)
-    state.replan_feedback = "Full planning requested after repeated recovery failures." if full_replan else ""
+def normalize_state(state: RunState) -> bool:
+    """Repair small logical inconsistencies instead of turning them into a STOP path."""
+    changed = False
+    if state.completed and state.stage != "completed":
+        state.completed = False
+        changed = True
+
+    first_pending = next(
+        (index for index, task in enumerate(state.tasks) if task.status != "completed"),
+        len(state.tasks),
+    )
+    if not state.completed:
+        expected_current = first_pending if first_pending < len(state.tasks) else len(state.tasks)
+        if state.current != expected_current:
+            state.current = expected_current
+            changed = True
+
+    if state.stage == "completed" and not state.completed:
+        state.stage = "validator_failed" if first_pending == len(state.tasks) else "created"
+        changed = True
+    return changed
 
 
 __all__ = [
     "complete_run",
     "complete_task",
     "install_plan",
-    "prepare_repair_cycle",
-    "prepare_task_replan",
+    "invalidate_plan",
+    "normalize_state",
     "set_stage",
 ]

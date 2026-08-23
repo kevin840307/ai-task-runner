@@ -7,9 +7,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from ...agent import AgentClient
-from ...agent.calls import retry_model_call
-from ...agent.factory import AgentFactory
+from ...agent import create_agent
+from ...agent.retry import retry_model_call
 from ...agent.prompts import (
     ai_validator_prompt,
     skipped_review_tasks,
@@ -18,8 +17,6 @@ from ...agent.results import parse_ai_validation
 from ...config import RuntimeConfig
 from ...errors import RunnerError
 from ...engine.models import RunState
-from ...safety.project_guard import readonly_ask
-from ...app.ui import LiveUI
 from ..model_calls import readonly_structured_call
 
 
@@ -28,11 +25,8 @@ def run_ai_validator(
     root: Path,
     work: Path,
     state: RunState,
-    protected: Sequence[Path],
-    ui: LiveUI,
     model_call_errors_before_task_retry: int,
     custom_prompt: str = "",
-    agent_factory: AgentFactory | None = None,
 ) -> tuple[bool, str]:
     total = args.final_ai_validations
     configured_required = args.final_ai_required_passes
@@ -40,41 +34,29 @@ def run_ai_validator(
     debug_dir = work / "debug"
     results: list[Mapping[str, Any]] = []
     passes = 0
-    factory = agent_factory or AgentFactory(
-        args,
-        root,
-        debug_dir,
-        constructor=AgentClient,
-    )
 
     for index in range(1, total + 1):
         # Empty sessions make quorum runs independent from one another.
-        validator = factory.create(
-            "runtime",
-            timeout=args.agent_timeout,
-        )
+        validator = create_agent(args, root, debug_dir, mode="runtime", timeout=args.agent_timeout)
 
         call = partial(
             readonly_structured_call,
             validator,
             ai_validator_prompt(
-                state.goal, root, protected, custom_prompt, skipped_review_tasks(state)
+                state.goal, root, custom_prompt, skipped_review_tasks(state)
             ),
             parse_ai_validation,
             debug_dir=debug_dir,
             root=root,
             work=work,
-            protected=protected,
             stage="AI validator",
             timeout=args.agent_timeout,
             idle_timeout=args.agent_idle_after_change_timeout,
-            ask=readonly_ask,
         )
 
         try:
             result = retry_model_call(
                 call,
-                ui,
                 "正在執行最終 AI 驗證",
                 f"new session · {index}/{total} · passes {passes}/{required}",
                 args.retry_wait,

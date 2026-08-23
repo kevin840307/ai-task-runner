@@ -313,7 +313,7 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
 
     def fake_run(request, on_event=None):
         captured.append(request)
-        return RunResult(exit_code=0, state_files=(), states=())
+        return RunResult(exit_code=0, state_files=(str(tmp_path / "state.json"),), states=({"completed": True, "stage": "completed"},))
 
     monkeypatch.setattr(ai_task_runner, "run", fake_run)
     code = ai_task_runner.main([
@@ -439,7 +439,7 @@ def test_cli_logs_unexpected_exception_and_retries_original_without_state(
         requests.append(request.resume)
         if len(requests) == 1:
             raise RuntimeError("boom")
-        return RunResult(exit_code=0, state_files=(), states=())
+        return RunResult(exit_code=0, state_files=(str(tmp_path / "state.json"),), states=({"completed": True, "stage": "completed"},))
 
     monkeypatch.setattr(ai_task_runner, "run", fake_run)
     monkeypatch.setattr(ai_task_runner.time, "sleep", lambda _: None)
@@ -455,6 +455,44 @@ def test_cli_logs_unexpected_exception_and_retries_original_without_state(
     assert requests == [False, False]
     log = tmp_path / ".ai-task-runner" / "exception.log"
     assert "RuntimeError: boom" in log.read_text(encoding="utf-8")
+
+
+def test_cli_continues_when_run_returns_zero_before_completion(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.api import RunResult
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = []
+
+    def fake_run(request, on_event=None):
+        calls.append(request.resume)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("{}", encoding="utf-8")
+        if len(calls) == 1:
+            return RunResult(
+                exit_code=0,
+                state_files=(str(state_file),),
+                states=({"completed": False, "stage": "validating"},),
+            )
+        return RunResult(
+            exit_code=0,
+            state_files=(str(state_file),),
+            states=({"completed": True, "stage": "completed"},),
+        )
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+    monkeypatch.setattr(ai_task_runner.time, "sleep", lambda _: None)
+
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--backend", "opencode",
+        "--retry-delay", "0",
+    ])
+
+    assert code == 0
+    assert calls == [False, True]
 
 
 def test_cli_does_not_retry_configuration_error(monkeypatch, tmp_path):

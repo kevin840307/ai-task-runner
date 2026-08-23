@@ -1,6 +1,9 @@
 # AI Task Runner
 
-版本：1.2.18
+版本：1.2.21
+
+
+執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態），CLI 才會退出。若 state 尚未完成，main 會自動 resume 繼續。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -56,3 +59,10 @@ Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，�
 預設關閉。只有明確開啟 `--loop-context-compress` 後，Loop Detection 且目前 context 使用率達 `--loop-context-compress-threshold 50` 才會嘗試壓縮。拿不到實際 context 使用率就跳過；一般 retry、API timeout/429/5xx 不會觸發。Qwen backend 使用 session `/compress-fast`。
 
 YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_threshold: 50`。
+
+## Flow Engine 架構
+
+Runner 現在是 Graph 驅動的 Flow Engine。`PlanningStage`、`ExecuteStage`、`ReviewStage`、`ValidateStage` 都是獨立方塊；Stage 只回傳 Outcome，Recovery 決定 `advance/retry/replan`，`FlowDefinition` 再決定下一個節點。簡單流程使用 `FlowDefinition.linear(...)`，只有特殊分支才覆寫 route。
+
+橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 透過透明 Execution Hook 註冊。Core 與 Stage 不 import 這些具體 extension。
+

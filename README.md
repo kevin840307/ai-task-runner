@@ -1,6 +1,9 @@
 # AI Task Runner
 
-Version: 1.2.18
+Version: 1.2.21
+
+
+Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The CLI resumes unfinished state automatically. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -67,3 +70,10 @@ Disabled by default. Enable only for Loop Detection recovery:
 The threshold is a context-usage percentage (0-100). If the backend cannot report current context usage, compression is skipped. Qwen uses its session `/compress-fast` capability; normal retries and transient API errors do not trigger it.
 
 YAML task items may also set `loop_context_compress: true` and `loop_context_compress_threshold: 50`.
+
+## Flow engine architecture
+
+The runner is a graph-driven flow engine. `PlanningStage`, `ExecuteStage`, `ReviewStage`, and `ValidateStage` are independent blocks. Stages return outcomes; recovery decides `advance/retry/replan`; `FlowDefinition` resolves the next node. Simple flows use `FlowDefinition.linear(...)`, while special branches override only the required routes.
+
+Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, and read-only enforcement register transparent execution hooks. Core stages do not import those concrete extensions.
+

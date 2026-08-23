@@ -88,19 +88,17 @@ def test_lower_layers_do_not_import_back_into_orchestration():
         assert not imports.intersection(forbidden), filename
 
 
-def test_core_depends_on_feature_packages():
+def test_core_depends_only_on_graph_stage_and_generic_runtime_layers():
     imports = module_imports("runner/engine/core.py")
-    assert {
-        "runner.agent.calls",
-        "runner.agent.factory",
-        "runner.agent.prompts",
-        "runner.safety.policy",
-        "runner.safety.project_guard",
-        "runner.workflow.planning",
-        "runner.workflow.reviewing",
-        "runner.workflow.validation.ai",
-        "runner.workflow.validation.file",
-    } <= imports
+    required = {
+        "runner.workflow.flow",
+        "runner.workflow.stages",
+        "runner.runtime",
+        "runner.runtime.project_state",
+        "runner.agent",
+    }
+    assert required <= imports
+    assert not {name for name in imports if name.startswith("runner.safety") or name.startswith("runner.extensions.")}
 
 
 def test_root_python_files_stay_minimal():

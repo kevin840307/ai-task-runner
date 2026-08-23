@@ -34,7 +34,7 @@ def _validator(path: Path) -> Path:
 
 
 def test_canonical_public_names_are_stable():
-    assert __version__ == "1.2.18"
+    assert __version__ == "1.2.21"
     assert RunState.__name__ == "RunState"
     assert AgentClient.__name__ == "AgentClient"
     assert AgentBackend.__name__ == "AgentBackend"
@@ -143,8 +143,9 @@ def test_core_uses_descriptive_canonical_names():
     core = (ROOT / "runner" / "engine" / "core.py").read_text(encoding="utf-8")
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
 
-    assert "from .models import ReviewResult, RunStage, Task" in core
-    assert "from ..agent.factory import AgentFactory" in core
+    assert "from .models import RunStage, Task" in core
+    assert "from ..agent import create_agent" in core
+    assert "from ..workflow.flow import default_flow" in core
     assert "from .recovery import (" in core
     assert "Outcome," in core and "Transition," in core
     assert not (ROOT / "runner" / "support.py").exists()

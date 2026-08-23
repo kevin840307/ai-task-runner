@@ -1,6 +1,6 @@
 # State and Events
 
-Version: 1.2.18
+Version: 1.2.21
 
 ## State
 Runner state lives under the project-relative work directory (default `.ai-task-runner`). It records run/cycle identity, current task index, task status/attempts/review information, session identifiers, progress/recovery metadata, and completion state needed for resume. The exact JSON is an internal persistence format; integrations should prefer the public API/events instead of editing state directly.

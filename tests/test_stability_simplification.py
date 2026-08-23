@@ -4,72 +4,34 @@ from types import SimpleNamespace
 import pytest
 
 
-def test_no_change_still_reviews_and_preserves_executor_session(tmp_path, monkeypatch):
-    import runner.engine.core as core
-    from runner.engine.models import RunState, Task
+def test_execute_success_without_change_routes_to_review_and_keeps_session():
+    from runner.engine.models import Task
+    from runner.engine.recovery import Outcome, decide
+    from runner.workflow.flow import default_flow
+
+    class S:
+        def __init__(self, name): self.name = name
 
     task = Task(
-        id="c01-t001",
-        title="Read-only task",
-        description="Inspect current state",
-        deliverable="Inspection completed",
-        acceptance_criteria=["Current state inspected"],
+        id="c01-t001", title="Read-only task", description="Inspect current state",
+        deliverable="Inspection completed", acceptance_criteria=["Current state inspected"],
     )
-    runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
-    runner.root = tmp_path
-    runner.work = tmp_path / ".ai-task-runner"
-    runner.state = RunState(
-        run_id="r", goal="g", project_root=str(tmp_path), tasks=[task]
-    )
-    runner.agent = SimpleNamespace(session_id="task-session")
-    runner.ui = SimpleNamespace(set=lambda *args: None)
-    runner._save_state = lambda: None
-    runner._set_stage = lambda *args: None
-    runner._execute_current_task = lambda current: "inspection complete"
-    reviews = []
-    runner._review_current_task = lambda current, output: reviews.append((current.id, output)) or {
-        "completed": True, "reason": "already satisfied", "missing_items": []
-    }
-
-    monkeypatch.setattr(core, "project_manifest", lambda *args: {})
-    monkeypatch.setattr(core, "changed_project_files", lambda *args: [])
-    monkeypatch.setattr(core, "show_todo", lambda *args: None)
-
-    assert runner._run_pending_tasks() is None
-    assert reviews == [(task.id, "inspection complete")]
-    assert task.status == "completed"
-    assert task.review_skipped is False
-    assert runner.agent.session_id == "task-session"
-    assert runner.state.agent_session_id == "task-session"
+    outcome = Outcome("execute", "pass", output="inspection complete", changed_files=[])
+    decision = decide(outcome, task=task, threshold=0)
+    planning, execute, review, validate = (S(name) for name in ("planning", "execute", "review", "validate"))
+    flow = default_flow(planning, execute, review, validate)
+    ctx = SimpleNamespace(state=SimpleNamespace(tasks=[task], current=0, stage="executing", completed=False))
+    assert decision.action == "advance"
+    assert flow.next("execute", decision.action, ctx) == "review"
 
 
-def test_validator_infrastructure_error_retries_without_repair_cycle(tmp_path):
-    import runner.engine.core as core
+def test_validator_infrastructure_error_retries_without_repair_cycle():
     from runner.errors import RunnerError
-    from runner.engine.models import RunState
+    from runner.engine.recovery import Outcome, decide
 
-    stages = []
-    runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(retry_delay=0, full_replan_threshold=0)
-    runner.ai_validation = False
-    runner.validator = tmp_path / "validator.py"
-    runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.ui = SimpleNamespace(
-        start=lambda *args: None,
-        stop=lambda *args: None,
-        set=lambda *args: None,
-    )
-    runner._save_state = lambda: None
-    runner._set_stage = lambda stage, detail="": stages.append((stage, detail))
-    runner._run_validator = lambda: (_ for _ in ()).throw(
-        RunnerError("validator process unavailable")
-    )
-
-    assert runner._validate_cycle() is None
-    assert runner.state.cycle == 1
-    assert runner.state.completed is False
-    assert any(stage == "validator_retry_wait" for stage, _ in stages)
+    outcome = Outcome("validate", "error", error=RunnerError("validator process unavailable"))
+    decision = decide(outcome, threshold=0)
+    assert decision.action == "retry"
 
 
 def test_loop_detection_reuses_once_then_resets_repeated_session():

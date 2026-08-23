@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...errors import RunnerError
 from ...runtime.process_control import run_process
-from ...safety.project_guard import restore_changed, snapshot
+from ...runtime.execution import guarded_call
 
 
 def run_file_validator(
@@ -17,41 +17,25 @@ def run_file_validator(
     state_file: Path,
     timeout: int,
     extra_args: Sequence[str],
-    protected: Sequence[Path],
 ) -> tuple[bool, str]:
-    file_snapshot = snapshot(protected)
     clear_validator_reports(root)
     command = [
-        sys.executable,
-        str(path),
-        "--project-root",
-        str(root),
-        "--state-file",
-        str(state_file),
-        *extra_args,
+        sys.executable, str(path), "--project-root", str(root),
+        "--state-file", str(state_file), *extra_args,
     ]
     try:
-        result = run_process(command, root, timeout)
+        result = guarded_call(
+            lambda: run_process(command, root, timeout),
+            root, root / ".ai-task-runner", actor="validator",
+        )
     except OSError as error:
-        restore_changed(file_snapshot)
         raise RunnerError(f"validator failed: {error}") from error
-
-    changed = restore_changed(file_snapshot)
-    changed_message = (
-        "Protected file changed during validation and was restored: "
-        + ", ".join(changed)
-        if changed
-        else ""
-    )
     if result.timed_out:
         details = [
             f"validator timeout after {timeout} seconds",
             result.output[-4000:].strip(),
-            changed_message,
         ]
         raise RunnerError("\n".join(item for item in details if item))
-    if changed_message:
-        raise RunnerError(changed_message)
     return result.return_code == 0, result.output
 
 

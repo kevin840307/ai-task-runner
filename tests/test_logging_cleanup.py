@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from runner.agent.calls import retry_model_call
+from runner.agent.retry import retry_model_call
+from runner.runtime import status as runner_status
+from runner.runtime.events import EventBus
 from runner.app.ui import LiveUI
 from runner.engine.models import RunState, Task
 from runner.errors import RunnerError
@@ -33,22 +35,26 @@ def test_progress_event_emits_after_task_state_changes():
 
 def test_final_failed_model_call_does_not_claim_it_will_retry():
     events = []
-    ui = LiveUI(event_callback=events.append, human_output=False)
+    bus = EventBus()
+    bus.subscribe(events.append)
+    runner_status.configure(bus)
     with pytest.raises(RunnerError):
         retry_model_call(
             lambda: (_ for _ in ()).throw(RunnerError("boom")),
-            ui, "run", "task", 0, 0, max_attempts=1,
+            "run", "task", 0, 0, max_attempts=1,
         )
     assert not any(event["status"] == "模型呼叫異常，將自動重試" for event in events)
 
 
 def test_intermediate_failed_model_call_logs_retry():
     events = []
-    ui = LiveUI(event_callback=events.append, human_output=False)
+    bus = EventBus()
+    bus.subscribe(events.append)
+    runner_status.configure(bus)
     attempts = iter([False, True])
     def action():
         if not next(attempts):
             raise RunnerError("boom")
         return "ok"
-    assert retry_model_call(action, ui, "run", "task", 0, 0, max_attempts=2) == "ok"
-    assert sum(event["status"] == "模型呼叫異常，將自動重試" for event in events) == 1
+    assert retry_model_call(action, "run", "task", 0, 0, max_attempts=2) == "ok"
+    assert sum(event.get("action") == "stop_set" and event["status"] == "模型呼叫異常，將自動重試" for event in events) == 1

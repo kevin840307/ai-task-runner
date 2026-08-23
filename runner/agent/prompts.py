@@ -11,7 +11,8 @@ from typing import Any
 from ..config.defaults import MIN_PLANNED_TASKS
 from ..errors import RunnerError
 from ..engine.models import RunState, Task
-from ..safety.policy import instructions
+from ..config.project_policy import instructions
+from ..runtime.execution import extension_instructions
 
 PROMPT_DIR = files("runner.agent.prompt_templates")
 MAX_PROMPT_HISTORY_ITEMS = 20
@@ -53,11 +54,10 @@ def _always_instructions(root: Path) -> str:
     return f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
 
 
-def rules(root: Path, protected: Sequence[Path]) -> str:
-    protected_names = "\n".join(f"- {path}" for path in protected)
+def rules(root: Path) -> str:
     return render_prompt_template(
         "rules.md",
-        {"root": root, "protected_names": protected_names},
+        {"root": root, "extension_rules": extension_instructions(root)},
     ) + _always_instructions(root)
 
 
@@ -277,7 +277,6 @@ def _execution_feedback(
 def execution_prompt(
     state: RunState,
     root: Path,
-    protected: Sequence[Path],
     strategy_note: str = "",
     validator_hint: str = "",
     include_goal: bool = True,
@@ -334,7 +333,7 @@ def execution_prompt(
         render_prompt_template(
             "execution.md",
             {
-                "rules": rules(root, protected),
+                "rules": rules(root),
                 "goal": state.goal,
                 "context_json": json.dumps(context, ensure_ascii=False),
                 "validator_reference": validator_reference,
@@ -399,7 +398,6 @@ def format_validator_feedback(feedback: str, limit: int = 2000) -> str:
 def ai_validator_prompt(
     goal: str,
     root: Path,
-    protected: Sequence[Path],
     custom: str = "",
     review_skipped: Sequence[dict[str, Any]] = (),
 ) -> str:
@@ -416,7 +414,7 @@ def ai_validator_prompt(
     return render_prompt_template(
         "ai_validator.md",
         {
-            "rules": rules(root, protected),
+            "rules": rules(root),
             "goal": goal,
             "extra": extra,
         },

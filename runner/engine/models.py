@@ -58,7 +58,6 @@ class Task:
     last_review: ReviewResult | None = None
     progress_key: str = ""
     stagnant_attempts: int = 0
-    recovery_attempts: int = 0
     recovery_level: int = 0
     review_skipped: bool = False
     review_skip_reason: str = ""
@@ -86,7 +85,7 @@ class Task:
             for item in self.changed_files
         ):
             raise ValueError(f"{prefix}.changed_files must be strings")
-        for name in ("attempts", "stagnant_attempts", "recovery_attempts", "recovery_level"):
+        for name in ("attempts", "stagnant_attempts", "recovery_level"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"{prefix}.{name} must be non-negative")

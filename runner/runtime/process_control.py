@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..safety.git_guard import guarded_command, guarded_environment
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
@@ -36,7 +35,14 @@ def run_process(
     input_text: str | None = None,
 ) -> ProcessResult:
     """Run one command and ensure timeout cleanup cannot wait forever."""
-    environment = guarded_environment()
+    environment = dict(os.environ)
+    try:
+        from .extensions import current
+        hooks = current().hooks
+        environment = hooks.environment(environment)
+        command = hooks.command(command, environment)
+    except RuntimeError:
+        command = list(command)
     options: dict[str, Any] = {
         "cwd": cwd,
         "text": True,
@@ -52,7 +58,7 @@ def run_process(
     else:
         options["start_new_session"] = True
 
-    process = subprocess.Popen(guarded_command(command, environment), **options)
+    process = subprocess.Popen(command, **options)
     try:
         if idle_timeout_after_change and change_detected is not None:
             return _communicate_with_watchdog(

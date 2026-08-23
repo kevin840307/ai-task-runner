@@ -15,7 +15,7 @@ from runner.engine.recovery import (
     record_execution_progress,
     validator_failure_key,
 )
-from runner.engine.transitions import complete_task, install_plan, prepare_repair_cycle
+from runner.engine.transitions import complete_task, install_plan, invalidate_plan
 from runner.errors import RunnerError
 from runner.workflow.model_calls import structured_call
 
@@ -58,7 +58,7 @@ def test_transitions_preserve_existing_state_semantics():
     complete_task(state, tasks[0], "s2")
     assert tasks[0].status == "completed" and state.current == 1 and state.agent_session_id == "s2"
     old = state.cycle
-    prepare_repair_cycle(state)
+    invalidate_plan(state)
     assert state.cycle == old + 1 and state.current == len(state.tasks)
 
 
@@ -75,12 +75,12 @@ def test_prompt_contract_fragments_are_emitted_once(tmp_path):
 def test_recovery_escalates_same_to_fresh_then_replan_without_stop():
     
     task = _state().tasks[0]
-    task.recovery_attempts = 3
+    task.stagnant_attempts = 3
     first = decide(Outcome("execute", "error", error=RunnerError("boom")), task=task, threshold=3)
     assert first.action == "retry" and first.retry_session == "fresh"
 
     escalate_task_recovery(task)
-    task.recovery_attempts = 3
+    task.stagnant_attempts = 3
     second = decide(Outcome("execute", "error", error=RunnerError("boom")), task=task, threshold=3)
     assert second.action == "replan"
 

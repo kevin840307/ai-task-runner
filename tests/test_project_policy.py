@@ -30,37 +30,37 @@ def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
 
 
 
-def test_runner_merges_yaml_paths_into_existing_protection(tmp_path: Path) -> None:
-    (tmp_path / POLICY_FILENAME).write_text(
-        "protected_paths:\n  - locked/\n",
-        encoding="utf-8",
-    )
-    runner = TaskRunner.__new__(TaskRunner)
-    runner.root = tmp_path.resolve()
-    runner.args = SimpleNamespace(goal_file=None, protect_file=[])
-    runner.validator = None
-    runner.state_file = tmp_path / ".ai-task-runner" / "state.json"
-    runner.backend_files = []
+def test_safety_extension_applies_yaml_protection_without_runner_coupling(tmp_path: Path) -> None:
+    from runner.config import RuntimeConfig
+    from runner.runtime.execution import guarded_call
+    from runner.runtime.extensions import bootstrap
 
-    protected = runner._build_protected_files()
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    target = locked / "data.txt"
+    target.write_text("before", encoding="utf-8")
+    (tmp_path / POLICY_FILENAME).write_text("protected_paths:\n  - locked/\n", encoding="utf-8")
+    bootstrap(RuntimeConfig(goal="g", project_root=str(tmp_path), validator="ai", human_output=False))
 
-    assert (tmp_path / POLICY_FILENAME).resolve() in protected
-    assert (tmp_path / "locked").resolve() in protected
+    with pytest.raises(RunnerError):
+        guarded_call(lambda: target.write_text("after", encoding="utf-8"), tmp_path, tmp_path / ".ai-task-runner", actor="test")
+    assert target.read_text(encoding="utf-8") == "before"
 
 
-def test_runner_protects_ai_validator_prompt_file(tmp_path: Path) -> None:
+def test_safety_extension_protects_ai_validator_prompt_file(tmp_path: Path) -> None:
+    from runner.config import RuntimeConfig
+    from runner.runtime.execution import guarded_call
+    from runner.runtime.extensions import bootstrap
+
     prompt = tmp_path / "ai_validation.md"
     prompt.write_text("check", encoding="utf-8")
-    runner = TaskRunner.__new__(TaskRunner)
-    runner.root = tmp_path.resolve()
-    runner.args = SimpleNamespace(
-        goal_file=None, ai_validator_prompt_file=str(prompt), protect_file=[]
-    )
-    runner.validator = None
-    runner.state_file = tmp_path / ".ai-task-runner" / "state.json"
-    runner.backend_files = []
-
-    assert prompt.resolve() in runner._build_protected_files()
+    bootstrap(RuntimeConfig(
+        goal="g", project_root=str(tmp_path), validator="ai", human_output=False,
+        ai_validator_prompt_file=str(prompt),
+    ))
+    with pytest.raises(RunnerError):
+        guarded_call(lambda: prompt.write_text("changed", encoding="utf-8"), tmp_path, tmp_path / ".ai-task-runner", actor="test")
+    assert prompt.read_text(encoding="utf-8") == "check"
 
 
 def test_policy_folder_snapshot_restores_modify_create_and_delete(tmp_path: Path) -> None:

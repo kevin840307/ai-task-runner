@@ -14,7 +14,8 @@ from typing import Any, ClassVar, Literal
 
 from ..errors import RunnerError
 from ..runtime.process_control import ProcessResult, run_process
-from ..safety.policy import instructions
+from ..config.project_policy import instructions
+from ..runtime.execution import extension_instructions
 
 AgentMode = Literal["planning", "review", "no_tool", "runtime"]
 
@@ -65,10 +66,10 @@ def ensure_project_rules(root: Path, filename: str) -> Path:
 {RUNNER_RULE_MARKER}
 - You may read files outside this project when needed.
 - You may write, create, rename, or delete files only under: {root}
-- Never modify validator files, runner state, or this rule file.
-- Never run git add, git commit, or git push; leave Git acceptance and publication to human review.
+- Never modify runner state directly.
 - Python owns task order and completion state.
 - Execute only the current task supplied by the runner.
+{extension_instructions(root)}
 - Complete the task with the smallest clean change possible; avoid unnecessary code, files, abstractions, dependencies, refactoring, or unrelated modifications.
 - Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
 """

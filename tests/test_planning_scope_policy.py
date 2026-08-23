@@ -34,6 +34,21 @@ class _StubAgent:
         return []
 
 
+
+def _run_planning_stage(runner):
+    from runner.workflow.stages import PlanningStage, StageContext
+    from runner.engine.transitions import install_plan
+
+    ctx = StageContext(
+        args=runner.args, root=runner.root, work=runner.work, state=runner.state, agent=runner.agent,
+        state_file=getattr(runner, "state_file", runner.work / "state.json"), validator=getattr(runner, "validator", None),
+        ai_validation=getattr(runner, "ai_validation", False), save_state=runner._save_state, set_stage=runner._set_stage,
+    )
+    outcome = PlanningStage(ctx).run()
+    install_plan(runner.state, outcome.data, runner.agent.session_id)
+    runner._save_state()
+    return outcome
+
 def test_understanding_is_embedded_in_existing_prompts(tmp_path: Path):
     state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[Task(
         id="c01-t001",
@@ -159,14 +174,14 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
         calls.append((agent, prompt))
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planning-session"
-            return "Relevant project evidence gathered", [], []
+            return "Relevant project evidence gathered", []
         if "plan quality judge" in prompt:
             payload = judge_payload()
         elif "Create the implementation plan now" in prompt:
             payload = task_payload("Draft")
         else:
             payload = task_payload("Refined")
-        return json.dumps(payload), [], []
+        return json.dumps(payload), []
 
     runner = core.TaskRunner.__new__(core.TaskRunner)
     runner.args = SimpleNamespace(
@@ -182,19 +197,15 @@ def test_plan_judge_pass_skips_refine(tmp_path: Path, monkeypatch):
     runner.work = tmp_path / ".ai-task-runner"
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert len(created) == 0
     assert all(agent is runner.agent for agent, _ in calls)
@@ -256,7 +267,7 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
         calls.append((agent, prompt))
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planning-session"
-            return "Relevant project evidence gathered", [], []
+            return "Relevant project evidence gathered", []
         if "plan quality judge" in prompt:
             judge_calls += 1
             payload = (
@@ -272,7 +283,7 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
             payload = task_payload("Draft")
         else:
             raise AssertionError(prompt)
-        return json.dumps(payload), [], []
+        return json.dumps(payload), []
 
     runner = core.TaskRunner.__new__(core.TaskRunner)
     runner.args = SimpleNamespace(
@@ -288,19 +299,15 @@ def test_plan_judge_feedback_rewrites_with_original_planner(tmp_path: Path, monk
     runner.work = tmp_path / ".ai-task-runner"
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert len(created) == 0
     assert judge_calls == 2
@@ -368,13 +375,13 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planning-session"
-            return "Relevant project evidence gathered", [], []
+            return "Relevant project evidence gathered", []
         payload = (
             judge_payload(rejected_index=1, issue="Plan is still not bounded")
             if "plan quality judge" in prompt
             else tasks
         )
-        return json.dumps(payload), [], []
+        return json.dumps(payload), []
 
     runner = core.TaskRunner.__new__(core.TaskRunner)
     runner.args = SimpleNamespace(
@@ -390,19 +397,15 @@ def test_plan_judge_rejects_twice_then_defers_to_validator_loop(tmp_path: Path, 
     runner.work = tmp_path / ".ai-task-runner"
     runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert len(created) == 0
     assert len(runner.state.tasks) == 6
@@ -422,7 +425,7 @@ def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planning-session"
-            return "Relevant repair evidence gathered", [], []
+            return "Relevant repair evidence gathered", []
         if "plan quality judge" in prompt:
             payload = {"accepted": True, "issues": []}
         else:
@@ -432,7 +435,7 @@ def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
                 "deliverable": "Validator-relevant repair",
                 "acceptance_criteria": ["The reported failure is fixed"],
             }]}
-        return json.dumps(payload), [], []
+        return json.dumps(payload), []
 
     old = Task(
         id="c01-t001",
@@ -465,19 +468,15 @@ def test_repair_plan_replaces_previous_cycle_tasks(tmp_path: Path, monkeypatch):
         stage="validator_failed",
         validator_output="failure",
     )
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
 
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert runner.state.current == 0
     assert [task.id for task in runner.state.tasks] == ["c02-t001"]
@@ -499,9 +498,7 @@ def _adaptive_runner(core, tmp_path):
     runner.work = tmp_path / ".ai-task-runner"
     runner.work.mkdir(exist_ok=True)
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
     return runner
@@ -548,19 +545,17 @@ def test_understanding_failure_reuses_same_session_for_no_tool_plan(tmp_path: Pa
             raise RunnerError("understanding exploration failed")
         if "Create the implementation plan now" in prompt:
             assert agent.session_id == "draft-session"
-            return json.dumps(_six_tasks("Finalized")), [], []
+            return json.dumps(_six_tasks("Finalized")), []
         if "Continue the existing planning work" in prompt:
-            return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload()), [], []
+            return json.dumps(_six_tasks("Refined")), []
+        return json.dumps(judge_payload()), []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert created == []
     assert runner.agent.root == tmp_path
@@ -603,19 +598,17 @@ def test_same_session_plan_failure_falls_back_to_fresh_no_tool_plan_without_reex
         if "Create the implementation plan now" in prompt and agent.session_id:
             raise RunnerError("resume failed")
         if "Create the implementation plan now" in prompt:
-            return json.dumps(_six_tasks("Minimal")), [], []
+            return json.dumps(_six_tasks("Minimal")), []
         if "Continue the existing planning work" in prompt:
-            return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload()), [], []
+            return json.dumps(_six_tasks("Refined")), []
+        return json.dumps(judge_payload()), []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert explore_calls == 1
     assert created == []
@@ -645,22 +638,20 @@ def test_successful_understanding_without_session_is_carried_into_minimal_plan(t
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         prompts.append(prompt)
         if "dedicated project-understanding turn" in prompt:
-            return "Important evidence: renderer uses layered values and Jinja templates.", [], []
+            return "Important evidence: renderer uses layered values and Jinja templates.", []
         if "Create the implementation plan now" in prompt:
             assert "Important evidence: renderer uses layered values and Jinja templates." in prompt
-            return json.dumps(_six_tasks("Minimal")), [], []
+            return json.dumps(_six_tasks("Minimal")), []
         if "Continue the existing planning work" in prompt:
-            return json.dumps(_six_tasks("Refined")), [], []
-        return json.dumps(judge_payload()), [], []
+            return json.dumps(_six_tasks("Refined")), []
+        return json.dumps(judge_payload()), []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
     assert runner.state.tasks[0].title == "Minimal 1"
 
 
@@ -678,21 +669,19 @@ def test_refiner_error_keeps_last_valid_plan(tmp_path: Path, monkeypatch):
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "draft-session"
-            return "Relevant project evidence gathered", [], []
+            return "Relevant project evidence gathered", []
         if "Create the implementation plan now" in prompt:
-            return json.dumps(_six_tasks("Draft")), [], []
+            return json.dumps(_six_tasks("Draft")), []
         if "Continue the existing planning work" in prompt:
             raise RunnerError("refiner unavailable")
-        return json.dumps(judge_payload()), [], []
+        return json.dumps(judge_payload()), []
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
     assert runner.state.tasks[0].title == "Draft 1"
 
 
@@ -710,21 +699,19 @@ def test_judge_error_uses_last_valid_plan(tmp_path: Path, monkeypatch):
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "draft-session"
-            return "Relevant project evidence gathered", [], []
+            return "Relevant project evidence gathered", []
         if "Create the implementation plan now" in prompt:
-            return json.dumps(_six_tasks("Draft")), [], []
+            return json.dumps(_six_tasks("Draft")), []
         if "Continue the existing planning work" in prompt:
-            return json.dumps(_six_tasks("Refined")), [], []
+            return json.dumps(_six_tasks("Refined")), []
         raise RunnerError("judge unavailable")
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
     assert runner.state.tasks[0].title == "Draft 1"
 
 
@@ -772,29 +759,27 @@ def test_rewrite_retries_fresh_only_after_planner_session_is_lost(tmp_path: Path
         calls.append((agent, prompt))
         if "dedicated project-understanding turn" in prompt:
             agent.session_id = "planner-session"
-            return "evidence", [], []
+            return "evidence", []
         if "Create the implementation plan now" in prompt:
-            return json.dumps(_six_tasks("Draft")), [], []
+            return json.dumps(_six_tasks("Draft")), []
         if "plan quality judge" in prompt:
             judge_calls += 1
-            return json.dumps(judge_payload(rejected_index=1)) if judge_calls == 1 else json.dumps(judge_payload()), [], []
+            return json.dumps(judge_payload(rejected_index=1)) if judge_calls == 1 else json.dumps(judge_payload()), []
         if "Continue the existing planning work" in prompt:
             rewrite_calls += 1
             if rewrite_calls == 1:
                 agent.session_id = ""
                 raise RunnerError("session unavailable")
             agent.session_id = "fresh-planner-session"
-            return json.dumps(_six_tasks("Recovered")), [], []
+            return json.dumps(_six_tasks("Recovered")), []
         raise AssertionError(prompt)
 
     runner = _adaptive_runner(core, tmp_path)
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     rewrite_agents = [agent for agent, prompt in calls if "Continue the existing planning work" in prompt]
     assert rewrite_calls == 2
@@ -819,20 +804,18 @@ def test_planning_reuses_existing_main_session_when_available(tmp_path: Path, mo
     def fake_readonly_ask(agent, prompt, *args, **kwargs):
         if "dedicated project-understanding turn" in prompt:
             assert agent.session_id == "executor-session"
-            return "evidence", [], []
+            return "evidence", []
         if "Create the implementation plan now" in prompt:
-            return json.dumps(_six_tasks("Plan")), [], []
-        return json.dumps(judge_payload()), [], []
+            return json.dumps(_six_tasks("Plan")), []
+        return json.dumps(judge_payload()), []
 
     runner = _adaptive_runner(core, tmp_path)
     runner.agent.session_id = "executor-session"
     monkeypatch.setattr(planning, "AgentClient", FakeAgent)
     monkeypatch.setattr(planning, "readonly_ask", fake_readonly_ask)
     monkeypatch.setattr(planning, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert created == []
     assert runner.agent.session_id == "executor-session"
@@ -849,9 +832,7 @@ def test_planning_switches_main_agent_args_then_restores_runtime(tmp_path: Path,
     runner.root = tmp_path
     runner.work = tmp_path / ".ai-task-runner"; runner.work.mkdir()
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))
-    runner.protected = []
     runner.agent = _StubAgent(tmp_path)
-    runner.ui = SimpleNamespace(set=lambda *args: None)
     runner._set_stage = lambda *args: None
     runner._save_state = lambda: None
     seen = []
@@ -861,11 +842,10 @@ def test_planning_switches_main_agent_args_then_restores_runtime(tmp_path: Path,
         runner.agent.session_id = "planning-session"
         return [Task(id="c01-t001", title="T", description="D", deliverable="X", acceptance_criteria=["A"])]
 
-    monkeypatch.setattr(core, "build_plan", fake_build_plan)
-    monkeypatch.setattr(core, "retry_model_call", lambda action, *args, **kwargs: action())
-    monkeypatch.setattr(core, "show_todo", lambda *args, **kwargs: None)
+    import runner.workflow.stages as stages
+    monkeypatch.setattr(stages, "build_plan", fake_build_plan)
 
-    runner._plan_if_needed()
+    _run_planning_stage(runner)
 
     assert seen and "--yolo" in seen[0] and "--safe-mode" in seen[0]
     assert "--exclude-tools" in seen[0]
@@ -1011,8 +991,7 @@ def test_first_validator_failure_uses_minimal_repair_without_inspect_or_judge(tm
     flow = planning._PlanningFlow(
         SimpleNamespace(planning_timeout=1, agent_idle_after_change_timeout=0,
                         retry_wait=0, retry_max_wait=0),
-        tmp_path, tmp_path / ".ai-task-runner", state, [],
-        SimpleNamespace(set=lambda *args: None),
+        tmp_path, tmp_path / ".ai-task-runner", state,
         SimpleNamespace(session_id="executor-session"),
     )
     task = Task(id="c02-t001", title="repair", description="d", deliverable="x",
@@ -1036,8 +1015,7 @@ def test_repeated_same_validator_failure_falls_back_to_full_planning(tmp_path, m
     flow = planning._PlanningFlow(
         SimpleNamespace(planning_timeout=1, agent_idle_after_change_timeout=0,
                         retry_wait=0, retry_max_wait=0),
-        tmp_path, tmp_path / ".ai-task-runner", state, [],
-        SimpleNamespace(set=lambda *args: None),
+        tmp_path, tmp_path / ".ai-task-runner", state,
         SimpleNamespace(session_id="executor-session"),
     )
     task = Task(id="c03-t001", title="repair", description="d", deliverable="x",

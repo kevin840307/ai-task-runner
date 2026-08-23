@@ -1,12 +1,11 @@
 """Planning flow: inspect, finalize, refine, and judge one task plan."""
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..agent import AgentClient
-from ..agent.calls import retry_model_call
+from ..agent.retry import retry_model_call
 from ..agent.debug import parse_with_debug
 from ..agent.prompts import (
     plan_finalize_prompt,
@@ -20,8 +19,8 @@ from ..config.defaults import MIN_PLANNED_TASKS, REPAIR_FULL_PLAN_AFTER_SAME_FAI
 from ..errors import RunnerError, diagnostic_error
 from ..engine.models import PlanJudgment, RunState, Task
 from ..engine.recovery import Outcome, decide
-from ..safety.project_guard import readonly_ask
-from ..app.ui import LiveUI
+from ..runtime import status as runner_status
+from ..runtime.execution import readonly_ask
 from .model_calls import structured_call
 
 PLAN_JUDGE_MAX_REWRITES = 2
@@ -34,8 +33,6 @@ class _PlanningFlow:
     root: Path
     work: Path
     state: RunState
-    protected: Sequence[Path]
-    ui: LiveUI
     planner: AgentClient
     project_changed: list[str] = field(default_factory=list)
 
@@ -64,20 +61,12 @@ class _PlanningFlow:
             return None
 
     def ask_raw(self, prompt: str) -> str:
-        output, protected_changed, changed = readonly_ask(
-            self.planner,
-            prompt,
-            self.root,
-            self.work,
-            self.protected,
+        output, changed = readonly_ask(
+            self.planner, prompt, self.root, self.work,
             timeout=self.args.planning_timeout,
             idle_timeout=self.args.agent_idle_after_change_timeout,
+            tolerate_restored_changes=True,
         )
-        if protected_changed:
-            raise RunnerError(
-                "AI modified files during planning and they were restored: "
-                + ", ".join(protected_changed)
-            )
         self.project_changed.extend(changed)
         return output
 
@@ -88,7 +77,7 @@ class _PlanningFlow:
             salvaged = self.salvage_plan(error)
             if salvaged is None:
                 raise
-            self.ui.set(
+            runner_status.set_status(
                 "AI 規劃程序異常但已取得有效規劃",
                 "using usable model output",
             )
@@ -98,7 +87,7 @@ class _PlanningFlow:
     def create_minimal_repair_plan(self) -> list[Task]:
         """Build the smallest repair directly from validator evidence first."""
         self.planner.session_id = ""
-        self.ui.set(
+        runner_status.set_status(
             "AI 正在建立最小修復規劃",
             "validator evidence first · skip inspect/judge when sufficient",
         )
@@ -127,7 +116,7 @@ class _PlanningFlow:
             self.state,
             self.work,
         )
-        self.ui.set("AI 正在理解專案", "bounded read-only planning inspection")
+        runner_status.set_status("AI 正在理解專案", "bounded read-only planning inspection")
         try:
             summary = self.ask_raw(prompt)
             return summary, None
@@ -154,7 +143,7 @@ class _PlanningFlow:
             prompt = plan_finalize_prompt(
                 self.state.goal, self.root, self.state, self.work, same_session=True
             )
-            self.ui.set(
+            runner_status.set_status(
                 "AI 正在產生任務規劃",
                 "reuse completed planning inspection without tools",
             )
@@ -172,7 +161,7 @@ class _PlanningFlow:
         self.planner.session_id = ""
 
         def minimal_plan() -> list[Task]:
-            self.ui.set("AI 正在建立最小任務規劃", "fresh full-context fallback")
+            runner_status.set_status("AI 正在建立最小任務規劃", "fresh full-context fallback")
             return self.ask_plan(
                 plan_finalize_prompt(
                     self.state.goal,
@@ -186,7 +175,6 @@ class _PlanningFlow:
 
         return retry_model_call(
             minimal_plan,
-            self.ui,
             "AI 正在準備最小任務規劃",
             str(inspection_error or "planning session unavailable")[-500:],
             self.args.retry_wait,
@@ -198,7 +186,7 @@ class _PlanningFlow:
             try:
                 judgment = self._judge(tasks, judge_round)
             except RunnerError as error:
-                self.ui.set(
+                runner_status.set_status(
                     "AI 規劃審查異常，使用目前有效規劃",
                     str(error)[-500:],
                 )
@@ -208,7 +196,7 @@ class _PlanningFlow:
             if not judge_issues:
                 break
             if judge_round == PLAN_JUDGE_MAX_REWRITES:
-                self.ui.set(
+                runner_status.set_status(
                     "AI 任務規劃仍有疑慮，交由後續驗證閉環",
                     "; ".join(judge_issues),
                 )
@@ -228,7 +216,7 @@ class _PlanningFlow:
             self.work,
             same_session=bool(self.planner.session_id),
         )
-        self.ui.set(
+        runner_status.set_status(
             "AI 正在審查任務規劃",
             f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES + 1}",
         )
@@ -255,7 +243,7 @@ class _PlanningFlow:
             judge_issues,
             same_session=bool(self.planner.session_id),
         )
-        self.ui.set(
+        runner_status.set_status(
             "AI 任務規劃未通過，正在重寫",
             f"round {judge_round + 1}/{PLAN_JUDGE_MAX_REWRITES} · "
             + "; ".join(judge_issues),
@@ -269,7 +257,7 @@ class _PlanningFlow:
             )
             if transition.retry_session == "fresh":
                 self.planner.session_id = ""
-                self.ui.set(
+                runner_status.set_status(
                     "AI 重寫 session 無法使用，改用 fresh 規劃重寫",
                     str(error)[-500:],
                 )
@@ -282,7 +270,7 @@ class _PlanningFlow:
                     )
                 except RunnerError as fresh_error:
                     error = fresh_error
-            self.ui.set("AI 重寫規劃異常，保留目前有效規劃", str(error)[-500:])
+            runner_status.set_status("AI 重寫規劃異常，保留目前有效規劃", str(error)[-500:])
             return None
 
     def run(self) -> list[Task]:
@@ -290,7 +278,7 @@ class _PlanningFlow:
             try:
                 return self.create_minimal_repair_plan()
             except RunnerError as error:
-                self.ui.set(
+                runner_status.set_status(
                     "最小修復規劃不足，改用完整規劃",
                     str(error)[-500:],
                 )
@@ -299,7 +287,7 @@ class _PlanningFlow:
         tasks = self.create_initial_plan(inspection_summary, inspection_error)
         tasks = self.judge_and_refine(tasks)
         if self.project_changed:
-            self.ui.set(
+            runner_status.set_status(
                 "AI restored project changes made during planning",
                 ", ".join(sorted(set(self.project_changed))),
             )
@@ -311,13 +299,11 @@ def build_plan(
     root: Path,
     work: Path,
     state: RunState,
-    protected: Sequence[Path],
-    ui: LiveUI,
     main_agent: AgentClient,
 ) -> list[Task]:
     """Build one current-cycle plan without changing planning semantics."""
     return _PlanningFlow(
-        args, root, work, state, protected, ui, main_agent
+        args, root, work, state, main_agent
     ).run()
 
 

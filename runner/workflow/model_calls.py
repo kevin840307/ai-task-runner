@@ -1,19 +1,18 @@
 """Shared structured model-call primitives for workflow decision stages."""
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from ..agent import AgentClient
-from ..agent.calls import recover_structured_output
+from ..agent import Agent
+from ..agent.retry import recover_structured_output
 from ..agent.debug import parse_with_debug
 from ..agent.prompts import structured_output_retry_prompt
-from ..safety.project_guard import readonly_ask, require_unchanged_project
+from ..runtime.execution import readonly_ask
 
 T = TypeVar("T")
 AskText = Callable[[str], str]
-ReadonlyAsk = Callable[..., tuple[str, list[str], list[str]]]
 
 
 def structured_call(
@@ -23,7 +22,6 @@ def structured_call(
     *,
     retries: int = 1,
 ) -> T:
-    """Ask, parse, and correct malformed structured output in the same session."""
     raw = ask(prompt)
     return recover_structured_output(
         raw,
@@ -34,32 +32,28 @@ def structured_call(
 
 
 def readonly_structured_call(
-    agent: AgentClient,
+    agent: Agent,
     prompt: str,
     parser: Callable[[str], T],
     *,
     debug_dir: Path,
     root: Path,
     work: Path,
-    protected: Sequence[Path],
     stage: str,
     timeout: int,
     idle_timeout: float,
-    ask: ReadonlyAsk = readonly_ask,
 ) -> T:
-    """Run one protected read-only structured call with same-session correction."""
+    """Run one hook-protected read-only structured call."""
 
     def ask_raw(current_prompt: str) -> str:
-        raw, protected_changed, project_changed = ask(
+        raw, _restored = readonly_ask(
             agent,
             current_prompt,
             root,
             work,
-            protected,
             timeout=timeout,
             idle_timeout=idle_timeout,
         )
-        require_unchanged_project(protected_changed, project_changed, stage)
         return raw
 
     return structured_call(

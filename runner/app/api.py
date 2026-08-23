@@ -10,7 +10,7 @@ from typing import Any
 
 from ..backends import backend_names, sandbox_supported
 from ..config import EventHandler, RuntimeConfig
-from ..engine.core import execute
+from .execution import execute
 from ..config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
@@ -299,7 +299,8 @@ class RunResult:
     @property
     def completed(self) -> bool:
         return self.exit_code == 0 and bool(self.states) and all(
-            state.get("completed") is True for state in self.states
+            state.get("completed") is True and state.get("stage") == "completed"
+            for state in self.states
         )
 
 

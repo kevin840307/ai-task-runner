@@ -18,6 +18,8 @@ from runner.agent.calls import retry_model_call
 from runner.agent.results import parse_ai_validation, parse_json, parse_review, parse_tasks
 from runner.errors import RunnerError
 from runner.runtime.process_control import run_process
+from runner.config import RuntimeConfig
+from runner.runtime.extensions import bootstrap
 from runner.api import RunRequest, run
 from runner.engine.models import RunState, Task
 from runner.safety.project_guard import protected_ask, readonly_project_call
@@ -428,8 +430,9 @@ def test_file_validator_timeout_kills_child_tree_and_preserves_partial_output(tm
         "time.sleep(30)\n",
         encoding="utf-8",
     )
+    bootstrap(RuntimeConfig(project_root=str(tmp_path), protect_file=[str(state_file)], human_output=False))
     with pytest.raises(RunnerError) as exc_info:
-        run_file_validator(validator, tmp_path, state_file, 1, [], [state_file])
+        run_file_validator(validator, tmp_path, state_file, 1, [])
     output = str(exc_info.value)
     assert "validator timeout after 1 seconds" in output
     assert "validator-started" in output
@@ -617,7 +620,7 @@ def test_validator_arguments_are_forwarded(tmp_path):
         encoding="utf-8",
     )
     assert run_file_validator(
-        validator, tmp_path, state_file, 10, ["--token", "ok"], [state_file]
+        validator, tmp_path, state_file, 10, ["--token", "ok"]
     )[0] is True
 
 
