@@ -19,6 +19,7 @@ from ..config import RuntimeConfig
 from ..config.defaults import MIN_PLANNED_TASKS, REPAIR_FULL_PLAN_AFTER_SAME_FAILURES
 from ..errors import RunnerError, diagnostic_error
 from ..engine.models import PlanJudgment, RunState, Task
+from ..engine.recovery import Outcome, decide
 from ..safety.project_guard import readonly_ask
 from ..app.ui import LiveUI
 from .model_calls import structured_call
@@ -161,6 +162,12 @@ class _PlanningFlow:
             if tasks is not None:
                 return tasks
             inspection_error = error or inspection_error
+            transition = decide(
+                Outcome("planning", "error", error=inspection_error),
+                recovery_level=1,
+            )
+            if transition.retry_session == "fresh":
+                self.planner.session_id = ""
 
         self.planner.session_id = ""
 
@@ -256,7 +263,12 @@ class _PlanningFlow:
         try:
             return self.ask_plan(prompt)
         except RunnerError as error:
-            if not self.planner.session_id:
+            transition = decide(
+                Outcome("planning", "error", error=error),
+                recovery_level=0 if self.planner.session_id else 1,
+            )
+            if transition.retry_session == "fresh":
+                self.planner.session_id = ""
                 self.ui.set(
                     "AI 重寫 session 無法使用，改用 fresh 規劃重寫",
                     str(error)[-500:],

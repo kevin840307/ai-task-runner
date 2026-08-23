@@ -16,7 +16,7 @@ def test_no_change_still_reviews_and_preserves_executor_session(tmp_path, monkey
         acceptance_criteria=["Current state inspected"],
     )
     runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
     runner.root = tmp_path
     runner.work = tmp_path / ".ai-task-runner"
     runner.state = RunState(
@@ -51,7 +51,7 @@ def test_validator_infrastructure_error_retries_without_repair_cycle(tmp_path):
 
     stages = []
     runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(retry_delay=0, max_cycles=0)
+    runner.args = SimpleNamespace(retry_delay=0, full_replan_threshold=0)
     runner.ai_validation = False
     runner.validator = tmp_path / "validator.py"
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path))

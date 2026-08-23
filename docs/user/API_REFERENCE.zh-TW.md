@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.2.17
+版本：1.2.18
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。

@@ -9,7 +9,9 @@ from runner.agent.prompts import (
 )
 from runner.engine.models import RunState, Task
 from runner.engine.recovery import (
-    decide_task_retry,
+    decide,
+    escalate_task_recovery,
+    Outcome,
     record_execution_progress,
     validator_failure_key,
 )
@@ -44,8 +46,8 @@ def test_recovery_policy_is_deterministic():
     record_execution_progress(task, error, False)
     record_execution_progress(task, error, False)
     record_execution_progress(task, error, False)
-    decision = decide_task_retry(task, 3)
-    assert decision.action == "retry" and decision.fresh_session is True
+    decision = decide(Outcome("execute", "error", error=error), task=task, threshold=3)
+    assert decision.action == "retry" and decision.retry_session == "fresh"
     assert validator_failure_key(" A \n B ") == validator_failure_key("A\nB")
 
 
@@ -71,14 +73,49 @@ def test_prompt_contract_fragments_are_emitted_once(tmp_path):
 
 
 def test_recovery_escalates_same_to_fresh_then_replan_without_stop():
-    from runner.engine.recovery import apply_fresh_session_recovery, decide_task_retry
-
+    
     task = _state().tasks[0]
     task.recovery_attempts = 3
-    first = decide_task_retry(task, 3)
-    assert first.action == "retry" and first.fresh_session is True
+    first = decide(Outcome("execute", "error", error=RunnerError("boom")), task=task, threshold=3)
+    assert first.action == "retry" and first.retry_session == "fresh"
 
-    apply_fresh_session_recovery(task)
+    escalate_task_recovery(task)
     task.recovery_attempts = 3
-    second = decide_task_retry(task, 3)
+    second = decide(Outcome("execute", "error", error=RunnerError("boom")), task=task, threshold=3)
     assert second.action == "replan"
+
+
+def test_unified_transition_policy_has_no_stop_path():
+    from runner.engine.recovery import Outcome, decide
+
+    assert decide(Outcome("validate", "pass")).action == "advance"
+    assert decide(Outcome("validate", "fail")).action == "replan"
+    assert decide(Outcome("validate", "error", error=RunnerError("validator unavailable"))).action == "retry"
+    planning = decide(
+        Outcome("planning", "error", error=RunnerError("planning unavailable")),
+        recovery_level=1,
+    )
+    assert planning.action == "retry"
+    assert planning.retry_session == "fresh"
+    assert {"advance", "retry", "replan"} == {
+        decide(Outcome("validate", "pass")).action,
+        decide(Outcome("validate", "error", error=RunnerError("x"))).action,
+        decide(Outcome("validate", "fail")).action,
+    }
+
+
+def test_public_max_limits_map_to_internal_recovery_thresholds():
+    from runner.api import RunRequest
+
+    config = RunRequest(
+        goal="g",
+        validator="ai",
+        max_attempts=7,
+        max_cycles=4,
+    ).to_runtime_config()
+
+    assert config.task_recovery_threshold == 7
+    assert config.full_replan_threshold == 4
+    namespace = config.to_namespace()
+    assert namespace.max_attempts == 7
+    assert namespace.max_cycles == 4

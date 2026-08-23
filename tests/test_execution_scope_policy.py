@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from runner.agent.prompts import execution_prompt, render_prompt_template
 from runner.engine.models import RunState, Task
-from runner.engine.recovery import decide_execution, execution_outcome, record_execution_progress
+from runner.engine.recovery import Outcome, decide, record_execution_progress
 
 
 def state(attempts=1):
@@ -63,7 +63,7 @@ def _runner(tmp_path, task):
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[task])
     runner.agent = SimpleNamespace(session_id="old-session")
     runner.ui = SimpleNamespace(set=lambda *args: None, bind=lambda *args: None)
-    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
     runner._save_state = lambda: None
     runner._save_session = lambda: None
     runner._set_stage = lambda *args: None
@@ -107,12 +107,10 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path):
         deliverable="result", acceptance_criteria=["result exists"],
     )
     runner = _runner(tmp_path, task)
-    outcome = execution_outcome(
-        error=RunnerError("failed"), changed_files=["result.txt"]
-    )
+    outcome = Outcome("execute", "error", error=RunnerError("failed"), changed_files=["result.txt"])
 
-    assert decide_execution(task, outcome, 3).action == "continue"
-    assert outcome.status == "execution_error"
+    assert decide(outcome, task=task, threshold=3).action == "advance"
+    assert outcome.status == "error"
 
 
 def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path):
@@ -126,10 +124,10 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
     runner = _runner(tmp_path, task)
     error = RunnerError("same failure")
     record_execution_progress(task, error, changed=False)
-    outcome = execution_outcome(error=error, changed_files=[])
+    outcome = Outcome("execute", "error", error=error)
 
-    decision = decide_execution(task, outcome, 0)
-    runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
+    decision = decide(outcome, task=task, threshold=0)
+    runner._prepare_task_retry(task, decision.retry_session, decision.reason)
 
     assert decision.action == "retry"
     assert task.status == "pending"
@@ -146,19 +144,19 @@ def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp
     )
     runner = _runner(tmp_path, task)
     error = RunnerError("same failure")
-    outcome = execution_outcome(error=error, changed_files=[])
+    outcome = Outcome("execute", "error", error=error)
 
     for _ in range(2):
         record_execution_progress(task, error, changed=False)
-        decision = decide_execution(task, outcome, 0)
+        decision = decide(outcome, task=task, threshold=0)
         assert decision.action == "retry"
-        runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
+        runner._prepare_task_retry(task, decision.retry_session, decision.reason)
     assert runner.agent.session_id == "old-session"
 
     record_execution_progress(task, error, changed=False)
-    decision = decide_execution(task, outcome, 0)
-    assert decision.action == "retry" and decision.fresh_session is True
-    runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
+    decision = decide(outcome, task=task, threshold=0)
+    assert decision.action == "retry" and decision.retry_session == "fresh"
+    runner._prepare_task_retry(task, decision.retry_session, decision.reason)
 
     assert task.status == "pending"
     assert task.review_skipped is False
@@ -174,12 +172,12 @@ def test_transient_service_error_is_separate_and_does_not_mark_stagnation(tmp_pa
         deliverable="result", acceptance_criteria=["result exists"],
     )
     error = AgentError("HTTP 503 service unavailable", transient=True)
-    outcome = execution_outcome(error=error, changed_files=[])
+    outcome = Outcome("execute", "error", error=error)
 
     record_execution_progress(task, error, changed=False)
 
-    assert outcome.status == "service_error"
-    assert decide_execution(task, outcome, 3).action == "retry"
+    assert outcome.status == "error"
+    assert decide(outcome, task=task, threshold=3).action == "retry"
     assert task.stagnant_attempts == 0
     assert task.progress_key == ""
 
@@ -192,7 +190,7 @@ def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monke
         Task(id="c01-t002", title="two", description="d", deliverable="b", acceptance_criteria=["b"]),
     ]
     runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
     runner.root = tmp_path
     runner.work = tmp_path / ".ai-task-runner"
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=tasks)
@@ -218,7 +216,7 @@ def test_normal_executor_completion_without_file_change_still_reviews(tmp_path, 
 
     task = Task(id="c01-t001", title="check existing result", description="d", deliverable="d", acceptance_criteria=["ok"])
     runner = core.TaskRunner.__new__(core.TaskRunner)
-    runner.args = SimpleNamespace(max_attempts=0, retry_delay=0)
+    runner.args = SimpleNamespace(task_recovery_threshold=0, retry_delay=0)
     runner.root = tmp_path
     runner.work = tmp_path / ".ai-task-runner"
     runner.state = RunState(run_id="r", goal="g", project_root=str(tmp_path), tasks=[task])

@@ -45,8 +45,8 @@ class RuntimeConfig:
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
-    max_attempts: int = DEFAULT_MAX_ATTEMPTS
-    max_cycles: int = DEFAULT_MAX_CYCLES
+    task_recovery_threshold: int = DEFAULT_MAX_ATTEMPTS
+    full_replan_threshold: int = DEFAULT_MAX_CYCLES
     retry_delay: float = 2
     retry_wait: float = 5
     retry_max_wait: float = 300
@@ -91,8 +91,8 @@ class RuntimeConfig:
                 "agent_idle_after_change_timeout",
                 DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
             ),
-            max_attempts=getattr(args, "max_attempts", DEFAULT_MAX_ATTEMPTS),
-            max_cycles=getattr(args, "max_cycles", DEFAULT_MAX_CYCLES),
+            task_recovery_threshold=getattr(args, "task_recovery_threshold", getattr(args, "max_attempts", DEFAULT_MAX_ATTEMPTS)),
+            full_replan_threshold=getattr(args, "full_replan_threshold", getattr(args, "max_cycles", DEFAULT_MAX_CYCLES)),
             retry_delay=getattr(args, "retry_delay", 2),
             retry_wait=getattr(args, "retry_wait", 5),
             retry_max_wait=getattr(args, "retry_max_wait", 300),
@@ -124,5 +124,8 @@ class RuntimeConfig:
         )
 
     def to_namespace(self) -> argparse.Namespace:
-        """Compatibility adapter for integrations expecting argparse fields."""
-        return argparse.Namespace(**vars(self))
+        """Compatibility adapter; public max_* names remain accepted aliases."""
+        values = vars(self).copy()
+        values["max_attempts"] = self.task_recovery_threshold
+        values["max_cycles"] = self.full_replan_threshold
+        return argparse.Namespace(**values)

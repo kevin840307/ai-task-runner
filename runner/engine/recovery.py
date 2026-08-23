@@ -1,25 +1,36 @@
-"""Central deterministic recovery policy for the long-running runner."""
+"""Deterministic Outcome -> Transition policy for the long-running runner."""
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from ..config.defaults import NO_PROGRESS_LIMIT
 from ..errors import RunnerError
 from ..safety.project_guard import progress_key
-from .models import ExecutionOutcome, ReviewResult, Task
-
-RecoveryAction = Literal["retry", "continue", "replan"]
+from .models import Task
 
 
 @dataclass(frozen=True)
-class RecoveryDecision:
-    """One workflow-level decision; mechanisms stay in their owning stages/backends."""
+class Outcome:
+    """Facts produced by a workflow stage; never contains next-step policy."""
 
-    action: RecoveryAction
-    fresh_session: bool = False
+    stage: Literal["planning", "execute", "review", "validate"]
+    status: Literal["pass", "fail", "error"]
+    output: str = ""
+    error: RunnerError | None = None
+    changed_files: list[str] = field(default_factory=list)
+    feedback: list[str] = field(default_factory=list)
+    skipped: bool = False
+
+
+@dataclass(frozen=True)
+class Transition:
+    """The runner has only three non-terminal transitions."""
+
+    action: Literal["advance", "retry", "replan"]
+    retry_session: Literal["same", "fresh"] = "same"
     reason: str = ""
 
 
@@ -38,7 +49,6 @@ def validator_failure_key(output: str) -> str:
 
 
 def is_service_error(error: BaseException) -> bool:
-    """Return True for transient external service/API failures in an error chain."""
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
@@ -49,33 +59,10 @@ def is_service_error(error: BaseException) -> bool:
     return False
 
 
-def execution_outcome(
-    *,
-    output: str = "",
-    error: RunnerError | None = None,
-    changed_files: list[str] | None = None,
-) -> ExecutionOutcome:
-    return ExecutionOutcome(
-        status=(
-            "normal"
-            if error is None
-            else "service_error"
-            if is_service_error(error)
-            else "execution_error"
-        ),
-        output=output,
-        error=error,
-        changed_files=list(changed_files or []),
-    )
-
-
 def record_execution_progress(task: Task, error: RunnerError, changed: bool) -> None:
-    """Track task-level progress without treating service outages as task failure."""
+    """Service outages do not count as task stagnation; real progress resets it."""
     if changed:
-        task.progress_key = ""
-        task.stagnant_attempts = 0
-        task.recovery_attempts = 0
-        task.recovery_level = 0
+        reset_task_recovery(task)
         return
     if is_service_error(error):
         return
@@ -105,65 +92,79 @@ def record_review_progress(
         task.recovery_level = 0
 
 
-def _needs_escalation(task: Task, attempt_threshold: int) -> bool:
-    return task.stagnant_attempts >= NO_PROGRESS_LIMIT or bool(
-        attempt_threshold and task.recovery_attempts >= attempt_threshold
-    )
+def reset_task_recovery(task: Task) -> None:
+    task.progress_key = ""
+    task.stagnant_attempts = 0
+    task.recovery_attempts = 0
+    task.recovery_level = 0
 
 
-def decide_task_retry(
-    task: Task,
-    attempt_threshold: int,
-    error: RunnerError | None = None,
-) -> RecoveryDecision:
-    """Escalate same-session retry -> fresh session -> replan, never stop the run."""
-    if error is not None and is_service_error(error):
-        return RecoveryDecision("retry", reason="transient service failure")
-    if not _needs_escalation(task, attempt_threshold):
-        return RecoveryDecision("retry", reason="task retry")
-    if task.recovery_level == 0:
-        return RecoveryDecision(
-            "retry",
-            fresh_session=True,
-            reason="task recovery escalated to fresh session",
-        )
-    return RecoveryDecision("replan", reason="task recovery escalated to replan")
-
-
-def decide_execution(
-    task: Task, outcome: ExecutionOutcome, attempt_threshold: int
-) -> RecoveryDecision:
-    """Preserve changed work for review; otherwise apply the shared retry policy."""
-    if outcome.status == "normal" or outcome.changed_files:
-        return RecoveryDecision("continue", reason="review executor result")
-    assert outcome.error is not None
-    return decide_task_retry(task, attempt_threshold, outcome.error)
-
-
-def decide_review(task: Task, review: ReviewResult, attempt_threshold: int) -> RecoveryDecision:
-    if review["completed"] is True:
-        return RecoveryDecision("continue", reason="task review passed")
-    return decide_task_retry(task, attempt_threshold)
-
-
-def apply_fresh_session_recovery(task: Task) -> None:
-    """Advance recovery level while preserving failure signature for replan detection."""
+def escalate_task_recovery(task: Task) -> None:
     task.recovery_level = 1
     task.recovery_attempts = 0
     task.stagnant_attempts = 0
 
 
+def _retry(task: Task, threshold: int, error: RunnerError | None) -> Transition:
+    if error is not None and is_service_error(error):
+        return Transition("retry", reason="transient service failure")
+    stalled = task.stagnant_attempts >= NO_PROGRESS_LIMIT or bool(
+        threshold and task.recovery_attempts >= threshold
+    )
+    if not stalled:
+        return Transition("retry", reason="task retry")
+    if task.recovery_level == 0:
+        return Transition("retry", "fresh", "task recovery escalated to fresh session")
+    return Transition("replan", reason="task recovery escalated to replan")
+
+
+def decide(
+    outcome: Outcome,
+    *,
+    task: Task | None = None,
+    threshold: int = 0,
+    recovery_level: int = 0,
+) -> Transition:
+    """Choose ADVANCE / RETRY / REPLAN. Recoverable outcomes never STOP the run."""
+    if outcome.stage == "execute":
+        if outcome.status == "pass" or outcome.changed_files:
+            return Transition("advance", reason="review executor result")
+        if task is None or outcome.error is None:
+            raise ValueError("execute recovery requires task and error")
+        return _retry(task, threshold, outcome.error)
+
+    if outcome.stage == "review":
+        if outcome.status == "pass":
+            return Transition("advance", reason="task review passed")
+        if task is None:
+            raise ValueError("review recovery requires task")
+        return _retry(task, threshold, outcome.error)
+
+    if outcome.stage == "validate":
+        if outcome.status == "pass":
+            return Transition("advance", reason="validator passed")
+        if outcome.status == "fail":
+            return Transition("replan", reason="validator rejected current project state")
+        return Transition("retry", reason="validator infrastructure failure")
+
+    if outcome.status == "pass":
+        return Transition("advance", reason="usable planning result")
+    return Transition(
+        "retry",
+        "fresh" if recovery_level > 0 else "same",
+        "planning recovery",
+    )
+
+
 __all__ = [
-    "RecoveryAction",
-    "RecoveryDecision",
-    "apply_fresh_session_recovery",
-    "decide_execution",
-    "decide_review",
-    "decide_task_retry",
+    "Outcome",
+    "Transition",
+    "decide",
     "error_failure_key",
-    "execution_outcome",
+    "escalate_task_recovery",
     "is_service_error",
     "record_execution_progress",
     "record_review_progress",
+    "reset_task_recovery",
     "validator_failure_key",
 ]

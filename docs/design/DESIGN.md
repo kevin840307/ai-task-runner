@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.17
+Version: 1.2.18
 
 ## Responsibility boundary
 The Runner owns orchestration; project code and validators own application-specific behavior.
@@ -75,4 +75,6 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 ## Compatibility cleanup
 Internal helpers should use one canonical name/signature. Dead internal aliases and unused compatibility parameters are removed instead of being carried indefinitely. Compatibility aliases that may be used by external Python callers remain until an intentional public breaking change; new code should use the canonical `RunRequest`, `AgentClient`, `RunState`, and `AgentBackend` names.
 
-Recovery policy is centralized: recoverable runtime outcomes map only to `RETRY`, `CONTINUE`, or `REPLAN`. Task recovery escalates `same session -> fresh session -> replan`; validator failures preserve project changes and replan. Recoverable workflow failures never produce a terminal exit code. Completion is declared only after Final Validator PASS.
+Recovery policy is centralized: recoverable runtime outcomes map only to `ADVANCE`, `RETRY`, or `REPLAN`. Task recovery escalates `same session -> fresh session -> replan`; validator failures preserve project changes and replan. Recoverable workflow failures never produce a terminal exit code. Completion is declared only after Final Validator PASS.
+
+Execution-loop simplification uses one `Outcome -> Transition` contract across Execute, Review, Planning recovery, and Final Validator. Stages report facts (`pass` / `fail` / `error`, progress, usable evidence); the policy alone chooses `ADVANCE`, `RETRY(same|fresh)`, or `REPLAN`. Explicit review FAIL remains distinct from reviewer ERROR: FAIL retries the TODO, while repeated reviewer infrastructure/model errors may fail-soft to `review_skipped` and remain subject to the Final Validator hard gate.

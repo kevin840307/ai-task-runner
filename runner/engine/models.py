@@ -37,17 +37,6 @@ class ReviewResult(_ReviewResultRequired, total=False):
     review_skipped: bool
 
 
-ExecutionStatus = Literal["normal", "service_error", "execution_error"]
-
-
-@dataclass
-class ExecutionOutcome:
-    status: ExecutionStatus
-    output: str = ""
-    error: RunnerError | None = None
-    changed_files: list[str] = field(default_factory=list)
-
-
 class AIValidationResult(TypedDict):
     passed: bool
     reason: str
@@ -176,8 +165,6 @@ class RunState:
 
 __all__ = [
     "AIValidationResult",
-    "ExecutionOutcome",
-    "ExecutionStatus",
     "PlanJudgment",
     "ReviewResult",
     "RunStage",

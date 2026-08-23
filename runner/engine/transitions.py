@@ -5,6 +5,7 @@ import time
 from collections.abc import Sequence
 
 from .models import RunStage, RunState, Task
+from .recovery import reset_task_recovery
 
 
 def set_stage(
@@ -32,10 +33,7 @@ def install_plan(state: RunState, tasks: Sequence[Task], session_id: str) -> Non
 def complete_task(state: RunState, task: Task, session_id: str) -> None:
     task.status = "completed"
     task.last_output = ""
-    task.progress_key = ""
-    task.stagnant_attempts = 0
-    task.recovery_attempts = 0
-    task.recovery_level = 0
+    reset_task_recovery(task)
     state.agent_session_id = session_id
     state.current += 1
 

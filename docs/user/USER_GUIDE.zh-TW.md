@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.17
+版本：1.2.18
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`

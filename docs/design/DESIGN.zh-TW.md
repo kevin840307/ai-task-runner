@@ -1,6 +1,6 @@
 # 完整設計
 
-Version: 1.2.17
+Version: 1.2.18
 
 ## 目標
 1. AI 長時間執行時，即使模型/CLI 異常也盡量保留有價值的專案變更。
@@ -58,4 +58,6 @@ Current/last files 用於立即診斷；bounded pair history 用於完整回溯�
 ## 相容性清理
 Internal helper 維持單一 canonical 名稱與 signature；已無用途的內部 alias、無效 compatibility parameter 應直接移除，不永久累積。可能被外部 Python caller 使用的 compatibility alias，除非明確做 public breaking change，否則先保留；新程式一律使用 `RunRequest`、`AgentClient`、`RunState`、`AgentBackend` canonical 名稱。
 
-恢復策略集中處理：可恢復的 runtime outcome 只會映射成 `RETRY`、`CONTINUE`、`REPLAN`。任務恢復依序升級 `same session -> fresh session -> replan`；Validator FAIL 保留專案成果後重新規劃。可恢復的 workflow 錯誤不會產生終止 exit code，只有 Final Validator PASS 才宣告完成。
+恢復策略集中處理：可恢復的 runtime outcome 只會映射成 `ADVANCE`、`RETRY`、`REPLAN`。任務恢復依序升級 `same session -> fresh session -> replan`；Validator FAIL 保留專案成果後重新規劃。可恢復的 workflow 錯誤不會產生終止 exit code，只有 Final Validator PASS 才宣告完成。
+
+Execution Loop 統一使用 `Outcome -> Transition`：Execute、Review、Planning recovery、Final Validator 只回報 `pass / fail / error`、是否有進展、是否已有可用成果，再由單一 policy 決定 `ADVANCE`、`RETRY(same|fresh)` 或 `REPLAN`。Review 明確 FAIL 與 Reviewer ERROR 保持不同：FAIL 必須重試 TODO；Reviewer 本身反覆異常才允許 fail-soft `review_skipped`，最後仍由 Final Validator hard gate 把關。

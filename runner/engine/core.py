@@ -21,7 +21,7 @@ from ..agent.prompts import (
 )
 from ..config import RuntimeConfig
 from ..errors import ConfigurationError, RunnerError, backend_diagnostic_parts
-from .models import ExecutionOutcome, ReviewResult, RunStage, Task
+from .models import ReviewResult, RunStage, Task
 from ..safety.policy import protected_paths as policy_protected_paths
 from ..safety.project_guard import (
     changed_project_files,
@@ -35,11 +35,10 @@ from ..safety.project_guard import (
 from ..app.script_runner import execute_script as execute_yaml_script
 from .state_store import StateStore
 from .recovery import (
-    execution_outcome,
-    RecoveryDecision,
-    apply_fresh_session_recovery,
-    decide_execution,
-    decide_review,
+    Outcome,
+    Transition,
+    decide,
+    escalate_task_recovery,
     record_execution_progress,
     record_review_progress,
     validator_failure_key,
@@ -125,7 +124,7 @@ class TaskRunner:
         while not self.state.completed:
             self._plan_if_needed()
             if self.args.plan_only:
-                self.ui.set("Plan ready", "plan-only stopped before execution")
+                self.ui.set("Plan ready", "plan-only completed without execution")
                 return 0
             self._run_pending_tasks()
             if self._needs_planning():
@@ -222,27 +221,67 @@ class TaskRunner:
             self._save_state()
             show_todo(self.state, self.ui)
 
-            outcome = self._execute_outcome(task)
-            decision = decide_execution(task, outcome, self.args.max_attempts)
-            if outcome.error is not None:
-                self._log_execution_outcome(task, outcome, decision)
-            if decision.action == "continue":
-                self._set_stage("reviewing")
-                if outcome.status != "normal":
-                    self.ui.set(
-                        "Executor 異常但已有檔案變更，先執行 Review",
-                        task.title,
-                    )
-                review = self._review_current_task(task, task.last_output)
-                decision = self._handle_review_result(task, review)
-            if decision.action == "replan":
-                self._replan_stuck_task(task, decision.reason)
-                return
-            if decision.action == "retry":
-                self._prepare_task_retry(task, decision.fresh_session, decision.reason)
-        return
+            outcome = self._run_task(task)
+            transition = decide(
+                outcome,
+                task=task,
+                threshold=self.args.task_recovery_threshold,
+            )
 
-    def _execute_outcome(self, task: Task) -> ExecutionOutcome:
+            if transition.action == "advance":
+                self._complete_current_task(task)
+                continue
+            if transition.action == "replan":
+                self._replan_stuck_task(task, transition.reason)
+                return
+            self._prepare_task_retry(
+                task,
+                transition.retry_session,
+                transition.reason,
+            )
+
+    def _run_task(self, task: Task) -> Outcome:
+        """Run one TODO through Execute -> Review and return one stage-neutral outcome."""
+        execution = self._execute_outcome(task)
+        execution_transition = decide(
+            execution,
+            task=task,
+            threshold=self.args.task_recovery_threshold,
+        )
+        if execution.error is not None:
+            self._log_execution_outcome(task, execution, execution_transition)
+        if execution_transition.action != "advance":
+            return execution
+
+        self._set_stage("reviewing")
+        if execution.status == "error":
+            self.ui.set(
+                "Executor 異常但已有檔案變更，先執行 Review",
+                task.title,
+            )
+        review = self._review_current_task(task, task.last_output)
+        task.last_review = review
+        self._save_session()
+        outcome = Outcome(
+            "review",
+            "pass" if review["completed"] else "fail",
+            output=str(review.get("reason", "")),
+            feedback=list(review["missing_items"]),
+            skipped=bool(review.get("review_skipped")),
+        )
+
+        if outcome.status == "pass":
+            task.review_skipped = outcome.skipped
+            task.review_skip_reason = outcome.output if outcome.skipped else ""
+            return outcome
+
+        task.status = "pending"
+        record_review_progress(task, self.root, self.work, outcome.feedback)
+        self._save_state()
+        self.ui.set("任務未完成，準備恢復", outcome.output)
+        return outcome
+
+    def _execute_outcome(self, task: Task) -> Outcome:
         project_before = project_manifest(self.root, self.work)
         self._set_stage("executing")
         try:
@@ -255,7 +294,9 @@ class TaskRunner:
             error = current
 
         changed_files = changed_project_files(self.root, self.work, project_before)
-        outcome = execution_outcome(
+        outcome = Outcome(
+            "execute",
+            "pass" if error is None else "error",
             output=output,
             error=error,
             changed_files=changed_files,
@@ -278,8 +319,8 @@ class TaskRunner:
     def _log_execution_outcome(
         self,
         task: Task,
-        outcome: ExecutionOutcome,
-        decision: RecoveryDecision,
+        outcome: Outcome,
+        transition: Transition,
     ) -> None:
         assert outcome.error is not None
         shown_files = outcome.changed_files[:20]
@@ -293,42 +334,23 @@ class TaskRunner:
             f"task_changed_files={len(task.changed_files)}",
             f"stagnant_attempts={task.stagnant_attempts}",
             f"failure_signature={task.progress_key[:12] or '-'}",
-            f"task_recovery_action={decision.action}",
-            f"fresh_session={decision.fresh_session}",
+            f"task_recovery_action={transition.action}",
+            f"retry_session={transition.retry_session}",
         ]
         details.extend(backend_diagnostic_parts(outcome.error, include_output=True))
         details.append(str(outcome.error)[-1000:])
         self.ui.set("模型階段失敗，套用統一恢復策略", " | ".join(details))
 
-    def _handle_review_result(
-        self,
-        task: Task,
-        review: ReviewResult,
-    ) -> RecoveryDecision:
-        task.last_review = review
-        self._save_session()
-        if review["completed"] is True:
-            task.review_skipped = bool(review.get("review_skipped"))
-            task.review_skip_reason = str(review.get("reason", "")) if task.review_skipped else ""
-            self._complete_current_task(task)
-            return decide_review(task, review, self.args.max_attempts)
-
-        task.status = "pending"
-        self._record_no_progress(task, review)
-        self._save_state()
-        self.ui.set("任務未完成，準備恢復", review["reason"])
-        return decide_review(task, review, self.args.max_attempts)
-
     def _prepare_task_retry(
         self,
         task: Task,
-        fresh_session: bool = False,
+        retry_session: str = "same",
         reason: str = "",
     ) -> None:
-        if fresh_session:
+        if retry_session == "fresh":
             self.agent.session_id = ""
             self.state.agent_session_id = ""
-            apply_fresh_session_recovery(task)
+            escalate_task_recovery(task)
             task.last_output = bounded_text(
                 task.last_output
                 + "\nRecovery: The previous session made insufficient progress. "
@@ -352,15 +374,6 @@ class TaskRunner:
         prepare_task_replan(self.state, feedback)
         self._save_state()
         self.ui.set("目前 TODO 持續無法推進，保留成果並重新規劃", task.title)
-
-
-    def _record_no_progress(
-        self,
-        task: Task,
-        review: ReviewResult,
-    ) -> None:
-        record_review_progress(task, self.root, self.work, review["missing_items"])
-
 
     def _complete_current_task(self, task: Task) -> None:
         complete_task(self.state, task, self.agent.session_id)
@@ -466,22 +479,31 @@ class TaskRunner:
         self._set_stage("validating")
         self.ui.start("正在執行最終驗證", detail)
         try:
-            passed, output = self._run_validator()
-        except RunnerError as error:
-            output = str(error)
-            self.state.validator_output = bounded_text(
-                output, MAX_VALIDATOR_OUTPUT_CHARS
-            )
-            self._set_stage("validator_retry_wait", output)
-            self.ui.set("Validator 無法執行，稍後重試", output[-1000:])
-            if self.args.retry_delay:
-                time.sleep(self.args.retry_delay)
-            return
+            try:
+                passed, output = self._run_validator()
+                outcome = Outcome(
+                    "validate", "pass" if passed else "fail", output=output
+                )
+            except RunnerError as error:
+                outcome = Outcome(
+                    "validate", "error", output=str(error), error=error
+                )
         finally:
             self.ui.stop()
 
-        self.state.validator_output = bounded_text(output, MAX_VALIDATOR_OUTPUT_CHARS)
-        if passed:
+        self.state.validator_output = bounded_text(
+            outcome.output, MAX_VALIDATOR_OUTPUT_CHARS
+        )
+        transition = decide(outcome)
+
+        if transition.action == "retry":
+            self._set_stage("validator_retry_wait", outcome.output)
+            self.ui.set("Validator 無法執行，稍後重試", outcome.output[-1000:])
+            if self.args.retry_delay:
+                time.sleep(self.args.retry_delay)
+            return
+
+        if transition.action == "advance":
             self.agent.session_id = ""
             complete_run(self.state)
             self._set_stage("completed")
@@ -489,10 +511,10 @@ class TaskRunner:
             self.ui.set("全部完成", "Validator PASS")
             return
 
-        self._record_validator_failure(output)
+        self._record_validator_failure(outcome.output)
         full_replan = (
             self.state.validator_failure_count >= REPAIR_FULL_PLAN_AFTER_SAME_FAILURES
-            or bool(self.args.max_cycles and self.state.cycle >= self.args.max_cycles)
+            or bool(self.args.full_replan_threshold and self.state.cycle >= self.args.full_replan_threshold)
         )
         if full_replan:
             self.agent.session_id = ""
@@ -503,7 +525,7 @@ class TaskRunner:
             "AI FAIL"
             if self.ai_validation
             else "AI vote FAIL"
-            if output.startswith("FILE_VALIDATION_PASS\n")
+            if outcome.output.startswith("FILE_VALIDATION_PASS\n")
             else "file validator FAIL"
         )
         self.ui.set(
@@ -511,7 +533,6 @@ class TaskRunner:
             validator_name,
         )
         show_todo(self.state, self.ui)
-        return
 
     def _record_validator_failure(self, output: str) -> None:
         key = validator_failure_key(output)

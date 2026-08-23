@@ -1,6 +1,6 @@
 # Python API Reference
 
-Version: 1.2.17
+Version: 1.2.18
 
 ## Canonical integration surface
 External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI, future UI, and skills should adapt to this same request model instead of implementing another Runner flow.
