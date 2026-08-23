@@ -5,6 +5,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_obsolete_top_level_feature_modules_are_absent():
     obsolete = {
+        "core.py",
+        "models.py",
+        "state_store.py",
+        "process_control.py",
+        "ui.py",
+        "defaults.py",
+        "value_checks.py",
         "agent_args.py",
         "agent_factory.py",
         "ai_validation.py",
@@ -25,7 +32,7 @@ def test_obsolete_top_level_feature_modules_are_absent():
 
 
 def test_internal_modules_use_feature_owners_directly():
-    core = (ROOT / "runner" / "core.py").read_text(encoding="utf-8")
+    core = (ROOT / "runner" / "engine" / "core.py").read_text(encoding="utf-8")
     planning = (ROOT / "runner" / "workflow" / "planning.py").read_text(
         encoding="utf-8"
     )
@@ -36,14 +43,14 @@ def test_internal_modules_use_feature_owners_directly():
         ROOT / "runner" / "workflow" / "validation" / "file.py"
     ).read_text(encoding="utf-8")
 
-    assert "from .agent.factory import AgentFactory" in core
-    assert "from .workflow.planning import build_plan" in core
-    assert "from .workflow.reviewing import review_task" in core
-    assert "from .safety.project_guard import (" in core
+    assert "from ..agent.factory import AgentFactory" in core
+    assert "from ..workflow.planning import build_plan" in core
+    assert "from ..workflow.reviewing import review_task" in core
+    assert "from ..safety.project_guard import (" in core
     assert "from ..agent.calls import" in planning
     assert "from ..safety.project_guard import readonly_ask" in planning
     assert "from .structured import readonly_structured_call" in reviewing
-    assert "from ...process_control import run_process" in file_validation
+    assert "from ...runtime.process_control import run_process" in file_validation
 
 
 def test_feature_packages_expose_canonical_modules():

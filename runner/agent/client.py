@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from runner.backends import BackendError, create_backend
-from runner.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+from ..config.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 
 from ..errors import RunnerError, diagnostic_detail
 from .debug import begin_model_call, finish_model_call

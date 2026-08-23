@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import Any, TypeVar
 
 from ..errors import RunnerError
-from ..models import AIValidationResult, PlanJudgment, ReviewResult, Task
+from ..engine.models import AIValidationResult, PlanJudgment, ReviewResult, Task
 
 MAX_RESULT_REASON_CHARS = 4_000
 MAX_MISSING_ITEMS = 100

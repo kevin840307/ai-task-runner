@@ -5,8 +5,8 @@ import pytest
 
 
 def test_no_change_still_reviews_and_preserves_executor_session(tmp_path, monkeypatch):
-    import runner.core as core
-    from runner.models import RunState, Task
+    import runner.engine.core as core
+    from runner.engine.models import RunState, Task
 
     task = Task(
         id="c01-t001",
@@ -45,9 +45,9 @@ def test_no_change_still_reviews_and_preserves_executor_session(tmp_path, monkey
 
 
 def test_validator_infrastructure_error_retries_without_repair_cycle(tmp_path):
-    import runner.core as core
+    import runner.engine.core as core
     from runner.errors import RunnerError
-    from runner.models import RunState
+    from runner.engine.models import RunState
 
     stages = []
     runner = core.TaskRunner.__new__(core.TaskRunner)
@@ -128,7 +128,7 @@ def test_planning_can_preserve_loop_session_for_no_tool_finalize():
 
 
 def test_prompt_history_is_bounded_to_recent_items(tmp_path):
-    from runner.models import RunState, Task
+    from runner.engine.models import RunState, Task
     from runner.agent.prompts import MAX_PROMPT_HISTORY_ITEMS, completed_titles
 
     state = RunState(

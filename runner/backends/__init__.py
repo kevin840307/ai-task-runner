@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from runner.defaults import DEFAULT_AGENT_TIMEOUT
+from ..config.defaults import DEFAULT_AGENT_TIMEOUT
 
 from .base import AgentBackend, AgentMode, BackendError, BackendResult
 from .opencode import OpenCodeBackend, ensure_opencode_rules

@@ -5,8 +5,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 ORCHESTRATION = {
     "runner.api",
-    "runner.core",
-    "runner.script_runner",
+    "runner.engine.core",
+    "runner.app.script_runner",
     "runner.workflow.planning",
     "runner.workflow.reviewing",
     "runner.workflow.structured",
@@ -15,8 +15,8 @@ ORCHESTRATION = {
 }
 
 FORBIDDEN_IMPORTS = {
-    "runner/config.py": ORCHESTRATION | {"runner.agent"},
-    "runner/state_store.py": ORCHESTRATION,
+    "runner/config/runtime.py": ORCHESTRATION | {"runner.agent"},
+    "runner/engine/state_store.py": ORCHESTRATION,
     "runner/agent/arguments.py": ORCHESTRATION,
     "runner/agent/calls.py": ORCHESTRATION,
     "runner/agent/debug.py": ORCHESTRATION,
@@ -27,37 +27,37 @@ FORBIDDEN_IMPORTS = {
     "runner/safety/policy.py": ORCHESTRATION,
     "runner/safety/project_guard.py": ORCHESTRATION,
     "runner/workflow/planning.py": {
-        "runner.core",
-        "runner.script_runner",
+        "runner.engine.core",
+        "runner.app.script_runner",
         "runner.workflow.reviewing",
         "runner.workflow.validation.ai",
         "runner.workflow.validation.file",
     },
     "runner/workflow/reviewing.py": {
-        "runner.core",
-        "runner.script_runner",
+        "runner.engine.core",
+        "runner.app.script_runner",
         "runner.workflow.planning",
         "runner.workflow.validation.ai",
         "runner.workflow.validation.file",
     },
     "runner/workflow/structured.py": {
-        "runner.core",
-        "runner.script_runner",
+        "runner.engine.core",
+        "runner.app.script_runner",
         "runner.workflow.planning",
         "runner.workflow.reviewing",
         "runner.workflow.validation.ai",
         "runner.workflow.validation.file",
     },
     "runner/workflow/validation/ai.py": {
-        "runner.core",
-        "runner.script_runner",
+        "runner.engine.core",
+        "runner.app.script_runner",
         "runner.workflow.planning",
         "runner.workflow.reviewing",
         "runner.workflow.validation.file",
     },
     "runner/workflow/validation/file.py": {
-        "runner.core",
-        "runner.script_runner",
+        "runner.engine.core",
+        "runner.app.script_runner",
         "runner.workflow.planning",
         "runner.workflow.reviewing",
         "runner.workflow.validation.ai",
@@ -89,7 +89,7 @@ def test_lower_layers_do_not_import_back_into_orchestration():
 
 
 def test_core_depends_on_feature_packages():
-    imports = module_imports("runner/core.py")
+    imports = module_imports("runner/engine/core.py")
     assert {
         "runner.agent.calls",
         "runner.agent.factory",

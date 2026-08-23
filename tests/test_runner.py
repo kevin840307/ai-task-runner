@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from runner import state_store
+from runner.engine import state_store
 from runner.safety import project_guard
 
 
@@ -218,7 +218,7 @@ def test_task_schema_accepts_common_criteria_alias():
 
 
 def test_task_completion_requires_successful_execution_and_ai_review():
-    source = (ROOT / "runner/core.py").read_text(encoding="utf-8")
+    source = (ROOT / "runner/engine/core.py").read_text(encoding="utf-8")
     assert "defer_to_validator" not in source
     assert "skipping AI review" not in source
     assert 'if review["completed"] is True:' in source
@@ -231,7 +231,7 @@ def test_prompts_forbid_questions_and_omit_runtime_fields():
         plan_understand_prompt,
         review_prompt,
     )
-    from runner.models import RunState, Task
+    from runner.engine.models import RunState, Task
 
     root = Path("/project")
     task = Task("id", "Title", "Description", ["Done"], attempts=9, last_output="large output")
@@ -776,7 +776,7 @@ def test_review_and_validator_results_are_bounded():
 
 
 def test_old_state_without_24h_fields_still_loads():
-    from runner.models import RunState
+    from runner.engine.models import RunState
 
     state = RunState.load({
         "run_id": "run",
@@ -796,7 +796,7 @@ def test_old_state_without_24h_fields_still_loads():
 
 def test_prompts_require_project_understanding_and_minimal_compatible_changes(tmp_path):
     import runner.agent.prompts as prompting
-    from runner.models import RunState, Task
+    from runner.engine.models import RunState, Task
 
     state = RunState(
         run_id="test-run",
@@ -827,7 +827,7 @@ def test_prompts_require_project_understanding_and_minimal_compatible_changes(tm
 
 def test_plan_understand_prompt_uses_project_root_without_preloaded_file_list(tmp_path):
     import runner.agent.prompts as prompting
-    from runner.models import RunState
+    from runner.engine.models import RunState
 
     (tmp_path / "README.md").write_text("fixture", encoding="utf-8")
     (tmp_path / "src").mkdir()

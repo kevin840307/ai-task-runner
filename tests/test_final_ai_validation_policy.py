@@ -2,7 +2,7 @@ import pytest
 
 from ai_task_runner import parser
 from runner.api import RunRequest
-from runner.defaults import (
+from runner.config.defaults import (
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
 )
@@ -70,7 +70,7 @@ def test_ai_validation_stops_after_quorum_in_independent_sessions(monkeypatch, t
     from types import SimpleNamespace
 
     from runner.workflow.validation import ai as ai_validation
-    from runner.models import RunState
+    from runner.engine.models import RunState
 
     sessions = []
     replies = iter([
@@ -120,7 +120,7 @@ def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_p
     from types import SimpleNamespace
 
     from runner.workflow.validation import ai as ai_validation
-    from runner.models import RunState
+    from runner.engine.models import RunState
 
     sessions = []
     replies = iter([
@@ -163,7 +163,7 @@ def test_run_ai_validator_uses_majority_and_runs_all_sessions(monkeypatch, tmp_p
 def test_ai_validation_stops_when_quorum_is_impossible(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner.models import RunState
+    from runner.engine.models import RunState
     from runner.workflow.validation import ai as ai_validation
 
     sessions = []
@@ -212,8 +212,8 @@ def test_ai_validation_stops_when_quorum_is_impossible(monkeypatch, tmp_path):
 def test_mixed_validation_runs_hard_gate_then_ai_vote(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import core
-    from runner.models import RunState
+    from runner.engine import core
+    from runner.engine.models import RunState
 
     calls = []
     monkeypatch.setattr(
@@ -251,8 +251,8 @@ def test_mixed_validation_runs_hard_gate_then_ai_vote(monkeypatch, tmp_path):
 def test_mixed_validation_skips_ai_when_hard_gate_fails(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner import core
-    from runner.models import RunState
+    from runner.engine import core
+    from runner.engine.models import RunState
 
     calls = []
     monkeypatch.setattr(

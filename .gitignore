@@ -6,4 +6,10 @@ __pycache__/
 .pytest_cache/
 examples/
 .ruff_cache/
-*.egg-info/
+*.egg-info/*.pyc
+*.pyo
+build/
+dist/
+bundle.txt
+project.bundle.txt
+tmp.txt

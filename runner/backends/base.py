@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from runner.errors import RunnerError
-from runner.process_control import ProcessResult, run_process
-from runner.safety.policy import instructions
+from ..errors import RunnerError
+from ..runtime.process_control import ProcessResult, run_process
+from ..safety.policy import instructions
 
 AgentMode = Literal["planning", "review", "no_tool", "runtime"]
 

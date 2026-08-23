@@ -17,11 +17,11 @@ from ..agent.prompts import (
 )
 from ..agent.results import parse_plan_judgment, parse_tasks
 from ..config import RuntimeConfig
-from ..defaults import MIN_PLANNED_TASKS
+from ..config.defaults import MIN_PLANNED_TASKS
 from ..errors import RunnerError, diagnostic_error
-from ..models import PlanJudgment, RunState, Task
+from ..engine.models import PlanJudgment, RunState, Task
 from ..safety.project_guard import readonly_ask
-from ..ui import LiveUI
+from ..app.ui import LiveUI
 
 PLAN_JUDGE_MAX_REWRITES = 2
 

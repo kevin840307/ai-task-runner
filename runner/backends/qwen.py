@@ -1,13 +1,15 @@
 """Qwen CLI backend."""
 from __future__ import annotations
 
+import json
+import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from runner.defaults import DEFAULT_QWEN_COMMAND
-from runner.process_control import run_process
+from ..config.defaults import DEFAULT_QWEN_COMMAND
+from ..runtime.process_control import run_process
 
 from .base import (
     AgentBackend,
@@ -41,6 +43,10 @@ class QwenBackend(AgentBackend):
     def build_command(self, prompt: str, session_id: str) -> list[str]:
         if not prompt.strip():
             raise BackendError("qwen prompt is empty")
+        if session_id and any(
+            value in {"-s", "--sandbox"} for value in self.extra_args
+        ):
+            bridge_sandbox_session(self.root, session_id)
         session_args = ["--resume", session_id] if session_id else []
         return [
             *self.base_command,
@@ -160,6 +166,43 @@ class QwenBackend(AgentBackend):
 def ensure_qwen_rules(root: Path) -> Path:
     """Create or extend the Qwen project rule file."""
     return ensure_project_rules(root, "QWEN.md")
+
+def bridge_sandbox_session(
+    root: Path,
+    session_id: str,
+    projects: Path | None = None,
+) -> None:
+    """Expose a container-recorded chat at Qwen's host project path."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", session_id):
+        raise BackendError("invalid Qwen session id")
+    projects = projects or Path.home() / ".qwen" / "projects"
+    project_root = str(root.resolve())
+    if os.name == "nt":
+        project_root = project_root.lower()
+    project_id = re.sub(r"[^a-zA-Z0-9]", "-", project_root)
+    target = projects / project_id / "chats" / f"{session_id}.jsonl"
+    try:
+        sources = [
+            path for path in projects.glob(f"*/chats/{session_id}.jsonl")
+            if path != target
+        ]
+        if not sources:
+            return
+        source = max(sources, key=lambda path: path.stat().st_mtime_ns)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for line in source.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            if isinstance(record, dict) and "cwd" in record:
+                record["cwd"] = str(root.resolve())
+            lines.append(json.dumps(
+                record, ensure_ascii=False, separators=(",", ":")
+            ))
+        temporary = target.with_suffix(".jsonl.tmp")
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+    except (OSError, json.JSONDecodeError) as error:
+        raise BackendError("invalid Qwen sandbox session") from error
 
 
 

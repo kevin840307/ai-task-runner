@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from ..errors import RunnerError, diagnostic_detail
-from ..ui import LiveUI
+from ..app.ui import LiveUI
 
 T = TypeVar("T")
 

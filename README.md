@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.12
+Version: 1.2.13
 
 A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
@@ -34,17 +34,17 @@ The file validator must PASS first; then 3 fresh AI sessions vote independently 
 ## Documentation map
 - [Full documentation index](docs/INDEX.md) / [中文索引](docs/INDEX.zh-TW.md)
 - [繁體中文首頁](README.zh-TW.md)
-- [Design](docs/DESIGN.md) / [設計](docs/DESIGN.zh-TW.md)
-- [Architecture](docs/ARCHITECTURE.md) / [架構](docs/ARCHITECTURE.zh-TW.md)
-- [User Guide](docs/USER_GUIDE.md) / [使用指南](docs/USER_GUIDE.zh-TW.md)
-- [CLI Reference](docs/CLI_REFERENCE.md) / [CLI 參考](docs/CLI_REFERENCE.zh-TW.md)
-- [Python API Reference](docs/API_REFERENCE.md) / [API 中文](docs/API_REFERENCE.zh-TW.md)
-- [Prompt / Session Contract](docs/PROMPT_SESSION.md) / [Prompt / Session 中文](docs/PROMPT_SESSION.zh-TW.md)
-- [State / Events](docs/STATE_EVENTS.md) / [State / Events 中文](docs/STATE_EVENTS.zh-TW.md)
-- [Protection / Safety](docs/SECURITY_PROTECTION.md) / [保護與安全](docs/SECURITY_PROTECTION.zh-TW.md)
-- [Operations](docs/OPERATIONS.md) / [24H 運行與故障排查](docs/OPERATIONS.zh-TW.md)
-- [Project / Maintainer Guide](docs/PROJECT_GUIDE.md) / [專案 / 維護者指南](docs/PROJECT_GUIDE.zh-TW.md)
-- [Test Matrix](docs/TEST_MATRIX.md) / [測試矩陣](docs/TEST_MATRIX.zh-TW.md)
+- [Design](docs/design/DESIGN.md) / [設計](docs/design/DESIGN.zh-TW.md)
+- [Architecture](docs/design/ARCHITECTURE.md) / [架構](docs/design/ARCHITECTURE.zh-TW.md)
+- [User Guide](docs/user/USER_GUIDE.md) / [使用指南](docs/user/USER_GUIDE.zh-TW.md)
+- [CLI Reference](docs/user/CLI_REFERENCE.md) / [CLI 參考](docs/user/CLI_REFERENCE.zh-TW.md)
+- [Python API Reference](docs/user/API_REFERENCE.md) / [API 中文](docs/user/API_REFERENCE.zh-TW.md)
+- [Prompt / Session Contract](docs/design/PROMPT_SESSION.md) / [Prompt / Session 中文](docs/design/PROMPT_SESSION.zh-TW.md)
+- [State / Events](docs/design/STATE_EVENTS.md) / [State / Events 中文](docs/design/STATE_EVENTS.zh-TW.md)
+- [Protection / Safety](docs/operations/SECURITY_PROTECTION.md) / [保護與安全](docs/operations/SECURITY_PROTECTION.zh-TW.md)
+- [Operations](docs/operations/OPERATIONS.md) / [24H 運行與故障排查](docs/operations/OPERATIONS.zh-TW.md)
+- [Project / Maintainer Guide](docs/development/PROJECT_GUIDE.md) / [專案 / 維護者指南](docs/development/PROJECT_GUIDE.zh-TW.md)
+- [Test Matrix](docs/development/TEST_MATRIX.md) / [測試矩陣](docs/development/TEST_MATRIX.zh-TW.md)
 - [Validator templates](docs/validator_templates/README.md) / [Validator 範本](docs/validator_templates/README.zh-TW.md)
 - [Examples](examples/README.md) / [範例](examples/README.zh-TW.md)
 - [Smoke](smoke/README.md) / [Smoke 測試](smoke/README.zh-TW.md)

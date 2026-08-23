@@ -12,9 +12,9 @@ sys.path.insert(0, str(ROOT))
 
 from runner.agent import AgentClient
 from runner.backends import AgentBackend, default_command
-from runner.defaults import DEFAULT_QWEN_COMMAND
+from runner.config.defaults import DEFAULT_QWEN_COMMAND
 from runner.api import RunRequest, __version__, run
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 from ai_task_runner_validator import ValidatorReport
 
 
@@ -34,7 +34,7 @@ def _validator(path: Path) -> Path:
 
 
 def test_canonical_public_names_are_stable():
-    assert __version__ == "1.2.12"
+    assert __version__ == "1.2.13"
     assert RunState.__name__ == "RunState"
     assert AgentClient.__name__ == "AgentClient"
     assert AgentBackend.__name__ == "AgentBackend"
@@ -46,6 +46,10 @@ def test_validator_helper_is_installable_public_module():
     assert 'name = "ai-task-runner"' in pyproject
     for package in (
         "runner",
+        "runner.app",
+        "runner.engine",
+        "runner.config",
+        "runner.runtime",
         "runner.agent",
         "runner.backends",
         "runner.safety",
@@ -113,7 +117,7 @@ def test_same_python_process_can_run_multiple_complete_jobs(tmp_path):
 def test_retry_loop_is_iterative_across_one_thousand_failures():
     from runner.errors import RunnerError
     from runner.agent.calls import retry_model_call
-    from runner.ui import LiveUI
+    from runner.app.ui import LiveUI
 
     attempts = 0
 
@@ -136,11 +140,11 @@ def test_retry_loop_is_iterative_across_one_thousand_failures():
 
 
 def test_core_uses_descriptive_canonical_names():
-    core = (ROOT / "runner" / "core.py").read_text(encoding="utf-8")
+    core = (ROOT / "runner" / "engine" / "core.py").read_text(encoding="utf-8")
     cli = (ROOT / "ai_task_runner.py").read_text(encoding="utf-8")
 
     assert "from .models import ReviewResult, RunStage, Task" in core
-    assert "from .agent.factory import AgentFactory" in core
+    assert "from ..agent.factory import AgentFactory" in core
     assert not (ROOT / "runner" / "support.py").exists()
     assert "from runner.agent.prompts import" not in cli
     assert "from runner.api import RunRequest, run" in cli

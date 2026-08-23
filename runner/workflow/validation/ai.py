@@ -17,9 +17,9 @@ from ...agent.prompts import (
 from ...agent.results import parse_ai_validation
 from ...config import RuntimeConfig
 from ...errors import RunnerError
-from ...models import RunState
+from ...engine.models import RunState
 from ...safety.project_guard import readonly_ask
-from ...ui import LiveUI
+from ...app.ui import LiveUI
 from ..structured import readonly_structured_call
 
 

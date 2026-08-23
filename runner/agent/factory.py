@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..backends import AgentMode, configure_agent_args, configure_sandbox_args
 from ..config import RuntimeConfig
-from ..defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+from ..config.defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from .client import AgentClient
 
 AgentConstructor = Callable[..., AgentClient]

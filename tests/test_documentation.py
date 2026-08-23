@@ -10,10 +10,10 @@ from runner.version import __version__
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = {
     "README": ROOT / "README.md",
-    "DESIGN": ROOT / "docs" / "DESIGN.md",
-    "USER_GUIDE": ROOT / "docs" / "USER_GUIDE.md",
-    "TEST_MATRIX": ROOT / "docs" / "TEST_MATRIX.md",
-    "PROJECT_GUIDE": ROOT / "docs" / "PROJECT_GUIDE.md",
+    "DESIGN": ROOT / "docs" / "design" / "DESIGN.md",
+    "USER_GUIDE": ROOT / "docs" / "user" / "USER_GUIDE.md",
+    "TEST_MATRIX": ROOT / "docs" / "development" / "TEST_MATRIX.md",
+    "PROJECT_GUIDE": ROOT / "docs" / "development" / "PROJECT_GUIDE.md",
 }
 
 
@@ -89,17 +89,17 @@ def test_bilingual_document_set_is_complete_and_linked():
     pairs = (
         ("README.md", "README.zh-TW.md"),
         ("docs/INDEX.md", "docs/INDEX.zh-TW.md"),
-        ("docs/DESIGN.md", "docs/DESIGN.zh-TW.md"),
-        ("docs/ARCHITECTURE.md", "docs/ARCHITECTURE.zh-TW.md"),
-        ("docs/USER_GUIDE.md", "docs/USER_GUIDE.zh-TW.md"),
-        ("docs/CLI_REFERENCE.md", "docs/CLI_REFERENCE.zh-TW.md"),
-        ("docs/API_REFERENCE.md", "docs/API_REFERENCE.zh-TW.md"),
-        ("docs/PROMPT_SESSION.md", "docs/PROMPT_SESSION.zh-TW.md"),
-        ("docs/STATE_EVENTS.md", "docs/STATE_EVENTS.zh-TW.md"),
-        ("docs/SECURITY_PROTECTION.md", "docs/SECURITY_PROTECTION.zh-TW.md"),
-        ("docs/OPERATIONS.md", "docs/OPERATIONS.zh-TW.md"),
-        ("docs/PROJECT_GUIDE.md", "docs/PROJECT_GUIDE.zh-TW.md"),
-        ("docs/TEST_MATRIX.md", "docs/TEST_MATRIX.zh-TW.md"),
+        ("docs/design/DESIGN.md", "docs/design/DESIGN.zh-TW.md"),
+        ("docs/design/ARCHITECTURE.md", "docs/design/ARCHITECTURE.zh-TW.md"),
+        ("docs/user/USER_GUIDE.md", "docs/user/USER_GUIDE.zh-TW.md"),
+        ("docs/user/CLI_REFERENCE.md", "docs/user/CLI_REFERENCE.zh-TW.md"),
+        ("docs/user/API_REFERENCE.md", "docs/user/API_REFERENCE.zh-TW.md"),
+        ("docs/design/PROMPT_SESSION.md", "docs/design/PROMPT_SESSION.zh-TW.md"),
+        ("docs/design/STATE_EVENTS.md", "docs/design/STATE_EVENTS.zh-TW.md"),
+        ("docs/operations/SECURITY_PROTECTION.md", "docs/operations/SECURITY_PROTECTION.zh-TW.md"),
+        ("docs/operations/OPERATIONS.md", "docs/operations/OPERATIONS.zh-TW.md"),
+        ("docs/development/PROJECT_GUIDE.md", "docs/development/PROJECT_GUIDE.zh-TW.md"),
+        ("docs/development/TEST_MATRIX.md", "docs/development/TEST_MATRIX.zh-TW.md"),
         ("docs/validator_templates/README.md", "docs/validator_templates/README.zh-TW.md"),
         ("examples/README.md", "examples/README.zh-TW.md"),
         ("smoke/README.md", "smoke/README.zh-TW.md"),
@@ -115,10 +115,10 @@ def test_validator_arg_and_maintenance_contract_are_documented():
         for path in (
             ROOT / "README.md",
             ROOT / "README.zh-TW.md",
-            ROOT / "docs" / "CLI_REFERENCE.md",
-            ROOT / "docs" / "CLI_REFERENCE.zh-TW.md",
-            ROOT / "docs" / "PROJECT_GUIDE.md",
-            ROOT / "docs" / "PROJECT_GUIDE.zh-TW.md",
+            ROOT / "docs" / "user" / "CLI_REFERENCE.md",
+            ROOT / "docs" / "user" / "CLI_REFERENCE.zh-TW.md",
+            ROOT / "docs" / "development" / "PROJECT_GUIDE.md",
+            ROOT / "docs" / "development" / "PROJECT_GUIDE.zh-TW.md",
             ROOT / "AGENTS.md",
             ROOT / "QWEN.md",
         )

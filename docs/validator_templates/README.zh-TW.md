@@ -1,6 +1,6 @@
 # Validator Interface 與範本
 
-版本：1.2.12
+版本：1.2.13
 
 Example/smoke 的 deterministic validator 統一使用 local `validator_interface.py` 模式。Project-specific check 留在 validator；interface 只統一 report/error/warning/exit 行為。
 

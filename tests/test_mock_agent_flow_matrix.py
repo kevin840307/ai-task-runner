@@ -138,7 +138,7 @@ def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypat
 
 def test_generic_workflow_and_prompts_have_no_backend_or_example_literals():
     generic_paths = [
-        ROOT / "runner" / "core.py",
+        ROOT / "runner" / "engine" / "core.py",
         *(ROOT / "runner" / "agent").rglob("*.py"),
         *(ROOT / "runner" / "agent" / "prompt_templates").glob("*.md"),
         *(ROOT / "runner" / "workflow").rglob("*.py"),

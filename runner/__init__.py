@@ -7,7 +7,7 @@ __all__ = ["RunRequest", "RunResult", "__version__", "run"]
 
 def __getattr__(name: str):
     if name in {"RunRequest", "RunResult", "run"}:
-        from .api import RunRequest, RunResult, run
+        from .app.api import RunRequest, RunResult, run
 
         return {
             "RunRequest": RunRequest,

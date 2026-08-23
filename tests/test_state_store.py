@@ -2,14 +2,14 @@ import json
 
 import pytest
 
-from runner.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
+from runner.config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from runner.errors import RunnerError
-from runner.models import RunState, Task
-from runner.state_store import StateStore
+from runner.engine.models import RunState, Task
+from runner.engine.state_store import StateStore
 
 
 def _store(tmp_path, monkeypatch) -> StateStore:
-    from runner import state_store
+    from runner.engine import state_store
 
     monkeypatch.setattr(
         state_store.tempfile,

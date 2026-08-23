@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 
 
 def test_review_policy_options_are_removed_from_public_request():
@@ -32,7 +32,7 @@ def test_legacy_review_counter_fields_are_ignored_when_loading_state():
 
 
 def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 
@@ -98,7 +98,7 @@ def test_review_error_without_session_is_skipped_after_one_independent_call(tmp_
 
 
 def test_review_explicit_fail_is_not_skipped(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     import runner.workflow.reviewing as reviewing
 
     class FakeAgent:
@@ -162,7 +162,7 @@ def test_qwen_review_args_disable_mutating_tools():
 
 
 def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 
@@ -229,7 +229,7 @@ def test_review_error_with_session_finalizes_without_tools(tmp_path, monkeypatch
 
 
 def test_review_finalize_error_still_skips_to_final_validator(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     import runner.workflow.reviewing as reviewing
     from runner.errors import RunnerError
 

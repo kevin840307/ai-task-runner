@@ -17,11 +17,11 @@ from runner.agent import SESSION_INVALID_MARKERS, is_session_invalid_error
 from runner.agent.calls import retry_model_call
 from runner.agent.results import parse_ai_validation, parse_json, parse_review, parse_tasks
 from runner.errors import RunnerError
-from runner.process_control import run_process
+from runner.runtime.process_control import run_process
 from runner.api import RunRequest, run
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 from runner.safety.project_guard import protected_ask, readonly_project_call
-from runner.ui import LiveUI
+from runner.app.ui import LiveUI
 from runner.workflow.validation.file import run_file_validator
 
 
@@ -376,7 +376,7 @@ def test_process_stdin_is_devnull(tmp_path):
     assert result.output.strip() == "''"
 
 def test_process_unexpected_error_cleans_up_process_tree(tmp_path, monkeypatch):
-    import runner.process_control as process_control
+    import runner.runtime.process_control as process_control
 
     killed = []
 
@@ -651,7 +651,7 @@ def test_file_validator_clears_previous_reports_before_run(tmp_path):
 
 def test_file_validator_large_output_keeps_summary_and_report_reference(tmp_path):
     from runner.agent.prompts import bounded_text
-    from runner.defaults import MAX_VALIDATOR_OUTPUT_CHARS
+    from runner.config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 
     state_file = tmp_path / "state.json"
     state_file.write_text("{}", encoding="utf-8")
@@ -725,7 +725,7 @@ def test_invalid_yaml_fails_before_item_state_is_created(tmp_path):
 
 
 def test_windows_process_tree_uses_taskkill_tree_flags(monkeypatch):
-    import runner.process_control as process_control
+    import runner.runtime.process_control as process_control
     from types import SimpleNamespace
 
     calls = []

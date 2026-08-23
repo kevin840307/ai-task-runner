@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ...errors import RunnerError
-from ...process_control import run_process
+from ...runtime.process_control import run_process
 from ...safety.project_guard import restore_changed, snapshot
 
 

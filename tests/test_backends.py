@@ -72,7 +72,7 @@ def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatc
 
 def test_core_has_no_backend_specific_command_logic():
     root = Path(__file__).resolve().parents[1]
-    source = (root / "runner" / "core.py").read_text(encoding="utf-8")
+    source = (root / "runner" / "engine" / "core.py").read_text(encoding="utf-8")
     assert "[\"--resume\"," not in source
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
@@ -191,7 +191,7 @@ def test_zero_backend_timeout_disables_limit(tmp_path):
 
 def test_timeout_uses_existing_retry_loop(tmp_path):
     from runner.agent.calls import retry_model_call
-    from runner.ui import LiveUI
+    from runner.app.ui import LiveUI
 
     counter = tmp_path / "count.txt"
 
@@ -285,7 +285,7 @@ def test_backend_project_instructions_are_replaced_from_policy(tmp_path):
 
 
 def test_qwen_ask_passes_exact_prompt_through_stdin_only(tmp_path, monkeypatch):
-    from runner.process_control import ProcessResult
+    from runner.runtime.process_control import ProcessResult
 
     backend = QwenBackend(sys.executable, tmp_path, [])
     captured = {}
@@ -343,7 +343,7 @@ def test_qwen_rejects_blank_stdin_prompt(tmp_path):
 
 
 def test_run_process_sends_multiline_unicode_stdin_exactly(tmp_path):
-    from runner.process_control import run_process
+    from runner.runtime.process_control import run_process
 
     prompt = "第一行\n第二行 JSON: {\"tasks\":[]}\n" + ("長內容\n" * 200)
     code = "import sys; data=sys.stdin.read(); sys.stdout.write(data)"
@@ -353,7 +353,7 @@ def test_run_process_sends_multiline_unicode_stdin_exactly(tmp_path):
 
 
 def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
-    from runner.process_control import run_process
+    from runner.runtime.process_control import run_process
 
     prompt = "line1\nline2\n" * 500
     code = (
@@ -375,7 +375,7 @@ def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
 
 
 def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
-    from runner.process_control import ProcessResult
+    from runner.runtime.process_control import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
@@ -403,7 +403,7 @@ def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
 
 
 def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
-    from runner.process_control import ProcessResult
+    from runner.runtime.process_control import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, [])
@@ -417,7 +417,7 @@ def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
 
 
 def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
-    from runner.process_control import ProcessResult
+    from runner.runtime.process_control import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])

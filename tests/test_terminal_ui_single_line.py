@@ -1,7 +1,7 @@
 import os
 
-from runner.models import RunState
-from runner.ui import LiveUI
+from runner.engine.models import RunState
+from runner.app.ui import LiveUI
 
 
 class FakeStdout:
@@ -20,10 +20,10 @@ class FakeStdout:
 
 def _plain_ui(monkeypatch, width=120):
     stdout = FakeStdout()
-    monkeypatch.setattr("runner.ui.sys.stdout", stdout)
-    monkeypatch.setattr("runner.ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.app.ui.sys.stdout", stdout)
+    monkeypatch.setattr("runner.app.ui.supports_ansi_screen", lambda: False)
     monkeypatch.setattr(
-        "runner.ui.shutil.get_terminal_size",
+        "runner.app.ui.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((width, 20)),
     )
     ui = LiveUI()

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 from runner.agent.prompts import review_finalize_prompt, review_prompt
 
 

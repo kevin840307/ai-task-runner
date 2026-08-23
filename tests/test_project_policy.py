@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from runner.core import TaskRunner
+from runner.engine.core import TaskRunner
 from runner.errors import RunnerError
 from runner.safety.git_guard import git_subcommand
 from runner.safety.policy import POLICY_FILENAME, protected_paths
-from runner.process_control import run_process
+from runner.runtime.process_control import run_process
 from runner.safety.project_guard import normalize_protected_paths, restore_changed, snapshot
 
 

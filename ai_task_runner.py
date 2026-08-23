@@ -12,7 +12,7 @@ from pathlib import Path
 
 from runner.api import RunRequest, run
 from runner.backends import backend_names
-from runner.defaults import (
+from runner.config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
     DEFAULT_BACKEND,

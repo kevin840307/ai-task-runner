@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from runner.agent.prompts import execution_prompt, render_prompt_template
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 
 
 def state(attempts=1):
@@ -54,7 +54,7 @@ def test_execution_prompt_keeps_only_shared_global_constraints(tmp_path):
 
 
 def _runner(tmp_path, task):
-    import runner.core as core
+    import runner.engine.core as core
 
     runner = core.TaskRunner.__new__(core.TaskRunner)
     runner.root = tmp_path
@@ -70,7 +70,7 @@ def _runner(tmp_path, task):
 
 
 def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
 
     task = Task(
         id="c01-t001",
@@ -99,7 +99,7 @@ def test_task_completion_emits_one_state_transition(tmp_path, monkeypatch):
 
 
 def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     from runner.errors import RunnerError
 
     task = Task(
@@ -124,7 +124,7 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path, monk
 
 
 def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     from runner.errors import RunnerError
 
     task = Task(
@@ -151,7 +151,7 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
 
 
 def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
     from runner.errors import RunnerError
 
     task = Task(
@@ -173,7 +173,7 @@ def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp
 
 
 def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
 
     tasks = [
         Task(id="c01-t001", title="one", description="d", deliverable="a", acceptance_criteria=["a"]),
@@ -202,7 +202,7 @@ def test_completed_todo_preserves_executor_session_for_next_todo(tmp_path, monke
 
 
 def test_normal_executor_completion_without_file_change_still_reviews(tmp_path, monkeypatch):
-    import runner.core as core
+    import runner.engine.core as core
 
     task = Task(id="c01-t001", title="check existing result", description="d", deliverable="d", acceptance_criteria=["ok"])
     runner = core.TaskRunner.__new__(core.TaskRunner)

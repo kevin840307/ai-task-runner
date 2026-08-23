@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from runner.models import RunState, Task
+from runner.engine.models import RunState, Task
 from runner.agent.prompts import (
     ai_validator_prompt,
     execution_prompt,
