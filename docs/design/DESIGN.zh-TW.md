@@ -1,6 +1,6 @@
 # 完整設計
 
-Version: 1.2.16
+Version: 1.2.17
 
 ## 目標
 1. AI 長時間執行時，即使模型/CLI 異常也盡量保留有價值的專案變更。
@@ -35,7 +35,7 @@ Fresh/Rebuilt Executor 收到 Original Goal 是為了避免遺失全域限制，
 - Session expired/unavailable 時立即 fresh rebuilt；單次 loop 等可恢復錯誤先沿用 session，只有重複 loop／no-progress 達門檻才 fresh rebuilt。
 - 執行中的 continuation 全專案採單一規則：保留同一個 `AgentClient` 與其 session，禁止只為 resume 舊 session 而建立新 client。Planning Finalize 重用 Understand planner；Review Finalize 重用 Reviewer；Executor retry 與後續 TODO 都持續重用主 Executor client，直到 Runner 因 session 無效或重複停滯而主動清空 session。只有程式重啟後的 `--resume` 可用 state 中 session id 建立新 client，因為舊 Python client 已不存在。
 - 不用過短 timeout 殺掉有進展的模型；預設允許長時間 work，idle-after-change 負責 bounded recovery。
-- `max_attempts=0`、`max_cycles=0` 表示不以次數設上限。
+- `max_attempts`、`max_cycles` 是恢復策略升級門檻，不是終止上限。`0` 代表關閉對應的次數門檻；可恢復錯誤仍會在 retry、fresh session、replan 間持續循環。
 
 ## Validation
 Python Validator 是 hard gate。Runner 固定傳 `--project-root`、`--state-file`，再把每個 `--validator-arg` 原樣附加。`validator_interface.py` 只統一 report/entry，不應放專案-specific assertion。
@@ -57,3 +57,5 @@ Current/last files 用於立即診斷；bounded pair history 用於完整回溯�
 
 ## 相容性清理
 Internal helper 維持單一 canonical 名稱與 signature；已無用途的內部 alias、無效 compatibility parameter 應直接移除，不永久累積。可能被外部 Python caller 使用的 compatibility alias，除非明確做 public breaking change，否則先保留；新程式一律使用 `RunRequest`、`AgentClient`、`RunState`、`AgentBackend` canonical 名稱。
+
+恢復策略集中處理：可恢復的 runtime outcome 只會映射成 `RETRY`、`CONTINUE`、`REPLAN`。任務恢復依序升級 `same session -> fresh session -> replan`；Validator FAIL 保留專案成果後重新規劃。可恢復的 workflow 錯誤不會產生終止 exit code，只有 Final Validator PASS 才宣告完成。

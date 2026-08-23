@@ -1,9 +1,9 @@
 # Operations and Troubleshooting
 
-Version: 1.2.16
+Version: 1.2.17
 
 ## Long-running behavior
-Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Count limits default to zero (unbounded by count). Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.
+Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.
 
 ## Common recovery paths
 - Invalid structured JSON/schema -> send a short same-session JSON-only correction first. Planning then retries/falls back as needed; Judge/Review remain fail-soft only after correction/recovery cannot produce a usable result.

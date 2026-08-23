@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from runner.agent.prompts import execution_prompt, render_prompt_template
 from runner.engine.models import RunState, Task
-from runner.engine.recovery import execution_outcome, record_execution_progress, should_review
+from runner.engine.recovery import decide_execution, execution_outcome, record_execution_progress
 
 
 def state(attempts=1):
@@ -111,7 +111,7 @@ def test_execution_error_with_current_changes_reviews_immediately(tmp_path):
         error=RunnerError("failed"), changed_files=["result.txt"]
     )
 
-    assert should_review(outcome) is True
+    assert decide_execution(task, outcome, 3).action == "continue"
     assert outcome.status == "execution_error"
 
 
@@ -128,9 +128,10 @@ def test_old_changes_do_not_count_as_progress_for_current_failed_attempt(tmp_pat
     record_execution_progress(task, error, changed=False)
     outcome = execution_outcome(error=error, changed_files=[])
 
-    result = runner._recover_execution(task, outcome)
+    decision = decide_execution(task, outcome, 0)
+    runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
 
-    assert result is None
+    assert decision.action == "retry"
     assert task.status == "pending"
     assert task.stagnant_attempts == 1
     assert runner.agent.session_id == "old-session"
@@ -149,11 +150,15 @@ def test_three_same_no_change_failures_rebuild_session_but_keep_todo_pending(tmp
 
     for _ in range(2):
         record_execution_progress(task, error, changed=False)
-        assert runner._recover_execution(task, outcome) is None
+        decision = decide_execution(task, outcome, 0)
+        assert decision.action == "retry"
+        runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
     assert runner.agent.session_id == "old-session"
 
     record_execution_progress(task, error, changed=False)
-    assert runner._recover_execution(task, outcome) is None
+    decision = decide_execution(task, outcome, 0)
+    assert decision.action == "retry" and decision.fresh_session is True
+    runner._prepare_task_retry(task, decision.fresh_session, decision.reason)
 
     assert task.status == "pending"
     assert task.review_skipped is False
@@ -174,7 +179,7 @@ def test_transient_service_error_is_separate_and_does_not_mark_stagnation(tmp_pa
     record_execution_progress(task, error, changed=False)
 
     assert outcome.status == "service_error"
-    assert should_review(outcome) is False
+    assert decide_execution(task, outcome, 3).action == "retry"
     assert task.stagnant_attempts == 0
     assert task.progress_key == ""
 

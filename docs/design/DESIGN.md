@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.16
+Version: 1.2.17
 
 ## Responsibility boundary
 The Runner owns orchestration; project code and validators own application-specific behavior.
@@ -38,7 +38,7 @@ Original Goal may be supplied to a fresh/rebuilt Executor so global constraints 
 - Use fresh sessions only when the previous session is unavailable/expired or bounded recovery shows repeated loop/no-progress failure.
 - In-run continuation is simple and global: keep the same `AgentClient` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries and subsequent TODOs reuse the main Executor client until the Runner intentionally clears an invalid or repeatedly stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
 - Avoid arbitrary short model timeouts; defaults favor long work, while idle-after-change provides bounded recovery.
-- `max_attempts=0` and `max_cycles=0` mean unbounded by count.
+- `max_attempts` and `max_cycles` are recovery-escalation thresholds, never termination limits. `0` disables the corresponding count threshold; recoverable failures still circulate through retry, fresh session, and replan.
 
 ## Validation
 A configured Python validator is the hard correctness gate. It receives `--project-root` and `--state-file`, followed by each repeatable `--validator-arg`. Optional `validator_interface.py` standardizes reporting but does not contain project-specific assertions.
@@ -74,3 +74,5 @@ OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
 ## Compatibility cleanup
 Internal helpers should use one canonical name/signature. Dead internal aliases and unused compatibility parameters are removed instead of being carried indefinitely. Compatibility aliases that may be used by external Python callers remain until an intentional public breaking change; new code should use the canonical `RunRequest`, `AgentClient`, `RunState`, and `AgentBackend` names.
+
+Recovery policy is centralized: recoverable runtime outcomes map only to `RETRY`, `CONTINUE`, or `REPLAN`. Task recovery escalates `same session -> fresh session -> replan`; validator failures preserve project changes and replan. Recoverable workflow failures never produce a terminal exit code. Completion is declared only after Final Validator PASS.

@@ -9,9 +9,8 @@ from runner.agent.prompts import (
 )
 from runner.engine.models import RunState, Task
 from runner.engine.recovery import (
+    decide_task_retry,
     record_execution_progress,
-    should_rebuild_session,
-    task_attempts_exhausted,
     validator_failure_key,
 )
 from runner.engine.transitions import complete_task, install_plan, prepare_repair_cycle
@@ -45,9 +44,8 @@ def test_recovery_policy_is_deterministic():
     record_execution_progress(task, error, False)
     record_execution_progress(task, error, False)
     record_execution_progress(task, error, False)
-    assert should_rebuild_session(task)
-    task.attempts = 3
-    assert task_attempts_exhausted(task, 3)
+    decision = decide_task_retry(task, 3)
+    assert decision.action == "retry" and decision.fresh_session is True
     assert validator_failure_key(" A \n B ") == validator_failure_key("A\nB")
 
 
@@ -70,3 +68,17 @@ def test_prompt_contract_fragments_are_emitted_once(tmp_path):
     assert e.count('Finish with a factual summary of changed files and checks.') == 1
     r = review_prompt(state, tmp_path, "done")
     assert r.count('"completed":true') == 1
+
+
+def test_recovery_escalates_same_to_fresh_then_replan_without_stop():
+    from runner.engine.recovery import apply_fresh_session_recovery, decide_task_retry
+
+    task = _state().tasks[0]
+    task.recovery_attempts = 3
+    first = decide_task_retry(task, 3)
+    assert first.action == "retry" and first.fresh_session is True
+
+    apply_fresh_session_recovery(task)
+    task.recovery_attempts = 3
+    second = decide_task_retry(task, 3)
+    assert second.action == "replan"

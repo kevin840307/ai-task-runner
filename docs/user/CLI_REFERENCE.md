@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.2.16
+Version: 1.2.17
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 
@@ -24,8 +24,8 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--agent-timeout` | runtime AI-call seconds | 7200; 0 disables |
 | `--planning-timeout` | planning AI-call seconds | 600; 0 disables |
 | `--agent-idle-after-change-timeout` | idle seconds after changes/output stop | 900; 0 disables |
-| `--max-attempts` | per-task attempt cap | 0 = unbounded by count |
-| `--max-cycles` | repair-cycle cap | 0 = unbounded by count |
+| `--max-attempts` | task recovery escalation threshold | After this many ineffective task recovery attempts, escalate same-session retry to fresh-session retry/replan; never stops the runner. `0` uses no-progress detection only. |
+| `--max-cycles` | repair-cycle full-replan threshold | At/after this cycle threshold, validator failure forces a fresh full replan instead of stopping. `0` disables this extra threshold. |
 | `--retry-delay` | logical task retry delay | 2 seconds |
 | `--retry-wait` | initial model-call retry wait | 5 seconds |
 | `--retry-max-wait` | max model-call retry wait | 300 seconds |

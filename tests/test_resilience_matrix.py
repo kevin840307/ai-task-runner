@@ -567,7 +567,7 @@ def test_execution_idle_after_change_goes_to_review(tmp_path, monkeypatch):
     assert result.states[0]["tasks"][0]["attempts"] == 1
 
 
-def test_max_attempts_stops_incomplete_task_with_exit_code_2(tmp_path, monkeypatch):
+def test_max_attempts_escalates_recovery_without_stopping(tmp_path, monkeypatch):
     state_dir = Path(tempfile.mkdtemp(prefix="max-attempts-", dir=tmp_path.parent))
     monkeypatch.setenv("SCENARIO", "stagnation")
     monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
@@ -581,12 +581,12 @@ def test_max_attempts_stops_incomplete_task_with_exit_code_2(tmp_path, monkeypat
         retry_wait=0,
         retry_max_wait=0,
     ))
-    assert result.exit_code == 2
-    assert result.completed is False
-    assert result.states[0]["tasks"][0]["attempts"] == 2
+    assert result.exit_code == 0
+    assert result.completed is True
+    assert int((state_dir / "execute.count").read_text()) >= 4
 
 
-def test_max_cycles_stops_after_first_failed_validation(tmp_path, monkeypatch):
+def test_max_cycles_forces_full_replan_without_stopping(tmp_path, monkeypatch):
     state_dir = Path(tempfile.mkdtemp(prefix="max-cycles-", dir=tmp_path.parent))
     monkeypatch.setenv("SCENARIO", "ai_replan")
     monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
@@ -600,9 +600,10 @@ def test_max_cycles_stops_after_first_failed_validation(tmp_path, monkeypatch):
         retry_wait=0,
         retry_max_wait=0,
     ))
-    assert result.exit_code == 3
-    assert result.completed is False
-    assert result.states[0]["cycle"] == 2
+    assert result.exit_code == 0
+    assert result.completed is True
+    assert result.states[0]["cycle"] >= 2
+    assert (state_dir / "validator.count").read_text() == "2"
 
 
 def test_validator_arguments_are_forwarded(tmp_path):

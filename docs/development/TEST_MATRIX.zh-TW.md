@@ -1,6 +1,6 @@
 # 測試矩陣
 
-Version: 1.2.16
+Version: 1.2.17
 
 ## 主要契約
 - CLI/API request validation 與 YAML script mode。

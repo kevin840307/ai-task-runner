@@ -96,11 +96,13 @@ def parser() -> argparse.ArgumentParser:
         "--max-attempts",
         type=int,
         default=DEFAULT_MAX_ATTEMPTS,
+        help="task recovery escalation threshold; never stops the runner; 0 uses no-progress detection only",
     )
     command_parser.add_argument(
         "--max-cycles",
         type=int,
         default=DEFAULT_MAX_CYCLES,
+        help="repair-cycle threshold that forces fresh full replanning; never stops the runner; 0 disables this threshold",
     )
     command_parser.add_argument(
         "--retry-delay",

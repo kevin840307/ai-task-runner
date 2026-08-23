@@ -72,7 +72,7 @@ elif stage == "execute":
         raise SystemExit(7)
     if scenario == "protected_retry" and n == 1:
         Path(os.environ["PROTECTED_PATH"]).write_text("changed", encoding="utf-8")
-    if scenario == "stagnation" and "Previous attempts made no effective progress" in prompt:
+    if scenario == "stagnation" and "previous session made insufficient progress" in prompt:
         (state_dir / "strategy_seen.txt").write_text("yes", encoding="utf-8")
     if scenario == "validator_repair" and "Validator repair mode" in prompt:
         (root / "repaired.txt").write_text("done", encoding="utf-8")

@@ -116,6 +116,7 @@ def _planning_context(
     progress = {
         "cycle": state.cycle,
         "validator_feedback": state.validator_output[-8000:],
+        "replan_feedback": state.replan_feedback[-4000:],
         "completed_tasks": completed_titles(state),
         "review_skipped_tasks": skipped_review_tasks(state),
     }

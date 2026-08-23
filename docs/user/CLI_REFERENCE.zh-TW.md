@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.2.16
+版本：1.2.17
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 
@@ -24,8 +24,8 @@
 | `--agent-timeout` | runtime AI call timeout | 7200；0=停用 |
 | `--planning-timeout` | Planning AI call timeout | 600；0=停用 |
 | `--agent-idle-after-change-timeout` | 變更/輸出停止後 idle timeout | 900；0=停用 |
-| `--max-attempts` | 每 TODO attempt 上限 | 0=不以次數限制 |
-| `--max-cycles` | Repair cycle 上限 | 0=不以次數限制 |
+| `--max-attempts` | 任務恢復升級門檻 | 無效恢復達門檻後由 same-session 升級成 fresh-session / replan；不會停止 Runner。`0` 僅使用 no-progress 判斷。 |
+| `--max-cycles` | Repair cycle 完整重規劃門檻 | 達門檻後 Validator FAIL 強制 fresh full replan，不會停止 Runner；`0` 關閉此額外門檻。 |
 | `--retry-delay` | 邏輯 task retry delay | 2 秒 |
 | `--retry-wait` | model-call 初始 retry wait | 5 秒 |
 | `--retry-max-wait` | model-call 最大 retry wait | 300 秒 |

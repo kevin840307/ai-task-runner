@@ -116,6 +116,7 @@ class _PlanningFlow:
             self.state.cycle > 1
             and self.state.validator_output.strip()
             and self.state.validator_failure_count < REPAIR_FULL_PLAN_AFTER_SAME_FAILURES
+            and not self.state.replan_feedback.strip()
         )
 
     def inspect_project(self) -> tuple[str, RunnerError | None]:

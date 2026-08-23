@@ -69,6 +69,8 @@ class Task:
     last_review: ReviewResult | None = None
     progress_key: str = ""
     stagnant_attempts: int = 0
+    recovery_attempts: int = 0
+    recovery_level: int = 0
     review_skipped: bool = False
     review_skip_reason: str = ""
     changed_files: list[str] = field(default_factory=list)
@@ -95,7 +97,7 @@ class Task:
             for item in self.changed_files
         ):
             raise ValueError(f"{prefix}.changed_files must be strings")
-        for name in ("attempts", "stagnant_attempts"):
+        for name in ("attempts", "stagnant_attempts", "recovery_attempts", "recovery_level"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"{prefix}.{name} must be non-negative")
@@ -118,6 +120,7 @@ class RunState:
     last_error: str = ""
     validator_failure_key: str = ""
     validator_failure_count: int = 0
+    replan_feedback: str = ""
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -133,7 +136,7 @@ class RunState:
             raise ValueError("state.current is outside the task list")
         if not isinstance(self.completed, bool):
             raise ValueError("state.completed must be boolean")
-        for name in ("stage", "last_error", "validator_failure_key"):
+        for name in ("stage", "last_error", "validator_failure_key", "replan_feedback"):
             value = getattr(self, name)
             if not isinstance(value, str):
                 raise ValueError(f"state.{name} must be a string")

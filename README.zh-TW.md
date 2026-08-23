@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.16
+版本：1.2.17
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 

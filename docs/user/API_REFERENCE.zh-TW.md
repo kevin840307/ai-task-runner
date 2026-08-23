@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.2.16
+版本：1.2.17
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
@@ -33,3 +33,5 @@ print(result.exit_code, result.completed)
 
 ## YAML script
 `runner.script_runner` 接受非空 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator` path 或 `ai`；相對 `goal_file` 與 `ai_validator_prompt_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊格式仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
+
+`max_attempts` 與 `max_cycles` 保留既有 API 欄位，但語意是恢復策略升級門檻，不是終止上限。可恢復的 workflow 錯誤會持續在 retry / fresh-session / replan 間循環，直到 Final Validator PASS。

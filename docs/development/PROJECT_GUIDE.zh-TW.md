@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.16
+版本：1.2.17
 
 ## 強制維護規則
 1. Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 model identity 分支。
