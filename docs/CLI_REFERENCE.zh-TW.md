@@ -16,6 +16,7 @@
 | `--ai-validator-prompt-file` | AI 驗證 Prompt UTF-8 檔案；與 `--ai-validator-prompt` 二選一 | 空/關閉 |
 | `--backend` | `qwen` / `opencode` | `qwen` |
 | `--command` | 覆寫 backend executable | backend default |
+| `--sandbox` | 讓 Agent 呼叫使用 backend sandbox | 預設關閉；Qwen 加入 `-s` |
 | `--agent-arg` | backend 額外一個 argv | 可重複 |
 | `--validator-arg` | validator 額外一個 argv | 可重複 |
 | `--protect-file` | 額外 protected file/directory | 可重複 |

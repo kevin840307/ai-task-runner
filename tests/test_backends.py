@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 
 from runner.agent.arguments import planning_agent_args
-from runner.backends import BACKENDS, AgentBackend, backend_names, create_backend
+from runner.backends import (
+    BACKENDS,
+    AgentBackend,
+    backend_names,
+    configure_agent_args,
+    create_backend,
+    sandbox_supported,
+)
 from runner.backends.base import BackendError, BackendResult, split_command
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.backends.qwen import QwenBackend, ensure_qwen_rules
@@ -72,6 +79,18 @@ def test_core_has_no_backend_specific_command_logic():
     assert 'backend == "opencode"' not in source
     assert 'backend == "qwen"' not in source
     assert 'runner.backends.qwen' not in source
+
+
+def test_sandbox_arguments_are_owned_by_the_backend_adapter():
+    assert sandbox_supported("qwen") is True
+    assert sandbox_supported("opencode") is False
+    assert configure_agent_args("qwen", "runtime", [], sandbox=True).count("-s") == 1
+    assert configure_agent_args(
+        "qwen",
+        "runtime",
+        ["--sandbox"],
+        sandbox=True,
+    ).count("-s") == 0
 
 
 def test_windows_quoted_command_path_is_unwrapped():

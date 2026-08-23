@@ -43,13 +43,32 @@ def configure_agent_args(
     extra_args: Sequence[str],
     *,
     allow_project_read: bool = False,
+    sandbox: bool = False,
 ) -> list[str]:
     backend_type = _backend_type(name)
-    return backend_type.configure_args(
+    result = backend_type.configure_args(
         mode,
         extra_args,
         allow_project_read=allow_project_read,
     )
+    return configure_sandbox_args(name, result, sandbox=sandbox)
+
+
+def configure_sandbox_args(
+    name: str,
+    extra_args: Sequence[str],
+    *,
+    sandbox: bool,
+) -> list[str]:
+    result = list(extra_args)
+    flags = _backend_type(name).sandbox_flags
+    if sandbox and flags and not any(flag in result for flag in flags):
+        result.append(flags[0])
+    return result
+
+
+def sandbox_supported(name: str) -> bool:
+    return bool(_backend_type(name).sandbox_flags)
 
 
 def create_backend(
@@ -73,8 +92,10 @@ __all__ = [
     "BackendResult",
     "backend_names",
     "configure_agent_args",
+    "configure_sandbox_args",
     "create_backend",
     "default_command",
     "ensure_opencode_rules",
     "ensure_qwen_rules",
+    "sandbox_supported",
 ]

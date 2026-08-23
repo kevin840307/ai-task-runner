@@ -37,6 +37,7 @@ class RuntimeConfig:
     ai_validator_prompt_file: str | None = None
     backend: str = DEFAULT_BACKEND
     command: str | None = None
+    sandbox: bool = False
     agent_arg: list[str] = field(default_factory=list)
     validator_arg: list[str] = field(default_factory=list)
     protect_file: list[str] = field(default_factory=list)
@@ -78,6 +79,7 @@ class RuntimeConfig:
             ai_validator_prompt_file=getattr(args, "ai_validator_prompt_file", None),
             backend=getattr(args, "backend", DEFAULT_BACKEND),
             command=getattr(args, "command", None),
+            sandbox=bool(getattr(args, "sandbox", False)),
             agent_arg=list(getattr(args, "agent_arg", [])),
             validator_arg=list(getattr(args, "validator_arg", [])),
             protect_file=list(getattr(args, "protect_file", [])),

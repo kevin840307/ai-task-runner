@@ -58,6 +58,11 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_BACKEND,
     )
     command_parser.add_argument("--command")
+    command_parser.add_argument(
+        "--sandbox",
+        action="store_true",
+        help="run agent calls in the backend's sandbox mode",
+    )
     command_parser.add_argument("--agent-arg", action="append", default=[])
     command_parser.add_argument("--validator-arg", action="append", default=[])
     command_parser.add_argument("--protect-file", action="append", default=[])

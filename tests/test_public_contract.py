@@ -177,6 +177,31 @@ def test_agent_timeout_is_part_of_public_request_contract():
         RunRequest(goal="x", validator="ai", agent_idle_after_change_timeout=-1).validate()
 
 
+def test_sandbox_is_part_of_cli_and_public_request_contract():
+    from ai_task_runner import parser
+
+    disabled = parser().parse_args(["--goal", "x", "--validator", "ai"])
+    enabled = parser().parse_args(
+        ["--goal", "x", "--validator", "ai", "--sandbox"]
+    )
+
+    assert disabled.sandbox is False
+    assert enabled.sandbox is True
+    request = RunRequest.from_namespace(enabled)
+    assert request.sandbox is True
+    assert request.to_runtime_config().sandbox is True
+
+    with pytest.raises(ValueError, match="sandbox must be a boolean"):
+        RunRequest(goal="x", validator="ai", sandbox="yes").validate()
+    with pytest.raises(ValueError, match="does not support sandbox mode: opencode"):
+        RunRequest(
+            goal="x",
+            validator="ai",
+            backend="opencode",
+            sandbox=True,
+        ).validate()
+
+
 @pytest.mark.parametrize(
     "field_name",
     [

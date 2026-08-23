@@ -8,7 +8,7 @@
 舊版 compatibility 名稱可能仍為既有 caller 保留，但不屬於 canonical API，新 integration 不應使用。純 internal、已無 production caller 的 compatibility shim 會直接移除。
 
 ## RunRequest 欄位
-`goal`、`goal_file`、`project_root`、`script`、`validator`、`validator_prompt`、`ai_validator_prompt`、`ai_validator_prompt_file`、`backend`、`command`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
+`goal`、`goal_file`、`project_root`、`script`、`validator`、`validator_prompt`、`ai_validator_prompt`、`ai_validator_prompt_file`、`backend`、`command`、`sandbox`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
 
 `RunRequest.validate()` 會檢查 goal/script/validator 互斥與必填、backend、work_dir 不可逃出 project root、list element 型別、timeout/retry 範圍、Final AI quorum，以及 resume/force-new 衝突。
 

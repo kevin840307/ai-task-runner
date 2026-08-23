@@ -8,7 +8,7 @@ External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI,
 Legacy compatibility names may still exist for existing callers, but they are not the canonical API and should not be used by new integrations. Internal-only compatibility shims are removed when no production caller needs them.
 
 ## RunRequest fields
-`goal`, `goal_file`, `project_root`, `script`, `validator`, `validator_prompt`, `ai_validator_prompt`, `ai_validator_prompt_file`, `backend`, `command`, `agent_args`, `validator_args`, `protect_files`, `validator_timeout`, `agent_timeout`, `planning_timeout`, `agent_idle_after_change_timeout`, `max_attempts`, `max_cycles`, `retry_delay`, `retry_wait`, `retry_max_wait`, `final_ai_validations`, `final_ai_required_passes`, `work_dir`, `resume`, `force_new`, `plan_only`, `human_output`, and `json_events`.
+`goal`, `goal_file`, `project_root`, `script`, `validator`, `validator_prompt`, `ai_validator_prompt`, `ai_validator_prompt_file`, `backend`, `command`, `sandbox`, `agent_args`, `validator_args`, `protect_files`, `validator_timeout`, `agent_timeout`, `planning_timeout`, `agent_idle_after_change_timeout`, `max_attempts`, `max_cycles`, `retry_delay`, `retry_wait`, `retry_max_wait`, `final_ai_validations`, `final_ai_required_passes`, `work_dir`, `resume`, `force_new`, `plan_only`, `human_output`, and `json_events`.
 
 `RunRequest.validate()` enforces mutual exclusions, required validator/goal inputs, supported backend names, project-relative work directory, list element types, timeout ranges, retry ranges, AI validation quorum, and resume/force-new exclusivity.
 

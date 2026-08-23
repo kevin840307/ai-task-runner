@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-from .backends import backend_names
+from .backends import backend_names, sandbox_supported
 from .config import EventHandler, RuntimeConfig
 from .core import execute
 from .defaults import (
@@ -42,6 +42,7 @@ class RunRequest:
     ai_validator_prompt_file: str | None = None
     backend: str = DEFAULT_BACKEND
     command: str | None = None
+    sandbox: bool = False
     agent_args: list[str] = field(default_factory=list)
     validator_args: list[str] = field(default_factory=list)
     protect_files: list[str] = field(default_factory=list)
@@ -79,6 +80,7 @@ class RunRequest:
             ai_validator_prompt_file=getattr(args, "ai_validator_prompt_file", None),
             backend=args.backend,
             command=args.command,
+            sandbox=getattr(args, "sandbox", False),
             agent_args=list(args.agent_arg),
             validator_args=list(args.validator_arg),
             protect_files=list(args.protect_file),
@@ -141,6 +143,7 @@ class RunRequest:
             ai_validator_prompt_file=self.ai_validator_prompt_file,
             backend=self.backend,
             command=self.command,
+            sandbox=self.sandbox,
             agent_arg=list(self.agent_args),
             validator_arg=list(self.validator_args),
             protect_file=list(self.protect_files),
@@ -200,6 +203,10 @@ class RunRequest:
                 raise ValueError(f"{name} must be a string")
         if self.backend not in backend_names():
             raise ValueError(f"unsupported backend: {self.backend}")
+        if not isinstance(self.sandbox, bool):
+            raise ValueError("sandbox must be a boolean")
+        if self.sandbox and not sandbox_supported(self.backend):
+            raise ValueError(f"backend does not support sandbox mode: {self.backend}")
         if self.resume and self.force_new:
             raise ValueError("resume and force_new cannot both be true")
 

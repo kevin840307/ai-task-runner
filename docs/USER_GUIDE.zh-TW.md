@@ -56,7 +56,7 @@ Protected path 是 project-relative，可指檔案或資料夾；資料夾會保
 `--json-events` 輸出 JSON Lines。Python/UI/Skill 應使用 `runner.api.RunRequest` + `runner.api.run()`，這是正式共用入口。
 
 ## Backend 參數
-每個 backend argv item 都重複 `--agent-arg`。`--command` 只用於覆寫 backend executable。Qwen 完整 Prompt 固定 stdin-only。
+每個 backend argv item 都重複 `--agent-arg`。`--command` 只用於覆寫 backend executable。`--sandbox` 會在 backend 支援時啟用 sandbox；Qwen 會收到 `-s`。Qwen 完整 Prompt 固定 stdin-only。
 
 ## CLI Protected path
 額外保護可重複使用 `--protect-file`；長期專案規則建議放 project-root policy。

@@ -7,6 +7,7 @@ def test_run_request_resolves_to_typed_runtime_config():
     request = RunRequest(
         goal="goal",
         validator="ai",
+        sandbox=True,
         agent_args=["--model", "test-model"],
         loop_context_compress=True,
         loop_context_compress_threshold=65,
@@ -15,6 +16,7 @@ def test_run_request_resolves_to_typed_runtime_config():
     config = request.to_runtime_config()
 
     assert isinstance(config, RuntimeConfig)
+    assert config.sandbox is True
     assert config.agent_arg == ["--model", "test-model"]
     assert config.loop_context_compress is True
     assert config.loop_context_compress_threshold == 65
@@ -74,3 +76,28 @@ def test_agent_factory_can_preserve_precomputed_arguments(tmp_path):
     factory.create("runtime", extra_args=["--legacy-arg"])
 
     assert constructed[0]["extra_args"] == ["--legacy-arg"]
+
+
+def test_agent_factory_applies_qwen_sandbox_to_every_argument_path(tmp_path):
+    constructed = []
+
+    def constructor(**kwargs):
+        constructed.append(kwargs)
+        return object()
+
+    factory = AgentFactory(
+        RuntimeConfig(backend="qwen", sandbox=True),
+        tmp_path,
+        None,
+        constructor=constructor,
+    )
+
+    for mode in ("planning", "runtime", "review", "no_tool"):
+        args = factory.arguments(mode)
+        assert args.count("-s") == 1
+
+    factory.create("runtime")
+    factory.create("runtime", extra_args=["--custom"])
+
+    assert all(item["extra_args"].count("-s") == 1 for item in constructed)
+    assert constructed[1]["extra_args"] == ["--custom", "-s"]

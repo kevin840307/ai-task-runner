@@ -16,6 +16,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--ai-validator-prompt-file` | UTF-8 file containing Final AI validation instructions; mutually exclusive with `--ai-validator-prompt` | empty/off |
 | `--backend` | `qwen` or `opencode` | `qwen` |
 | `--command` | backend executable override | backend default |
+| `--sandbox` | run agent calls in the backend sandbox | off; Qwen adds `-s` |
 | `--agent-arg` | one extra backend argv element | repeatable |
 | `--validator-arg` | one extra validator argv element | repeatable |
 | `--protect-file` | additional protected file/directory | repeatable |

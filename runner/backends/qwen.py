@@ -22,6 +22,7 @@ from .qwen_args import configure_qwen_args
 class QwenBackend(AgentBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
+    sandbox_flags = ("-s", "--sandbox")
 
     @classmethod
     def configure_args(

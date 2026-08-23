@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..backends import AgentMode, configure_agent_args
+from ..backends import AgentMode, configure_agent_args, configure_sandbox_args
 from ..config import RuntimeConfig
 from ..defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from .client import AgentClient
@@ -31,6 +31,7 @@ class AgentFactory:
             mode,
             getattr(self.config, "agent_arg", []),
             allow_project_read=allow_project_read,
+            sandbox=getattr(self.config, "sandbox", False),
         )
 
     def create(
@@ -47,7 +48,11 @@ class AgentFactory:
             command=self.config.command,
             root=self.root,
             extra_args=(
-                list(extra_args)
+                configure_sandbox_args(
+                    self.config.backend,
+                    extra_args,
+                    sandbox=getattr(self.config, "sandbox", False),
+                )
                 if extra_args is not None
                 else self.arguments(
                     mode,

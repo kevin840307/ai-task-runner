@@ -113,6 +113,7 @@ class AgentBackend(ABC):
 
     name: ClassVar[str]
     default_command: ClassVar[str]
+    sandbox_flags: ClassVar[tuple[str, ...]] = ()
 
     def __init__(
         self,

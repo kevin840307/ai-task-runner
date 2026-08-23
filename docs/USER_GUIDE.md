@@ -56,7 +56,7 @@ Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md 
 `--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills.
 
 ## Backend arguments
-Repeat `--agent-arg` per backend argv item. Use `--command` only to override the backend executable. Qwen full prompts are always stdin-only.
+Repeat `--agent-arg` per backend argv item. Use `--command` only to override the backend executable. `--sandbox` enables backend sandboxing when supported; Qwen receives `-s`. Qwen full prompts are always stdin-only.
 
 ## Protected paths from CLI
 Repeat `--protect-file` for additional paths. Project policy is preferred for stable project-owned rules.
