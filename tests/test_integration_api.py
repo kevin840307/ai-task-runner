@@ -75,7 +75,7 @@ def test_api_transient_failure_resumes_saved_direct_or_yaml_state(
     assert calls == [False, True]
 
 
-def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypatch):
+def test_yaml_result_reads_state_from_single_batch_work_dir(tmp_path, monkeypatch):
     import runner.api as api_module
 
     child = tmp_path / "child"
@@ -85,7 +85,7 @@ def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypat
         "- prompt: x\n  project_root: child\n  validator: ai\n",
         encoding="utf-8",
     )
-    state_file = child / ".ai-task-runner" / "script" / "001" / "state.json"
+    state_file = tmp_path / ".ai-task-runner" / "script" / "001" / "state.json"
 
     def fake_execute(config):
         state_file.parent.mkdir(parents=True)
@@ -183,8 +183,13 @@ def test_cli_json_events_are_machine_readable_json_lines(tmp_path):
 
 
 def test_yaml_api_events_include_script_item_context(tmp_path):
+    child = tmp_path / "child"
+    child.mkdir()
     script = tmp_path / "tasks.yaml"
-    script.write_text("- prompt: first\n  validator: ai\n", encoding="utf-8")
+    script.write_text(
+        "- prompt: first\n  project_root: child\n  validator: ai\n",
+        encoding="utf-8",
+    )
     events = []
 
     result = run(
@@ -204,6 +209,8 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
     assert task_events
     assert all(event["script_index"] == 1 for event in task_events)
     assert all(event["script_total"] == 1 for event in task_events)
+    assert (tmp_path / ".ai-task-runner" / "script" / "001" / "state.json").is_file()
+    assert not (child / ".ai-task-runner").exists()
 
 
 def test_event_callback_failure_does_not_stop_runner(tmp_path):

@@ -73,7 +73,8 @@ def build_script_item_config(
         item_root = Path(args.project_root) / item_root
     work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
     project_root = str(item_root.resolve())
-    resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
+    state_root = str(Path(args.state_root or args.project_root).resolve())
+    resume = bool(args.resume and Path(state_root, work_dir, "state.json").is_file())
     child = replace(
         args,
         script=None,
@@ -91,6 +92,7 @@ def build_script_item_config(
         ),
         plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),
         work_dir=work_dir,
+        state_root=state_root,
         resume=resume,
         force_new=not resume,
     )

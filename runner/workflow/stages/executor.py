@@ -73,6 +73,10 @@ class StageExecutor:
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
+        run_state = str(getattr(stage, "run_state", "") or "")
+        if run_state:
+            ctx.set_stage(run_state, "")
+        progress.stage_started(StageAction(stage, ctx))
 
         while True:
             attempt += 1
@@ -153,10 +157,6 @@ class StageExecutor:
 
     def _attempt(self, stage: Stage, ctx: StageContext, previous: StageResult | None) -> StageResult:
         action = StageAction(stage, ctx)
-        run_state = str(getattr(stage, "run_state", "") or "")
-        if run_state:
-            ctx.set_stage(run_state, "")
-        progress.stage_started(action)
         before = project_manifest(ctx.root, ctx.work) if action.track_changes else None
         tokens = []
         try:

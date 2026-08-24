@@ -70,6 +70,31 @@ def test_executor_preserves_stage_lifecycle_events():
     assert lifecycle == [("runner.stage", "start", "sample"), ("runner.stage", "finish", "sample")]
 
 
+def test_executor_does_not_restart_stage_lifecycle_for_retries():
+    class RetryOnce(Stage):
+        retry = 1
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return StageResult.error_result(self.name, RunnerError("retry"))
+            return StageResult(self.name, "pass")
+
+    records = []
+    bus = EventBus(); bus.subscribe(records.append)
+    events.configure(bus)
+    StageExecutor(Hooks()).run(RetryOnce(), context())
+    lifecycle = [
+        (event["action"], event.get("stage"))
+        for event in records
+        if event["type"] == "runner.stage"
+    ]
+    assert lifecycle == [("start", "sample"), ("finish", "sample")]
+
+
 def test_hook_chain_rolls_back_completed_before_hooks_when_later_before_fails():
     from runner.plugins.contracts import HookChain
 

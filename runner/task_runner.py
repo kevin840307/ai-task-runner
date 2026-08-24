@@ -24,7 +24,7 @@ class TaskRunner:
         self.root = Path(self.config.project_root).resolve()
         self.validator_is_ai = self.config.validator.lower() == "ai"
         self.validator_path = None if self.validator_is_ai else Path(self.config.validator).resolve()
-        self.work = self.root / self.config.work_dir
+        self.work = self.config.work_path
         self.state_store = StateStore(self.root, self.work)
         self.state_file = self.state_store.path
         self._validate_paths()

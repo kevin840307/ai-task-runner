@@ -58,6 +58,7 @@ class RuntimeConfig:
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     work_dir: str = ".ai-task-runner"
+    state_root: str | None = None
     resume: bool = False
     force_new: bool = False
     plan_only: bool = False
@@ -67,6 +68,11 @@ class RuntimeConfig:
     script_index: int | None = None
     script_total: int | None = None
 
+    @property
+    def work_path(self) -> Path:
+        """Resolve Runner-managed state independently from the project being edited."""
+        return Path(self.state_root or self.project_root).resolve() / self.work_dir
+
     def validate(self) -> None:
         """Validate the one execution contract shared by API, CLI, and YAML."""
         from ..backends.registry import backend_names, sandbox_supported
@@ -74,6 +80,10 @@ class RuntimeConfig:
 
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
+        if self.state_root is not None and (
+            not isinstance(self.state_root, str) or not self.state_root.strip()
+        ):
+            raise ValueError("state_root must be a non-empty string")
         if not self.script and not self.resume and not self.goal.strip():
             raise ValueError("goal is required unless script or resume is used")
         if not self.script and not (

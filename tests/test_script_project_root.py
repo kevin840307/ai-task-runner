@@ -32,8 +32,8 @@ def test_yaml_item_project_root_resolves_from_outer_project_root(tmp_path):
     item=load_yaml_script(script)[0]
     child=build_script_item_config(base_args(tmp_path), item, 1)
     assert Path(child.project_root) == project.resolve()
-    assert Path(child.project_root, child.work_dir, 'state.json') == (
-        project / '.ai-task-runner' / 'script' / '001' / 'state.json'
+    assert child.work_path / 'state.json' == (
+        tmp_path / '.ai-task-runner' / 'script' / '001' / 'state.json'
     )
 
 
@@ -58,12 +58,12 @@ def test_execute_script_uses_distinct_item_project_roots(tmp_path):
     args=base_args(tmp_path); args.script=str(script); args.human_output=False; args.json_events=False; args.event_callback=None
     seen=[]
     def execute_one(child):
-        seen.append((Path(child.project_root), Path(child.work_dir), child.script_index))
+        seen.append((Path(child.project_root), child.work_path, child.script_index))
         return 0
     assert execute_script(args, execute_one)==0
     assert seen==[
-        ((tmp_path/'a').resolve(), Path('.ai-task-runner')/'script'/'001', 1),
-        ((tmp_path/'b').resolve(), Path('.ai-task-runner')/'script'/'002', 2),
+        ((tmp_path/'a').resolve(), tmp_path/'.ai-task-runner'/'script'/'001', 1),
+        ((tmp_path/'b').resolve(), tmp_path/'.ai-task-runner'/'script'/'002', 2),
     ]
 
 
