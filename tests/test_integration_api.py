@@ -351,10 +351,9 @@ def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
     request = RunRequest(
         goal="build", validator="ai", ai_validator_prompt_file=str(prompt_file)
     )
-    request.validate()
-    args = request.to_namespace()
-    assert args.ai_validator_prompt == "Check architecture and genericity.\n"
-    assert args.ai_validator_prompt_file == str(prompt_file)
+    config = request.normalized_config()
+    assert config.ai_validator_prompt == "Check architecture and genericity.\n"
+    assert config.ai_validator_prompt_file == str(prompt_file)
 
 
 def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):

@@ -40,11 +40,15 @@ class HookChain:
         tokens: list[tuple[Any, Any]] = []
         try:
             for hook in self._hooks:
-                tokens.append((hook, hook.before_execution(action)))
+                before = getattr(hook, "before_execution", None)
+                if callable(before):
+                    tokens.append((hook, before(action)))
         except BaseException:
             for hook, token in reversed(tokens):
                 try:
-                    hook.after_execution(action, token)
+                    after = getattr(hook, "after_execution", None)
+                    if callable(after):
+                        after(action, token)
                 except BaseException:
                     pass
             raise
@@ -55,7 +59,9 @@ class HookChain:
         first_error: BaseException | None = None
         for hook, token in reversed(list(tokens)):
             try:
-                violations.extend(hook.after_execution(action, token))
+                after = getattr(hook, "after_execution", None)
+                if callable(after):
+                    violations.extend(after(action, token))
             except BaseException as error:
                 first_error = first_error or error
         if first_error is not None:
@@ -100,6 +106,18 @@ class HookChain:
                 if text:
                     parts.append(text)
         return "\n".join(parts)
+
+    def model_error(self, client: Any, error: Any) -> None:
+        for hook in self._hooks:
+            handler = getattr(hook, "model_error", None)
+            if not callable(handler):
+                continue
+            try:
+                handler(client, error)
+            except Exception as plugin_error:  # noqa: BLE001 - plugins are fail-open here
+                error.diagnostics["plugin_error"] = (
+                    f"{type(plugin_error).__name__}: {plugin_error}"
+                )
 
 
 

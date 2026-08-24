@@ -1,4 +1,23 @@
+import pytest
+
+from runner.ai.errors import AIError, BackendError
 from runner.backends.base import BaseBackend
+from runner.bootstrap import runtime_scope
+from runner.config import RuntimeConfig
+
+
+def _loop_error(agent, tmp_path, *, enabled=False, threshold=50.0):
+    config = RuntimeConfig(
+        goal="x",
+        validator="ai",
+        project_root=str(tmp_path),
+        loop_context_compress=enabled,
+        loop_context_compress_threshold=threshold,
+    )
+    with runtime_scope(config), pytest.raises(AIError) as caught:
+        agent.ask("x")
+    assert isinstance(caught.value.__cause__, BackendError)
+    return caught.value.__cause__
 
 
 def test_extract_loop_diagnostics_from_backend_events():
@@ -52,8 +71,6 @@ def test_extract_diagnostics_does_not_invent_context_usage():
 
 def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
     from runner.ai.client import AIClient
-    from runner.ai.errors import AIError
-    from runner.ai.errors import BackendError
 
     class FakeBackend:
         name = "fake"
@@ -93,14 +110,8 @@ def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
     agent.debug_dir = None
     agent._recoverable_session_failures = 0
 
-    try:
-        agent.ask("x")
-    except AIError as error:
-        cause = error.__cause__
-        assert isinstance(cause, BackendError)
-        assert cause.diagnostics["context_snapshot"].startswith("## Context Usage")
-    else:
-        raise AssertionError("expected AIError")
+    cause = _loop_error(agent, tmp_path)
+    assert cause.diagnostics["context_snapshot"].startswith("## Context Usage")
 
 
 def _make_agent_with_loop_backend(
@@ -109,7 +120,6 @@ def _make_agent_with_loop_backend(
     message="fake exit 1: Loop detection halted the run",
 ):
     from runner.ai.client import AIClient
-    from runner.ai.errors import BackendError
 
     class FakeBackend:
         name = "fake"
@@ -153,100 +163,55 @@ def _make_agent_with_loop_backend(
     agent.timeout = 10
     agent.debug_dir = None
     agent._recoverable_session_failures = 0
-    agent.loop_context_compress = True
-    agent.loop_context_compress_threshold = 50.0
     return agent
 
 
 def test_loop_context_at_threshold_compresses_without_changing_error_flow(tmp_path):
-    from runner.ai.errors import AIError
     agent = _make_agent_with_loop_backend(tmp_path, 50.0)
-    try:
-        agent.ask("x")
-    except AIError as error:
-        cause = error.__cause__
-        assert cause.diagnostics["context_used_percent"] == 50.0
-        assert cause.diagnostics["context_compression"] == "compressed"
-        assert cause.diagnostics["session_recovery_action"] == "compress_and_retry"
-        assert agent._backend.compressions == ["loop-session"]
-    else:
-        raise AssertionError("expected AIError")
+    cause = _loop_error(agent, tmp_path, enabled=True)
+    assert cause.diagnostics["context_used_percent"] == 50.0
+    assert cause.diagnostics["context_compression"] == "compressed"
+    assert cause.diagnostics["session_recovery_action"] == "compress_and_retry"
+    assert agent._backend.compressions == ["loop-session"]
 
 
 
 def test_loop_context_compression_is_disabled_by_default(tmp_path):
-    from runner.ai.errors import AIError
     agent = _make_agent_with_loop_backend(tmp_path, 90.0)
-    agent.loop_context_compress = False
-    try:
-        agent.ask("x")
-    except AIError as error:
-        cause = error.__cause__
-        assert cause.diagnostics["context_used_percent"] == 90.0
-        assert "context_compression" not in cause.diagnostics
-        assert agent._backend.compressions == []
-    else:
-        raise AssertionError("expected AIError")
+    cause = _loop_error(agent, tmp_path)
+    assert cause.diagnostics["context_used_percent"] == 90.0
+    assert "context_compression" not in cause.diagnostics
+    assert agent._backend.compressions == []
 
 
 def test_loop_context_compression_uses_configured_threshold(tmp_path):
-    from runner.ai.errors import AIError
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
-    agent.loop_context_compress_threshold = 70.0
-    try:
-        agent.ask("x")
-    except AIError as error:
-        cause = error.__cause__
-        assert cause.diagnostics["context_used_percent"] == 60.0
-        assert "context_compression" not in cause.diagnostics
-        assert agent._backend.compressions == []
-    else:
-        raise AssertionError("expected AIError")
+    cause = _loop_error(agent, tmp_path, enabled=True, threshold=70.0)
+    assert cause.diagnostics["context_used_percent"] == 60.0
+    assert "context_compression" not in cause.diagnostics
+    assert agent._backend.compressions == []
 
 def test_loop_context_below_threshold_does_not_compress(tmp_path):
-    from runner.ai.errors import AIError
     agent = _make_agent_with_loop_backend(tmp_path, 49.9)
-    try:
-        agent.ask("x")
-    except AIError as error:
-        cause = error.__cause__
-        assert cause.diagnostics["context_used_percent"] == 49.9
-        assert "context_compression" not in cause.diagnostics
-        assert agent._backend.compressions == []
-    else:
-        raise AssertionError("expected AIError")
+    cause = _loop_error(agent, tmp_path, enabled=True)
+    assert cause.diagnostics["context_used_percent"] == 49.9
+    assert "context_compression" not in cause.diagnostics
+    assert agent._backend.compressions == []
 
 
 
 def test_loop_context_compression_records_decision_metadata(tmp_path):
-    from runner.ai.errors import AIError
-
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
-    agent.loop_context_compress_threshold = 50.0
-    try:
-        agent.ask("x")
-    except AIError as error:
-        diagnostics = error.__cause__.diagnostics
-        assert diagnostics["context_compress_enabled"] is True
-        assert diagnostics["context_compress_threshold"] == 50.0
-        assert diagnostics["context_compress_status"] == "done"
-        assert "context_compress_reason" not in diagnostics
-    else:
-        raise AssertionError("expected AIError")
+    diagnostics = _loop_error(agent, tmp_path, enabled=True).diagnostics
+    assert diagnostics["context_compress_enabled"] is True
+    assert diagnostics["context_compress_threshold"] == 50.0
+    assert diagnostics["context_compress_status"] == "done"
+    assert "context_compress_reason" not in diagnostics
 
 
 def test_loop_context_compression_records_skip_reason(tmp_path):
-    from runner.ai.errors import AIError
-
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
-    agent.loop_context_compress_threshold = 70.0
-    try:
-        agent.ask("x")
-    except AIError as error:
-        diagnostics = error.__cause__.diagnostics
-        assert diagnostics["context_compress_status"] == "skipped"
-        assert diagnostics["context_compress_reason"] == "below_threshold"
-    else:
-        raise AssertionError("expected AIError")
-
+    diagnostics = _loop_error(agent, tmp_path, enabled=True, threshold=70.0).diagnostics
+    assert diagnostics["context_compress_status"] == "skipped"
+    assert diagnostics["context_compress_reason"] == "below_threshold"
 

@@ -6,7 +6,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import NoReturn, TypeVar
 
-from ..config.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from ..errors import RunnerError, diagnostic_detail
 from ..runtime import events
 from .diagnostics import error_result, prepare_session_recovery
@@ -25,8 +24,6 @@ class AIClient:
         session_id: str = "",
         timeout: int = 7200,
         debug_dir: Path | None = None,
-        loop_context_compress: bool = False,
-        loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     ) -> None:
         try:
             from ..backends.registry import create_backend
@@ -44,8 +41,6 @@ class AIClient:
         self.session_id = session_id
         self.timeout = timeout
         self.debug_dir = debug_dir
-        self.loop_context_compress = loop_context_compress
-        self.loop_context_compress_threshold = loop_context_compress_threshold
 
     def run_with_retry(
         self,
@@ -210,10 +205,7 @@ def build_backend_args(config, mode, *, allow_project_read=False):
 def create_ai_client(config, root, debug_dir=None, *, mode="runtime", session_id="", timeout=None, allow_project_read=False, extra_args=None, constructor=AIClient):
     """Create one AI client directly; no factory lifecycle is required."""
     from ..backends.registry import configure_sandbox_args
-    from ..config.defaults import (
-        DEFAULT_AGENT_TIMEOUT,
-        DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-    )
+    from ..config.defaults import DEFAULT_AGENT_TIMEOUT
     args = (
         configure_sandbox_args(config.backend, extra_args, sandbox=getattr(config, "sandbox", False))
         if extra_args is not None
@@ -224,8 +216,6 @@ def create_ai_client(config, root, debug_dir=None, *, mode="runtime", session_id
         session_id=session_id,
         timeout=getattr(config, "agent_timeout", DEFAULT_AGENT_TIMEOUT) if timeout is None else timeout,
         debug_dir=debug_dir,
-        loop_context_compress=getattr(config, "loop_context_compress", False),
-        loop_context_compress_threshold=getattr(config, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD),
     )
 
 

@@ -3,7 +3,7 @@
 目錄本身就是架構圖：
 
 - `runner/api.py`、`bootstrap.py`、`task_runner.py`：外部 request、dependency 組裝、單次任務協調。
-- `runner/script_loader.py`、`script_runner.py`：YAML List 讀取/驗證與逐項執行。
+- `runner/script_loader.py`、`script_runner.py`：YAML 結構/檔案解析，以及經驗證的 child config 執行。
 - `runner/workflow/`：Workflow 定義、路由規則、特殊 Prompt/Result adapter 與 Stage Engine。
 - `runner/workflow/stages/`：Stage contract、factory、共用 executor、`AIStage`、`PlanStage`、`PythonValidatorStage`。
 - `runner/ai/`：AI Client、Backend contract、Session 判斷、Structured Output、AI diagnostics。
@@ -11,8 +11,8 @@
 - `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
 - `runner/prompts/`：Strict Jinja loader、穩定 Prompt Context contract、Prompt resources。
 - `runner/runtime/`：Durable state、subprocess lifecycle、raw EventBus，以及 Workflow 使用的 semantic progress facade。
-- `runner/plugins/`：Safety、Console、History、Observability 等橫切 Plugin/Hook。
-- `runner/config/`：Runtime/default configuration。
+- `runner/plugins/`：Safety、Console、History、Observability、Loop context 壓縮等橫切 Plugin/Hook。
+- `runner/config/`：Defaults 與唯一經驗證的 Runtime configuration contract。
 - `runner/utils/`：只保留無狀態、通用的 file/text helper。
 
 ## 依賴方向
@@ -26,6 +26,10 @@
 `Bootstrap -> backend/plugin registries`
 
 Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin、raw event schema 或 UI 行為；`runtime/progress.py` 是語意 facade，`runtime/events.py` 才負責 event transport/schema。AI subsystem 不得反向依賴 Workflow business stage。
+
+CLI parsing 在 `RunRequest.from_namespace()` 結束。`RunRequest.normalized_config()` 只做一次檔案解析與公開欄位映射；`RuntimeConfig.validate()` 是一般 request 與 YAML child item 共用的執行驗證。Runner 不再保留反向或內部 Namespace 相容層。
+
+Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 Hook Chain 回報錯誤；只有 Plugin 讀取壓縮設定與 Backend 的可選 context capability。
 
 ## Workflow 契約
 

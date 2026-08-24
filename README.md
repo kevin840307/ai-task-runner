@@ -77,7 +77,7 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 The runner uses a small stage-list pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns a `StageResult`; a result may add dynamic `next_flow`, replace the remaining outer flow, stop, or complete the run. Pipeline only consumes those facts and never hardcodes review/repair/validation routes.
 
-Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, and read-only enforcement register transparent execution hooks. Core stages do not import those concrete plugins.
+Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, read-only enforcement, and optional loop-context compression register as plugins. Core stages and the AI client do not import those concrete plugins.
 
 
 ## Stage execution architecture

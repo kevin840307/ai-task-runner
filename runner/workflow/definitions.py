@@ -1,46 +1,44 @@
 """Bundled Stage presets and workflow topology."""
 
+_PLAN = {
+    "stage": "plan",
+    "run_state": "planning",
+    "mode": "readonly",
+    "backend_mode": "planning",
+    "timeout_attr": "planning_timeout",
+    "result_handler": "handle_plan_result",
+}
+
+_EXECUTION = {
+    "stage": "ai",
+    "run_state": "executing",
+    "mode": "write",
+    "actor": "executor",
+    "track_changes": True,
+    "prompt": "stages/execution.md",
+}
+
 STAGES = {
     "plan": {
-        "stage": "plan",
+        **_PLAN,
         "name": "planning",
         "status": "AI 正在產生任務規劃",
-        "run_state": "planning",
-        "mode": "readonly",
-        "backend_mode": "planning",
-        "timeout_attr": "planning_timeout",
-        "result_handler": "handle_plan_result",
         "plan_only_stop": True,
     },
     "repair_plan": {
-        "stage": "plan",
+        **_PLAN,
         "status": "AI 正在建立修復規劃",
-        "run_state": "planning",
-        "mode": "readonly",
-        "backend_mode": "planning",
-        "timeout_attr": "planning_timeout",
         "repair_plan": True,
         "fresh_session_on_start": True,
-        "result_handler": "handle_plan_result",
     },
     "execute": {
-        "stage": "ai",
+        **_EXECUTION,
         "status": "AI 正在處理目前任務",
-        "run_state": "executing",
-        "mode": "write",
-        "actor": "executor",
-        "track_changes": True,
-        "prompt": "stages/execution.md",
         "result_handler": "handle_execute_result",
     },
     "repair": {
-        "stage": "ai",
+        **_EXECUTION,
         "status": "AI 正在修復目前任務",
-        "run_state": "executing",
-        "mode": "write",
-        "actor": "executor",
-        "track_changes": True,
-        "prompt": "stages/execution.md",
         "result_handler": "handle_repair_result",
     },
     "review": {

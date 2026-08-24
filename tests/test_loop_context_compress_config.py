@@ -13,17 +13,16 @@ def test_loop_context_compression_cli_defaults_off():
     assert args.loop_context_compress_threshold == 50.0
 
 
-def test_loop_context_compression_cli_round_trips_to_request():
+def test_loop_context_compression_cli_normalizes_to_runtime_config():
     args = parser().parse_args([
         "--goal", "x", "--validator", "ai",
         "--loop-context-compress",
         "--loop-context-compress-threshold", "65",
     ])
     request = RunRequest.from_namespace(args)
-    request.validate()
-    namespace = request.to_namespace()
-    assert namespace.loop_context_compress is True
-    assert namespace.loop_context_compress_threshold == 65.0
+    config = request.normalized_config()
+    assert config.loop_context_compress is True
+    assert config.loop_context_compress_threshold == 65.0
 
 
 def test_loop_context_compression_threshold_is_bounded():

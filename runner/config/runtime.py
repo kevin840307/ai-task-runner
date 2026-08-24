@@ -1,9 +1,9 @@
 """Validated internal settings used by the running workflow."""
 from __future__ import annotations
 
-import argparse
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from .defaults import (
@@ -28,7 +28,7 @@ EventHandler = Callable[[dict[str, Any]], None]
 
 @dataclass
 class RuntimeConfig:
-    """Canonical execution settings; CLI aliases are adapted at the boundary."""
+    """Canonical, validated settings used by the running workflow."""
 
     goal: str = ""
     goal_file: str | None = None
@@ -70,88 +70,88 @@ class RuntimeConfig:
     script_index: int | None = None
     script_total: int | None = None
 
-    @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> RuntimeConfig:
-        """Adapt CLI/legacy Namespace names into the canonical internal contract."""
-        json_events = bool(getattr(args, "json_events", False))
-        return cls(
-            goal=getattr(args, "goal", "") or "",
-            goal_file=getattr(args, "goal_file", None),
-            project_root=getattr(args, "project_root", "."),
-            script=getattr(args, "script", None),
-            validator=getattr(args, "validator", None),
-            validator_prompt=getattr(args, "validator_prompt", ""),
-            ai_validator_prompt=getattr(args, "ai_validator_prompt", ""),
-            ai_validator_prompt_file=getattr(args, "ai_validator_prompt_file", None),
-            backend=getattr(args, "backend", DEFAULT_BACKEND),
-            command=getattr(args, "command", None),
-            sandbox=bool(getattr(args, "sandbox", False)),
-            agent_args=list(getattr(args, "agent_args", getattr(args, "agent_arg", []))),
-            validator_args=list(getattr(args, "validator_args", getattr(args, "validator_arg", []))),
-            protect_files=list(getattr(args, "protect_files", getattr(args, "protect_file", []))),
-            validator_timeout=getattr(args, "validator_timeout", DEFAULT_VALIDATOR_TIMEOUT),
-            agent_timeout=getattr(args, "agent_timeout", DEFAULT_AGENT_TIMEOUT),
-            planning_timeout=getattr(args, "planning_timeout", DEFAULT_PLANNING_TIMEOUT),
-            agent_idle_after_change_timeout=getattr(
-                args,
-                "agent_idle_after_change_timeout",
-                DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
-            ),
-            api_retry_timeout=getattr(args, "api_retry_timeout", getattr(args, "api_wait_timeout", DEFAULT_API_WAIT_TIMEOUT)),
-            watchdog_interval=getattr(args, "watchdog_interval", DEFAULT_WATCHDOG_INTERVAL),
-            same_session_retries=getattr(
-                args,
-                "same_session_retries",
-                getattr(args, "task_recovery_threshold", getattr(args, "max_attempts", DEFAULT_MAX_ATTEMPTS)),
-            ),
-            review_retries=getattr(args, "review_retries", DEFAULT_REVIEW_RETRIES),
-            max_cycles=getattr(
-                args,
-                "max_cycles",
-                getattr(args, "full_replan_threshold", DEFAULT_MAX_CYCLES),
-            ),
-            stage_retry_delay=getattr(args, "stage_retry_delay", getattr(args, "retry_delay", 2)),
-            api_retry_wait=getattr(args, "api_retry_wait", getattr(args, "retry_wait", 5)),
-            api_retry_max_wait=getattr(args, "api_retry_max_wait", getattr(args, "retry_max_wait", 300)),
-            final_ai_validations=getattr(args, "final_ai_validations", DEFAULT_FINAL_AI_VALIDATIONS),
-            final_ai_required_passes=getattr(
-                args,
-                "final_ai_required_passes",
-                DEFAULT_FINAL_AI_REQUIRED_PASSES,
-            ),
-            loop_context_compress=getattr(args, "loop_context_compress", DEFAULT_LOOP_CONTEXT_COMPRESS),
-            loop_context_compress_threshold=getattr(
-                args,
-                "loop_context_compress_threshold",
-                DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-            ),
-            work_dir=getattr(args, "work_dir", ".ai-task-runner"),
-            resume=bool(getattr(args, "resume", False)),
-            force_new=bool(getattr(args, "force_new", False)),
-            plan_only=bool(getattr(args, "plan_only", False)),
-            human_output=bool(getattr(args, "human_output", not json_events)),
-            json_events=json_events,
-            event_callback=getattr(args, "event_callback", None),
-            script_index=getattr(args, "script_index", None),
-            script_total=getattr(args, "script_total", None),
-        )
+    def validate(self) -> None:
+        """Validate the one execution contract shared by API, CLI, and YAML."""
+        from ..backends.registry import backend_names, sandbox_supported
 
-    def to_namespace(self) -> argparse.Namespace:
-        """Expose legacy CLI field names only at the compatibility boundary."""
-        values = vars(self).copy()
-        values.update({
-            "agent_arg": list(self.agent_args),
-            "validator_arg": list(self.validator_args),
-            "protect_file": list(self.protect_files),
-            "api_wait_timeout": self.api_retry_timeout,
-            "task_recovery_threshold": self.same_session_retries,
-            "full_replan_threshold": self.max_cycles,
-            "retry_delay": self.stage_retry_delay,
-            "retry_wait": self.api_retry_wait,
-            "retry_max_wait": self.api_retry_max_wait,
-            "max_attempts": self.same_session_retries,
-        })
-        return argparse.Namespace(**values)
+        if not isinstance(self.project_root, str) or not self.project_root.strip():
+            raise ValueError("project_root must be a non-empty string")
+        if not self.script and not self.resume and not self.goal.strip():
+            raise ValueError("goal is required unless script or resume is used")
+        if not self.script and not (
+            isinstance(self.validator, str) and self.validator.strip()
+        ):
+            raise ValueError("validator is required unless script is used")
+        if self.backend not in backend_names():
+            raise ValueError(f"unsupported backend: {self.backend}")
+        if not isinstance(self.sandbox, bool):
+            raise ValueError("sandbox must be a boolean")  # noqa: TRY004
+        if self.sandbox and not sandbox_supported(self.backend):
+            raise ValueError(f"backend does not support sandbox mode: {self.backend}")
+        if self.resume and self.force_new:
+            raise ValueError("resume and force_new cannot both be true")
+
+        work = Path(self.work_dir)
+        if not self.work_dir or work.is_absolute() or ".." in work.parts:
+            raise ValueError("work_dir must stay inside project_root")
+        for name in ("agent_args", "validator_args", "protect_files"):
+            values = getattr(self, name)
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) or not value for value in values
+            ):
+                raise ValueError(f"{name} must be a list of non-empty strings")
+
+        _positive_integer(self, "validator_timeout")
+        for name in (
+            "agent_timeout",
+            "planning_timeout",
+            "same_session_retries",
+            "review_retries",
+            "max_cycles",
+        ):
+            _non_negative(self, name, integer=True)
+        for name in (
+            "agent_idle_after_change_timeout",
+            "api_retry_timeout",
+            "stage_retry_delay",
+            "api_retry_wait",
+            "api_retry_max_wait",
+        ):
+            _non_negative(self, name)
+        if not is_number(self.watchdog_interval) or self.watchdog_interval <= 0:
+            raise ValueError("watchdog_interval must be a positive number")
+        if self.api_retry_max_wait < self.api_retry_wait:
+            raise ValueError("api_retry_max_wait must be greater than or equal to api_retry_wait")
+
+        _positive_integer(self, "final_ai_validations")
+        if (
+            not is_integer(self.final_ai_required_passes)
+            or not 0 <= self.final_ai_required_passes <= self.final_ai_validations
+        ):
+            raise ValueError(
+                "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
+            )
+        if not isinstance(self.loop_context_compress, bool):
+            raise ValueError("loop_context_compress must be a boolean")  # noqa: TRY004
+        if (
+            not is_number(self.loop_context_compress_threshold)
+            or not 0 <= self.loop_context_compress_threshold <= 100
+        ):
+            raise ValueError("loop_context_compress_threshold must be between 0 and 100")
+
+
+def _positive_integer(config: RuntimeConfig, name: str) -> None:
+    value = getattr(config, name)
+    if not is_integer(value) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+
+
+def _non_negative(config: RuntimeConfig, name: str, *, integer: bool = False) -> None:
+    value = getattr(config, name)
+    valid = is_integer(value) if integer else is_number(value)
+    if not valid or value < 0:
+        kind = "integer" if integer else "number"
+        raise ValueError(f"{name} must be a non-negative {kind}")
 
 
 def is_integer(value: object) -> bool:

@@ -1,7 +1,6 @@
 """Single-task workflow orchestration."""
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 from .ai import create_ai_client
@@ -17,8 +16,8 @@ from .workflow.stages import StageContext, StageExecutor
 class TaskRunner:
     """Run one task request until final validation completes."""
 
-    def __init__(self, config: RuntimeConfig | argparse.Namespace) -> None:
-        self.config = config if isinstance(config, RuntimeConfig) else RuntimeConfig.from_namespace(config)
+    def __init__(self, config: RuntimeConfig) -> None:
+        self.config = config
         if not self.config.validator:
             raise RunnerError("--validator is required unless --script is used")
 

@@ -1,18 +1,18 @@
-import argparse
 from pathlib import Path
 
 import pytest
 
+from runner.config import RuntimeConfig
 from runner.errors import RunnerError
 from runner.script_loader import load_yaml_script
 from runner.script_runner import build_script_item_config
 
 
-def base_args(tmp_path: Path) -> argparse.Namespace:
-    return argparse.Namespace(
+def base_args(tmp_path: Path) -> RuntimeConfig:
+    return RuntimeConfig(
         project_root=str(tmp_path), work_dir='.ai-task-runner', resume=False,
         final_ai_validations=1, final_ai_required_passes=0,
-        script='tasks.yaml', goal=None, validator=None, validator_prompt='',
+        script='tasks.yaml', goal='', validator=None, validator_prompt='',
         ai_validator_prompt='', ai_validator_prompt_file=None,
     )
 
@@ -124,18 +124,22 @@ def test_yaml_item_ai_validator_prompt_file_missing_is_actionable(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "field_name",
-    ["ai_validator_count", "ai_validator_required_passes"],
+    ("field_name", "error_name"),
+    [
+        ("ai_validator_count", "final_ai_validations"),
+        ("ai_validator_required_passes", "final_ai_required_passes"),
+    ],
 )
-def test_yaml_item_numeric_counts_reject_booleans(tmp_path, field_name):
+def test_yaml_item_numeric_counts_reject_booleans(tmp_path, field_name, error_name):
     script = tmp_path / "tasks.yaml"
     script.write_text(
         f"- prompt: build\n  validator: ai\n  {field_name}: true\n",
         encoding="utf-8",
     )
 
-    with pytest.raises(RunnerError, match=field_name):
-        load_yaml_script(script)
+    item = load_yaml_script(script)[0]
+    with pytest.raises(RunnerError, match=error_name):
+        build_script_item_config(base_args(tmp_path), item, 1)
 
 
 def test_yaml_item_validator_prompt_must_be_a_string(tmp_path):

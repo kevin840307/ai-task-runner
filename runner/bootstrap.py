@@ -1,7 +1,6 @@
 """Application/runtime bootstrap and plugin discovery."""
 from __future__ import annotations
 
-import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,8 +8,8 @@ from pathlib import Path
 from .config import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
-from .runtime.events import EventBus
 from .runtime import events
+from .runtime.events import EventBus
 
 
 @dataclass
@@ -88,9 +87,7 @@ def runtime_scope(config: RuntimeConfig):
         _current = previous
 
 
-def execute(args: RuntimeConfig | argparse.Namespace) -> int:
-    if not isinstance(args, RuntimeConfig):
-        args = RuntimeConfig.from_namespace(args)
+def execute(args: RuntimeConfig) -> int:
     with runtime_scope(args):
         if args.script:
             from .script_runner import execute_script

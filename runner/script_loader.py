@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config.runtime import is_integer, is_number
 from .errors import RunnerError
 
 
@@ -64,15 +63,9 @@ def _options(item: dict[str, Any], index: int) -> dict[str, Any]:
             raise RunnerError(f"script item {index} project_root must be a non-empty string")
         result["project_root"] = value.strip()
     if "loop_context_compress" in item:
-        value = item["loop_context_compress"]
-        if not isinstance(value, bool):
-            raise RunnerError(f"script item {index} loop_context_compress must be a boolean")
-        result["loop_context_compress"] = value
+        result["loop_context_compress"] = item["loop_context_compress"]
     if "loop_context_compress_threshold" in item:
-        value = item["loop_context_compress_threshold"]
-        if not is_number(value) or not 0 <= value <= 100:
-            raise RunnerError(f"script item {index} loop_context_compress_threshold must be between 0 and 100")
-        result["loop_context_compress_threshold"] = float(value)
+        result["loop_context_compress_threshold"] = item["loop_context_compress_threshold"]
 
     aliases = {
         "review_retries": "review_retries",
@@ -82,10 +75,7 @@ def _options(item: dict[str, Any], index: int) -> dict[str, Any]:
     for source, target in aliases.items():
         if source not in item:
             continue
-        value = item[source]
-        if not is_integer(value) or value < 0:
-            raise RunnerError(f"script item {index} {source} must be a non-negative integer")
-        result[target] = value
+        result[target] = item[source]
     return result
 
 

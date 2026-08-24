@@ -8,9 +8,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-from .backends.registry import backend_names, sandbox_supported
-from .config import EventHandler, RuntimeConfig
 from .bootstrap import execute
+from .config import EventHandler, RuntimeConfig
 from .config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
@@ -27,7 +26,6 @@ from .config.defaults import (
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
 )
-from .config.runtime import is_integer, is_number
 from .version import __version__
 
 
@@ -129,13 +127,6 @@ class RunRequest:
             raise ValueError("unknown request fields: " + ", ".join(unknown))
         return cls(**dict(values))
 
-    def to_namespace(
-        self,
-        on_event: EventHandler | None = None,
-    ) -> argparse.Namespace:
-        """Compatibility adapter for integrations expecting argparse fields."""
-        return self.to_runtime_config(on_event).to_namespace()
-
     def to_runtime_config(
         self,
         on_event: EventHandler | None = None,
@@ -153,9 +144,9 @@ class RunRequest:
             backend=self.backend,
             command=self.command,
             sandbox=self.sandbox,
-            agent_args=list(self.agent_args),
-            validator_args=list(self.validator_args),
-            protect_files=list(self.protect_files),
+            agent_args=self.agent_args,
+            validator_args=self.validator_args,
+            protect_files=self.protect_files,
             validator_timeout=self.validator_timeout,
             agent_timeout=self.agent_timeout,
             planning_timeout=self.planning_timeout,
@@ -183,11 +174,22 @@ class RunRequest:
 
     def validate(self) -> None:
         """Fail fast with clear errors for every integration surface."""
+        self.normalized_config()
+
+    def normalized_config(
+        self,
+        on_event: EventHandler | None = None,
+    ) -> RuntimeConfig:
+        """Resolve public inputs and return the validated execution contract."""
         self._validate_request_source()
-        self._validate_mode_options()
-        self._validate_paths_and_collections()
-        self._validate_timeouts_and_limits()
-        self._validate_retry_and_context_settings()
+        if self.ai_validator_prompt and self.ai_validator_prompt_file:
+            raise ValueError("use either ai_validator_prompt or ai_validator_prompt_file, not both")
+        for name in ("validator_prompt", "ai_validator_prompt"):
+            if not isinstance(getattr(self, name), str):
+                raise ValueError(f"{name} must be a string")  # noqa: TRY004
+        config = self.to_runtime_config(on_event)
+        config.validate()
+        return config
 
     def _validate_request_source(self) -> None:
         if not isinstance(self.project_root, str) or not self.project_root.strip():
@@ -206,78 +208,6 @@ class RunRequest:
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script is used")
-
-    def _validate_mode_options(self) -> None:
-        if self.ai_validator_prompt and self.ai_validator_prompt_file:
-            raise ValueError("use either ai_validator_prompt or ai_validator_prompt_file, not both")
-        for name in ("validator_prompt", "ai_validator_prompt"):
-            if not isinstance(getattr(self, name), str):
-                raise ValueError(f"{name} must be a string")
-        if self.backend not in backend_names():
-            raise ValueError(f"unsupported backend: {self.backend}")
-        if not isinstance(self.sandbox, bool):
-            raise ValueError("sandbox must be a boolean")
-        if self.sandbox and not sandbox_supported(self.backend):
-            raise ValueError(f"backend does not support sandbox mode: {self.backend}")
-        if self.resume and self.force_new:
-            raise ValueError("resume and force_new cannot both be true")
-
-    def _validate_paths_and_collections(self) -> None:
-        work = Path(self.work_dir)
-        if not self.work_dir or work.is_absolute() or ".." in work.parts:
-            raise ValueError("work_dir must stay inside project_root")
-
-        for name in ("agent_args", "validator_args", "protect_files"):
-            values = getattr(self, name)
-            if not isinstance(values, list) or any(
-                not isinstance(value, str) or not value for value in values
-            ):
-                raise ValueError(f"{name} must be a list of non-empty strings")
-
-    def _validate_timeouts_and_limits(self) -> None:
-        if not is_integer(self.validator_timeout) or self.validator_timeout <= 0:
-            raise ValueError("validator_timeout must be a positive integer")
-        if not is_integer(self.agent_timeout) or self.agent_timeout < 0:
-            raise ValueError("agent_timeout must be a non-negative integer")
-        if not is_integer(self.planning_timeout) or self.planning_timeout < 0:
-            raise ValueError("planning_timeout must be a non-negative integer")
-        if (
-            not is_number(self.agent_idle_after_change_timeout)
-            or self.agent_idle_after_change_timeout < 0
-        ):
-            raise ValueError(
-                "agent_idle_after_change_timeout must be a non-negative number"
-            )
-        for name in ("max_attempts", "max_cycles", "review_retries"):
-            value = getattr(self, name)
-            if not is_integer(value) or value < 0:
-                raise ValueError(f"{name} must be a non-negative integer")
-        if not is_integer(self.final_ai_validations) or self.final_ai_validations < 1:
-            raise ValueError("final_ai_validations must be a positive integer")
-        if (
-            not is_integer(self.final_ai_required_passes)
-            or not 0 <= self.final_ai_required_passes <= self.final_ai_validations
-        ):
-            raise ValueError(
-                "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
-            )
-
-    def _validate_retry_and_context_settings(self) -> None:
-        for name in ("retry_delay", "retry_wait", "retry_max_wait", "api_wait_timeout"):
-            value = getattr(self, name)
-            if not is_number(value) or value < 0:
-                raise ValueError(f"{name} must be a non-negative number")
-        if not is_number(self.watchdog_interval) or self.watchdog_interval <= 0:
-            raise ValueError("watchdog_interval must be a positive number")
-        if self.retry_max_wait < self.retry_wait:
-            raise ValueError("retry_max_wait must be greater than or equal to retry_wait")
-        if not isinstance(self.loop_context_compress, bool):
-            raise ValueError("loop_context_compress must be a boolean")
-        if (
-            not is_number(self.loop_context_compress_threshold)
-            or not 0 <= self.loop_context_compress_threshold <= 100
-        ):
-            raise ValueError("loop_context_compress_threshold must be between 0 and 100")
 
     def _effective_goal(self) -> str:
         if isinstance(self.goal, str):
@@ -326,8 +256,7 @@ def run(
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
 
-    request.validate()
-    config = request.to_runtime_config(on_event)
+    config = request.normalized_config(on_event)
     exit_code = execute(config)
     state_files = _state_files(request)
     states = tuple(_read_state(path) for path in state_files if path.is_file())

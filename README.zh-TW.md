@@ -64,7 +64,7 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult`。Result 可動態帶 `next_flow`、用 `replace_remaining` 取代剩餘 flow、停止或完成；Pipeline 只消費這些資訊，不 hardcode review/repair/validation 路線。
 
-橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 透過透明 Execution Hook 註冊。Core 與 Stage 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
+橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
 
 ## Stage 執行架構

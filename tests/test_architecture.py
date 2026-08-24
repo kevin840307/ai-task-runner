@@ -115,3 +115,22 @@ def test_workflow_uses_semantic_progress_not_raw_event_transport():
         assert "runtime import events" not in source, path
         assert "runtime.events" not in source, path
         assert "publish(\"runner." not in source, path
+
+
+def test_internal_config_has_no_namespace_compatibility_layer():
+    runtime = (ROOT / "runner/config/runtime.py").read_text(encoding="utf-8")
+    bootstrap = (ROOT / "runner/bootstrap.py").read_text(encoding="utf-8")
+    assert "argparse" not in runtime
+    assert "from_namespace" not in runtime
+    assert "to_namespace" not in runtime
+    assert "argparse.Namespace" not in bootstrap
+
+
+def test_loop_context_compression_is_a_plugin():
+    plugin = ROOT / "runner/plugins/context_compression.py"
+    client = (ROOT / "runner/ai/client.py").read_text(encoding="utf-8")
+    assert plugin.is_file()
+    assert "class ContextCompressionPlugin" in plugin.read_text(encoding="utf-8")
+    assert "loop_context_compress" not in client
+    for path in (ROOT / "runner/workflow").rglob("*.py"):
+        assert "context_compress" not in path.read_text(encoding="utf-8")
