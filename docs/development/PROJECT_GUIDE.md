@@ -61,7 +61,7 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 - Final AI voting: every validation run starts a different fresh session.
 
 ## Validation and YAML List
-Validator feedback in state is bounded to 20,000 characters with the start and end preserved. External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`; configured log folders are copied into `.ai-task-runner/validator-reports/external-command/`.
+Validator feedback in state is bounded to 20,000 characters with the start and end preserved. Runner sets `AI_TASK_RUNNER_WORK_DIR` for validator processes, and maintained templates write reports under its `validator-reports/` directory (falling back to `.ai-task-runner` when run standalone). External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`.
 
 Three validation modes are supported: AI-only, Python-only, and Mixed. Mixed validation always runs the Python hard gate before Final AI voting.
 

@@ -10,6 +10,10 @@ class ConfigurationError(RunnerError):
     """Deterministic input or configuration failure that retrying cannot fix."""
 
 
+class StructuredOutputError(RunnerError):
+    """Structured response recovery was exhausted inside one AI stage call."""
+
+
 def diagnostic_error(error: BaseException) -> BaseException | None:
     """Find backend diagnostics through wrapped exception chains."""
     seen: set[int] = set()
@@ -88,6 +92,9 @@ def backend_diagnostic_parts(
             parts.append(
                 "context_compression=" + " ".join(str(compression).split())[-1000:]
             )
+        plugin_error = diagnostics.get("plugin_error")
+        if plugin_error:
+            parts.append("plugin_error=" + " ".join(str(plugin_error).split())[-1000:])
 
     if include_output:
         output = getattr(cause, "output", "")
@@ -104,6 +111,7 @@ def diagnostic_detail(error: BaseException, limit: int = 2000) -> str:
 
 __all__ = [
     "RunnerError",
+    "StructuredOutputError",
     "backend_diagnostic_parts",
     "diagnostic_detail",
     "diagnostic_error",

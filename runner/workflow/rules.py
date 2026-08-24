@@ -189,7 +189,7 @@ def complete_run(state: RunState) -> None:
 def invalidate_plan(ctx: StageContext, feedback: str = "") -> None:
     state = ctx.state
     limit = ctx.config.max_cycles
-    if limit and state.cycle >= limit:
+    if limit >= 0 and state.cycle >= limit:
         raise ConfigurationError(f"max cycles reached: {limit}")
     state.cycle += 1
     state.current = len(state.tasks)

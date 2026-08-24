@@ -4,6 +4,7 @@ from runner.ai.errors import AIError, BackendError
 from runner.backends.base import BaseBackend
 from runner.bootstrap import runtime_scope
 from runner.config import RuntimeConfig
+from runner.errors import diagnostic_detail
 
 
 def _loop_error(agent, tmp_path, *, enabled=False, threshold=50.0):
@@ -11,8 +12,12 @@ def _loop_error(agent, tmp_path, *, enabled=False, threshold=50.0):
         goal="x",
         validator="ai",
         project_root=str(tmp_path),
-        loop_context_compress=enabled,
-        loop_context_compress_threshold=threshold,
+        plugins={
+            "context_compression": {
+                "enabled": enabled,
+                "threshold": threshold,
+            }
+        },
     )
     with runtime_scope(config), pytest.raises(AIError) as caught:
         agent.ask("x")
@@ -175,6 +180,15 @@ def test_loop_context_at_threshold_compresses_without_changing_error_flow(tmp_pa
     assert agent._backend.compressions == ["loop-session"]
 
 
+def test_plugin_failure_is_visible_in_bounded_diagnostics():
+    error = BackendError(
+        "model failed",
+        return_code=1,
+        diagnostics={"plugin_error": "RuntimeError: observer failed"},
+    )
+    assert "plugin_error=RuntimeError: observer failed" in diagnostic_detail(error)
+
+
 
 def test_loop_context_compression_is_disabled_by_default(tmp_path):
     agent = _make_agent_with_loop_backend(tmp_path, 90.0)
@@ -214,4 +228,3 @@ def test_loop_context_compression_records_skip_reason(tmp_path):
     diagnostics = _loop_error(agent, tmp_path, enabled=True, threshold=70.0).diagnostics
     assert diagnostics["context_compress_status"] == "skipped"
     assert diagnostics["context_compress_reason"] == "below_threshold"
-

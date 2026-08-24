@@ -7,9 +7,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ...bootstrap import current_runtime
+from ...config.defaults import DEFAULT_MAX_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError
-from ...runtime import progress
 from ...project.files import changed_project_files, project_manifest
+from ...runtime import progress
 from .contracts import Stage, StageContext, StageExecution, StageResult
 
 
@@ -56,9 +57,19 @@ class StageExecutor:
         retry_attr = str(getattr(stage, "retry_attr", "") or "")
         if retry_attr:
             configured_retry = getattr(ctx.config, retry_attr)
-        same_retry_limit = max(0, int(
-            ctx.config.same_session_retries if configured_retry is None else configured_retry
-        ))
+        effective_retry = (
+            ctx.config.same_session_retries
+            if configured_retry is None
+            else configured_retry
+        )
+        unlimited_retry = effective_retry == -1
+        # Unlimited recovery still rotates sessions after the normal per-session budget.
+        per_session_retry = (
+            ctx.config.same_session_retries if unlimited_retry else effective_retry
+        )
+        if per_session_retry == -1:
+            per_session_retry = DEFAULT_MAX_ATTEMPTS
+        same_retry_limit = max(0, int(per_session_retry))
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
@@ -77,6 +88,10 @@ class StageExecutor:
                 break
 
             error = result.error or RunnerError(result.output or "stage error")
+            error_retry_limit = max(
+                0,
+                int(getattr(error, "same_session_retry_limit", same_retry_limit)),
+            )
             if self._is_service_error(error):
                 progress.service_wait_exhausted(stage.name, str(error)[-1000:])
                 raise error
@@ -87,8 +102,12 @@ class StageExecutor:
 
             previous_error = str(error)
 
-            if bool(getattr(stage, "skip_on_error", False)) and same_retry_limit > 0:
-                if attempt <= same_retry_limit:
+            if (
+                bool(getattr(stage, "skip_on_error", False))
+                and not unlimited_retry
+                and error_retry_limit > 0
+            ):
+                if attempt <= error_retry_limit:
                     retry_mode = "same" if self._has_session(ctx) else "fresh"
                     self._sleep(ctx)
                     continue
@@ -97,7 +116,7 @@ class StageExecutor:
                 break
 
             failure_count, fresh_round = self._record_failure(stage, ctx, error)
-            if failure_count <= same_retry_limit:
+            if failure_count <= error_retry_limit:
                 retry_mode = "same" if self._has_session(ctx) else "fresh"
                 self._sleep(ctx)
                 continue
@@ -107,6 +126,14 @@ class StageExecutor:
                 ctx.state.fresh_session_round = 1
                 ctx.save_state()
                 retry_mode = "fresh"
+                continue
+
+            if unlimited_retry:
+                self._reset_failure(ctx)
+                self._fresh_session(ctx)
+                ctx.save_state()
+                retry_mode = "fresh"
+                self._sleep(ctx)
                 continue
 
             result = replace(result, status="replan")

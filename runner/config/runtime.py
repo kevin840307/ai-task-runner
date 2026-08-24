@@ -13,8 +13,6 @@ from .defaults import (
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
@@ -58,8 +56,7 @@ class RuntimeConfig:
     api_retry_max_wait: float = 300
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
-    loop_context_compress: bool = DEFAULT_LOOP_CONTEXT_COMPRESS
-    loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+    plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
@@ -73,6 +70,7 @@ class RuntimeConfig:
     def validate(self) -> None:
         """Validate the one execution contract shared by API, CLI, and YAML."""
         from ..backends.registry import backend_names, sandbox_supported
+        from ..plugins.registry import normalize_plugin_config
 
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
@@ -105,11 +103,10 @@ class RuntimeConfig:
         for name in (
             "agent_timeout",
             "planning_timeout",
-            "same_session_retries",
-            "review_retries",
-            "max_cycles",
         ):
             _non_negative(self, name, integer=True)
+        for name in ("same_session_retries", "review_retries", "max_cycles"):
+            _retry_limit(self, name)
         for name in (
             "agent_idle_after_change_timeout",
             "api_retry_timeout",
@@ -131,13 +128,9 @@ class RuntimeConfig:
             raise ValueError(
                 "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
             )
-        if not isinstance(self.loop_context_compress, bool):
-            raise ValueError("loop_context_compress must be a boolean")  # noqa: TRY004
-        if (
-            not is_number(self.loop_context_compress_threshold)
-            or not 0 <= self.loop_context_compress_threshold <= 100
-        ):
-            raise ValueError("loop_context_compress_threshold must be between 0 and 100")
+        if not isinstance(self.plugins, dict):
+            raise ValueError("plugins must be an object")  # noqa: TRY004
+        self.plugins = normalize_plugin_config(self.plugins)
 
 
 def _positive_integer(config: RuntimeConfig, name: str) -> None:
@@ -152,6 +145,12 @@ def _non_negative(config: RuntimeConfig, name: str, *, integer: bool = False) ->
     if not valid or value < 0:
         kind = "integer" if integer else "number"
         raise ValueError(f"{name} must be a non-negative {kind}")
+
+
+def _retry_limit(config: RuntimeConfig, name: str) -> None:
+    value = getattr(config, name)
+    if not is_integer(value) or value < -1:
+        raise ValueError(f"{name} must be -1 or a non-negative integer")
 
 
 def is_integer(value: object) -> bool:

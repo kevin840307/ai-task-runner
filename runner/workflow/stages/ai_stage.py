@@ -1,9 +1,9 @@
 """Generic AI-backed Stage. Retry routing and UI lifecycle live outside it."""
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
-import json
 from typing import Any, Literal
 
 from ...ai.client import configure_ai_client, create_ai_client
@@ -87,9 +87,11 @@ class AIStage:
             )
 
         results: list[StageResult] = []
-        for _ in range(runs):
+        for run_index in range(runs):
             client = self._client(ctx)
-            if self.spec.fresh_session_each_run:
+            if self.spec.fresh_session_each_run and (
+                run_index > 0 or ctx.execution.retry_mode == "initial"
+            ):
                 client.session_id = ""
             results.append(self._run_once(ctx, previous, client))
 
@@ -229,14 +231,10 @@ class AIStage:
         )
 
     def _fresh_session_prompt(self, ctx: StageContext, original: str) -> str:
-        task = build_stage_prompt_context(ctx, self.spec.name)["task"]
-        context = f"Original specification:\n{ctx.state.goal}\n"
-        if task is not None:
-            context += f"Current TODO:\n{json.dumps(task, ensure_ascii=False)}\n"
         return (
             f"Continue the same {self.name} stage in a fresh session. "
             "Inspect the CURRENT project state first and preserve valid existing work.\n\n"
-            f"{context}Stage instructions:\n{original}"
+            f"Stage instructions:\n{original}"
         )
 
 

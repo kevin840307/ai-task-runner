@@ -22,7 +22,6 @@ from runner.config.defaults import (
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
@@ -31,6 +30,7 @@ from runner.config.defaults import (
     DEFAULT_WATCHDOG_INTERVAL,
 )
 from runner.errors import ConfigurationError
+from runner.plugins.registry import add_plugin_arguments
 from runner.runtime.process_runner import ACTIVE_PROCESS_FILE
 from runner.version import __version__
 
@@ -115,19 +115,19 @@ def parser() -> argparse.ArgumentParser:
         "--max-attempts",
         type=int,
         default=DEFAULT_MAX_ATTEMPTS,
-        help="task recovery escalation threshold; never stops the runner; 0 uses no-progress detection only",
+        help="same-session retries before fresh recovery; -1 retries until PASS, 0 disables same-session retry",
     )
     command_parser.add_argument(
         "--review-retries",
         type=int,
         default=DEFAULT_REVIEW_RETRIES,
-        help="AI Review same-session retries before skip; 0 disables skip",
+        help="AI Review retries before skip; -1 retries until PASS, 0 disables retry",
     )
     command_parser.add_argument(
         "--max-cycles",
         type=int,
         default=DEFAULT_MAX_CYCLES,
-        help="maximum workflow/replan cycles; 0 means unlimited (default)",
+        help="maximum workflow/replan cycles; -1 means unlimited (default), 0 disables replan",
     )
     command_parser.add_argument(
         "--retry-delay",
@@ -161,18 +161,7 @@ def parser() -> argparse.ArgumentParser:
         default=300,
         help="maximum model-call retry wait",
     )
-    command_parser.add_argument(
-        "--loop-context-compress",
-        action="store_true",
-        help="on Loop Detection, compact the session when current context usage reaches the configured threshold",
-    )
-    command_parser.add_argument(
-        "--loop-context-compress-threshold",
-        type=float,
-        default=DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-        metavar="PERCENT",
-        help="context usage percent required for Loop Detection compression (default: 50)",
-    )
+    add_plugin_arguments(command_parser)
     command_parser.add_argument("--work-dir", default=".ai-task-runner")
     command_parser.add_argument(
         "--json-events",

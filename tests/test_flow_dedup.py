@@ -1,4 +1,6 @@
-from runner.errors import RunnerError
+import pytest
+
+from runner.errors import RunnerError, StructuredOutputError
 from runner.ai.structured_output import structured_call
 from runner.workflow.stages.executor import StageExecutor
 
@@ -15,6 +17,29 @@ def test_structured_call_reuses_same_ask_for_correction():
         return raw
     assert structured_call("start", parse, ask) == '{"ok":true}'
     assert len(prompts) == 2
+
+
+def test_structured_fresh_recovery_exhaustion_does_not_restart_same_retry_budget():
+    calls = []
+
+    def ask(prompt):
+        calls.append(prompt)
+        return "bad"
+
+    def parse(raw):
+        raise RunnerError("bad json")
+
+    with pytest.raises(StructuredOutputError) as caught:
+        structured_call(
+            "start",
+            parse,
+            ask,
+            retries=2,
+            fresh_ask=lambda: ask("fresh"),
+            fresh_retries=1,
+        )
+    assert caught.value.same_session_retry_limit == 0
+    assert len(calls) == 6
 
 
 def test_failure_fingerprint_is_normalized_and_deterministic():

@@ -24,8 +24,9 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--agent-timeout` | runtime AI-call seconds | 7200; 0 disables |
 | `--planning-timeout` | planning AI-call seconds | 600; 0 disables |
 | `--agent-idle-after-change-timeout` | idle seconds after changes/output stop | 900; 0 disables |
-| `--max-attempts` | task recovery escalation threshold | After this many ineffective task recovery attempts, escalate same-session retry to fresh-session retry/replan; never stops the runner. `0` uses no-progress detection only. |
-| `--max-cycles` | repair-cycle full-replan threshold | At/after this cycle threshold, validator failure forces a fresh full replan instead of stopping. `0` disables this extra threshold. |
+| `--max-attempts` | same-session recovery limit | `-1` keeps recovering until PASS, `0` disables same-session retry, and a positive value switches to Fresh Session after that many retries. Default: `2`. |
+| `--review-retries` | AI Review recovery limit | `-1` retries until PASS, `0` disables retry, and a positive value skips Review after that many retries. Default: `1`; Final Validator remains authoritative. |
+| `--max-cycles` | workflow/replan cycle limit | `-1` keeps validating and repairing until PASS, `0` disables replan, and a positive value is a finite termination cap. Default: `-1`. |
 | `--retry-delay` | logical task retry delay | 2 seconds |
 | `--retry-wait` | initial model-call retry wait | 5 seconds |
 | `--retry-max-wait` | max model-call retry wait | 300 seconds |

@@ -24,8 +24,9 @@
 | `--agent-timeout` | runtime AI call timeout | 7200；0=停用 |
 | `--planning-timeout` | Planning AI call timeout | 600；0=停用 |
 | `--agent-idle-after-change-timeout` | 變更/輸出停止後 idle timeout | 900；0=停用 |
-| `--max-attempts` | 任務恢復升級門檻 | 無效恢復達門檻後由 same-session 升級成 fresh-session / replan；不會停止 Runner。`0` 僅使用 no-progress 判斷。 |
-| `--max-cycles` | Repair cycle 完整重規劃門檻 | 達門檻後 Validator FAIL 強制 fresh full replan，不會停止 Runner；`0` 關閉此額外門檻。 |
+| `--max-attempts` | Same Session 恢復上限 | `-1` 持續恢復直到 PASS，`0` 停用 Same Session retry，正數表示達該次數後切換 Fresh Session。預設：`2`。 |
+| `--review-retries` | AI Review 恢復上限 | `-1` 重試直到 PASS，`0` 停用 retry，正數表示達該次數後 skip Review。預設：`1`；Final Validator 仍是最終權威。 |
+| `--max-cycles` | Workflow/replan cycle 上限 | `-1` 持續驗證與修復直到 PASS，`0` 停用 replan，正數是有限終止上限。預設：`-1`。 |
 | `--retry-delay` | 邏輯 task retry delay | 2 秒 |
 | `--retry-wait` | model-call 初始 retry wait | 5 秒 |
 | `--retry-max-wait` | model-call 最大 retry wait | 300 秒 |

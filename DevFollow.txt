@@ -1,12 +1,12 @@
 設計原則（必須遵守）：
 
 1. 最少 Code，禁止 Hardcode(Global通用的不算)。
-2. 不影響現有 24H 穩定執行，包含 YAML List 任務。
+2. 不影響現有 24H 穩定執行，包含 YAML List 任務。(預設參數就是24H穩定運行到過, 不能中途停下)
 3. Log 精簡但足夠 Debug。
 4. 低耦合：Workflow 不感知 Extension/Event，擴充功能一律 Plugin 化。
 5. 正常流程優先 Same Session，只補新資訊，不重複 Context。
 6. AI 最終驗證使用 New Session，然後假如需要驗證三次，這三次都要是不同的Session。
-7. 驗證異常先 Same Session Recover，最多 Retry 2 次；仍失敗才 New Session。
+7. 驗證異常先 Same Session Recover，最多 Retry 2(default可更改) 次；仍失敗才 New Session。
 8. New Session 才提供完整且必要的 Context。
 9. Workflow 必須易於新增、移動、替換與擴充 Stage。
 10. 能瘦身就瘦身, 減少不必要的Code
@@ -14,5 +14,7 @@
 12. 移除舊程式碼、不必要的程式碼
 13. ai agent輸入prompt應該都要使用stdin, 防止cmd超出文字
 14. 檔案&function命名合理、易懂、folder分類合理、拆分合理
-15. 文件要有中英版本, 要詳細一點並且跟現有功能有對齊
+15. plugins容易新增和擴充
+16. 文件要有中英版本, 要詳細一點並且跟現有功能有對齊
+17. retry -1則是測試到過為止, 但還是要遵守5. 6.
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。

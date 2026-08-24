@@ -75,7 +75,7 @@ STAGES = {
         "fresh_session_each_run": True,
         "structured_retries": 2,
         "structured_fresh_retries": 1,
-        "retry": 0,
+        "retry": -1,
         "runs_field": "final_ai_validations",
         "required_passes_field": "final_ai_required_passes",
         "prompt": "stages/ai_validator.md",

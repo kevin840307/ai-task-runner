@@ -19,6 +19,7 @@ TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
 ACTIVE_PROCESS_FILE = "active-process"
 PROCESS_POLL_INTERVAL = 0.2
+WORK_DIR_ENV = "AI_TASK_RUNNER_WORK_DIR"
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ def run_process(
         runtime = current_runtime()
         hooks = runtime.hooks
         watchdog_interval = runtime.config.watchdog_interval
+        environment[WORK_DIR_ENV] = str(runtime.work)
         environment = hooks.process_environment(environment)
         command = hooks.process_command(command, environment)
     except RuntimeError:

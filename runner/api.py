@@ -26,6 +26,11 @@ from .config.defaults import (
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
 )
+from .plugins.registry import (
+    merge_plugin_config,
+    plugin_config_from_namespace,
+    plugin_config_from_request,
+)
 from .version import __version__
 
 
@@ -63,6 +68,7 @@ class RunRequest:
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     loop_context_compress: bool = DEFAULT_LOOP_CONTEXT_COMPRESS
     loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+    plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
@@ -110,6 +116,7 @@ class RunRequest:
             loop_context_compress_threshold=getattr(
                 args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
             ),
+            plugins=plugin_config_from_namespace(args),
             work_dir=args.work_dir,
             resume=args.resume,
             force_new=args.force_new,
@@ -161,8 +168,7 @@ class RunRequest:
             api_retry_max_wait=self.retry_max_wait,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
-            loop_context_compress=self.loop_context_compress,
-            loop_context_compress_threshold=self.loop_context_compress_threshold,
+            plugins=merge_plugin_config(plugin_config_from_request(self), self.plugins),
             work_dir=self.work_dir,
             resume=self.resume,
             force_new=self.force_new,

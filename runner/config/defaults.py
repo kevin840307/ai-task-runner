@@ -9,10 +9,10 @@ DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT = 900
 DEFAULT_API_WAIT_TIMEOUT = 3600
 DEFAULT_WATCHDOG_INTERVAL = 15.0
 DEFAULT_VALIDATOR_TIMEOUT = 1200
-# Recovery escalation thresholds; neither value is a runner termination limit.
+# Recovery defaults: bounded per session, unlimited across validation cycles.
 DEFAULT_MAX_ATTEMPTS = 2
 DEFAULT_REVIEW_RETRIES = 1
-DEFAULT_MAX_CYCLES = 0
+DEFAULT_MAX_CYCLES = -1
 DEFAULT_FINAL_AI_VALIDATIONS = 1
 # 0 means strict majority of configured independent AI validations.
 DEFAULT_FINAL_AI_REQUIRED_PASSES = 0

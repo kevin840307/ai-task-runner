@@ -69,7 +69,10 @@ def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp
     c = ctx(tmp_path, model)
     c.scratch['validator'] = model
     prompt = tmp_path / 'validator.md'
-    prompt.write_text('FULL VALIDATOR CONTRACT', encoding='utf-8')
+    prompt.write_text(
+        'Original specification:\n{{ goal }}\nFULL VALIDATOR CONTRACT',
+        encoding='utf-8',
+    )
     stage = AIStage(AIStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator',
         prompt=str(prompt), parser=parse_ok,
@@ -78,10 +81,12 @@ def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp
     result = StageExecutor(Hooks()).run(stage, c)
     assert result.status == 'pass'
     assert [before for before, _, _ in model.calls] == ['', 'S1', 'S1', '']
-    assert 'FULL VALIDATOR CONTRACT' == model.calls[0][2]
+    assert 'Original specification:\nORIGINAL SPEC' in model.calls[0][2]
+    assert 'FULL VALIDATOR CONTRACT' in model.calls[0][2]
     assert all('FULL VALIDATOR CONTRACT' not in model.calls[i][2] for i in (1,2))
     assert 'Original specification:\nORIGINAL SPEC' in model.calls[3][2]
-    assert 'Stage instructions:\nFULL VALIDATOR CONTRACT' in model.calls[3][2]
+    assert model.calls[3][2].count('Original specification:\nORIGINAL SPEC') == 1
+    assert 'Stage instructions:\nOriginal specification:' in model.calls[3][2]
 
 
 def test_independent_ai_votes_each_start_new_session(tmp_path):

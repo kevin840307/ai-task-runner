@@ -11,6 +11,7 @@ from typing import Any
 
 from .config import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
+from .plugins.registry import merge_plugin_config
 from .script_loader import load_yaml_script
 from .version import __version__
 
@@ -123,12 +124,7 @@ def build_script_item_config(
         final_ai_required_passes=item.get(
             "final_ai_required_passes", args.final_ai_required_passes
         ),
-        loop_context_compress=item.get(
-            "loop_context_compress", args.loop_context_compress
-        ),
-        loop_context_compress_threshold=item.get(
-            "loop_context_compress_threshold", args.loop_context_compress_threshold
-        ),
+        plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),
         work_dir=work_dir,
         resume=resume,
         force_new=not resume,

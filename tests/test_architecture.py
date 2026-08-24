@@ -134,3 +134,11 @@ def test_loop_context_compression_is_a_plugin():
     assert "loop_context_compress" not in client
     for path in (ROOT / "runner/workflow").rglob("*.py"):
         assert "context_compress" not in path.read_text(encoding="utf-8")
+
+    for relative in (
+        "ai_task_runner.py",
+        "runner/config/runtime.py",
+        "runner/script_loader.py",
+        "runner/script_runner.py",
+    ):
+        assert "loop_context_compress" not in (ROOT / relative).read_text(encoding="utf-8")

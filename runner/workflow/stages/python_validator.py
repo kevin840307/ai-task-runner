@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from collections.abc import Callable
 from typing import Literal
 
 from ...errors import RunnerError
@@ -49,7 +49,7 @@ class PythonValidatorStage:
             return StageResult(self.name, "pass", output="FILE_VALIDATION_SKIPPED")
         validator = self._validator(ctx)
         if self.spec.clear_reports:
-            clear_validator_reports(ctx.root)
+            clear_validator_reports(ctx.work)
         command = [
             sys.executable,
             str(validator),
@@ -93,8 +93,8 @@ class PythonValidatorStage:
         return ctx.validator_path
 
 
-def clear_validator_reports(root: Path) -> None:
-    reports = root / ".ai-task-runner" / "validator-reports"
+def clear_validator_reports(work: Path) -> None:
+    reports = work / "validator-reports"
     if not reports.exists() and not reports.is_symlink():
         return
     try:

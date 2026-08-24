@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator
-from typing import Any, TypeVar, TypedDict
+from typing import Any, TypedDict, TypeVar
 
-from ..errors import RunnerError
+from ..errors import RunnerError, StructuredOutputError
 from ..prompts.loader import structured_retry_prompt
 
 T = TypeVar("T")
@@ -109,7 +109,10 @@ def structured_call(
                     raw = ask(retry_prompt(str(error)))
                     continue
                 if fresh_ask is None or fresh_round >= fresh_retries:
-                    raise
+                    exhausted = StructuredOutputError(str(error))
+                    if fresh_retries:
+                        exhausted.same_session_retry_limit = 0
+                    raise exhausted from error
                 fresh_round += 1
                 raw = fresh_ask()
                 break

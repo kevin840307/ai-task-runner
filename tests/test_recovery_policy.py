@@ -68,6 +68,14 @@ class ReviewErrorStage(AskStage):
     skip_on_error = True
 
 
+class UnlimitedValidationStage(AskStage):
+    name = 'validate_ai'
+    mode = 'readonly'
+    actor = 'validator'
+    run_state = 'validating'
+    retry = -1
+
+
 class ChangedErrorStage(AskStage):
     def run(self, ctx, previous=None):
         return StageResult.error_result(self.name, RunnerError('bad output')).__class__(
@@ -106,6 +114,24 @@ def test_default_non_api_retry_is_two_then_fresh_session(tmp_path):
     assert result.status == 'pass'
     assert [session for session, _ in model.calls] == ['session-A', 'session-A', 'session-A', '']
     assert ctx.state.ai_session_id == model.session_id == 'session-B'
+
+
+def test_unlimited_validation_keeps_default_same_then_fresh_recovery(tmp_path):
+    model = SessionFakeAI([RunnerError('same')] * 3 + [None])
+    ctx = context(tmp_path, model)
+    result = StageExecutor(Hooks()).run(UnlimitedValidationStage(), ctx)
+    assert result.status == 'pass'
+    assert [session for session, _ in model.calls] == [
+        'session-A', 'session-A', 'session-A', ''
+    ]
+
+
+def test_unlimited_validation_continues_after_a_failed_fresh_round(tmp_path):
+    model = SessionFakeAI([RunnerError('same')] * 7 + [None])
+    ctx = context(tmp_path, model)
+    result = StageExecutor(Hooks()).run(UnlimitedValidationStage(), ctx)
+    assert result.status == 'pass'
+    assert len(model.calls) == 8
 
 
 def test_different_failure_resets_retry_count(tmp_path):
@@ -155,18 +181,20 @@ def test_changed_error_is_not_counted_as_failure(tmp_path):
     assert ctx.state.same_failures == 0
 
 
-def test_same_session_prompt_is_short_but_fresh_prompt_restores_spec_and_task(tmp_path):
+def test_same_session_prompt_is_short_and_fresh_wrapper_does_not_duplicate_context(tmp_path):
     model = SessionFakeAI([])
     ctx = context(tmp_path, model)
     stage = AIStage(AIStageSpec(name='execute', status='execute'))
     ctx.execution.previous_error = 'Loop detection halted the run'
     same = stage._same_session_prompt(ctx)
-    fresh = stage._fresh_session_prompt(ctx, 'STAGE-SPEC')
+    original = 'ORIGINAL SPEC\nCurrent TODO\nDo only this TODO\nSTAGE-SPEC'
+    fresh = stage._fresh_session_prompt(ctx, original)
     assert 'ORIGINAL SPEC' not in same
     assert 'Do only this TODO' not in same
     assert 'Do not repeat the exact failed action' in same
-    assert 'ORIGINAL SPEC' in fresh
-    assert 'Current TODO' in fresh and 'Do only this TODO' in fresh
+    assert fresh.count('ORIGINAL SPEC') == 1
+    assert fresh.count('Current TODO') == 1
+    assert fresh.count('Do only this TODO') == 1
     assert 'Inspect the CURRENT project state first' in fresh
     assert 'STAGE-SPEC' in fresh
 

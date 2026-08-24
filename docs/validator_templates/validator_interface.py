@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 import traceback
 from pathlib import Path
 from typing import Iterable
@@ -41,7 +42,13 @@ class ValidatorReport:
         stdout_items: int = DEFAULT_STDOUT_ITEMS,
     ) -> None:
         self.project_root = Path(project_root).resolve()
-        self.report_dir = self.project_root / ".ai-task-runner" / "validator-reports" / name
+        work = Path(
+            os.environ.get(
+                "AI_TASK_RUNNER_WORK_DIR",
+                self.project_root / ".ai-task-runner",
+            )
+        )
+        self.report_dir = work / "validator-reports" / name
         self.stdout_items = stdout_items
         self.errors: list[Finding] = []
         self.warnings: list[Finding] = []
@@ -188,4 +195,3 @@ def run_validation(report: ValidatorReport, check) -> int:
             fix="Use the traceback to identify the failing validator step, then fix the project output or validator input that triggered it.",
         )
     return report.finish()
-

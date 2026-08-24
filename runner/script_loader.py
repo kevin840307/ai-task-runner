@@ -1,10 +1,12 @@
 """Load YAML batch items and translate them into canonical runner fields."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .errors import RunnerError
+from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 
 
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
@@ -62,10 +64,18 @@ def _options(item: dict[str, Any], index: int) -> dict[str, Any]:
         if not isinstance(value, str) or not value.strip():
             raise RunnerError(f"script item {index} project_root must be a non-empty string")
         result["project_root"] = value.strip()
-    if "loop_context_compress" in item:
-        result["loop_context_compress"] = item["loop_context_compress"]
-    if "loop_context_compress_threshold" in item:
-        result["loop_context_compress_threshold"] = item["loop_context_compress_threshold"]
+    configured_plugins = item.get("plugins", {})
+    if not isinstance(configured_plugins, Mapping):
+        raise RunnerError(f"script item {index} plugins must be an object")
+    try:
+        plugins = merge_plugin_config(
+            plugin_config_from_yaml(item),
+            configured_plugins,
+        )
+    except ValueError as error:
+        raise RunnerError(f"script item {index} {error}") from error
+    if plugins:
+        result["plugins"] = plugins
 
     aliases = {
         "review_retries": "review_retries",

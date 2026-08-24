@@ -66,15 +66,36 @@ def test_plain_console_deduplicates_same_status(tmp_path, capsys):
     assert ui._thread is None
 
 
-def test_max_cycles_zero_is_unlimited_and_positive_is_enforced(tmp_path):
+def test_max_cycles_minus_one_is_unlimited_and_non_negative_is_enforced(tmp_path):
     state = _state(tmp_path)
-    ctx = SimpleNamespace(state=state, config=SimpleNamespace(max_cycles=0))
+    ctx = SimpleNamespace(state=state, config=SimpleNamespace(max_cycles=-1))
     invalidate_plan(ctx)
     assert state.cycle == 2
 
     ctx.config.max_cycles = 2
     with pytest.raises(ConfigurationError, match='max cycles reached: 2'):
         invalidate_plan(ctx)
+
+    state.cycle = 0
+    ctx.config.max_cycles = 0
+    with pytest.raises(ConfigurationError, match='max cycles reached: 0'):
+        invalidate_plan(ctx)
+
+
+def test_retry_limits_accept_only_minus_one_or_non_negative_values():
+    RuntimeConfig(
+        goal='x',
+        validator='ai',
+        same_session_retries=-1,
+        review_retries=-1,
+        max_cycles=-1,
+    ).validate()
+    with pytest.raises(ValueError, match='must be -1'):
+        RuntimeConfig(
+            goal='x',
+            validator='ai',
+            same_session_retries=-2,
+        ).validate()
 
 
 class _Hooks:

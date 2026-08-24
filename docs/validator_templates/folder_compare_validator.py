@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import configparser
 import difflib
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -276,7 +277,10 @@ def main() -> int:
     _state_file = Path(args.state_file).resolve()
     expected_root = (project_root / args.expected_dir).resolve()
     actual_root = (project_root / args.actual_dir).resolve()
-    report_dir = project_root / ".ai-task-runner" / "validator-reports" / "folder-compare"
+    work = Path(
+        os.environ.get("AI_TASK_RUNNER_WORK_DIR", project_root / ".ai-task-runner")
+    )
+    report_dir = work / "validator-reports" / "folder-compare"
 
     errors: list[tuple[str, str, set[str], str]] = []
     warnings: list[tuple[str, str, set[str]]] = []

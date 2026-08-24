@@ -3,6 +3,64 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from ..config.defaults import (
+    DEFAULT_LOOP_CONTEXT_COMPRESS,
+    DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+)
+from ..config.runtime import is_number
+
+PLUGIN_NAME = "context_compression"
+
+
+def add_arguments(parser) -> None:
+    parser.add_argument(
+        "--loop-context-compress",
+        action="store_true",
+        help="on Loop Detection, compact the session when context usage reaches the threshold",
+    )
+    parser.add_argument(
+        "--loop-context-compress-threshold",
+        type=float,
+        default=DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+        metavar="PERCENT",
+        help="context usage percent required for Loop Detection compression (default: 50)",
+    )
+
+
+def config_from_namespace(namespace) -> dict[str, object]:
+    return {
+        "enabled": namespace.loop_context_compress,
+        "threshold": namespace.loop_context_compress_threshold,
+    }
+
+
+def config_from_request(request) -> dict[str, object]:
+    return {
+        "enabled": request.loop_context_compress,
+        "threshold": request.loop_context_compress_threshold,
+    }
+
+
+def config_from_yaml(item) -> dict[str, object]:
+    fields = {
+        "loop_context_compress": "enabled",
+        "loop_context_compress_threshold": "threshold",
+    }
+    return {target: item[source] for source, target in fields.items() if source in item}
+
+
+def normalize_config(config) -> dict[str, object]:
+    unknown = sorted(set(config) - {"enabled", "threshold"})
+    if unknown:
+        raise ValueError(f"{PLUGIN_NAME} unknown options: " + ", ".join(unknown))
+    enabled = config.get("enabled", DEFAULT_LOOP_CONTEXT_COMPRESS)
+    threshold = config.get("threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD)
+    if not isinstance(enabled, bool):
+        raise ValueError("loop_context_compress must be a boolean")  # noqa: TRY004
+    if not is_number(threshold) or not 0 <= threshold <= 100:
+        raise ValueError("loop_context_compress_threshold must be between 0 and 100")
+    return {"enabled": enabled, "threshold": float(threshold)}
+
 
 def _safe_call(action: Callable[[], str]) -> str:
     try:
@@ -13,8 +71,9 @@ def _safe_call(action: Callable[[], str]) -> str:
 
 class ContextCompressionPlugin:
     def __init__(self, config) -> None:
-        self.enabled = config.loop_context_compress
-        self.threshold = float(config.loop_context_compress_threshold)
+        options = normalize_config(config.plugins.get(PLUGIN_NAME, {}))
+        self.enabled = options["enabled"]
+        self.threshold = options["threshold"]
 
     def model_error(self, client, error) -> None:
         session = error.session_id or client.session_id
@@ -61,4 +120,4 @@ def register(runtime) -> None:
     runtime.hooks.add(ContextCompressionPlugin(runtime.config))
 
 
-__all__ = ["ContextCompressionPlugin", "register"]
+__all__ = ["PLUGIN_NAME", "ContextCompressionPlugin", "register"]

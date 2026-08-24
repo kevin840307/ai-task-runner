@@ -1,6 +1,15 @@
 from pathlib import Path
 
-from runner.workflow.stages import AIStage, AIStageSpec, PlanStage, PlanStageSpec, PythonValidatorStage, PythonValidatorStageSpec
+from runner.workflow.definitions import STAGES
+from runner.workflow.stages import (
+    AIStage,
+    AIStageSpec,
+    PlanStage,
+    PlanStageSpec,
+    PythonValidatorStage,
+    PythonValidatorStageSpec,
+)
+from runner.workflow.stages.python_validator import clear_validator_reports
 
 
 def test_only_ai_plan_and_python_validator_stage_implementations_exist():
@@ -24,5 +33,23 @@ def test_retry_is_common_executor_metadata():
     assert 'while True' in executor
 
 
+def test_final_ai_validation_retries_until_pass():
+    assert STAGES['validate_ai']['retry'] == -1
+
+
 def test_plan_stage_is_ai_stage_with_only_plan_parser_difference():
     assert issubclass(PlanStage, AIStage)
+
+
+def test_validator_reports_are_cleared_from_configured_work_dir(tmp_path):
+    work = tmp_path / "custom-work"
+    reports = work / "validator-reports"
+    reports.mkdir(parents=True)
+    (reports / "old.txt").write_text("old", encoding="utf-8")
+    untouched = tmp_path / ".ai-task-runner" / "validator-reports"
+    untouched.mkdir(parents=True)
+
+    clear_validator_reports(work)
+
+    assert not reports.exists()
+    assert untouched.exists()

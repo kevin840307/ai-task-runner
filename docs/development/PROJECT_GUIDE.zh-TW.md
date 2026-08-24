@@ -61,7 +61,7 @@ Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesyst
 - Final AI voting：每個 validation run 都建立不同 Fresh Session。
 
 ## Validation 與 YAML List
-Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭與結尾。External Validator（exe、bat、jar、Java CLI 等）應使用 `docs/validator_templates/external_command_validator.py`；設定的 log folder 會複製到 `.ai-task-runner/validator-reports/external-command/`。
+Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭與結尾。Runner 會為 Validator process 設定 `AI_TASK_RUNNER_WORK_DIR`；維護中的模板會把報告寫到其 `validator-reports/` 下，單獨執行時則 fallback 到 `.ai-task-runner`。External Validator（exe、bat、jar、Java CLI 等）應使用 `docs/validator_templates/external_command_validator.py`。
 
 支援三種 validation：AI-only、Python-only、Mixed。Mixed 一律先 Python hard gate，再 Final AI voting。
 

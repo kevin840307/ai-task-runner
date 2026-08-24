@@ -92,12 +92,17 @@ def test_run_process_logs_pid_return_code_and_clears_active_file(tmp_path, monke
     monkeypatch.setattr(bootstrap, "current_runtime", lambda: runtime)
 
     result = process_module.run_process(
-        [sys.executable, "-c", "print('ok')"],
+        [
+            sys.executable,
+            "-c",
+            "import os; print(os.environ['AI_TASK_RUNNER_WORK_DIR'])",
+        ],
         tmp_path,
         10,
     )
 
     assert result.return_code == 0
+    assert result.output.strip() == str(work)
     assert [event["type"] for event in events] == [
         "runner.process.start", "runner.process.exit"
     ]

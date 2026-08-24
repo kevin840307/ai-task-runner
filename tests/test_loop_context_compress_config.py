@@ -21,8 +21,10 @@ def test_loop_context_compression_cli_normalizes_to_runtime_config():
     ])
     request = RunRequest.from_namespace(args)
     config = request.normalized_config()
-    assert config.loop_context_compress is True
-    assert config.loop_context_compress_threshold == 65.0
+    assert config.plugins["context_compression"] == {
+        "enabled": True,
+        "threshold": 65.0,
+    }
 
 
 def test_loop_context_compression_threshold_is_bounded():
@@ -44,5 +46,27 @@ def test_yaml_item_accepts_loop_context_compression(tmp_path: Path):
         encoding="utf-8",
     )
     item = load_yaml_script(script)[0]
-    assert item["loop_context_compress"] is True
-    assert item["loop_context_compress_threshold"] == 60.0
+    assert item["plugins"]["context_compression"] == {
+        "enabled": True,
+        "threshold": 60,
+    }
+
+
+def test_generic_plugin_mapping_uses_the_same_validation(tmp_path: Path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: x\n"
+        "  validator: ai\n"
+        "  plugins:\n"
+        "    context_compression:\n"
+        "      enabled: true\n"
+        "      threshold: 70\n",
+        encoding="utf-8",
+    )
+    item = load_yaml_script(script)[0]
+    config = RunRequest(
+        goal="x",
+        validator="ai",
+        plugins=item["plugins"],
+    ).normalized_config()
+    assert config.plugins["context_compression"]["threshold"] == 70.0
