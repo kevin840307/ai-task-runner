@@ -46,7 +46,7 @@ def test_plain_ai_stage_needs_no_prompt_builder_registry(tmp_path):
     }
     stage = create_stage(definition)
     prompt = stage._original_prompt(context(tmp_path), None)
-    assert "Final validation in a fresh independent session" in prompt
+    assert "Final validation. This is a fresh independent read-only session." in prompt
     assert "ORIGINAL GOAL" in prompt
 
 

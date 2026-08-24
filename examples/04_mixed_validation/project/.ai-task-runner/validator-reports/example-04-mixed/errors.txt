@@ -1,2 +1,0 @@
-[E001] Functional validation failed
-- missing todo_cli.py

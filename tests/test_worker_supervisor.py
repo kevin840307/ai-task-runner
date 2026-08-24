@@ -115,12 +115,25 @@ def test_cleanup_orphan_only_for_matching_worker(tmp_path, monkeypatch):
     active.write_text("100 200", encoding="ascii")
     request = SimpleNamespace(project_root=str(tmp_path), work_dir=".ai-task-runner")
     calls = []
-    monkeypatch.setattr(ai_task_runner.os, "killpg", lambda pid, sig: calls.append((pid, sig)))
+    if ai_task_runner.os.name == "nt":
+        monkeypatch.setattr(
+            ai_task_runner.subprocess,
+            "run",
+            lambda command, **kwargs: calls.append(command),
+        )
+    else:
+        monkeypatch.setattr(
+            ai_task_runner.os,
+            "killpg",
+            lambda pid, sig: calls.append((pid, sig)),
+        )
 
     ai_task_runner._cleanup_orphan(request, 999)
     assert calls == []
     assert active.exists()
 
     ai_task_runner._cleanup_orphan(request, 100)
-    assert calls and calls[0][0] == 200
+    assert calls
+    child = calls[0][2] if ai_task_runner.os.name == "nt" else calls[0][0]
+    assert str(child) == "200"
     assert not active.exists()

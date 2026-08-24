@@ -176,8 +176,8 @@ def runner_command(
         command.extend([
             "--planning-timeout", "1",
             "--agent-timeout", "1",
-            "--max-session-resets", "1",
-            "--no-progress-timeout", "30",
+            "--max-attempts", "1",
+            "--max-cycles", "1",
         ])
     if final_ai:
         command.extend([
@@ -260,6 +260,64 @@ def console_log(project: Path, name: str) -> Path:
     return project.parent / "_harness-logs" / f"{project.name}-{name}"
 
 
+def runner_events(project: Path) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    try:
+        lines = (project / ".ai-task-runner" / "log.txt").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except OSError:
+        return events
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
+def observed_session(project: Path, session_id: str, mode: str) -> bool:
+    return any(
+            event.get("type") == "model.prompt"
+            and event.get("session") == session_id
+            and event.get("session_mode") == mode
+        for event in runner_events(project)
+    )
+
+
+def final_validation_sessions(project: Path) -> set[str]:
+    sessions: set[str] = set()
+    validating = False
+    for event in runner_events(project):
+        if (
+            event.get("type") == "runner.stage"
+            and event.get("action") == "start"
+            and event.get("stage") == "validate_ai"
+        ):
+            validating = True
+        elif (
+            validating
+            and event.get("type") == "model.result"
+            and not event.get("error")
+            and isinstance(event.get("session"), str)
+            and event["session"]
+        ):
+            sessions.add(event["session"])
+    return sessions
+
+
+def observed_stage_result(project: Path, stage: str, result: str) -> bool:
+    return any(
+            event.get("type") == "runner.stage"
+            and event.get("action") == "finish"
+            and event.get("stage") == stage
+            and event.get("result") == result
+        for event in runner_events(project)
+    )
+
+
 def assert_completed(
     project: Path,
     code: int,
@@ -273,7 +331,6 @@ def assert_completed(
         raise RuntimeError(f"validator passed but {expected_file} is incorrect")
     required = (
         project / ".ai-task-runner" / "log.txt",
-        project / ".ai-task-runner" / "checkpoint.json",
         project / ".ai-task-runner" / "debug" / "last-prompt.txt",
         project / ".ai-task-runner" / "debug" / "last-result.txt",
     )
@@ -304,7 +361,7 @@ def resume_probe(settings: Settings, root: Path) -> None:
     try:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
-            session = state.get("agent_session_id")
+            session = state.get("ai_session_id")
             if isinstance(session, str) and session and state.get("completed") is not True:
                 interrupted_session = session
                 terminate(process)
@@ -323,11 +380,9 @@ def resume_probe(settings: Settings, root: Path) -> None:
 
     def observe_resume() -> None:
         nonlocal saw_resume
-        current = project / ".ai-task-runner" / "debug" / "current-prompt.txt"
-        try:
-            saw_resume = saw_resume or "mode=resume" in current.read_text(encoding="utf-8")
-        except OSError:
-            pass
+        saw_resume = saw_resume or observed_session(
+            project, interrupted_session, "resume"
+        )
 
     code = run_command(
         runner_command(settings, project, resume=True),
@@ -347,7 +402,6 @@ def validator_repair_probe(settings: Settings, root: Path) -> None:
     marker = root / "_harness-control" / "repair-first-value.txt"
     validator = f'''from __future__ import annotations
 import argparse
-import json
 from pathlib import Path
 
 p = argparse.ArgumentParser()
@@ -356,17 +410,12 @@ p.add_argument("--state-file", required=True)
 a = p.parse_args()
 target = Path(a.project_root).resolve() / "repair.txt"
 marker = Path({str(marker)!r})
-stage = json.loads(Path(a.state_file).read_text(encoding="utf-8")).get("stage")
-expected = {REPAIR_FINAL!r} if marker.exists() else {REPAIR_INITIAL!r}
-if stage != "final_validate":
-    if not target.is_file() or target.read_text(encoding="utf-8") != expected:
-        print(f"VALIDATION_FAILED: repair.txt must contain exactly {{expected}}")
-        raise SystemExit(1)
-    print("VALIDATION_PASSED")
-    raise SystemExit(0)
 if not marker.exists():
+    if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_INITIAL!r}:
+        print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_INITIAL}")
+        raise SystemExit(1)
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(target.read_text(encoding="utf-8") if target.is_file() else "MISSING", encoding="utf-8")
+    marker.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
     print("VALIDATION_FAILED: replace repair.txt content with exactly {REPAIR_FINAL}")
     raise SystemExit(1)
 if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_FINAL!r}:
@@ -462,19 +511,18 @@ def final_ai_quorum_probe(
     assert_completed(project, code)
     output = str(read_state(project).get("validator_output", ""))
     if mixed:
-        if not output.startswith("FILE_VALIDATION_PASS\n"):
+        if not observed_stage_result(project, "validate_file", "pass"):
             raise RuntimeError("mixed validation did not record the Python hard gate")
-        output = output.split("\n", 1)[1]
     try:
         evidence = json.loads(output)
     except json.JSONDecodeError as error:
         raise RuntimeError("Final AI quorum evidence is not JSON") from error
     if not (
         evidence.get("passed") is True
-        and evidence.get("configured_validations") == 3
         and evidence.get("required_passes") == 2
         and evidence.get("passes", 0) >= 2
-        and 2 <= evidence.get("completed_validations", 0) <= 3
+        and len(evidence.get("runs", [])) == 3
+        and len(final_validation_sessions(project)) >= 3
     ):
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
@@ -504,7 +552,7 @@ def api_recovery_probe(settings: Settings, root: Path) -> None:
             try:
                 while process.poll() is None and time.monotonic() < deadline:
                     state = read_state(project)
-                    current_session = state.get("agent_session_id")
+                    current_session = state.get("ai_session_id")
                     if not session_id and isinstance(current_session, str) and current_session:
                         session_id = current_session
                         proxy.fail = True
@@ -516,7 +564,12 @@ def api_recovery_probe(settings: Settings, root: Path) -> None:
                         evidence = evidence_path.read_text(encoding="utf-8")
                     except OSError:
                         evidence = ""
-                    if session_id and current_session not in {session_id, ""}:
+                    if (
+                        session_id
+                        and isinstance(current_session, str)
+                        and current_session
+                        and current_session != session_id
+                    ):
                         raise RuntimeError("API recovery replaced the healthy session")
                     time.sleep(0.1)
             finally:
@@ -544,9 +597,18 @@ def timeout_probe(settings: Settings, root: Path) -> None:
         120,
     )
     state = read_state(project)
-    log = project / ".ai-task-runner" / "log.txt"
-    evidence = log.read_text(encoding="utf-8") if log.is_file() else ""
-    if code == 0 or state.get("stage") != "blocked" or "kind=timeout" not in evidence:
+    events = runner_events(project)
+    timed_out = any(
+        event.get("type") == "model.result"
+        and "timed out after" in str(event.get("error", ""))
+        for event in events
+    )
+    recovered = any(
+        event.get("type") == "runner.session"
+        and event.get("action") == "fresh"
+        for event in events
+    )
+    if code == 0 or state.get("completed") is True or not timed_out or not recovered:
         raise RuntimeError(
             f"timeout recovery evidence missing: exit={code}, stage={state.get('stage')}"
         )
@@ -631,7 +693,16 @@ def transient_proxy(upstream_port: int):
         def log_message(self, format: str, *args: object) -> None:
             pass
 
-    server = ThreadingHTTPServer(("0.0.0.0", 0), Handler)
+    class ProxyServer(ThreadingHTTPServer):
+        def handle_error(self, request, client_address) -> None:
+            if isinstance(
+                sys.exc_info()[1],
+                (BrokenPipeError, ConnectionAbortedError, ConnectionResetError),
+            ):
+                return
+            super().handle_error(request, client_address)
+
+    server = ProxyServer(("0.0.0.0", 0), Handler)
     control.port = int(server.server_address[1])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

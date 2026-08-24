@@ -22,3 +22,8 @@ Example/smoke validators use the local `validator_interface.py` reporting contra
 
 ## Prompt/validator alignment
 Smoke/example prompts contain task-specific requirements only; generic Runner behavior such as autonomous inspection, retry, and verification is not repeated. Deterministic validators must not enforce hidden formatting or planning strategy. Every hard validator assertion should map to an explicit task requirement or an immutable fixture invariant; qualitative goals such as concision should normally be warnings unless the prompt gives a numeric limit.
+
+## Qwen live reliability
+`python tool/qwen_live_reliability.py` is the opt-in real-Qwen reliability gate. It verifies process restart/resume with the same durable session, validator-driven repair, an injected transient API outage without replacing the healthy session, multi-TODO checkpoint resume without repeating completed work, independent Final AI 3/2 voting in three distinct sessions, mixed Python + Final AI validation, and bounded timeout recovery.
+
+Use `python tool/qwen_live_reliability.py --hours 24 --pause 30` for the 24-hour soak. A claim of 24-hour stability requires the command to run for the full wall-clock duration and produce a passing `summary.json`; passing the fault-injection probes alone is strong preflight evidence but is not a substitute for elapsed time. Per-run projects, concise console JSONL, Runner events, state, and diagnostics are stored under `.ai-task-runner-live/<timestamp>/`.

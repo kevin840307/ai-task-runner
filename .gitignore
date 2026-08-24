@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.vs/
+.qwen/
+.ai-task*/
+.pytest_cache/
+.ai-task-runner/

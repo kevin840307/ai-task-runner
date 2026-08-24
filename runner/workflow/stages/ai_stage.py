@@ -166,7 +166,7 @@ class AIStage:
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
         client.session_id = ""
         original = self._original_prompt(ctx, previous)
-        return self._ask(ctx, client, self._fresh_session_prompt(original))
+        return self._ask(ctx, client, self._fresh_session_prompt(ctx, original))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
@@ -199,7 +199,7 @@ class AIStage:
             return original
         if mode == "same" and getattr(client, "session_id", ""):
             return self._same_session_prompt(ctx)
-        return self._fresh_session_prompt(original)
+        return self._fresh_session_prompt(ctx, original)
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
@@ -228,12 +228,15 @@ class AIStage:
             + "Return the result required by the original stage instructions; do not restart unrelated work.\n"
         )
 
-    def _fresh_session_prompt(self, original: str) -> str:
+    def _fresh_session_prompt(self, ctx: StageContext, original: str) -> str:
+        task = build_stage_prompt_context(ctx, self.spec.name)["task"]
+        context = f"Original specification:\n{ctx.state.goal}\n"
+        if task is not None:
+            context += f"Current TODO:\n{json.dumps(task, ensure_ascii=False)}\n"
         return (
             f"Continue the same {self.name} stage in a fresh session. "
-            "Inspect current project state first and preserve valid existing work. "
-            "Follow the complete stage instructions below.\n\n"
-            + original
+            "Inspect the CURRENT project state first and preserve valid existing work.\n\n"
+            f"{context}Stage instructions:\n{original}"
         )
 
 

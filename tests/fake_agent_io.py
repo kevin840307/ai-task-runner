@@ -20,7 +20,8 @@ PromptStage = Literal[
 
 def read_prompt(args: list[str]) -> tuple[bool, str]:
     is_qwen = "--output-format" in args and "stream-json" in args
-    return is_qwen, sys.stdin.read() if is_qwen else args[-1]
+    prompt = sys.stdin.buffer.read().decode("utf-8") if is_qwen else args[-1]
+    return is_qwen, prompt
 
 
 def prompt_stage(prompt: str) -> PromptStage:
@@ -31,6 +32,8 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "plan_refine"
     if (
         "Create the implementation plan now" in prompt
+        or "Create the initial implementation plan now" in prompt
+        or "Create the repair implementation plan now" in prompt
         or "Plan only the remaining work" in prompt
     ):
         return "plan_finalize"
@@ -38,10 +41,14 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "review_finalize"
     if (
         "Review only. You are a read-only task reviewer" in prompt
+        or "Review only. Read-only: do not modify project files." in prompt
         or "Continue the same review stage." in prompt
     ):
         return "review"
-    if "Final validation in a fresh independent session" in prompt:
+    if (
+        "Final validation in a fresh independent session" in prompt
+        or "Final validation. This is a fresh independent read-only session." in prompt
+    ):
         return "validator"
     if any(
         marker in prompt
