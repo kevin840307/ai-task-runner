@@ -103,6 +103,7 @@ class Settings:
     run_timeout: float
     pause: float
     api_port: int
+    soak_final_ai_every: int
 
 
 @dataclass
@@ -122,6 +123,12 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--command", default="qwen.cmd" if os.name == "nt" else "qwen")
     parser.add_argument("--sandbox", action="store_true")
     parser.add_argument("--api-port", type=int, default=8080)
+    parser.add_argument(
+        "--soak-final-ai-every",
+        type=int,
+        default=0,
+        help="run mixed Python + Final AI validation every N soak runs; 0 disables",
+    )
     parser.add_argument(
         "--require-transient",
         action="store_true",
@@ -616,21 +623,33 @@ def timeout_probe(settings: Settings, root: Path) -> None:
         )
 
 
-def soak(settings: Settings, root: Path, hours: float) -> int:
+def soak(settings: Settings, root: Path, hours: float) -> tuple[int, int]:
     deadline = time.monotonic() + hours * 3600
     completed = 0
+    mixed_validations = 0
     while time.monotonic() < deadline:
-        project = create_project(root, f"soak-{completed + 1:04d}")
+        run_number = completed + 1
+        project = create_project(root, f"soak-{run_number:04d}")
+        mixed = (
+            settings.soak_final_ai_every > 0
+            and run_number % settings.soak_final_ai_every == 0
+        )
         code = run_command(
-            runner_command(settings, project),
+            runner_command(settings, project, final_ai=mixed),
             console_log(project, "console.jsonl"),
             settings.run_timeout,
         )
         assert_completed(project, code)
+        if mixed:
+            mixed_validations += 1
+            if len(final_validation_sessions(project)) < 3:
+                raise RuntimeError(
+                    f"soak-{run_number:04d} did not use three Final AI sessions"
+                )
         completed += 1
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    return completed
+    return completed, mixed_validations
 
 
 @contextmanager
@@ -779,16 +798,18 @@ def main() -> int:
     args = arguments()
     if (
         args.hours < 0 or args.pause < 0 or args.run_timeout <= 0
+        or args.soak_final_ai_every < 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
-            "hours/pause must be non-negative; run-timeout and api-port must be valid"
+            "hours/pause/soak-final-ai-every must be non-negative; "
+            "run-timeout and api-port must be valid"
         )
     if not shutil.which(args.command) and not Path(args.command).is_file():
         raise SystemExit(f"Qwen command not found: {args.command}")
     settings = Settings(
         args.workspace.resolve(), args.command, args.sandbox,
-        args.run_timeout, args.pause, args.api_port,
+        args.run_timeout, args.pause, args.api_port, args.soak_final_ai_every,
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
@@ -808,7 +829,9 @@ def main() -> int:
         print("PASS Python + Final AI 3/2 mixed probe", flush=True)
         timeout_probe(settings, run_root)
         print("PASS timeout/recovery-budget probe", flush=True)
-        completed = soak(settings, run_root, args.hours) if args.hours else 0
+        completed, soak_mixed_validations = (
+            soak(settings, run_root, args.hours) if args.hours else (0, 0)
+        )
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
     summary = {
@@ -816,6 +839,8 @@ def main() -> int:
         "sandbox": settings.sandbox,
         "hours_requested": args.hours,
         "soak_runs_completed": completed,
+        "soak_final_ai_every": settings.soak_final_ai_every,
+        "soak_mixed_validation_runs": soak_mixed_validations,
         "transient_observed": transient_observed,
         "run_root": str(run_root),
     }
