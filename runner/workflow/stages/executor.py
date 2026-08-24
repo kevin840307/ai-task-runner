@@ -179,10 +179,12 @@ class StageExecutor:
                     changed_files=list(dict.fromkeys([*result.changed_files, *changed])),
                 )
 
+        hooks_failed = False
         try:
             violations = self.hooks.after(action, tokens)
         except BaseException as error:
             violations = []
+            hooks_failed = True
             if result.status != "error":
                 result = StageResult.error_result(stage.name, error)
 
@@ -193,6 +195,10 @@ class StageExecutor:
                 for violation in violations
                 if not (tolerate and getattr(violation, "kind", "") == "readonly")
             ]
+        if hooks_failed or violations:
+            discard = getattr(stage, "discard_attempt_results", None)
+            if callable(discard):
+                discard()
         if violations:
             if result.status == "error":
                 result = replace(result, changed_files=[])
@@ -219,7 +225,7 @@ class StageExecutor:
             state.fresh_session_round = 0
         else:
             state.same_failures += 1
-        ctx.save_state()
+        ctx.set_stage(getattr(state, "stage", stage.name), str(error))
         return state.same_failures, state.fresh_session_round
 
     @staticmethod

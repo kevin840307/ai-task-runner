@@ -69,6 +69,9 @@ class AIStage:
         self.retry_attr = spec.retry_attr
         self.plan_only_stop = spec.plan_only_stop
         self.fresh_session_on_start = spec.fresh_session_on_start
+        self._completed_runs: list[StageResult] = []
+        self._run_pending = False
+        self._attempt_checkpoint = 0
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         """Perform one Stage attempt. Retry/Hook/Event are owned by StageExecutor."""
@@ -86,14 +89,16 @@ class AIStage:
                 f"AI stage {self.name} requires 1 <= required_passes <= runs"
             )
 
-        results: list[StageResult] = []
-        for run_index in range(runs):
+        self._attempt_checkpoint = len(self._completed_runs)
+        while len(self._completed_runs) < runs:
             client = self._client(ctx)
-            if self.spec.fresh_session_each_run and (
-                run_index > 0 or ctx.execution.retry_mode == "initial"
-            ):
+            if self.spec.fresh_session_each_run and not self._run_pending:
                 client.session_id = ""
-            results.append(self._run_once(ctx, previous, client))
+            self._run_pending = True
+            self._completed_runs.append(self._run_once(ctx, previous, client))
+            self._run_pending = False
+
+        results = list(self._completed_runs)
 
         if runs == 1:
             return results[0]
@@ -116,9 +121,18 @@ class AIStage:
         )
 
     def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
-        if self.spec.result_handler is None:
-            return result
-        return self.spec.result_handler(ctx, result)
+        try:
+            if self.spec.result_handler is None:
+                return result
+            return self.spec.result_handler(ctx, result)
+        finally:
+            self._completed_runs.clear()
+            self._run_pending = False
+
+    def discard_attempt_results(self) -> None:
+        """Discard votes produced by an attempt rejected by execution hooks."""
+        del self._completed_runs[self._attempt_checkpoint :]
+        self._run_pending = False
 
     def _run_once(self, ctx: StageContext, previous: StageResult | None, client) -> StageResult:
         spec = self.spec

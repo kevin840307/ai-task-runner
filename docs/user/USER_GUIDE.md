@@ -56,7 +56,7 @@ Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md 
 - Same Session is the normal first recovery path. It sends only new Stage/failure evidence and the next instruction.
 - After the configured same-session retry budget (default 2), the Runner uses a Fresh Session with complete necessary context.
 - Repeated identical failure after Fresh Session escalates to Replan; a different failure resets the streak.
-- Final AI validation is different from normal recovery: every configured vote starts a different Fresh Session.
+- Final AI validation is different from normal recovery: every configured vote starts a different Fresh Session. A completed vote is retained while a later vote recovers from a model error; votes produced during an attempt rejected by safety hooks are discarded.
 - Structured-output correction is bounded to at most two Same Session retries before configured Fresh fallback.
 
 ## JSON events / integration

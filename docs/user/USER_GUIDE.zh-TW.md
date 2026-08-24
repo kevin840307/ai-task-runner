@@ -67,7 +67,7 @@ YAML List 遇到第一個 non-zero result 就停止後續 item；已完成 item 
 - Same Session 是正常 failure 的第一 recovery 路徑，只補 Stage 身分、新 failure evidence 與下一步，不重送完整 Context。
 - Same Session retry budget（預設 2）用盡後，才建立 Fresh Session，並提供完整且必要的 Context。
 - Fresh Session 仍出現相同 persistent failure 時才升級 Replan；failure fingerprint 改變則重新計數。
-- Final AI Validation 與一般 recovery 不同：每個 configured vote 都必須使用不同 Fresh Session。
+- Final AI Validation 與一般 recovery 不同：每個 configured vote 都必須使用不同 Fresh Session。後續 vote 遇到模型異常並恢復時，已完成的 vote 會保留；若 safety hook 拒絕該 attempt，該次新增的 vote 會丟棄。
 - Structured Output correction 最多先做 2 次 Same Session retry，仍失敗才依設定 Fresh fallback。
 
 ## JSON events / Integration

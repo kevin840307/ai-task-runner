@@ -125,6 +125,54 @@ def test_ai_vote_recovery_preserves_three_distinct_successful_sessions(tmp_path)
     assert successful_sessions == ['S1', 'S2', 'S3']
 
 
+def test_ai_vote_recovery_does_not_repeat_completed_votes(tmp_path):
+    model = FakeAI(['OK', RunnerError('backend failed'), 'OK', 'OK'])
+    c = ctx(tmp_path, model, same_session_retries=2)
+    c.scratch['validator'] = model
+    prompt = tmp_path / 'validator-partial-recovery.md'
+    prompt.write_text('FULL', encoding='utf-8')
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator', runs=3,
+        fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
+        result_status=lambda data: 'pass', retry=-1,
+    ))
+
+    result = StageExecutor(Hooks()).run(stage, c)
+
+    assert result.status == 'pass'
+    assert len(model.calls) == 4
+    assert [after for _, after, _ in model.calls] == ['S1', 'S2', 'S2', 'S3']
+
+
+def test_ai_vote_hook_violation_discards_votes_from_rejected_attempt(tmp_path):
+    from runner.plugins.contracts import HookViolation
+
+    class RejectFirstAttempt(Hooks):
+        def __init__(self):
+            self.calls = 0
+
+        def after(self, action, tokens):
+            self.calls += 1
+            return [HookViolation('restored change')] if self.calls == 1 else []
+
+    model = FakeAI(['OK', RunnerError('backend failed'), 'OK', 'OK', 'OK'])
+    c = ctx(tmp_path, model, same_session_retries=2)
+    c.scratch['validator'] = model
+    prompt = tmp_path / 'validator-rejected-attempt.md'
+    prompt.write_text('FULL', encoding='utf-8')
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator', runs=3,
+        fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
+        result_status=lambda data: 'pass', retry=-1,
+    ))
+
+    result = StageExecutor(RejectFirstAttempt()).run(stage, c)
+
+    assert result.status == 'pass'
+    assert len(model.calls) == 5
+    assert [after for _, after, _ in model.calls[-3:]] == ['S3', 'S4', 'S5']
+
+
 class ReviewStage:
     name='review'; mode='readonly'; actor='model'; status='review'; detail=''; run_state='reviewing'
     retry=None; retry_attr='review_retries'; skip_on_error=True; tolerate_restored_changes=False
