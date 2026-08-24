@@ -11,11 +11,11 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -510,9 +510,8 @@ def final_ai_quorum_probe(
     )
     assert_completed(project, code)
     output = str(read_state(project).get("validator_output", ""))
-    if mixed:
-        if not observed_stage_result(project, "validate_file", "pass"):
-            raise RuntimeError("mixed validation did not record the Python hard gate")
+    if mixed and not observed_stage_result(project, "validate_file", "pass"):
+        raise RuntimeError("mixed validation did not record the Python hard gate")
     try:
         evidence = json.loads(output)
     except json.JSONDecodeError as error:
@@ -527,66 +526,69 @@ def final_ai_quorum_probe(
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
 
-def api_recovery_probe(settings: Settings, root: Path) -> None:
-    with transient_proxy(settings.api_port) as proxy:
-        with qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=1):
-            project = create_project(root, "api-recovery-probe")
-            log = console_log(project, "console.jsonl")
-            log.parent.mkdir(parents=True, exist_ok=True)
-            stream = log.open("w", encoding="utf-8")
-            options: dict[str, object] = {
-                "cwd": ROOT,
-                "stdin": subprocess.DEVNULL,
-                "stdout": stream,
-                "stderr": subprocess.STDOUT,
-                "text": True,
-            }
-            if os.name == "nt":
-                options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-            else:
-                options["start_new_session"] = True
-            process = subprocess.Popen(runner_command(settings, project), **options)
-            deadline = time.monotonic() + settings.run_timeout
-            session_id = ""
-            outage_until = 0.0
-            try:
-                while process.poll() is None and time.monotonic() < deadline:
-                    state = read_state(project)
-                    current_session = state.get("ai_session_id")
-                    if not session_id and isinstance(current_session, str) and current_session:
-                        session_id = current_session
-                        proxy.fail = True
-                        outage_until = time.monotonic() + 15
-                    if proxy.fail and time.monotonic() >= outage_until:
-                        proxy.fail = False
-                    evidence_path = project / ".ai-task-runner" / "log.txt"
-                    try:
-                        evidence = evidence_path.read_text(encoding="utf-8")
-                    except OSError:
-                        evidence = ""
-                    if (
-                        session_id
-                        and isinstance(current_session, str)
-                        and current_session
-                        and current_session != session_id
-                    ):
-                        raise RuntimeError("API recovery replaced the healthy session")
-                    time.sleep(0.1)
-            finally:
-                proxy.fail = False
-                if process.poll() is None:
-                    terminate(process)
-                stream.close()
-            code = process.returncode or 0
-            assert_completed(project, code)
-            evidence = (project / ".ai-task-runner" / "log.txt").read_text(
-                encoding="utf-8"
-            )
-            if (
-                not session_id or proxy.failures < 1
-                or "verdict=RESET_SESSION" in evidence
-            ):
-                raise RuntimeError("API outage did not recover in the same session")
+def api_recovery_probe(settings: Settings, root: Path) -> bool:
+    with (
+        transient_proxy(settings.api_port) as proxy,
+        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=1),
+    ):
+        project = create_project(root, "api-recovery-probe")
+        log = console_log(project, "console.jsonl")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        stream = log.open("w", encoding="utf-8")
+        options: dict[str, object] = {
+            "cwd": ROOT,
+            "stdin": subprocess.DEVNULL,
+            "stdout": stream,
+            "stderr": subprocess.STDOUT,
+            "text": True,
+        }
+        if os.name == "nt":
+            options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            options["start_new_session"] = True
+        process = subprocess.Popen(runner_command(settings, project), **options)
+        deadline = time.monotonic() + settings.run_timeout
+        session_id = ""
+        outage_until = 0.0
+        try:
+            while process.poll() is None and time.monotonic() < deadline:
+                state = read_state(project)
+                current_session = state.get("ai_session_id")
+                if not session_id and isinstance(current_session, str) and current_session:
+                    session_id = current_session
+                    proxy.fail = True
+                    outage_until = time.monotonic() + 15
+                if proxy.fail and time.monotonic() >= outage_until:
+                    proxy.fail = False
+                evidence_path = project / ".ai-task-runner" / "log.txt"
+                try:
+                    evidence = evidence_path.read_text(encoding="utf-8")
+                except OSError:
+                    evidence = ""
+                if (
+                    session_id
+                    and isinstance(current_session, str)
+                    and current_session
+                    and current_session != session_id
+                ):
+                    raise RuntimeError("API recovery replaced the healthy session")
+                time.sleep(0.1)
+        finally:
+            proxy.fail = False
+            if process.poll() is None:
+                terminate(process)
+            stream.close()
+        code = process.returncode or 0
+        assert_completed(project, code)
+        evidence = (project / ".ai-task-runner" / "log.txt").read_text(
+            encoding="utf-8"
+        )
+        if (
+            not session_id or proxy.failures < 1 or proxy.successes < 1
+            or "verdict=RESET_SESSION" in evidence
+        ):
+            raise RuntimeError("API outage did not recover in the same session")
+        return True
 
 
 def timeout_probe(settings: Settings, root: Path) -> None:
@@ -629,16 +631,6 @@ def soak(settings: Settings, root: Path, hours: float) -> int:
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
     return completed
-
-
-def has_transient_evidence(root: Path) -> bool:
-    for path in root.rglob("log.txt"):
-        try:
-            if "kind=transient" in path.read_text(encoding="utf-8"):
-                return True
-        except OSError:
-            pass
-    return False
 
 
 @contextmanager
@@ -806,7 +798,7 @@ def main() -> int:
         print("PASS resume/process-restart probe", flush=True)
         validator_repair_probe(settings, run_root)
         print("PASS validator-fail/repair probe", flush=True)
-        api_recovery_probe(settings, run_root)
+        transient_observed = api_recovery_probe(settings, run_root)
         print("PASS transient API/same-session recovery probe", flush=True)
         multi_todo_resume_probe(settings, run_root)
         print("PASS multi-TODO/checkpoint resume probe", flush=True)
@@ -817,14 +809,14 @@ def main() -> int:
         timeout_probe(settings, run_root)
         print("PASS timeout/recovery-budget probe", flush=True)
         completed = soak(settings, run_root, args.hours) if args.hours else 0
-        if args.require_transient and not has_transient_evidence(run_root):
+        if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
     summary = {
         "passed": True,
         "sandbox": settings.sandbox,
         "hours_requested": args.hours,
         "soak_runs_completed": completed,
-        "transient_observed": has_transient_evidence(run_root),
+        "transient_observed": transient_observed,
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(

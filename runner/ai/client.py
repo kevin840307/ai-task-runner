@@ -9,10 +9,9 @@ from typing import NoReturn, TypeVar
 from ..config.defaults import DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
 from ..errors import RunnerError, diagnostic_detail
 from ..runtime import events
-from .contracts import BackendMode
-from .errors import BackendError, AIError
-from .session import is_session_invalid_error, is_transient_service_error
 from .diagnostics import error_result, prepare_session_recovery
+from .errors import AIError, BackendError
+from .session import is_session_invalid_error, is_transient_service_error
 
 T = TypeVar("T")
 
@@ -211,7 +210,10 @@ def build_backend_args(config, mode, *, allow_project_read=False):
 def create_ai_client(config, root, debug_dir=None, *, mode="runtime", session_id="", timeout=None, allow_project_read=False, extra_args=None, constructor=AIClient):
     """Create one AI client directly; no factory lifecycle is required."""
     from ..backends.registry import configure_sandbox_args
-    from ..config.defaults import DEFAULT_AGENT_TIMEOUT, DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
+    from ..config.defaults import (
+        DEFAULT_AGENT_TIMEOUT,
+        DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
+    )
     args = (
         configure_sandbox_args(config.backend, extra_args, sandbox=getattr(config, "sandbox", False))
         if extra_args is not None
