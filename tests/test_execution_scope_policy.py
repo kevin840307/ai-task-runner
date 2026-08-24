@@ -1,13 +1,12 @@
 from pathlib import Path
 
-from runner.errors import RunnerError
-from runner.workflow.stages.executor import StageExecutor
+from runner.errors import RunnerError, is_transient_error
 
 
 def test_transient_service_error_is_not_a_real_stage_failure():
     error = RunnerError("service unavailable")
     error.transient = True
-    assert StageExecutor._is_service_error(error)
+    assert is_transient_error(error)
 
 
 def test_pipeline_does_not_own_task_or_stage_specific_policy():

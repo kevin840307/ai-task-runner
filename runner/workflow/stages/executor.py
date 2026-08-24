@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...bootstrap import current_runtime
 from ...config.defaults import DEFAULT_MAX_ATTEMPTS
-from ...errors import ConfigurationError, RunnerError
+from ...errors import ConfigurationError, RunnerError, is_transient_error
 from ...project.files import changed_project_files, project_manifest
 from ...runtime import progress
 from .contracts import Stage, StageContext, StageExecution, StageResult
@@ -92,7 +92,7 @@ class StageExecutor:
                 0,
                 int(getattr(error, "same_session_retry_limit", same_retry_limit)),
             )
-            if self._is_service_error(error):
+            if is_transient_error(error):
                 progress.service_wait_exhausted(stage.name, str(error)[-1000:])
                 raise error
 
@@ -200,17 +200,6 @@ class StageExecutor:
                 messages = [violation.message for violation in violations]
                 result = StageResult.error_result(stage.name, RunnerError("; ".join(messages)))
         return result
-
-    @staticmethod
-    def _is_service_error(error: BaseException) -> bool:
-        seen: set[int] = set()
-        current: BaseException | None = error
-        while current is not None and id(current) not in seen:
-            seen.add(id(current))
-            if bool(getattr(current, "transient", False)):
-                return True
-            current = current.__cause__ or current.__context__
-        return False
 
     @staticmethod
     def _failure_key(stage: Stage, ctx: StageContext, error: BaseException) -> tuple[str, str]:

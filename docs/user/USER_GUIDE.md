@@ -69,7 +69,7 @@ Repeat `--agent-arg` per backend argv item. Use `--command` only to override the
 Repeat `--protect-file` for additional paths. Project policy is preferred for stable project-owned rules. If a readonly Stage attempts a write, Safety restores the change and the attempt is treated as a failure; same-session recovery sends only the new stage/failure delta.
 
 ## Debug
-Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing AI behavior. Logs/events stay concise but retain Stage, session mode, retry/recovery, process exit, and validator evidence needed for 24H debugging.
+Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing AI behavior. Logs/events stay concise but retain Stage, session mode, retry/recovery, process exit, and validator evidence needed for 24H debugging. `log.txt` and `exception.log` rotate at 10 MB and retain one previous file; model-call history keeps its separate bounded policy.
 
 ## Timeout defaults
 | Option | Default |

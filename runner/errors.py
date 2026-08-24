@@ -35,6 +35,18 @@ def diagnostic_error(error: BaseException) -> BaseException | None:
     return None
 
 
+def is_transient_error(error: BaseException) -> bool:
+    """Return whether any error in the wrapped chain is a transient service failure."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if bool(getattr(current, "transient", False)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def backend_diagnostic_parts(
     error: BaseException,
     *,
@@ -115,4 +127,5 @@ __all__ = [
     "backend_diagnostic_parts",
     "diagnostic_detail",
     "diagnostic_error",
+    "is_transient_error",
 ]

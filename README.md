@@ -85,7 +85,7 @@ Cross-cutting features stay outside the flow: status events feed UI/logging/diag
 `Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> next_flow/replace_remaining/complete -> next Stage`
 
 Unified execution rules:
-- API/service failures use exponential backoff inside the AI client for up to one configured wait window (default 1 hour) and do not count as Stage failures.
+- API/service failures use exponential backoff inside the AI client for one configured wait window (default 1 hour) and do not count as Stage failures. If a window is exhausted, canonical `runner.api.run()` resumes durable direct/YAML state and opens another window until the task passes.
 - Real failures retry in the same session using a short stage-aware continuation prompt containing only the stage identity, new failure evidence, and required next action; after the configured retry count (default 2), StageExecutor starts a fresh session.
 - Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. Different failures reset the failure streak.
 - A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.

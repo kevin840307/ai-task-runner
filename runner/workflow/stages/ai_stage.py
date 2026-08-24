@@ -168,7 +168,7 @@ class AIStage:
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
         client.session_id = ""
         original = self._original_prompt(ctx, previous)
-        return self._ask(ctx, client, self._fresh_session_prompt(ctx, original))
+        return self._ask(ctx, client, self._fresh_session_prompt(original))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
@@ -201,7 +201,7 @@ class AIStage:
             return original
         if mode == "same" and getattr(client, "session_id", ""):
             return self._same_session_prompt(ctx)
-        return self._fresh_session_prompt(ctx, original)
+        return self._fresh_session_prompt(original)
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
@@ -230,7 +230,7 @@ class AIStage:
             + "Return the result required by the original stage instructions; do not restart unrelated work.\n"
         )
 
-    def _fresh_session_prompt(self, ctx: StageContext, original: str) -> str:
+    def _fresh_session_prompt(self, original: str) -> str:
         return (
             f"Continue the same {self.name} stage in a fresh session. "
             "Inspect the CURRENT project state first and preserve valid existing work.\n\n"

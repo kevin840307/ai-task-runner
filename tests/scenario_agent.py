@@ -111,7 +111,10 @@ elif stage == "validator":
     session = "scenario-validator-session-001"
     if scenario == "readonly" and n == 1:
         (root / "validator_mutation.txt").write_text("should be restored", encoding="utf-8")
-    passed = not (scenario == "ai_replan" and n == 1)
+    passed = not (
+        (scenario == "ai_replan" and n == 1)
+        or (scenario == "ai_replan_many" and n <= 4)
+    )
     answer = {"passed": passed, "reason": "checked", "missing_items": [] if passed else ["retry cycle"]}
 else:
     raise SystemExit(2)

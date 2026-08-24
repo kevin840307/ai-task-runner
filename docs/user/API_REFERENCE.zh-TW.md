@@ -29,7 +29,7 @@ print(result.exit_code, result.completed)
 ```
 
 ## Events
-`run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
+`run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。Transient service 等待視窗用盡後會自動 resume 可用的 direct 或 YAML item state；non-transient 與 deterministic configuration error 仍會交還 caller。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
 
 ## YAML script
 `runner.script_loader` 負責解析非空 YAML array、結構欄位、alias 與引用檔案；`runner.script_runner` 使用 `dataclasses.replace()` 建立 child，並套用 API/CLI 共用的 `RuntimeConfig.validate()`。YAML 不另外維護 timeout、retry、quorum 或 Plugin option 規則。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator` path 或 `ai`；相對 `goal_file` 與 `ai_validator_prompt_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、Final AI quorum alias、`project_root` 與通用 `plugins` mapping。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊 Plugin 欄位仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。

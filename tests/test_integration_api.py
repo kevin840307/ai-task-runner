@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from runner.api import RunRequest, __version__, run
+from runner.errors import RunnerError
 
 
 def _validator(path: Path) -> Path:
@@ -23,6 +24,55 @@ def _validator(path: Path) -> Path:
 
 def _fake_command() -> str:
     return f'"{sys.executable}" "{ROOT / "tests/fake_agent.py"}"'
+
+
+@pytest.mark.parametrize("script_mode", [False, True])
+def test_api_transient_failure_resumes_saved_direct_or_yaml_state(
+    tmp_path,
+    monkeypatch,
+    script_mode,
+):
+    import runner.api as api_module
+
+    script = tmp_path / "tasks.yaml"
+    if script_mode:
+        script.write_text("- prompt: x\n  validator: ai\n", encoding="utf-8")
+    request = RunRequest(
+        goal=None if script_mode else "x",
+        script=str(script) if script_mode else None,
+        project_root=str(tmp_path),
+        validator=None if script_mode else "ai",
+        retry_delay=0,
+    )
+    state_file = (
+        tmp_path / ".ai-task-runner" / "script" / "001" / "state.json"
+        if script_mode
+        else tmp_path / ".ai-task-runner" / "state.json"
+    )
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if len(calls) == 1:
+            state_file.write_text(
+                '{"completed":false,"stage":"validating"}',
+                encoding="utf-8",
+            )
+            error = RunnerError("service unavailable")
+            error.transient = True
+            raise error
+        state_file.write_text(
+            '{"completed":true,"stage":"completed"}',
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(request)
+
+    assert result.completed
+    assert calls == [False, True]
 
 
 def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
@@ -167,16 +217,21 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
     assert result.completed is True
 
 
-def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
-    from runner.plugins.console import LiveUI
+def test_json_event_output_disconnect_does_not_stop_observer(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from runner.plugins.observability import ObservabilityObserver
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
 
     monkeypatch.setattr("builtins.print", broken_print)
-    ui = LiveUI(json_events=True, human_output=False)
-    ui.set("running", "test")
-    assert ui.json_events is False
+    observer = ObservabilityObserver(SimpleNamespace(
+        config=SimpleNamespace(event_callback=None, json_events=True),
+        work=tmp_path,
+    ))
+    observer({"type": "runner.status", "status": "running", "detail": "test"})
+    assert observer.json_events is False
 
 
 def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):

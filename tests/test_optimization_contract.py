@@ -106,6 +106,25 @@ def test_independent_ai_votes_each_start_new_session(tmp_path):
     assert [after for _, after, _ in model.calls] == ['S1','S2','S3']
 
 
+def test_ai_vote_recovery_preserves_three_distinct_successful_sessions(tmp_path):
+    model = FakeAI([RunnerError('backend failed'), 'OK', 'OK', 'OK'])
+    c = ctx(tmp_path, model, same_session_retries=2)
+    c.scratch['validator'] = model
+    prompt = tmp_path / 'validator-recovery.md'
+    prompt.write_text('FULL', encoding='utf-8')
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator', runs=3,
+        fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
+        result_status=lambda data: 'pass', retry=-1,
+    ))
+
+    result = StageExecutor(Hooks()).run(stage, c)
+
+    assert result.status == 'pass'
+    successful_sessions = [after for _, after, _ in model.calls[1:]]
+    assert successful_sessions == ['S1', 'S2', 'S3']
+
+
 class ReviewStage:
     name='review'; mode='readonly'; actor='model'; status='review'; detail=''; run_state='reviewing'
     retry=None; retry_attr='review_retries'; skip_on_error=True; tolerate_restored_changes=False

@@ -29,7 +29,7 @@ print(result.exit_code, result.completed)
 ```
 
 ## Events
-`run(request, on_event=callback)` forwards Runner progress/status/script events to a callback. Callback exceptions are fail-soft and do not stop the run. `RunResult` returns `exit_code`, `state_files`, parsed `states`, and a `completed` property.
+`run(request, on_event=callback)` forwards Runner progress/status/script events to a callback. Callback exceptions are fail-soft and do not stop the run. Exhausted transient service windows automatically resume available direct or YAML item state; non-transient and deterministic configuration errors still surface to the caller. `RunResult` returns `exit_code`, `state_files`, parsed `states`, and a `completed` property.
 
 ## YAML scripts
 `runner.script_loader` parses the non-empty YAML array, structural fields, aliases, and referenced files. `runner.script_runner` creates each child with `dataclasses.replace()` and applies the same `RuntimeConfig.validate()` used by API/CLI execution; YAML does not maintain a second set of timeout, retry, quorum, or plugin-option rules. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus a `validator` path or `ai`. Relative `goal_file` and `ai_validator_prompt_file` paths are resolved from the YAML file directory. Optional per-item fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, Final AI quorum aliases, `project_root`, and the generic `plugins` mapping. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Legacy plugin fields remain valid. Each item receives an isolated nested work directory and stops the sequence on first non-zero result.

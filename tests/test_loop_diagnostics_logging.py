@@ -113,7 +113,6 @@ def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
     agent.session_id = ""
     agent.timeout = 10
     agent.debug_dir = None
-    agent._recoverable_session_failures = 0
 
     cause = _loop_error(agent, tmp_path)
     assert cause.diagnostics["context_snapshot"].startswith("## Context Usage")
@@ -167,7 +166,6 @@ def _make_agent_with_loop_backend(
     agent.session_id = "loop-session"
     agent.timeout = 10
     agent.debug_dir = None
-    agent._recoverable_session_failures = 0
     return agent
 
 

@@ -1,9 +1,6 @@
 """Execute validated YAML batch script items."""
 from __future__ import annotations
 
-import json
-import sys
-import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -12,8 +9,8 @@ from typing import Any
 from .config import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .plugins.registry import merge_plugin_config
+from .runtime import events
 from .script_loader import load_yaml_script
-from .version import __version__
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
@@ -29,7 +26,7 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
         raise ConfigurationError(str(error)) from error
     total = len(items)
     for index, item in enumerate(items, 1):
-        _emit_script_event(args, "script.item_started", index, total, item)
+        _emit_script_event("script.item_started", index, total, item)
         child = replace(
             build_script_item_config(args, item, index),
             script_index=index,
@@ -38,7 +35,6 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
         code = execute_one(child)
         if code != 0:
             _emit_script_event(
-                args,
                 "script.item_failed",
                 index,
                 total,
@@ -46,56 +42,25 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
                 exit_code=code,
             )
             return code
-        _emit_script_event(args, "script.item_completed", index, total, item)
+        _emit_script_event("script.item_completed", index, total, item)
     return 0
 
 
 def _emit_script_event(
-    args: RuntimeConfig,
     event_type: str,
     index: int,
     total: int,
     item: dict[str, Any],
     exit_code: int | None = None,
 ) -> None:
-    event: dict[str, Any] = {
-        "schema_version": 1,
-        "runner_version": __version__,
-        "type": event_type,
-        "timestamp": time.time(),
+    payload: dict[str, Any] = {
         "script_index": index,
         "script_total": total,
         "prompt_preview": item["goal"][:500],
     }
     if exit_code is not None:
-        event["exit_code"] = exit_code
-
-    callback = getattr(args, "event_callback", None)
-    if callback is not None:
-        try:
-            callback(event)
-        except Exception:  # noqa: BLE001, S110 - callback failures are isolated
-            # External UI/skill failures must not stop script execution.
-            pass
-    if getattr(args, "json_events", False):
-        try:
-            print(json.dumps(event), flush=True)
-        except (BrokenPipeError, OSError):
-            args.json_events = False
-        return
-    if not getattr(args, "human_output", True):
-        return
-
-    if event_type == "script.item_started":
-        print(f"[Script {index}/{total}] {item['goal']}", flush=True)
-    elif event_type == "script.item_completed":
-        print(f"[Script {index}/{total}] PASS", flush=True)
-    else:
-        print(
-            f"[Script {index}/{total}] FAILED ({exit_code})",
-            file=sys.stderr,
-            flush=True,
-        )
+        payload["exit_code"] = exit_code
+    events.publish(event_type, event_type.rsplit("_", 1)[-1], **payload)
 
 
 def build_script_item_config(

@@ -188,7 +188,7 @@ def test_same_session_prompt_is_short_and_fresh_wrapper_does_not_duplicate_conte
     ctx.execution.previous_error = 'Loop detection halted the run'
     same = stage._same_session_prompt(ctx)
     original = 'ORIGINAL SPEC\nCurrent TODO\nDo only this TODO\nSTAGE-SPEC'
-    fresh = stage._fresh_session_prompt(ctx, original)
+    fresh = stage._fresh_session_prompt(original)
     assert 'ORIGINAL SPEC' not in same
     assert 'Do only this TODO' not in same
     assert 'Do not repeat the exact failed action' in same

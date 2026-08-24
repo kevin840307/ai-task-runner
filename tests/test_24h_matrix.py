@@ -3,13 +3,14 @@ import json, sys, textwrap
 from pathlib import Path
 import pytest
 from runner.api import RunRequest, run
+from runner.config.defaults import DEFAULT_MAX_CYCLES
 ROOT=Path(__file__).resolve().parents[1]
 def cmd(): return f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
 def records(sd):
  p=sd/'prompt-log.jsonl'; return [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
 def base(tmp_path, monkeypatch, scenario, validator='ai', **kw):
  sd=tmp_path.parent/f'{tmp_path.name}-{scenario}-state'; monkeypatch.setenv('SCENARIO',scenario); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
- req=RunRequest(goal='Create requested result',project_root=str(tmp_path),validator=validator,backend='qwen',command=cmd(),max_attempts=kw.pop('max_attempts',2),max_cycles=kw.pop('max_cycles',3),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0,**kw)
+ req=RunRequest(goal='Create requested result',project_root=str(tmp_path),validator=validator,backend='qwen',command=cmd(),max_attempts=kw.pop('max_attempts',2),max_cycles=kw.pop('max_cycles',DEFAULT_MAX_CYCLES),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0,**kw)
  r=run(req); return r,records(sd)
 def validator(path):
  path.write_text(textwrap.dedent('''import argparse\nfrom pathlib import Path\np=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()\nraise SystemExit(0 if (Path(a.project_root)/"done.txt").exists() else 5)\n'''))
@@ -30,6 +31,13 @@ def test_review_repair(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'review_retry'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=2; assert sum(x['stage']=='execute' for x in recs)>=2
 def test_ai_replan(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'ai_replan'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=2; assert r.states[0]['cycle']>=2
+def test_default_unlimited_cycles_continue_past_four_failures(tmp_path,monkeypatch):
+ r,recs=base(tmp_path,monkeypatch,'ai_replan_many'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=5; assert r.states[0]['cycle']>=5
+def test_yaml_default_unlimited_cycles_continue_past_four_failures(tmp_path,monkeypatch):
+ sd=tmp_path.parent/f'{tmp_path.name}-yaml-many-state'; monkeypatch.setenv('SCENARIO','ai_replan_many'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
+ script=tmp_path/'tasks.yaml'; script.write_text('- prompt: Create requested result\n  validator: ai\n',encoding='utf-8')
+ r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
+ assert r.completed; assert r.states[0]['cycle']>=5
 def test_stagnation_repair(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'stagnation'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=4
 def test_api_503_recovers(tmp_path,monkeypatch):

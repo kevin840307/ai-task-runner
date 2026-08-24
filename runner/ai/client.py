@@ -100,7 +100,6 @@ class AIClient:
     def _raise_backend_error(
         self,
         error: BackendError,
-        prompt: str,
         call_session_id: str,
         debug_call_id: str,
     ) -> NoReturn:
@@ -161,7 +160,6 @@ class AIClient:
         except BackendError as error:
             self._raise_backend_error(
                 error,
-                prompt,
                 call_session_id,
                 debug_call_id,
             )

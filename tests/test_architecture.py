@@ -80,7 +80,7 @@ def test_root_python_files_stay_minimal():
 def test_recovery_is_centralized_in_stage_executor():
     assert not (ROOT / "runner/utils/recovery.py").exists()
     source = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
-    for token in ("same_failures", "fresh_session_round", "_is_service_error", "_fresh_session"):
+    for token in ("same_failures", "fresh_session_round", "is_transient_error", "_fresh_session"):
         assert token in source
 
 
@@ -96,7 +96,7 @@ def test_project_and_utils_ownership_is_explicit():
     project = {path.name for path in (ROOT / "runner/project").glob("*.py")}
     assert {"files.py", "policy.py", "instructions.py", "__init__.py"} <= project
     utils = {path.name for path in (ROOT / "runner/utils").glob("*.py")}
-    assert utils == {"files.py", "text.py", "__init__.py"}
+    assert utils == {"files.py", "logs.py", "text.py", "__init__.py"}
 
 
 def test_registries_are_not_hidden_in_contract_or_package_init_files():
@@ -142,3 +142,12 @@ def test_loop_context_compression_is_a_plugin():
         "runner/script_runner.py",
     ):
         assert "loop_context_compress" not in (ROOT / relative).read_text(encoding="utf-8")
+
+
+def test_console_and_script_runner_do_not_own_event_transport():
+    console = (ROOT / "runner/plugins/console.py").read_text(encoding="utf-8")
+    script = (ROOT / "runner/script_runner.py").read_text(encoding="utf-8")
+    for legacy in ("event_callback", "json_events", "log_path", "def _emit("):
+        assert legacy not in console
+    for transport in ("event_callback", "json_events", "human_output"):
+        assert transport not in script

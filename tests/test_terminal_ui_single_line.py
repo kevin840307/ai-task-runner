@@ -55,12 +55,22 @@ def test_spinner_redraw_does_not_accumulate_newlines(monkeypatch):
     assert stdout.output.count("\n") == before
 
 
-def test_events_keep_original_multiline_detail(monkeypatch):
+def test_observer_events_keep_original_multiline_detail(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.plugins.observability import ObservabilityObserver
+
     events = []
-    ui = LiveUI(event_callback=events.append, human_output=False)
-    ui.bind(RunState("run", "goal", "/project"))
     detail = "qwen exit 1:\nLoop detection halted"
-    ui.set("AI 正在建立最小任務規劃", detail)
+    observer = ObservabilityObserver(SimpleNamespace(
+        config=SimpleNamespace(event_callback=events.append, json_events=False),
+        work=tmp_path,
+    ))
+    observer({
+        "type": "runner.status",
+        "status": "AI 正在建立最小任務規劃",
+        "detail": detail,
+    })
 
     assert events[-1]["detail"] == detail
 

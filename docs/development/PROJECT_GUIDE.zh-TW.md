@@ -57,7 +57,7 @@ Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesyst
 - Same Session 仍失敗：Fresh Session + 完整必要 Context。
 - Fresh Session 出現相同 persistent failure：回傳 `replan`，重新建立 Plan。
 - 不同 failure fingerprint：重新計數，不沿用舊 failure streak。
-- API/service transient failure：使用 AI transport backoff，不消耗 Stage failure budget。
+- API/service transient failure：使用 AI transport backoff，不消耗 Stage failure budget；等待視窗用盡後由 canonical API resume durable state。
 - Final AI voting：每個 validation run 都建立不同 Fresh Session。
 
 ## Validation 與 YAML List
@@ -79,7 +79,7 @@ YAML batch mode 已支援。YAML batch mode 支援每筆獨立 `project_root`、
 ## Plugin / Event 邊界
 Plugin 只處理 cross-cutting concern，例如 Console、Safety、History、Observability。Workflow 禁止 import 具體 Plugin。
 
-Workflow 只使用 semantic progress API；raw event type/schema、subscriber delivery 屬於 runtime。不要在 Workflow 寫 `publish("runner.xxx", ...)`。
+Workflow 只使用 semantic progress API；raw event type/schema、subscriber delivery 屬於 runtime。Script batch orchestration 也透過同一 EventBus 發布 semantic `script.item_*` event；Console output、JSON Lines、callback 與 diagnostic log 只屬於 Plugin。不要在 Workflow 寫 `publish("runner.xxx", ...)`。
 
 ## Agent rule files
 - Qwen Code：`QWEN.md`

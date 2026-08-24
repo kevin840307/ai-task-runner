@@ -32,6 +32,7 @@ from runner.config.defaults import (
 from runner.errors import ConfigurationError
 from runner.plugins.registry import add_plugin_arguments
 from runner.runtime.process_runner import ACTIVE_PROCESS_FILE
+from runner.utils import append_bounded_log
 from runner.version import __version__
 
 
@@ -218,12 +219,11 @@ def _recover_from_unexpected_error(
     error: BaseException,
 ) -> None:
     log = Path(request.project_root, request.work_dir, "exception.log").resolve()
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as file:
-        file.write(
-            f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-            f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
-        )
+    append_bounded_log(
+        log,
+        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+        f"{type(error).__name__}: {error}\n{traceback.format_exc()}",
+    )
 
     state_file = Path(request.project_root, request.work_dir, "state.json").resolve()
     if state_file.is_file():

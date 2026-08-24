@@ -72,7 +72,7 @@ Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 
 `Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> next_flow/replace_remaining/complete -> next Stage`
 
 統一執行規則：
-- API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。
+- API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。視窗用盡後，正式 `runner.api.run()` 會從 direct/YAML durable state 自動 resume 並開啟下一個視窗，直到任務 PASS。
 - 真實 failure 先使用 same-session 的短 Stage-aware 續跑 prompt，只補 Stage 身分、新 failure evidence 與下一步；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
 - fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。

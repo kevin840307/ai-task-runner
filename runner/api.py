@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from .config.defaults import (
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
 )
+from .errors import RunnerError, is_transient_error
 from .plugins.registry import (
     merge_plugin_config,
     plugin_config_from_namespace,
@@ -263,7 +265,20 @@ def run(
         request = RunRequest.from_mapping(request)
 
     config = request.normalized_config(on_event)
-    exit_code = execute(config)
+    while True:
+        try:
+            exit_code = execute(config)
+            break
+        except RunnerError as error:
+            if not is_transient_error(error):
+                raise
+            config = replace(
+                config,
+                resume=any(path.is_file() for path in _state_files(request)),
+                force_new=False,
+            )
+            if config.stage_retry_delay:
+                time.sleep(config.stage_retry_delay)
     state_files = _state_files(request)
     states = tuple(_read_state(path) for path in state_files if path.is_file())
     return RunResult(

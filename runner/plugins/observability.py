@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from ..utils import append_bounded_log
+
 
 class ObservabilityObserver:
     def __init__(self, runtime) -> None:
@@ -21,7 +23,7 @@ class ObservabilityObserver:
                 if key not in {"text", "debug_dir"}
             })
             return
-        if not kind.startswith("runner."):
+        if not kind.startswith(("runner.", "script.")):
             return
         public = {key: value for key, value in event.items() if key not in {"action", "state"}}
         if self.callback is not None:
@@ -67,12 +69,10 @@ class ObservabilityObserver:
                 pass
 
     def _write_log(self, event: dict) -> None:
-        try:
-            self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.log_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(event, ensure_ascii=False) + "\n")
-        except OSError:
-            pass
+        append_bounded_log(
+            self.log_path,
+            json.dumps(event, ensure_ascii=False) + "\n",
+        )
 
 
 def register(runtime) -> None:

@@ -1,48 +1,33 @@
 """Console UI extension for terminal runner events."""
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import sys
 import threading
-import time
 import unicodedata
-from collections.abc import Callable, Mapping
-from pathlib import Path
-from typing import Any
 
 from ..runtime.run_state import RunState, Task
-from ..version import __version__
 
 
 class LiveUI:
-    """Human terminal UI plus optional machine-readable progress events."""
+    """Human terminal rendering for semantic Runner events."""
 
     FRAMES = "|/-\\"
 
     def __init__(
         self,
-        event_callback: Callable[[dict[str, Any]], None] | None = None,
-        json_events: bool = False,
         human_output: bool = True,
-        context: Mapping[str, Any] | None = None,
-        log_path: Path | None = None,
     ) -> None:
-        self.event_callback = event_callback
-        self.json_events = json_events
         self.human_output = human_output
-        self.context = dict(context or {})
-        self.log_path = log_path
-        self.enabled = human_output and not json_events and sys.stdout.isatty()
+        self.enabled = human_output and sys.stdout.isatty()
         self.fullscreen = self.enabled and supports_ansi_screen()
         self.state: RunState | None = None
         self.status = "準備中"
         self.detail = ""
         self._line_width = 0
         self._task_list_snapshot: tuple[tuple[str, str, str], ...] = ()
-        self._last_progress_snapshot: tuple[Any, ...] | None = None
-        self._last_plain_status_snapshot: tuple[Any, ...] | None = None
+        self._last_plain_status_snapshot: tuple[object, ...] | None = None
         self._frame = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -60,24 +45,12 @@ class LiveUI:
             sys.stdout.flush()
         else:
             self.draw()
-        snapshot: tuple[Any, ...] = (
-            state.run_id,
-            state.cycle,
-            state.current,
-            state.completed,
-            tuple((task.id, task.title, task.status, task.attempts) for task in state.tasks),
-        )
-        if snapshot == self._last_progress_snapshot:
-            return
-        self._last_progress_snapshot = snapshot
-        self._emit("runner.progress", include_detail=False)
 
     def set(self, status: str, detail: str = "") -> None:
         with self._lock:
             self.status = status
             self.detail = detail
         self.draw()
-        self._emit("runner.status")
 
     def draw(self) -> None:
         if not self.enabled or not self.state:
@@ -231,57 +204,6 @@ class LiveUI:
             used += char_width
         return line[:end] + suffix
 
-    def _emit(self, event_type: str, *, include_detail: bool = True) -> None:
-        event: dict[str, Any] = {
-            "schema_version": 1,
-            "runner_version": __version__,
-            "type": event_type,
-            "timestamp": time.time(),
-            "status": self.status,
-            "detail": self.detail if include_detail else "",
-            **self.context,
-        }
-        if self.state is not None:
-            event.update({
-                "run_id": self.state.run_id,
-                "cycle": self.state.cycle,
-                "current": self.state.current,
-                "completed": self.state.completed,
-                "tasks": [
-                    {
-                        "id": task.id,
-                        "title": task.title,
-                        "status": task.status,
-                        "attempts": task.attempts,
-                    }
-                    for task in self.state.tasks
-                ],
-            })
-        if self.event_callback is not None:
-            try:
-                self.event_callback(event)
-            except Exception:
-                # Integration/UI failures must not stop the automation loop.
-                pass
-        self._write_log(event)
-        if self.json_events:
-            try:
-                print(json.dumps(event), flush=True)
-            except (BrokenPipeError, OSError):
-                # A disconnected UI must not stop the automation loop.
-                self.json_events = False
-
-    def _write_log(self, event: dict[str, Any]) -> None:
-        if self.log_path is None:
-            return
-        try:
-            self.log_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.log_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(event, ensure_ascii=False) + "\n")
-        except OSError:
-            # Log writes are best-effort debug output only.
-            pass
-
     @staticmethod
     def _task_mark(state: RunState, index: int, task: Task) -> str:
         if task.status == "completed":
@@ -300,7 +222,7 @@ class LiveUI:
             if snapshot == self._last_plain_status_snapshot:
                 return
             self._last_plain_status_snapshot = snapshot
-            if self.human_output and not self.json_events:
+            if self.human_output:
                 message = f"{status}: {detail}" if detail else status
                 print(message, flush=True)
             return
@@ -343,10 +265,27 @@ class ConsoleObserver:
 
     def __init__(self, runtime) -> None:
         config = runtime.config
-        self.ui = LiveUI(json_events=False, human_output=config.human_output, context={}, log_path=None)
+        self.ui = LiveUI(human_output=config.human_output)
 
     def __call__(self, event: dict) -> None:
         kind = str(event.get("type", ""))
+        if kind.startswith("script.item_"):
+            self.ui.stop()
+            if self.ui.human_output:
+                index = event.get("script_index", "?")
+                total = event.get("script_total", "?")
+                if kind == "script.item_started":
+                    detail = event.get("prompt_preview", "")
+                elif kind == "script.item_completed":
+                    detail = "PASS"
+                else:
+                    detail = f"FAILED ({event.get('exit_code', '?')})"
+                print(
+                    f"[Script {index}/{total}] {detail}",
+                    file=sys.stderr if kind == "script.item_failed" else sys.stdout,
+                    flush=True,
+                )
+            return
         if not kind.startswith("runner."):
             return
         state = event.get("state")

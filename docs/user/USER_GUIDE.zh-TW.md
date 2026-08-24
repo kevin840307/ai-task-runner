@@ -92,7 +92,7 @@ Readonly Stage 如果嘗試修改檔案，Safety Plugin 會還原修改並把該
 - `last-result.txt`
 - `debug/history/`
 
-Log/Event 應維持精簡，但要保留 Session mode、Stage、retry/recovery、process exit、validator result 等足以定位 24H 問題的資訊。
+Log/Event 應維持精簡，但要保留 Session mode、Stage、retry/recovery、process exit、validator result 等足以定位 24H 問題的資訊。`log.txt` 與 `exception.log` 到 10 MB 時 rotate，並保留一份上一代；model-call history 使用自己獨立的 bounded policy。
 
 ## Timeout 預設值
 | Option | Default |

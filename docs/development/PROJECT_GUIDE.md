@@ -57,7 +57,7 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 - Same session still fails: fresh session + complete necessary context.
 - Same persistent failure after fresh recovery: return `replan` and create a new plan.
 - Different failure fingerprint: reset the persistent-failure streak.
-- Transient API/service failure: AI transport backoff; do not consume Stage failure budget.
+- Transient API/service failure: AI transport backoff; do not consume Stage failure budget. Canonical API resumes durable state after an exhausted wait window.
 - Final AI voting: every validation run starts a different fresh session.
 
 ## Validation and YAML List
@@ -79,7 +79,7 @@ If the requirement is only conditional text/formatting, use Jinja. Only genuinel
 ## Plugin / event boundary
 Plugins own cross-cutting concerns such as Console, Safety, History, and Observability. Workflow must never import a concrete Plugin.
 
-Workflow uses a semantic progress API; raw event types/schema and subscriber delivery belong to runtime. Do not add `publish("runner.xxx", ...)` to Workflow.
+Workflow uses a semantic progress API; raw event types/schema and subscriber delivery belong to runtime. Script batch orchestration publishes semantic `script.item_*` events through the same EventBus. Console output, JSON Lines, callbacks, and diagnostic logs belong only to Plugins. Do not add `publish("runner.xxx", ...)` to Workflow.
 
 ## Agent rule files
 - Qwen Code: `QWEN.md`
