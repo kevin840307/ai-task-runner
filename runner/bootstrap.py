@@ -46,7 +46,7 @@ def register_resources(paths) -> None:
 def _create_runtime(config: RuntimeConfig) -> Runtime:
     return Runtime(
         config=config,
-        work=config.work_path,
+        work=Path(config.project_root).resolve() / config.work_dir,
         events=EventBus(),
         hooks=HookChain(),
         resources=[],

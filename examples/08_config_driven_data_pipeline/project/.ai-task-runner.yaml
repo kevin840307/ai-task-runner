@@ -2,8 +2,8 @@ protected_paths:
   - prompt.md
   - validation.py
   - ai_validation.md
-
   - ai_task_runner_validator.py
+  - .ai-task-runner.yaml
 instructions:
   always: |
     Work only inside this project root.

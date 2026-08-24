@@ -12,7 +12,7 @@ class ObservabilityObserver:
     def __init__(self, runtime) -> None:
         self.callback = runtime.config.event_callback
         self.json_events = runtime.config.json_events
-        self.log_path = runtime.work / "log.txt"
+        self.log_path = None if getattr(runtime.config, "script", None) else runtime.work / "log.txt"
 
     def __call__(self, event: dict) -> None:
         kind = str(event.get("type", ""))
@@ -69,6 +69,8 @@ class ObservabilityObserver:
                 pass
 
     def _write_log(self, event: dict) -> None:
+        if self.log_path is None:
+            return
         append_bounded_log(
             self.log_path,
             json.dumps(event, ensure_ascii=False) + "\n",

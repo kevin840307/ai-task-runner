@@ -296,7 +296,7 @@ def _state_files(request: RunRequest, config: RuntimeConfig) -> list[Path]:
     if request.script:
         script = Path(config.script).resolve()
         return [
-            child.work_path / "state.json"
+            Path(child.project_root, child.work_dir, "state.json")
             for index, item in enumerate(load_yaml_script(script), 1)
             for child in (build_script_item_config(config, item, index),)
         ]
