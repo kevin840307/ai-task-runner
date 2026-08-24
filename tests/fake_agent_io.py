@@ -36,7 +36,10 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "plan_finalize"
     if "Review only. Finalize the current review now." in prompt:
         return "review_finalize"
-    if "Review only. You are a read-only task reviewer" in prompt:
+    if (
+        "Review only. You are a read-only task reviewer" in prompt
+        or "Continue the same review stage." in prompt
+    ):
         return "review"
     if "Final validation in a fresh independent session" in prompt:
         return "validator"
@@ -47,6 +50,8 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Work only on this Current TODO",
             "Continue only the same current TODO",
             "Continue the current task. Fix the previous failure and finish it.",
+            "Continue the same execute stage.",
+            "Continue the same repair stage.",
         )
     ):
         return "execute"

@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 
 from runner.task_runner import TaskRunner
+from runner import bootstrap
+from runner.config import RuntimeConfig
 from runner.errors import RunnerError
-from runner.extensions.safety import git_subcommand
-from runner.config.project_policy import POLICY_FILENAME, protected_paths
-from runner.runtime.process import run_process
-from runner.extensions.safety import normalize_paths, restore_changed, snapshot
+from runner.plugins.safety import git_subcommand
+from runner.project.policy import POLICY_FILENAME, protected_paths
+from runner.runtime.process_runner import run_process
+from runner.plugins.safety import normalize_paths, restore_changed, snapshot
 
 
 def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
@@ -76,7 +78,13 @@ def test_git_subcommand_handles_global_options() -> None:
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
-def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_path: Path) -> None:
+def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bootstrap, "_current", None)
+    bootstrap.bootstrap_runtime(RuntimeConfig(project_root=str(tmp_path), validator="ai", human_output=False))
+
     version = run_process(["git", "--version"], tmp_path, 10)
     blocked = run_process(["git", "-C", str(tmp_path), "add", "."], tmp_path, 10)
 
@@ -87,7 +95,7 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_pat
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
-    from runner.config.project_policy import instructions
+    from runner.project.policy import instruction_text
 
     (tmp_path / POLICY_FILENAME).write_text(
         "instructions:\n"
@@ -98,8 +106,8 @@ def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    assert instructions(tmp_path, "always") == "Never hardcode project-specific values."
-    assert instructions(tmp_path, "project") == "Keep configuration data-driven."
+    assert instruction_text(tmp_path, "always") == "Never hardcode project-specific values."
+    assert instruction_text(tmp_path, "project") == "Keep configuration data-driven."
 
 
 def test_policy_rejects_unknown_instruction_keys(tmp_path: Path) -> None:

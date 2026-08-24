@@ -15,16 +15,17 @@ dependencies = [
 [tool.setuptools]
 packages = [
     "runner",
-    "runner.model",
+    "runner.ai",
     "runner.prompts",
     "runner.prompts.stages",
     "runner.prompts.system",
     "runner.backends",
     "runner.config",
-    "runner.extensions",
-    "runner.flow",
+    "runner.plugins",
+    "runner.project",
+    "runner.workflow",
     "runner.runtime",
-    "runner.flow.stages",
+    "runner.workflow.stages",
     "runner.utils",
 ]
 py-modules = [

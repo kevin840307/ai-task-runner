@@ -1,4 +1,4 @@
-# Optional project-relative flow definition. Omit to use runner/flow/default.yaml.
+# Optional project-relative flow definition. Omit to use runner/workflow/definitions.py.
 
 # Project-relative files or folders that AI sessions may read but must never change.
 protected_paths:

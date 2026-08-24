@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 from runner.errors import RunnerError
-from runner.script_runner import load_yaml_script, script_item_args
+from runner.script_loader import load_yaml_script
+from runner.script_runner import build_script_item_config
 
 
 def base_args(tmp_path: Path) -> argparse.Namespace:
@@ -20,7 +21,7 @@ def test_yaml_item_project_root_is_optional_and_backward_compatible(tmp_path):
     script=tmp_path/'tasks.yaml'
     script.write_text('- prompt: old\n  validator: ai\n', encoding='utf-8')
     item=load_yaml_script(script)[0]
-    child=script_item_args(base_args(tmp_path), item, 1)
+    child=build_script_item_config(base_args(tmp_path), item, 1)
     assert Path(child.project_root) == tmp_path.resolve()
 
 
@@ -29,7 +30,7 @@ def test_yaml_item_project_root_resolves_from_outer_project_root(tmp_path):
     script=tmp_path/'tasks.yaml'
     script.write_text('- prompt: one\n  project_root: examples/one\n  validator: ai\n', encoding='utf-8')
     item=load_yaml_script(script)[0]
-    child=script_item_args(base_args(tmp_path), item, 1)
+    child=build_script_item_config(base_args(tmp_path), item, 1)
     assert Path(child.project_root) == project.resolve()
     assert Path(child.project_root, child.work_dir, 'state.json') == (
         project / '.ai-task-runner' / 'script' / '001' / 'state.json'
@@ -72,9 +73,9 @@ def test_yaml_item_goal_file_loads_relative_to_script(tmp_path):
     script=tmp_path/'tasks.yaml'
     script.write_text('- goal_file: prompts/goal.md\n  validator: ai\n', encoding='utf-8')
     item=load_yaml_script(script)[0]
-    assert item['prompt'] == 'build from file'
+    assert item['goal'] == 'build from file'
     assert Path(item['goal_file']) == goal.resolve()
-    child=script_item_args(base_args(tmp_path), item, 1)
+    child=build_script_item_config(base_args(tmp_path), item, 1)
     assert child.goal == 'build from file'
     assert Path(child.goal_file) == goal.resolve()
 
@@ -102,7 +103,7 @@ def test_yaml_item_ai_validator_prompt_file_loads_relative_to_script(tmp_path):
     item = load_yaml_script(script)[0]
     assert item['ai_validator_prompt'] == 'check genericity'
     assert Path(item['ai_validator_prompt_file']) == ai_prompt.resolve()
-    child = script_item_args(base_args(tmp_path), item, 1)
+    child = build_script_item_config(base_args(tmp_path), item, 1)
     assert child.ai_validator_prompt == 'check genericity'
     assert Path(child.ai_validator_prompt_file) == ai_prompt.resolve()
 

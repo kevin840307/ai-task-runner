@@ -8,12 +8,12 @@ import pytest
 from runner.config import RuntimeConfig
 from runner.config.defaults import DEFAULT_API_WAIT_TIMEOUT, DEFAULT_MAX_ATTEMPTS
 from runner.errors import RunnerError
-from runner.flow.behavior import _finish_plan, _restart_plan
-from runner.flow.stages.base import StageContext, StageResult
-from runner.flow.stages.executor import StageExecutor
-from runner.flow.stages.global_stage import GlobalStage, GlobalStageSpec
-from runner.model import model as model_module
-from runner.runtime.state import RunState, Task
+from runner.workflow.rules import handle_plan_result, _restart_plan
+from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages.executor import StageExecutor
+from runner.workflow.stages.ai_stage import AIStage, AIStageSpec
+import runner.ai.client as ai_client_module
+from runner.runtime.run_state import RunState, Task
 
 
 class Hooks:
@@ -22,7 +22,7 @@ class Hooks:
     def change_detector(self, action, tokens, fallback): return fallback
 
 
-class SessionModel:
+class SessionFakeAI:
     root = Path('.')
     extra_args = []
     def __init__(self, failures):
@@ -52,7 +52,7 @@ class AskStage:
     skip_on_error = False
     tolerate_restored_changes = False
     def run(self, ctx, previous=None):
-        return StageResult(self.name, 'pass', output=ctx.model.ask('do current task'))
+        return StageResult(self.name, 'pass', output=ctx.ai_client.ask('do current task'))
     def finish(self, ctx, result):
         if result.status == 'pass':
             ctx.save_session()
@@ -85,14 +85,14 @@ def context(tmp_path: Path, model, *, retry=2) -> StageContext:
         tasks=[Task('t1', 'Current TODO', 'Do only this TODO', ['must pass'], 'artifact')],
     )
     return StageContext(
-        args=RuntimeConfig(task_recovery_threshold=retry, retry_delay=0),
+        config=RuntimeConfig(same_session_retries=retry, stage_retry_delay=0),
         root=tmp_path,
         work=tmp_path / '.work',
         state=state,
-        model=model,
+        ai_client=model,
         state_file=tmp_path / 'state.json',
-        validator=None,
-        ai_validation=False,
+        validator_path=None,
+        validator_is_ai=False,
         save_state=lambda: None,
         set_stage=lambda stage, detail='': setattr(state, 'stage', stage),
     )
@@ -100,16 +100,16 @@ def context(tmp_path: Path, model, *, retry=2) -> StageContext:
 
 def test_default_non_api_retry_is_two_then_fresh_session(tmp_path):
     assert DEFAULT_MAX_ATTEMPTS == 2
-    model = SessionModel([RunnerError('same'), RunnerError('same'), RunnerError('same'), None])
+    model = SessionFakeAI([RunnerError('same'), RunnerError('same'), RunnerError('same'), None])
     ctx = context(tmp_path, model)
     result = StageExecutor(Hooks()).run(AskStage(), ctx)
     assert result.status == 'pass'
     assert [session for session, _ in model.calls] == ['session-A', 'session-A', 'session-A', '']
-    assert ctx.state.model_session_id == model.session_id == 'session-B'
+    assert ctx.state.ai_session_id == model.session_id == 'session-B'
 
 
 def test_different_failure_resets_retry_count(tmp_path):
-    model = SessionModel([
+    model = SessionFakeAI([
         RunnerError('failure-A'),
         RunnerError('failure-B'), RunnerError('failure-B'), RunnerError('failure-B'),
         None,
@@ -123,20 +123,20 @@ def test_different_failure_resets_retry_count(tmp_path):
 
 
 def test_persistent_same_failure_replans_after_fresh_session(tmp_path):
-    model = SessionModel([RunnerError('same')] * 10)
+    model = SessionFakeAI([RunnerError('same')] * 10)
     ctx = context(tmp_path, model)
     result = StageExecutor(Hooks()).run(AskStage(), ctx)
     assert result.status == 'replan'
     assert [session for session, _ in model.calls] == ['session-A', 'session-A', 'session-A', '']
 
     replanned = _restart_plan(ctx, result)
-    assert replanned.replace is True
-    assert [item['name'] for item in replanned.stages] == ['planning', 'validate_file', 'validate_ai']
-    assert model.session_id == ctx.state.model_session_id == ''
+    assert replanned.replace_remaining is True
+    assert [item['name'] for item in replanned.next_flow] == ['planning', 'validate_file', 'validate_ai']
+    assert model.session_id == ctx.state.ai_session_id == ''
 
 
 def test_review_retry_then_skip_does_not_count_failures_or_replace_session(tmp_path):
-    model = SessionModel([RunnerError('review broke')] * 10)
+    model = SessionFakeAI([RunnerError('review broke')] * 10)
     ctx = context(tmp_path, model)
     result = StageExecutor(Hooks()).run(ReviewErrorStage(), ctx)
     assert result.status == 'pass' and result.skipped
@@ -147,7 +147,7 @@ def test_review_retry_then_skip_does_not_count_failures_or_replace_session(tmp_p
 
 
 def test_changed_error_is_not_counted_as_failure(tmp_path):
-    ctx = context(tmp_path, SessionModel([]))
+    ctx = context(tmp_path, SessionFakeAI([]))
     result = StageExecutor(Hooks()).run(ChangedErrorStage(), ctx)
     assert result.status == 'error'
     assert result.changed_files == ['x.txt']
@@ -156,9 +156,9 @@ def test_changed_error_is_not_counted_as_failure(tmp_path):
 
 
 def test_same_session_prompt_is_short_but_fresh_prompt_restores_spec_and_task(tmp_path):
-    model = SessionModel([])
+    model = SessionFakeAI([])
     ctx = context(tmp_path, model)
-    stage = GlobalStage(GlobalStageSpec(name='execute', status='execute'))
+    stage = AIStage(AIStageSpec(name='execute', status='execute'))
     ctx.execution.previous_error = 'Loop detection halted the run'
     same = stage._same_session_prompt(ctx)
     fresh = stage._fresh_session_prompt(ctx, 'STAGE-SPEC')
@@ -172,13 +172,13 @@ def test_same_session_prompt_is_short_but_fresh_prompt_restores_spec_and_task(tm
 
 
 def test_plan_returns_execute_review_groups_for_pipeline(tmp_path):
-    ctx = context(tmp_path, SessionModel([]))
+    ctx = context(tmp_path, SessionFakeAI([]))
     tasks = [
         Task('t1', 'one', 'd1', ['a1'], 'o1'),
         Task('t2', 'two', 'd2', ['a2'], 'o2'),
     ]
-    result = _finish_plan(ctx, StageResult('planning', 'pass', data=tasks))
-    assert [[item['name'] for item in group] for group in result.stages] == [
+    result = handle_plan_result(ctx, StageResult('planning', 'pass', data=tasks))
+    assert [[item['name'] for item in group] for group in result.next_flow] == [
         ['execute', 'review'], ['execute', 'review']
     ]
 
@@ -186,8 +186,8 @@ def test_plan_returns_execute_review_groups_for_pipeline(tmp_path):
 def test_api_retry_window_defaults_to_one_hour_and_does_not_use_task_failures(monkeypatch):
     assert DEFAULT_API_WAIT_TIMEOUT == 3600
     ticks = iter([0.0, 1000.0, 2000.0, 3601.0])
-    monkeypatch.setattr(model_module.time, 'monotonic', lambda: next(ticks))
-    monkeypatch.setattr(model_module.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(ai_client_module.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(ai_client_module.time, 'sleep', lambda _: None)
     calls = 0
     def fail():
         nonlocal calls
@@ -196,7 +196,7 @@ def test_api_retry_window_defaults_to_one_hour_and_does_not_use_task_failures(mo
         error.transient = True
         raise error
     with pytest.raises(RunnerError, match='503'):
-        model_module._call_with_backoff(
+        ai_client_module._run_with_backoff(
             fail, 'api', '', 1, 10, max_elapsed=DEFAULT_API_WAIT_TIMEOUT
         )
     assert calls == 3
@@ -205,7 +205,7 @@ def test_api_retry_window_defaults_to_one_hour_and_does_not_use_task_failures(mo
 def test_service_error_exhaustion_is_not_recorded_as_task_failure(tmp_path):
     error = RunnerError('HTTP 503 service unavailable')
     error.transient = True
-    model = SessionModel([error])
+    model = SessionFakeAI([error])
     ctx = context(tmp_path, model)
     with pytest.raises(RunnerError, match='503'):
         StageExecutor(Hooks()).run(AskStage(), ctx)
@@ -216,12 +216,12 @@ def test_service_error_exhaustion_is_not_recorded_as_task_failure(tmp_path):
 def test_api_retry_sleep_never_exceeds_remaining_wait_window(monkeypatch):
     ticks = iter([0.0, 3500.0, 3600.0])
     sleeps = []
-    monkeypatch.setattr(model_module.time, 'monotonic', lambda: next(ticks))
-    monkeypatch.setattr(model_module.time, 'sleep', sleeps.append)
+    monkeypatch.setattr(ai_client_module.time, 'monotonic', lambda: next(ticks))
+    monkeypatch.setattr(ai_client_module.time, 'sleep', sleeps.append)
     def fail():
         error = RunnerError('HTTP 503 service unavailable')
         error.transient = True
         raise error
     with pytest.raises(RunnerError):
-        model_module._call_with_backoff(fail, 'api', '', 300, 300, max_elapsed=3600)
+        ai_client_module._run_with_backoff(fail, 'api', '', 300, 300, max_elapsed=3600)
     assert sleeps == [100.0]

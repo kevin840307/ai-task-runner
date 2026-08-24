@@ -6,12 +6,12 @@ from pathlib import Path
 from runner.config import RuntimeConfig
 from runner.config.defaults import DEFAULT_REVIEW_RETRIES
 from runner.errors import RunnerError
-from runner.extensions.console import LiveUI
-from runner.flow.stages.base import StageContext, StageResult
-from runner.flow.stages.executor import StageExecutor
-from runner.flow.stages.global_stage import GlobalStage, GlobalStageSpec
-from runner.runtime import progress
-from runner.runtime.state import RunState, Task
+from runner.plugins.console import LiveUI
+from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages.executor import StageExecutor
+from runner.workflow.stages.ai_stage import AIStage, AIStageSpec
+from runner.runtime import events
+from runner.runtime.run_state import RunState, Task
 
 
 class Hooks:
@@ -20,7 +20,7 @@ class Hooks:
     def change_detector(self, action, tokens, fallback): return fallback
 
 
-class Model:
+class FakeAI:
     root = Path('.')
     extra_args = []
     def __init__(self, outputs):
@@ -38,7 +38,7 @@ class Model:
         if isinstance(value, BaseException):
             raise value
         return value
-    def invoke(self, action, *args, **kwargs): return action()
+    def run_with_retry(self, action, *args, **kwargs): return action()
     def set_extra_args(self, extra_args): self.extra_args = list(extra_args)
 
 
@@ -52,9 +52,9 @@ class Stdout:
 def ctx(tmp_path, model, **config):
     state = RunState('run', 'ORIGINAL SPEC', str(tmp_path), tasks=[Task('t1','TODO','do it',['ok'],'out')])
     return StageContext(
-        args=RuntimeConfig(retry_delay=0, **config), root=tmp_path, work=tmp_path/'.work',
-        state=state, model=model, state_file=tmp_path/'state.json', validator=None,
-        ai_validation=True, save_state=lambda: None,
+        config=RuntimeConfig(stage_retry_delay=0, **config), root=tmp_path, work=tmp_path/'.work',
+        state=state, ai_client=model, state_file=tmp_path/'state.json', validator_path=None,
+        validator_is_ai=True, save_state=lambda: None,
         set_stage=lambda stage, detail='': setattr(state, 'stage', stage),
     )
 
@@ -65,12 +65,14 @@ def parse_ok(text, ctx):
 
 
 def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp_path):
-    model = Model(['bad1', 'bad2', 'bad3', 'OK'])
+    model = FakeAI(['bad1', 'bad2', 'bad3', 'OK'])
     c = ctx(tmp_path, model)
     c.scratch['validator'] = model
-    stage = GlobalStage(GlobalStageSpec(
-        name='validate_ai', status='validate', model_key='validator',
-        prompt_builder=lambda c,p: 'FULL VALIDATOR CONTRACT', parser=parse_ok,
+    prompt = tmp_path / 'validator.md'
+    prompt.write_text('FULL VALIDATOR CONTRACT', encoding='utf-8')
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator',
+        prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass', structured_retries=2, structured_fresh_retries=1, retry=0,
     ))
     result = StageExecutor(Hooks()).run(stage, c)
@@ -83,12 +85,14 @@ def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp
 
 
 def test_independent_ai_votes_each_start_new_session(tmp_path):
-    model = Model(['OK', 'OK', 'OK'])
+    model = FakeAI(['OK', 'OK', 'OK'])
     c = ctx(tmp_path, model)
     c.scratch['validator'] = model
-    stage = GlobalStage(GlobalStageSpec(
-        name='validate_ai', status='validate', model_key='validator', reviews=3,
-        fresh_each_review=True, prompt_builder=lambda c,p: 'FULL', parser=parse_ok,
+    prompt = tmp_path / 'validator.md'
+    prompt.write_text('FULL', encoding='utf-8')
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator', runs=3,
+        fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass',
     ))
     result = stage.run(c)
@@ -101,14 +105,14 @@ class ReviewStage:
     name='review'; mode='readonly'; actor='model'; status='review'; detail=''; run_state='reviewing'
     retry=None; retry_attr='review_retries'; skip_on_error=True; tolerate_restored_changes=False
     def run(self, c, previous=None):
-        c.model.ask('review')
+        c.ai_client.ask('review')
         return StageResult('review','pass')
     def finish(self,c,r): return r
 
 
 def test_review_default_is_one_retry_then_skip(tmp_path):
     assert DEFAULT_REVIEW_RETRIES == 1
-    model=Model([RunnerError('x'), RunnerError('x')])
+    model=FakeAI([RunnerError('x'), RunnerError('x')])
     c=ctx(tmp_path, model, review_retries=1)
     result=StageExecutor(Hooks()).run(ReviewStage(), c)
     assert result.status == 'pass' and result.skipped
@@ -117,7 +121,7 @@ def test_review_default_is_one_retry_then_skip(tmp_path):
 
 
 def test_review_zero_disables_skip_and_uses_normal_recovery(tmp_path):
-    model=Model([RunnerError('x'), RunnerError('x')])
+    model=FakeAI([RunnerError('x'), RunnerError('x')])
     model.session_id='S0'
     c=ctx(tmp_path, model, review_retries=0)
     result=StageExecutor(Hooks()).run(ReviewStage(), c)
@@ -128,9 +132,9 @@ def test_review_zero_disables_skip_and_uses_normal_recovery(tmp_path):
 
 def test_task_list_update_stops_old_spinner_without_redrawing_old_status(monkeypatch, tmp_path):
     stdout=Stdout(True)
-    monkeypatch.setattr('runner.extensions.console.sys.stdout', stdout)
-    monkeypatch.setattr('runner.extensions.console.supports_ansi_screen', lambda: False)
-    monkeypatch.setattr('runner.extensions.console.shutil.get_terminal_size', lambda fallback: os.terminal_size((120,20)))
+    monkeypatch.setattr('runner.plugins.console.sys.stdout', stdout)
+    monkeypatch.setattr('runner.plugins.console.supports_ansi_screen', lambda: False)
+    monkeypatch.setattr('runner.plugins.console.shutil.get_terminal_size', lambda fallback: os.terminal_size((120,20)))
     ui=LiveUI()
     empty=RunState('run','goal',str(tmp_path))
     ui.bind(empty)
@@ -144,12 +148,12 @@ def test_task_list_update_stops_old_spinner_without_redrawing_old_status(monkeyp
 
 
 def test_progress_no_longer_publishes_runner_control(tmp_path):
-    events=[]
-    bus=progress.EventBus(); bus.subscribe(events.append); progress.configure(bus)
-    progress.bind(RunState('run','goal',str(tmp_path)))
-    progress.stop()
-    assert all(event['type'] != 'runner.control' for event in events)
-    assert any(event['type']=='runner.status' and event['action']=='stop' for event in events)
+    records=[]
+    bus=events.EventBus(); bus.subscribe(records.append); events.configure(bus)
+    events.bind(RunState('run','goal',str(tmp_path)))
+    events.stop()
+    assert all(event['type'] != 'runner.control' for event in records)
+    assert any(event['type']=='runner.status' and event['action']=='stop' for event in records)
 
 def test_ai_validator_votes_use_independent_new_sessions(tmp_path, monkeypatch):
     import json, sys
@@ -169,3 +173,24 @@ def test_ai_validator_votes_use_independent_new_sessions(tmp_path, monkeypatch):
     votes = [item for item in records if item['stage'] == 'validator']
     assert result.completed and len(votes) == 3
     assert all(not item['resumed'] for item in votes)
+
+def test_ai_vote_required_passes_uses_runtime_config(tmp_path):
+    model = FakeAI(['OK', 'OK', 'BAD'])
+    c = ctx(tmp_path, model, final_ai_validations=3, final_ai_required_passes=3)
+    c.scratch['validator'] = model
+    prompt = tmp_path / 'validator-required.md'
+    prompt.write_text('FULL', encoding='utf-8')
+
+    def parse_vote(text, _ctx):
+        return {'passed': text == 'OK'}
+
+    stage = AIStage(AIStageSpec(
+        name='validate_ai', status='validate', client_cache_key='validator',
+        runs_field='final_ai_validations', required_passes_field='final_ai_required_passes',
+        fresh_session_each_run=True, prompt=str(prompt), parser=parse_vote,
+        result_status=lambda data: 'pass' if data['passed'] else 'fail',
+    ))
+    result = stage.run(c)
+    assert result.status == 'fail'
+    assert '"passes": 2' in result.output
+    assert '"required_passes": 3' in result.output

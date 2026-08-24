@@ -1,6 +1,6 @@
 from runner.errors import RunnerError
-from runner.model.response import structured_call
-from runner.flow.stages.executor import StageExecutor
+from runner.ai.structured_output import structured_call
+from runner.workflow.stages.executor import StageExecutor
 
 
 def test_structured_call_reuses_same_ask_for_correction():
@@ -32,5 +32,5 @@ def test_failure_fingerprint_is_normalized_and_deterministic():
 def test_public_max_limits_remain_accepted_for_compatibility():
     from runner.api import RunRequest
     config = RunRequest(goal="g", validator="ai", max_attempts=7, max_cycles=4).to_runtime_config()
-    assert config.task_recovery_threshold == 7
-    assert config.full_replan_threshold == 4
+    assert config.same_session_retries == 7
+    assert config.max_cycles == 4

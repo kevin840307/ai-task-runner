@@ -3,9 +3,9 @@ from pathlib import Path
 
 def test_flow_is_plain_data_and_pipeline_is_generic():
     root = Path(__file__).resolve().parents[1]
-    default = (root / "runner/flow/default.py").read_text(encoding="utf-8")
-    pipeline = (root / "runner/flow/pipeline.py").read_text(encoding="utf-8")
-    factory = (root / "runner/flow/stages/factory.py").read_text(encoding="utf-8")
+    default = (root / "runner/workflow/definitions.py").read_text(encoding="utf-8")
+    pipeline = (root / "runner/workflow/pipeline.py").read_text(encoding="utf-8")
+    factory = (root / "runner/workflow/stages/factory.py").read_text(encoding="utf-8")
 
     assert "FLOWS = {" in default
     assert '"default": [' in default
@@ -20,7 +20,7 @@ def test_flow_is_plain_data_and_pipeline_is_generic():
 
 def test_stage_executor_remains_shared_execution_boundary():
     root = Path(__file__).resolve().parents[1]
-    executor = (root / "runner/flow/stages/executor.py").read_text(encoding="utf-8")
+    executor = (root / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
     assert "class StageExecutor" in executor
     assert "self.hooks.before(action)" in executor
     assert "self.hooks.after(action, tokens)" in executor

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ..model.backend import ModelMode
+from ..ai.contracts import BackendMode
 
 QWEN_DEFAULT_MAX_TOOL_CALLS = "-1"
 QWEN_COMPUTER_USE_TOOLS = (
@@ -135,7 +135,7 @@ QWEN_RUNTIME_EXCLUDED_TOOLS = (
 
 
 def configure_qwen_args(
-    mode: ModelMode,
+    mode: BackendMode,
     extra_args: Sequence[str],
     *,
     allow_project_read: bool = False,

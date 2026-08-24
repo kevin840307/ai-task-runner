@@ -13,10 +13,9 @@ Check implementation completeness, required files, user-facing behavior, data fo
 Run reasonable local checks when possible, such as tests, lint/build commands, CLI commands, or small examples. Generated artifacts are temporary and will be discarded.
 If no reliable command is obvious, inspect the relevant files directly and explain that no command was available in checks_run.
 When failing, make missing_items concrete, actionable, evidence-based, and grouped by blocking issue. Do not include warnings unless they block safe and correct completion.
-{% set custom = args.ai_validator_prompt or args.validator_prompt %}
-{% if custom %}
+{% if validation.instructions %}
 Additional validation instructions:
-{{ custom }}
+{{ validation.instructions }}
 {% endif %}
 {% set skipped = tasks | selectattr("review_skipped") | list %}
 {% if skipped %}

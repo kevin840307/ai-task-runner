@@ -1,1 +1,1 @@
-"""Operating-system runtime and process execution helpers."""
+"""Runtime state, process management, and event delivery."""

@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import runner.flow.pipeline as pipeline_module
-from runner.flow.pipeline import Pipeline
-from runner.flow.stages.base import StageResult
+import runner.workflow.pipeline as pipeline_module
+from runner.workflow.pipeline import Pipeline
+from runner.workflow.stages.contracts import StageResult
 
 
 class Stage:
@@ -64,7 +64,7 @@ def test_pipeline_runs_nested_stage_lists_in_place():
     plan = item("plan")
     validate = item("validate")
     executor.results = iter([
-        StageResult("plan", "pass", stages=([execute, review],)),
+        StageResult("plan", "pass", next_flow=([execute, review],)),
         StageResult("execute", "pass"),
         StageResult("review", "pass"),
         StageResult("validate", "pass"),
@@ -77,7 +77,7 @@ def test_any_stage_can_return_another_stage_list():
     ctx = context()
     repair, review = item("repair"), item("review")
     executor = Executor([
-        StageResult("a", "fail", stages=(repair, review)),
+        StageResult("a", "fail", next_flow=(repair, review)),
         StageResult("repair", "pass"),
         StageResult("review", "pass"),
         StageResult("b", "pass"),
@@ -90,7 +90,7 @@ def test_replace_restarts_the_whole_remaining_flow():
     ctx = context()
     understand, plan = item("understand"), item("plan")
     executor = Executor([
-        StageResult("execute", "replan", stages=(understand, plan), replace=True),
+        StageResult("execute", "replan", next_flow=(understand, plan), replace_remaining=True),
         StageResult("understand", "pass"),
         StageResult("plan", "pass"),
     ])

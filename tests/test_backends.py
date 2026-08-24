@@ -5,25 +5,25 @@ import pytest
 
 from runner.backends import (
     BACKENDS,
-    ModelBackend,
     backend_names,
-    configure_model_args,
+    configure_backend_args,
     create_backend,
     sandbox_supported,
 )
-from runner.model.backend import BackendResult, split_command
-from runner.model.errors import BackendError
+from runner.ai.contracts import BackendResult
+from runner.backends.base import BaseBackend, split_command
+from runner.ai.errors import BackendError
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.backends.qwen import QwenBackend, ensure_qwen_rules
-from runner.extensions.safety import runner_source_files
+from runner.plugins.safety import runner_source_files
 
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert backend_names() == ("qwen", "opencode")
     assert BACKENDS["qwen"] is QwenBackend
     assert BACKENDS["opencode"] is OpenCodeBackend
-    assert issubclass(QwenBackend, ModelBackend)
-    assert issubclass(OpenCodeBackend, ModelBackend)
+    assert issubclass(QwenBackend, BaseBackend)
+    assert issubclass(OpenCodeBackend, BaseBackend)
     assert QwenBackend.__module__ == "runner.backends.qwen"
     assert OpenCodeBackend.__module__ == "runner.backends.opencode"
 
@@ -41,7 +41,7 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
 
 
 def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatch):
-    class CustomBackend(ModelBackend):
+    class CustomBackend(BaseBackend):
         name = "custom"
         default_command = "custom"
 
@@ -63,7 +63,7 @@ def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatc
 
     monkeypatch.setitem(BACKENDS, CustomBackend.name, CustomBackend)
 
-    assert configure_model_args("custom", "planning", ["--existing"], allow_project_read=True) == [
+    assert configure_backend_args("custom", "planning", ["--existing"], allow_project_read=True) == [
         "--existing",
         "--mode=planning",
         "--read=True",
@@ -84,8 +84,8 @@ def test_core_has_no_backend_specific_command_logic():
 def test_sandbox_arguments_are_owned_by_the_backend_adapter():
     assert sandbox_supported("qwen") is True
     assert sandbox_supported("opencode") is False
-    assert configure_model_args("qwen", "runtime", [], sandbox=True).count("-s") == 1
-    assert configure_model_args(
+    assert configure_backend_args("qwen", "runtime", [], sandbox=True).count("-s") == 1
+    assert configure_backend_args(
         "qwen",
         "runtime",
         ["--sandbox"],
@@ -143,7 +143,7 @@ def test_backend_project_rules_use_current_root_files(tmp_path):
 
 
 def test_backend_rejects_empty_success_output(tmp_path):
-    class EmptyBackend(ModelBackend):
+    class EmptyBackend(BaseBackend):
         name = "empty"
         default_command = sys.executable
 
@@ -159,7 +159,7 @@ def test_backend_rejects_empty_success_output(tmp_path):
 
 
 def test_backend_timeout_kills_call_and_raises_recoverable_error(tmp_path):
-    class SlowBackend(ModelBackend):
+    class SlowBackend(BaseBackend):
         name = "slow"
         default_command = sys.executable
 
@@ -175,7 +175,7 @@ def test_backend_timeout_kills_call_and_raises_recoverable_error(tmp_path):
 
 
 def test_zero_backend_timeout_disables_limit(tmp_path):
-    class FastBackend(ModelBackend):
+    class FastBackend(BaseBackend):
         name = "fast"
         default_command = sys.executable
 
@@ -190,7 +190,7 @@ def test_zero_backend_timeout_disables_limit(tmp_path):
 
 
 def test_backend_error_preserves_failure_diagnostics(tmp_path):
-    class FailingBackend(ModelBackend):
+    class FailingBackend(BaseBackend):
         name = "failing"
         default_command = sys.executable
 
@@ -249,7 +249,7 @@ def test_backend_project_instructions_are_replaced_from_policy(tmp_path):
 
 
 def test_qwen_ask_passes_exact_prompt_through_stdin_only(tmp_path, monkeypatch):
-    from runner.runtime.process import ProcessResult
+    from runner.runtime.process_runner import ProcessResult
 
     backend = QwenBackend(sys.executable, tmp_path, [])
     captured = {}
@@ -286,7 +286,7 @@ def test_qwen_long_todo_split_prompt_uses_exact_stdin(tmp_path):
     backend = QwenBackend(
         sys.executable,
         tmp_path,
-        configure_model_args("qwen", "no_tool", []),
+        configure_backend_args("qwen", "no_tool", []),
     )
 
     for session_id in ("", "session-123"):
@@ -306,7 +306,7 @@ def test_qwen_rejects_blank_stdin_prompt(tmp_path):
 
 
 def test_run_process_sends_multiline_unicode_stdin_exactly(tmp_path):
-    from runner.runtime.process import run_process
+    from runner.runtime.process_runner import run_process
 
     prompt = "第一行\n第二行 JSON: {\"tasks\":[]}\n" + ("長內容\n" * 200)
     code = "import sys; data=sys.stdin.read(); sys.stdout.write(data)"
@@ -316,7 +316,7 @@ def test_run_process_sends_multiline_unicode_stdin_exactly(tmp_path):
 
 
 def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
-    from runner.runtime.process import run_process
+    from runner.runtime.process_runner import run_process
 
     prompt = "line1\nline2\n" * 500
     code = (
@@ -338,7 +338,7 @@ def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
 
 
 def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
-    from runner.runtime.process import ProcessResult
+    from runner.runtime.process_runner import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
@@ -366,7 +366,7 @@ def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
 
 
 def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
-    from runner.runtime.process import ProcessResult
+    from runner.runtime.process_runner import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, [])
@@ -380,7 +380,7 @@ def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
 
 
 def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
-    from runner.runtime.process import ProcessResult
+    from runner.runtime.process_runner import ProcessResult
     import runner.backends.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])

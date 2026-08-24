@@ -1,22 +1,47 @@
 # Architecture
 
-The runner is built around strict execution ownership:
+The directory structure is intentionally the architecture map:
 
-- `runner/flow/`: graph, pipeline loading, transition and shared retry policy. Flow decides what runs next.
-- `runner/stages/`: composable Stage implementations plus `StageExecutor` and `Stage builder`.
-- `runner/model/`: model/backend contracts, client/session behavior, structured model output.
-- `runner/runtime/`: durable state, progress/events, subprocess execution only.
-- `runner/extensions/`: optional hooks/observers such as safety, console, history, observability.
-- `runner/utils/`: generic file/project/template/text/import helpers.
+- `runner/api.py`, `bootstrap.py`, `task_runner.py`: public request boundary, dependency composition, and one-run orchestration.
+- `runner/script_loader.py`, `script_runner.py`: YAML batch parsing/validation and batch execution.
+- `runner/workflow/`: declarative workflow definitions, routing rules, result parsers, and the Stage engine.
+- `runner/workflow/stages/`: Stage contracts, factory, shared executor, generic `AIStage`, `PlanStage`, and `PythonValidatorStage`.
+- `runner/ai/`: AI client, backend contracts, session classification, structured-output handling, and AI diagnostics.
+- `runner/backends/`: Qwen/OpenCode implementations plus backend registry/configuration.
+- `runner/project/`: project file snapshots/restores, project policy, and QWEN.md/AGENTS.md instruction-file lifecycle.
+- `runner/prompts/`: strict Jinja loader, stable prompt context contract, and bundled prompt resources.
+- `runner/runtime/`: durable run state, subprocess lifecycle, and semantic event delivery.
+- `runner/plugins/`: optional cross-cutting hooks/observers such as safety, console, history, and observability.
+- `runner/config/`: runtime/default configuration only.
+- `runner/utils/`: small stateless generic file/text helpers only.
 
-## Core contract
+## Dependency direction
 
-`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> stages/replace/complete -> next Stage`
+The runner owns orchestration; backends, plugins, prompts, and validators provide bounded capabilities behind explicit contracts.
 
-A Stage performs one attempt and returns facts only. It does not call hooks, retry itself, publish UI lifecycle events, or select another flow node.
 
-`StageExecutor` is the single execution boundary. It owns before/after hooks, write-stage project snapshots/change detection, exception-to-result conversion, and `runner.stage` lifecycle events.
+`API/Bootstrap -> TaskRunner -> Workflow -> Stage -> AI contracts`
 
-`StageExecutor retry` is shared by every Stage type. A special Stage such as `PlanStage` or `PythonValidationStage` only implements the behavior that differs from generic `GlobalStage`/`GlobalStage`.
+`Backends -> AI contracts`
 
-`Stage builder` maps implementation type to Stage builder. `Pipeline` does not import or branch on concrete Stage classes or business Stage names.
+`StageExecutor -> Project + Runtime + generic plugin hooks`
+
+`Bootstrap -> backend/plugin registries`
+
+Workflow code must not depend on Qwen/OpenCode implementations, concrete plugins, or raw UI behavior. AI code must not depend on workflow business stages.
+
+## Workflow contract
+
+`Pipeline -> StageExecutor -> Stage.run() -> StageResult -> Stage.finish() -> next Stage`
+
+A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `Pipeline` only consumes declarative Stage data and returned `StageResult.next_flow/replace_remaining/complete` facts.
+
+Fixed topology lives only in `workflow/definitions.py`. Routing/result transitions live in `workflow/rules.py`.
+
+## Prompt contract
+
+All bundled prompts use Jinja with `StrictUndefined`. Stage templates never receive `RunState`, `RuntimeConfig`, or arbitrary dictionaries directly. `prompts/context.py` exposes the stable top-level contract:
+
+`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `session`, `failure`, `planning`, `previous`, `rules`, `always_instructions`.
+
+Ordinary AI stages reference a prompt path directly. Planning-specific computed context is owned by `PlanStage`; there is no separate prompt-builder registry.

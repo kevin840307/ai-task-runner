@@ -1,20 +1,20 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.flow.stages.base import StageContext
-from runner.flow.stages.global_stage import GlobalStage, GlobalStageSpec
-from runner.runtime.state import RunState
+from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages.ai_stage import AIStage, AIStageSpec
+from runner.runtime.run_state import RunState
 
 
 def test_plain_ai_stage_can_reference_bundled_prompt_path_directly(tmp_path):
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
-        args=SimpleNamespace(), root=tmp_path, work=tmp_path, state=state,
-        model=SimpleNamespace(session_id=""), state_file=tmp_path / "state.json",
-        validator=None, ai_validation=False, save_state=lambda: None,
+        config=SimpleNamespace(), root=tmp_path, work=tmp_path, state=state,
+        ai_client=SimpleNamespace(session_id=""), state_file=tmp_path / "state.json",
+        validator_path=None, validator_is_ai=False, save_state=lambda: None,
         set_stage=lambda *_: None,
     )
-    stage = GlobalStage(GlobalStageSpec(
+    stage = AIStage(AIStageSpec(
         name="security_review", status="checking", prompt="stages/ai_validator.md"
     ))
     rendered = stage._original_prompt(ctx, None)
@@ -22,6 +22,6 @@ def test_plain_ai_stage_can_reference_bundled_prompt_path_directly(tmp_path):
 
 
 def test_default_flow_has_no_prompt_path_resolver_hardcode():
-    source = Path("runner/flow/stages/global_stage.py").read_text(encoding="utf-8")
+    source = Path("runner/workflow/stages/ai_stage.py").read_text(encoding="utf-8")
     assert '"stages/" +' not in source
     assert '.replace(".md"' not in source

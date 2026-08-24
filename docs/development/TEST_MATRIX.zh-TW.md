@@ -1,11 +1,11 @@
 # 測試矩陣
 
-Version: 1.2.23
+Version: 1.2.33
 
 ## 主要契約
 - CLI/API request validation 與 YAML script mode。
 - Qwen/OpenCode backend command/session parsing；Qwen stdin-only Prompt + EOF。
-- Planning Understand/Finalize/Judge/Rewrite 同 session、bounded read-only inspection、不可恢復 session 才 fresh fallback、至少 6 TODO、bounded scope、planning quality-gate fail-soft。
+- Plan Stage 的 structured task contract、Same/Fresh recovery、minimum TODO contract、bounded scope，以及 no-Understand/no-Judge flow。
 - Executor Fresh/Rebuilt Goal context、same-session short continuation、Current-TODO-only。
 - Review/read-only/finalize。
 - Generic structured result extraction + strict stage schemas。

@@ -1,22 +1,44 @@
 # 架構
 
-Runner 以清楚的 execution ownership 為核心：
+目錄本身就是架構圖：
 
-- `runner/flow/`：精簡 Stage-list Pipeline 與預設 Stage 組裝；下一步由 StageResult.stages 動態產生。
-- `runner/stages/`：可拼接 Stage、`StageExecutor`、`Stage builder`。
-- `runner/model/`：Model/Backend 契約、client/session、structured output。
-- `runner/runtime/`：durable state、progress/events、subprocess；不放 model ask 或 Hook 執行。
-- `runner/extensions/`：Safety、Console、History、Observability 等可抽插 Hook/Observer。
-- `runner/utils/`：純通用 file/project/template/text/import helper。
+- `runner/api.py`、`bootstrap.py`、`task_runner.py`：外部 request、dependency 組裝、單次任務協調。
+- `runner/script_loader.py`、`script_runner.py`：YAML List 讀取/驗證與逐項執行。
+- `runner/workflow/`：Workflow 定義、路由規則、特殊 Prompt/Result adapter 與 Stage Engine。
+- `runner/workflow/stages/`：Stage contract、factory、共用 executor、`AIStage`、`PlanStage`、`PythonValidatorStage`。
+- `runner/ai/`：AI Client、Backend contract、Session 判斷、Structured Output、AI diagnostics。
+- `runner/backends/`：Qwen/OpenCode 實作與 Backend registry/configuration。
+- `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
+- `runner/prompts/`：Strict Jinja loader、穩定 Prompt Context contract、Prompt resources。
+- `runner/runtime/`：Durable state、subprocess lifecycle、EventBus。
+- `runner/plugins/`：Safety、Console、History、Observability 等橫切 Plugin/Hook。
+- `runner/config/`：Runtime/default configuration。
+- `runner/utils/`：只保留無狀態、通用的 file/text helper。
 
-## 核心契約
+## 依賴方向
 
-`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> stages/replace/complete -> next Stage`
+`API/Bootstrap -> TaskRunner -> Workflow -> Stage -> AI contracts`
 
-Stage 每次只做一個 attempt 並回傳事實結果；Stage 不執行 Hook、不自己 Retry、不發布 UI lifecycle event，也不決定下一個 Flow node。
+`Backends -> AI contracts`
 
-`StageExecutor` 是唯一執行邊界，統一負責 before/after Hook、write Stage 的 project snapshot/change detection、exception 轉 StageResult，以及既有 `runner.stage` lifecycle event。
+`StageExecutor -> Project + Runtime + generic plugin hooks`
 
-所有 Stage 共用同一套 `StageExecutor retry`。`PlanStage`、`PythonValidationStage` 這種特殊 Stage 只寫與 `GlobalStage` / `GlobalStage` 不同的部分。
+`Bootstrap -> backend/plugin registries`
 
-`Stage builder` 負責 implementation type 到 Stage builder 的對應；`Pipeline` 不 import concrete Stage class，也不認任何業務 Stage 名稱。
+Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin 或 UI 行為；AI subsystem 不得反向依賴 Workflow business stage。
+
+## Workflow 契約
+
+`Pipeline -> StageExecutor -> Stage.run() -> StageResult -> Stage.finish() -> next Stage`
+
+Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`Pipeline` 只消費 declarative Stage data 與 `StageResult.next_flow/replace_remaining/complete`。
+
+固定拓樸只放 `workflow/definitions.py`；Result routing/state transition 只放 `workflow/rules.py`。
+
+## Prompt 契約
+
+所有 bundled Prompt 統一使用 Jinja + `StrictUndefined`。Template 不直接取得 `RunState`、`RuntimeConfig` 或任意 dict。`prompts/context.py` 是唯一 Prompt Context 入口，固定 top-level variables：
+
+`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `session`, `failure`, `planning`, `previous`, `rules`, `always_instructions`。
+
+一般 AI Stage 直接指定 prompt path；只有真的需要 Python 計算 context 的特殊 Stage 才使用 prompt builder，目前只保留 Planning / Repair Planning。

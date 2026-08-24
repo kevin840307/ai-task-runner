@@ -3,16 +3,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_stage_ownership_is_inside_flow():
+def test_stage_ownership_is_inside_workflow():
     assert not (ROOT / "runner/stages").exists()
-    stages = ROOT / "runner/flow/stages"
+    stages = ROOT / "runner/workflow/stages"
     assert stages.is_dir()
-    for name in ("base.py", "executor.py", "factory.py", "global_stage.py", "plan.py", "python_validation.py"):
+    for name in ("contracts.py", "executor.py", "factory.py", "ai_stage.py", "plan_stage.py", "python_validator.py"):
         assert (stages / name).is_file()
 
 
-def test_default_flow_is_data_only():
-    source = (ROOT / "runner/flow/default.py").read_text(encoding="utf-8")
-    assert "DEFAULT_FLOW" in source
+def test_workflow_definitions_are_data_only():
+    source = (ROOT / "runner/workflow/definitions.py").read_text(encoding="utf-8")
+    assert "FLOWS" in source
     assert "STAGES" in source
     assert "def " not in source

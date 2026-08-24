@@ -1,15 +1,15 @@
 # Operations and Troubleshooting
 
-Version: 1.2.23
+Version: 1.2.33
 
 ## Long-running behavior
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.
 
 ## Common recovery paths
-- Invalid structured JSON/schema -> send a short same-session JSON-only correction first. Planning then retries/falls back as needed; Judge/Review remain fail-soft only after correction/recovery cannot produce a usable result.
+- Invalid structured JSON/schema -> send a short same-session JSON-only correction first; if still invalid, use the Stage-configured fresh fallback. Review model errors follow the normal Stage retry budget before an allowed fail-soft skip.
 - Session unavailable/expired -> rebuild immediately. Recoverable model failures such as a single loop keep the current session; repeated loop/no-progress failures trigger a bounded fresh rebuild with required context.
 - Executor crashes after changing files -> preserve coherent changes and let Review/next recovery decide.
-- Review model error with resumable session -> no-tool Review Finalize.
+- Review model/policy error -> use shared stage-aware same-session recovery first. Read-only mutations are restored by Safety and treated as a failed attempt, so Review retries instead of silently accepting a mutated run; when the configured Review retry budget is exhausted and skip is allowed, record review_skipped.
 - Validator FAIL -> Repair Planning with validator feedback.
 - Validator infrastructure failure -> retry; never PASS open.
 
@@ -30,3 +30,5 @@ Human status/detail text is converted to one line before spinner rendering so em
 Provide state/event log, `current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, relevant history pair, command line, and visible error. This normally reconstructs stage -> prompt -> model result -> parser/backend decision -> Runner recovery.
 
 Transient API/network/rate-limit outages use bounded exponential backoff per delay interval but no retry-count exhaustion; they preserve current state/session. Persistent model/session problems use the normal reuse-then-rebuild policy.
+
+Safety snapshot temp directories use `ai-task-runner-readonly-*` / `ai-task-runner-protect-*`. Normal Stage completion removes them immediately; startup also removes stale abandoned snapshots so abnormal process termination does not accumulate them indefinitely.

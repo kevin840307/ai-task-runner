@@ -31,7 +31,7 @@ from runner.config.defaults import (
     DEFAULT_WATCHDOG_INTERVAL,
 )
 from runner.errors import ConfigurationError
-from runner.runtime.process import ACTIVE_PROCESS_FILE
+from runner.runtime.process_runner import ACTIVE_PROCESS_FILE
 from runner.version import __version__
 
 

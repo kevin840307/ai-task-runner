@@ -5,10 +5,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from ..model.backend import ModelBackend, BackendResult, ensure_project_rules
+from ..ai.contracts import BackendResult
+from .base import BaseBackend
+from ..project.instructions import ensure_instruction_file
 
 
-class OpenCodeBackend(ModelBackend):
+class OpenCodeBackend(BaseBackend):
     name = "opencode"
     default_command = "opencode"
 
@@ -58,4 +60,4 @@ class OpenCodeBackend(ModelBackend):
 
 def ensure_opencode_rules(root: Path) -> Path:
     """Create or extend the OpenCode project rule file."""
-    return ensure_project_rules(root, "AGENTS.md")
+    return ensure_instruction_file(root, "AGENTS.md")

@@ -12,12 +12,14 @@ from runner.backends.qwen import QwenBackend
 from runner.config import RuntimeConfig
 from runner.config.defaults import DEFAULT_WATCHDOG_INTERVAL
 from runner.errors import ConfigurationError, RunnerError
-from runner.extensions.console import LiveUI
-from runner.flow.behavior import invalidate_plan
-from runner.flow.stages.base import StageContext, StageResult
-from runner.flow.stages.executor import StageExecutor
-from runner.model.model import BackendResult, ModelClient
-from runner.runtime.state import RunState
+from runner.plugins.console import LiveUI
+from runner.workflow.rules import invalidate_plan
+from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages.executor import StageExecutor
+from runner.ai.contracts import BackendResult
+from runner.ai.client import AIClient
+from runner.runtime import events
+from runner.runtime.run_state import RunState
 
 
 def _backend(cls):
@@ -66,11 +68,11 @@ def test_plain_console_deduplicates_same_status(tmp_path, capsys):
 
 def test_max_cycles_zero_is_unlimited_and_positive_is_enforced(tmp_path):
     state = _state(tmp_path)
-    ctx = SimpleNamespace(state=state, args=SimpleNamespace(full_replan_threshold=0))
+    ctx = SimpleNamespace(state=state, config=SimpleNamespace(max_cycles=0))
     invalidate_plan(ctx)
     assert state.cycle == 2
 
-    ctx.args.full_replan_threshold = 2
+    ctx.config.max_cycles = 2
     with pytest.raises(ConfigurationError, match='max cycles reached: 2'):
         invalidate_plan(ctx)
 
@@ -112,7 +114,7 @@ class _ModelStage:
     tolerate_restored_changes = False
 
     def run(self, ctx, previous=None):
-        return StageResult(self.name, 'pass', output=ctx.model.ask('understand'))
+        return StageResult(self.name, 'pass', output=ctx.ai_client.ask('understand'))
 
     def finish(self, ctx, result):
         ctx.save_session()
@@ -124,14 +126,14 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
     model = _SessionModel()
     saves = []
     ctx = StageContext(
-        args=RuntimeConfig(task_recovery_threshold=0, retry_delay=0),
+        config=RuntimeConfig(same_session_retries=0, stage_retry_delay=0),
         root=tmp_path,
         work=tmp_path / '.work',
         state=state,
-        model=model,
+        ai_client=model,
         state_file=tmp_path / 'state.json',
-        validator=None,
-        ai_validation=False,
+        validator_path=None,
+        validator_is_ai=False,
         save_state=lambda: saves.append(state.dump()),
         set_stage=lambda stage, detail='': setattr(state, 'stage', stage),
     )
@@ -140,12 +142,12 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
 
     assert result.status == 'pass'
     assert model.calls == ['session-A', '']  # second call cannot resume A
-    assert model.session_id == state.model_session_id == 'session-B'
+    assert model.session_id == state.ai_session_id == 'session-B'
     assert state.fresh_session_round == 0  # reset after successful recovery
 
 
 def test_model_result_event_contains_actual_new_session(tmp_path, monkeypatch):
-    client = ModelClient('qwen', sys.executable, tmp_path, [])
+    client = AIClient('qwen', sys.executable, tmp_path, [])
 
     class Backend:
         name = 'qwen'
@@ -160,7 +162,7 @@ def test_model_result_event_contains_actual_new_session(tmp_path, monkeypatch):
 
     client._backend = Backend()
     events = []
-    monkeypatch.setattr(client, '_publish_model_event', lambda kind, session_id, text, call_id='', error='', **meta: (events.append((kind, session_id, meta)) or 'call-1'))
+    monkeypatch.setattr(client, '_publish_ai_event', lambda kind, session_id, text, call_id='', error='', **meta: (events.append((kind, session_id, meta)) or 'call-1'))
 
     assert client.ask('hello') == 'ok'
     assert events[0][0:2] == ('model.prompt', '')
@@ -170,7 +172,7 @@ def test_model_result_event_contains_actual_new_session(tmp_path, monkeypatch):
 
 
 def test_console_observer_ignores_duplicate_stage_start_event(tmp_path):
-    from runner.extensions.console import ConsoleObserver
+    from runner.plugins.console import ConsoleObserver
     runtime = SimpleNamespace(config=SimpleNamespace(human_output=False))
     observer = ConsoleObserver(runtime)
     calls = []
@@ -184,7 +186,7 @@ def test_console_observer_ignores_duplicate_stage_start_event(tmp_path):
 def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
     import subprocess
     import time
-    from runner.runtime.process import _communicate_with_watchdog
+    from runner.runtime.process_runner import _communicate_with_watchdog
 
     process = subprocess.Popen(
         [sys.executable, "-c", "print('ok')"],
@@ -205,3 +207,22 @@ def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
     assert result.return_code == 0
     assert result.output.strip() == "ok"
     assert time.monotonic() - started < 5
+
+
+def test_cleanup_stale_safety_snapshots(tmp_path):
+    from runner.project.files import cleanup_stale_artifacts
+
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    readonly = temp_root / "ai-task-runner-readonly-old"
+    protected = temp_root / "ai-task-runner-protect-old"
+    keep = temp_root / "unrelated"
+    for path in (readonly, protected, keep):
+        path.mkdir()
+        (path / "x.txt").write_text("x", encoding="utf-8")
+
+    cleanup_stale_artifacts(tmp_path / "work", temp_root=temp_root, older_than=0)
+
+    assert not readonly.exists()
+    assert not protected.exists()
+    assert keep.exists()

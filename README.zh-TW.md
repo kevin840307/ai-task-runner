@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.25
+版本：1.2.33
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態），CLI 才會退出。若 state 尚未完成，main 會自動 resume 繼續。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
@@ -9,8 +9,8 @@
 
 ## 核心能力
 - 支援 Qwen / OpenCode；Qwen Prompt 僅走 stdin，不使用 `-p` 傳完整 Prompt。
-- Adaptive Planning：bounded read-only Understand -> 同一 planning client/session 的 Plan Finalize -> 必要時同 session Judge/Rewrite；只有 planning session 無法恢復時才用 fresh full-context fallback。
-- TODO 隔離執行：Executor 跨 TODO 沿用同一 session，每次只送新的 Current TODO 與 scope 提醒；Review 才使用 fresh read-only session。
+- Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
+- TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Review 使用獨立 read-only client/session。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode（每筆可指定 `project_root`，goal 可用 `goal_file`）。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
@@ -69,18 +69,18 @@ Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 
 
 ## Stage 執行架構
 
-`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> stages/replace/complete -> next Stage`
+`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> next_flow/replace_remaining/complete -> next Stage`
 
 統一執行規則：
-- API／服務異常由 model client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。
-- 真實 failure 先使用 same-session 的短續跑 prompt；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
+- API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。
+- 真實 failure 先使用 same-session 的短 Stage-aware 續跑 prompt，只補 Stage 身分、新 failure evidence 與下一步；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
 - fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會重新理解目前專案並重新產生 plan；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
 - Plan 把 TODO list 存入 durable state，並直接回傳由 `[execute, review]` 組成的 execution list。Pipeline 先完整執行這個巢狀 list，再回到外層繼續 Python/AI Validator；未來任何 Stage 都可以用相同方式回傳 Stage list。
 
 
-Stage 一次只做一個 attempt。Hook/Event/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `GlobalStage` / `GlobalStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidationStage`。
+Stage 一次只做一個 attempt。Hook/Event/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `AIStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
 
 
 ## 新增普通 AI Stage
@@ -89,11 +89,11 @@ Stage 一次只做一個 attempt。Hook/Event/change tracking 由 `StageExecutor
 
 ```python
 "security_review": {
-    "stage": "global",
+    "stage": "ai",
     "status": "AI 正在執行 Security Review",
     "mode": "readonly",
     "prompt": "stages/security_review.md",
 }
 ```
 
-再把 `"security_review"` 插入 `FLOWS` 的目標位置，並新增 `runner/prompts/stages/security_review.md`。Stage preset 的 key 會自動成為 Stage name。只有確實需要 Python 動態組裝 context 的特殊 Stage 才使用 `prompt_builder`。
+再把 `"security_review"` 插入 `FLOWS` 的目標位置，並新增 `runner/prompts/stages/security_review.md`。Stage preset 的 key 會自動成為 Stage name。Planning 專用的動態 context 由 `PlanStage` 負責，不再有獨立 prompt-builder registry。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`，禁止直接讀 runtime 內部物件。

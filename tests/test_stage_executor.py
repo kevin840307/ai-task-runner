@@ -2,9 +2,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from runner.errors import RunnerError
-from runner.runtime import progress
-from runner.runtime.progress import EventBus
-from runner.flow.stages import StageExecutor, StageResult
+from runner.runtime import events
+from runner.runtime.events import EventBus
+from runner.workflow.stages import StageExecutor, StageResult
 
 
 class Hooks:
@@ -25,6 +25,8 @@ class Stage:
     retry = 0
     def run(self, ctx, previous=None):
         return StageResult(self.name, "pass", output="ok")
+    def finish(self, ctx, result):
+        return result
 
 
 def context():
@@ -33,13 +35,14 @@ def context():
         root=Path("."), work=Path("."),
         execution=SimpleNamespace(change_detected=None),
         set_stage=lambda *args: None,
-        args=SimpleNamespace(retry_delay=0),
-        task=None, model=model, scratch={},
+        config=SimpleNamespace(stage_retry_delay=0),
+        task=None, ai_client=model, scratch={},
         state=SimpleNamespace(
-            model_session_id="", failure_scope="", failure_key="",
+            ai_session_id="", failure_scope="", failure_key="",
             same_failures=0, fresh_session_round=0,
         ),
         save_state=lambda: None,
+        reset_sessions=lambda: setattr(model, "session_id", ""),
     )
 
 
@@ -53,22 +56,22 @@ def test_executor_wraps_one_stage_once_with_hooks():
 def test_executor_converts_stage_exception_to_result():
     class Broken(Stage):
         def run(self, ctx, previous=None): raise RunnerError("boom")
-    result = StageExecutor(Hooks()).run(Broken(), context())
+    result = StageExecutor(Hooks())._attempt(Broken(), context(), None)
     assert result.status == "error"
     assert "boom" in str(result.error)
 
 
 def test_executor_preserves_stage_lifecycle_events():
-    events = []
-    bus = EventBus(); bus.subscribe(events.append)
-    progress.configure(bus)
+    records = []
+    bus = EventBus(); bus.subscribe(records.append)
+    events.configure(bus)
     StageExecutor(Hooks()).run(Stage(), context())
-    lifecycle = [(event["type"], event["action"], event.get("stage")) for event in events if event["type"] == "runner.stage"]
+    lifecycle = [(event["type"], event["action"], event.get("stage")) for event in records if event["type"] == "runner.stage"]
     assert lifecycle == [("runner.stage", "start", "sample"), ("runner.stage", "finish", "sample")]
 
 
 def test_hook_chain_rolls_back_completed_before_hooks_when_later_before_fails():
-    from runner.extensions.base import HookChain
+    from runner.plugins.contracts import HookChain
 
     calls = []
 

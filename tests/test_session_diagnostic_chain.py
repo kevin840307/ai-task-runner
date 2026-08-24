@@ -1,4 +1,4 @@
-from runner.model.model import BackendError
+from runner.ai.errors import BackendError
 from runner.errors import RunnerError, diagnostic_error
 
 

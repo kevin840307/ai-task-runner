@@ -16,10 +16,10 @@ Work directly in this session; do not delegate to subagents or use computer-use,
 Do not leave scratch, diagnostic, runner-state, sidecar, or ad hoc verification files in the project unless they are required deliverables. Use an existing temporary location for disposable checks and remove any temporary artifacts before finishing.
 
 Run context:
-{{ {"cycle": state.cycle, "validator_feedback": state.validator_output[-2000:]} | tojson }}
-{% if validator %}
+{{ {"cycle": workflow.cycle, "validator_feedback": workflow.validator_feedback[-2000:]} | tojson }}
+{% if validation.validator_path %}
 Validator reference:
-{{ validator }}
+{{ validation.validator_path }}
 {% endif %}
 
 Task:

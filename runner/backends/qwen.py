@@ -9,14 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_QWEN_COMMAND
-from ..runtime.process import run_process
+from ..runtime.process_runner import run_process
 
-from ..model.backend import ModelBackend, ModelMode, BackendResult, ensure_project_rules
-from ..model.errors import BackendError
+from ..ai.contracts import BackendMode, BackendResult
+from .base import BaseBackend
+from ..project.instructions import ensure_instruction_file
+from ..ai.errors import BackendError
 from .qwen_args import configure_qwen_args
 
 
-class QwenBackend(ModelBackend):
+class QwenBackend(BaseBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
     sandbox_flags = ("-s", "--sandbox")
@@ -24,7 +26,7 @@ class QwenBackend(ModelBackend):
     @classmethod
     def configure_args(
         cls,
-        mode: ModelMode,
+        mode: BackendMode,
         extra_args: Sequence[str],
         *,
         allow_project_read: bool = False,
@@ -162,7 +164,7 @@ class QwenBackend(ModelBackend):
 
 def ensure_qwen_rules(root: Path) -> Path:
     """Create or extend the Qwen project rule file."""
-    return ensure_project_rules(root, "QWEN.md")
+    return ensure_instruction_file(root, "QWEN.md")
 
 def bridge_sandbox_session(
     root: Path,

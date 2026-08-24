@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import time
 
-from runner.extensions.console import LiveUI
-from runner.flow.default import FLOWS, STAGES
-from runner.runtime.state import RunState
+from runner.plugins.console import LiveUI
+from runner.workflow.definitions import FLOWS, STAGES
+from runner.runtime.run_state import RunState
 
 
 class _Stdout:
@@ -29,10 +29,10 @@ def _state(tmp_path):
 
 def test_tty_keeps_spinner_on_single_line(monkeypatch, tmp_path):
     stdout = _Stdout(True)
-    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
-    monkeypatch.setattr("runner.extensions.console.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)
     monkeypatch.setattr(
-        "runner.extensions.console.shutil.get_terminal_size",
+        "runner.plugins.console.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((120, 20)),
     )
     ui = LiveUI()
@@ -51,7 +51,7 @@ def test_tty_keeps_spinner_on_single_line(monkeypatch, tmp_path):
 
 def test_redirected_output_has_no_spinner_and_deduplicates(monkeypatch, tmp_path):
     stdout = _Stdout(False)
-    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
     ui = LiveUI()
     ui.bind(_state(tmp_path))
 
@@ -71,10 +71,10 @@ def test_default_and_replan_flows_do_not_force_understand_stage():
 
 def test_repeated_tty_start_does_not_restart_spinner_or_add_lines(monkeypatch, tmp_path):
     stdout = _Stdout(True)
-    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
-    monkeypatch.setattr("runner.extensions.console.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)
     monkeypatch.setattr(
-        "runner.extensions.console.shutil.get_terminal_size",
+        "runner.plugins.console.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((120, 20)),
     )
     ui = LiveUI()

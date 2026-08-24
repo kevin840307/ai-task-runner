@@ -1,4 +1,4 @@
-"""Generic filesystem helpers shared by runtime and extensions."""
+"""Generic filesystem helpers shared by runtime and plugins."""
 from __future__ import annotations
 
 import hashlib

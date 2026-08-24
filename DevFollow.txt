@@ -13,4 +13,5 @@
 11. 程式碼需要容易懂，直觀，人好維護
 12. 移除舊程式碼、不必要的程式碼
 13. ai agent輸入prompt應該都要使用stdin, 防止cmd超出文字
+14. 檔案&function命名合理、易懂、folder分類合理、拆分合理
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import sys
 
 import ai_task_runner
-from runner.runtime import process as process_module
+from runner.runtime import process_runner as process_module
 
 
 def _args(root: Path) -> list[str]:

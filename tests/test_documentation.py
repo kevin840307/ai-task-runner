@@ -53,7 +53,7 @@ def test_canonical_api_resume_and_24h_boundaries_are_documented():
     assert "the runner owns orchestration" in combined.lower()
     assert "Final Validator PASS" in combined
     assert "20,000" in combined
-    assert "process.py" in _text("DESIGN")
+    assert "process_runner.py" in _text("DESIGN")
 
 
 def test_stale_timeout_and_version_claims_are_absent():

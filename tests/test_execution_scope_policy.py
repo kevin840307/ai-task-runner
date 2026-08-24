@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from runner.errors import RunnerError
-from runner.flow.stages.executor import StageExecutor
+from runner.workflow.stages.executor import StageExecutor
 
 
 def test_transient_service_error_is_not_a_real_stage_failure():
@@ -12,6 +12,6 @@ def test_transient_service_error_is_not_a_real_stage_failure():
 
 def test_pipeline_does_not_own_task_or_stage_specific_policy():
     root = Path(__file__).resolve().parents[1]
-    source = (root / "runner/flow/pipeline.py").read_text(encoding="utf-8")
+    source = (root / "runner/workflow/pipeline.py").read_text(encoding="utf-8")
     for token in ("task.attempts", "review_skipped", "validator_failure", "model.session_id", "failure_key"):
         assert token not in source

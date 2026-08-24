@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-from .backends import backend_names, sandbox_supported
+from .backends.registry import backend_names, sandbox_supported
 from .config import EventHandler, RuntimeConfig
 from .bootstrap import execute
 from .config.defaults import (
@@ -153,21 +153,21 @@ class RunRequest:
             backend=self.backend,
             command=self.command,
             sandbox=self.sandbox,
-            agent_arg=list(self.agent_args),
-            validator_arg=list(self.validator_args),
-            protect_file=list(self.protect_files),
+            agent_args=list(self.agent_args),
+            validator_args=list(self.validator_args),
+            protect_files=list(self.protect_files),
             validator_timeout=self.validator_timeout,
             agent_timeout=self.agent_timeout,
             planning_timeout=self.planning_timeout,
             agent_idle_after_change_timeout=self.agent_idle_after_change_timeout,
-            api_wait_timeout=self.api_wait_timeout,
+            api_retry_timeout=self.api_wait_timeout,
             watchdog_interval=self.watchdog_interval,
-            task_recovery_threshold=self.max_attempts,
+            same_session_retries=self.max_attempts,
             review_retries=self.review_retries,
-            full_replan_threshold=self.max_cycles,
-            retry_delay=self.retry_delay,
-            retry_wait=self.retry_wait,
-            retry_max_wait=self.retry_max_wait,
+            max_cycles=self.max_cycles,
+            stage_retry_delay=self.retry_delay,
+            api_retry_wait=self.retry_wait,
+            api_retry_max_wait=self.retry_max_wait,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
             loop_context_compress=self.loop_context_compress,

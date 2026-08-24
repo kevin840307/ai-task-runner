@@ -22,9 +22,9 @@ def module_imports(filename: str) -> set[str]:
 
 
 def test_core_ownership_is_obvious():
-    for package in ("engine", "workflow", "agent", "ai"):
+    for package in ("flow", "model", "extensions", "agent", "engine"):
         assert not (ROOT / "runner" / package).exists()
-    for package in ("flow", "model", "runtime", "backends", "extensions", "utils", "prompts"):
+    for package in ("workflow", "ai", "runtime", "backends", "plugins", "project", "utils", "prompts"):
         assert (ROOT / "runner" / package).is_dir()
 
 
@@ -32,15 +32,15 @@ def test_task_runner_uses_stage_executor_and_never_concrete_stage_types():
     source = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
     assert "StageExecutor" in source
     assert "build_pipeline" in source
-    for name in ("GlobalStage", "PlanStage", "PythonValidationStage", "ReviewStage", "ValidateStage"):
+    for name in ("AIStage", "PlanStage", "PythonValidatorStage", "ReviewStage", "ValidateStage"):
         assert name not in source
 
 
 def test_stage_executor_is_only_hook_boundary():
-    executor = (ROOT / "runner/flow/stages/executor.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
     assert ".hooks.before(" in executor
     assert ".hooks.after(" in executor
-    for path in (ROOT / "runner/flow/stages").glob("*.py"):
+    for path in (ROOT / "runner/workflow/stages").glob("*.py"):
         if path.name in {"executor.py", "__init__.py"}:
             continue
         source = path.read_text(encoding="utf-8")
@@ -50,7 +50,7 @@ def test_stage_executor_is_only_hook_boundary():
 
 
 def test_stage_never_uses_graph_or_transition_objects():
-    for path in (ROOT / "runner/flow/stages").glob("*.py"):
+    for path in (ROOT / "runner/workflow/stages").glob("*.py"):
         if path.name == "__init__.py":
             continue
         source = path.read_text(encoding="utf-8")
@@ -59,16 +59,16 @@ def test_stage_never_uses_graph_or_transition_objects():
         assert "FlowDefinition" not in source
 
 
-def test_model_package_contains_only_model_concerns():
-    names = {path.name for path in (ROOT / "runner/model").glob("*.py")}
-    assert {"model.py", "session.py", "response.py", "errors.py", "prompt.py", "__init__.py"} <= names
+def test_ai_package_contains_only_ai_concerns():
+    names = {path.name for path in (ROOT / "runner/ai").glob("*.py")}
+    assert {"client.py", "contracts.py", "session.py", "structured_output.py", "diagnostics.py", "errors.py", "__init__.py"} <= names
     for forbidden in ("retry.py", "trace.py", "history.py"):
         assert forbidden not in names
 
 
-def test_runtime_does_not_own_model_ask_or_stage_hooks():
+def test_runtime_does_not_own_ai_calls_or_stage_hooks():
     runtime_source = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "runner/runtime").glob("*.py"))
-    assert "model.ask(" not in runtime_source
+    assert ".ask(" not in runtime_source
     assert "hooks.before(" not in runtime_source
     assert "hooks.after(" not in runtime_source
 
@@ -79,14 +79,30 @@ def test_root_python_files_stay_minimal():
 
 def test_recovery_is_centralized_in_stage_executor():
     assert not (ROOT / "runner/utils/recovery.py").exists()
-    source = (ROOT / "runner/flow/stages/executor.py").read_text(encoding="utf-8")
+    source = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
     for token in ("same_failures", "fresh_session_round", "_is_service_error", "_fresh_session"):
         assert token in source
 
 
-def test_model_abstract_contracts_live_in_model_package():
-    backend_sources = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "runner/backends").glob("*.py"))
-    assert "class ModelBackend(ABC)" not in backend_sources
-    model_package = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "runner/model").glob("*.py"))
-    assert "class ModelBackend(ABC)" in model_package
-    assert "class Model(Protocol)" in model_package
+def test_ai_contracts_are_separate_from_backend_implementations():
+    contracts = (ROOT / "runner/ai/contracts.py").read_text(encoding="utf-8")
+    base = (ROOT / "runner/backends/base.py").read_text(encoding="utf-8")
+    assert "class AIBackend(Protocol)" in contracts
+    assert "class AIClientProtocol(Protocol)" in contracts
+    assert "class BaseBackend(ABC)" in base
+
+
+def test_project_and_utils_ownership_is_explicit():
+    project = {path.name for path in (ROOT / "runner/project").glob("*.py")}
+    assert {"files.py", "policy.py", "instructions.py", "__init__.py"} <= project
+    utils = {path.name for path in (ROOT / "runner/utils").glob("*.py")}
+    assert utils == {"files.py", "text.py", "__init__.py"}
+
+
+def test_registries_are_not_hidden_in_contract_or_package_init_files():
+    assert (ROOT / "runner/backends/registry.py").is_file()
+    assert (ROOT / "runner/plugins/registry.py").is_file()
+    backend_init = (ROOT / "runner/backends/__init__.py").read_text(encoding="utf-8")
+    plugin_contracts = (ROOT / "runner/plugins/contracts.py").read_text(encoding="utf-8")
+    assert "def create_backend(" not in backend_init
+    assert "current_runtime" not in plugin_contracts

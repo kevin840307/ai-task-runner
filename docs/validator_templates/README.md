@@ -1,6 +1,6 @@
 # Validator Interface and Templates
 
-Version: 1.2.23
+Version: 1.2.33
 
 Use the shared local `validator_interface.py` pattern for deterministic example/smoke validators. Keep project-specific checks in the validator itself; the interface only standardizes report/error/warning/final exit behavior.
 

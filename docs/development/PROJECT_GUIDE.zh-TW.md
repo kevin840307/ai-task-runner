@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.23
+版本：1.2.33
 
 ## 強制維護規則
 1. Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 model identity 分支。
@@ -27,4 +27,4 @@ CLI/UI/Skill/Python 都應使用 `runner.api.RunRequest` / `runner.api.run()`；
 ## Project policy
 所有維護中的 smoke/example project root 都應有 `.ai-task-runner.yaml`。Policy 本身自動 protected。Immutable input/reference fixture 應列成 protected；Task 本來要修改的檔案則不可 protected。
 
-- Session 規則：同一程序內，禁止只為 resume 既有 session 而 new `Agent`；必須直接重用原 client。只有程式重啟後的 `--resume` 可從持久化 session state 重建 client。
+- Session 規則：同一程序內，禁止只為 resume 既有 session 而 new `AIClient`；必須直接重用原 client。只有程式重啟後的 `--resume` 可從持久化 session state 重建 client。

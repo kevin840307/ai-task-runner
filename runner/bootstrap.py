@@ -1,16 +1,16 @@
-"""Application/runtime bootstrap and extension discovery."""
+"""Application/runtime bootstrap and plugin discovery."""
 from __future__ import annotations
 
 import argparse
-import importlib
-import pkgutil
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from .config import RuntimeConfig
-from .extensions.base import HookChain
-from .runtime.progress import EventBus
-from .runtime import progress
+from .plugins.contracts import HookChain
+from .plugins.registry import register_plugins
+from .runtime.events import EventBus
+from .runtime import events
 
 
 @dataclass
@@ -44,40 +44,59 @@ def register_resources(paths) -> None:
             runtime.resources.append(path)
 
 
-def bootstrap_runtime(config: RuntimeConfig) -> Runtime:
-    global _current
-    runtime = Runtime(
+def _create_runtime(config: RuntimeConfig) -> Runtime:
+    return Runtime(
         config=config,
         work=Path(config.project_root).resolve() / config.work_dir,
         events=EventBus(),
         hooks=HookChain(),
         resources=[],
     )
-    _current = runtime
-    progress.configure(runtime.events, {
+
+
+def _event_context(config: RuntimeConfig) -> dict[str, int]:
+    return {
         key: value for key, value in {
             "script_index": config.script_index,
             "script_total": config.script_total,
         }.items() if value is not None
-    })
-    package = importlib.import_module("runner.extensions")
-    for module_info in sorted(pkgutil.iter_modules(package.__path__), key=lambda item: item.name):
-        module = importlib.import_module(f"runner.extensions.{module_info.name}")
-        register = getattr(module, "register", None)
-        if callable(register):
-            register(runtime)
+    }
+
+
+def bootstrap_runtime(config: RuntimeConfig) -> Runtime:
+    """Install one runtime until another runtime is bootstrapped."""
+    global _current
+    runtime = _create_runtime(config)
+    _current = runtime
+    events.configure(runtime.events, _event_context(config))
+    register_plugins(runtime)
     return runtime
+
+
+@contextmanager
+def runtime_scope(config: RuntimeConfig):
+    """Activate one runtime and restore the caller runtime after completion."""
+    global _current
+    previous = _current
+    runtime = _create_runtime(config)
+    _current = runtime
+    try:
+        with events.scope(runtime.events, _event_context(config)):
+            register_plugins(runtime)
+            yield runtime
+    finally:
+        _current = previous
 
 
 def execute(args: RuntimeConfig | argparse.Namespace) -> int:
     if not isinstance(args, RuntimeConfig):
         args = RuntimeConfig.from_namespace(args)
-    bootstrap_runtime(args)
-    if args.script:
-        from .script_runner import execute_script
-        return execute_script(args, execute)
-    from .task_runner import TaskRunner
-    return TaskRunner(args).run()
+    with runtime_scope(args):
+        if args.script:
+            from .script_runner import execute_script
+            return execute_script(args, execute)
+        from .task_runner import TaskRunner
+        return TaskRunner(args).run()
 
 
-__all__ = ["Runtime", "bootstrap_runtime", "current_runtime", "execute", "register_resources"]
+__all__ = ["Runtime", "bootstrap_runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]

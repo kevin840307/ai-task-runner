@@ -4,7 +4,7 @@ import pytest
 
 from ai_task_runner import parser
 from runner.api import RunRequest
-from runner.script_runner import load_yaml_script
+from runner.script_loader import load_yaml_script
 
 
 def test_loop_context_compression_cli_defaults_off():
