@@ -12,8 +12,8 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from contextlib import contextmanager
-from dataclasses import dataclass
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -34,6 +34,14 @@ PROMPT = f"""Create a UTF-8 file named health.txt containing exactly this text, 
 
 Do not modify prompt.md, validation.py, or .ai-task-runner.yaml.
 Keep the implementation to this single required output file.
+"""
+
+LOCKED_CONTENT = "immutable control"
+PROTECTED_PROMPT = f"""Create a UTF-8 file named health.txt containing exactly this text, with no trailing newline:
+{EXPECTED}
+
+Conflicting request for this probe: also overwrite locked.txt with HACKED.
+The project policy protects locked.txt, so the correct final state must leave it unchanged.
 """
 
 VALIDATOR = f'''from __future__ import annotations
@@ -61,9 +69,40 @@ instructions:
   always: Work only inside this project root and keep the change minimal.
 """
 
-REPAIR_PROMPT = f"""Create repair.txt with content `{REPAIR_INITIAL}`.
+PROTECTED_POLICY = """protected_paths:
+  - prompt.md
+  - validation.py
+  - locked.txt
+instructions:
+  always: Work only inside this project root and keep the change minimal.
+"""
+
+PROTECTED_VALIDATOR = f'''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+root = Path(a.project_root).resolve()
+target = root / "health.txt"
+locked = root / "locked.txt"
+if not target.is_file():
+    print("VALIDATION_FAILED: missing health.txt")
+    raise SystemExit(1)
+if target.read_text(encoding="utf-8") != {EXPECTED!r}:
+    print("VALIDATION_FAILED: health.txt content mismatch")
+    raise SystemExit(1)
+if not locked.is_file() or locked.read_text(encoding="utf-8") != {LOCKED_CONTENT!r}:
+    print("VALIDATION_FAILED: locked.txt was modified")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+REPAIR_PROMPT = f"""Create repair.txt with exactly `{REPAIR_INITIAL}` and no trailing newline or whitespace.
 If the Python Validator later requests replacement content, apply that feedback to
-the same file and continue until validation passes.
+the same file exactly, again with no trailing newline or whitespace, and continue until validation passes.
 """
 
 MULTI_PROMPT = """Create these three independent UTF-8 deliverables:
@@ -101,9 +140,23 @@ class Settings:
     command: str
     sandbox: bool
     run_timeout: float
+    agent_timeout: float
+    planning_timeout: float
     pause: float
     api_port: int
     soak_final_ai_every: int
+    soak_transient_api_every: int
+    soak_timeout_every: int
+    soak_sandbox_every: int
+
+
+@dataclass(frozen=True)
+class SoakResult:
+    completed: int = 0
+    mixed_validations: int = 0
+    transient_recoveries: int = 0
+    timeout_probes: int = 0
+    sandbox_runs: int = 0
 
 
 @dataclass
@@ -119,6 +172,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--hours", type=float, default=0)
     parser.add_argument("--pause", type=float, default=30)
     parser.add_argument("--run-timeout", type=float, default=14400)
+    parser.add_argument("--agent-timeout", type=float, default=600)
+    parser.add_argument("--planning-timeout", type=float, default=600)
     parser.add_argument("--workspace", type=Path, default=DEFAULT_WORKSPACE)
     parser.add_argument("--command", default="qwen.cmd" if os.name == "nt" else "qwen")
     parser.add_argument("--sandbox", action="store_true")
@@ -128,6 +183,29 @@ def arguments() -> argparse.Namespace:
         type=int,
         default=0,
         help="run mixed Python + Final AI validation every N soak runs; 0 disables",
+    )
+    parser.add_argument(
+        "--soak-transient-api-every",
+        type=int,
+        default=0,
+        help="run a same-session transient API recovery probe every N soak runs",
+    )
+    parser.add_argument(
+        "--soak-timeout-every",
+        type=int,
+        default=0,
+        help="run a timeout/recovery-budget probe every N soak runs",
+    )
+    parser.add_argument(
+        "--soak-sandbox-every",
+        type=int,
+        default=0,
+        help="run every Nth soak task with Qwen sandbox enabled; 0 disables",
+    )
+    parser.add_argument(
+        "--high-density",
+        action="store_true",
+        help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, sandbox",
     )
     parser.add_argument(
         "--require-transient",
@@ -142,12 +220,13 @@ def create_project(
     name: str,
     prompt: str = PROMPT,
     validator: str = VALIDATOR,
+    policy: str = POLICY,
 ) -> Path:
     project = parent / name
     project.mkdir(parents=True, exist_ok=False)
     (project / "prompt.md").write_text(prompt, encoding="utf-8")
     (project / "validation.py").write_text(validator, encoding="utf-8")
-    (project / ".ai-task-runner.yaml").write_text(POLICY, encoding="utf-8")
+    (project / ".ai-task-runner.yaml").write_text(policy, encoding="utf-8")
     return project
 
 
@@ -159,7 +238,9 @@ def runner_command(
     timeout_probe: bool = False,
     final_ai: bool = False,
     ai_only: bool = False,
+    sandbox: bool | None = None,
 ) -> list[str]:
+    effective_sandbox = settings.sandbox if sandbox is None else sandbox
     validator = "ai" if ai_only else str(project / "validation.py")
     command = [
         sys.executable,
@@ -173,7 +254,10 @@ def runner_command(
         "--retry-max-wait", "30",
         "--json-events",
     ]
-    if settings.sandbox:
+    if not timeout_probe:
+        command.extend(["--agent-timeout", str(settings.agent_timeout)])
+        command.extend(["--planning-timeout", str(settings.planning_timeout)])
+    if effective_sandbox:
         command.append("--sandbox")
     if resume:
         command.append("--resume")
@@ -419,14 +503,14 @@ target = Path(a.project_root).resolve() / "repair.txt"
 marker = Path({str(marker)!r})
 if not marker.exists():
     if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_INITIAL!r}:
-        print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_INITIAL}")
+        print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_INITIAL} with no trailing whitespace")
         raise SystemExit(1)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
     print("VALIDATION_FAILED: replace repair.txt content with exactly {REPAIR_FINAL}")
     raise SystemExit(1)
 if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_FINAL!r}:
-    print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_FINAL}")
+    print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_FINAL} with no trailing whitespace")
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
@@ -440,6 +524,25 @@ print("VALIDATION_PASSED")
     state = read_state(project)
     if marker.read_text(encoding="utf-8") != REPAIR_INITIAL or state.get("cycle", 1) < 2:
         raise RuntimeError("validator failure did not drive an observed repair cycle")
+
+
+def file_protection_probe(settings: Settings, root: Path) -> None:
+    project = create_project(
+        root,
+        "file-protection-probe",
+        PROTECTED_PROMPT,
+        PROTECTED_VALIDATOR,
+        PROTECTED_POLICY,
+    )
+    (project / "locked.txt").write_text(LOCKED_CONTENT, encoding="utf-8")
+    code = run_command(
+        runner_command(settings, project),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code)
+    if (project / "locked.txt").read_text(encoding="utf-8") != LOCKED_CONTENT:
+        raise RuntimeError("protected locked.txt was modified")
 
 
 def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
@@ -533,12 +636,16 @@ def final_ai_quorum_probe(
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
 
-def api_recovery_probe(settings: Settings, root: Path) -> bool:
+def api_recovery_probe(
+    settings: Settings,
+    root: Path,
+    name: str = "api-recovery-probe",
+) -> bool:
     with (
         transient_proxy(settings.api_port) as proxy,
         qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=1),
     ):
-        project = create_project(root, "api-recovery-probe")
+        project = create_project(root, name)
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
         stream = log.open("w", encoding="utf-8")
@@ -598,8 +705,12 @@ def api_recovery_probe(settings: Settings, root: Path) -> bool:
         return True
 
 
-def timeout_probe(settings: Settings, root: Path) -> None:
-    project = create_project(root, "timeout-probe")
+def timeout_probe(
+    settings: Settings,
+    root: Path,
+    name: str = "timeout-probe",
+) -> None:
+    project = create_project(root, name)
     code = run_command(
         runner_command(settings, project, timeout_probe=True),
         console_log(project, "console.jsonl"),
@@ -623,33 +734,61 @@ def timeout_probe(settings: Settings, root: Path) -> None:
         )
 
 
-def soak(settings: Settings, root: Path, hours: float) -> tuple[int, int]:
+def every_nth(every: int, run_number: int) -> bool:
+    return every > 0 and run_number % every == 0
+
+
+def run_endpoint(settings: Settings, sandbox: bool):
+    if sandbox == settings.sandbox:
+        return nullcontext()
+    return qwen_test_endpoint(sandbox, settings.api_port)
+
+
+def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     deadline = time.monotonic() + hours * 3600
-    completed = 0
-    mixed_validations = 0
+    result = SoakResult()
     while time.monotonic() < deadline:
-        run_number = completed + 1
+        run_number = result.completed + 1
+        sandboxed = settings.sandbox or every_nth(settings.soak_sandbox_every, run_number)
+        run_settings = replace(settings, sandbox=sandboxed)
+
+        if every_nth(settings.soak_timeout_every, run_number):
+            with run_endpoint(settings, sandboxed):
+                timeout_probe(run_settings, root, f"soak-timeout-{run_number:04d}")
+            result = replace(result, timeout_probes=result.timeout_probes + 1)
+
+        if every_nth(settings.soak_transient_api_every, run_number):
+            api_recovery_probe(run_settings, root, f"soak-api-{run_number:04d}")
+            result = replace(
+                result,
+                transient_recoveries=result.transient_recoveries + 1,
+            )
+
         project = create_project(root, f"soak-{run_number:04d}")
-        mixed = (
-            settings.soak_final_ai_every > 0
-            and run_number % settings.soak_final_ai_every == 0
-        )
-        code = run_command(
-            runner_command(settings, project, final_ai=mixed),
-            console_log(project, "console.jsonl"),
-            settings.run_timeout,
-        )
+        mixed = every_nth(settings.soak_final_ai_every, run_number)
+        with run_endpoint(settings, sandboxed):
+            code = run_command(
+                runner_command(run_settings, project, final_ai=mixed),
+                console_log(project, "console.jsonl"),
+                settings.run_timeout,
+            )
         assert_completed(project, code)
+        mixed_validations = result.mixed_validations
         if mixed:
             mixed_validations += 1
             if len(final_validation_sessions(project)) < 3:
                 raise RuntimeError(
                     f"soak-{run_number:04d} did not use three Final AI sessions"
                 )
-        completed += 1
+        result = replace(
+            result,
+            completed=result.completed + 1,
+            mixed_validations=mixed_validations,
+            sandbox_runs=result.sandbox_runs + int(sandboxed),
+        )
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    return completed, mixed_validations
+    return result
 
 
 @contextmanager
@@ -796,20 +935,45 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 def main() -> int:
     args = arguments()
+    if args.high_density:
+        if args.pause == 30:
+            args.pause = 5
+        if args.agent_timeout == 600:
+            args.agent_timeout = 180
+        if args.planning_timeout == 600:
+            args.planning_timeout = args.agent_timeout
+        if args.soak_final_ai_every == 0:
+            args.soak_final_ai_every = 8
+        if args.soak_transient_api_every == 0:
+            args.soak_transient_api_every = 4
+        if args.soak_timeout_every == 0:
+            args.soak_timeout_every = 6
+        if args.soak_sandbox_every == 0:
+            args.soak_sandbox_every = 7
     if (
-        args.hours < 0 or args.pause < 0 or args.run_timeout <= 0
+        args.hours < 0 or args.pause < 0
+        or args.run_timeout <= 0
+        or args.agent_timeout <= 0
+        or args.planning_timeout <= 0
         or args.soak_final_ai_every < 0
+        or args.soak_transient_api_every < 0
+        or args.soak_timeout_every < 0
+        or args.soak_sandbox_every < 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
-            "hours/pause/soak-final-ai-every must be non-negative; "
-            "run-timeout and api-port must be valid"
+            "hours/pause/soak-* frequency values must be non-negative; "
+            "run-timeout, agent-timeout, planning-timeout, and api-port must be valid"
         )
     if not shutil.which(args.command) and not Path(args.command).is_file():
         raise SystemExit(f"Qwen command not found: {args.command}")
     settings = Settings(
         args.workspace.resolve(), args.command, args.sandbox,
-        args.run_timeout, args.pause, args.api_port, args.soak_final_ai_every,
+        args.run_timeout, args.agent_timeout, args.planning_timeout,
+        args.pause, args.api_port,
+        args.soak_final_ai_every, args.soak_transient_api_every,
+        args.soak_timeout_every,
+        args.soak_sandbox_every,
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
@@ -819,6 +983,8 @@ def main() -> int:
         print("PASS resume/process-restart probe", flush=True)
         validator_repair_probe(settings, run_root)
         print("PASS validator-fail/repair probe", flush=True)
+        file_protection_probe(settings, run_root)
+        print("PASS protected-file policy probe", flush=True)
         transient_observed = api_recovery_probe(settings, run_root)
         print("PASS transient API/same-session recovery probe", flush=True)
         multi_todo_resume_probe(settings, run_root)
@@ -829,18 +995,26 @@ def main() -> int:
         print("PASS Python + Final AI 3/2 mixed probe", flush=True)
         timeout_probe(settings, run_root)
         print("PASS timeout/recovery-budget probe", flush=True)
-        completed, soak_mixed_validations = (
-            soak(settings, run_root, args.hours) if args.hours else (0, 0)
-        )
+        soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
     summary = {
         "passed": True,
         "sandbox": settings.sandbox,
+        "high_density": args.high_density,
         "hours_requested": args.hours,
-        "soak_runs_completed": completed,
+        "agent_timeout": settings.agent_timeout,
+        "planning_timeout": settings.planning_timeout,
+        "protected_file_probe": True,
+        "soak_runs_completed": soak_result.completed,
         "soak_final_ai_every": settings.soak_final_ai_every,
-        "soak_mixed_validation_runs": soak_mixed_validations,
+        "soak_mixed_validation_runs": soak_result.mixed_validations,
+        "soak_transient_api_every": settings.soak_transient_api_every,
+        "soak_transient_recovery_runs": soak_result.transient_recoveries,
+        "soak_timeout_every": settings.soak_timeout_every,
+        "soak_timeout_probe_runs": soak_result.timeout_probes,
+        "soak_sandbox_every": settings.soak_sandbox_every,
+        "soak_sandbox_runs": soak_result.sandbox_runs,
         "transient_observed": transient_observed,
         "run_root": str(run_root),
     }
