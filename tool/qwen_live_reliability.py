@@ -147,6 +147,7 @@ class Settings:
     soak_final_ai_every: int
     soak_transient_api_every: int
     soak_timeout_every: int
+    soak_yaml_every: int
     soak_sandbox_every: int
 
 
@@ -156,7 +157,9 @@ class SoakResult:
     mixed_validations: int = 0
     transient_recoveries: int = 0
     timeout_probes: int = 0
+    yaml_runs: int = 0
     sandbox_runs: int = 0
+    elapsed_seconds: float = 0
 
 
 @dataclass
@@ -197,6 +200,12 @@ def arguments() -> argparse.Namespace:
         help="run a timeout/recovery-budget probe every N soak runs",
     )
     parser.add_argument(
+        "--soak-yaml-every",
+        type=int,
+        default=0,
+        help="run a YAML List restart/resume probe every N soak runs",
+    )
+    parser.add_argument(
         "--soak-sandbox-every",
         type=int,
         default=0,
@@ -205,7 +214,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument(
         "--high-density",
         action="store_true",
-        help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, sandbox",
+        help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, YAML, sandbox",
     )
     parser.add_argument(
         "--require-transient",
@@ -239,6 +248,7 @@ def runner_command(
     final_ai: bool = False,
     ai_only: bool = False,
     sandbox: bool | None = None,
+    script: Path | None = None,
 ) -> list[str]:
     effective_sandbox = settings.sandbox if sandbox is None else sandbox
     validator = "ai" if ai_only else str(project / "validation.py")
@@ -248,12 +258,17 @@ def runner_command(
         "--backend", "qwen",
         "--command", settings.command,
         "--project-root", str(project),
-        "--goal-file", str(project / "prompt.md"),
-        "--validator", validator,
         "--retry-wait", "0" if timeout_probe else "2",
         "--retry-max-wait", "30",
         "--json-events",
     ]
+    command.extend(
+        ["--script", str(script)]
+        if script else [
+            "--goal-file", str(project / "prompt.md"),
+            "--validator", validator,
+        ]
+    )
     if not timeout_probe:
         command.extend(["--agent-timeout", str(settings.agent_timeout)])
         command.extend(["--planning-timeout", str(settings.planning_timeout)])
@@ -338,8 +353,7 @@ def terminate(process: subprocess.Popen[str]) -> None:
         process.kill()
 
 
-def read_state(project: Path) -> dict[str, object]:
-    path = project / ".ai-task-runner" / "state.json"
+def read_json(path: Path) -> dict[str, object]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
         return value if isinstance(value, dict) else {}
@@ -347,16 +361,22 @@ def read_state(project: Path) -> dict[str, object]:
         return {}
 
 
+def read_state(project: Path) -> dict[str, object]:
+    return read_json(project / ".ai-task-runner" / "state.json")
+
+
 def console_log(project: Path, name: str) -> Path:
     return project.parent / "_harness-logs" / f"{project.name}-{name}"
 
 
 def runner_events(project: Path) -> list[dict[str, object]]:
+    return jsonl_events(project / ".ai-task-runner" / "log.txt")
+
+
+def jsonl_events(path: Path) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     try:
-        lines = (project / ".ai-task-runner" / "log.txt").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
         return events
     for line in lines:
@@ -414,16 +434,18 @@ def assert_completed(
     code: int,
     expected_file: str = "health.txt",
     expected_text: str = EXPECTED,
+    work_dir: str = ".ai-task-runner",
 ) -> None:
-    state = read_state(project)
+    work = project / work_dir
+    state = read_json(work / "state.json")
     if code != 0 or state.get("completed") is not True:
         raise RuntimeError(f"run failed: exit={code}, stage={state.get('stage')}")
     if (project / expected_file).read_text(encoding="utf-8") != expected_text:
         raise RuntimeError(f"validator passed but {expected_file} is incorrect")
     required = (
-        project / ".ai-task-runner" / "log.txt",
-        project / ".ai-task-runner" / "debug" / "last-prompt.txt",
-        project / ".ai-task-runner" / "debug" / "last-result.txt",
+        work / "log.txt",
+        work / "debug" / "last-prompt.txt",
+        work / "debug" / "last-result.txt",
     )
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
@@ -605,6 +627,87 @@ def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("second TODO output is incorrect")
 
 
+def yaml_list_resume_probe(
+    settings: Settings,
+    root: Path,
+    name: str = "yaml-list-resume-probe",
+) -> None:
+    batch = root / name
+    batch.mkdir()
+    (batch / ".ai-task-runner.yaml").write_text(POLICY, encoding="utf-8")
+    projects = [create_project(batch, f"item-{index}") for index in (1, 2)]
+    script = batch / "tasks.yaml"
+    script.write_text(json.dumps([
+        {
+            "prompt": PROMPT,
+            "project_root": project.name,
+            "validator": str(project / "validation.py"),
+        }
+        for project in projects
+    ], indent=2), encoding="utf-8")
+
+    first_log = console_log(batch, "first-console.jsonl")
+    first_log.parent.mkdir(parents=True, exist_ok=True)
+    stream = first_log.open("w", encoding="utf-8")
+    options: dict[str, object] = {
+        "cwd": ROOT,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stream,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    process = subprocess.Popen(
+        runner_command(settings, batch, script=script),
+        **options,
+    )
+    deadline = time.monotonic() + settings.run_timeout
+    first_mtime = None
+    first_state = projects[0] / ".ai-task-runner" / "script" / "001" / "state.json"
+    try:
+        while process.poll() is None and time.monotonic() < deadline:
+            if read_json(first_state).get("completed") is True:
+                first_mtime = (projects[0] / "health.txt").stat().st_mtime_ns
+                terminate(process)
+                break
+            time.sleep(0.1)
+    finally:
+        if process.poll() is None:
+            terminate(process)
+        stream.close()
+    if first_mtime is None:
+        raise RuntimeError("could not interrupt YAML List after its first completed item")
+
+    resume_log = console_log(batch, "resume-console.jsonl")
+    code = run_command(
+        runner_command(settings, batch, resume=True, script=script),
+        resume_log,
+        settings.run_timeout,
+    )
+    for index, project in enumerate(projects, 1):
+        assert_completed(
+            project,
+            code,
+            work_dir=f".ai-task-runner/script/{index:03d}",
+        )
+    if (projects[0] / "health.txt").stat().st_mtime_ns != first_mtime:
+        raise RuntimeError("YAML List resume repeated its completed first item")
+
+    events = jsonl_events(resume_log)
+    completed = {
+        event.get("script_index")
+        for event in events
+        if event.get("type") == "script.item_completed"
+    }
+    if completed != {1, 2} or any(
+        event.get("type") == "script.item_failed" for event in events
+    ):
+        raise RuntimeError("YAML List resume events are incomplete")
+
+
 def final_ai_quorum_probe(
     settings: Settings,
     root: Path,
@@ -664,23 +767,28 @@ def api_recovery_probe(
         deadline = time.monotonic() + settings.run_timeout
         session_id = ""
         outage_until = 0.0
+        successes_before_outage = 0
+        recovered = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
                 current_session = state.get("ai_session_id")
                 if not session_id and isinstance(current_session, str) and current_session:
                     session_id = current_session
+                    successes_before_outage = proxy.successes
                     proxy.fail = True
                     outage_until = time.monotonic() + 15
                 if proxy.fail and time.monotonic() >= outage_until:
                     proxy.fail = False
-                evidence_path = project / ".ai-task-runner" / "log.txt"
-                try:
-                    evidence = evidence_path.read_text(encoding="utf-8")
-                except OSError:
-                    evidence = ""
+                recovered = recovered or (
+                    session_id != ""
+                    and proxy.failures > 0
+                    and not proxy.fail
+                    and proxy.successes > successes_before_outage
+                )
                 if (
-                    session_id
+                    not recovered
+                    and session_id
                     and isinstance(current_session, str)
                     and current_session
                     and current_session != session_id
@@ -698,7 +806,7 @@ def api_recovery_probe(
             encoding="utf-8"
         )
         if (
-            not session_id or proxy.failures < 1 or proxy.successes < 1
+            not session_id or not recovered
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
@@ -745,7 +853,8 @@ def run_endpoint(settings: Settings, sandbox: bool):
 
 
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
-    deadline = time.monotonic() + hours * 3600
+    started = time.monotonic()
+    deadline = started + hours * 3600
     result = SoakResult()
     while time.monotonic() < deadline:
         run_number = result.completed + 1
@@ -763,6 +872,15 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
                 result,
                 transient_recoveries=result.transient_recoveries + 1,
             )
+
+        if every_nth(settings.soak_yaml_every, run_number):
+            with run_endpoint(settings, sandboxed):
+                yaml_list_resume_probe(
+                    run_settings,
+                    root,
+                    f"soak-yaml-{run_number:04d}",
+                )
+            result = replace(result, yaml_runs=result.yaml_runs + 1)
 
         project = create_project(root, f"soak-{run_number:04d}")
         mixed = every_nth(settings.soak_final_ai_every, run_number)
@@ -788,7 +906,22 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
         )
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    return result
+    return replace(result, elapsed_seconds=time.monotonic() - started)
+
+
+def require_dense_coverage(result: SoakResult) -> None:
+    missing = [
+        name for name, count in (
+            ("mixed Final AI", result.mixed_validations),
+            ("transient API", result.transient_recoveries),
+            ("timeout", result.timeout_probes),
+            ("YAML List", result.yaml_runs),
+            ("sandbox", result.sandbox_runs),
+        )
+        if count < 1
+    ]
+    if missing:
+        raise RuntimeError("high-density soak missed: " + ", ".join(missing))
 
 
 @contextmanager
@@ -948,6 +1081,8 @@ def main() -> int:
             args.soak_transient_api_every = 4
         if args.soak_timeout_every == 0:
             args.soak_timeout_every = 6
+        if args.soak_yaml_every == 0:
+            args.soak_yaml_every = 7
         if args.soak_sandbox_every == 0:
             args.soak_sandbox_every = 7
     if (
@@ -958,6 +1093,7 @@ def main() -> int:
         or args.soak_final_ai_every < 0
         or args.soak_transient_api_every < 0
         or args.soak_timeout_every < 0
+        or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
         or not 1 <= args.api_port <= 65535
     ):
@@ -973,6 +1109,7 @@ def main() -> int:
         args.pause, args.api_port,
         args.soak_final_ai_every, args.soak_transient_api_every,
         args.soak_timeout_every,
+        args.soak_yaml_every,
         args.soak_sandbox_every,
     )
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
@@ -989,6 +1126,8 @@ def main() -> int:
         print("PASS transient API/same-session recovery probe", flush=True)
         multi_todo_resume_probe(settings, run_root)
         print("PASS multi-TODO/checkpoint resume probe", flush=True)
+        yaml_list_resume_probe(settings, run_root)
+        print("PASS YAML List/process-restart resume probe", flush=True)
         final_ai_quorum_probe(settings, run_root, mixed=False)
         print("PASS Final AI 3/2 quorum probe", flush=True)
         final_ai_quorum_probe(settings, run_root, mixed=True)
@@ -996,6 +1135,10 @@ def main() -> int:
         timeout_probe(settings, run_root)
         print("PASS timeout/recovery-budget probe", flush=True)
         soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
+        if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
+            raise RuntimeError("soak ended before the requested wall-clock duration")
+        if args.high_density and args.hours:
+            require_dense_coverage(soak_result)
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
     summary = {
@@ -1006,13 +1149,17 @@ def main() -> int:
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
+        "yaml_list_resume_probe": True,
         "soak_runs_completed": soak_result.completed,
+        "soak_elapsed_seconds": round(soak_result.elapsed_seconds, 3),
         "soak_final_ai_every": settings.soak_final_ai_every,
         "soak_mixed_validation_runs": soak_result.mixed_validations,
         "soak_transient_api_every": settings.soak_transient_api_every,
         "soak_transient_recovery_runs": soak_result.transient_recoveries,
         "soak_timeout_every": settings.soak_timeout_every,
         "soak_timeout_probe_runs": soak_result.timeout_probes,
+        "soak_yaml_every": settings.soak_yaml_every,
+        "soak_yaml_runs": soak_result.yaml_runs,
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
         "transient_observed": transient_observed,

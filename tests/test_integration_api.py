@@ -75,6 +75,33 @@ def test_api_transient_failure_resumes_saved_direct_or_yaml_state(
     assert calls == [False, True]
 
 
+def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypatch):
+    import runner.api as api_module
+
+    child = tmp_path / "child"
+    child.mkdir()
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: x\n  project_root: child\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    state_file = child / ".ai-task-runner" / "script" / "001" / "state.json"
+
+    def fake_execute(config):
+        state_file.parent.mkdir(parents=True)
+        state_file.write_text(
+            '{"completed":true,"stage":"completed"}',
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(project_root=str(tmp_path), script=str(script)))
+
+    assert result.completed
+    assert result.state_files == (str(state_file),)
+
+
 def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
     events = []
     result = run(

@@ -40,7 +40,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## YAML script mode
 `--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
 
-可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 script item 都使用自己的 `.ai-task-runner/script/<index>` nested state，內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
+可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 script item 都使用自己的 `.ai-task-runner/script/<index>` nested state；完成判定與 resume 會讀取每個 item 的實際 state path，也支援不同 project root。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
 
 ```yaml
 - goal_file: prompts/example-a.md

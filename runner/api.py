@@ -33,6 +33,8 @@ from .plugins.registry import (
     plugin_config_from_namespace,
     plugin_config_from_request,
 )
+from .script_loader import load_yaml_script
+from .script_runner import build_script_item_config
 from .version import __version__
 
 
@@ -274,12 +276,12 @@ def run(
                 raise
             config = replace(
                 config,
-                resume=any(path.is_file() for path in _state_files(request)),
+                resume=any(path.is_file() for path in _state_files(request, config)),
                 force_new=False,
             )
             if config.stage_retry_delay:
                 time.sleep(config.stage_retry_delay)
-    state_files = _state_files(request)
+    state_files = _state_files(request, config)
     states = tuple(_read_state(path) for path in state_files if path.is_file())
     return RunResult(
         exit_code=exit_code,
@@ -288,12 +290,16 @@ def run(
     )
 
 
-def _state_files(request: RunRequest) -> list[Path]:
+def _state_files(request: RunRequest, config: RuntimeConfig) -> list[Path]:
     root = Path(request.project_root).resolve()
     work = root / request.work_dir
     if request.script:
-        script_root = work / "script"
-        return sorted(script_root.glob("*/state.json")) if script_root.exists() else []
+        script = Path(config.script).resolve()
+        return [
+            Path(child.project_root, child.work_dir, "state.json")
+            for index, item in enumerate(load_yaml_script(script), 1)
+            for child in (build_script_item_config(config, item, index),)
+        ]
     return [work / "state.json"]
 
 
