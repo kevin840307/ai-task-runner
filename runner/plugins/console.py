@@ -338,9 +338,6 @@ def supports_ansi_screen() -> bool:
     )
 
 
-def show_todo(state: RunState, ui: LiveUI) -> None:
-    ui.bind(state)
-
 class ConsoleObserver:
     """Translate generic runtime status events into terminal UI updates."""
 

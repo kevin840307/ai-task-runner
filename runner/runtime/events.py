@@ -164,6 +164,4 @@ def _publish(event_type: str, action: str) -> None:
     publish(event_type, action)
 
 
-set = set_status
-
-__all__ = ["EventBus", "EventHandler", "bind", "configure", "scope", "publish", "service_wait_exhausted", "session_fresh", "set", "set_status", "show_todo", "stage_finished", "stage_started", "start", "stop"]
+__all__ = ["EventBus", "EventHandler", "bind", "configure", "scope", "publish", "service_wait_exhausted", "session_fresh", "set_status", "show_todo", "stage_finished", "stage_started", "start", "stop"]

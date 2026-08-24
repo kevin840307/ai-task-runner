@@ -1,0 +1,4 @@
+VALIDATION_FAILED
+errors: 1
+warnings: 0
+report_dir: .ai-task-runner/validator-reports/example-06-yaml-tool

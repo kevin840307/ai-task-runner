@@ -7,8 +7,10 @@ These rules are mandatory for changes to this repository.
 - A behavior that is conceptually the same must use one shared function/implementation. Reuse existing helpers before adding code; do not create parallel parsers, retry loops, path guards, prompt builders, or validation wrappers.
 - Prefer the smallest production change that solves the demonstrated problem. Do not add speculative frameworks, abstraction layers, or future-only configuration.
 - Keep code concise, readable, and explicit. Prefer short functions with clear names over clever indirection.
+- Folder, Python filename, class/function, and field names must describe their actual responsibility. Split/merge only when it makes ownership clearer; avoid vague dumping-ground modules.
 - Preserve current behavior outside the requested scope.
 - Remove obsolete/dead compatibility code when its replacement is complete; do not keep parallel old/new implementations.
+- Keep all human-facing maintained documentation bilingual: English `.md` plus matching Traditional Chinese `.zh-TW.md`, with both versions aligned to current behavior.
 - Keep Workflow topology declarative so Stages can be added, moved, replaced, or removed without business branches in Pipeline/Executor.
 - Do not make tests pass by weakening production guarantees or by adding project-specific branches.
 - Python Runner code orchestrates generic flow/state/retry/recovery/protection/validation. Requirement-specific behavior belongs in goals, validators, project policy, templates, or project code.

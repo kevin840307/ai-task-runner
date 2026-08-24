@@ -32,7 +32,7 @@ Hard + AI 混合驗證：
 ```bat
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
 ```
-Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半。
+Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半；`--ai-validator-required-passes` 可明確要求例如 3/3。
 
 ## 文件地圖
 - [完整文件索引](docs/INDEX.zh-TW.md) / [English index](docs/INDEX.md)
@@ -62,9 +62,9 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 retry、Hook、Event 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult`。Result 可動態帶 `stages`、重設剩餘 queue、停止或完成；Pipeline 只消費這些資訊，不 hardcode review/repair/validation 路線。
+Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult`。Result 可動態帶 `next_flow`、用 `replace_remaining` 取代剩餘 flow、停止或完成；Pipeline 只消費這些資訊，不 hardcode review/repair/validation 路線。
 
-橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 透過透明 Execution Hook 註冊。Core 與 Stage 不 import 這些具體 extension。
+橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 透過透明 Execution Hook 註冊。Core 與 Stage 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
 
 ## Stage 執行架構
@@ -74,13 +74,13 @@ Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 
 統一執行規則：
 - API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。
 - 真實 failure 先使用 same-session 的短 Stage-aware 續跑 prompt，只補 Stage 身分、新 failure evidence 與下一步；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
-- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會重新理解目前專案並重新產生 plan；failure 不同則重新計數。
+- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
 - Plan 把 TODO list 存入 durable state，並直接回傳由 `[execute, review]` 組成的 execution list。Pipeline 先完整執行這個巢狀 list，再回到外層繼續 Python/AI Validator；未來任何 Stage 都可以用相同方式回傳 Stage list。
 
 
-Stage 一次只做一個 attempt。Hook/Event/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `AIStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
+Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `AIStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
 
 
 ## 新增普通 AI Stage

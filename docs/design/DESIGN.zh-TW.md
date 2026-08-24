@@ -3,16 +3,20 @@
 Version: 1.2.33
 
 ## 原則
-1. 最少 Code；Runner Core 禁止 project-specific hardcode。
-2. 不影響現有功能與 24H / YAML List 穩定執行。
-3. Log 精簡但足夠 Debug。
-4. Workflow 不依賴具體 Plugin/Event/Backend。
-5. 優先 Same Session，只補新資訊。
-6. Final AI Validation 使用彼此獨立的 Fresh Session。
-7. 真實 Stage failure 依序 `same session -> fresh session -> replan`；暫時性 API/service error 只走 transport backoff，不消耗 Stage failure budget。
-8. Fresh Session 才提供完整且必要 Context。
-9. Workflow 拓樸資料化，容易新增、移動、替換 Stage。
-10. 完整 AI Prompt 固定 stdin，不放 command line。
+1. 最少 Code；Runner Core 禁止 project-specific hardcode，Global 通用行為不算 hardcode。
+2. 不影響現有 24H 穩定執行，包含 YAML List。
+3. Log/Event 精簡但必須足夠 Debug Stage、Session、Retry、Process、Validator 問題。
+4. Workflow 不依賴具體 Plugin、Backend implementation 或 raw event schema；橫切行為只透過 Plugin/Hook/runtime semantic boundary 接入。
+5. 正常流程優先 Same Session，只補新資訊，不重複 Session 已知 Context。
+6. Final AI Validation 每次使用獨立 Fresh Session；設定 3 次就必須是 3 個不同 Session。
+7. Validation/Structured Output 異常先 Same Session bounded recovery，最多 Retry 2 次；仍失敗才 Fresh Session。
+8. 只有 Fresh/Rebuilt Session 才提供完整且必要的 Goal、Current Task、Project-state instruction 與 Stage instructions。
+9. Workflow topology 必須資料化，容易新增、移動、替換或移除 Stage。
+10. 能刪/合併就先瘦身，不為了抽象再增加不必要 layer；同一行為只保留一份 implementation。
+11. 程式碼必須直觀、容易維護：命名清楚、function cohesive、contract 明確、layer 少。
+12. 移除 dead/stale code、無需求的 compatibility shim、舊流程名稱與 unused alias。
+13. 完整 AI task Prompt 固定 stdin，不放 command-line argv；短 backend control command 不屬於 task Prompt。
+14. Folder、Python filename、class/function/field 命名必須符合真實責任，拆分/合併要合理。
 
 ## 主流程
 
@@ -29,7 +33,7 @@ Version: 1.2.33
 
 - `workflow/definitions.py`：Stage presets + 固定 `FLOWS`。
 - `workflow/rules.py`：conditions、result handlers、durable-state transition、routing。
-- `workflow/stages/executor.py`：共用 retry/session recovery、hooks、events、project change tracking。
+- `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。
 - `ai/`：AI interaction/session/structured output。
 - `backends/`：Qwen/OpenCode transport implementation。

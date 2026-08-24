@@ -16,3 +16,6 @@ Human output is a rendering of the same state/event information. Multiline backe
 
 ## State ownership
 AI agents must not edit Runner state. The project policy file is automatically protected; Runner-managed debug/state mutations are owned by the Runner and are excluded from normal project-change semantics.
+
+## Runtime scope
+Each `execute()` call owns a scoped runtime/event context. YAML List child items temporarily replace that context and restore the parent on exit, so repeated programmatic calls and nested batch execution do not leak hooks/events/state across runs.

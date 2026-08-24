@@ -1,0 +1,4 @@
+VALIDATION_PASSED
+errors: 0
+warnings: 0
+report_dir: .ai-task-runner/validator-reports/example-05-ai-quality

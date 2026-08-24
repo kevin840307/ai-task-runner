@@ -15,4 +15,4 @@ Version: 1.2.33
 - `development/TEST_MATRIX.md`: contract coverage and smoke/example policy.
 - `validator_templates/README.md`: deterministic validator conventions.
 
-Every document above has a matching `.zh-TW.md` Traditional Chinese version.
+Every human-facing maintained document must have an English `.md` and a matching Traditional Chinese `.zh-TW.md` version describing the same current behavior. Prompt resources, QWEN.md/AGENTS.md, and sample-project task inputs are executable resources and are excluded.

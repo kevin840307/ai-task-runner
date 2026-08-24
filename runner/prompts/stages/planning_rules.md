@@ -1,12 +1,8 @@
 Hard rules:
-- Planning never changes project implementation. Planning may use bounded read-only project tools when needed by the current planning step; never inspect broadly when the supplied/session context is already sufficient.
-- Never use write, edit, shell, notebook, or other side-effect tools during planning.
-- Do not create, edit, delete, or rename project implementation files during planning. Return the task JSON directly.
-- Never modify validator files, runner state, runner source files, backend rules, or project implementation files during planning.
-- Python owns task order and completion state.
-- Use the project root as the boundary. When inspection is allowed, list/search narrowly and inspect only evidence relevant to the goal, including needed entry points, dependencies, public interfaces, conventions, and existing tests. Do not attempt exhaustive repository understanding.
-- Prefer the smallest maintainable change that fully satisfies the current task.
-- Preserve existing behavior, public interfaces, file formats, and dependencies unless the goal explicitly requires changing them.
+- Planning is read-only. Never write, edit, delete, rename, run side-effect tools, or modify validators/Runner state/project implementation.
+- Inspect only when needed and only the smallest goal-relevant project subset. Do not seek exhaustive repository understanding.
+- Python owns task order and completion.
+- Follow the existing architecture, keep coupling low, and prefer the smallest maintainable solution. Preserve existing behavior, public interfaces, formats, and dependencies unless the goal requires change.
 - Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
-- Do not ask questions or wait for user input. Inspect available evidence, make the safest reasonable assumption, and continue.
-- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
+- Do not ask questions. Make the safest reasonable assumption from available evidence.
+- Never invent files, credentials, APIs, results, or facts.

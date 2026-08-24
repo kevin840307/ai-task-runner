@@ -10,7 +10,7 @@ The directory structure is intentionally the architecture map:
 - `runner/backends/`: Qwen/OpenCode implementations plus backend registry/configuration.
 - `runner/project/`: project file snapshots/restores, project policy, and QWEN.md/AGENTS.md instruction-file lifecycle.
 - `runner/prompts/`: strict Jinja loader, stable prompt context contract, and bundled prompt resources.
-- `runner/runtime/`: durable run state, subprocess lifecycle, and semantic event delivery.
+- `runner/runtime/`: durable run state, subprocess lifecycle, raw event delivery, and the semantic progress facade used by orchestration.
 - `runner/plugins/`: optional cross-cutting hooks/observers such as safety, console, history, and observability.
 - `runner/config/`: runtime/default configuration only.
 - `runner/utils/`: small stateless generic file/text helpers only.
@@ -24,11 +24,11 @@ The runner owns orchestration; backends, plugins, prompts, and validators provid
 
 `Backends -> AI contracts`
 
-`StageExecutor -> Project + Runtime + generic plugin hooks`
+`StageExecutor -> Project + Runtime semantic progress + generic hook contract`
 
 `Bootstrap -> backend/plugin registries`
 
-Workflow code must not depend on Qwen/OpenCode implementations, concrete plugins, or raw UI behavior. AI code must not depend on workflow business stages.
+Workflow code must not depend on Qwen/OpenCode implementations, concrete plugins, raw event schemas, or raw UI behavior. `runtime/progress.py` is the small semantic facade; `runtime/events.py` owns transport/schema. AI code must not depend on workflow business stages.
 
 ## Workflow contract
 

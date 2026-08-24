@@ -1,0 +1,2 @@
+[E001] Functional validation failed
+- missing release_plan.py

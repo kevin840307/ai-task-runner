@@ -1,8 +1,8 @@
 Hard rules:
-- You may READ files anywhere when necessary.
-- You may WRITE/CREATE/DELETE files only inside project root: {{ project.root }}
-- Treat every path outside project root as read-only. Do not create sidecar state, log, report, or scratch files next to outside-root paths.
-- Never modify runner state directly. Python owns task state.
-- Preserve unrelated behavior and public interfaces unless the current goal explicitly requires changing them.
-- Do not invent files, credentials, APIs, test results, or facts. Report unavailable evidence honestly.
+- READ anywhere when needed; WRITE/CREATE/DELETE only inside project root: {{ project.root }}.
+- Treat paths outside project root as read-only. Never place sidecar state, logs, reports, or scratch files there.
+- Never modify Runner-managed state. Python owns task order and completion.
+- Follow the existing architecture and keep coupling low. Make the smallest maintainable change; avoid unnecessary code, abstractions, dependencies, refactoring, and unrelated changes.
+- Preserve unrelated behavior and public interfaces unless the goal requires otherwise.
+- Never invent files, credentials, APIs, results, or facts; report missing evidence honestly.
 {{ plugin_rules }}

@@ -72,8 +72,9 @@ def test_agent_rule_files_and_task_prompt_shape_are_documented():
     assert "Qwen Code: `QWEN.md`" in combined
     assert "OpenCode: `AGENTS.md`" in combined
     assert "OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`" in combined
-    assert "current task" in _text("PROJECT_GUIDE")
-    assert "previous attempt output or diagnostic" in _text("PROJECT_GUIDE")
+    guide = _text("PROJECT_GUIDE").lower()
+    assert "current task" in guide
+    assert "previous attempt output or diagnostic" in guide
     assert "YAML batch mode is supported" in _text("PROJECT_GUIDE")
 
 
@@ -127,3 +128,47 @@ def test_validator_arg_and_maintenance_contract_are_documented():
     assert "No project-specific hardcode" in combined or "禁止 project-specific hardcode" in combined
     assert "one shared implementation" in combined.lower()
     assert "minimum code" in combined.lower() or "最小程式碼" in combined
+
+
+def test_all_human_facing_markdown_has_bilingual_pair():
+    """Maintained documentation is bilingual; executable prompt/fixture files are excluded."""
+    documents = [ROOT / "README.md"]
+    documents.extend(
+        path for path in (ROOT / "docs").rglob("*.md")
+        if not path.name.endswith(".zh-TW.md")
+    )
+    documents.extend(
+        path for path in (ROOT / "examples").rglob("README.md")
+        if "project" not in path.parts
+    )
+    documents.append(ROOT / "smoke" / "README.md")
+
+    for english in documents:
+        chinese = english.with_name(f"{english.stem}.zh-TW{english.suffix}")
+        assert chinese.is_file(), f"missing Traditional Chinese document for {english.relative_to(ROOT)}"
+
+
+def test_bilingual_core_docs_cover_current_architecture_and_recovery():
+    pairs = (
+        (ROOT / "docs" / "design" / "DESIGN.md", ROOT / "docs" / "design" / "DESIGN.zh-TW.md"),
+        (ROOT / "docs" / "development" / "PROJECT_GUIDE.md", ROOT / "docs" / "development" / "PROJECT_GUIDE.zh-TW.md"),
+        (ROOT / "docs" / "user" / "USER_GUIDE.md", ROOT / "docs" / "user" / "USER_GUIDE.zh-TW.md"),
+    )
+    required = (
+        "Same Session",
+        "Fresh Session",
+        "YAML",
+        "stdin",
+        "Final AI",
+        "Plugin",
+        "Prompt",
+    )
+    for english, chinese in pairs:
+        en = english.read_text(encoding="utf-8")
+        zh = chinese.read_text(encoding="utf-8")
+        for token in required:
+            assert token.lower() in en.lower(), (english, token)
+            assert token.lower() in zh.lower(), (chinese, token)
+
+    assert "next_flow" in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")
+    assert "重新理解目前專案" not in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")

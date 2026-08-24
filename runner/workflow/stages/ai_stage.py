@@ -10,7 +10,7 @@ from ...ai.client import configure_ai_client, create_ai_client
 from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
-from ...prompts.loader import always_instructions, render_prompt, structured_retry_prompt
+from ...prompts.loader import render_prompt, structured_retry_prompt
 from .contracts import StageContext, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
@@ -27,7 +27,7 @@ class AIStageSpec:
     detail: str = ""
     run_state: str = ""
     mode: Literal["readonly", "write"] = "readonly"
-    actor: str = "model"
+    actor: str = "ai"
     backend_mode: str = "runtime"
     allow_project_read: bool = False
     parser: ResultParser | None = None
@@ -138,8 +138,7 @@ class AIStage:
                     lambda text: spec.parser(text, ctx),
                     lambda text: self._ask(ctx, client, text),
                     retries=spec.structured_retries,
-                    retry_prompt=lambda error: always_instructions(ctx.root)
-                    + structured_retry_prompt(error),
+                    retry_prompt=structured_retry_prompt,
                     fresh_ask=lambda: self._structured_fresh_ask(ctx, client, previous),
                     fresh_retries=spec.structured_fresh_retries,
                 )
@@ -167,7 +166,7 @@ class AIStage:
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
         client.session_id = ""
         original = self._original_prompt(ctx, previous)
-        return self._ask(ctx, client, self._fresh_session_prompt(ctx, original))
+        return self._ask(ctx, client, self._fresh_session_prompt(original))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
@@ -200,14 +199,14 @@ class AIStage:
             return original
         if mode == "same" and getattr(client, "session_id", ""):
             return self._same_session_prompt(ctx)
-        return self._fresh_session_prompt(ctx, original)
+        return self._fresh_session_prompt(original)
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
             raise ConfigurationError(f"AI stage {self.spec.name} requires prompt")
         return render_prompt(
             self.spec.prompt,
-            build_stage_prompt_context(ctx, self.spec.name, previous),
+            build_stage_prompt_context(ctx, self.spec.name),
         )
 
     def _same_session_prompt(self, ctx: StageContext) -> str:
@@ -229,27 +228,14 @@ class AIStage:
             + "Return the result required by the original stage instructions; do not restart unrelated work.\n"
         )
 
-    def _fresh_session_prompt(self, ctx: StageContext, original: str) -> str:
-        task = ctx.task
-        task_text = "" if task is None else json.dumps(
-            {
-                "id": task.id,
-                "title": task.title,
-                "description": task.description,
-                "deliverable": task.deliverable,
-                "acceptance_criteria": task.acceptance_criteria,
-            },
-            ensure_ascii=False,
-        )
+    def _fresh_session_prompt(self, original: str) -> str:
         return (
-            always_instructions(ctx.root)
-            + "\nYou are continuing an interrupted task in a new session.\n"
-            + f"Original specification:\n{ctx.state.goal}\n\n"
-            + (f"Current task:\n{task_text}\n\n" if task_text else "")
-            + "Inspect the CURRENT project state first. Preserve valid existing work. "
-            "Complete only the current stage/task.\n\n"
-            + f"Stage instructions:\n{original}"
+            f"Continue the same {self.name} stage in a fresh session. "
+            "Inspect current project state first and preserve valid existing work. "
+            "Follow the complete stage instructions below.\n\n"
+            + original
         )
+
 
 
 __all__ = ["AIStage", "AIStageSpec", "ResultHandler"]

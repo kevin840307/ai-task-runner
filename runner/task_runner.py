@@ -8,7 +8,7 @@ from .ai import create_ai_client
 from .config import RuntimeConfig
 from .errors import RunnerError
 from .project.files import cleanup_stale_artifacts
-from .runtime import events
+from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .workflow.pipeline import build_pipeline
 from .workflow.stages import StageContext, StageExecutor
@@ -49,7 +49,7 @@ class TaskRunner:
             self._save_state()
         if normalize_state(self.state):
             self._save_state()
-        events.bind(self.state)
+        progress.bind(self.state)
 
         self.context = StageContext(
             config=self.config,
@@ -68,7 +68,7 @@ class TaskRunner:
 
     def run(self) -> int:
         if self.config.plan_only and self.state.tasks:
-            events.set_status("Plan ready", "plan-only completed without execution")
+            progress.set_status("Plan ready", "plan-only completed without execution")
             return 0
         return self.pipeline.run(self.stage_executor, plan_only=self.config.plan_only)
 

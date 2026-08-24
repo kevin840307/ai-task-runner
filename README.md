@@ -7,7 +7,7 @@ Runtime completion rule: a normal internal return is not treated as completion u
 
 The runner owns orchestration; backends, plugins, prompts, and validators provide bounded capabilities behind explicit contracts.
 
-A small reusable Python orchestrator for long-running AI coding tasks. It separates model work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
+A small reusable Python orchestrator for long-running AI coding tasks. It separates AI work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
 ## Key properties
 - Qwen and OpenCode backends; Qwen prompt transport is stdin-only.
@@ -15,7 +15,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - TODO execution runs Execute -> Review for each task. Same-task failures prefer the same session and rebuild only when needed; Review uses an independent read-only client/session.
 - Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
 - Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode with optional per-item `project_root` and `goal_file`.
-- Shared model-result parser: lenient JSON envelope, strict stage payload/schema.
+- Shared AI-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
 - Project policy in `<project-root>/.ai-task-runner.yaml`; the policy file protects itself automatically.
 
@@ -75,7 +75,7 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 ## Flow engine architecture
 
-The runner uses a small stage-list pipeline. `StageExecutor` owns shared retry, Hook, Event and exception handling. Each Stage performs one job and returns a `StageResult`; a result may add dynamic `next_flow`, replace the remaining outer flow, stop, or complete the run. Pipeline only consumes those facts and never hardcodes review/repair/validation routes.
+The runner uses a small stage-list pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns a `StageResult`; a result may add dynamic `next_flow`, replace the remaining outer flow, stop, or complete the run. Pipeline only consumes those facts and never hardcodes review/repair/validation routes.
 
 Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, and read-only enforcement register transparent execution hooks. Core stages do not import those concrete plugins.
 
@@ -93,7 +93,7 @@ Unified execution rules:
 - Plan stores the durable TODO list and returns an execution list of `[execute, review]` groups. Pipeline runs that nested list completely, then resumes the outer Python/AI validators. Any Stage may return another Stage list the same way.
 
 
-Stages perform one attempt only. `StageExecutor` owns hooks/events/change tracking; retry and routing stay in Flow. Generic `AIStage` are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
+Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `AIStage` are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
 
 A normal AI Stage is declarative. Add the Stage preset and place its prompt file; no Python prompt builder is needed:
 

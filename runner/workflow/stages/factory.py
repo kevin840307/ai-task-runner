@@ -12,12 +12,12 @@ STAGE_REGISTRY: dict[str, dict[str, Any]] = {
     "ai": {
         "class": AIStage,
         "spec": AIStageSpec,
-        "defaults": {"mode": "readonly", "actor": "model", "runs": 1},
+        "defaults": {"mode": "readonly", "actor": "ai", "runs": 1},
     },
     "plan": {
         "class": PlanStage,
         "spec": PlanStageSpec,
-        "defaults": {"mode": "readonly", "actor": "model"},
+        "defaults": {"mode": "readonly", "actor": "ai"},
     },
     "python_validator": {
         "class": PythonValidatorStage,

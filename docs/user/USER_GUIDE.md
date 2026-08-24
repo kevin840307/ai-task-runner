@@ -34,7 +34,7 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each script item gets an isolated work-dir state under `.ai-task-runner/script/<index>`. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
 
 ```yaml
 - goal_file: prompts/example-a.md
@@ -52,17 +52,24 @@ Protected paths are project-relative and may name files or directories. The poli
 
 Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` requires the Python validator plus at least 2 of 3 independent AI PASS votes.
 
+## Session recovery
+- Same Session is the normal first recovery path. It sends only new Stage/failure evidence and the next instruction.
+- After the configured same-session retry budget (default 2), the Runner uses a Fresh Session with complete necessary context.
+- Repeated identical failure after Fresh Session escalates to Replan; a different failure resets the streak.
+- Final AI validation is different from normal recovery: every configured vote starts a different Fresh Session.
+- Structured-output correction is bounded to at most two Same Session retries before configured Fresh fallback.
+
 ## JSON events / integration
-`--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills.
+`--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills. Workflow uses a semantic progress facade and does not depend on raw event schema or concrete Plugin implementations.
 
 ## Backend arguments
-Repeat `--agent-arg` per backend argv item. Use `--command` only to override the backend executable. `--sandbox` enables backend sandboxing when supported; Qwen receives `-s`. Qwen full prompts are always stdin-only.
+Repeat `--agent-arg` per backend argv item. Use `--command` only to override the backend executable. `--sandbox` enables backend sandboxing when supported; Qwen receives `-s`. Full AI task prompts are always stdin-only. Qwen `/context` and `/compress-fast` are short backend control commands, not task prompts, and may use CLI control arguments.
 
 ## Protected paths from CLI
-Repeat `--protect-file` for additional paths. Project policy is preferred for stable project-owned rules.
+Repeat `--protect-file` for additional paths. Project policy is preferred for stable project-owned rules. If a readonly Stage attempts a write, Safety restores the change and the attempt is treated as a failure; same-session recovery sends only the new stage/failure delta.
 
 ## Debug
-Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing model behavior.
+Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing AI behavior. Logs/events stay concise but retain Stage, session mode, retry/recovery, process exit, and validator evidence needed for 24H debugging.
 
 ## Timeout defaults
 | Option | Default |
@@ -72,7 +79,7 @@ Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.
 | `--agent-idle-after-change-timeout` | `900` |
 | `--validator-timeout` | `1200` |
 
-Resume does not require repeating `--goal` if compatible state already exists, but passing the same goal is fine.
+Resume does not require repeating `--goal` if compatible state already exists, but passing the same goal is fine. Transient API/network/rate-limit/service failures use a separate backoff window and do not consume the Stage failure budget.
 
 ## Canonical Python API
 ```python
@@ -80,7 +87,7 @@ from runner import RunRequest, run
 ```
 
 ## External command validator
-If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_templates/external_command_validator.py` as the Python wrapper. Pass the external command and log folders through repeated `--validator-arg` values. The wrapper captures stdout/stderr and copies matching log folders into `.ai-task-runner/validator-reports/external-command/`.
+If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_templates/external_command_validator.py` as the Python wrapper. Pass the external command and log folders through repeated `--validator-arg` values. The wrapper captures stdout/stderr and copies matching log folders into `.ai-task-runner/validator-reports/external-command/`. Deterministic validators should verify observable requirements, not hidden Planner strategy or coding-style constraints absent from the Goal.
 
 ## Agent rule files
 - Qwen Code: `QWEN.md`

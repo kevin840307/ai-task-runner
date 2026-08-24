@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ...bootstrap import current_runtime
 from ...errors import ConfigurationError, RunnerError
-from ...runtime import events
+from ...runtime import progress
 from ...project.files import changed_project_files, project_manifest
 from .contracts import Stage, StageContext, StageExecution, StageResult
 
@@ -78,7 +78,7 @@ class StageExecutor:
 
             error = result.error or RunnerError(result.output or "stage error")
             if self._is_service_error(error):
-                events.service_wait_exhausted(stage.name, str(error)[-1000:])
+                progress.service_wait_exhausted(stage.name, str(error)[-1000:])
                 raise error
 
             if result.changed_files:
@@ -121,7 +121,7 @@ class StageExecutor:
 
         ctx.execution = StageExecution()
         ctx.save_state()
-        events.stage_finished(StageAction(stage, ctx), result)
+        progress.stage_finished(StageAction(stage, ctx), result)
         return result
 
     def _attempt(self, stage: Stage, ctx: StageContext, previous: StageResult | None) -> StageResult:
@@ -129,7 +129,7 @@ class StageExecutor:
         run_state = str(getattr(stage, "run_state", "") or "")
         if run_state:
             ctx.set_stage(run_state, "")
-        events.stage_started(action)
+        progress.stage_started(action)
         before = project_manifest(ctx.root, ctx.work) if action.track_changes else None
         tokens = []
         try:
@@ -218,7 +218,7 @@ class StageExecutor:
     def _fresh_session(ctx: StageContext) -> None:
         previous = ctx.ai_client.session_id
         ctx.reset_sessions()
-        events.session_fresh(previous)
+        progress.session_fresh(previous)
 
     @staticmethod
     def _has_session(ctx: StageContext) -> bool:

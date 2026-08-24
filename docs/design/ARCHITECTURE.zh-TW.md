@@ -10,7 +10,7 @@
 - `runner/backends/`：Qwen/OpenCode 實作與 Backend registry/configuration。
 - `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
 - `runner/prompts/`：Strict Jinja loader、穩定 Prompt Context contract、Prompt resources。
-- `runner/runtime/`：Durable state、subprocess lifecycle、EventBus。
+- `runner/runtime/`：Durable state、subprocess lifecycle、raw EventBus，以及 Workflow 使用的 semantic progress facade。
 - `runner/plugins/`：Safety、Console、History、Observability 等橫切 Plugin/Hook。
 - `runner/config/`：Runtime/default configuration。
 - `runner/utils/`：只保留無狀態、通用的 file/text helper。
@@ -21,11 +21,11 @@
 
 `Backends -> AI contracts`
 
-`StageExecutor -> Project + Runtime + generic plugin hooks`
+`StageExecutor -> Project + Runtime semantic progress + generic hook contract`
 
 `Bootstrap -> backend/plugin registries`
 
-Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin 或 UI 行為；AI subsystem 不得反向依賴 Workflow business stage。
+Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin、raw event schema 或 UI 行為；`runtime/progress.py` 是語意 facade，`runtime/events.py` 才負責 event transport/schema。AI subsystem 不得反向依賴 Workflow business stage。
 
 ## Workflow 契約
 
@@ -41,4 +41,4 @@ Stage 一次只做一個 attempt。Hook、Project change tracking、retry/sessio
 
 `goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `session`, `failure`, `planning`, `previous`, `rules`, `always_instructions`。
 
-一般 AI Stage 直接指定 prompt path；只有真的需要 Python 計算 context 的特殊 Stage 才使用 prompt builder，目前只保留 Planning / Repair Planning。
+一般 AI Stage 直接指定 prompt path；沒有 prompt-builder registry。Planning / Repair Planning 的計算 context 直接由 `PlanStage` 管理。

@@ -106,3 +106,12 @@ def test_registries_are_not_hidden_in_contract_or_package_init_files():
     plugin_contracts = (ROOT / "runner/plugins/contracts.py").read_text(encoding="utf-8")
     assert "def create_backend(" not in backend_init
     assert "current_runtime" not in plugin_contracts
+
+
+def test_workflow_uses_semantic_progress_not_raw_event_transport():
+    workflow = ROOT / "runner" / "workflow"
+    for path in workflow.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "runtime import events" not in source, path
+        assert "runtime.events" not in source, path
+        assert "publish(\"runner." not in source, path

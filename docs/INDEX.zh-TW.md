@@ -15,4 +15,4 @@
 - `development/TEST_MATRIX.zh-TW.md`：測試契約、Smoke/Examples policy。
 - `validator_templates/README.zh-TW.md`：Deterministic validator 慣例。
 
-每份主文件都有對應 English 版本。
+所有 human-facing 維護文件都必須同時有英文 `.md` 與繁中 `.zh-TW.md` 版本，並描述相同的現行功能。Prompt resource、`QWEN.md`/`AGENTS.md` 與 sample project task input 屬於執行/輸入資源，不要求翻譯 duplicate。

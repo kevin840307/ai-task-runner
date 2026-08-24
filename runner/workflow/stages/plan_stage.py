@@ -33,18 +33,11 @@ class PlanStage(AIStage):
         values = build_stage_prompt_context(
             ctx,
             "repair_plan" if repair else "planning",
-            previous,
         )
         planning = dict(values["planning"])
-        planning.update({
-            "source_instruction": (
-                "Build the smallest repair plan directly from validator evidence. "
-                "Do not inspect unrelated work."
-                if repair
-                else "Use only the supplied goal, progress, validator feedback, and inspection summary."
-            ),
-            "inspection_summary": "" if repair else bounded_text(previous.output if previous else "", 12000),
-        })
+        planning["inspection_summary"] = (
+            "" if repair else bounded_text(previous.output if previous else "", 12000)
+        )
         values["planning"] = planning
         if not repair and ctx.ai_client.session_id and previous and previous.output:
             return render_prompt("stages/plan_finalize_same_session.md", values)

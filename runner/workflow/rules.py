@@ -10,7 +10,7 @@ from typing import Any
 
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
-from ..runtime import events
+from ..runtime import progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
 from .definitions import FLOWS, STAGES
@@ -54,7 +54,7 @@ def _restart_plan(ctx: StageContext, result: StageResult) -> StageResult:
     feedback = str(result.error or result.output)[-4000:]
     invalidate_plan(ctx, feedback)
     ctx.reset_sessions()
-    events.set_status("相同失敗持續，重新規劃", result.stage)
+    progress.set_status("相同失敗持續，重新規劃", result.stage)
     return replace(
         result,
         next_flow=tuple(flow_definition("replan")),
@@ -68,7 +68,7 @@ def handle_plan_result(ctx: StageContext, result: StageResult) -> StageResult:
     if result.status != "pass" or not isinstance(result.data, list):
         return result
     install_plan(ctx.state, result.data, ctx.ai_client.session_id)
-    events.show_todo(ctx.state)
+    progress.show_todo(ctx.state)
     return replace(result, next_flow=tuple(_remaining_task_flow(ctx)))
 
 
@@ -106,18 +106,18 @@ def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
         task.review_skip_reason = reason
         complete_task(ctx.state, task, ctx.ai_client.session_id)
         ctx.scratch.pop("review_client", None)
-        events.set_status("Review 異常，暫時跳過", f"{task.title} · final validator will decide")
+        progress.set_status("Review 異常，暫時跳過", f"{task.title} · final validator will decide")
         return result
 
     if result.status == "pass":
         complete_task(ctx.state, task, ctx.ai_client.session_id)
         ctx.scratch.pop("review_client", None)
-        events.set_status("任務完成", task.title)
+        progress.set_status("任務完成", task.title)
         return result
 
     if result.status == "fail":
         task.status = "pending"
-        events.set_status("任務未完成，進入 Repair", result.output)
+        progress.set_status("任務未完成，進入 Repair", result.output)
         return replace(result, next_flow=tuple(flow_definition("repair")))
     return result
 
@@ -142,7 +142,7 @@ def handle_final_validation_result(ctx: StageContext, result: StageResult) -> St
         complete_run(ctx.state)
         ctx.ai_client.session_id = ""
         ctx.set_stage("completed", "")
-        events.set_status("全部完成", "Validator PASS")
+        progress.set_status("全部完成", "Validator PASS")
         return replace(result, complete=True)
     return result
 
@@ -157,7 +157,7 @@ def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
         ctx.state.validator_failure_count = 1
     ctx.set_stage("validator_failed", result.output)
     invalidate_plan(ctx)
-    events.set_status("最終驗證失敗，保留修改並進入 Repair Plan", result.stage)
+    progress.set_status("最終驗證失敗，保留修改並進入 Repair Plan", result.stage)
 
 
 def needs_ai_validation(ctx: StageContext) -> bool:
