@@ -1,1 +1,0 @@
-Validator repair mode: the final validator has failed with the same diagnostic $failure_count times. Treat the validator feedback in Run context as authoritative. Fix the first reported failure directly, verify the affected files carefully, and do not dismiss the validator as a false positive unless there is concrete evidence of an impossible requirement.

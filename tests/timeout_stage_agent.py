@@ -18,10 +18,7 @@ state_dir.mkdir(parents=True, exist_ok=True)
 session = "timeout-main-session"
 prompt_kind = prompt_stage(prompt)
 
-if prompt_kind == "plan_understand":
-    stage = "plan"
-    answer = "Relevant project evidence gathered"
-elif prompt_kind in {"plan_finalize", "plan_refine"}:
+if prompt_kind in {"plan_finalize", "plan_refine"}:
     stage = "plan_refine" if prompt_kind == "plan_refine" else "plan"
     answer = {
         "tasks": [{

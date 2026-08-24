@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 import runner.backends.qwen as qwen
-from runner.backends.base import AgentMode
+from runner.model.model import ModelMode
 from runner.backends.qwen import QwenBackend, bridge_sandbox_session
-from runner.runtime.process_control import ProcessResult
+from runner.runtime.process import ProcessResult
 
 
 def _backend(root: Path, extra_args=("--sandbox",)) -> QwenBackend:

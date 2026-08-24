@@ -1,7 +1,7 @@
 """Backend registry.
 
 To add a backend:
-1. Create one module implementing AgentBackend.
+1. Create one module implementing ModelBackend.
 2. Override configure_args only when the CLI needs stage-specific policy.
 3. Import the class here and add one registry entry.
 """
@@ -12,11 +12,12 @@ from pathlib import Path
 
 from ..config.defaults import DEFAULT_AGENT_TIMEOUT
 
-from .base import AgentBackend, AgentMode, BackendError, BackendResult
+from ..model.backend import ModelBackend, ModelMode, BackendResult
+from ..model.errors import BackendError
 from .opencode import OpenCodeBackend, ensure_opencode_rules
 from .qwen import QwenBackend, ensure_qwen_rules
 
-BACKENDS: dict[str, type[AgentBackend]] = {
+BACKENDS: dict[str, type[ModelBackend]] = {
     QwenBackend.name: QwenBackend,
     OpenCodeBackend.name: OpenCodeBackend,
 }
@@ -30,16 +31,16 @@ def default_command(name: str) -> str:
     return BACKENDS[name].default_command
 
 
-def _backend_type(name: str) -> type[AgentBackend]:
+def _backend_type(name: str) -> type[ModelBackend]:
     try:
         return BACKENDS[name]
     except KeyError as error:
         raise BackendError(f"unsupported backend: {name}") from error
 
 
-def configure_agent_args(
+def configure_model_args(
     name: str,
-    mode: AgentMode,
+    mode: ModelMode,
     extra_args: Sequence[str],
     *,
     allow_project_read: bool = False,
@@ -77,7 +78,7 @@ def create_backend(
     root: Path,
     extra_args: Sequence[str],
     timeout: int = DEFAULT_AGENT_TIMEOUT,
-) -> AgentBackend:
+) -> ModelBackend:
     backend_type = _backend_type(name)
     return backend_type(
         command or backend_type.default_command, root, extra_args, timeout
@@ -86,12 +87,12 @@ def create_backend(
 
 __all__ = [
     "BACKENDS",
-    "AgentBackend",
-    "AgentMode",
+    "ModelBackend",
+    "ModelMode",
     "BackendError",
     "BackendResult",
     "backend_names",
-    "configure_agent_args",
+    "configure_model_args",
     "configure_sandbox_args",
     "create_backend",
     "default_command",

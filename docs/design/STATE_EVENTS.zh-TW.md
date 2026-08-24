@@ -1,12 +1,12 @@
 # State 與 Events
 
-版本：1.2.21
+版本：1.2.23
 
 ## State
 Runner state 放在 project-relative work dir（預設 `.ai-task-runner`）。內容包含 run/cycle identity、current task index、task status/attempts/review、session id、progress/recovery metadata 與 Resume 需要的 completion state。實際 JSON 是內部 persistence format；Integration 應優先使用 Public API/Event，不要直接修改 state。
 
 ## Resume 規則
-`--resume` 載入相容 state。因為程式重啟會使本機 `AgentClient` 消失，只有這條路徑允許用已保存的遠端 session id 重建新 client；同一個執行程序內的 continuation 一律重用既有 client/session。`--force-new` 開新 run。Script item 各自使用 nested state dir。Task 完成後 agent session id 可能清空；真正 durable source of truth 是 project files + Runner state，不是模型 chat memory。
+`--resume` 載入相容 state。因為程式重啟會使本機 `Agent` 消失，只有這條路徑允許用已保存的遠端 session id 重建新 client；同一個執行程序內的 continuation 一律重用既有 client/session。`--force-new` 開新 run。Script item 各自使用 nested state dir。Task 完成後 agent session id 可能清空；真正 durable source of truth 是 project files + Runner state，不是模型 chat memory。
 
 ## JSON Events
 使用 `--json-events` 時輸出 JSON Lines。核心 event 含 schema/runner version、timestamp、status/detail、run id、cycle、current index、completed、task summary。Script mode 額外有 `script.item_started`、`script.item_completed`、`script.item_failed`。

@@ -46,9 +46,7 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch):
     assert result.completed is True
     records = _records(state_dir)
     assert [record["stage"] for record in records] == [
-        "plan_understand",
         "plan_finalize",
-        "plan_judge",
         "execute",
         "review",
         "validator",
@@ -56,17 +54,13 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch):
     assert [record["resumed"] for record in records] == [
         False,
         True,
-        True,
-        True,
         False,
         False,
     ]
 
     limits = {
-        "plan_understand": 6000,
-        "plan_finalize": 4000,
-        "plan_judge": 3000,
-        "execute": 2500,
+        "plan_finalize": 5000,
+        "execute": 4500,
         "review": 4500,
         "validator": 7000,
     }
@@ -78,32 +72,26 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch):
         record["stage"]
         for record in records
         if str(tmp_path) in record["prompt"]
-    } == {"plan_understand", "validator"}
+    } == {"plan_finalize", "execute", "validator"}
     assert len({record["prompt"] for record in records}) == len(records)
 
 
 def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypatch):
     expectations = {
         "review_retry": {
-            "plan_understand": 1,
             "plan_finalize": 1,
-            "plan_judge": 1,
             "execute": 2,
             "review": 2,
             "validator": 1,
         },
         "execution_model_error": {
-            "plan_understand": 1,
             "plan_finalize": 1,
-            "plan_judge": 1,
             "execute": 4,
             "review": 1,
             "validator": 1,
         },
         "ai_replan": {
-            "plan_understand": 1,
             "plan_finalize": 2,
-            "plan_judge": 1,
             "execute": 2,
             "review": 2,
             "validator": 2,
@@ -138,7 +126,7 @@ def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypat
 
 def test_generic_workflow_and_prompts_have_no_backend_or_example_literals():
     generic_paths = [
-        ROOT / "runner" / "engine" / "core.py",
+        ROOT / "runner" / "task_runner.py",
         *(ROOT / "runner" / "agent").rglob("*.py"),
         *(ROOT / "runner" / "agent" / "prompt_templates").glob("*.md"),
         *(ROOT / "runner" / "workflow").rglob("*.py"),

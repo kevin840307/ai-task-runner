@@ -15,9 +15,11 @@ from typing import Any
 
 from ..config.project_policy import protected_paths as policy_protected_paths
 from ..errors import RunnerError
-from ..runtime.extensions import current
-from ..runtime.hooks import ExecutionContext, HookViolation
-from ..runtime.project_state import copy_ignore, digest, excluded_dirs, restore_project_changes, tree_manifest
+from ..utils.files import copy_ignore, digest
+from ..bootstrap import current_runtime
+from .base import HookViolation
+
+from ..utils.project import excluded_dirs, restore_project_changes, tree_manifest
 
 BLOCKED_GIT_SUBCOMMANDS = frozenset({"add", "commit", "push"})
 _VALUE_OPTIONS = frozenset({
@@ -104,7 +106,7 @@ def _guard_main() -> int:
     return subprocess.run([real_git, *args], check=False).returncode
 
 
-def _runner_source_files() -> list[Path]:
+def runner_source_files() -> list[Path]:
     package_root = Path(__file__).resolve().parents[1]
     root = package_root.parent
     result = [package_root]
@@ -114,7 +116,7 @@ def _runner_source_files() -> list[Path]:
     return result
 
 
-def _normalize_paths(paths: Sequence[Path]) -> list[Path]:
+def normalize_paths(paths: Sequence[Path]) -> list[Path]:
     roots: list[Path] = []
     for path in sorted({Path(value).resolve() for value in paths}, key=lambda value: (len(value.parts), str(value))):
         if not any(path == root or root in path.parents for root in roots):
@@ -133,15 +135,15 @@ def _snapshot_data(path: Path) -> ProtectedData:
     return path.read_bytes()
 
 
-def _snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, ProtectedData]]:
+def snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, ProtectedData]]:
     return {path: (digest(path), _snapshot_data(path)) for path in paths}
 
 
-def _changed_snapshot_paths(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
+def changed_snapshot_paths(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
     return [str(path) for path, (old_hash, _data) in saved.items() if digest(path) != old_hash]
 
 
-def _restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
+def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
     changed: list[str] = []
     backup_roots: list[Path] = []
     for path, (old_hash, old_data) in saved.items():
@@ -174,9 +176,9 @@ class _Token:
 
 class SafetyHook:
     def _protected(self, root: Path) -> list[Path]:
-        runtime = current()
+        runtime = current_runtime()
         config = runtime.config
-        values: list[Path] = [*_runner_source_files(), *runtime.resources]
+        values: list[Path] = [*runner_source_files(), *runtime.resources]
         for value in (config.goal_file, config.ai_validator_prompt_file):
             if value:
                 values.append(Path(value).resolve())
@@ -185,10 +187,10 @@ class SafetyHook:
         values.append(root / config.work_dir / "state.json")
         values.extend(policy_protected_paths(root))
         values.extend(Path(value).resolve() for value in config.protect_file)
-        return _normalize_paths(values)
+        return normalize_paths(values)
 
-    def before_execution(self, context: ExecutionContext) -> _Token:
-        protected_snapshot = _snapshot(self._protected(context.root))
+    def before_execution(self, context) -> _Token:
+        protected_snapshot = snapshot(self._protected(context.root))
         if context.mode != "readonly":
             return _Token(protected_snapshot)
         excluded = excluded_dirs(context.root, context.work)
@@ -198,15 +200,15 @@ class SafetyHook:
         shutil.copytree(context.root, backup, symlinks=True, ignore=copy_ignore(excluded))
         return _Token(protected_snapshot, before, backup_root, backup)
 
-    def wrap_change_detector(self, context: ExecutionContext, token: _Token, base):
+    def wrap_change_detector(self, context, token: _Token, base):
         def changed() -> bool:
-            protected_changed = _changed_snapshot_paths(token.protected_snapshot)
+            protected_changed = changed_snapshot_paths(token.protected_snapshot)
             if protected_changed:
                 raise RunnerError("protected file modified during model call: " + ", ".join(protected_changed))
             return base()
         return changed
 
-    def after_execution(self, context: ExecutionContext, token: _Token) -> list[HookViolation]:
+    def after_execution(self, context, token: _Token) -> list[HookViolation]:
         project_changed: list[str] = []
         if token.before is not None and token.backup is not None:
             after = tree_manifest(context.root, excluded_dirs(context.root, context.work))
@@ -215,7 +217,7 @@ class SafetyHook:
                 restore_project_changes(context.root, token.backup, project_changed)
         if token.backup_root is not None:
             shutil.rmtree(token.backup_root, ignore_errors=True)
-        protected_changed = _restore_changed(token.protected_snapshot)
+        protected_changed = restore_changed(token.protected_snapshot)
         violations: list[HookViolation] = []
         if protected_changed:
             violations.append(HookViolation("protected file modified and restored: " + ", ".join(protected_changed), "protected", tuple(protected_changed)))
@@ -246,4 +248,4 @@ def register(runtime) -> None:
     runtime.hooks.add(SafetyHook())
 
 
-__all__ = ["BLOCKED_GIT_SUBCOMMANDS", "SafetyHook", "_guard_main", "git_subcommand", "register"]
+__all__ = ["BLOCKED_GIT_SUBCOMMANDS", "SafetyHook", "git_subcommand", "normalize_paths", "register", "restore_changed", "runner_source_files", "snapshot"]

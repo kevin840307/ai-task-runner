@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.21
+版本：1.2.25
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態），CLI 才會退出。若 state 尚未完成，main 會自動 resume 繼續。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
@@ -62,7 +62,38 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 現在是 Graph 驅動的 Flow Engine。`PlanningStage`、`ExecuteStage`、`ReviewStage`、`ValidateStage` 都是獨立方塊；Stage 只回傳 Outcome，Recovery 決定 `advance/retry/replan`，`FlowDefinition` 再決定下一個節點。簡單流程使用 `FlowDefinition.linear(...)`，只有特殊分支才覆寫 route。
+Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 retry、Hook、Event 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult`。Result 可動態帶 `stages`、重設剩餘 queue、停止或完成；Pipeline 只消費這些資訊，不 hardcode review/repair/validation 路線。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 透過透明 Execution Hook 註冊。Core 與 Stage 不 import 這些具體 extension。
 
+
+## Stage 執行架構
+
+`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> stages/replace/complete -> next Stage`
+
+統一執行規則：
+- API／服務異常由 model client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。
+- 真實 failure 先使用 same-session 的短續跑 prompt；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
+- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會重新理解目前專案並重新產生 plan；failure 不同則重新計數。
+- write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
+- Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
+- Plan 把 TODO list 存入 durable state，並直接回傳由 `[execute, review]` 組成的 execution list。Pipeline 先完整執行這個巢狀 list，再回到外層繼續 Python/AI Validator；未來任何 Stage 都可以用相同方式回傳 Stage list。
+
+
+Stage 一次只做一個 attempt。Hook/Event/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `GlobalStage` / `GlobalStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidationStage`。
+
+
+## 新增普通 AI Stage
+
+普通 AI Stage 直接資料化，不需要新增 Python prompt builder：
+
+```python
+"security_review": {
+    "stage": "global",
+    "status": "AI 正在執行 Security Review",
+    "mode": "readonly",
+    "prompt": "stages/security_review.md",
+}
+```
+
+再把 `"security_review"` 插入 `FLOWS` 的目標位置，並新增 `runner/prompts/stages/security_review.md`。Stage preset 的 key 會自動成為 Stage name。只有確實需要 Python 動態組裝 context 的特殊 Stage 才使用 `prompt_builder`。

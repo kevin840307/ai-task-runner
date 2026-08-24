@@ -9,6 +9,7 @@ from typing import Any
 from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
+    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
@@ -17,7 +18,9 @@ from .defaults import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_REVIEW_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
+    DEFAULT_WATCHDOG_INTERVAL,
 )
 
 EventHandler = Callable[[dict[str, Any]], None]
@@ -45,7 +48,10 @@ class RuntimeConfig:
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
+    api_wait_timeout: float = DEFAULT_API_WAIT_TIMEOUT
+    watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     task_recovery_threshold: int = DEFAULT_MAX_ATTEMPTS
+    review_retries: int = DEFAULT_REVIEW_RETRIES
     full_replan_threshold: int = DEFAULT_MAX_CYCLES
     retry_delay: float = 2
     retry_wait: float = 5
@@ -91,7 +97,10 @@ class RuntimeConfig:
                 "agent_idle_after_change_timeout",
                 DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
             ),
+            api_wait_timeout=getattr(args, "api_wait_timeout", DEFAULT_API_WAIT_TIMEOUT),
+            watchdog_interval=getattr(args, "watchdog_interval", DEFAULT_WATCHDOG_INTERVAL),
             task_recovery_threshold=getattr(args, "task_recovery_threshold", getattr(args, "max_attempts", DEFAULT_MAX_ATTEMPTS)),
+            review_retries=getattr(args, "review_retries", DEFAULT_REVIEW_RETRIES),
             full_replan_threshold=getattr(args, "full_replan_threshold", getattr(args, "max_cycles", DEFAULT_MAX_CYCLES)),
             retry_delay=getattr(args, "retry_delay", 2),
             retry_wait=getattr(args, "retry_wait", 5),
@@ -129,3 +138,11 @@ class RuntimeConfig:
         values["max_attempts"] = self.task_recovery_threshold
         values["max_cycles"] = self.full_replan_threshold
         return argparse.Namespace(**values)
+
+
+def is_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)

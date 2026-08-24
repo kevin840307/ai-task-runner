@@ -5,10 +5,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from .base import AgentBackend, BackendResult, ensure_project_rules
+from ..model.backend import ModelBackend, BackendResult, ensure_project_rules
 
 
-class OpenCodeBackend(AgentBackend):
+class OpenCodeBackend(ModelBackend):
     name = "opencode"
     default_command = "opencode"
 
@@ -23,7 +23,6 @@ class OpenCodeBackend(AgentBackend):
             "json",
             *session_args,
             *self.extra_args,
-            prompt,
         ]
 
     def decode(self, raw: str) -> BackendResult:

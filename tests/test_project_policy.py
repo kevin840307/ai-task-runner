@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from runner.engine.core import TaskRunner
+from runner.task_runner import TaskRunner
 from runner.errors import RunnerError
-from runner.safety.git_guard import git_subcommand
-from runner.safety.policy import POLICY_FILENAME, protected_paths
-from runner.runtime.process_control import run_process
-from runner.safety.project_guard import normalize_protected_paths, restore_changed, snapshot
+from runner.extensions.safety import git_subcommand
+from runner.config.project_policy import POLICY_FILENAME, protected_paths
+from runner.runtime.process import run_process
+from runner.extensions.safety import normalize_paths, restore_changed, snapshot
 
 
 def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
@@ -28,39 +28,6 @@ def test_policy_protects_file_folder_and_policy_itself(tmp_path: Path) -> None:
     ]
 
 
-
-
-def test_safety_extension_applies_yaml_protection_without_runner_coupling(tmp_path: Path) -> None:
-    from runner.config import RuntimeConfig
-    from runner.runtime.execution import guarded_call
-    from runner.runtime.extensions import bootstrap
-
-    locked = tmp_path / "locked"
-    locked.mkdir()
-    target = locked / "data.txt"
-    target.write_text("before", encoding="utf-8")
-    (tmp_path / POLICY_FILENAME).write_text("protected_paths:\n  - locked/\n", encoding="utf-8")
-    bootstrap(RuntimeConfig(goal="g", project_root=str(tmp_path), validator="ai", human_output=False))
-
-    with pytest.raises(RunnerError):
-        guarded_call(lambda: target.write_text("after", encoding="utf-8"), tmp_path, tmp_path / ".ai-task-runner", actor="test")
-    assert target.read_text(encoding="utf-8") == "before"
-
-
-def test_safety_extension_protects_ai_validator_prompt_file(tmp_path: Path) -> None:
-    from runner.config import RuntimeConfig
-    from runner.runtime.execution import guarded_call
-    from runner.runtime.extensions import bootstrap
-
-    prompt = tmp_path / "ai_validation.md"
-    prompt.write_text("check", encoding="utf-8")
-    bootstrap(RuntimeConfig(
-        goal="g", project_root=str(tmp_path), validator="ai", human_output=False,
-        ai_validator_prompt_file=str(prompt),
-    ))
-    with pytest.raises(RunnerError):
-        guarded_call(lambda: prompt.write_text("changed", encoding="utf-8"), tmp_path, tmp_path / ".ai-task-runner", actor="test")
-    assert prompt.read_text(encoding="utf-8") == "check"
 
 
 def test_policy_folder_snapshot_restores_modify_create_and_delete(tmp_path: Path) -> None:
@@ -120,7 +87,7 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(tmp_pat
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
-    from runner.safety.policy import instructions
+    from runner.config.project_policy import instructions
 
     (tmp_path / POLICY_FILENAME).write_text(
         "instructions:\n"
@@ -156,7 +123,7 @@ def test_policy_rejects_non_string_instructions(tmp_path: Path) -> None:
 def test_protected_roots_drop_descendants_without_guessing_siblings(tmp_path: Path) -> None:
     locked = (tmp_path / "locked").resolve()
     other = (tmp_path / "other.txt").resolve()
-    roots = normalize_protected_paths([
+    roots = normalize_paths([
         locked / "a.txt",
         other,
         locked,

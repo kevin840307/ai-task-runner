@@ -26,10 +26,7 @@ def count(name: str) -> int:
     return value
 
 
-if stage == "plan_understand":
-    count("plan")
-    answer = "Relevant project evidence gathered"
-elif stage in {"plan_finalize", "plan_refine"}:
+if stage in {"plan_finalize", "plan_refine"}:
     count("plan")
     answer = {
         "tasks": [{

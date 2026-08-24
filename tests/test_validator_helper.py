@@ -4,12 +4,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from runner.safety.policy import protected_paths
+from runner.config.project_policy import protected_paths
 
 
 def test_runner_validator_execution_has_no_helper_filename_policy():
-    source = Path("runner/workflow/validation/file.py").read_text(encoding="utf-8")
-    core = Path("runner/engine/core.py").read_text(encoding="utf-8")
+    source = Path("runner/flow/stages/python_validation.py").read_text(encoding="utf-8")
+    core = Path("runner/task_runner.py").read_text(encoding="utf-8")
     assert "VALIDATOR_HELPER" not in source + core
     assert "prepare_validator_helper" not in source + core
     assert "ai_task_runner_validator.py" not in source + core

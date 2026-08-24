@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from runner.config import RuntimeConfig
+from runner.config.defaults import DEFAULT_REVIEW_RETRIES
+from runner.errors import RunnerError
+from runner.extensions.console import LiveUI
+from runner.flow.stages.base import StageContext, StageResult
+from runner.flow.stages.executor import StageExecutor
+from runner.flow.stages.global_stage import GlobalStage, GlobalStageSpec
+from runner.runtime import progress
+from runner.runtime.state import RunState, Task
+
+
+class Hooks:
+    def before(self, action): return []
+    def after(self, action, tokens): return []
+    def change_detector(self, action, tokens, fallback): return fallback
+
+
+class Model:
+    root = Path('.')
+    extra_args = []
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+        self.session_id = ''
+        self.calls = []
+        self.session_no = 0
+    def ask(self, prompt, **kwargs):
+        before = self.session_id
+        if not self.session_id:
+            self.session_no += 1
+            self.session_id = f'S{self.session_no}'
+        self.calls.append((before, self.session_id, prompt))
+        value = self.outputs.pop(0)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+    def invoke(self, action, *args, **kwargs): return action()
+    def set_extra_args(self, extra_args): self.extra_args = list(extra_args)
+
+
+class Stdout:
+    def __init__(self, tty=True): self.tty, self.output = tty, ''
+    def isatty(self): return self.tty
+    def write(self, text): self.output += text
+    def flush(self): pass
+
+
+def ctx(tmp_path, model, **config):
+    state = RunState('run', 'ORIGINAL SPEC', str(tmp_path), tasks=[Task('t1','TODO','do it',['ok'],'out')])
+    return StageContext(
+        args=RuntimeConfig(retry_delay=0, **config), root=tmp_path, work=tmp_path/'.work',
+        state=state, model=model, state_file=tmp_path/'state.json', validator=None,
+        ai_validation=True, save_state=lambda: None,
+        set_stage=lambda stage, detail='': setattr(state, 'stage', stage),
+    )
+
+
+def parse_ok(text, ctx):
+    if text != 'OK': raise RunnerError('need OK')
+    return {'passed': True}
+
+
+def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp_path):
+    model = Model(['bad1', 'bad2', 'bad3', 'OK'])
+    c = ctx(tmp_path, model)
+    c.scratch['validator'] = model
+    stage = GlobalStage(GlobalStageSpec(
+        name='validate_ai', status='validate', model_key='validator',
+        prompt_builder=lambda c,p: 'FULL VALIDATOR CONTRACT', parser=parse_ok,
+        result_status=lambda data: 'pass', structured_retries=2, structured_fresh_retries=1, retry=0,
+    ))
+    result = StageExecutor(Hooks()).run(stage, c)
+    assert result.status == 'pass'
+    assert [before for before, _, _ in model.calls] == ['', 'S1', 'S1', '']
+    assert 'FULL VALIDATOR CONTRACT' == model.calls[0][2]
+    assert all('FULL VALIDATOR CONTRACT' not in model.calls[i][2] for i in (1,2))
+    assert 'Original specification:\nORIGINAL SPEC' in model.calls[3][2]
+    assert 'Stage instructions:\nFULL VALIDATOR CONTRACT' in model.calls[3][2]
+
+
+def test_independent_ai_votes_each_start_new_session(tmp_path):
+    model = Model(['OK', 'OK', 'OK'])
+    c = ctx(tmp_path, model)
+    c.scratch['validator'] = model
+    stage = GlobalStage(GlobalStageSpec(
+        name='validate_ai', status='validate', model_key='validator', reviews=3,
+        fresh_each_review=True, prompt_builder=lambda c,p: 'FULL', parser=parse_ok,
+        result_status=lambda data: 'pass',
+    ))
+    result = stage.run(c)
+    assert result.status == 'pass'
+    assert [before for before, _, _ in model.calls] == ['', '', '']
+    assert [after for _, after, _ in model.calls] == ['S1','S2','S3']
+
+
+class ReviewStage:
+    name='review'; mode='readonly'; actor='model'; status='review'; detail=''; run_state='reviewing'
+    retry=None; retry_attr='review_retries'; skip_on_error=True; tolerate_restored_changes=False
+    def run(self, c, previous=None):
+        c.model.ask('review')
+        return StageResult('review','pass')
+    def finish(self,c,r): return r
+
+
+def test_review_default_is_one_retry_then_skip(tmp_path):
+    assert DEFAULT_REVIEW_RETRIES == 1
+    model=Model([RunnerError('x'), RunnerError('x')])
+    c=ctx(tmp_path, model, review_retries=1)
+    result=StageExecutor(Hooks()).run(ReviewStage(), c)
+    assert result.status == 'pass' and result.skipped
+    assert len(model.calls) == 2
+    assert c.state.same_failures == 0
+
+
+def test_review_zero_disables_skip_and_uses_normal_recovery(tmp_path):
+    model=Model([RunnerError('x'), RunnerError('x')])
+    model.session_id='S0'
+    c=ctx(tmp_path, model, review_retries=0)
+    result=StageExecutor(Hooks()).run(ReviewStage(), c)
+    assert result.status == 'replan' and not result.skipped
+    assert len(model.calls) == 2
+    assert model.calls[0][0] == 'S0' and model.calls[1][0] == ''
+
+
+def test_task_list_update_stops_old_spinner_without_redrawing_old_status(monkeypatch, tmp_path):
+    stdout=Stdout(True)
+    monkeypatch.setattr('runner.extensions.console.sys.stdout', stdout)
+    monkeypatch.setattr('runner.extensions.console.supports_ansi_screen', lambda: False)
+    monkeypatch.setattr('runner.extensions.console.shutil.get_terminal_size', lambda fallback: os.terminal_size((120,20)))
+    ui=LiveUI()
+    empty=RunState('run','goal',str(tmp_path))
+    ui.bind(empty)
+    ui.start('PLANNING')
+    state=RunState('run','goal',str(tmp_path), tasks=[Task('t1','one','d',['a'],'o')])
+    ui.bind(state)
+    ui.stop()
+    tail=stdout.output[stdout.output.rfind('AI Task Runner'):]
+    assert 'PLANNING' not in tail
+    assert '[>] 1. one' in tail
+
+
+def test_progress_no_longer_publishes_runner_control(tmp_path):
+    events=[]
+    bus=progress.EventBus(); bus.subscribe(events.append); progress.configure(bus)
+    progress.bind(RunState('run','goal',str(tmp_path)))
+    progress.stop()
+    assert all(event['type'] != 'runner.control' for event in events)
+    assert any(event['type']=='runner.status' and event['action']=='stop' for event in events)
+
+def test_ai_validator_votes_use_independent_new_sessions(tmp_path, monkeypatch):
+    import json, sys
+    from runner.api import RunRequest, run
+    root = Path(__file__).resolve().parents[1]
+    state_dir = tmp_path.parent / 'v6-votes-state'
+    monkeypatch.setenv('SCENARIO', 'happy_path')
+    monkeypatch.setenv('SCENARIO_STATE_DIR', str(state_dir))
+    request = RunRequest(
+        goal='Create requested result', project_root=str(tmp_path), validator='ai',
+        backend='qwen', command=f'"{sys.executable}" "{root / "tests/scenario_agent.py"}"',
+        final_ai_validations=3, retry_delay=0, retry_wait=0, retry_max_wait=0,
+        api_wait_timeout=10, agent_idle_after_change_timeout=0,
+    )
+    result = run(request)
+    records = [json.loads(line) for line in (state_dir/'prompt-log.jsonl').read_text().splitlines()]
+    votes = [item for item in records if item['stage'] == 'validator']
+    assert result.completed and len(votes) == 3
+    assert all(not item['resumed'] for item in votes)

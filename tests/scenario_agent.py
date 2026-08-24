@@ -24,9 +24,7 @@ def count(name):
     return value + 1
 
 
-if stage == "plan_understand":
-    answer = "Relevant project evidence gathered"
-elif stage in {"plan_finalize", "plan_refine"}:
+if stage in {"plan_finalize", "plan_refine"}:
     if scenario == "multi_task_plan":
         answer = {"tasks": [
             {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"]},
@@ -60,6 +58,12 @@ elif stage == "execute":
     if scenario == "execution_model_error" and n <= 3:
         print("stable tool failure")
         raise SystemExit(7)
+    if scenario == "api_503" and n <= 3:
+        print("HTTP 503 Service Unavailable")
+        raise SystemExit(7)
+    if scenario == "loop_detection" and n == 1:
+        print("Loop detection halted the run (consecutive_identical_tool_calls)")
+        raise SystemExit(7)
     if scenario == "execution_model_error_no_change_forever":
         print("stable tool failure without project changes")
         raise SystemExit(7)
@@ -67,13 +71,8 @@ elif stage == "execute":
         (root / "done.txt").write_text("done", encoding="utf-8")
         print("failed after writing")
         raise SystemExit(7)
-    if scenario == "execution_model_error" and "Previous model call failed" not in prompt:
-        print("missing retry diagnostic")
-        raise SystemExit(7)
     if scenario == "protected_retry" and n == 1:
         Path(os.environ["PROTECTED_PATH"]).write_text("changed", encoding="utf-8")
-    if scenario == "stagnation" and "previous session made insufficient progress" in prompt:
-        (state_dir / "strategy_seen.txt").write_text("yes", encoding="utf-8")
     if scenario == "validator_repair" and "Validator repair mode" in prompt:
         (root / "repaired.txt").write_text("done", encoding="utf-8")
     if scenario != "stagnation" and scenario != "multi_task_plan":

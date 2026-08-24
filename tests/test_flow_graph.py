@@ -1,45 +1,98 @@
+from collections import deque
 from types import SimpleNamespace
 
-from runner.workflow.flow import FlowDefinition, default_flow
+import pytest
+
+import runner.flow.pipeline as pipeline_module
+from runner.flow.pipeline import Pipeline
+from runner.flow.stages.base import StageResult
 
 
-class S:
-    def __init__(self, name): self.name = name
+class Stage:
+    mode = "readonly"
+    actor = "test"
+    status = "test"
+    detail = ""
+    retry = 0
+    plan_only_stop = False
+
+    def __init__(self, name):
+        self.name = name
 
 
-def test_linear_flow_builds_default_advance_routes():
-    a, b, c = S("a"), S("b"), S("c")
-    flow = FlowDefinition.linear(a, b, c)
-    ctx = SimpleNamespace()
-    assert flow.entry(ctx) == "a"
-    assert flow.next("a", "advance", ctx) == "b"
-    assert flow.next("b", "advance", ctx) == "c"
-    assert flow.next("c", "advance", ctx) is None
-    assert flow.next("b", "retry", ctx) == "b"
-    assert flow.next("b", "replan", ctx) == "a"
+@pytest.fixture(autouse=True)
+def stage_factory(monkeypatch):
+    monkeypatch.setattr(pipeline_module, "create_stage", lambda item: Stage(item["name"]))
 
 
-def test_graph_routes_can_override_linear_edges_and_resolve_dynamically():
-    p, e, r, v = (S(name) for name in ("planning", "execute", "review", "validate"))
-    flow = default_flow(p, e, r, v)
-    state = SimpleNamespace(tasks=[SimpleNamespace(status="pending")], current=0, stage="executing", completed=False)
-    ctx = SimpleNamespace(state=state)
-
-    assert flow.entry(ctx) == "execute"
-    assert flow.next("execute", "advance", ctx) == "review"
-    assert flow.next("review", "retry", ctx) == "execute"
-
-    state.current = 1
-    state.tasks[0].status = "completed"
-    assert flow.next("review", "advance", ctx) == "validate"
-    assert flow.next("validate", "replan", ctx) == "planning"
+def item(name):
+    return {"name": name}
 
 
-def test_flow_rejects_unknown_nodes():
-    flow = FlowDefinition.linear(S("a"), S("b"))
-    try:
-        flow.route("a", "advance", "missing")
-    except ValueError as error:
-        assert "unknown flow target" in str(error)
-    else:
-        raise AssertionError("unknown graph target must be rejected")
+class Executor:
+    def __init__(self, results):
+        self.results = iter(results)
+        self.seen = []
+
+    def run(self, stage, ctx, previous=None):
+        self.seen.append(stage.name)
+        return next(self.results)
+
+
+def context():
+    state = SimpleNamespace(completed=False)
+    return SimpleNamespace(state=state, save_state=lambda: None)
+
+
+def test_pipeline_runs_stage_list_in_order():
+    ctx = context()
+    executor = Executor([StageResult("a", "pass"), StageResult("b", "pass")])
+    Pipeline(ctx, [item("a"), item("b")]).run(executor)
+    assert executor.seen == ["a", "b"]
+
+
+def test_pipeline_runs_nested_stage_lists_in_place():
+    ctx = context()
+    executor = Executor([
+        StageResult("plan", "pass"),
+        StageResult("execute", "pass"),
+        StageResult("review", "pass"),
+        StageResult("validate", "pass"),
+    ])
+    execute = item("execute")
+    review = item("review")
+    plan = item("plan")
+    validate = item("validate")
+    executor.results = iter([
+        StageResult("plan", "pass", stages=([execute, review],)),
+        StageResult("execute", "pass"),
+        StageResult("review", "pass"),
+        StageResult("validate", "pass"),
+    ])
+    Pipeline(ctx, [plan, validate]).run(executor)
+    assert executor.seen == ["plan", "execute", "review", "validate"]
+
+
+def test_any_stage_can_return_another_stage_list():
+    ctx = context()
+    repair, review = item("repair"), item("review")
+    executor = Executor([
+        StageResult("a", "fail", stages=(repair, review)),
+        StageResult("repair", "pass"),
+        StageResult("review", "pass"),
+        StageResult("b", "pass"),
+    ])
+    Pipeline(ctx, [item("a"), item("b")]).run(executor)
+    assert executor.seen == ["a", "repair", "review", "b"]
+
+
+def test_replace_restarts_the_whole_remaining_flow():
+    ctx = context()
+    understand, plan = item("understand"), item("plan")
+    executor = Executor([
+        StageResult("execute", "replan", stages=(understand, plan), replace=True),
+        StageResult("understand", "pass"),
+        StageResult("plan", "pass"),
+    ])
+    Pipeline(ctx, [[item("execute"), item("stale-review")], item("stale-validator")]).run(executor)
+    assert executor.seen == ["execute", "understand", "plan"]

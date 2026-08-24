@@ -1,0 +1,4 @@
+python bundle.py pack C:\MyProject project.bundle.txt
+python bundle.py verify project.bundle.txt
+python bundle.py unpack project.bundle.txt C:\Restore
+python bundle.py pack C:\MyProject project.bundle.txt --exclude ".git/**" --exclude ".ai-task-runner/**" --exclude "__pycache__/**" --exclude "node_modules/**" --exclude "bin/**" --exclude "obj/**"

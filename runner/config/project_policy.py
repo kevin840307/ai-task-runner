@@ -45,6 +45,7 @@ def _load(root: Path) -> dict[str, Any]:
     return data
 
 
+
 def instructions(root: Path, name: str) -> str:
     """Return one optional user instruction block from project policy."""
     return (_load(root).get("instructions", {}).get(name, "") or "").strip()

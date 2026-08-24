@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.21
+Version: 1.2.25
 
 
 Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The CLI resumes unfinished state automatically. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
@@ -73,7 +73,35 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 ## Flow engine architecture
 
-The runner is a graph-driven flow engine. `PlanningStage`, `ExecuteStage`, `ReviewStage`, and `ValidateStage` are independent blocks. Stages return outcomes; recovery decides `advance/retry/replan`; `FlowDefinition` resolves the next node. Simple flows use `FlowDefinition.linear(...)`, while special branches override only the required routes.
+The runner uses a small stage-list pipeline. `StageExecutor` owns shared retry, Hook, Event and exception handling. Each Stage performs one job and returns a `StageResult`; a result may add dynamic `stages`, replace the remaining outer flow, stop, or complete the run. Pipeline only consumes those facts and never hardcodes review/repair/validation routes.
 
 Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, and read-only enforcement register transparent execution hooks. Core stages do not import those concrete extensions.
 
+
+## Stage execution architecture
+
+`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> stages/replace/complete -> next Stage`
+
+Unified execution rules:
+- API/service failures use exponential backoff inside the model client for up to one configured wait window (default 1 hour) and do not count as Stage failures.
+- Real failures retry in the same session using a short continuation prompt; after the configured retry count (default 2), StageExecutor starts a fresh session.
+- Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. Different failures reset the failure streak.
+- A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.
+- Review may skip after its retry budget is exhausted; the skip is recorded and Final Validator remains the completion gate.
+- Plan stores the durable TODO list and returns an execution list of `[execute, review]` groups. Pipeline runs that nested list completely, then resumes the outer Python/AI validators. Any Stage may return another Stage list the same way.
+
+
+Stages perform one attempt only. `StageExecutor` owns hooks/events/change tracking; retry and routing stay in Flow. Generic `GlobalStage`/`GlobalStage` are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidationStage`.
+
+A normal AI Stage is declarative. Add the Stage preset and place its prompt file; no Python prompt builder is needed:
+
+```python
+"security_review": {
+    "stage": "global",
+    "status": "AI is running security review",
+    "mode": "readonly",
+    "prompt": "stages/security_review.md",
+}
+```
+
+Then add `"security_review"` at the desired position in `FLOWS` and create `runner/prompts/stages/security_review.md`. The preset key becomes the Stage name automatically. Use `prompt_builder` only when the prompt genuinely needs special Python-side context composition.

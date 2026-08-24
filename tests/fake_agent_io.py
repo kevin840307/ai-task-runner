@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Literal
 
 PromptStage = Literal[
-    "plan_understand",
     "plan_finalize",
     "plan_judge",
     "plan_refine",
@@ -26,8 +25,6 @@ def read_prompt(args: list[str]) -> tuple[bool, str]:
 
 def prompt_stage(prompt: str) -> PromptStage:
     """Classify Runner prompts by stable workflow contract, in one test helper."""
-    if "dedicated project-understanding turn" in prompt:
-        return "plan_understand"
     if "plan quality judge" in prompt:
         return "plan_judge"
     if "Continue the existing planning work" in prompt:
@@ -49,6 +46,7 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Current TODO is the only executable scope",
             "Work only on this Current TODO",
             "Continue only the same current TODO",
+            "Continue the current task. Fix the previous failure and finish it.",
         )
     ):
         return "execute"

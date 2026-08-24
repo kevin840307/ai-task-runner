@@ -1,3 +1,5 @@
+# Optional project-relative flow definition. Omit to use runner/flow/default.yaml.
+
 # Project-relative files or folders that AI sessions may read but must never change.
 protected_paths:
   - ai_task_runner_validator.py

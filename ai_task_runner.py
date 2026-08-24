@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
+import subprocess
 import sys
 import time
 import traceback
@@ -15,6 +18,7 @@ from runner.backends import backend_names
 from runner.config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
+    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
@@ -22,9 +26,12 @@ from runner.config.defaults import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
+    DEFAULT_REVIEW_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
+    DEFAULT_WATCHDOG_INTERVAL,
 )
 from runner.errors import ConfigurationError
+from runner.runtime.process import ACTIVE_PROCESS_FILE
 from runner.version import __version__
 
 
@@ -93,16 +100,34 @@ def parser() -> argparse.ArgumentParser:
         ),
     )
     command_parser.add_argument(
+        "--api-wait-timeout",
+        type=float,
+        default=DEFAULT_API_WAIT_TIMEOUT,
+        help="maximum seconds in one API/service retry window; the runner keeps retrying after each window",
+    )
+    command_parser.add_argument(
+        "--watchdog-interval",
+        type=float,
+        default=DEFAULT_WATCHDOG_INTERVAL,
+        help="seconds between watchdog checks",
+    )
+    command_parser.add_argument(
         "--max-attempts",
         type=int,
         default=DEFAULT_MAX_ATTEMPTS,
         help="task recovery escalation threshold; never stops the runner; 0 uses no-progress detection only",
     )
     command_parser.add_argument(
+        "--review-retries",
+        type=int,
+        default=DEFAULT_REVIEW_RETRIES,
+        help="AI Review same-session retries before skip; 0 disables skip",
+    )
+    command_parser.add_argument(
         "--max-cycles",
         type=int,
         default=DEFAULT_MAX_CYCLES,
-        help="repair-cycle threshold that forces fresh full replanning; never stops the runner; 0 disables this threshold",
+        help="maximum workflow/replan cycles; 0 means unlimited (default)",
     )
     command_parser.add_argument(
         "--retry-delay",
@@ -247,5 +272,46 @@ def _report_error(
     print(prefix + message, file=sys.stderr)
 
 
+def _supervise(argv: Sequence[str]) -> int:
+    if os.environ.get("AI_TASK_RUNNER_WORKER") == "1":
+        return main(argv)
+
+    request = RunRequest.from_namespace(parser().parse_args(argv))
+    worker_args = list(argv)
+    while True:
+        env = dict(os.environ)
+        env["AI_TASK_RUNNER_WORKER"] = "1"
+        worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), *worker_args], env=env)
+        try:
+            code = worker.wait()
+        except KeyboardInterrupt:
+            worker.terminate()
+            return 130
+        if code in (0, 1, 130):
+            return code
+        state = Path(request.project_root, request.work_dir, "state.json").resolve()
+        if not state.is_file():
+            return code
+        _cleanup_orphan(request, worker.pid)
+        _report_error(request, "runner.retry", f"worker exited unexpectedly ({code}); resuming saved state", 0)
+        worker_args = [arg for arg in worker_args if arg not in {"--resume", "--force-new"}] + ["--resume"]
+        time.sleep(max(1, request.retry_delay))
+
+
+def _cleanup_orphan(request: RunRequest, worker_pid: int) -> None:
+    path = Path(request.project_root, request.work_dir, ACTIVE_PROCESS_FILE).resolve()
+    try:
+        owner, child = map(int, path.read_text(encoding="ascii").split())
+        if owner != worker_pid:
+            return
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(child), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        else:
+            os.killpg(child, signal.SIGKILL)
+        path.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        pass
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_supervise(sys.argv[1:]))

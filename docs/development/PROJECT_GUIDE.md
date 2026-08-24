@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.21
+Version: 1.2.23
 
 ## Mandatory maintenance rules
 1. No project-specific hardcode in generic Runner code. Never branch on sample project names, FAB/ENV/version values, filenames, business fields, or a specific model identity to solve one case.
@@ -41,4 +41,4 @@ YAML batch mode is supported. Each item gets its own nested state directory unde
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
-- Session rule: during one process, never instantiate a new `AgentClient` solely to resume an existing session. Reuse the existing client. Only process-level `--resume` may reconstruct a client from persisted session state.
+- Session rule: during one process, never instantiate a new `Agent` solely to resume an existing session. Reuse the existing client. Only process-level `--resume` may reconstruct a client from persisted session state.

@@ -22,9 +22,7 @@ def count(name: str) -> int:
 
 
 session = "old-session"
-if stage == "plan_understand":
-    answer = "Relevant project evidence gathered"
-elif stage in {"plan_finalize", "plan_refine"}:
+if stage in {"plan_finalize", "plan_refine"}:
     answer = {
         "tasks": [{
             "title": "Create marker",

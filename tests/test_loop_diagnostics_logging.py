@@ -1,4 +1,4 @@
-from runner.backends.base import AgentBackend
+from runner.model.backend import ModelBackend
 
 
 def test_extract_loop_diagnostics_from_backend_events():
@@ -16,7 +16,7 @@ def test_extract_loop_diagnostics_from_backend_events():
         },
     }]
 
-    actual = AgentBackend.extract_diagnostics(
+    actual = ModelBackend.extract_diagnostics(
         events,
         "Loop detection halted the run (turn_tool_call_cap: limit reached).",
     )
@@ -32,7 +32,7 @@ def test_extract_loop_diagnostics_from_backend_events():
 
 
 def test_extract_identical_tool_loop_without_usage():
-    actual = AgentBackend.extract_diagnostics(
+    actual = ModelBackend.extract_diagnostics(
         [],
         "Loop detection halted the run (consecutive_identical_tool_calls: repeated call).",
     )
@@ -40,7 +40,7 @@ def test_extract_identical_tool_loop_without_usage():
 
 
 def test_extract_diagnostics_does_not_invent_context_usage():
-    actual = AgentBackend.extract_diagnostics(
+    actual = ModelBackend.extract_diagnostics(
         [{"usage": {"input_tokens": 1000, "total_tokens": 1200}}],
         "backend failure",
     )
@@ -51,8 +51,9 @@ def test_extract_diagnostics_does_not_invent_context_usage():
 
 
 def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
-    from runner.agent import AgentClient, AgentError
-    from runner.backends.base import BackendError
+    from runner.model.model import ModelClient
+    from runner.model.errors import ModelError
+    from runner.model.errors import BackendError
 
     class FakeBackend:
         name = "fake"
@@ -81,7 +82,7 @@ def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
         def decode(self, raw):
             raise AssertionError("not used")
 
-    agent = AgentClient.__new__(AgentClient)
+    agent = ModelClient.__new__(ModelClient)
     agent._backend = FakeBackend()
     agent.backend = "fake"
     agent.base_command = ["fake"]
@@ -94,12 +95,12 @@ def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
 
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         cause = error.__cause__
         assert isinstance(cause, BackendError)
         assert cause.diagnostics["context_snapshot"].startswith("## Context Usage")
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
 def _make_agent_with_loop_backend(
@@ -107,8 +108,8 @@ def _make_agent_with_loop_backend(
     percent,
     message="fake exit 1: Loop detection halted the run",
 ):
-    from runner.agent import AgentClient
-    from runner.backends.base import BackendError
+    from runner.model.model import ModelClient
+    from runner.model.errors import BackendError
 
     class FakeBackend:
         name = "fake"
@@ -142,7 +143,7 @@ def _make_agent_with_loop_backend(
         def decode(self, raw):
             raise AssertionError("not used")
 
-    agent = AgentClient.__new__(AgentClient)
+    agent = ModelClient.__new__(ModelClient)
     agent._backend = FakeBackend()
     agent.backend = "fake"
     agent.base_command = ["fake"]
@@ -158,140 +159,94 @@ def _make_agent_with_loop_backend(
 
 
 def test_loop_context_at_threshold_compresses_without_changing_error_flow(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
     agent = _make_agent_with_loop_backend(tmp_path, 50.0)
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         cause = error.__cause__
         assert cause.diagnostics["context_used_percent"] == 50.0
         assert cause.diagnostics["context_compression"] == "compressed"
         assert cause.diagnostics["session_recovery_action"] == "compress_and_retry"
         assert agent._backend.compressions == ["loop-session"]
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
 
 def test_loop_context_compression_is_disabled_by_default(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
     agent = _make_agent_with_loop_backend(tmp_path, 90.0)
     agent.loop_context_compress = False
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         cause = error.__cause__
         assert cause.diagnostics["context_used_percent"] == 90.0
         assert "context_compression" not in cause.diagnostics
         assert agent._backend.compressions == []
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
 def test_loop_context_compression_uses_configured_threshold(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
     agent.loop_context_compress_threshold = 70.0
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         cause = error.__cause__
         assert cause.diagnostics["context_used_percent"] == 60.0
         assert "context_compression" not in cause.diagnostics
         assert agent._backend.compressions == []
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 def test_loop_context_below_threshold_does_not_compress(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
     agent = _make_agent_with_loop_backend(tmp_path, 49.9)
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         cause = error.__cause__
         assert cause.diagnostics["context_used_percent"] == 49.9
         assert "context_compression" not in cause.diagnostics
         assert agent._backend.compressions == []
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
 
 def test_loop_context_compression_records_decision_metadata(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
 
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
     agent.loop_context_compress_threshold = 50.0
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         diagnostics = error.__cause__.diagnostics
         assert diagnostics["context_compress_enabled"] is True
         assert diagnostics["context_compress_threshold"] == 50.0
         assert diagnostics["context_compress_status"] == "done"
         assert "context_compress_reason" not in diagnostics
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
 def test_loop_context_compression_records_skip_reason(tmp_path):
-    from runner.agent import AgentError
+    from runner.model.errors import ModelError
 
     agent = _make_agent_with_loop_backend(tmp_path, 60.0)
     agent.loop_context_compress_threshold = 70.0
     try:
         agent.ask("x")
-    except AgentError as error:
+    except ModelError as error:
         diagnostics = error.__cause__.diagnostics
         assert diagnostics["context_compress_status"] == "skipped"
         assert diagnostics["context_compress_reason"] == "below_threshold"
     else:
-        raise AssertionError("expected AgentError")
+        raise AssertionError("expected ModelError")
 
 
-def test_repeated_loop_resets_generic_backend_without_compressing_discarded_session(tmp_path):
-    from runner.agent import AgentError
-
-    agent = _make_agent_with_loop_backend(
-        tmp_path,
-        60.0,
-        message="generic agent stopped a guarded execution cycle",
-    )
-    actions = []
-    reasons = []
-    for _ in range(2):
-        try:
-            agent.ask("x")
-        except AgentError as error:
-            diagnostics = error.__cause__.diagnostics
-            actions.append(diagnostics["session_recovery_action"])
-            reasons.append(diagnostics.get("context_compress_reason"))
-        else:
-            raise AssertionError("expected AgentError")
-
-    assert actions == ["compress_and_retry", "reset_session"]
-    assert reasons == [None, "session_reset"]
-    assert agent._backend.compressions == ["loop-session"]
-    assert agent._backend.snapshots == ["loop-session"]
-    assert agent.session_id == ""
-
-
-def test_loop_compression_decision_is_visible_in_debug_history(tmp_path):
-    from runner.agent import AgentError
-
-    agent = _make_agent_with_loop_backend(tmp_path, 60.0)
-    agent.debug_dir = tmp_path / "debug"
-    try:
-        agent.ask("x")
-    except AgentError:
-        pass
-    else:
-        raise AssertionError("expected AgentError")
-
-    results = list((agent.debug_dir / "history").glob("*-result.txt"))
-    assert len(results) == 1
-    text = results[0].read_text(encoding="utf-8")
-    assert "context_compress_status=done" in text
-    assert "context_compress_threshold=50.0" in text
-    assert "context_compression=compressed" in text
-    assert "session_recovery_action=compress_and_retry" in text

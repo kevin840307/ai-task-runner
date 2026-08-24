@@ -9,19 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_QWEN_COMMAND
-from ..runtime.process_control import run_process
+from ..runtime.process import run_process
 
-from .base import (
-    AgentBackend,
-    AgentMode,
-    BackendError,
-    BackendResult,
-    ensure_project_rules,
-)
+from ..model.backend import ModelBackend, ModelMode, BackendResult, ensure_project_rules
+from ..model.errors import BackendError
 from .qwen_args import configure_qwen_args
 
 
-class QwenBackend(AgentBackend):
+class QwenBackend(ModelBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
     sandbox_flags = ("-s", "--sandbox")
@@ -29,7 +24,7 @@ class QwenBackend(AgentBackend):
     @classmethod
     def configure_args(
         cls,
-        mode: AgentMode,
+        mode: ModelMode,
         extra_args: Sequence[str],
         *,
         allow_project_read: bool = False,

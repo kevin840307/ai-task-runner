@@ -12,9 +12,7 @@ is_qwen, prompt = read_prompt(args)
 stage = prompt_stage(prompt)
 session = 'retry-session-001'
 
-if stage == 'plan_understand':
-    phase, answer = 'plan', 'relevant project evidence gathered'
-elif stage == 'plan_refine':
+if stage == 'plan_refine':
     phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
 elif stage == 'plan_finalize':
     phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}

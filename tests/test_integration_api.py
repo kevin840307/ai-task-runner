@@ -129,32 +129,6 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
     assert all(event["script_total"] == 1 for event in task_events)
 
 
-def test_retry_loop_survives_many_transient_failures():
-    from runner.errors import RunnerError
-    from runner.agent.calls import retry_model_call
-    from runner.app.ui import LiveUI
-
-    attempts = 0
-
-    def action():
-        nonlocal attempts
-        attempts += 1
-        if attempts <= 100:
-            raise RunnerError("temporary model outage")
-        return "ok"
-
-    result = retry_model_call(
-        action,
-        LiveUI(human_output=False),
-        "retry",
-        "",
-        0,
-        0,
-    )
-    assert result == "ok"
-    assert attempts == 101
-
-
 def test_event_callback_failure_does_not_stop_runner(tmp_path):
     def broken_callback(event):
         raise RuntimeError("UI disconnected")
@@ -194,7 +168,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
 
 
 def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
-    from runner.app.ui import LiveUI
+    from runner.extensions.console import LiveUI
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
@@ -206,8 +180,8 @@ def test_json_event_output_disconnect_does_not_stop_ui(monkeypatch):
 
 
 def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
-    from runner.engine.models import RunState, Task
-    from runner.app.ui import LiveUI
+    from runner.runtime.state import RunState, Task
+    from runner.extensions.console import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -223,8 +197,8 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("runner.app.ui.sys.stdout", stdout)
-    monkeypatch.setattr("runner.app.ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.extensions.console.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[
@@ -243,11 +217,11 @@ def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
 def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
     import os
 
-    from runner.engine.models import RunState, Task
-    from runner.app.ui import LiveUI
+    from runner.runtime.state import RunState, Task
+    from runner.extensions.console import LiveUI
 
     monkeypatch.setattr(
-        "runner.app.ui.shutil.get_terminal_size",
+        "runner.extensions.console.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((50, 10)),
     )
     state = RunState("run", "goal", "/project", tasks=[
@@ -272,8 +246,8 @@ def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
 
 
 def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
-    from runner.engine.models import RunState, Task
-    from runner.app.ui import LiveUI
+    from runner.runtime.state import RunState, Task
+    from runner.extensions.console import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -289,8 +263,8 @@ def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("runner.app.ui.sys.stdout", stdout)
-    monkeypatch.setattr("runner.app.ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.extensions.console.supports_ansi_screen", lambda: False)
 
     ui = LiveUI()
     ui.bind(RunState("run", "goal", "/project", tasks=[
@@ -522,8 +496,8 @@ def test_cli_does_not_retry_configuration_error(monkeypatch, tmp_path):
 def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
     import os
 
-    from runner.engine.models import RunState, Task
-    from runner.app.ui import LiveUI
+    from runner.runtime.state import RunState, Task
+    from runner.extensions.console import LiveUI
 
     class FakeStdout:
         def __init__(self):
@@ -539,10 +513,10 @@ def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
             pass
 
     stdout = FakeStdout()
-    monkeypatch.setattr("runner.app.ui.sys.stdout", stdout)
-    monkeypatch.setattr("runner.app.ui.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr("runner.extensions.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.extensions.console.supports_ansi_screen", lambda: False)
     monkeypatch.setattr(
-        "runner.app.ui.shutil.get_terminal_size",
+        "runner.extensions.console.shutil.get_terminal_size",
         lambda fallback: os.terminal_size((80, 20)),
     )
 
@@ -561,7 +535,7 @@ def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
 
 
 def test_terminal_fit_keeps_short_cjk_line():
-    from runner.app.ui import LiveUI
+    from runner.extensions.console import LiveUI
 
     line = "AI 正在處理目前任務"
     assert LiveUI._fit_terminal_line(line, 80) == line

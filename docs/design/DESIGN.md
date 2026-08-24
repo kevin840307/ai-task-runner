@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.21
+Version: 1.2.23
 
 ## Responsibility boundary
 The Runner owns orchestration; project code and validators own application-specific behavior.
@@ -16,7 +16,7 @@ The Runner owns orchestration; project code and validators own application-speci
 2. Load/create Runner state.
 3. Build normalized protected roots.
 4. Planning Understand: fresh, bounded read-only inspection.
-5. Planning uses the main `AgentClient` and session. Core temporarily applies planning `--yolo` + bounded read-only Qwen args, then restores runtime `--yolo` args before TODO execution. Finalize/Judge/Rewrite use short same-session prompts; rebuilt calls use self-contained prompts.
+5. Planning uses the main `Agent` and session. Core temporarily applies planning `--yolo` + bounded read-only Qwen args, then restores runtime `--yolo` args before TODO execution. Finalize/Judge/Rewrite use short same-session prompts; rebuilt calls use self-contained prompts.
 6. If planning output fails, retry the same planning session while it remains usable. Only after the session is invalid or repeated attempts cannot recover, clear it and use the same planner client with a fresh full-context plan prompt.
 7. Judge the valid plan in the same planning session. Judge may use bounded read-only inspection when needed; on rejection, rewrite in that same session and judge again. If the quality gate itself cannot produce a usable verdict, fail-soft to the last valid plan. Binary verdict prompts show both FAIL and PASS examples.
 8. Execute one Current TODO. The Executor session survives successful TODO completion; the next TODO resumes that same session with only the new TODO spec and a strict current-scope reminder. Fresh/rebuilt execution receives the Original Goal only as global context.
@@ -36,7 +36,7 @@ Original Goal may be supplied to a fresh/rebuilt Executor so global constraints 
 - Retry based on actual behavior/errors, never model size/name.
 - Preserve coherent file changes when a model crashes after making progress.
 - Use fresh sessions only when the previous session is unavailable/expired or bounded recovery shows repeated loop/no-progress failure.
-- In-run continuation is simple and global: keep the same `AgentClient` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries and subsequent TODOs reuse the main Executor client until the Runner intentionally clears an invalid or repeatedly stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
+- In-run continuation is simple and global: keep the same `Agent` and its session. Never create a new client merely to resume an existing session. Planning Finalize reuses the Understand planner; Review Finalize reuses the Reviewer; Executor retries and subsequent TODOs reuse the main Executor client until the Runner intentionally clears an invalid or repeatedly stagnant session. A new client with a stored session id is allowed only after process-level `--resume`, because the old Python client no longer exists.
 - Avoid arbitrary short model timeouts; defaults favor long work, while idle-after-change provides bounded recovery.
 - `max_attempts` and `max_cycles` are recovery-escalation thresholds, never termination limits. `0` disables the corresponding count threshold; recoverable failures still circulate through retry, fresh session, and replan.
 
@@ -61,7 +61,7 @@ Current/last files support immediate diagnosis. Bounded paired history supports 
 ## Durable state and completion authority
 A run is complete only when **Final Validator PASS** is recorded. State is written after meaningful transitions and the filesystem remains implementation truth. Model output retained per task is bounded; validator feedback stored in state is capped at **20,000** characters with beginning and end preserved. Resume does not require repeating `--goal`; the original goal is already in state.
 
-`runner/runtime/process_control.py` owns subprocess waiting, timeout, idle detection, and termination behavior.
+`runner/runtime/process.py` owns subprocess waiting, timeout, idle detection, and termination behavior.
 
 ## External validator bridge
 External commands such as exe, bat, jar, or Java tools should use `docs/validator_templates/external_command_validator.py`. It keeps the Python validator contract, stores command output, and copies configured log folders under `.ai-task-runner/validator-reports/external-command/`.
@@ -73,8 +73,8 @@ External commands such as exe, bat, jar, or Java tools should use `docs/validato
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
 ## Compatibility cleanup
-Internal helpers should use one canonical name/signature. Dead internal aliases and unused compatibility parameters are removed instead of being carried indefinitely. Compatibility aliases that may be used by external Python callers remain until an intentional public breaking change; new code should use the canonical `RunRequest`, `AgentClient`, `RunState`, and `AgentBackend` names.
+Internal helpers should use one canonical name/signature. Dead internal aliases and unused compatibility parameters are removed instead of being carried indefinitely. Compatibility aliases that may be used by external Python callers remain until an intentional public breaking change; new code should use the canonical `RunRequest`, `Agent`, `RunState`, and `AgentBackend` names.
 
 Recovery policy is centralized: recoverable runtime outcomes map only to `ADVANCE`, `RETRY`, or `REPLAN`. Task recovery escalates `same session -> fresh session -> replan`; validator failures preserve project changes and replan. Recoverable workflow failures never produce a terminal exit code. Completion is declared only after Final Validator PASS.
 
-Execution-loop simplification uses one `Outcome -> Transition` contract across Execute, Review, Planning recovery, and Final Validator. Stages report facts (`pass` / `fail` / `error`, progress, usable evidence); the policy alone chooses `ADVANCE`, `RETRY(same|fresh)`, or `REPLAN`. Explicit review FAIL remains distinct from reviewer ERROR: FAIL retries the TODO, while repeated reviewer infrastructure/model errors may fail-soft to `review_skipped` and remain subject to the Final Validator hard gate.
+Execution uses one small nested Stage-list loop. `StageExecutor` owns shared retry/session recovery, Hook, Event, exception handling, and write-change detection. A Stage performs one job and returns final facts in `StageResult`; the Stage may dynamically return `stages`, replace the remaining outer flow, stop, or complete. Review FAIL can therefore return a Repair nested Stage list, while repeated reviewer infrastructure/model errors may fail-soft to `review_skipped`; Final Validator remains the hard completion gate.

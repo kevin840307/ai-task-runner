@@ -1,6 +1,6 @@
 # 完整設計
 
-Version: 1.2.21
+Version: 1.2.23
 
 ## 目標
 1. AI 長時間執行時，即使模型/CLI 異常也盡量保留有價值的專案變更。
@@ -13,7 +13,7 @@ Version: 1.2.21
 2. 載入或建立 Runner state。
 3. 建立 normalized protected roots。
 4. Planning Understand：fresh session，bounded read-only inspection。
-5. Planning 直接沿用主 `AgentClient` 與 session。Core 在 Planning 暫時套用 `--yolo` + bounded read-only Qwen args，進 TODO 前恢復 runtime `--yolo` args；Finalize/Judge/Rewrite 同 session 用短 Prompt，fresh/rebuilt 才補完整 context。
+5. Planning 直接沿用主 `Agent` 與 session。Core 在 Planning 暫時套用 `--yolo` + bounded read-only Qwen args，進 TODO 前恢復 runtime `--yolo` args；Finalize/Judge/Rewrite 同 session 用短 Prompt，fresh/rebuilt 才補完整 context。
 6. Planning output 失敗時，只要 session 仍可用就先沿用同一 planning session 重試；只有 session invalid 或重複嘗試仍無法恢復時，才清 session，使用同一 planner client 以 fresh full-context Prompt 重建。
 7. Judge 沿用同一 planning client/session 審查有效 plan；context 不足時可 bounded read-only inspect。只有被拒絕才在同 session 重寫並再次 Judge；quality gate 本身無法產生可用 verdict 時 fail-soft 保留最後有效 plan。二元 verdict Prompt 同時提供 FAIL/PASS 範例。
 8. Executor 一次只執行一個 Current TODO。TODO 完成後保留 Executor session；下一個 TODO 以短 Prompt 只送新的 TODO spec 與 scope 提醒。只有 Fresh/Rebuilt session 才重新帶 Original Goal 作為 global context。
@@ -33,7 +33,7 @@ Fresh/Rebuilt Executor 收到 Original Goal 是為了避免遺失全域限制，
 - 依實際 error/behavior retry，不依模型名稱或大小。
 - 模型 crash 前若已有 coherent file changes，保留變更再交 Review/後續 recovery。
 - Session expired/unavailable 時立即 fresh rebuilt；單次 loop 等可恢復錯誤先沿用 session，只有重複 loop／no-progress 達門檻才 fresh rebuilt。
-- 執行中的 continuation 全專案採單一規則：保留同一個 `AgentClient` 與其 session，禁止只為 resume 舊 session 而建立新 client。Planning Finalize 重用 Understand planner；Review Finalize 重用 Reviewer；Executor retry 與後續 TODO 都持續重用主 Executor client，直到 Runner 因 session 無效或重複停滯而主動清空 session。只有程式重啟後的 `--resume` 可用 state 中 session id 建立新 client，因為舊 Python client 已不存在。
+- 執行中的 continuation 全專案採單一規則：保留同一個 `Agent` 與其 session，禁止只為 resume 舊 session 而建立新 client。Planning Finalize 重用 Understand planner；Review Finalize 重用 Reviewer；Executor retry 與後續 TODO 都持續重用主 Executor client，直到 Runner 因 session 無效或重複停滯而主動清空 session。只有程式重啟後的 `--resume` 可用 state 中 session id 建立新 client，因為舊 Python client 已不存在。
 - 不用過短 timeout 殺掉有進展的模型；預設允許長時間 work，idle-after-change 負責 bounded recovery。
 - `max_attempts`、`max_cycles` 是恢復策略升級門檻，不是終止上限。`0` 代表關閉對應的次數門檻；可恢復錯誤仍會在 retry、fresh session、replan 間持續循環。
 
@@ -56,8 +56,8 @@ Policy 只從 project root 讀取。Protected directory 自動涵蓋 subtree。`
 Current/last files 用於立即診斷；bounded pair history 用於完整回溯最近 call 而不讓磁碟無限成長。Terminal status/detail 只做單行化顯示；raw event/debug 仍保留真正換行與完整診斷。
 
 ## 相容性清理
-Internal helper 維持單一 canonical 名稱與 signature；已無用途的內部 alias、無效 compatibility parameter 應直接移除，不永久累積。可能被外部 Python caller 使用的 compatibility alias，除非明確做 public breaking change，否則先保留；新程式一律使用 `RunRequest`、`AgentClient`、`RunState`、`AgentBackend` canonical 名稱。
+Internal helper 維持單一 canonical 名稱與 signature；已無用途的內部 alias、無效 compatibility parameter 應直接移除，不永久累積。可能被外部 Python caller 使用的 compatibility alias，除非明確做 public breaking change，否則先保留；新程式一律使用 `RunRequest`、`Agent`、`RunState`、`AgentBackend` canonical 名稱。
 
 恢復策略集中處理：可恢復的 runtime outcome 只會映射成 `ADVANCE`、`RETRY`、`REPLAN`。任務恢復依序升級 `same session -> fresh session -> replan`；Validator FAIL 保留專案成果後重新規劃。可恢復的 workflow 錯誤不會產生終止 exit code，只有 Final Validator PASS 才宣告完成。
 
-Execution Loop 統一使用 `Outcome -> Transition`：Execute、Review、Planning recovery、Final Validator 只回報 `pass / fail / error`、是否有進展、是否已有可用成果，再由單一 policy 決定 `ADVANCE`、`RETRY(same|fresh)` 或 `REPLAN`。Review 明確 FAIL 與 Reviewer ERROR 保持不同：FAIL 必須重試 TODO；Reviewer 本身反覆異常才允許 fail-soft `review_skipped`，最後仍由 Final Validator hard gate 把關。
+Execution Loop 現在是單純的 Stage Queue。`StageExecutor` 統一負責 retry/session recovery、Hook、Event、exception 與 write-change detection；Stage 只做一件事並回傳 `StageResult`。Stage 可動態回傳 `stages`、替換剩餘 queue、停止或完成。Review FAIL 因此可直接回 Repair nested Stage list；Reviewer 本身反覆異常才 fail-soft `review_skipped`，最後仍由 Final Validator hard gate 把關。
