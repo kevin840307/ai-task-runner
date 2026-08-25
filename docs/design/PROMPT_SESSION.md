@@ -38,5 +38,6 @@ Full AI task prompts are passed through stdin and never embedded in argv. Qwen `
 
 - Global engineering/safety rules live in shared rules, not repeated in every TODO acceptance criterion.
 - Planning emits only task-specific, objectively checkable acceptance criteria.
+- When the Planner-visible Stage catalog contains a write Stage, every planned TODO must include at least one write Stage; read-only review-only TODOs are rejected.
 - Stage prompts prefer short scope/evidence/action/contract language over repeated prose or long example lists.
 - JSON output examples are intentionally retained because they materially improve structured-output reliability on smaller models.

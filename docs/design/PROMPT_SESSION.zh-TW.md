@@ -38,5 +38,6 @@ Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `
 
 - Global engineering / safety rules 放在共用 rules，不重複塞進每個 TODO acceptance criterion。
 - Planning 只產生 task-specific、可客觀驗證的 acceptance criteria。
+- Planner 可見 Stage catalog 中只要有 write Stage，每個 planned TODO 就必須至少包含一個 write Stage；read-only review-only TODO 會被拒絕。
 - Stage Prompt 優先使用短而明確的 scope / evidence / action / contract，不重複同義規則，也避免過長的問題列舉。
 - JSON output 範例刻意保留，因為對小模型 structured output 穩定度有實際幫助。

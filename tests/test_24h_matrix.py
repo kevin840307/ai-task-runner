@@ -8,6 +8,9 @@ ROOT=Path(__file__).resolve().parents[1]
 def cmd(): return f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
 def records(sd):
  p=sd/'prompt-log.jsonl'; return [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
+def stages(project):
+ p=project/'.ai-task-runner'/'log.txt'
+ return [json.loads(x)['stage'] for x in p.read_text(encoding='utf-8').splitlines() if json.loads(x).get('type')=='runner.stage' and json.loads(x).get('action')=='start']
 def base(tmp_path, monkeypatch, scenario, validator='ai', **kw):
  sd=tmp_path.parent/f'{tmp_path.name}-{scenario}-state'; monkeypatch.setenv('SCENARIO',scenario); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
  req=RunRequest(goal='Create requested result',project_root=str(tmp_path),validator=validator,backend='qwen',command=cmd(),max_attempts=kw.pop('max_attempts',2),max_cycles=kw.pop('max_cycles',DEFAULT_MAX_CYCLES),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0,**kw)
@@ -16,11 +19,11 @@ def validator(path):
  path.write_text(textwrap.dedent('''import argparse\nfrom pathlib import Path\np=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()\nraise SystemExit(0 if (Path(a.project_root)/"done.txt").exists() else 5)\n'''))
 
 def test_ai_validation(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'happy_path'); assert r.completed; assert [x['stage'] for x in recs][-1]=='validator'
+ r,recs=base(tmp_path,monkeypatch,'happy_path'); flow=stages(tmp_path); assert r.completed; assert [x['stage'] for x in recs][-1]=='validator'; assert 'validate_ai' in flow and 'validate_file' not in flow
 def test_python_validation(tmp_path,monkeypatch):
- v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v)); assert r.completed; assert 'validator' not in [x['stage'] for x in recs]
+ v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v)); flow=stages(tmp_path); assert r.completed; assert 'validator' not in [x['stage'] for x in recs]; assert 'validate_file' in flow and 'validate_ai' not in flow
 def test_mixed_validation(tmp_path,monkeypatch):
- v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v),ai_validator_prompt='independent check'); assert r.completed; assert 'validator' in [x['stage'] for x in recs]
+ v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v),ai_validator_prompt='independent check'); flow=stages(tmp_path); assert r.completed; assert 'validator' in [x['stage'] for x in recs]; assert 'validate_file' in flow and 'validate_ai' in flow
 def test_file_protection(tmp_path,monkeypatch):
  p=tmp_path/'protected.txt'; p.write_text('original'); monkeypatch.setenv('PROTECTED_PATH',str(p)); r,recs=base(tmp_path,monkeypatch,'protected_retry',protect_files=[str(p)]); assert r.completed; assert p.read_text()=='original'; assert sum(x['stage']=='execute' for x in recs)>=2
 def test_loop_recovery(tmp_path,monkeypatch):

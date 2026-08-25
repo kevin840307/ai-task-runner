@@ -169,6 +169,24 @@ def test_plan_rejects_static_or_unknown_stage_name(tmp_path):
     with pytest.raises(RunnerError, match="unavailable Stage: validate_file"):
         stage.spec.parser(payload, context)
 
+
+def test_plan_rejects_task_without_write_stage_when_available(tmp_path):
+    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    context = _context(tmp_path, workflow)
+    stage = create_stage(workflow[0])
+    payload = json.dumps({
+        "tasks": [{
+            "title": "Review-only non-work",
+            "description": "Incorrectly skip implementation",
+            "deliverable": "No project change",
+            "acceptance_criteria": ["A writable task stage was used"],
+            "steps": ["review"],
+        }]
+    })
+    with pytest.raises(RunnerError, match="must include a write Stage"):
+        stage.spec.parser(payload, context)
+
+
 def test_registry_is_only_type_to_class():
     assert set(STAGE_REGISTRY) == {"base", "plan", "python"}
     assert all(isinstance(stage_class, type) for stage_class in STAGE_REGISTRY.values())

@@ -270,8 +270,8 @@ def runner_command(
         ]
     )
     if not timeout_probe:
-        command.extend(["--agent-timeout", str(settings.agent_timeout)])
-        command.extend(["--planning-timeout", str(settings.planning_timeout)])
+        command.extend(["--agent-timeout", whole_seconds_arg(settings.agent_timeout)])
+        command.extend(["--planning-timeout", whole_seconds_arg(settings.planning_timeout)])
     if effective_sandbox:
         command.append("--sandbox")
     if resume:
@@ -293,6 +293,14 @@ def runner_command(
             "--final-ai-required-passes", "2",
         ])
     return command
+
+
+def whole_seconds_arg(value: float) -> str:
+    """Format Runner CLI timeout values, which require whole seconds."""
+    whole = int(value)
+    if value != whole:
+        raise ValueError("Runner timeout arguments must be whole seconds")
+    return str(whole)
 
 
 def run_command(

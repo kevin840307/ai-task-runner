@@ -109,6 +109,11 @@ def parse_plan_tasks(
         for name, definition in available.items()
         if definition.get("result_handler") == "review"
     }
+    write_stages = {
+        name
+        for name, definition in available.items()
+        if definition.get("mode") == "write"
+    }
 
     def parse(value: Any) -> list[Task]:
         raw = require_object(value).get("tasks")
@@ -131,6 +136,10 @@ def parse_plan_tasks(
             if review_stages and steps[-1] not in review_stages:
                 raise RunnerError(
                     f"tasks[{index}].steps must end with a review Stage"
+                )
+            if write_stages and not any(name in write_stages for name in steps):
+                raise RunnerError(
+                    f"tasks[{index}].steps must include a write Stage"
                 )
             tasks.append(
                 Task(

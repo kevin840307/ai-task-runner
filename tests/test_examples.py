@@ -6,6 +6,10 @@ from pathlib import Path
 
 import yaml
 
+from runner.config import RuntimeConfig
+from runner.script_loader import load_yaml_script
+from runner.script_runner import build_script_item_config
+
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXPECTED = {
@@ -16,6 +20,8 @@ EXPECTED = {
     "05_ai_quality_repair",
     "06_yaml_driven_tool",
     "07_blackbox_medium",
+    "08_config_driven_data_pipeline",
+    "09_config_environment_auditor",
 }
 
 
@@ -44,9 +50,9 @@ def test_example_python_files_compile():
         )
 
 
-def test_examples_yaml_runs_01_to_07_with_per_item_project_roots():
+def test_examples_yaml_runs_01_to_09_with_per_item_project_roots():
     data = yaml.safe_load((EXAMPLES / "examples.yaml").read_text(encoding="utf-8"))
-    assert isinstance(data, list) and len(data) == 7
+    assert isinstance(data, list) and len(data) == 9
     for index, item in enumerate(data, 1):
         prefix = f"{index:02d}_"
         goal_file = item.get("goal_file")
@@ -60,11 +66,29 @@ def test_examples_yaml_runs_01_to_07_with_per_item_project_roots():
         if validator != "ai":
             assert (EXAMPLES / validator).is_file()
     assert data[2]["validator"] == "ai" and data[2]["ai_validator_count"] == 3
-    for item in data[2:5]:
+    for item in [data[2], data[3], data[4], data[7], data[8]]:
         assert item["ai_validator_count"] == 3
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
+
+
+def test_validation_modes_example_maps_to_builtin_workflows():
+    script = EXAMPLES / "validation_modes.yaml"
+    items = load_yaml_script(script)
+    config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
+
+    workflows = [
+        [stage["name"] for stage in build_script_item_config(config, item, index).workflow]
+        for index, item in enumerate(items, 1)
+    ]
+
+    assert workflows == [
+        ["planning", "validate_file"],
+        ["planning", "validate_ai"],
+        ["planning", "validate_file", "validate_ai"],
+    ]
+    assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 
 
 def run_validator(name: str) -> subprocess.CompletedProcess[str]:
@@ -93,6 +117,8 @@ def test_starter_states_match_example_purpose():
         "04_mixed_validation",
         "06_yaml_driven_tool",
         "07_blackbox_medium",
+        "08_config_driven_data_pipeline",
+        "09_config_environment_auditor",
     ):
         result = run_validator(name)
         assert result.returncode != 0, f"starter unexpectedly passed: {name}\n{result.stdout}"

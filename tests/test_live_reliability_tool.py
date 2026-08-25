@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,41 @@ def test_script_command_uses_canonical_yaml_entry(tmp_path: Path):
     assert "--goal-file" not in command
     assert "--validator" not in command
     assert "--resume" in command
+
+
+def _option(command: list[str], name: str) -> str:
+    return command[command.index(name) + 1]
+
+
+def test_runner_command_inputs_select_builtin_validation_workflows(tmp_path: Path):
+    project = tmp_path / "project"
+    config = replace(settings(tmp_path), agent_timeout=30.0, planning_timeout=40.0)
+
+    file_only = live.runner_command(config, project)
+    assert _option(file_only, "--validator") == str(project / "validation.py")
+    assert "--ai-validator-prompt" not in file_only
+    assert "--validator-prompt" not in file_only
+    assert "--workflow" not in file_only
+
+    mixed = live.runner_command(config, project, final_ai=True)
+    assert _option(mixed, "--validator") == str(project / "validation.py")
+    assert _option(mixed, "--ai-validator-prompt") == live.FINAL_AI_PROMPT
+    assert "--validator-prompt" not in mixed
+    assert "--workflow" not in mixed
+
+    ai_only = live.runner_command(config, project, final_ai=True, ai_only=True)
+    assert _option(ai_only, "--validator") == "ai"
+    assert _option(ai_only, "--validator-prompt") == live.FINAL_AI_PROMPT
+    assert "--ai-validator-prompt" not in ai_only
+    assert "--workflow" not in ai_only
+    assert _option(file_only, "--agent-timeout") == "30"
+    assert _option(file_only, "--planning-timeout") == "40"
+
+
+def test_runner_timeout_arguments_must_be_whole_seconds():
+    assert live.whole_seconds_arg(12.0) == "12"
+    with pytest.raises(ValueError, match="whole seconds"):
+        live.whole_seconds_arg(12.5)
 
 
 def test_dense_coverage_requires_every_mixed_probe():

@@ -17,6 +17,8 @@ examples\run_examples.bat
 5. `05_ai_quality_repair`：硬性功能驗證 + AI 通用性/品質 gate。
 6. `06_yaml_driven_tool`：小型 YAML 應用；外層 `examples.yaml` 同時驗證 Runner YAML batch mode。
 7. `07_blackbox_medium`：中型黑盒案例，Validator 只驗 CLI output，完全不檢查實作結構。
+8. `08_config_driven_data_pipeline`：混合驗證的資料管線案例，以黑盒行為檢查為主。
+9. `09_config_environment_auditor`：混合驗證的設定檔稽核案例，涵蓋多種格式與乾淨重跑。
 
 所有 Python example Validator 都統一使用共用的 `ai_task_runner_validator.ValidatorReport` 契約。功能失敗透過 `ValidatorReport.error()` 回報；適用的 JSON output 使用 `parse_json()`；完整報告會寫入各 project 的 `.ai-task-runner/validator-reports/`。
 
@@ -24,3 +26,9 @@ examples\run_examples.bat
 每個 YAML item 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。每個 project 會把 `prompt.md`、Python `validation.py` 與可選的 `ai_validation.md` 放在自己的 root 內，並由 `.ai-task-runner.yaml` 的 `protected_paths` 明確保護；policy 本身也會自動受保護。`examples.yaml` 使用 `goal_file` 與 `ai_validator_prompt_file` 引用這些檔案。
 
 Workflow Schema 範例：`workflow_multi_prompt.yaml` 會重複使用同一個 `BaseStage`，並在每次 invocation 覆寫不同 prompt、retry 與 skip。
+
+驗證模式 Workflow 範例：`validation_modes.yaml` 展示自動內建對應：
+
+- 只有 Python file validator 時選用 `runner/workflow/file.yaml`。
+- `validator: ai` 時選用 `runner/workflow/ai.yaml`。
+- Python file validator 加上 `ai_validator_prompt` 或 `ai_validator_prompt_file` 時選用 `runner/workflow/mixed.yaml`。
