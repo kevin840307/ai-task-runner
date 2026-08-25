@@ -11,7 +11,7 @@ from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
 from ...prompts.loader import render_prompt, structured_retry_prompt
-from .contracts import StageContext, StageResult
+from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
 StatusResolver = Callable[[Any], Literal["pass", "fail"]]
@@ -27,7 +27,7 @@ class BaseStageSpec:
     instructions: str = ""
     detail: str = ""
     run_state: str = ""
-    mode: Literal["readonly", "write"] = "readonly"
+    mode: StageMode = MODE_READONLY
     actor: str = "ai"
     backend_mode: str = "runtime"
     allow_project_read: bool = False
@@ -229,7 +229,7 @@ class BaseStage:
         error = ctx.execution.previous_error.strip()
         readonly = (
             " Do not modify project files; the previous attempt was restored if it changed them."
-            if self.spec.mode == "readonly"
+            if self.spec.mode == MODE_READONLY
             else ""
         )
         loop_note = (

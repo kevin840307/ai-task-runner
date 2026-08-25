@@ -6,11 +6,10 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from ...errors import RunnerError
 from ...runtime.process_runner import run_process
-from .contracts import StageContext, StageResult
+from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
 
 ResultHandler = Callable[[StageContext, StageResult], StageResult]
 
@@ -22,7 +21,7 @@ class PythonValidatorStageSpec:
     path: str = ""
     detail: str = ""
     run_state: str = ""
-    mode: Literal["readonly", "write"] = "write"
+    mode: StageMode = MODE_WRITE
     actor: str = "validator"
     tolerate_restored_changes: bool = False
     clear_reports: bool = True

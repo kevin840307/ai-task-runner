@@ -12,7 +12,14 @@ from ...config.defaults import DEFAULT_MAX_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError, is_transient_error
 from ...project.files import changed_project_files, project_manifest
 from ...runtime import progress
-from .contracts import Stage, StageContext, StageExecution, StageResult
+from .contracts import (
+    MODE_READONLY,
+    MODE_WRITE,
+    Stage,
+    StageContext,
+    StageExecution,
+    StageResult,
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +41,7 @@ class StageAction:
 
     @property
     def mode(self) -> str:
-        return getattr(self.stage, "mode", "readonly")
+        return getattr(self.stage, "mode", MODE_READONLY)
 
     @property
     def actor(self) -> str:
@@ -42,7 +49,7 @@ class StageAction:
 
     @property
     def track_changes(self) -> bool:
-        return self.mode == "write" or bool(getattr(self.stage, "track_changes", False))
+        return self.mode == MODE_WRITE or bool(getattr(self.stage, "track_changes", False))
 
 
 class StageExecutor:
@@ -202,7 +209,7 @@ class StageExecutor:
             violations = [
                 violation
                 for violation in violations
-                if not (tolerate and getattr(violation, "kind", "") == "readonly")
+                if not (tolerate and getattr(violation, "kind", "") == MODE_READONLY)
             ]
         if hooks_failed or violations:
             discard = getattr(stage, "discard_attempt_results", None)

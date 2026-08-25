@@ -13,6 +13,9 @@ from ...errors import RunnerError
 from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error", "replan"]
+StageMode = Literal["readonly", "write"]
+MODE_READONLY: StageMode = "readonly"
+MODE_WRITE: StageMode = "write"
 
 
 @dataclass(frozen=True)
@@ -104,4 +107,13 @@ class Stage(Protocol):
     def finish(self, ctx: StageContext, result: StageResult) -> StageResult: ...
 
 
-__all__ = ["Stage", "StageContext", "StageExecution", "StageResult", "StageStatus"]
+__all__ = [
+    "MODE_READONLY",
+    "MODE_WRITE",
+    "Stage",
+    "StageContext",
+    "StageExecution",
+    "StageMode",
+    "StageResult",
+    "StageStatus",
+]
