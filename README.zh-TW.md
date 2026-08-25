@@ -12,7 +12,7 @@
 - Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
 - TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Review 使用獨立 read-only client/session。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
-- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、YAML script mode（每筆可指定 `project_root`，goal 可用 `goal_file`）。
+- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
 - `<project-root>/.ai-task-runner.yaml` 是專案 policy；policy 本身會自動受到保護。

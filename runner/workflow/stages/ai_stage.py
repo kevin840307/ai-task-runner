@@ -24,6 +24,7 @@ class AIStageSpec:
     name: str
     status: str
     prompt: str = ""
+    instructions: str = ""
     detail: str = ""
     run_state: str = ""
     mode: Literal["readonly", "write"] = "readonly"
@@ -220,10 +221,9 @@ class AIStage:
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
             raise ConfigurationError(f"AI stage {self.spec.name} requires prompt")
-        return render_prompt(
-            self.spec.prompt,
-            build_stage_prompt_context(ctx, self.spec.name),
-        )
+        values = build_stage_prompt_context(ctx, self.spec.name, previous)
+        values["instructions"] = self.spec.instructions
+        return render_prompt(self.spec.prompt, values)
 
     def _same_session_prompt(self, ctx: StageContext) -> str:
         error = ctx.execution.previous_error.strip()

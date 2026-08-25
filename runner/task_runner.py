@@ -9,6 +9,7 @@ from .errors import RunnerError
 from .project.files import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
+from .workflow.loader import workflow_fingerprint
 from .workflow.pipeline import build_pipeline
 from .workflow.stages import StageContext, StageExecutor
 
@@ -35,6 +36,11 @@ class TaskRunner:
             resume=self.config.resume,
             force_new=self.config.force_new,
         )
+        fingerprint = workflow_fingerprint(self.config.workflow)
+        if self.state.workflow_fingerprint not in {"", fingerprint}:
+            raise RunnerError("resume workflow differs from the saved workflow")
+        new_fingerprint = not self.state.workflow_fingerprint
+        self.state.workflow_fingerprint = fingerprint
         self.ai_client = create_ai_client(
             self.config,
             self.root,
@@ -44,7 +50,7 @@ class TaskRunner:
         )
         self.ai_client.prepare_project()
         self.ai_client.update_goal_reference(self.config.goal_file)
-        if not self.config.resume:
+        if not self.config.resume or new_fingerprint:
             self._save_state()
         if normalize_state(self.state):
             self._save_state()

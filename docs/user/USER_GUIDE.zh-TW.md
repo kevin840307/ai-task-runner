@@ -40,7 +40,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## YAML script mode
 `--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
 
-可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
+可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`、`workflow_file`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
 
 ```yaml
 - goal_file: prompts/example-a.md
@@ -48,7 +48,54 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
   validator: validation.py
   ai_validator_prompt_file: ai_validation.md
   ai_validator_count: 3
+  workflow_file: workflows/build.yaml
 ```
+
+## Workflow YAML
+未傳 `--workflow` 時，Runner 會依 validator 參數選擇內建檔：Python validator 加 AI validation instructions 使用 `mixed.yaml`，只有 Python validator 使用 `file.yaml`，`--validator ai` 使用 `ai.yaml`。YAML List 也會逐 item 獨立選擇。自訂檔案就是單一線性 YAML list，不需要 flow name、route 或外層 object：
+
+```yaml
+- stage: planning
+  retry: 2
+- stage: run_prompt
+  id: generate_report
+  prompt: prompts/generate.md
+  retry: -1
+- stage: review
+  prompt: prompts/review.md
+  retry: 1
+  skip: true
+- stage: validate_file
+  retry: -1
+- stage: validate_ai
+  retry: -1
+  runs: 3
+  required_passes: 2
+```
+
+`planning` 仍會回傳產生出的 TODO `execute -> review` groups；`Pipeline` 會先遞迴跑完這些 group，再繼續下一個頂層 YAML Stage。未來任何 Stage 都可回傳相同的 `StageResult.next_flow` contract，Pipeline 沒有 Planning 專用分支。
+
+目前頂層支援 `planning`、`run_prompt`、`review`、`validate_file`、`validate_ai`。`prompt` 是 UTF-8 instruction file，路徑以 Workflow YAML 所在目錄為基準；`run_prompt` 與頂層 `review` 必填，`validate_ai` 可用它追加驗證指示。同一 Stage type 出現多次時，請用唯一 `id` 區分。`retry: -1` 表示持續恢復直到取得有效 Stage result，`0` 表示不做 Same Session retry，非負正數則是有限次數。`review` 的 `skip: true` 只允許在技術性 recovery error 用盡後略過；有效的邏輯 FAIL 仍會進入 repair。`runs` 與 `required_passes` 可覆寫該 Final AI Stage 的 voting 設定。所有參數都可省略，未指定時沿用現有 Runner config；上方展開值是為了說明每個 override 應放的位置。
+
+支援三種 validation topology：Mixed（`planning -> validate_file -> validate_ai`）、file-only（`planning -> validate_file`）、AI-only（`planning -> validate_ai`）。必須有唯一 `planning` 與至少一個 final validator；兩種 validator 都存在時，`validate_file` 必須先於 `validate_ai`，且實際 final validator 必須放在 list 最後。其他 Stage 可插在 final validation 前。
+
+```yaml
+# File-only
+- planning
+- stage: validate_file
+  retry: -1
+```
+
+```yaml
+# AI-only
+- planning
+- stage: validate_ai
+  retry: -1
+  runs: 3
+  required_passes: 2
+```
+
+Runtime validation 也會確認拓樸符合 `--validator`：Python validator 不可省略 file validation；`--validator ai` 或 Mixed validation 不可省略 AI validation。Resume 會保存頂層位置與 Workflow fingerprint；自訂 Workflow resume 時必須再次傳入相同 `--workflow`。若 Workflow 已變更，Runner 會拒絕 resume，避免把舊游標套到新拓樸。
 
 YAML List 遇到第一個 non-zero result 就停止後續 item；已完成 item 的 state 保留，可供 Debug/Resume 判斷。
 

@@ -36,6 +36,7 @@ from .plugins.registry import (
 from .script_loader import load_yaml_script
 from .script_runner import build_script_item_config
 from .version import __version__
+from .workflow.loader import load_default_workflow, load_workflow
 
 
 @dataclass
@@ -50,6 +51,7 @@ class RunRequest:
     validator_prompt: str = ""
     ai_validator_prompt: str = ""
     ai_validator_prompt_file: str | None = None
+    workflow_file: str | None = None
     backend: str = DEFAULT_BACKEND
     command: str | None = None
     sandbox: bool = False
@@ -92,6 +94,7 @@ class RunRequest:
             validator_prompt=args.validator_prompt,
             ai_validator_prompt=getattr(args, "ai_validator_prompt", ""),
             ai_validator_prompt_file=getattr(args, "ai_validator_prompt_file", None),
+            workflow_file=getattr(args, "workflow", None),
             backend=args.backend,
             command=args.command,
             sandbox=getattr(args, "sandbox", False),
@@ -143,6 +146,12 @@ class RunRequest:
         on_event: EventHandler | None = None,
     ) -> RuntimeConfig:
         """Resolve public request inputs into the typed execution contract."""
+        ai_validator_prompt = self._effective_ai_validator_prompt()
+        workflow = (
+            load_workflow(self.workflow_file)
+            if self.workflow_file
+            else load_default_workflow(self.validator, ai_validator_prompt)
+        )
         return RuntimeConfig(
             goal=self._effective_goal(),
             goal_file=self.goal_file,
@@ -150,8 +159,10 @@ class RunRequest:
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
-            ai_validator_prompt=self._effective_ai_validator_prompt(),
+            ai_validator_prompt=ai_validator_prompt,
             ai_validator_prompt_file=self.ai_validator_prompt_file,
+            workflow=workflow,
+            workflow_explicit=bool(self.workflow_file),
             backend=self.backend,
             command=self.command,
             sandbox=self.sandbox,

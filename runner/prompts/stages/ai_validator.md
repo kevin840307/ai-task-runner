@@ -13,6 +13,9 @@ On FAIL, make `missing_items` concrete, actionable, evidence-based, and limited 
 {% if validation.instructions %}Additional validation instructions:
 {{ validation.instructions }}
 {% endif %}
+{% if instructions %}Workflow validation instructions:
+{{ instructions }}
+{% endif %}
 {% set skipped = tasks | selectattr("review_skipped") | list %}
 {% if skipped %}Independently verify these TODOs because Review was unavailable:
 {% for item in skipped[-20:] %}- {{ item.id }}: {{ item.title }} — {{ item.review_skip_reason }}

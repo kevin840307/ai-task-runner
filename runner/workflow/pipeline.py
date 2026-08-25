@@ -41,6 +41,12 @@ class Pipeline:
             result = executor.run(stage, self.context, previous_result)
             if result.complete:
                 self.context.state.completed = True
+            workflow_index = item.get("_workflow_index")
+            if workflow_index is not None and not result.replace_remaining:
+                self.context.state.workflow_position = max(
+                    self.context.state.workflow_position,
+                    int(workflow_index) + 1,
+                )
             self.context.save_state()
 
             if plan_only and getattr(stage, "plan_only_stop", False) and result.status == "pass":

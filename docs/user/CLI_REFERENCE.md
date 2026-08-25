@@ -10,6 +10,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--goal-file` | UTF-8 goal file | preferred for long goals |
 | `--project-root` | writable project boundary | `.` |
 | `--script` | YAML task array; items may use `prompt`/`goal` or `goal_file` | exclusive with goal |
+| `--workflow` | linear Workflow YAML | omitted: select Mixed, File-only, or AI-only from validator options |
 | `--validator` | Python validator path or `ai` | required outside script mode |
 | `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
 | `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |

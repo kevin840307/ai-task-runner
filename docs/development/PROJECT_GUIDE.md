@@ -65,13 +65,15 @@ Validator feedback in state is bounded to 20,000 characters with the start and e
 
 Three validation modes are supported: AI-only, Python-only, and Mixed. Mixed validation always runs the Python hard gate before Final AI voting.
 
-YAML batch mode is supported. YAML batch mode supports per-item `project_root`, `goal_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
+YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
+
+Top-level Workflow topology is a linear list loaded by `workflow/loader.py`; bundled Mixed, File-only, and AI-only lists live in `workflow/mixed.yaml`, `file.yaml`, and `ai.yaml`. Keep internal generated TODO/repair groups in `workflow/definitions.py`. Any Stage may return `StageResult.next_flow`; do not add a Stage-specific recursion branch to Pipeline.
 
 ## Prompt contract
 All bundled Stage prompts use Jinja + `StrictUndefined`. Top-level template variables come only from `runner/prompts/context.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly.
 
 An ordinary AI Stage should require only:
-1. a Stage preset/FLOWS placement in `workflow/definitions.py`;
+1. a Stage preset in `workflow/definitions.py` and, when user-configurable, a declarative Workflow loader registration;
 2. `runner/prompts/stages/<name>.md`.
 
 If the requirement is only conditional text/formatting, use Jinja. Only genuinely computed planning-specific context belongs in `PlanStage`.

@@ -11,6 +11,7 @@ from .errors import ConfigurationError, RunnerError
 from .plugins.registry import merge_plugin_config
 from .runtime import events
 from .script_loader import load_yaml_script
+from .workflow.loader import load_default_workflow
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
@@ -74,6 +75,14 @@ def build_script_item_config(
     work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
     project_root = str(item_root.resolve())
     resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
+    ai_validator_prompt = item.get("ai_validator_prompt", "")
+    item_workflow = item.get("workflow")
+    if item_workflow is not None:
+        workflow = item_workflow
+    elif args.workflow_explicit:
+        workflow = args.workflow
+    else:
+        workflow = load_default_workflow(item["validator"], ai_validator_prompt)
     child = replace(
         args,
         script=None,
@@ -82,13 +91,15 @@ def build_script_item_config(
         project_root=project_root,
         validator=item["validator"],
         validator_prompt=item["validator_prompt"],
-        ai_validator_prompt=item.get("ai_validator_prompt", ""),
+        ai_validator_prompt=ai_validator_prompt,
         ai_validator_prompt_file=item.get("ai_validator_prompt_file"),
         review_retries=item.get("review_retries", args.review_retries),
         final_ai_validations=item.get("final_ai_validations", args.final_ai_validations),
         final_ai_required_passes=item.get(
             "final_ai_required_passes", args.final_ai_required_passes
         ),
+        workflow=workflow,
+        workflow_explicit=item_workflow is not None or args.workflow_explicit,
         plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),
         work_dir=work_dir,
         resume=resume,

@@ -20,7 +20,7 @@ Version: 1.2.33
 
 ## Main flow
 
-`Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
+Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
 
 - No independent Understand Stage.
 - Plan writes the durable TODO list and returns the TODO execution groups.
@@ -28,10 +28,12 @@ Version: 1.2.33
 - Python validation is deterministic and runs before AI validation when both are enabled.
 - Validator FAIL returns `validator_repair`: Repair Plan -> TODO execution -> validators again.
 - Completion is recorded only after the configured final validation path passes.
+- A custom top-level Workflow remains one linear YAML list. Planning's generated TODO groups are recursive `next_flow` data and finish before the next top-level Stage.
 
 ## Ownership
 
-- `workflow/definitions.py`: Stage presets + fixed `FLOWS` only.
+- `workflow/mixed.yaml`, `file.yaml`, `ai.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
+- `workflow/definitions.py`: reusable Stage presets plus internal TODO/repair subflows.
 - `workflow/rules.py`: conditions, result handlers, durable-state transitions, and routing.
 - `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.

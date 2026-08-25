@@ -40,12 +40,14 @@ Loop-context inspection and compression is a model-error plugin. The AI client r
 
 A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `Pipeline` only consumes declarative Stage data and returned `StageResult.next_flow/replace_remaining/complete` facts.
 
-Fixed topology lives only in `workflow/definitions.py`. Routing/result transitions live in `workflow/rules.py`.
+`workflow/mixed.yaml`, `file.yaml`, and `ai.yaml` are the bundled top-level topologies. `workflow/loader.py` owns both validator-based default selection and normalization of custom linear YAML into the same Stage definitions. `workflow/definitions.py` owns reusable Stage presets and internal TODO/repair subflows; routing and durable transitions live in `workflow/rules.py`. Pipeline treats `StageResult.next_flow` generically, so Planning can recursively insert generated execute/review groups without a Planning branch in Pipeline.
+
+The durable state stores the completed top-level Workflow position and a semantic fingerprint. Legacy state without these fields is normalized compatibly. A resumed custom Workflow must match its saved fingerprint so reordered Stages cannot be silently skipped or repeated.
 
 ## Prompt contract
 
 All bundled prompts use Jinja with `StrictUndefined`. Stage templates never receive `RunState`, `RuntimeConfig`, or arbitrary dictionaries directly. `prompts/context.py` exposes the stable top-level contract:
 
-`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `session`, `failure`, `planning`, `previous`, `rules`, `always_instructions`.
+`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `planning`, `previous`, `instructions`, `rules`, `always_instructions`.
 
 Ordinary AI stages reference a prompt path directly. Planning-specific computed context is owned by `PlanStage`; there is no separate prompt-builder registry.

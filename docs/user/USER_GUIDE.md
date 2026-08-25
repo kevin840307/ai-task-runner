@@ -34,7 +34,7 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, and `project_root`. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, `project_root`, and `workflow_file`. Relative per-item file paths, including `workflow_file`, are resolved from the script YAML directory. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
 
 ```yaml
 - goal_file: prompts/example-a.md
@@ -42,7 +42,54 @@ Protected paths are project-relative and may name files or directories. The poli
   validator: validation.py
   ai_validator_prompt_file: ai_validation.md
   ai_validator_count: 3
+  workflow_file: workflows/build.yaml
 ```
+
+## Workflow YAML
+Without `--workflow`, Runner selects one bundled file from the validator options: `mixed.yaml` for a Python validator plus AI validation instructions, `file.yaml` for a Python validator alone, or `ai.yaml` for `--validator ai`. YAML List items make the same selection independently. A custom file is one linear YAML list; it has no flow names, routes, or wrapper object:
+
+```yaml
+- stage: planning
+  retry: 2
+- stage: run_prompt
+  id: generate_report
+  prompt: prompts/generate.md
+  retry: -1
+- stage: review
+  prompt: prompts/review.md
+  retry: 1
+  skip: true
+- stage: validate_file
+  retry: -1
+- stage: validate_ai
+  retry: -1
+  runs: 3
+  required_passes: 2
+```
+
+`planning` still returns the generated TODO `execute -> review` groups. `Pipeline` runs those groups recursively before continuing with the next top-level YAML Stage. Any future Stage can return the same `StageResult.next_flow` contract; Pipeline does not contain a Planning-only branch.
+
+Supported top-level Stages are `planning`, `run_prompt`, `review`, `validate_file`, and `validate_ai`. `prompt` is a UTF-8 instruction file resolved relative to the Workflow YAML. `run_prompt` and top-level `review` require it; `validate_ai` may use it for additional validation instructions. Use a unique `id` when the same Stage type appears more than once. `retry` accepts `-1` for recovery until a valid Stage result, `0` for no same-session retry, or a finite non-negative count. For `review`, `skip: true` permits skipping only after technical recovery errors are exhausted; a valid logical FAIL still enters repair. `runs` and `required_passes` override Final AI voting for that Stage. Every parameter is optional; omitted values inherit the existing Runner configuration. The expanded values above demonstrate where each override belongs.
+
+The three supported validation topologies are Mixed (`planning -> validate_file -> validate_ai`), file-only (`planning -> validate_file`), and AI-only (`planning -> validate_ai`). Exactly one `planning` and at least one final validator are required. With both validators, `validate_file` must precede `validate_ai`; the configured final validator must end the list. Other Stages may be inserted before final validation.
+
+```yaml
+# File-only
+- planning
+- stage: validate_file
+  retry: -1
+```
+
+```yaml
+# AI-only
+- planning
+- stage: validate_ai
+  retry: -1
+  runs: 3
+  required_passes: 2
+```
+
+Runtime validation also checks that the topology matches `--validator`: file validation cannot be omitted for a Python validator, and AI validation cannot be omitted for `--validator ai` or Mixed validation. Resume persists both the top-level position and a Workflow fingerprint: pass the same `--workflow` again when resuming a custom Workflow. A changed Workflow is rejected instead of applying an old cursor to new topology.
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.

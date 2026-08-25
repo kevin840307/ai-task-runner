@@ -24,6 +24,12 @@ from .defaults import (
 EventHandler = Callable[[dict[str, Any]], None]
 
 
+def _default_workflow() -> list[dict[str, Any]]:
+    from ..workflow.loader import load_workflow
+
+    return load_workflow()
+
+
 @dataclass
 class RuntimeConfig:
     """Canonical, validated settings used by the running workflow."""
@@ -56,6 +62,8 @@ class RuntimeConfig:
     api_retry_max_wait: float = 300
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
+    workflow: list[dict[str, Any]] = field(default_factory=_default_workflow)
+    workflow_explicit: bool = False
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
     work_dir: str = ".ai-task-runner"
     resume: bool = False
@@ -130,6 +138,19 @@ class RuntimeConfig:
             )
         if not isinstance(self.plugins, dict):
             raise ValueError("plugins must be an object")  # noqa: TRY004
+        if not isinstance(self.workflow, list) or not self.workflow:
+            raise ValueError("workflow must be a non-empty list")
+        if not isinstance(self.workflow_explicit, bool):
+            raise ValueError("workflow_explicit must be a boolean")  # noqa: TRY004
+        from ..workflow.loader import workflow_validators
+
+        has_file_validation, has_ai_validation = workflow_validators(self.workflow)
+        if self.validator:
+            validator_is_ai = self.validator.lower() == "ai"
+            if not validator_is_ai and not has_file_validation:
+                raise ValueError("file validator workflow requires validate_file")
+            if (validator_is_ai or self.ai_validator_prompt.strip()) and not has_ai_validation:
+                raise ValueError("AI validation workflow requires validate_ai")
         self.plugins = normalize_plugin_config(self.plugins)
 
 

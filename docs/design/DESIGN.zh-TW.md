@@ -20,7 +20,7 @@ Version: 1.2.33
 
 ## 主流程
 
-`Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
+內建預設：`Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
 
 - 沒有獨立 Understand Stage。
 - Plan 寫入 durable TODO list，並回傳 TODO execution groups。
@@ -28,10 +28,12 @@ Version: 1.2.33
 - Python Validator 是 deterministic gate；混合驗證時一定先於 AI Validator。
 - Validator FAIL 回到 `validator_repair`：Repair Plan -> TODO execution -> validators again。
 - 只有設定的 final validation path PASS 才記錄完成。
+- 自訂頂層 Workflow 維持單一線性 YAML list；Planning 產生的 TODO group 是遞迴 `next_flow` data，會在下一個頂層 Stage 前跑完。
 
 ## 責任
 
-- `workflow/definitions.py`：Stage presets + 固定 `FLOWS`。
+- `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
+- `workflow/definitions.py`：可重用 Stage preset 與內部 TODO/repair subflow。
 - `workflow/rules.py`：conditions、result handlers、durable-state transition、routing。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。

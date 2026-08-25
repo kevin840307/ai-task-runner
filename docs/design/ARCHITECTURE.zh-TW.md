@@ -37,12 +37,14 @@ Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 H
 
 Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`Pipeline` 只消費 declarative Stage data 與 `StageResult.next_flow/replace_remaining/complete`。
 
-固定拓樸只放 `workflow/definitions.py`；Result routing/state transition 只放 `workflow/rules.py`。
+`workflow/mixed.yaml`、`file.yaml`、`ai.yaml` 是三個內建頂層拓樸；`workflow/loader.py` 同時負責依 validator 選擇預設檔，以及把自訂線性 YAML normalization 成相同 Stage definition。`workflow/definitions.py` 只管理可重用 Stage preset 與內部 TODO/repair subflow，routing 與 durable transition 放在 `workflow/rules.py`。Pipeline 一律處理通用 `StageResult.next_flow`，因此 Planning 可遞迴插入產生的 execute/review group，而 Pipeline 不需要 Planning 專用分支。
+
+Durable state 會保存已完成的頂層 Workflow 位置與語意 fingerprint；缺少新欄位的舊 state 會相容 normalization。自訂 Workflow resume 時 fingerprint 必須一致，避免 Stage 調序後被靜默略過或重複。
 
 ## Prompt 契約
 
 所有 bundled Prompt 統一使用 Jinja + `StrictUndefined`。Template 不直接取得 `RunState`、`RuntimeConfig` 或任意 dict。`prompts/context.py` 是唯一 Prompt Context 入口，固定 top-level variables：
 
-`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `session`, `failure`, `planning`, `previous`, `rules`, `always_instructions`。
+`goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `planning`, `previous`, `instructions`, `rules`, `always_instructions`。
 
 一般 AI Stage 直接指定 prompt path；沒有 prompt-builder registry。Planning / Repair Planning 的計算 context 直接由 `PlanStage` 管理。

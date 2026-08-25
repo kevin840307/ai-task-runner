@@ -36,3 +36,4 @@ py-modules = [
 [tool.setuptools.package-data]
 "runner.prompts.stages" = ["*.md"]
 "runner.prompts.system" = ["*.md"]
+"runner.workflow" = ["*.yaml"]

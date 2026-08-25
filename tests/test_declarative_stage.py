@@ -30,7 +30,8 @@ def context(tmp_path: Path) -> StageContext:
 def test_existing_ai_stages_use_declarative_prompt_paths():
     assert STAGES["execute"]["prompt"] == "stages/execution.md"
     assert STAGES["repair"]["prompt"] == "stages/execution.md"
-    assert STAGES["review"]["prompt"] == "stages/review.md"
+    assert STAGES["task_review"]["prompt"] == "stages/review.md"
+    assert STAGES["review"]["prompt"] == "stages/workflow_review.md"
     assert STAGES["validate_ai"]["prompt"] == "stages/ai_validator.md"
     assert all("prompt_builder" not in STAGES[name] for name in ("execute", "repair", "review", "validate_ai"))
     assert not (Path(__file__).resolve().parents[1] / "runner/workflow/prompt_builders.py").exists()

@@ -45,6 +45,10 @@ def parser() -> argparse.ArgumentParser:
     )
     command_parser.add_argument("--project-root", default=".")
     command_parser.add_argument("--script", help="YAML array of prompt + validator items")
+    command_parser.add_argument(
+        "--workflow",
+        help="linear Workflow YAML; omitted selects file/ai/mixed from validator options",
+    )
     command_parser.add_argument("--validator", help="validator.py path or literal 'ai'")
     command_parser.add_argument(
         "--validator-prompt",

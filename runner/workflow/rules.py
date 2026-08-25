@@ -14,6 +14,7 @@ from ..runtime import progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
 from .definitions import FLOWS, STAGES
+from .loader import workflow_validators
 from .stages.contracts import StageContext, StageResult
 
 
@@ -31,6 +32,24 @@ def flow_definition(name: str) -> list[dict[str, Any]]:
     return [stage_definition(stage) for stage in FLOWS[name]]
 
 
+def workflow_definition(ctx: StageContext) -> list[dict[str, Any]]:
+    return deepcopy(ctx.config.workflow)
+
+
+def _planning_tail(ctx: StageContext) -> list[dict[str, Any]]:
+    workflow = workflow_definition(ctx)
+    planning = next(
+        index
+        for index, definition in enumerate(workflow)
+        if definition.get("stage") == "plan"
+    )
+    return workflow[planning + 1 :]
+
+
+def _validator_repair_flow(ctx: StageContext) -> list[dict[str, Any]]:
+    return [stage_definition("repair_plan"), *_planning_tail(ctx)]
+
+
 def _remaining_task_flow(ctx: StageContext) -> list[list[dict[str, Any]]]:
     remaining = max(0, len(ctx.state.tasks) - ctx.state.current)
     return [flow_definition("todo") for _ in range(remaining)]
@@ -40,14 +59,16 @@ def initial_flow(ctx: StageContext) -> list[object]:
     """Select resume-safe flow data without constructing Stage objects."""
     if ctx.state.completed:
         return []
-    validators = flow_definition("validators")
     if ctx.state.stage == "validator_failed":
-        return flow_definition("validator_repair")
+        return _validator_repair_flow(ctx)
+    workflow = workflow_definition(ctx)
+    position = min(ctx.state.workflow_position, len(workflow))
+    if ctx.state.tasks and position == 0:
+        position = len(workflow) - len(_planning_tail(ctx))
+    remaining = workflow[position:]
     if ctx.state.tasks and ctx.state.current < len(ctx.state.tasks):
-        return [_remaining_task_flow(ctx), *validators]
-    if ctx.state.tasks:
-        return validators
-    return flow_definition("default")
+        return [_remaining_task_flow(ctx), *remaining]
+    return remaining
 
 
 def _restart_plan(ctx: StageContext, result: StageResult) -> StageResult:
@@ -57,7 +78,7 @@ def _restart_plan(ctx: StageContext, result: StageResult) -> StageResult:
     progress.set_status("相同失敗持續，重新規劃", result.stage)
     return replace(
         result,
-        next_flow=tuple(flow_definition("replan")),
+        next_flow=tuple(workflow_definition(ctx)),
         replace_remaining=True,
     )
 
@@ -84,6 +105,10 @@ def handle_execute_result(ctx: StageContext, result: StageResult) -> StageResult
         task.last_output = bounded_text(str(result.error), MAX_TASK_OUTPUT_CHARS)
     ctx.save_session()
     return result
+
+
+def handle_prompt_result(ctx: StageContext, result: StageResult) -> StageResult:
+    return _restart_plan(ctx, result) if result.status == "replan" else result
 
 
 def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
@@ -122,6 +147,22 @@ def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
     return result
 
 
+def handle_workflow_review_result(
+    ctx: StageContext,
+    result: StageResult,
+) -> StageResult:
+    if result.status == "replan":
+        return _restart_plan(ctx, result)
+    if result.status == "fail":
+        _record_validator_failure(ctx, result)
+        return replace(
+            result,
+            next_flow=tuple(_validator_repair_flow(ctx)),
+            replace_remaining=True,
+        )
+    return result
+
+
 def handle_validation_result(ctx: StageContext, result: StageResult) -> StageResult:
     if result.status == "replan":
         return _restart_plan(ctx, result)
@@ -130,9 +171,16 @@ def handle_validation_result(ctx: StageContext, result: StageResult) -> StageRes
         _record_validator_failure(ctx, result)
         return replace(
             result,
-            next_flow=tuple(flow_definition("validator_repair")),
+            next_flow=tuple(_validator_repair_flow(ctx)),
             replace_remaining=True,
         )
+    _, has_ai_validation = workflow_validators(ctx.config.workflow)
+    if result.status == "pass" and not has_ai_validation:
+        complete_run(ctx.state)
+        ctx.ai_client.session_id = ""
+        ctx.set_stage("completed", "")
+        progress.set_status("全部完成", "Validator PASS")
+        return replace(result, complete=True)
     return result
 
 
@@ -194,6 +242,7 @@ def invalidate_plan(ctx: StageContext, feedback: str = "") -> None:
     state.cycle += 1
     state.current = len(state.tasks)
     state.completed = False
+    state.workflow_position = 0
     state.replan_feedback = feedback[-4000:]
 
 
@@ -201,7 +250,9 @@ RESULT_HANDLERS = {
     "handle_plan_result": handle_plan_result,
     "handle_execute_result": handle_execute_result,
     "handle_repair_result": handle_execute_result,
+    "handle_prompt_result": handle_prompt_result,
     "handle_review_result": handle_review_result,
+    "handle_workflow_review_result": handle_workflow_review_result,
     "handle_validation_result": handle_validation_result,
     "handle_final_validation_result": handle_final_validation_result,
 }

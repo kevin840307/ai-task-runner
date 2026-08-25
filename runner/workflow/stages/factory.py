@@ -29,6 +29,7 @@ STAGE_REGISTRY: dict[str, dict[str, Any]] = {
 
 def create_stage(definition: dict[str, Any]):
     values = deepcopy(definition)
+    values.pop("_workflow_index", None)
     stage_type = str(values.pop("stage", "ai"))
     try:
         registered = STAGE_REGISTRY[stage_type]

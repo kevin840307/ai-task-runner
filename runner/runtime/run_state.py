@@ -82,6 +82,8 @@ class RunState:
     failure_key: str = ""
     same_failures: int = 0
     fresh_session_round: int = 0
+    workflow_position: int = 0
+    workflow_fingerprint: str = ""
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -97,7 +99,15 @@ class RunState:
             raise ValueError("state.current is outside the task list")
         if not isinstance(self.completed, bool):
             raise ValueError("state.completed must be boolean")
-        for name in ("stage", "last_error", "validator_failure_key", "replan_feedback", "failure_scope", "failure_key"):
+        for name in (
+            "stage",
+            "last_error",
+            "validator_failure_key",
+            "replan_feedback",
+            "failure_scope",
+            "failure_key",
+            "workflow_fingerprint",
+        ):
             value = getattr(self, name)
             if not isinstance(value, str):
                 raise ValueError(f"state.{name} must be a string")
@@ -109,6 +119,8 @@ class RunState:
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"state.{name} must be non-negative")
+        if not is_integer(self.workflow_position) or self.workflow_position < 0:
+            raise ValueError("state.workflow_position must be non-negative")
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):

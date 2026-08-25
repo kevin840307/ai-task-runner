@@ -59,6 +59,7 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Continue the current task. Fix the previous failure and finish it.",
             "Continue the same execute stage.",
             "Continue the same repair stage.",
+            "Workflow Stage instructions:",
         )
     ):
         return "execute"

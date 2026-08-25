@@ -7,6 +7,7 @@ from typing import Any
 
 from .errors import RunnerError
 from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
+from .workflow.loader import load_workflow
 
 
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
@@ -57,7 +58,7 @@ def _ai_validator_prompt(script: Path, item: dict[str, Any], index: int) -> tupl
     return prompt.strip(), prompt_file
 
 
-def _options(item: dict[str, Any], index: int) -> dict[str, Any]:
+def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
     result: dict[str, Any] = {}
     if "project_root" in item:
         value = item["project_root"]
@@ -76,6 +77,17 @@ def _options(item: dict[str, Any], index: int) -> dict[str, Any]:
         raise RunnerError(f"script item {index} {error}") from error
     if plugins:
         result["plugins"] = plugins
+
+    if "workflow_file" in item:
+        value = item["workflow_file"]
+        if not isinstance(value, str) or not value.strip():
+            raise RunnerError(
+                f"script item {index} workflow_file must be a non-empty string"
+            )
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = script.parent / path
+        result["workflow"] = load_workflow(path)
 
     aliases = {
         "review_retries": "review_retries",
@@ -102,7 +114,7 @@ def _parse_item(script: Path, item: Any, index: int) -> dict[str, Any]:
         "validator": validator.strip(),
         "validator_prompt": _string_value(item, index, "validator_prompt"),
         "ai_validator_prompt": ai_prompt,
-        **_options(item, index),
+        **_options(script, item, index),
     }
     if ai_prompt_file:
         result["ai_validator_prompt_file"] = ai_prompt_file

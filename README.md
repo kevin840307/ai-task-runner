@@ -14,7 +14,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - Declarative Planning: Plan produces the durable TODO list directly; planning failures use the shared same-session -> fresh-session -> replan recovery path, with no independent Understand/Judge Stage.
 - TODO execution runs Execute -> Review for each task. Same-task failures prefer the same session and rebuild only when needed; Review uses an independent read-only client/session.
 - Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
-- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, YAML script mode with optional per-item `project_root` and `goal_file`.
+- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, Python API, linear Workflow YAML, and YAML script mode with optional per-item `project_root`, `goal_file`, and `workflow_file`.
 - Shared AI-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
 - Project policy in `<project-root>/.ai-task-runner.yaml`; the policy file protects itself automatically.

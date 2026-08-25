@@ -10,6 +10,7 @@
 | `--goal-file` | UTF-8 Goal 檔 | 長需求建議使用 |
 | `--project-root` | Agent 可工作的專案邊界 | `.` |
 | `--script` | YAML task array；item 可用 `prompt`/`goal` 或 `goal_file` | 與 goal mode 互斥 |
+| `--workflow` | 線性 Workflow YAML | 省略時依 validator 參數選擇 Mixed、File-only 或 AI-only |
 | `--validator` | Python validator path 或 `ai` | 非 script mode 必填 |
 | `--validator-prompt` | `--validator ai` 的 Final AI 額外指示 | 空字串 |
 | `--ai-validator-prompt` | file validator PASS 後追加的 Final AI 驗證指示 | 空字串/關閉 |

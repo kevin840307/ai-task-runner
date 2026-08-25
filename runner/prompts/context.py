@@ -8,7 +8,9 @@ from .loader import ai_rules, always_instructions
 PROMPT_CONTEXT_KEYS = frozenset({
     "always_instructions",
     "goal",
+    "instructions",
     "planning",
+    "previous",
     "project",
     "rules",
     "stage",
@@ -36,7 +38,11 @@ def _task_data(task: Any | None) -> dict[str, Any] | None:
     }
 
 
-def build_stage_prompt_context(ctx: Any, stage: str) -> dict[str, Any]:
+def build_stage_prompt_context(
+    ctx: Any,
+    stage: str,
+    previous: Any | None = None,
+) -> dict[str, Any]:
     """Return the only supported top-level variables for Stage templates."""
     state = ctx.state
     tasks = [_task_data(task) for task in state.tasks]
@@ -44,6 +50,7 @@ def build_stage_prompt_context(ctx: Any, stage: str) -> dict[str, Any]:
     ai_validator_prompt = getattr(ctx.config, "ai_validator_prompt", "") or ""
     return {
         "goal": state.goal,
+        "instructions": "",
         "stage": stage,
         "task": _task_data(ctx.task),
         "tasks": tasks,
@@ -72,6 +79,11 @@ def build_stage_prompt_context(ctx: Any, stage: str) -> dict[str, Any]:
                     for task in state.tasks if task.review_skipped
                 ][-20:],
             },
+        },
+        "previous": {
+            "stage": getattr(previous, "stage", ""),
+            "status": getattr(previous, "status", ""),
+            "output": str(getattr(previous, "output", ""))[-8000:],
         },
         "rules": ai_rules(ctx.root),
         "always_instructions": always_instructions(ctx.root),
