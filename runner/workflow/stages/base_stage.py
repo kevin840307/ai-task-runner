@@ -20,7 +20,7 @@ ResultHandler = Callable[[StageContext, StageResult], StageResult]
 
 
 @dataclass(frozen=True)
-class AIStageSpec:
+class BaseStageSpec:
     name: str
     status: str
     prompt: str = ""
@@ -53,10 +53,10 @@ class AIStageSpec:
     plan_only_stop: bool = False
 
 
-class AIStage:
+class BaseStage:
     """Perform one or more AI interactions and return only resulting facts."""
 
-    def __init__(self, spec: AIStageSpec) -> None:
+    def __init__(self, spec: BaseStageSpec) -> None:
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
@@ -87,7 +87,7 @@ class AIStage:
         ) or (runs // 2 + 1)
         if runs < 1 or not 1 <= required <= runs:
             raise ConfigurationError(
-                f"AI stage {self.name} requires 1 <= required_passes <= runs"
+                f"Base stage {self.name} requires 1 <= required_passes <= runs"
             )
 
         self._attempt_checkpoint = len(self._completed_runs)
@@ -220,7 +220,7 @@ class AIStage:
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
-            raise ConfigurationError(f"AI stage {self.spec.name} requires prompt")
+            raise ConfigurationError(f"Base stage {self.spec.name} requires prompt")
         values = build_stage_prompt_context(ctx, self.spec.name, previous)
         values["instructions"] = self.spec.instructions
         return render_prompt(self.spec.prompt, values)
@@ -253,4 +253,6 @@ class AIStage:
 
 
 
-__all__ = ["AIStage", "AIStageSpec", "ResultHandler"]
+BaseStage.spec_class = BaseStageSpec
+
+__all__ = ["BaseStage", "BaseStageSpec", "ResultHandler"]

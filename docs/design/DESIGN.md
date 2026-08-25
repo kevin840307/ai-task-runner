@@ -17,6 +17,7 @@ Version: 1.2.33
 12. Remove dead/stale code, obsolete compatibility shims, and unused aliases when no supported caller needs them.
 13. Full AI task prompts use stdin, never command-line argv; short backend control commands are not task prompts.
 14. Folder, Python filename, class/function, and field names must describe their actual responsibility, with sensible splitting/merging.
+15. Every Stage is independently executable for one attempt. It must not instantiate, call, or select another concrete Stage; composition happens only through `StageResult` and Pipeline/routing policy.
 
 ## Main flow
 
@@ -29,12 +30,12 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI 
 - Validator FAIL returns `validator_repair`: Repair Plan -> TODO execution -> validators again.
 - A Stage may override FAIL/replan recovery with the shared 1-based `restart_at` YAML option; omitted values preserve the routes above.
 - Completion is recorded only after the configured final validation path passes.
-- A custom top-level Workflow remains one linear YAML list. Planning's generated TODO groups are recursive `next_flow` data and finish before the next top-level Stage.
+- A custom Workflow YAML contains only named `stages` and top-level `flow`. Planning stores each TODO with its selected Stage sequence and returns validated `next_steps`; Pipeline executes them before final validation. Dynamic Stage candidates are inferred from YAML structure, so there is no `expand` or `foreach` setting.
 
 ## Ownership
 
 - `workflow/mixed.yaml`, `file.yaml`, `ai.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
-- `workflow/registry.py`: the only Stage class/spec/default/YAML-option registration source.
+- `workflow/registry.py`: the explicit `type -> Stage class` registry plus semantic parser/handler/condition resolution; it does not own workflow topology or Stage instances.
 - `workflow/rules.py`: internal TODO/repair subflows, conditions, result handlers, durable-state transitions, and routing.
 - `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.

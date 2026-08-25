@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..errors import RunnerError
 from ..ai.structured_output import AIValidationResult, ReviewResult, parse_result, require_object, require_text, require_text_list
+from ..errors import RunnerError
 from .stages.contracts import StageContext
 
 MAX_MISSING_ITEMS = 100
@@ -46,8 +46,8 @@ def parse_ai_validation(text: str, ctx: StageContext | None = None) -> AIValidat
 
 
 PARSERS = {
-    "parse_review": parse_review,
-    "parse_ai_validation_stage": parse_ai_validation,
+    "review": parse_review,
+    "validation": parse_ai_validation,
 }
 
 __all__ = ["PARSERS", "parse_review", "parse_ai_validation"]

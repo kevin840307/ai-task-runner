@@ -170,5 +170,7 @@ def test_bilingual_core_docs_cover_current_architecture_and_recovery():
             assert token.lower() in en.lower(), (english, token)
             assert token.lower() in zh.lower(), (chinese, token)
 
-    assert "next_flow" in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")
+    readme_zh = (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")
+    assert "next_steps" in readme_zh
+    assert "expand: [execute, review]" not in readme_zh
     assert "重新理解目前專案" not in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")

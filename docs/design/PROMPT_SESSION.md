@@ -22,7 +22,7 @@ All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or mi
 
 Ordinary AI work: `stage: ai` plus a Workflow-relative instruction file.
 
-Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `AIStage`; `mode: review` selects the readonly structured Review contract. There is no prompt-builder registry.
+Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; `mode: review` selects the readonly structured Review contract. There is no prompt-builder registry.
 
 ## Session policy
 

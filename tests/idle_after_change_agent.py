@@ -34,6 +34,7 @@ if stage in {"plan_finalize", "plan_refine"}:
             "description": "Create done.txt",
             "deliverable": "done.txt exists",
             "acceptance_criteria": ["done.txt exists"],
+            "steps": ["execute", "review"],
         }]
     }
 elif stage == "plan_judge":

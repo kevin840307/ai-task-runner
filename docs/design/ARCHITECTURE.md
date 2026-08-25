@@ -5,7 +5,7 @@ The directory structure is intentionally the architecture map:
 - `runner/api.py`, `bootstrap.py`, `task_runner.py`: public request boundary, dependency composition, and one-run orchestration.
 - `runner/script_loader.py`, `script_runner.py`: YAML structure/file parsing and validated child-config execution.
 - `runner/workflow/`: declarative workflow definitions, routing rules, result parsers, and the Stage engine.
-- `runner/workflow/stages/`: Stage contracts, factory, shared executor, generic `AIStage`, `PlanStage`, and `PythonValidatorStage`.
+- `runner/workflow/stages/`: Stage contracts, factory, shared executor, generic `BaseStage`, `PlanStage`, and `PythonValidatorStage`.
 - `runner/ai/`: AI client, backend contracts, session classification, structured-output handling, and AI diagnostics.
 - `runner/backends/`: Qwen/OpenCode implementations plus backend registry/configuration.
 - `runner/project/`: project file snapshots/restores, project policy, and QWEN.md/AGENTS.md instruction-file lifecycle.
@@ -38,9 +38,11 @@ Loop-context inspection and compression is a model-error plugin. The AI client r
 
 `Pipeline -> StageExecutor -> Stage.run() -> StageResult -> Stage.finish() -> next Stage`
 
-A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `Pipeline` only consumes declarative Stage data and returned `StageResult.next_flow/replace_remaining/complete` facts.
+A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `StageResult` contains execution facts and may carry validated generated `next_steps`. `FlowNode` owns static YAML routing (`recover`, `restart_at`); Pipeline interprets both forms generically.
 
-`workflow/mixed.yaml`, `file.yaml`, and `ai.yaml` are the bundled top-level topologies. `workflow/registry.py` is the single source for Stage class/spec, defaults, public YAML options, and construction. `workflow/loader.py` only selects/reads topology and delegates normalization to the Registry. Internal TODO/repair subflows and durable transitions live in `workflow/rules.py`. Pipeline treats `StageResult.next_flow` generically, so Planning can recursively insert generated execute/review groups without a Planning branch in Pipeline.
+`workflow/mixed.yaml`, `file.yaml`, and `ai.yaml` contain only `stages` and top-level `flow`. `workflow/registry.py` is intentionally minimal: Stage behavior `type -> class` only. `workflow/loader.py` normalizes Stage instances, derives Planner-visible dynamic Stage candidates from YAML structure, and marks `validator: file|ai` capability. `workflow/rules.py` only reduces durable state; Pipeline owns resume, recovery routing, and execution of generated `next_steps`. `PlanStage` stores each TODO with its ordered Stage names and emits concrete next-step definitions; no `expand`, `foreach`, or separate subflow DSL exists.
+
+Each Stage instance owns exactly one attempt and can be constructed/executed independently. Ordinary Stage implementations never instantiate/select another Stage and never receive `recover` or `restart_at`. `PlanStage` is the deliberate exception that selects only validated Stage instances from the loader-provided catalog and returns them as data (`next_steps`), without directly executing them. Result handlers reduce facts into durable state; composition and recovery stay in YAML `FlowNode` data.
 
 The durable state stores the completed top-level Workflow position and a semantic fingerprint. Legacy state without these fields is normalized compatibly. A resumed custom Workflow must match its saved fingerprint so reordered Stages cannot be silently skipped or repeated.
 

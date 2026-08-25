@@ -71,18 +71,6 @@ def test_executor_wraps_one_stage_once_with_hooks():
     assert hooks.calls == [("before", "sample"), ("after", "sample")]
 
 
-def test_executor_attaches_configured_restart_target_to_failure():
-    class Failing(Stage):
-        restart_at = 2
-
-        def run(self, ctx, previous=None):
-            return StageResult(self.name, "fail")
-
-    result = StageExecutor(Hooks()).run(Failing(), context())
-
-    assert result.restart_at == 2
-
-
 def test_executor_converts_stage_exception_to_result():
     class Broken(Stage):
         def run(self, ctx, previous=None):

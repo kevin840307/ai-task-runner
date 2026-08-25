@@ -1,4 +1,63 @@
-- stage: planning
-  # Optional: retry, restart_at
-- stage: validate_file
-  # Optional: retry, restart_at
+stages:
+  planning: &planning
+    type: plan
+    status: AI 正在產生任務規劃
+    run_state: planning
+    mode: readonly
+    actor: ai
+    backend_mode: planning
+    timeout_attr: planning_timeout
+    result_handler: plan
+    plan_only_stop: true
+
+
+  execute: &execute
+    status: AI 正在處理目前任務
+    run_state: executing
+    mode: write
+    actor: executor
+    track_changes: true
+    prompt: stages/execution.md
+    result_handler: task
+
+  review:
+    status: AI 正在確認任務是否完成
+    run_state: reviewing
+    mode: readonly
+    actor: ai
+    backend_mode: review
+    client_cache_key: review_client
+    timeout_attr: planning_timeout
+    prompt: stages/review.md
+    parser: review
+    result_status: completed
+    result_handler: review
+    retry_attr: review_retries
+    skip_on_error: true
+    recover: [repair]
+
+  repair:
+    <<: *execute
+    status: AI 正在修復目前任務
+    result_handler: task
+
+  repair_plan:
+    <<: *planning
+    status: AI 正在建立修復規劃
+    repair_plan: true
+    fresh_session_on_start: true
+    plan_only_stop: false
+
+  validate_file:
+    type: python
+    validator: file
+    status: 正在執行 File Validator
+    run_state: validating
+    mode: write
+    actor: validator
+    result_handler: validation
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - validate_file

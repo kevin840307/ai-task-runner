@@ -17,6 +17,7 @@ Version: 1.2.33
 12. 移除 dead/stale code、無需求的 compatibility shim、舊流程名稱與 unused alias。
 13. 完整 AI task Prompt 固定 stdin，不放 command-line argv；短 backend control command 不屬於 task Prompt。
 14. Folder、Python filename、class/function/field 命名必須符合真實責任，拆分/合併要合理。
+15. 每個 Stage 都必須能獨立執行一次 attempt，不得建立、呼叫或選擇下一個具體 Stage；串接只能透過 `StageResult` 與 Pipeline/routing policy。
 
 ## 主流程
 
@@ -29,12 +30,12 @@ Version: 1.2.33
 - Validator FAIL 回到 `validator_repair`：Repair Plan -> TODO execution -> validators again。
 - Stage 可用共用的 1-based YAML `restart_at` 覆蓋 FAIL/replan recovery；未設定時保留上述內建路由。
 - 只有設定的 final validation path PASS 才記錄完成。
-- 自訂頂層 Workflow 維持單一線性 YAML list；Planning 產生的 TODO group 是遞迴 `next_flow` data，會在下一個頂層 Stage 前跑完。
+- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。Planning 會把每個 TODO 與其選定 Stage sequence 一起保存並回傳已驗證的 `next_steps`，Pipeline 執行完成後再進 final validation。可用 dynamic Stage 由 YAML 結構自動推導，不需要 `expand` 或 `foreach`。
 
 ## 責任
 
 - `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
-- `workflow/registry.py`：唯一 Stage class/spec/default/YAML-option 註冊來源。
+- `workflow/registry.py`：明確的 `type -> Stage class` Registry，並負責 semantic parser/handler/condition 解析；不持有 Workflow topology 或 Stage instance。
 - `workflow/rules.py`：內部 TODO/repair subflow、conditions、result handlers、durable-state transition 與 routing。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。

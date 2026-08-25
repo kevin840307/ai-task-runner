@@ -35,6 +35,7 @@ def _task_data(task: Any | None) -> dict[str, Any] | None:
         "review_skipped": task.review_skipped,
         "review_skip_reason": task.review_skip_reason,
         "status": task.status,
+        "steps": list(task.steps),
     }
 
 

@@ -9,7 +9,7 @@ from runner.errors import RunnerError
 from runner.plugins.console import LiveUI
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
-from runner.workflow.stages.ai_stage import AIStage, AIStageSpec
+from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
 from runner.runtime import events
 from runner.runtime.run_state import RunState, Task
 
@@ -73,7 +73,7 @@ def test_structured_retry_stays_short_then_fresh_retry_restores_full_context(tmp
         'Original specification:\n{{ goal }}\nFULL VALIDATOR CONTRACT',
         encoding='utf-8',
     )
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator',
         prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass', structured_retries=2, structured_fresh_retries=1, retry=0,
@@ -95,7 +95,7 @@ def test_independent_ai_votes_each_start_new_session(tmp_path):
     c.scratch['validator'] = model
     prompt = tmp_path / 'validator.md'
     prompt.write_text('FULL', encoding='utf-8')
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator', runs=3,
         fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass',
@@ -112,7 +112,7 @@ def test_ai_vote_recovery_preserves_three_distinct_successful_sessions(tmp_path)
     c.scratch['validator'] = model
     prompt = tmp_path / 'validator-recovery.md'
     prompt.write_text('FULL', encoding='utf-8')
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator', runs=3,
         fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass', retry=-1,
@@ -131,7 +131,7 @@ def test_ai_vote_recovery_does_not_repeat_completed_votes(tmp_path):
     c.scratch['validator'] = model
     prompt = tmp_path / 'validator-partial-recovery.md'
     prompt.write_text('FULL', encoding='utf-8')
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator', runs=3,
         fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass', retry=-1,
@@ -160,7 +160,7 @@ def test_ai_vote_hook_violation_discards_votes_from_rejected_attempt(tmp_path):
     c.scratch['validator'] = model
     prompt = tmp_path / 'validator-rejected-attempt.md'
     prompt.write_text('FULL', encoding='utf-8')
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator', runs=3,
         fresh_session_each_run=True, prompt=str(prompt), parser=parse_ok,
         result_status=lambda data: 'pass', retry=-1,
@@ -256,7 +256,7 @@ def test_ai_vote_required_passes_uses_runtime_config(tmp_path):
     def parse_vote(text, _ctx):
         return {'passed': text == 'OK'}
 
-    stage = AIStage(AIStageSpec(
+    stage = BaseStage(BaseStageSpec(
         name='validate_ai', status='validate', client_cache_key='validator',
         runs_field='final_ai_validations', required_passes_field='final_ai_required_passes',
         fresh_session_each_run=True, prompt=str(prompt), parser=parse_vote,

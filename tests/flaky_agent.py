@@ -13,9 +13,9 @@ stage = prompt_stage(prompt)
 session = 'retry-session-001'
 
 if stage == 'plan_refine':
-    phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
+    phase, answer = 'plan_refine', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists'],'steps':['execute','review']}]}
 elif stage == 'plan_finalize':
-    phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists']}]}
+    phase, answer = 'plan', {'tasks':[{'title':'Create marker','description':'create done.txt','deliverable':'done.txt exists','acceptance_criteria':['done.txt exists'],'steps':['execute','review']}]}
 elif stage == 'plan_judge':
     phase = 'plan_judge'
     n = max(1, prompt.count('\"title\"'))

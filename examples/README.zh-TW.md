@@ -22,3 +22,5 @@ examples\run_examples.bat
 
 
 每個 YAML item 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。每個 project 會把 `prompt.md`、Python `validation.py` 與可選的 `ai_validation.md` 放在自己的 root 內，並由 `.ai-task-runner.yaml` 的 `protected_paths` 明確保護；policy 本身也會自動受保護。`examples.yaml` 使用 `goal_file` 與 `ai_validator_prompt_file` 引用這些檔案。
+
+Workflow Schema 範例：`workflow_multi_prompt.yaml` 會重複使用同一個 `BaseStage`，並在每次 invocation 覆寫不同 prompt、retry 與 skip。

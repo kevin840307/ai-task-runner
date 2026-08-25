@@ -103,4 +103,6 @@ def clear_validator_reports(work: Path) -> None:
         raise RunnerError(f"failed to clear validator reports: {error}") from error
 
 
+PythonValidatorStage.spec_class = PythonValidatorStageSpec
+
 __all__ = ["PythonValidatorStage", "PythonValidatorStageSpec", "clear_validator_reports"]

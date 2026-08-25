@@ -22,7 +22,7 @@ Template 禁止直接讀 `state`、`args`、`scratch` 等 Python internal object
 
 一般 AI 工作只需 `stage: ai` 加上相對於 Workflow 的 instruction file。
 
-Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `AIStage`；`mode: review` 選擇 readonly structured Review contract。不再有 prompt-builder registry。
+Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `BaseStage`；`mode: review` 選擇 readonly structured Review contract。不再有 prompt-builder registry。
 
 ## Session Policy
 

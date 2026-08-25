@@ -62,14 +62,14 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult`。Result 可動態帶 `next_flow`、用 `replace_remaining` 取代剩餘 flow、停止或完成；Pipeline 只消費這些資訊，不 hardcode review/repair/validation 路線。
+Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts。`recover`、`restart_at` 這類靜態 routing 屬於 `FlowNode`。`PlanStage` 是刻意保留的動態特例：它會從 YAML 自動推導出的 Stage catalog 中選擇合法 Stage，回傳 `next_steps`；Pipeline 只通用執行這些 steps，不 hardcode execute/review 名稱。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
 
 ## Stage 執行架構
 
-`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> next_flow/replace_remaining/complete -> next Stage`
+`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> next_steps/recovery -> next FlowNode`
 
 統一執行規則：
 - API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。視窗用盡後，正式 `runner.api.run()` 會從 direct/YAML durable state 自動 resume 並開啟下一個視窗，直到任務 PASS。
@@ -77,22 +77,25 @@ Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 
 - fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；Stage 也可用共用的 1-based YAML `restart_at` 改從目前或更前面的指定頂層 Stage 開始；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
-- Plan 把 TODO list 存入 durable state，並直接回傳由 `[execute, review]` 組成的 execution list。Pipeline 先完整執行這個巢狀 list，再回到外層繼續 Python/AI Validator；未來任何 Stage 都可以用相同方式回傳 Stage list。
+- Plan 會把每個 TODO 與其 ordered Stage names 一起存入 durable state。Planner 可用 Stage 由 YAML 結構自動推導：不是頂層 flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會成為可用能力。`PlanStage` 驗證名稱後回傳 `next_steps`，Pipeline 持久化並執行；若剛好在規劃完成與 queue 寫入之間 crash，Resume 可由 TODO 的 `steps` 重建。
 
 
-Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `AIStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
+Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
 
 
 ## 新增普通 AI Stage
 
-一般 AI 工作只需要 Workflow entry 與 instruction file：
+一般 AI 工作只使用 YAML 的 `stages` 與 `flow`：`stages` 定義可重用 node，`flow` 組裝流程，且每次 invocation 都能覆寫 `prompt`、`retry`、`skip` 等欄位。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常可省略；只有 `plan`、`python` 或真正的自訂 Stage 才需要明寫 `type`。
 
 ```yaml
-- stage: ai
-  prompt: prompts/security_check.md
-- stage: ai
-  mode: review
-  prompt: prompts/review_security.md
+stages:
+  security_check:
+    status: Security review
+    prompt: stages/workflow_prompt.md
+    instructions_file: prompts/security_check.md
+
+flow:
+  - security_check
 ```
 
-真正的新行為只新增 class/spec，並在 `workflow/registry.py` 做一次 `StageRegistration`；Loader、Pipeline 都不修改。YAML 未覆蓋時使用 Registry default。Planning 專用動態 context 由 `PlanStage` 負責，不再有 prompt-builder registry。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`，禁止直接讀 runtime 內部物件。
+真正的新行為只新增一個帶 `spec_class` 的 Stage class，再做一次 `register_stage("type", StageClass)`。Registry 只保留 `type -> class`；retry、prompt、recovery、validator capability 與流程組合都放 YAML。Planning 專用動態 context 仍由 `PlanStage` 負責。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`。

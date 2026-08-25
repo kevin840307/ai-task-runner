@@ -52,55 +52,90 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ```
 
 ## Workflow YAML
-未傳 `--workflow` 時，Runner 會依 validator 參數選擇內建檔：Python validator 加 AI validation instructions 使用 `mixed.yaml`，只有 Python validator 使用 `file.yaml`，`--validator ai` 使用 `ai.yaml`。YAML List 也會逐 item 獨立選擇。自訂檔案就是單一線性 YAML list，不需要 flow name 或外層 object：
+未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `mixed.yaml`、`file.yaml` 或 `ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
+
+Planning 是刻意保留的特殊動態 Stage。YAML 不需要 `expand`、`foreach` 或額外 subflow DSL；不在頂層 static flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會自動成為 Planner 可選能力。`PlanStage` 會為每個 TODO 選擇 ordered Stage sequence，並以 `next_steps` 回傳。
 
 ```yaml
-- stage: planning
-  retry: 2
-- stage: ai
-  prompt: prompts/generate.md
-  retry: -1
-- stage: ai
-  mode: review
-  prompt: prompts/review.md
-  retry: 1
-  skip: true
-- stage: validate_file
-  retry: -1
-  restart_at: 2
-- stage: validate_ai
-  retry: -1
-  runs: 3
-  required_passes: 2
+stages:
+  planning:
+    type: plan
+    status: Plan
+    result_handler: plan
+
+  execute:
+    status: Execute
+    mode: write
+    prompt: stages/execution.md
+    result_handler: task
+
+  security_review:
+    status: Security review
+    prompt: prompts/security_review.md
+
+  review_task:
+    status: Review
+    prompt: stages/review.md
+    parser: review
+    result_status: completed
+    result_handler: review
+
+  validate_file:
+    type: python
+    validator: file
+    status: Validate
+    result_handler: validation
+
+flow:
+  - planning
+  - validate_file
 ```
 
-`planning` 仍會回傳產生出的 TODO `execute -> review` groups；`Pipeline` 會先遞迴跑完這些 group，再繼續下一個頂層 YAML Stage。未來任何 Stage 都可回傳相同的 `StageResult.next_flow` contract，Pipeline 沒有 Planning 專用分支。
+在這份 YAML 中，Planner 可以選 `execute`、`security_review`、`review_task`，但不能選 `planning` 或 `validate_file`。某個 TODO 因此可以產生 `steps: [execute, security_review, review_task]`。Stage 名稱會在執行前完成驗證，並和 TODO 一起寫入 durable state，再轉成 `StageResult.next_steps` 交給 Pipeline 執行。若存在 review-capable Stage，每個 TODO 的最後一步必須是 review Stage。Planning 完成後即使在 queue 寫入前 crash，Resume 也能從已保存的 TODO steps 重建，不需要重新問模型規劃。
 
-頂層 Stage 全部由單一 Stage Registry 註冊；內建公開名稱是 `planning`、`ai`、`validate_file`、`validate_ai`。`stage: ai` 預設為 write；`mode: review` 會啟用 readonly safety、structured Review parsing 與 Review failure routing。`prompt` 是必填 UTF-8 instruction file，路徑以 Workflow YAML 所在目錄為基準。Stage type 可直接重複，沒有 `id` 欄位。`retry: -1` 表示持續恢復直到取得有效 Stage result，`0` 表示不做 Same Session retry，非負正數則是有限次數。Review mode 的 `skip: true` 只允許在技術性 recovery error 用盡後略過；有效邏輯 FAIL 仍會重跑／修復 Workflow。YAML 未寫 option 時使用 Registry default；明確寫入的值只覆蓋該 Stage。
-
-`restart_at` 是所有 Stage 共用的選填參數。Stage 回傳有效 `fail`，或持續技術錯誤最後成為 `replan` 時，Runner 會改跑從該 1-based 位置開始的 Workflow；目標只能是目前或更前面的 Stage。選定位置會寫入 durable state，process 中斷後 resume 仍從同一位置開始。未設定時完全保留內建規則：有 Planning 時 validator/review FAIL 走 Repair Plan，持續錯誤的 `replan` 則重跑 Workflow。Final validator 仍必須放在最後；`restart_at` 只用於向後 recovery，不是通用 graph，也不能用來略過 validation。
-
-三個內建 validation topology 是 Mixed（`planning -> validate_file -> validate_ai`）、file-only（`planning -> validate_file`）、AI-only（`planning -> validate_ai`）。自訂 Workflow 可省略 `planning`，或最多放一個；至少需要一個 final validator。兩種 validator 都存在時，`validate_file` 必須先於 `validate_ai`，且實際 final validator 必須放在 list 最後。其他 Stage 可插在 final validation 前。Validation FAIL 時，有 Planning 的流程走 Repair Plan；沒有 Planning 的流程重新執行完整 YAML。
+同一個可重用 `BaseStage` 可以在 flow 中重複使用，且每次給不同 prompt：
 
 ```yaml
-# File-only
-- planning
-- stage: validate_file
-  retry: -1
+stages:
+  run_prompt:
+    status: Run prompt
+    mode: write
+
+  review:
+    status: Review
+    mode: readonly
+    parser: review
+    result_status: completed
+
+  validate_file:
+    type: python
+    validator: file
+    status: Validate
+    result_handler: validation
+
+flow:
+  - stage: run_prompt
+    prompt: prompts/step_a.md
+
+  - stage: review
+    prompt: prompts/review_a.md
+    retry: 1
+    skip: true
+
+  - stage: run_prompt
+    prompt: prompts/step_b.md
+
+  - stage: review
+    prompt: prompts/review_b.md
+    skip: false
+
+  - stage: run_prompt
+    prompt: prompts/step_c.md
+
+  - validate_file
 ```
 
-```yaml
-# AI-only
-- planning
-- stage: validate_ai
-  retry: -1
-  runs: 3
-  required_passes: 2
-```
-
-Runtime validation 也會確認拓樸符合 `--validator`：Python validator 不可省略 file validation；`--validator ai` 或 Mixed validation 不可省略 AI validation。Resume 會保存頂層位置與 Workflow fingerprint；自訂 Workflow resume 時必須再次傳入相同 `--workflow`。若 Workflow 已變更，Runner 會拒絕 resume，避免把舊游標套到新拓樸。
-
-YAML List 遇到第一個 non-zero result 就停止後續 item；已完成 item 的 state 保留，可供 Debug/Resume 判斷。
+`skip` 是 `skip_on_error` 的精簡 alias。`type: plan` 表示 Planning、`type: python` 表示 Python Validator；`type: base` 可以明寫，但一般可省略。`validator: file|ai` 表示 validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。動態規劃只來自已驗證的 `PlanStage.next_steps`；YAML 不再有 `expand`/`foreach`。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；`retry` 可為 `-1`、`0` 或有限非負整數。Final validation 必須放最後；同時有兩種 validator 時，file validation 必須先於 AI validation。
 
 ## Validation 模式
 - Python/File Validator：`--validator path/to/validation.py`。

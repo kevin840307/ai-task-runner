@@ -75,14 +75,14 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 ## Flow engine architecture
 
-The runner uses a small stage-list pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns a `StageResult`; a result may add dynamic `next_flow`, replace the remaining outer flow, stop, or complete the run. Pipeline only consumes those facts and never hardcodes review/repair/validation routes.
+The runner uses a small YAML-driven flow pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns only `StageResult` facts. `FlowNode` owns static YAML routing such as `recover` and `restart_at`. `PlanStage` is the intentional dynamic exception: it returns validated `next_steps` chosen from the Stage catalog derived from YAML, and Pipeline executes those steps generically without hardcoding execute/review names.
 
 Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, read-only enforcement, and optional loop-context compression register as plugins. Core stages and the AI client do not import those concrete plugins.
 
 
 ## Stage execution architecture
 
-`Pipeline loop -> StageExecutor -> Stage.run() -> StageResult -> next_flow/replace_remaining/complete -> next Stage`
+`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> next_steps/recovery -> next FlowNode`
 
 Unified execution rules:
 - API/service failures use exponential backoff inside the AI client for one configured wait window (default 1 hour) and do not count as Stage failures. If a window is exhausted, canonical `runner.api.run()` resumes durable direct/YAML state and opens another window until the task passes.
@@ -90,19 +90,22 @@ Unified execution rules:
 - Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. A Stage may set the shared 1-based YAML `restart_at` option to restart from a specific current/earlier top-level Stage instead. Different failures reset the failure streak.
 - A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.
 - Review may skip after its retry budget is exhausted; the skip is recorded and Final Validator remains the completion gate.
-- Plan stores the durable TODO list and returns an execution list of `[execute, review]` groups. Pipeline runs that nested list completely, then resumes the outer Python/AI validators. Any Stage may return another Stage list the same way.
+- Plan stores each durable TODO together with its ordered Stage names. Planner-visible Stages are inferred from YAML: dynamic nodes are Stage definitions that are not top-level flow nodes, recovery-only nodes, planners, or validators. `PlanStage` validates those names, returns `next_steps`, and Pipeline persists/runs them. Resume can rebuild missing generated steps from the saved TODO `steps` if a crash occurs between planning and queue persistence.
 
 
-Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `AIStage` are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
+Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `BaseStage` instances are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
 
-Normal AI work is declarative and needs only a Workflow entry plus an instruction file:
+Normal AI work is declarative: YAML contains only `stages` and `flow`. `stages` defines reusable nodes; `flow` composes them and may override fields such as `prompt`, `retry`, or `skip` per invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted. `type` is written only for specialized behavior such as `plan`, `python`, or a custom Stage class.
 
 ```yaml
-- stage: ai
-  prompt: prompts/security_check.md
-- stage: ai
-  mode: review
-  prompt: prompts/review_security.md
+stages:
+  security_check:
+    status: Security review
+    prompt: stages/workflow_prompt.md
+    instructions_file: prompts/security_check.md
+
+flow:
+  - security_check
 ```
 
-A genuinely new behavior adds its class/spec and one `StageRegistration` in `workflow/registry.py`; Loader and Pipeline remain unchanged. Registry defaults apply unless YAML explicitly overrides an option. Planning-specific computed context is owned by `PlanStage`; there is no prompt-builder registry. Prompt variables are centralized by `runner/prompts/context.py`; templates use Jinja `StrictUndefined` and must not read runtime internals directly.
+A genuinely new behavior adds one Stage class exposing `spec_class`, then one `register_stage("type", StageClass)` entry. The registry is only `type -> class`; retry, prompt, recovery, validation capability, and composition belong to YAML. Planning-specific computed context remains owned by `PlanStage`. Prompt variables are centralized by `runner/prompts/context.py`; templates use Jinja `StrictUndefined` and must not read runtime internals directly.

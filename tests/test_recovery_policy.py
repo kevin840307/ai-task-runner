@@ -8,10 +8,10 @@ import pytest
 from runner.config import RuntimeConfig
 from runner.config.defaults import DEFAULT_API_WAIT_TIMEOUT, DEFAULT_MAX_ATTEMPTS
 from runner.errors import RunnerError
-from runner.workflow.rules import handle_plan_result, _restart_plan
+from runner.workflow.rules import handle_plan_result, prepare_replan
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
-from runner.workflow.stages.ai_stage import AIStage, AIStageSpec
+from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
 import runner.ai.client as ai_client_module
 from runner.runtime.run_state import RunState, Task
 
@@ -155,9 +155,9 @@ def test_persistent_same_failure_replans_after_fresh_session(tmp_path):
     assert result.status == 'replan'
     assert [session for session, _ in model.calls] == ['session-A', 'session-A', 'session-A', '']
 
-    replanned = _restart_plan(ctx, result)
-    assert replanned.replace_remaining is True
-    assert [item['name'] for item in replanned.next_flow] == ['planning', 'validate_file', 'validate_ai']
+    replanned = prepare_replan(ctx, result)
+    assert replanned.status == 'replan'
+    assert ctx.state.workflow_position == 0
     assert model.session_id == ctx.state.ai_session_id == ''
 
 
@@ -184,7 +184,7 @@ def test_changed_error_is_not_counted_as_failure(tmp_path):
 def test_same_session_prompt_is_short_and_fresh_wrapper_does_not_duplicate_context(tmp_path):
     model = SessionFakeAI([])
     ctx = context(tmp_path, model)
-    stage = AIStage(AIStageSpec(name='execute', status='execute'))
+    stage = BaseStage(BaseStageSpec(name='execute', status='execute'))
     ctx.execution.previous_error = 'Loop detection halted the run'
     same = stage._same_session_prompt(ctx)
     original = 'ORIGINAL SPEC\nCurrent TODO\nDo only this TODO\nSTAGE-SPEC'
@@ -199,16 +199,18 @@ def test_same_session_prompt_is_short_and_fresh_wrapper_does_not_duplicate_conte
     assert 'STAGE-SPEC' in fresh
 
 
-def test_plan_returns_execute_review_groups_for_pipeline(tmp_path):
+def test_plan_installs_tasks_without_expanding_task_flows(tmp_path):
     ctx = context(tmp_path, SessionFakeAI([]))
     tasks = [
         Task('t1', 'one', 'd1', ['a1'], 'o1'),
         Task('t2', 'two', 'd2', ['a2'], 'o2'),
     ]
     result = handle_plan_result(ctx, StageResult('planning', 'pass', data=tasks))
-    assert [[item['name'] for item in group] for group in result.next_flow] == [
-        ['execute', 'review'], ['execute', 'review']
-    ]
+    assert result.status == 'pass'
+    assert ctx.state.tasks == tasks
+    assert ctx.state.current == 0
+    assert ctx.state.dynamic_steps == []
+    assert ctx.state.dynamic_index == 0
 
 
 def test_api_retry_window_defaults_to_one_hour_and_does_not_use_task_failures(monkeypatch):

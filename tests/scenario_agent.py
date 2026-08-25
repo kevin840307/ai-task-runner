@@ -27,11 +27,11 @@ def count(name):
 if stage in {"plan_finalize", "plan_refine"}:
     if scenario == "multi_task_plan":
         answer = {"tasks": [
-            {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"]},
-            {"title": "Create second marker", "description": "Create second.txt after first.txt", "deliverable": "second.txt exists", "acceptance_criteria": ["second.txt exists"]},
+            {"title": "Create first marker", "description": "Create first.txt", "deliverable": "first.txt exists", "acceptance_criteria": ["first.txt exists"], "steps": ["execute", "review"]},
+            {"title": "Create second marker", "description": "Create second.txt after first.txt", "deliverable": "second.txt exists", "acceptance_criteria": ["second.txt exists"], "steps": ["execute", "review"]},
         ]}
     else:
-        answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "deliverable": "done.txt exists", "acceptance_criteria": ["done.txt exists"]}]}
+        answer = {"tasks": [{"title": "Create marker", "description": "Create done.txt", "deliverable": "done.txt exists", "acceptance_criteria": ["done.txt exists"], "steps": ["execute", "review"]}]}
 elif stage == "plan_judge":
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}

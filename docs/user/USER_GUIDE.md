@@ -46,53 +46,90 @@ Protected paths are project-relative and may name files or directories. The poli
 ```
 
 ## Workflow YAML
-Without `--workflow`, Runner selects one bundled file from the validator options: `mixed.yaml` for a Python validator plus AI validation instructions, `file.yaml` for a Python validator alone, or `ai.yaml` for `--validator ai`. YAML List items make the same selection independently. A custom file is one linear YAML list; it has no flow names or wrapper object:
+Without `--workflow`, Runner selects `mixed.yaml`, `file.yaml`, or `ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
+
+Planning is the one intentional dynamic Stage. YAML does not declare `expand`, `foreach`, or another subflow DSL. Instead, Stage definitions outside the static top-level flow become Planner candidates automatically unless they are recovery-only, planners, or validators. `PlanStage` chooses an ordered Stage sequence for every TODO and returns it as `next_steps`.
 
 ```yaml
-- stage: planning
-  retry: 2
-- stage: ai
-  prompt: prompts/generate.md
-  retry: -1
-- stage: ai
-  mode: review
-  prompt: prompts/review.md
-  retry: 1
-  skip: true
-- stage: validate_file
-  retry: -1
-  restart_at: 2
-- stage: validate_ai
-  retry: -1
-  runs: 3
-  required_passes: 2
+stages:
+  planning:
+    type: plan
+    status: Plan
+    result_handler: plan
+
+  execute:
+    status: Execute
+    mode: write
+    prompt: stages/execution.md
+    result_handler: task
+
+  security_review:
+    status: Security review
+    prompt: prompts/security_review.md
+
+  review_task:
+    status: Review
+    prompt: stages/review.md
+    parser: review
+    result_status: completed
+    result_handler: review
+
+  validate_file:
+    type: python
+    validator: file
+    status: Validate
+    result_handler: validation
+
+flow:
+  - planning
+  - validate_file
 ```
 
-`planning` still returns the generated TODO `execute -> review` groups. `Pipeline` runs those groups recursively before continuing with the next top-level YAML Stage. Any future Stage can return the same `StageResult.next_flow` contract; Pipeline does not contain a Planning-only branch.
+For this YAML, Planner can choose `execute`, `security_review`, and `review_task`; it cannot choose `planning` or `validate_file`. A TODO may therefore produce `steps: [execute, security_review, review_task]`. The selected Stage names are validated before execution, stored with the durable TODO, converted to `StageResult.next_steps`, and then executed by Pipeline. When a review-capable Stage exists, the plan must end each TODO with one. A crash after planning can resume from the saved TODO steps without asking the model to plan again.
 
-Supported top-level Stages are registered in the single Stage Registry. Bundled public names are `planning`, `ai`, `validate_file`, and `validate_ai`. `stage: ai` defaults to write behavior; `mode: review` selects readonly safety, structured Review parsing, and Review failure routing. `prompt` is a required UTF-8 instruction file resolved relative to the Workflow YAML. Stage types may repeat directly; there is no `id` field. `retry` accepts `-1` for recovery until a valid Stage result, `0` for no same-session retry, or a finite non-negative count. For review mode, `skip: true` permits skipping only after technical recovery errors are exhausted; a valid logical FAIL still restarts/repairs the Workflow. Registry defaults apply when YAML omits an option; explicit YAML values override only that Stage.
-
-`restart_at` is a shared optional Stage parameter. On a logical `fail` or a persistent technical failure that becomes `replan`, it replaces the remaining flow with the Workflow slice starting at that 1-based position. The target must be the current or an earlier Stage. The selected position is durable across process resume. Omitting it preserves the built-in behavior: validator/review failure uses Repair Plan when Planning exists, while persistent `replan` restarts the Workflow. Keep the final validator last; `restart_at` is a backward recovery jump, not a general graph or a way to bypass validation.
-
-The three bundled validation topologies are Mixed (`planning -> validate_file -> validate_ai`), file-only (`planning -> validate_file`), and AI-only (`planning -> validate_ai`). A custom Workflow may omit `planning` or include it once. At least one final validator is required. With both validators, `validate_file` must precede `validate_ai`; the configured final validator must end the list. Other Stages may be inserted before final validation. On validation failure, a Workflow with Planning uses Repair Plan; one without Planning restarts its complete YAML flow.
+The same reusable BaseStage can be invoked many times with different prompts:
 
 ```yaml
-# File-only
-- planning
-- stage: validate_file
-  retry: -1
+stages:
+  run_prompt:
+    status: Run prompt
+    mode: write
+
+  review:
+    status: Review
+    mode: readonly
+    parser: review
+    result_status: completed
+
+  validate_file:
+    type: python
+    validator: file
+    status: Validate
+    result_handler: validation
+
+flow:
+  - stage: run_prompt
+    prompt: prompts/step_a.md
+
+  - stage: review
+    prompt: prompts/review_a.md
+    retry: 1
+    skip: true
+
+  - stage: run_prompt
+    prompt: prompts/step_b.md
+
+  - stage: review
+    prompt: prompts/review_b.md
+    skip: false
+
+  - stage: run_prompt
+    prompt: prompts/step_c.md
+
+  - validate_file
 ```
 
-```yaml
-# AI-only
-- planning
-- stage: validate_ai
-  retry: -1
-  runs: 3
-  required_passes: 2
-```
-
-Runtime validation also checks that the topology matches `--validator`: file validation cannot be omitted for a Python validator, and AI validation cannot be omitted for `--validator ai` or Mixed validation. Resume persists both the top-level position and a Workflow fingerprint: pass the same `--workflow` again when resuming a custom Workflow. A changed Workflow is rejected instead of applying an old cursor to new topology.
+`skip` is a compact alias for `skip_on_error`. `type: plan` identifies planning behavior; `type: python` identifies the Python validator; `type: base` may be written explicitly but is optional. `validator: file|ai` marks validation capability. `recover` contains static recovery Stage sequences, while `restart_at` remains FlowNode routing metadata. Dynamic planned work comes only from validated `PlanStage` `next_steps`; there is no `expand`/`foreach` YAML setting. `instructions_file` loads UTF-8 instructions relative to the Workflow YAML. `retry` accepts `-1`, `0`, or a finite non-negative count. Final validation must remain last; when both validators exist, file validation must precede AI validation.
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.

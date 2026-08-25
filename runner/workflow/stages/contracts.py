@@ -17,7 +17,7 @@ StageStatus = Literal["pass", "fail", "error", "replan"]
 
 @dataclass(frozen=True)
 class StageResult:
-    """Facts from one Stage plus optional follow-up flow."""
+    """Facts returned by one Stage execution."""
 
     stage: str
     status: StageStatus
@@ -26,10 +26,7 @@ class StageResult:
     changed_files: list[str] = field(default_factory=list)
     skipped: bool = False
     data: object | None = None
-    next_flow: tuple[object, ...] = ()
-    replace_remaining: bool = False
-    complete: bool = False
-    restart_at: int | None = None
+    next_steps: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
     def error_result(cls, stage: str, error: BaseException) -> StageResult:
@@ -100,7 +97,6 @@ class Stage(Protocol):
     status: str
     detail: str
     retry: int | None
-    restart_at: int | None
 
     def run(
         self, ctx: StageContext, previous: StageResult | None = None

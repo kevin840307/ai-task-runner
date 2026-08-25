@@ -148,10 +148,6 @@ class StageExecutor:
             result = replace(result, status="replan")
             break
 
-        restart_at = getattr(stage, "restart_at", None)
-        if restart_at is not None and result.status in {"fail", "replan"}:
-            result = replace(result, restart_at=restart_at)
-
         try:
             result = stage.finish(ctx, result)
         except ConfigurationError:
