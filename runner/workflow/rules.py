@@ -14,7 +14,7 @@ from ..runtime import progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
 from .definitions import FLOWS, STAGES
-from .loader import workflow_validators
+from .loader import workflow_has_planning, workflow_validators
 from .stages.contracts import StageContext, StageResult
 
 
@@ -39,14 +39,21 @@ def workflow_definition(ctx: StageContext) -> list[dict[str, Any]]:
 def _planning_tail(ctx: StageContext) -> list[dict[str, Any]]:
     workflow = workflow_definition(ctx)
     planning = next(
-        index
-        for index, definition in enumerate(workflow)
-        if definition.get("stage") == "plan"
+        (
+            index
+            for index, definition in enumerate(workflow)
+            if definition.get("stage") == "plan"
+        ),
+        None,
     )
+    if planning is None:
+        return workflow
     return workflow[planning + 1 :]
 
 
 def _validator_repair_flow(ctx: StageContext) -> list[dict[str, Any]]:
+    if not workflow_has_planning(ctx.config.workflow):
+        return workflow_definition(ctx)
     return [stage_definition("repair_plan"), *_planning_tail(ctx)]
 
 
@@ -63,7 +70,7 @@ def initial_flow(ctx: StageContext) -> list[object]:
         return _validator_repair_flow(ctx)
     workflow = workflow_definition(ctx)
     position = min(ctx.state.workflow_position, len(workflow))
-    if ctx.state.tasks and position == 0:
+    if workflow_has_planning(workflow) and ctx.state.tasks and position == 0:
         position = len(workflow) - len(_planning_tail(ctx))
     remaining = workflow[position:]
     if ctx.state.tasks and ctx.state.current < len(ctx.state.tasks):

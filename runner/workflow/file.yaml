@@ -1,4 +1,4 @@
 - stage: planning
-  # Optional: id, retry
+  # Optional: retry
 - stage: validate_file
-  # Optional: id, retry
+  # Optional: retry

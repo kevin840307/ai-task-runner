@@ -1,6 +1,6 @@
 - stage: planning
-  # Optional: id, retry
+  # Optional: retry
 - stage: validate_file
-  # Optional: id, retry
+  # Optional: retry
 - stage: validate_ai
-  # Optional: id, prompt, retry, runs, required_passes
+  # Optional: prompt, retry, runs, required_passes

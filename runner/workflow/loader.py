@@ -24,11 +24,11 @@ WORKFLOW_STAGES = {
     "validate_ai": "validate_ai",
 }
 STAGE_OPTIONS = {
-    "planning": frozenset({"id", "retry"}),
-    "run_prompt": frozenset({"id", "prompt", "retry"}),
-    "review": frozenset({"id", "prompt", "retry", "skip"}),
-    "validate_file": frozenset({"id", "retry"}),
-    "validate_ai": frozenset({"id", "prompt", "retry", "runs", "required_passes"}),
+    "planning": frozenset({"retry"}),
+    "run_prompt": frozenset({"prompt", "retry"}),
+    "review": frozenset({"prompt", "retry", "skip"}),
+    "validate_file": frozenset({"retry"}),
+    "validate_ai": frozenset({"prompt", "retry", "runs", "required_passes"}),
 }
 
 
@@ -63,19 +63,10 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         raise RunnerError("workflow must be a non-empty YAML array")
 
     result: list[dict[str, Any]] = []
-    identifiers: set[str] = set()
     for index, item in enumerate(data, 1):
         stage_name, options = _stage_item(item, index)
-        identifier = options.pop("id", stage_name)
-        if not isinstance(identifier, str) or not identifier.strip():
-            raise RunnerError(f"workflow stage {index} id must be a non-empty string")
-        identifier = identifier.strip()
-        if identifier in identifiers:
-            raise RunnerError(f"duplicate workflow stage id: {identifier}")
-        identifiers.add(identifier)
-
         definition = deepcopy(STAGES[WORKFLOW_STAGES[stage_name]])
-        definition["name"] = identifier
+        definition["name"] = stage_name
         definition["_workflow_index"] = index - 1
         _apply_options(definition, stage_name, options, source, index)
         result.append(definition)
@@ -101,6 +92,13 @@ def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
         for definition in workflow
     )
     return has_file, has_ai
+
+
+def workflow_has_planning(workflow: list[dict[str, Any]]) -> bool:
+    return any(
+        isinstance(definition, dict) and definition.get("stage") == "plan"
+        for definition in workflow
+    )
 
 
 def _stage_item(item: Any, index: int) -> tuple[str, dict[str, Any]]:
@@ -193,8 +191,8 @@ def _validate_topology(workflow: list[dict[str, Any]]) -> None:
         for index, definition in enumerate(workflow)
         if definition.get("result_handler") == "handle_final_validation_result"
     ]
-    if len(plans) != 1:
-        raise RunnerError("workflow requires exactly one planning stage")
+    if len(plans) > 1:
+        raise RunnerError("workflow allows at most one planning stage")
     if len(files) > 1 or len(finals) > 1 or not (files or finals):
         raise RunnerError(
             "workflow requires one validate_file, one validate_ai, or both"
@@ -213,5 +211,6 @@ __all__ = [
     "load_workflow",
     "normalize_workflow",
     "workflow_fingerprint",
+    "workflow_has_planning",
     "workflow_validators",
 ]

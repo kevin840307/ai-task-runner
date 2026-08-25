@@ -89,7 +89,6 @@ def test_custom_workflow_loads_relative_prompts_and_stage_options(tmp_path):
         """
 - planning
 - stage: run_prompt
-  id: implement_report
   prompt: implement.md
   retry: -1
 - stage: review
@@ -108,7 +107,7 @@ def test_custom_workflow_loads_relative_prompts_and_stage_options(tmp_path):
 
     assert [item["name"] for item in workflow] == [
         "planning",
-        "implement_report",
+        "run_prompt",
         "review",
         "validate_file",
         "validate_ai",
@@ -146,10 +145,10 @@ def test_validate_file_accepts_explicit_retry(tmp_path):
         ),
         (
             (
-                "- planning\n- stage: run_prompt\n  prompt: task.md\n"
-                "- stage: run_prompt\n  prompt: task.md\n- validate_file\n- validate_ai\n"
+                "- stage: run_prompt\n  id: unsupported\n  prompt: task.md\n"
+                "- validate_file\n"
             ),
-            "duplicate workflow stage id",
+            "unknown options: id",
         ),
         (
             (
@@ -214,6 +213,8 @@ def test_resume_runs_pending_planning_children_before_workflow_tail(tmp_path):
         "- planning\n- validate_file\n- validate_ai\n",
         "- planning\n- validate_file\n",
         "- planning\n- validate_ai\n",
+        "- validate_file\n",
+        "- validate_ai\n",
     ],
 )
 def test_supported_validation_topologies(tmp_path, body):
@@ -221,6 +222,39 @@ def test_supported_validation_topologies(tmp_path, body):
     workflow_file.write_text(body, encoding="utf-8")
 
     assert load_workflow(workflow_file)
+
+
+def test_repeated_generic_stages_need_only_prompts(tmp_path):
+    for name in ("a.md", "b.md", "c.md", "d.md"):
+        (tmp_path / name).write_text(name, encoding="utf-8")
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+- stage: run_prompt
+  prompt: a.md
+- stage: review
+  prompt: b.md
+  retry: 1
+  skip: true
+- stage: run_prompt
+  prompt: c.md
+- stage: review
+  prompt: d.md
+  skip: false
+- validate_file
+""",
+        encoding="utf-8",
+    )
+
+    workflow = load_workflow(workflow_file)
+
+    assert [stage["name"] for stage in workflow] == [
+        "run_prompt",
+        "review",
+        "run_prompt",
+        "review",
+        "validate_file",
+    ]
 
 
 def test_file_only_validation_pass_completes_the_run(tmp_path):
@@ -236,6 +270,28 @@ def test_file_only_validation_pass_completes_the_run(tmp_path):
 
     assert result.complete
     assert context.state.completed
+
+
+def test_validation_failure_restarts_workflow_without_planning(tmp_path):
+    (tmp_path / "prompt.md").write_text("Fix the result.", encoding="utf-8")
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        "- stage: run_prompt\n  prompt: prompt.md\n- validate_file\n",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    context = _context(tmp_path, workflow)
+
+    result = handle_validation_result(
+        context,
+        StageResult("validate_file", "fail", output="still broken"),
+    )
+
+    assert result.replace_remaining
+    assert [stage["name"] for stage in result.next_flow] == [
+        "run_prompt",
+        "validate_file",
+    ]
 
 
 @pytest.mark.parametrize(

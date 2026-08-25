@@ -58,7 +58,6 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 - stage: planning
   retry: 2
 - stage: run_prompt
-  id: generate_report
   prompt: prompts/generate.md
   retry: -1
 - stage: review
@@ -75,9 +74,9 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 
 `planning` 仍會回傳產生出的 TODO `execute -> review` groups；`Pipeline` 會先遞迴跑完這些 group，再繼續下一個頂層 YAML Stage。未來任何 Stage 都可回傳相同的 `StageResult.next_flow` contract，Pipeline 沒有 Planning 專用分支。
 
-目前頂層支援 `planning`、`run_prompt`、`review`、`validate_file`、`validate_ai`。`prompt` 是 UTF-8 instruction file，路徑以 Workflow YAML 所在目錄為基準；`run_prompt` 與頂層 `review` 必填，`validate_ai` 可用它追加驗證指示。同一 Stage type 出現多次時，請用唯一 `id` 區分。`retry: -1` 表示持續恢復直到取得有效 Stage result，`0` 表示不做 Same Session retry，非負正數則是有限次數。`review` 的 `skip: true` 只允許在技術性 recovery error 用盡後略過；有效的邏輯 FAIL 仍會進入 repair。`runs` 與 `required_passes` 可覆寫該 Final AI Stage 的 voting 設定。所有參數都可省略，未指定時沿用現有 Runner config；上方展開值是為了說明每個 override 應放的位置。
+目前頂層支援 `planning`、`run_prompt`、`review`、`validate_file`、`validate_ai`。`prompt` 是 UTF-8 instruction file，路徑以 Workflow YAML 所在目錄為基準；`run_prompt` 與頂層 `review` 必填，`validate_ai` 可用它追加驗證指示。Stage type 可直接重複，沒有 `id` 欄位。`retry: -1` 表示持續恢復直到取得有效 Stage result，`0` 表示不做 Same Session retry，非負正數則是有限次數。`review` 的 `skip: true` 只允許在技術性 recovery error 用盡後略過；有效的邏輯 FAIL 仍會進入 repair。`runs` 與 `required_passes` 可覆寫該 Final AI Stage 的 voting 設定。所有參數都可省略，未指定時沿用現有 Runner config；上方展開值是為了說明每個 override 應放的位置。
 
-支援三種 validation topology：Mixed（`planning -> validate_file -> validate_ai`）、file-only（`planning -> validate_file`）、AI-only（`planning -> validate_ai`）。必須有唯一 `planning` 與至少一個 final validator；兩種 validator 都存在時，`validate_file` 必須先於 `validate_ai`，且實際 final validator 必須放在 list 最後。其他 Stage 可插在 final validation 前。
+三個內建 validation topology 是 Mixed（`planning -> validate_file -> validate_ai`）、file-only（`planning -> validate_file`）、AI-only（`planning -> validate_ai`）。自訂 Workflow 可省略 `planning`，或最多放一個；至少需要一個 final validator。兩種 validator 都存在時，`validate_file` 必須先於 `validate_ai`，且實際 final validator 必須放在 list 最後。其他 Stage 可插在 final validation 前。Validation FAIL 時，有 Planning 的流程走 Repair Plan；沒有 Planning 的流程重新執行完整 YAML。
 
 ```yaml
 # File-only
