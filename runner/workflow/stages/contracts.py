@@ -1,4 +1,5 @@
 """Small Stage contract shared by every pipeline item."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -28,11 +29,16 @@ class StageResult:
     next_flow: tuple[object, ...] = ()
     replace_remaining: bool = False
     complete: bool = False
+    restart_at: int | None = None
 
     @classmethod
-    def error_result(cls, stage: str, error: BaseException) -> "StageResult":
-        runner_error = error if isinstance(error, RunnerError) else RunnerError(str(error))
-        return cls(stage=stage, status="error", output=str(runner_error), error=runner_error)
+    def error_result(cls, stage: str, error: BaseException) -> StageResult:
+        runner_error = (
+            error if isinstance(error, RunnerError) else RunnerError(str(error))
+        )
+        return cls(
+            stage=stage, status="error", output=str(runner_error), error=runner_error
+        )
 
 
 @dataclass
@@ -62,7 +68,11 @@ class StageContext:
 
     @property
     def task(self) -> Task | None:
-        return self.state.tasks[self.state.current] if self.state.current < len(self.state.tasks) else None
+        return (
+            self.state.tasks[self.state.current]
+            if self.state.current < len(self.state.tasks)
+            else None
+        )
 
     def require_task(self, stage: str) -> Task:
         task = self.task
@@ -90,8 +100,11 @@ class Stage(Protocol):
     status: str
     detail: str
     retry: int | None
+    restart_at: int | None
 
-    def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult: ...
+    def run(
+        self, ctx: StageContext, previous: StageResult | None = None
+    ) -> StageResult: ...
     def finish(self, ctx: StageContext, result: StageResult) -> StageResult: ...
 
 

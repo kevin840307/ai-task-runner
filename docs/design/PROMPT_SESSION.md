@@ -20,9 +20,9 @@ All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or mi
 
 ## Stage prompt ownership
 
-Ordinary AI Stage: `workflow/definitions.py` + `prompts/stages/<name>.md`.
+Ordinary AI work: `stage: ai` plus a Workflow-relative instruction file.
 
-Planning-specific computed context is handled inside `PlanStage`. Ordinary AI stages use only `workflow/definitions.py` plus `prompts/stages/<name>.md`; there is no prompt-builder registry.
+Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `AIStage`; `mode: review` selects the readonly structured Review contract. There is no prompt-builder registry.
 
 ## Session policy
 

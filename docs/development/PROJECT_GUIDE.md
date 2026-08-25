@@ -67,14 +67,14 @@ Three validation modes are supported: AI-only, Python-only, and Mixed. Mixed val
 
 YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
 
-Top-level Workflow topology is a linear list loaded by `workflow/loader.py`; bundled Mixed, File-only, and AI-only lists live in `workflow/mixed.yaml`, `file.yaml`, and `ai.yaml`. Keep internal generated TODO/repair groups in `workflow/definitions.py`. Any Stage may return `StageResult.next_flow`; do not add a Stage-specific recursion branch to Pipeline.
+Top-level Workflow topology is a linear list loaded by `workflow/loader.py`; bundled Mixed, File-only, and AI-only lists live in `workflow/mixed.yaml`, `file.yaml`, and `ai.yaml`. Every Stage class/spec/default/public option is registered once in `workflow/registry.py`. Keep internal generated TODO/repair groups in `workflow/rules.py`. Any Stage may return `StageResult.next_flow`; do not add a Stage-specific recursion branch to Pipeline.
+
+Use the shared 1-based `restart_at` YAML option when a top-level Stage must route logical FAIL or exhausted recovery to a current/earlier Workflow position. Keep session recovery, generated Planning children, and completion rules in their existing semantic owners; they are not arbitrary YAML topology.
 
 ## Prompt contract
 All bundled Stage prompts use Jinja + `StrictUndefined`. Top-level template variables come only from `runner/prompts/context.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly.
 
-An ordinary AI Stage should require only:
-1. a Stage preset in `workflow/definitions.py` and, when user-configurable, a declarative Workflow loader registration;
-2. `runner/prompts/stages/<name>.md`.
+Ordinary AI work uses `stage: ai` plus an instruction file; `mode: review` enables Review behavior. A genuinely new Stage requires its class/spec, one `StageRegistration`, and a Workflow entry. Loader and Pipeline must not gain Stage-specific branches.
 
 If the requirement is only conditional text/formatting, use Jinja. Only genuinely computed planning-specific context belongs in `PlanStage`.
 

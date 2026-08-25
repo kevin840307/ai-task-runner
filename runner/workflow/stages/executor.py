@@ -1,4 +1,5 @@
 """Shared execution boundary for every Stage."""
+
 from __future__ import annotations
 
 import hashlib
@@ -50,8 +51,12 @@ class StageExecutor:
     def __init__(self, hooks=None) -> None:
         self.hooks = hooks or current_runtime().hooks
 
-    def run(self, stage: Stage, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
-        if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(ctx):
+    def run(
+        self, stage: Stage, ctx: StageContext, previous: StageResult | None = None
+    ) -> StageResult:
+        if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(
+            ctx
+        ):
             self._fresh_session(ctx)
         configured_retry = getattr(stage, "retry", None)
         retry_attr = str(getattr(stage, "retry_attr", "") or "")
@@ -143,6 +148,10 @@ class StageExecutor:
             result = replace(result, status="replan")
             break
 
+        restart_at = getattr(stage, "restart_at", None)
+        if restart_at is not None and result.status in {"fail", "replan"}:
+            result = replace(result, restart_at=restart_at)
+
         try:
             result = stage.finish(ctx, result)
         except ConfigurationError:
@@ -155,7 +164,9 @@ class StageExecutor:
         progress.stage_finished(StageAction(stage, ctx), result)
         return result
 
-    def _attempt(self, stage: Stage, ctx: StageContext, previous: StageResult | None) -> StageResult:
+    def _attempt(
+        self, stage: Stage, ctx: StageContext, previous: StageResult | None
+    ) -> StageResult:
         action = StageAction(stage, ctx)
         before = project_manifest(ctx.root, ctx.work) if action.track_changes else None
         tokens = []
@@ -176,7 +187,9 @@ class StageExecutor:
             if changed:
                 result = replace(
                     result,
-                    changed_files=list(dict.fromkeys([*result.changed_files, *changed])),
+                    changed_files=list(
+                        dict.fromkeys([*result.changed_files, *changed])
+                    ),
                 )
 
         hooks_failed = False
@@ -204,18 +217,26 @@ class StageExecutor:
                 result = replace(result, changed_files=[])
             else:
                 messages = [violation.message for violation in violations]
-                result = StageResult.error_result(stage.name, RunnerError("; ".join(messages)))
+                result = StageResult.error_result(
+                    stage.name, RunnerError("; ".join(messages))
+                )
         return result
 
     @staticmethod
-    def _failure_key(stage: Stage, ctx: StageContext, error: BaseException) -> tuple[str, str]:
+    def _failure_key(
+        stage: Stage, ctx: StageContext, error: BaseException
+    ) -> tuple[str, str]:
         task_id = ctx.task.id if ctx.task is not None else "-"
         scope = f"{stage.name}:{task_id}"
-        text = "\n".join(line.strip() for line in str(error).splitlines() if line.strip())
+        text = "\n".join(
+            line.strip() for line in str(error).splitlines() if line.strip()
+        )
         normalized = text[-2000:] or type(error).__name__
         return scope, hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-    def _record_failure(self, stage: Stage, ctx: StageContext, error: BaseException) -> tuple[int, int]:
+    def _record_failure(
+        self, stage: Stage, ctx: StageContext, error: BaseException
+    ) -> tuple[int, int]:
         scope, key = self._failure_key(stage, ctx, error)
         state = ctx.state
         if state.failure_scope != scope or state.failure_key != key:

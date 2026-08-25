@@ -27,14 +27,15 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI 
 - Review is a local semantic gate. With configured review retries it may fail-soft/skip; final validation remains authoritative.
 - Python validation is deterministic and runs before AI validation when both are enabled.
 - Validator FAIL returns `validator_repair`: Repair Plan -> TODO execution -> validators again.
+- A Stage may override FAIL/replan recovery with the shared 1-based `restart_at` YAML option; omitted values preserve the routes above.
 - Completion is recorded only after the configured final validation path passes.
 - A custom top-level Workflow remains one linear YAML list. Planning's generated TODO groups are recursive `next_flow` data and finish before the next top-level Stage.
 
 ## Ownership
 
 - `workflow/mixed.yaml`, `file.yaml`, `ai.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
-- `workflow/definitions.py`: reusable Stage presets plus internal TODO/repair subflows.
-- `workflow/rules.py`: conditions, result handlers, durable-state transitions, and routing.
+- `workflow/registry.py`: the only Stage class/spec/default/YAML-option registration source.
+- `workflow/rules.py`: internal TODO/repair subflows, conditions, result handlers, durable-state transitions, and routing.
 - `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.
 - `ai/`: AI interaction/session/structured output only.

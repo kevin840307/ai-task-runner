@@ -40,7 +40,7 @@ Loop-context inspection and compression is a model-error plugin. The AI client r
 
 A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `Pipeline` only consumes declarative Stage data and returned `StageResult.next_flow/replace_remaining/complete` facts.
 
-`workflow/mixed.yaml`, `file.yaml`, and `ai.yaml` are the bundled top-level topologies. `workflow/loader.py` owns both validator-based default selection and normalization of custom linear YAML into the same Stage definitions. `workflow/definitions.py` owns reusable Stage presets and internal TODO/repair subflows; routing and durable transitions live in `workflow/rules.py`. Pipeline treats `StageResult.next_flow` generically, so Planning can recursively insert generated execute/review groups without a Planning branch in Pipeline.
+`workflow/mixed.yaml`, `file.yaml`, and `ai.yaml` are the bundled top-level topologies. `workflow/registry.py` is the single source for Stage class/spec, defaults, public YAML options, and construction. `workflow/loader.py` only selects/reads topology and delegates normalization to the Registry. Internal TODO/repair subflows and durable transitions live in `workflow/rules.py`. Pipeline treats `StageResult.next_flow` generically, so Planning can recursively insert generated execute/review groups without a Planning branch in Pipeline.
 
 The durable state stores the completed top-level Workflow position and a semantic fingerprint. Legacy state without these fields is normalized compatibly. A resumed custom Workflow must match its saved fingerprint so reordered Stages cannot be silently skipped or repeated.
 

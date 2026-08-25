@@ -87,7 +87,7 @@ Cross-cutting features stay outside the flow: status events feed UI/logging/diag
 Unified execution rules:
 - API/service failures use exponential backoff inside the AI client for one configured wait window (default 1 hour) and do not count as Stage failures. If a window is exhausted, canonical `runner.api.run()` resumes durable direct/YAML state and opens another window until the task passes.
 - Real failures retry in the same session using a short stage-aware continuation prompt containing only the stage identity, new failure evidence, and required next action; after the configured retry count (default 2), StageExecutor starts a fresh session.
-- Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. Different failures reset the failure streak.
+- Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. A Stage may set the shared 1-based YAML `restart_at` option to restart from a specific current/earlier top-level Stage instead. Different failures reset the failure streak.
 - A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.
 - Review may skip after its retry budget is exhausted; the skip is recorded and Final Validator remains the completion gate.
 - Plan stores the durable TODO list and returns an execution list of `[execute, review]` groups. Pipeline runs that nested list completely, then resumes the outer Python/AI validators. Any Stage may return another Stage list the same way.
@@ -95,15 +95,14 @@ Unified execution rules:
 
 Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `AIStage` are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
 
-A normal AI Stage is declarative. Add the Stage preset and place its prompt file; no Python prompt builder is needed:
+Normal AI work is declarative and needs only a Workflow entry plus an instruction file:
 
-```python
-"security_review": {
-    "stage": "ai",
-    "status": "AI is running security review",
-    "mode": "readonly",
-    "prompt": "stages/security_review.md",
-}
+```yaml
+- stage: ai
+  prompt: prompts/security_check.md
+- stage: ai
+  mode: review
+  prompt: prompts/review_security.md
 ```
 
-Then add `"security_review"` at the desired position in `FLOWS` and create `runner/prompts/stages/security_review.md`. The preset key becomes the Stage name automatically. Planning-specific computed context is owned by `PlanStage`; there is no separate prompt-builder registry. Prompt variables are centralized by `runner/prompts/context.py`; templates use Jinja `StrictUndefined` and must not read runtime internals directly.
+A genuinely new behavior adds its class/spec and one `StageRegistration` in `workflow/registry.py`; Loader and Pipeline remain unchanged. Registry defaults apply unless YAML explicitly overrides an option. Planning-specific computed context is owned by `PlanStage`; there is no prompt-builder registry. Prompt variables are centralized by `runner/prompts/context.py`; templates use Jinja `StrictUndefined` and must not read runtime internals directly.

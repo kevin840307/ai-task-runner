@@ -74,7 +74,7 @@ Runner 現在使用精簡的 Stage List Pipeline。`StageExecutor` 統一處理 
 統一執行規則：
 - API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。視窗用盡後，正式 `runner.api.run()` 會從 direct/YAML durable state 自動 resume 並開啟下一個視窗，直到任務 PASS。
 - 真實 failure 先使用 same-session 的短 Stage-aware 續跑 prompt，只補 Stage 身分、新 failure evidence 與下一步；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
-- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；failure 不同則重新計數。
+- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；Stage 也可用共用的 1-based YAML `restart_at` 改從目前或更前面的指定頂層 Stage 開始；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
 - Plan 把 TODO list 存入 durable state，並直接回傳由 `[execute, review]` 組成的 execution list。Pipeline 先完整執行這個巢狀 list，再回到外層繼續 Python/AI Validator；未來任何 Stage 都可以用相同方式回傳 Stage list。
@@ -85,15 +85,14 @@ Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `S
 
 ## 新增普通 AI Stage
 
-普通 AI Stage 直接資料化，不需要新增 Python prompt builder：
+一般 AI 工作只需要 Workflow entry 與 instruction file：
 
-```python
-"security_review": {
-    "stage": "ai",
-    "status": "AI 正在執行 Security Review",
-    "mode": "readonly",
-    "prompt": "stages/security_review.md",
-}
+```yaml
+- stage: ai
+  prompt: prompts/security_check.md
+- stage: ai
+  mode: review
+  prompt: prompts/review_security.md
 ```
 
-再把 `"security_review"` 插入 `FLOWS` 的目標位置，並新增 `runner/prompts/stages/security_review.md`。Stage preset 的 key 會自動成為 Stage name。Planning 專用的動態 context 由 `PlanStage` 負責，不再有獨立 prompt-builder registry。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`，禁止直接讀 runtime 內部物件。
+真正的新行為只新增 class/spec，並在 `workflow/registry.py` 做一次 `StageRegistration`；Loader、Pipeline 都不修改。YAML 未覆蓋時使用 Registry default。Planning 專用動態 context 由 `PlanStage` 負責，不再有 prompt-builder registry。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`，禁止直接讀 runtime 內部物件。

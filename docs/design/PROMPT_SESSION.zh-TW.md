@@ -20,9 +20,9 @@ Template 禁止直接讀 `state`、`args`、`scratch` 等 Python internal object
 
 ## Stage Prompt Ownership
 
-一般 AI Stage 只需：`workflow/definitions.py` + `prompts/stages/<name>.md`。
+一般 AI 工作只需 `stage: ai` 加上相對於 Workflow 的 instruction file。
 
-Planning 專用的計算 context 直接由 `PlanStage` 處理。普通 AI Stage 只需要 `workflow/definitions.py` 與 `prompts/stages/<name>.md`，不再有 prompt-builder registry。
+Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `AIStage`；`mode: review` 選擇 readonly structured Review contract。不再有 prompt-builder registry。
 
 ## Session Policy
 

@@ -1,14 +1,14 @@
 """Load one small linear workflow into validated Stage definitions."""
+
 from __future__ import annotations
 
 import hashlib
 import json
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from ..errors import RunnerError
-from .definitions import STAGES
+from .registry import STAGE_REGISTRY, stage_definition
 
 BUILTIN_WORKFLOWS = {
     "mixed": Path(__file__).with_name("mixed.yaml"),
@@ -16,20 +16,6 @@ BUILTIN_WORKFLOWS = {
     "ai": Path(__file__).with_name("ai.yaml"),
 }
 DEFAULT_WORKFLOW = BUILTIN_WORKFLOWS["mixed"]
-WORKFLOW_STAGES = {
-    "planning": "plan",
-    "run_prompt": "run_prompt",
-    "review": "review",
-    "validate_file": "validate_file",
-    "validate_ai": "validate_ai",
-}
-STAGE_OPTIONS = {
-    "planning": frozenset({"retry"}),
-    "run_prompt": frozenset({"prompt", "retry"}),
-    "review": frozenset({"prompt", "retry", "skip"}),
-    "validate_file": frozenset({"retry"}),
-    "validate_ai": frozenset({"prompt", "retry", "runs", "required_passes"}),
-}
 
 
 def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
@@ -37,7 +23,9 @@ def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
     try:
         import yaml
     except ImportError as error:
-        raise RunnerError("Workflow YAML requires PyYAML: pip install PyYAML") from error
+        raise RunnerError(
+            "Workflow YAML requires PyYAML: pip install PyYAML"
+        ) from error
     try:
         data = yaml.safe_load(source.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -65,10 +53,13 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for index, item in enumerate(data, 1):
         stage_name, options = _stage_item(item, index)
-        definition = deepcopy(STAGES[WORKFLOW_STAGES[stage_name]])
-        definition["name"] = stage_name
+        definition = stage_definition(
+            stage_name,
+            options,
+            source=source,
+            index=index,
+        )
         definition["_workflow_index"] = index - 1
-        _apply_options(definition, stage_name, options, source, index)
         result.append(definition)
 
     _validate_topology(result)
@@ -76,14 +67,15 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
 
 
 def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
-    payload = json.dumps(workflow, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        workflow, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
     has_file = any(
-        isinstance(definition, dict)
-        and definition.get("stage") == "python_validator"
+        isinstance(definition, dict) and definition.get("stage") == "validate_file"
         for definition in workflow
     )
     has_ai = any(
@@ -96,7 +88,7 @@ def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
 
 def workflow_has_planning(workflow: list[dict[str, Any]]) -> bool:
     return any(
-        isinstance(definition, dict) and definition.get("stage") == "plan"
+        isinstance(definition, dict) and definition.get("stage") == "planning"
         for definition in workflow
     )
 
@@ -109,87 +101,23 @@ def _stage_item(item: Any, index: int) -> tuple[str, dict[str, Any]]:
         options = {key: value for key, value in item.items() if key != "stage"}
     else:
         raise RunnerError(f"workflow stage {index} must be a string or object")
-    if not isinstance(name, str) or name not in WORKFLOW_STAGES:
-        raise RunnerError(f"workflow stage {index} is unknown: {name}")
-    unknown = sorted(str(key) for key in options if key not in STAGE_OPTIONS[name])
-    if unknown:
-        raise RunnerError(
-            f"workflow stage {index} unknown options: {', '.join(unknown)}"
-        )
-    return name, options
-
-
-def _apply_options(
-    definition: dict[str, Any],
-    stage_name: str,
-    options: dict[str, Any],
-    source: Path,
-    index: int,
-) -> None:
-    if "prompt" in options:
-        prompt = options["prompt"]
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise RunnerError(f"workflow stage {index} prompt must be a non-empty string")
-        path = Path(prompt).expanduser()
-        if not path.is_absolute():
-            path = source.parent / path
-        try:
-            instructions = path.read_text(encoding="utf-8-sig").strip()
-        except OSError as error:
-            raise RunnerError(f"workflow stage {index} prompt not found: {prompt}") from error
-        if not instructions:
-            raise RunnerError(f"workflow stage {index} prompt must not be empty")
-        definition["instructions"] = instructions
-    elif stage_name in {"run_prompt", "review"}:
-        raise RunnerError(f"workflow stage {index} requires prompt")
-
-    if "retry" in options:
-        definition["retry"] = _retry(options["retry"], index)
-        if definition["stage"] != "python_validator":
-            definition["retry_attr"] = ""
-    if "skip" in options:
-        if not isinstance(options["skip"], bool):
-            raise RunnerError(f"workflow stage {index} skip must be boolean")
-        definition["skip_on_error"] = options["skip"]
-    if "runs" in options:
-        definition["runs"] = _positive_integer(options["runs"], index, "runs")
-        definition["runs_field"] = ""
-    if "required_passes" in options:
-        required = options["required_passes"]
-        if not isinstance(required, int) or isinstance(required, bool) or required < 0:
-            raise RunnerError(
-                f"workflow stage {index} required_passes must be a non-negative integer"
-            )
-        definition["required_passes"] = required
-        definition["required_passes_field"] = ""
     if (
-        "runs" in options
-        and "required_passes" in options
-        and options["required_passes"] > options["runs"]
+        not isinstance(name, str)
+        or name not in STAGE_REGISTRY
+        or not STAGE_REGISTRY[name].public
     ):
-        raise RunnerError(f"workflow stage {index} required_passes cannot exceed runs")
-
-
-def _retry(value: Any, index: int) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < -1:
-        raise RunnerError(f"workflow stage {index} retry must be -1 or a non-negative integer")
-    return value
-
-
-def _positive_integer(value: Any, index: int, name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise RunnerError(f"workflow stage {index} {name} must be a positive integer")
-    return value
+        raise RunnerError(f"workflow stage {index} is unknown: {name}")
+    return name, options
 
 
 def _validate_topology(workflow: list[dict[str, Any]]) -> None:
     stage_types = [definition["stage"] for definition in workflow]
-    plans = [index for index, value in enumerate(stage_types) if value == "plan"]
-    files = [index for index, value in enumerate(stage_types) if value == "python_validator"]
+    plans = [index for index, value in enumerate(stage_types) if value == "planning"]
+    files = [
+        index for index, value in enumerate(stage_types) if value == "validate_file"
+    ]
     finals = [
-        index
-        for index, definition in enumerate(workflow)
-        if definition.get("result_handler") == "handle_final_validation_result"
+        index for index, value in enumerate(stage_types) if value == "validate_ai"
     ]
     if len(plans) > 1:
         raise RunnerError("workflow allows at most one planning stage")
@@ -202,6 +130,12 @@ def _validate_topology(workflow: list[dict[str, Any]]) -> None:
     final_index = finals[0] if finals else files[0]
     if final_index != len(workflow) - 1:
         raise RunnerError("workflow must end with its final validation stage")
+    for index, definition in enumerate(workflow, 1):
+        restart_at = definition.get("restart_at")
+        if restart_at is not None and restart_at > index:
+            raise RunnerError(
+                f"workflow stage {index} restart_at must reference stage 1..{index}"
+            )
 
 
 __all__ = [

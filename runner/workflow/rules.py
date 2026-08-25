@@ -1,4 +1,5 @@
 """Default workflow routing and durable-state reducers."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,8 +14,8 @@ from ..errors import ConfigurationError
 from ..runtime import progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
-from .definitions import FLOWS, STAGES
 from .loader import workflow_has_planning, workflow_validators
+from .registry import stage_definition
 from .stages.contracts import StageContext, StageResult
 
 
@@ -22,14 +23,14 @@ def _resolve_boolean_status(result: Any, field: str) -> str:
     return "pass" if bool(result[field]) else "fail"
 
 
-def stage_definition(name: str) -> dict[str, Any]:
-    stage = deepcopy(STAGES[name])
-    stage.setdefault("name", name)
-    return stage
+INTERNAL_FLOWS = {
+    "todo": ("execute", "task_review"),
+    "repair": ("repair", "task_review"),
+}
 
 
 def flow_definition(name: str) -> list[dict[str, Any]]:
-    return [stage_definition(stage) for stage in FLOWS[name]]
+    return [stage_definition(stage) for stage in INTERNAL_FLOWS[name]]
 
 
 def workflow_definition(ctx: StageContext) -> list[dict[str, Any]]:
@@ -42,7 +43,7 @@ def _planning_tail(ctx: StageContext) -> list[dict[str, Any]]:
         (
             index
             for index, definition in enumerate(workflow)
-            if definition.get("stage") == "plan"
+            if definition.get("stage") == "planning"
         ),
         None,
     )
@@ -66,6 +67,9 @@ def initial_flow(ctx: StageContext) -> list[object]:
     """Select resume-safe flow data without constructing Stage objects."""
     if ctx.state.completed:
         return []
+    if ctx.state.stage == "workflow_restart":
+        workflow = workflow_definition(ctx)
+        return workflow[min(ctx.state.workflow_position, len(workflow)) :]
     if ctx.state.stage == "validator_failed":
         return _validator_repair_flow(ctx)
     workflow = workflow_definition(ctx)
@@ -90,6 +94,20 @@ def _restart_plan(ctx: StageContext, result: StageResult) -> StageResult:
     )
 
 
+def apply_workflow_restart(ctx: StageContext, result: StageResult) -> StageResult:
+    """Replace the remaining flow with a configured top-level Workflow slice."""
+    if result.restart_at is None:
+        return result
+    position = result.restart_at - 1
+    ctx.state.workflow_position = position
+    ctx.set_stage("workflow_restart", result.output)
+    return replace(
+        result,
+        next_flow=tuple(workflow_definition(ctx)[position:]),
+        replace_remaining=True,
+    )
+
+
 def handle_plan_result(ctx: StageContext, result: StageResult) -> StageResult:
     if result.status == "replan":
         return _restart_plan(ctx, result)
@@ -105,7 +123,9 @@ def handle_execute_result(ctx: StageContext, result: StageResult) -> StageResult
         return _restart_plan(ctx, result)
     task = ctx.require_task(result.stage)
     task.attempts += 1
-    task.changed_files = list(dict.fromkeys([*task.changed_files, *result.changed_files]))
+    task.changed_files = list(
+        dict.fromkeys([*task.changed_files, *result.changed_files])
+    )
     if result.status == "pass":
         task.last_output = bounded_text(result.output, MAX_TASK_OUTPUT_CHARS)
     elif result.error is not None:
@@ -138,7 +158,9 @@ def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
         task.review_skip_reason = reason
         complete_task(ctx.state, task, ctx.ai_client.session_id)
         ctx.scratch.pop("review_client", None)
-        progress.set_status("Review 異常，暫時跳過", f"{task.title} · final validator will decide")
+        progress.set_status(
+            "Review 異常，暫時跳過", f"{task.title} · final validator will decide"
+        )
         return result
 
     if result.status == "pass":
@@ -191,7 +213,9 @@ def handle_validation_result(ctx: StageContext, result: StageResult) -> StageRes
     return result
 
 
-def handle_final_validation_result(ctx: StageContext, result: StageResult) -> StageResult:
+def handle_final_validation_result(
+    ctx: StageContext, result: StageResult
+) -> StageResult:
     result = handle_validation_result(ctx, result)
     if result.status == "pass":
         complete_run(ctx.state)
@@ -203,7 +227,9 @@ def handle_final_validation_result(ctx: StageContext, result: StageResult) -> St
 
 
 def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
-    normalized = "\n".join(line.strip() for line in result.output.splitlines() if line.strip())
+    normalized = "\n".join(
+        line.strip() for line in result.output.splitlines() if line.strip()
+    )
     key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     if key == ctx.state.validator_failure_key:
         ctx.state.validator_failure_count += 1
@@ -271,4 +297,10 @@ STATUS_RESOLVERS = {
 
 CONDITIONS = {"needs_ai_validation": needs_ai_validation}
 
-__all__ = ["CONDITIONS", "RESULT_HANDLERS", "STATUS_RESOLVERS", "initial_flow"]
+__all__ = [
+    "CONDITIONS",
+    "RESULT_HANDLERS",
+    "STATUS_RESOLVERS",
+    "apply_workflow_restart",
+    "initial_flow",
+]

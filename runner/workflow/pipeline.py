@@ -1,11 +1,12 @@
 """Execute plain flow definitions (dict = Stage, list = nested flow)."""
+
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Iterable
 
+from .registry import create_stage
 from .stages import StageContext, StageExecutor, StageResult
-from .stages.factory import create_stage
 
 
 class Pipeline:
@@ -35,10 +36,16 @@ class Pipeline:
                     return replacement_flow, previous_result, stop
                 continue
             if not isinstance(item, dict):
-                raise TypeError(f"flow item must be dict or list, got {type(item).__name__}")
+                raise TypeError(
+                    f"flow item must be dict or list, got {type(item).__name__}"
+                )
 
             stage = create_stage(item)
             result = executor.run(stage, self.context, previous_result)
+            if result.restart_at is not None and result.status in {"fail", "replan"}:
+                from .rules import apply_workflow_restart
+
+                result = apply_workflow_restart(self.context, result)
             if result.complete:
                 self.context.state.completed = True
             workflow_index = item.get("_workflow_index")
@@ -49,7 +56,11 @@ class Pipeline:
                 )
             self.context.save_state()
 
-            if plan_only and getattr(stage, "plan_only_stop", False) and result.status == "pass":
+            if (
+                plan_only
+                and getattr(stage, "plan_only_stop", False)
+                and result.status == "pass"
+            ):
                 return None, result, True
             if result.replace_remaining:
                 return result.next_flow, result, False
@@ -69,6 +80,7 @@ class Pipeline:
 
 def build_pipeline(context: StageContext) -> Pipeline:
     from .rules import initial_flow
+
     return Pipeline(context, initial_flow(context))
 
 

@@ -46,20 +46,22 @@ Protected paths are project-relative and may name files or directories. The poli
 ```
 
 ## Workflow YAML
-Without `--workflow`, Runner selects one bundled file from the validator options: `mixed.yaml` for a Python validator plus AI validation instructions, `file.yaml` for a Python validator alone, or `ai.yaml` for `--validator ai`. YAML List items make the same selection independently. A custom file is one linear YAML list; it has no flow names, routes, or wrapper object:
+Without `--workflow`, Runner selects one bundled file from the validator options: `mixed.yaml` for a Python validator plus AI validation instructions, `file.yaml` for a Python validator alone, or `ai.yaml` for `--validator ai`. YAML List items make the same selection independently. A custom file is one linear YAML list; it has no flow names or wrapper object:
 
 ```yaml
 - stage: planning
   retry: 2
-- stage: run_prompt
+- stage: ai
   prompt: prompts/generate.md
   retry: -1
-- stage: review
+- stage: ai
+  mode: review
   prompt: prompts/review.md
   retry: 1
   skip: true
 - stage: validate_file
   retry: -1
+  restart_at: 2
 - stage: validate_ai
   retry: -1
   runs: 3
@@ -68,7 +70,9 @@ Without `--workflow`, Runner selects one bundled file from the validator options
 
 `planning` still returns the generated TODO `execute -> review` groups. `Pipeline` runs those groups recursively before continuing with the next top-level YAML Stage. Any future Stage can return the same `StageResult.next_flow` contract; Pipeline does not contain a Planning-only branch.
 
-Supported top-level Stages are `planning`, `run_prompt`, `review`, `validate_file`, and `validate_ai`. `prompt` is a UTF-8 instruction file resolved relative to the Workflow YAML. `run_prompt` and top-level `review` require it; `validate_ai` may use it for additional validation instructions. Stage types may repeat directly; there is no `id` field. `retry` accepts `-1` for recovery until a valid Stage result, `0` for no same-session retry, or a finite non-negative count. For `review`, `skip: true` permits skipping only after technical recovery errors are exhausted; a valid logical FAIL still enters repair. `runs` and `required_passes` override Final AI voting for that Stage. Every parameter is optional; omitted values inherit the existing Runner configuration. The expanded values above demonstrate where each override belongs.
+Supported top-level Stages are registered in the single Stage Registry. Bundled public names are `planning`, `ai`, `validate_file`, and `validate_ai`. `stage: ai` defaults to write behavior; `mode: review` selects readonly safety, structured Review parsing, and Review failure routing. `prompt` is a required UTF-8 instruction file resolved relative to the Workflow YAML. Stage types may repeat directly; there is no `id` field. `retry` accepts `-1` for recovery until a valid Stage result, `0` for no same-session retry, or a finite non-negative count. For review mode, `skip: true` permits skipping only after technical recovery errors are exhausted; a valid logical FAIL still restarts/repairs the Workflow. Registry defaults apply when YAML omits an option; explicit YAML values override only that Stage.
+
+`restart_at` is a shared optional Stage parameter. On a logical `fail` or a persistent technical failure that becomes `replan`, it replaces the remaining flow with the Workflow slice starting at that 1-based position. The target must be the current or an earlier Stage. The selected position is durable across process resume. Omitting it preserves the built-in behavior: validator/review failure uses Repair Plan when Planning exists, while persistent `replan` restarts the Workflow. Keep the final validator last; `restart_at` is a backward recovery jump, not a general graph or a way to bypass validation.
 
 The three bundled validation topologies are Mixed (`planning -> validate_file -> validate_ai`), file-only (`planning -> validate_file`), and AI-only (`planning -> validate_ai`). A custom Workflow may omit `planning` or include it once. At least one final validator is required. With both validators, `validate_file` must precede `validate_ai`; the configured final validator must end the list. Other Stages may be inserted before final validation. On validation failure, a Workflow with Planning uses Repair Plan; one without Planning restarts its complete YAML flow.
 

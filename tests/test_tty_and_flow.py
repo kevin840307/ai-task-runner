@@ -4,8 +4,9 @@ import os
 import time
 
 from runner.plugins.console import LiveUI
-from runner.workflow.definitions import FLOWS, STAGES
 from runner.runtime.run_state import RunState
+from runner.workflow.loader import load_default_workflow
+from runner.workflow.registry import STAGE_REGISTRY
 
 
 class _Stdout:
@@ -45,7 +46,9 @@ def test_tty_keeps_spinner_on_single_line(monkeypatch, tmp_path):
 
     assert stdout.output.count("\r") >= 2
     assert stdout.output.count("working") >= 2
-    assert stdout.output.count("\n") == before_newlines + 2  # start closes prior line; stop closes spinner line
+    assert (
+        stdout.output.count("\n") == before_newlines + 2
+    )  # start closes prior line; stop closes spinner line
     assert ui._thread is None
 
 
@@ -64,12 +67,19 @@ def test_redirected_output_has_no_spinner_and_deduplicates(monkeypatch, tmp_path
 
 
 def test_default_and_replan_flows_do_not_force_understand_stage():
-    assert "understand" not in STAGES
-    assert FLOWS["default"] == ["plan", "validate_file", "validate_ai"]
-    assert FLOWS["replan"] == ["plan", "validate_file", "validate_ai"]
+    assert "understand" not in STAGE_REGISTRY
+    assert [
+        stage["stage"] for stage in load_default_workflow("validator.py", "ai")
+    ] == [
+        "planning",
+        "validate_file",
+        "validate_ai",
+    ]
 
 
-def test_repeated_tty_start_does_not_restart_spinner_or_add_lines(monkeypatch, tmp_path):
+def test_repeated_tty_start_does_not_restart_spinner_or_add_lines(
+    monkeypatch, tmp_path
+):
     stdout = _Stdout(True)
     monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
     monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)

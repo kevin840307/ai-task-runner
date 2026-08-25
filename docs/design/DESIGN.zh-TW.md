@@ -27,14 +27,15 @@ Version: 1.2.33
 - Review 是局部 semantic gate；有設定 retry 時可 fail-soft/skip，但不能取代 Final Validator。
 - Python Validator 是 deterministic gate；混合驗證時一定先於 AI Validator。
 - Validator FAIL 回到 `validator_repair`：Repair Plan -> TODO execution -> validators again。
+- Stage 可用共用的 1-based YAML `restart_at` 覆蓋 FAIL/replan recovery；未設定時保留上述內建路由。
 - 只有設定的 final validation path PASS 才記錄完成。
 - 自訂頂層 Workflow 維持單一線性 YAML list；Planning 產生的 TODO group 是遞迴 `next_flow` data，會在下一個頂層 Stage 前跑完。
 
 ## 責任
 
 - `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
-- `workflow/definitions.py`：可重用 Stage preset 與內部 TODO/repair subflow。
-- `workflow/rules.py`：conditions、result handlers、durable-state transition、routing。
+- `workflow/registry.py`：唯一 Stage class/spec/default/YAML-option 註冊來源。
+- `workflow/rules.py`：內部 TODO/repair subflow、conditions、result handlers、durable-state transition 與 routing。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。
 - `ai/`：AI interaction/session/structured output。

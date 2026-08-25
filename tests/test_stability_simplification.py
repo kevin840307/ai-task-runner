@@ -3,17 +3,16 @@ from pathlib import Path
 
 def test_flow_is_plain_data_and_pipeline_is_generic():
     root = Path(__file__).resolve().parents[1]
-    default = (root / "runner/workflow/definitions.py").read_text(encoding="utf-8")
+    registry = (root / "runner/workflow/registry.py").read_text(encoding="utf-8")
+    rules = (root / "runner/workflow/rules.py").read_text(encoding="utf-8")
     pipeline = (root / "runner/workflow/pipeline.py").read_text(encoding="utf-8")
-    factory = (root / "runner/workflow/stages/factory.py").read_text(encoding="utf-8")
 
-    assert "FLOWS = {" in default
-    assert '"default": [' in default
-    assert "STAGES = {" in default
-    assert "def " not in default
+    assert "INTERNAL_FLOWS = {" in rules
+    assert "class StageRegistration" in registry
+    assert "def register_stage" in registry
     assert "create_stage(item)" in pipeline
-    assert "STAGE_REGISTRY" in factory
-    assert '"defaults":' in factory
+    assert "from .registry import create_stage" in pipeline
+    assert not (root / "runner/workflow/stages/factory.py").exists()
     for business_name in ("understand", "execute", "review", "repair", "validate"):
         assert business_name not in pipeline
 

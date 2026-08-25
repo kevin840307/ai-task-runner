@@ -37,7 +37,7 @@ Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 H
 
 Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`Pipeline` 只消費 declarative Stage data 與 `StageResult.next_flow/replace_remaining/complete`。
 
-`workflow/mixed.yaml`、`file.yaml`、`ai.yaml` 是三個內建頂層拓樸；`workflow/loader.py` 同時負責依 validator 選擇預設檔，以及把自訂線性 YAML normalization 成相同 Stage definition。`workflow/definitions.py` 只管理可重用 Stage preset 與內部 TODO/repair subflow，routing 與 durable transition 放在 `workflow/rules.py`。Pipeline 一律處理通用 `StageResult.next_flow`，因此 Planning 可遞迴插入產生的 execute/review group，而 Pipeline 不需要 Planning 專用分支。
+`workflow/mixed.yaml`、`file.yaml`、`ai.yaml` 是三個內建頂層拓樸；`workflow/registry.py` 是 Stage class/spec、default、公開 YAML option 與建構方式的唯一來源。`workflow/loader.py` 只選擇／讀取 topology，再把 normalization 委派給 Registry。內部 TODO/repair subflow 與 durable transition 放在 `workflow/rules.py`。Pipeline 一律處理通用 `StageResult.next_flow`，因此 Planning 可遞迴插入產生的 execute/review group，而 Pipeline 不需要 Planning 專用分支。
 
 Durable state 會保存已完成的頂層 Workflow 位置與語意 fingerprint；缺少新欄位的舊 state 會相容 normalization。自訂 Workflow resume 時 fingerprint 必須一致，避免 Stage 調序後被靜默略過或重複。
 

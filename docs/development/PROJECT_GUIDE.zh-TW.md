@@ -67,14 +67,14 @@ Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭
 
 YAML batch mode 已支援，並支援每筆獨立 `project_root`、`goal_file`、`workflow_file`、AI validation count/required passes。每筆使用自己的 nested state；runtime scope 必須在 child item 結束後恢復 parent，禁止全域 state leakage。
 
-頂層 Workflow topology 是由 `workflow/loader.py` 載入的線性 list；內建 Mixed、File-only、AI-only 分別放在 `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`。內部產生的 TODO/repair group 則留在 `workflow/definitions.py`。任何 Stage 都可回傳 `StageResult.next_flow`，禁止在 Pipeline 增加特定 Stage 專用的 recursion branch。
+頂層 Workflow topology 是由 `workflow/loader.py` 載入的線性 list；內建 Mixed、File-only、AI-only 分別放在 `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`。每個 Stage class/spec/default/公開 option 只在 `workflow/registry.py` 註冊一次；內部 TODO/repair group 留在 `workflow/rules.py`。任何 Stage 都可回傳 `StageResult.next_flow`，禁止在 Pipeline 增加特定 Stage 專用的 recursion branch。
+
+頂層 Stage 的有效 FAIL 或 recovery 用盡後需要回到目前／更前面的 Workflow 位置時，使用共用的 1-based YAML `restart_at`。Session recovery、Planning 產生的 child group 與 completion rule 應留在既有語意 owner，不做成任意 YAML topology。
 
 ## Prompt Contract
 所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Top-level template variable 只能由 `runner/prompts/context.py` 提供，不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。
 
-普通 AI Stage 只需要：
-1. 在 `workflow/definitions.py` 加 Stage preset；若需讓使用者設定，再宣告式註冊到 Workflow loader。
-2. `runner/prompts/stages/<name>.md`。
+一般 AI 工作使用 `stage: ai` 加 instruction file；`mode: review` 啟用 Review 行為。真正的新 Stage 只需 class/spec、一次 `StageRegistration` 與 Workflow entry；Loader、Pipeline 禁止增加 Stage-specific branch。
 
 如果只是字串條件/format，優先用 Jinja；只有真正需要計算的 planning-specific context 才放在 `PlanStage`。
 
