@@ -17,6 +17,11 @@ def base(tmp_path, monkeypatch, scenario, validator='ai', **kw):
  r=run(req); return r,records(sd)
 def validator(path):
  path.write_text(textwrap.dedent('''import argparse\nfrom pathlib import Path\np=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()\nraise SystemExit(0 if (Path(a.project_root)/"done.txt").exists() else 5)\n'''))
+def mixed_project(root):
+ root.mkdir(); (root/'prompt.md').write_text('Create requested result\n',encoding='utf-8'); (root/'ai.md').write_text('Independently confirm the requested result.\n',encoding='utf-8'); validator(root/'validator.py')
+def script_stages(project,index):
+ p=project/'.ai-task-runner'/'script'/f'{index:03d}'/'log.txt'
+ return [json.loads(x)['stage'] for x in p.read_text(encoding='utf-8').splitlines() if json.loads(x).get('type')=='runner.stage' and json.loads(x).get('action')=='start']
 
 def test_ai_validation(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'happy_path'); flow=stages(tmp_path); assert r.completed; assert [x['stage'] for x in recs][-1]=='validator'; assert 'validate_ai' in flow and 'validate_file' not in flow
@@ -41,6 +46,31 @@ def test_yaml_default_unlimited_cycles_continue_past_four_failures(tmp_path,monk
  script=tmp_path/'tasks.yaml'; script.write_text('- prompt: Create requested result\n  validator: ai\n',encoding='utf-8')
  r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
  assert r.completed; assert r.states[0]['cycle']>=5
+def test_yaml_mixed_reliability_gate_survives_repeated_final_ai_replans(tmp_path,monkeypatch):
+ sd=tmp_path.parent/f'{tmp_path.name}-yaml-mixed-reliability-state'; monkeypatch.setenv('SCENARIO','ai_replan_many_per_project'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
+ for name in ('one','two'): mixed_project(tmp_path/name)
+ one_validator=str(tmp_path/'one'/'validator.py').replace("'","''"); two_validator=str(tmp_path/'two'/'validator.py').replace("'","''")
+ script=tmp_path/'tasks.yaml'; script.write_text(textwrap.dedent(f'''\
+ - goal_file: one/prompt.md
+   project_root: one
+   validator: '{one_validator}'
+   ai_validator_prompt_file: one/ai.md
+   ai_validator_count: 3
+   ai_validator_required_passes: 3
+ - goal_file: two/prompt.md
+   project_root: two
+   validator: '{two_validator}'
+   ai_validator_prompt_file: two/ai.md
+   ai_validator_count: 3
+   ai_validator_required_passes: 3
+ '''),encoding='utf-8')
+ r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
+ assert r.completed and len(r.states)==2
+ assert [state['cycle'] for state in r.states]==[3,3]
+ assert all('validate_file' in script_stages(tmp_path/name,index) and script_stages(tmp_path/name,index).count('validate_ai')==3 for index,name in enumerate(('one','two'),1))
+ recs=records(sd); votes=[x for x in recs if x['stage']=='validator']
+ assert len(votes)==18
+ assert all(not x['resumed'] for x in votes)
 def test_stagnation_repair(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'stagnation'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=4
 def test_api_503_recovers(tmp_path,monkeypatch):

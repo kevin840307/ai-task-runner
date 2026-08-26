@@ -18,6 +18,8 @@ record_prompt(state_dir, stage, prompt, args)
 
 
 def count(name):
+    if scenario == "ai_replan_many_per_project":
+        name = f"{root.name}.{name}"
     path = state_dir / f"{name}.count"
     value = int(path.read_text() or "0") if path.exists() else 0
     path.write_text(str(value + 1))
@@ -114,6 +116,7 @@ elif stage == "validator":
     passed = not (
         (scenario == "ai_replan" and n == 1)
         or (scenario == "ai_replan_many" and n <= 4)
+        or (scenario == "ai_replan_many_per_project" and n <= 6)
     )
     answer = {"passed": passed, "reason": "checked", "missing_items": [] if passed else ["retry cycle"]}
 else:

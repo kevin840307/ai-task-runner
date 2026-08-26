@@ -21,6 +21,7 @@ from urllib.parse import urlsplit, urlunsplit
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
+DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_python_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
 REPAIR_INITIAL = "INITIAL"
 REPAIR_FINAL = "RECOVERED"
@@ -178,6 +179,17 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--agent-timeout", type=float, default=600)
     parser.add_argument("--planning-timeout", type=float, default=600)
     parser.add_argument("--workspace", type=Path, default=DEFAULT_WORKSPACE)
+    parser.add_argument(
+        "--example-smoke-project",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_EXAMPLE_SMOKE_PROJECT,
+        default=None,
+        help=(
+            "copy and run this example project as the final real-agent smoke; "
+            "omit the value to use examples/01_basic_python_validator/project"
+        ),
+    )
     parser.add_argument("--command", default="qwen.cmd" if os.name == "nt" else "qwen")
     parser.add_argument("--sandbox", action="store_true")
     parser.add_argument("--api-port", type=int, default=8080)
@@ -444,12 +456,20 @@ def assert_completed(
     expected_text: str = EXPECTED,
     work_dir: str = ".ai-task-runner",
 ) -> None:
+    assert_state_completed(project, code, work_dir)
+    if (project / expected_file).read_text(encoding="utf-8") != expected_text:
+        raise RuntimeError(f"validator passed but {expected_file} is incorrect")
+
+
+def assert_state_completed(
+    project: Path,
+    code: int,
+    work_dir: str = ".ai-task-runner",
+) -> None:
     work = project / work_dir
     state = read_json(work / "state.json")
     if code != 0 or state.get("completed") is not True:
         raise RuntimeError(f"run failed: exit={code}, stage={state.get('stage')}")
-    if (project / expected_file).read_text(encoding="utf-8") != expected_text:
-        raise RuntimeError(f"validator passed but {expected_file} is incorrect")
     required = (
         work / "log.txt",
         work / "debug" / "last-prompt.txt",
@@ -458,6 +478,27 @@ def assert_completed(
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError("missing diagnostics: " + ", ".join(missing))
+
+
+def copy_example_project(source: Path, root: Path) -> Path:
+    project = root / "example-smoke-probe"
+    shutil.copytree(
+        source,
+        project,
+        ignore=shutil.ignore_patterns(".ai-task-runner", "__pycache__"),
+    )
+    return project
+
+
+def example_smoke_probe(settings: Settings, root: Path, source: Path) -> Path:
+    project = copy_example_project(source.resolve(), root)
+    code = run_command(
+        runner_command(settings, project),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_state_completed(project, code)
+    return project
 
 
 def resume_probe(settings: Settings, root: Path) -> None:
@@ -1109,6 +1150,17 @@ def main() -> int:
             "hours/pause/soak-* frequency values must be non-negative; "
             "run-timeout, agent-timeout, planning-timeout, and api-port must be valid"
         )
+    example_smoke_enabled = args.example_smoke_project is not None
+    if example_smoke_enabled:
+        source = args.example_smoke_project.resolve()
+        if (
+            not source.is_dir()
+            or not (source / "prompt.md").is_file()
+            or not (source / "validation.py").is_file()
+        ):
+            raise SystemExit(
+                "example smoke project must contain prompt.md and validation.py"
+            )
     if not shutil.which(args.command) and not Path(args.command).is_file():
         raise SystemExit(f"Qwen command not found: {args.command}")
     settings = Settings(
@@ -1149,6 +1201,13 @@ def main() -> int:
             require_dense_coverage(soak_result)
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
+        example_smoke_project = (
+            example_smoke_probe(settings, run_root, args.example_smoke_project)
+            if example_smoke_enabled
+            else None
+        )
+        if example_smoke_project is not None:
+            print("PASS copied-example real-agent smoke", flush=True)
     summary = {
         "passed": True,
         "sandbox": settings.sandbox,
@@ -1171,6 +1230,11 @@ def main() -> int:
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
         "transient_observed": transient_observed,
+        "example_smoke": example_smoke_project is not None,
+        "example_smoke_source": (
+            "" if not example_smoke_enabled else str(args.example_smoke_project.resolve())
+        ),
+        "example_smoke_project": "" if example_smoke_project is None else str(example_smoke_project),
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(

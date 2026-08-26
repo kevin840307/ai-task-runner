@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -71,6 +72,18 @@ def test_runner_timeout_arguments_must_be_whole_seconds():
         live.whole_seconds_arg(12.5)
 
 
+def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
+    assert live.arguments().example_smoke_project is None
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["qwen_live_reliability.py", "--example-smoke-project"],
+    )
+    assert live.arguments().example_smoke_project == live.DEFAULT_EXAMPLE_SMOKE_PROJECT
+
+
 def test_dense_coverage_requires_every_mixed_probe():
     complete = live.SoakResult(
         completed=1,
@@ -108,3 +121,51 @@ def test_assert_completed_supports_yaml_child_work_dir(tmp_path: Path):
     (tmp_path / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
 
     live.assert_completed(tmp_path, 0, work_dir=".ai-task-runner/script/001")
+
+
+def test_example_smoke_probe_copies_project_and_runs_regular_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "prompt.md").write_text("build\n", encoding="utf-8")
+    (source / "validation.py").write_text("validate\n", encoding="utf-8")
+    (source / ".ai-task-runner").mkdir()
+    (source / ".ai-task-runner" / "state.json").write_text("old", encoding="utf-8")
+    (source / "__pycache__").mkdir()
+    (source / "__pycache__" / "x.pyc").write_text("old", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        captured["command"] = command
+        captured["timeout"] = timeout
+        project = Path(command[command.index("--project-root") + 1])
+        assert not (project / ".ai-task-runner").exists()
+        assert not (project / "__pycache__").exists()
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            '{"completed": true, "stage": "completed"}', encoding="utf-8"
+        )
+        (work / "log.txt").write_text("{}\n", encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    project = live.example_smoke_probe(settings(tmp_path), tmp_path, source)
+
+    assert project == tmp_path / "example-smoke-probe"
+    assert (project / "prompt.md").is_file()
+    assert (project / "validation.py").is_file()
+    assert not (project / "__pycache__").exists()
+    command = captured["command"]
+    assert command[command.index("--goal-file") + 1] == str(project / "prompt.md")
+    assert command[command.index("--validator") + 1] == str(project / "validation.py")
+    assert "--script" not in command
+    assert "--workflow" not in command
+    assert "--ai-validator-prompt" not in command

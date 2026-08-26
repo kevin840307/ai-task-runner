@@ -20,9 +20,9 @@ Template 禁止直接讀 `state`、`args`、`scratch` 等 Python internal object
 
 ## Stage Prompt Ownership
 
-一般 AI 工作只需 `stage: ai` 加上相對於 Workflow 的 instruction file。
+一般 AI 工作使用 BaseStage（`type: base`），搭配 `actor: ai` 與相對於 Workflow 的 prompt 或 instruction file。
 
-Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `BaseStage`；`mode: review` 選擇 readonly structured Review contract。不再有 prompt-builder registry。
+Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `BaseStage`；Review 使用 `mode: readonly` 加上 review parser/result handler contract。不再有 prompt-builder registry。
 
 ## Session Policy
 

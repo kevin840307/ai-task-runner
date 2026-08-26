@@ -20,9 +20,9 @@ All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or mi
 
 ## Stage prompt ownership
 
-Ordinary AI work: `stage: ai` plus a Workflow-relative instruction file.
+Ordinary AI work uses a BaseStage (`type: base`) with `actor: ai` and a Workflow-relative prompt or instruction file.
 
-Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; `mode: review` selects the readonly structured Review contract. There is no prompt-builder registry.
+Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; Review uses `mode: readonly` plus the review parser/result handler contract. There is no prompt-builder registry.
 
 ## Session policy
 
