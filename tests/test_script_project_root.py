@@ -5,7 +5,7 @@ import pytest
 from runner.config import RuntimeConfig
 from runner.errors import RunnerError
 from runner.script_loader import load_yaml_script
-from runner.script_runner import build_script_item_config
+from runner.script_runner import build_script_item_config, select_script_workflow
 
 
 def base_args(tmp_path: Path) -> RuntimeConfig:
@@ -140,6 +140,41 @@ def test_yaml_item_numeric_counts_reject_booleans(tmp_path, field_name, error_na
     item = load_yaml_script(script)[0]
     with pytest.raises(RunnerError, match=error_name):
         build_script_item_config(base_args(tmp_path), item, 1)
+
+
+def test_yaml_item_workflow_takes_precedence_over_cli_workflow(tmp_path):
+    args = base_args(tmp_path)
+    args.workflow = [{"name": "cli"}]
+    args.workflow_explicit = True
+    item = {"validator": "ai", "workflow": [{"name": "item"}]}
+
+    workflow, explicit = select_script_workflow(args, item, "")
+
+    assert workflow == [{"name": "item"}]
+    assert explicit is True
+
+
+def test_yaml_item_uses_cli_workflow_before_default(tmp_path):
+    args = base_args(tmp_path)
+    args.workflow = [{"name": "cli"}]
+    args.workflow_explicit = True
+    item = {"validator": "ai"}
+
+    workflow, explicit = select_script_workflow(args, item, "")
+
+    assert workflow == [{"name": "cli"}]
+    assert explicit is True
+
+
+def test_yaml_item_uses_default_workflow_when_no_explicit_workflow(tmp_path):
+    workflow, explicit = select_script_workflow(
+        base_args(tmp_path),
+        {"validator": "validator.py"},
+        "",
+    )
+
+    assert [stage["name"] for stage in workflow] == ["planning", "validate_file"]
+    assert explicit is False
 
 
 def test_yaml_item_validator_prompt_must_be_a_string(tmp_path):

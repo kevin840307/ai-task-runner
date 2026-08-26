@@ -76,13 +76,11 @@ def build_script_item_config(
     project_root = str(item_root.resolve())
     resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
     ai_validator_prompt = item.get("ai_validator_prompt", "")
-    item_workflow = item.get("workflow")
-    if item_workflow is not None:
-        workflow = item_workflow
-    elif args.workflow_explicit:
-        workflow = args.workflow
-    else:
-        workflow = load_default_workflow(item["validator"], ai_validator_prompt)
+    workflow, workflow_explicit = select_script_workflow(
+        args,
+        item,
+        ai_validator_prompt,
+    )
     child = replace(
         args,
         script=None,
@@ -99,7 +97,7 @@ def build_script_item_config(
             "final_ai_required_passes", args.final_ai_required_passes
         ),
         workflow=workflow,
-        workflow_explicit=item_workflow is not None or args.workflow_explicit,
+        workflow_explicit=workflow_explicit,
         plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),
         work_dir=work_dir,
         resume=resume,
@@ -110,3 +108,16 @@ def build_script_item_config(
     except ValueError as error:
         raise RunnerError(f"script item {index} {error}") from error
     return child
+
+
+def select_script_workflow(
+    args: RuntimeConfig,
+    item: dict[str, Any],
+    ai_validator_prompt: str,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Apply workflow precedence for one YAML List item."""
+    if item.get("workflow") is not None:
+        return item["workflow"], True
+    if args.workflow_explicit:
+        return args.workflow, True
+    return load_default_workflow(item["validator"], ai_validator_prompt), False

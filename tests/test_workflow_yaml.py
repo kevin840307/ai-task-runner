@@ -13,6 +13,7 @@ from runner.runtime.run_state import RunState, Task
 from runner.workflow.loader import (
     BUILTIN_WORKFLOW_DIR,
     BUILTIN_WORKFLOWS,
+    default_workflow_name,
     load_workflow,
     workflow_fingerprint,
     workflow_has_planning,
@@ -310,6 +311,19 @@ def test_validation_options_select_builtin_workflow(validator, ai_prompt, names)
     ).to_runtime_config().workflow
     assert _names(workflow) == names
     assert set(BUILTIN_WORKFLOWS) == {"mixed", "file", "ai"}
+
+
+@pytest.mark.parametrize(
+    ("validator", "ai_prompt", "workflow_name"),
+    [
+        ("validator.py", "", "file"),
+        ("validator.py", "AI check", "mixed"),
+        ("ai", "", "ai"),
+        ("AI", "ignored for ai-only", "ai"),
+    ],
+)
+def test_default_workflow_name_is_explicit(validator, ai_prompt, workflow_name):
+    assert default_workflow_name(validator, ai_prompt) == workflow_name
 
 
 def test_builtin_workflow_yaml_lives_in_dedicated_folder():
