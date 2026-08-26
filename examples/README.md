@@ -24,7 +24,7 @@ The suite is intentionally small and diagnostic:
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
 
-Workflow schema examples live under `workflows/`. `workflows/skill_prompt_review_chain.yaml` shows one reusable prompt Stage combined with prompts that begin with user-authored `/skill...` directives and reusable Review invocations, while `workflow_multi_prompt.yaml` is kept as the original compact multi-prompt example. `10_skill_prompt_review_workflow` runs that workflow against a real project and validator.
+Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../tool/workflows/skill_prompt_review_chain.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project and validator.
 
 Validation-mode workflow example: `validation_modes.yaml` shows the automatic built-in mapping:
 

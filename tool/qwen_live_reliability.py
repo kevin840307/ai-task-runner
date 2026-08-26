@@ -171,6 +171,13 @@ class ProxyControl:
     successes: int = 0
 
 
+@dataclass(frozen=True)
+class ExampleSmokeCase:
+    source: Path
+    workflow: Path | None = None
+    name: str = ""
+
+
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hours", type=float, default=0)
@@ -195,6 +202,20 @@ def arguments() -> argparse.Namespace:
         type=Path,
         default=None,
         help="optional workflow YAML for --example-smoke-project",
+    )
+    parser.add_argument(
+        "--example-smoke-matrix-project",
+        type=Path,
+        action="append",
+        default=[],
+        help="example project root to cross-run with --example-smoke-matrix-workflow",
+    )
+    parser.add_argument(
+        "--example-smoke-matrix-workflow",
+        type=Path,
+        action="append",
+        default=[],
+        help="workflow YAML to cross-run with each --example-smoke-matrix-project",
     )
     parser.add_argument("--command", default="qwen.cmd" if os.name == "nt" else "qwen")
     parser.add_argument("--sandbox", action="store_true")
@@ -489,8 +510,8 @@ def assert_state_completed(
         raise RuntimeError("missing diagnostics: " + ", ".join(missing))
 
 
-def copy_example_project(source: Path, root: Path) -> Path:
-    project = root / "example-smoke-probe"
+def copy_example_project(source: Path, root: Path, name: str = "example-smoke-probe") -> Path:
+    project = root / name
     shutil.copytree(
         source,
         project,
@@ -504,8 +525,9 @@ def example_smoke_probe(
     root: Path,
     source: Path,
     workflow: Path | None = None,
+    name: str = "example-smoke-probe",
 ) -> Path:
-    project = copy_example_project(source.resolve(), root)
+    project = copy_example_project(source.resolve(), root, name)
     code = run_command(
         runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
@@ -513,6 +535,58 @@ def example_smoke_probe(
     )
     assert_state_completed(project, code)
     return project
+
+
+def example_smoke_cases(args: argparse.Namespace) -> list[ExampleSmokeCase]:
+    cases: list[ExampleSmokeCase] = []
+    if args.example_smoke_project is not None:
+        cases.append(
+            ExampleSmokeCase(
+                args.example_smoke_project,
+                args.example_smoke_workflow,
+                "example-smoke-probe",
+            )
+        )
+
+    projects = list(args.example_smoke_matrix_project)
+    workflows = list(args.example_smoke_matrix_workflow) or [None]
+    for project in projects:
+        for workflow in workflows:
+            cases.append(
+                ExampleSmokeCase(
+                    project,
+                    workflow,
+                    f"example-smoke-{_slug(project)}-{_slug(workflow)}",
+                )
+            )
+    return cases
+
+
+def validate_example_smoke_cases(cases: list[ExampleSmokeCase]) -> None:
+    names = set()
+    for case in cases:
+        source = case.source.resolve()
+        if (
+            not source.is_dir()
+            or not (source / "prompt.md").is_file()
+            or not (source / "validation.py").is_file()
+        ):
+            raise SystemExit(
+                f"example smoke project must contain prompt.md and validation.py: {source}"
+            )
+        if case.workflow is not None and not case.workflow.is_file():
+            raise SystemExit(f"example smoke workflow must be an existing YAML file: {case.workflow}")
+        if case.name in names:
+            raise SystemExit(f"duplicate example smoke case name: {case.name}")
+        names.add(case.name)
+
+
+def _slug(path: Path | None) -> str:
+    if path is None:
+        return "default"
+    base = path.parent.name if path.name == "project" else path.stem
+    chars = [char.lower() if char.isalnum() else "-" for char in base]
+    return "-".join("".join(chars).split("-")) or "case"
 
 
 def resume_probe(settings: Settings, root: Path) -> None:
@@ -1164,19 +1238,12 @@ def main() -> int:
             "hours/pause/soak-* frequency values must be non-negative; "
             "run-timeout, agent-timeout, planning-timeout, and api-port must be valid"
         )
-    example_smoke_enabled = args.example_smoke_project is not None
-    if example_smoke_enabled:
-        source = args.example_smoke_project.resolve()
-        if (
-            not source.is_dir()
-            or not (source / "prompt.md").is_file()
-            or not (source / "validation.py").is_file()
-        ):
-            raise SystemExit(
-                "example smoke project must contain prompt.md and validation.py"
-            )
-        if args.example_smoke_workflow is not None and not args.example_smoke_workflow.is_file():
-            raise SystemExit("example smoke workflow must be an existing YAML file")
+    if args.example_smoke_matrix_workflow and not args.example_smoke_matrix_project:
+        raise SystemExit(
+            "--example-smoke-matrix-workflow requires --example-smoke-matrix-project"
+        )
+    example_cases = example_smoke_cases(args)
+    validate_example_smoke_cases(example_cases)
     if not shutil.which(args.command) and not Path(args.command).is_file():
         raise SystemExit(f"Qwen command not found: {args.command}")
     settings = Settings(
@@ -1217,18 +1284,17 @@ def main() -> int:
             require_dense_coverage(soak_result)
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
-        example_smoke_project = (
-            example_smoke_probe(
+        example_results = []
+        for case in example_cases:
+            project = example_smoke_probe(
                 settings,
                 run_root,
-                args.example_smoke_project,
-                args.example_smoke_workflow,
+                case.source,
+                case.workflow,
+                case.name,
             )
-            if example_smoke_enabled
-            else None
-        )
-        if example_smoke_project is not None:
-            print("PASS copied-example real-agent smoke", flush=True)
+            example_results.append((case, project))
+            print(f"PASS copied-example real-agent smoke {case.name}", flush=True)
     summary = {
         "passed": True,
         "sandbox": settings.sandbox,
@@ -1251,14 +1317,26 @@ def main() -> int:
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
         "transient_observed": transient_observed,
-        "example_smoke": example_smoke_project is not None,
+        "example_smoke": bool(example_results),
+        "example_smoke_runs": len(example_results),
         "example_smoke_source": (
-            "" if not example_smoke_enabled else str(args.example_smoke_project.resolve())
+            "" if not example_results else str(example_results[0][0].source.resolve())
         ),
-        "example_smoke_project": "" if example_smoke_project is None else str(example_smoke_project),
+        "example_smoke_project": "" if not example_results else str(example_results[0][1]),
         "example_smoke_workflow": (
-            "" if args.example_smoke_workflow is None else str(args.example_smoke_workflow.resolve())
+            ""
+            if not example_results or example_results[0][0].workflow is None
+            else str(example_results[0][0].workflow.resolve())
         ),
+        "example_smoke_cases": [
+            {
+                "name": case.name,
+                "source": str(case.source.resolve()),
+                "workflow": "" if case.workflow is None else str(case.workflow.resolve()),
+                "project": str(project),
+            }
+            for case, project in example_results
+        ],
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(

@@ -672,7 +672,7 @@ def test_multi_prompt_example_reuses_same_base_stage():
 def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
     example = (
         Path(__file__).resolve().parents[1]
-        / "examples"
+        / "tool"
         / "workflows"
         / "skill_prompt_review_chain.yaml"
     )
@@ -704,7 +704,7 @@ def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_pref
         assert text.startswith("/skill-")
 
 
-def test_workflow_examples_reference_existing_prompt_assets():
+def test_workflow_yaml_examples_reference_existing_prompt_assets():
     def collect_refs(data):
         refs = []
         for stage in data:
@@ -716,7 +716,9 @@ def test_workflow_examples_reference_existing_prompt_assets():
             refs.extend(collect_refs(stage.get("recover", ())))
         return refs
 
-    for example in (Path(__file__).resolve().parents[1] / "examples" / "workflows").glob("*.yaml"):
+    root = Path(__file__).resolve().parents[1]
+    examples = sorted((root / "tool" / "workflows").glob("*.yaml"))
+    for example in examples:
         text = example.read_text(encoding="utf-8")
         import yaml
 

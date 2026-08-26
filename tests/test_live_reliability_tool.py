@@ -8,6 +8,8 @@ import pytest
 
 from tool import qwen_live_reliability as live
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def settings(tmp_path: Path) -> live.Settings:
     return live.Settings(
@@ -83,6 +85,49 @@ def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
         ["qwen_live_reliability.py", "--example-smoke-project"],
     )
     assert live.arguments().example_smoke_project == live.DEFAULT_EXAMPLE_SMOKE_PROJECT
+
+
+def test_example_smoke_matrix_builds_cross_product(tmp_path: Path):
+    args = type("Args", (), {})()
+    args.example_smoke_project = None
+    args.example_smoke_workflow = None
+    args.example_smoke_matrix_project = [tmp_path / "a", tmp_path / "b"]
+    args.example_smoke_matrix_workflow = [tmp_path / "file.yaml", tmp_path / "mixed.yaml"]
+
+    cases = live.example_smoke_cases(args)
+
+    assert [(case.source, case.workflow) for case in cases] == [
+        (tmp_path / "a", tmp_path / "file.yaml"),
+        (tmp_path / "a", tmp_path / "mixed.yaml"),
+        (tmp_path / "b", tmp_path / "file.yaml"),
+        (tmp_path / "b", tmp_path / "mixed.yaml"),
+    ]
+    assert [case.name for case in cases] == [
+        "example-smoke-a-file",
+        "example-smoke-a-mixed",
+        "example-smoke-b-file",
+        "example-smoke-b-mixed",
+    ]
+
+
+def test_example_smoke_case_validation_requires_project_contract(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    cases = [live.ExampleSmokeCase(project, None, "bad")]
+
+    with pytest.raises(SystemExit, match="prompt.md and validation.py"):
+        live.validate_example_smoke_cases(cases)
+
+
+def test_example_smoke_case_validation_rejects_missing_workflow(tmp_path: Path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "prompt.md").write_text("build\n", encoding="utf-8")
+    (project / "validation.py").write_text("validate\n", encoding="utf-8")
+    cases = [live.ExampleSmokeCase(project, tmp_path / "missing.yaml", "bad")]
+
+    with pytest.raises(SystemExit, match="workflow must be an existing YAML file"):
+        live.validate_example_smoke_cases(cases)
 
 
 def test_dense_coverage_requires_every_mixed_probe():
@@ -206,3 +251,50 @@ def test_example_smoke_probe_can_run_custom_workflow(
     command = captured["command"]
     assert command[command.index("--workflow") + 1] == str(workflow)
     assert "--script" not in command
+
+
+def test_example_smoke_probe_uses_case_name_for_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "prompt.md").write_text("build\n", encoding="utf-8")
+    (source / "validation.py").write_text("validate\n", encoding="utf-8")
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            '{"completed": true, "stage": "completed"}', encoding="utf-8"
+        )
+        (work / "log.txt").write_text("{}\n", encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    project = live.example_smoke_probe(settings(tmp_path), tmp_path, source, name="case-a")
+
+    assert project == tmp_path / "case-a"
+
+
+@pytest.mark.parametrize(
+    ("name", "hours"),
+    [
+        ("qwen_live_reliability_0_5h.bat", "0.5"),
+        ("qwen_live_reliability_24h.bat", "24"),
+    ],
+)
+def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str):
+    text = (ROOT / "tool" / name).read_text(encoding="utf-8")
+    assert f"--hours {hours}" in text
+    assert "--high-density --require-transient" in text
+    assert "--example-smoke-matrix-project" in text
+    assert "runner\\workflow\\builtin\\file.yaml" in text
+    assert "runner\\workflow\\builtin\\mixed.yaml" in text
+    assert "tool\\workflows\\skill_prompt_review_chain.yaml" in text

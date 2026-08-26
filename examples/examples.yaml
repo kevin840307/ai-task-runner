@@ -47,4 +47,4 @@
 - goal_file: 10_skill_prompt_review_workflow/project/prompt.md
   project_root: 10_skill_prompt_review_workflow/project
   validator: 10_skill_prompt_review_workflow/project/validation.py
-  workflow_file: workflows/skill_prompt_review_chain.yaml
+  workflow_file: ../tool/workflows/skill_prompt_review_chain.yaml

@@ -73,7 +73,7 @@ def test_examples_yaml_runs_01_to_10_with_per_item_project_roots():
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
-    assert data[9]["workflow_file"] == "workflows/skill_prompt_review_chain.yaml"
+    assert data[9]["workflow_file"] == "../tool/workflows/skill_prompt_review_chain.yaml"
     assert (EXAMPLES / data[9]["workflow_file"]).is_file()
 
     items = load_yaml_script(script)

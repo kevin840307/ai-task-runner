@@ -1,0 +1,5 @@
+未來我想要加入UI UI會有這功能 請問目前的架構適不適合用外掛的方式新增(就是幾乎沒耦合 不需改現行的code 就能新建UI)
+1.支援 CRUD workflow
+2.支援stage使用python
+3.支援修改skill prompt
+4.支援對話框能立即看到任務, 跟chatgpt一樣可by專案建立對話
