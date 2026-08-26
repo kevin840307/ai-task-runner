@@ -35,7 +35,7 @@ print(result.exit_code, result.completed)
 ## YAML script
 `runner.script_loader` 負責解析非空 YAML array、結構欄位、alias 與引用檔案；`runner.script_runner` 使用 `dataclasses.replace()` 建立 child，並套用 API/CLI 共用的 `RuntimeConfig.validate()`。YAML 不另外維護 timeout、retry、quorum 或 Plugin option 規則。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator` path 或 `ai`；相對 `goal_file`、`ai_validator_prompt_file`、`workflow_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、Final AI quorum alias、`project_root`、`workflow_file` 與通用 `plugins` mapping。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊 Plugin 欄位仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
 
-`workflow_file` 只會 normalization 一次，成為 `RuntimeConfig.workflow`；格式與 User Guide 的線性 Workflow 相同。未指定時，direct request 與每個 YAML List item 都依自己的 validator 設定選擇 `mixed.yaml`、`file.yaml` 或 `ai.yaml`。明確指定的 parent Workflow 會由 YAML child 繼承；item 提供自己的 `workflow_file` 時，`dataclasses.replace()` 直接帶入已 normalization 的 child Workflow，不建立第二條執行路徑。
+`workflow_file` 只會 normalization 一次，成為 `RuntimeConfig.workflow`；格式與 User Guide 的線性 Workflow 相同。未指定時，direct request 與每個 YAML List item 都依自己的 validator 設定選擇 `workflow/builtin/mixed.yaml`、`workflow/builtin/file.yaml` 或 `workflow/builtin/ai.yaml`。明確指定的 parent Workflow 會由 YAML child 繼承；item 提供自己的 `workflow_file` 時，`dataclasses.replace()` 直接帶入已 normalization 的 child Workflow，不建立第二條執行路徑。
 
 Retry 與 cycle 上限統一使用同一 sentinel：`-1` 表示持續恢復直到 PASS，`0` 表示停用該 retry/cycle，正數表示有限上限。預設 `max_attempts=2` 仍會在最多兩次 Same Session 恢復後切換 Fresh Session；預設 `max_cycles=-1` 讓無人職守驗證持續到 PASS。
 

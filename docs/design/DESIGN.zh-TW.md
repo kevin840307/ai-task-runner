@@ -34,7 +34,7 @@ Version: 1.2.33
 
 ## 責任
 
-- `workflow/mixed.yaml`、`file.yaml`、`ai.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
+- `workflow/builtin/*.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
 - `workflow/registry.py`：明確的 `type -> Stage class` Registry，並負責 semantic parser/handler/condition 解析；不持有 Workflow topology 或 Stage instance。
 - `workflow/rules.py`：內部 TODO/repair subflow、conditions、result handlers、durable-state transition 與 routing。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。

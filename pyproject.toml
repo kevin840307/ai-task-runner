@@ -24,6 +24,7 @@ packages = [
     "runner.plugins",
     "runner.project",
     "runner.workflow",
+    "runner.workflow.builtin",
     "runner.runtime",
     "runner.workflow.stages",
     "runner.utils",
@@ -36,4 +37,4 @@ py-modules = [
 [tool.setuptools.package-data]
 "runner.prompts.stages" = ["*.md"]
 "runner.prompts.system" = ["*.md"]
-"runner.workflow" = ["*.yaml"]
+"runner.workflow.builtin" = ["*.yaml"]

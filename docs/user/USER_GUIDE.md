@@ -46,7 +46,7 @@ Protected paths are project-relative and may name files or directories. The poli
 ```
 
 ## Workflow YAML
-Without `--workflow`, Runner selects `mixed.yaml`, `file.yaml`, or `ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
+Without `--workflow`, Runner selects `workflow/builtin/mixed.yaml`, `workflow/builtin/file.yaml`, or `workflow/builtin/ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
 
 Planning is the one intentional dynamic Stage. YAML does not declare `expand`, `foreach`, or another subflow DSL. Instead, Stage definitions outside the static top-level flow become Planner candidates automatically unless they are recovery-only, planners, or validators. `PlanStage` chooses an ordered Stage sequence for every TODO and returns it as `next_steps`.
 
@@ -129,7 +129,7 @@ flow:
   - validate_file
 ```
 
-`skip` is a compact alias for `skip_on_error`. `type: plan` identifies planning behavior; `type: python` identifies the Python validator; `type: base` may be written explicitly but is optional. `validator: file|ai` marks validation capability. `recover` contains static recovery Stage sequences, while `restart_at` remains FlowNode routing metadata. Dynamic planned work comes only from validated `PlanStage` `next_steps`; there is no `expand`/`foreach` YAML setting. `instructions_file` loads UTF-8 instructions relative to the Workflow YAML. `retry` accepts `-1`, `0`, or a finite non-negative count. Final validation must remain last; when both validators exist, file validation must precede AI validation.
+`skip` is a compact alias for `skip_on_error`. `type: plan` identifies planning behavior; `type: python` identifies the Python validator; `type: base` may be written explicitly but is optional. `validator: file|ai` marks validation capability. `recover` contains static recovery Stage sequences, while `restart_at` remains FlowNode routing metadata. Dynamic planned work comes only from validated `PlanStage` `next_steps`; there is no `expand`/`foreach` YAML setting. `instructions_file` loads UTF-8 instructions relative to the Workflow YAML. Relative `prompt` paths first resolve beside the Workflow YAML when that file exists; otherwise they remain bundled prompt paths such as `stages/execution.md`. `retry` accepts `-1`, `0`, or a finite non-negative count. Final validation must remain last; when both validators exist, file validation must precede AI validation.
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.

@@ -11,6 +11,7 @@ from runner.config import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.loader import (
+    BUILTIN_WORKFLOW_DIR,
     BUILTIN_WORKFLOWS,
     load_workflow,
     workflow_fingerprint,
@@ -309,6 +310,11 @@ def test_validation_options_select_builtin_workflow(validator, ai_prompt, names)
     ).to_runtime_config().workflow
     assert _names(workflow) == names
     assert set(BUILTIN_WORKFLOWS) == {"mixed", "file", "ai"}
+
+
+def test_builtin_workflow_yaml_lives_in_dedicated_folder():
+    assert BUILTIN_WORKFLOW_DIR.name == "builtin"
+    assert all(path.parent == BUILTIN_WORKFLOW_DIR for path in BUILTIN_WORKFLOWS.values())
 
 
 @pytest.mark.parametrize(
@@ -647,3 +653,55 @@ def test_multi_prompt_example_reuses_same_base_stage():
     prompts = [item.get("prompt") for item in workflow if item["name"] == "run_prompt"]
     assert prompts == ["prompts/step_a.md", "prompts/step_b.md", "prompts/step_c.md"]
     assert all(item["type"] == "base" for item in workflow if item["name"] == "run_prompt")
+
+
+def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
+    example = (
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "workflows"
+        / "skill_prompt_review_chain.yaml"
+    )
+    workflow = load_workflow(example)
+    pairs = [
+        (
+            item["name"],
+            Path(item["prompt"]).relative_to(example.parent).as_posix(),
+        )
+        for item in workflow
+        if item["name"] != "validate_file"
+    ]
+    assert pairs == [
+        ("run_prompt", "prompts/design.md"),
+        ("review", "prompts/review_design.md"),
+        ("run_prompt", "prompts/implementation.md"),
+        ("review", "prompts/review_implementation.md"),
+        ("run_prompt", "prompts/documentation.md"),
+        ("review", "prompts/review_documentation.md"),
+    ]
+    assert {item["name"] for item in workflow} == {"run_prompt", "review", "validate_file"}
+    for prompt in ("design.md", "implementation.md", "documentation.md"):
+        text = (example.parent / "prompts" / prompt).read_text(encoding="utf-8")
+        assert text.startswith("/skill-")
+
+
+def test_workflow_examples_reference_existing_prompt_assets():
+    for example in (Path(__file__).resolve().parents[1] / "examples" / "workflows").glob("*.yaml"):
+        text = example.read_text(encoding="utf-8")
+        import yaml
+
+        data = yaml.safe_load(text)
+        refs = [
+            item
+            for stage in data.get("stages", {}).values()
+            for item in (stage.get("prompt"), stage.get("instructions_file"))
+            if item
+        ]
+        refs.extend(
+            item["prompt"]
+            for item in data.get("flow", [])
+            if isinstance(item, dict) and item.get("prompt")
+        )
+        assert refs, example
+        for ref in refs:
+            assert (example.parent / ref).is_file(), (example, ref)

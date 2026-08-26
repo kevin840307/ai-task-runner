@@ -15,10 +15,11 @@ from .registry import STAGE_REGISTRY
 ROUTING_FIELDS = frozenset({"recover", "restart_at"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 VALIDATORS = frozenset({"file", "ai"})
+BUILTIN_WORKFLOW_DIR = Path(__file__).with_name("builtin")
 BUILTIN_WORKFLOWS = {
-    "mixed": Path(__file__).with_name("mixed.yaml"),
-    "file": Path(__file__).with_name("file.yaml"),
-    "ai": Path(__file__).with_name("ai.yaml"),
+    "mixed": BUILTIN_WORKFLOW_DIR / "mixed.yaml",
+    "file": BUILTIN_WORKFLOW_DIR / "file.yaml",
+    "ai": BUILTIN_WORKFLOW_DIR / "ai.yaml",
 }
 DEFAULT_WORKFLOW = BUILTIN_WORKFLOWS["mixed"]
 
@@ -63,8 +64,8 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         str(name): _normalize_stage(name, definition, source)
         for name, definition in raw_stages.items()
     }
-    _inject_planner_catalog(stages, raw_flow)
-    result = _normalize_sequence(raw_flow, stages, top_level=True)
+    _inject_planner_catalog(stages, raw_flow, source)
+    result = _normalize_sequence(raw_flow, stages, top_level=True, source=source)
     _validate_topology(result)
     return result
 
@@ -82,12 +83,13 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
     instructions_file = values.pop("instructions_file", None)
     if instructions_file is not None:
         values["instructions"] = _read_text(instructions_file, source, name)
+    _resolve_local_prompt(values, source)
     _validate_stage(name, values)
     return values
 
 
 def _inject_planner_catalog(
-    stages: dict[str, dict[str, Any]], raw_flow: Any
+    stages: dict[str, dict[str, Any]], raw_flow: Any, source: Path
 ) -> None:
     plans = [definition for definition in stages.values() if definition.get("type") == "plan"]
     if not plans:
@@ -110,7 +112,7 @@ def _inject_planner_catalog(
         raise RunnerError("planning workflow requires at least one dynamic Stage")
 
     catalog = {
-        name: _normalize_invocation(name, stages, ())
+        name: _normalize_invocation(name, stages, (), source)
         for name in candidates
     }
     for definition in plans:
@@ -169,6 +171,18 @@ def _read_text(value: Any, source: Path, name: str) -> str:
     return text
 
 
+def _resolve_local_prompt(values: dict[str, Any], source: Path) -> None:
+    value = values.get("prompt")
+    if not isinstance(value, str) or not value.strip():
+        return
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return
+    local = source.parent / path
+    if local.is_file():
+        values["prompt"] = str(local.resolve())
+
+
 def _validate_numbers(name: str, values: dict[str, Any]) -> None:
     retry = values.get("retry")
     if retry is not None and (
@@ -194,6 +208,7 @@ def _normalize_sequence(
     *,
     top_level: bool = False,
     stack: tuple[str, ...] = (),
+    source: Path,
 ) -> list[dict[str, Any]]:
     if isinstance(data, str):
         data = [data]
@@ -202,7 +217,7 @@ def _normalize_sequence(
 
     result = []
     for index, item in enumerate(data):
-        node = _normalize_invocation(item, stages, stack)
+        node = _normalize_invocation(item, stages, stack, source)
         if top_level:
             node["_workflow_index"] = index
         result.append(node)
@@ -214,6 +229,7 @@ def _normalize_invocation(
     item: Any,
     stages: dict[str, dict[str, Any]],
     stack: tuple[str, ...],
+    source: Path,
 ) -> dict[str, Any]:
     if isinstance(item, str):
         ref, overrides = item, {}
@@ -229,12 +245,13 @@ def _normalize_invocation(
     if "skip" in overrides and "skip_on_error" not in overrides:
         overrides["skip_on_error"] = bool(overrides.pop("skip"))
     node.update(overrides)
+    _resolve_local_prompt(node, source)
     _validate_stage(str(node.get("name", ref)), node)
     if node.get("recover"):
         if ref in stack:
             raise RunnerError(f"cyclic workflow routing: {' -> '.join((*stack, ref))}")
         node["recover"] = _normalize_sequence(
-            node["recover"], stages, stack=(*stack, ref)
+            node["recover"], stages, stack=(*stack, ref), source=source
         )
     return node
 
@@ -295,6 +312,7 @@ def _validate_topology(workflow: list[dict[str, Any]]) -> None:
 
 
 __all__ = [
+    "BUILTIN_WORKFLOW_DIR",
     "BUILTIN_WORKFLOWS",
     "DEFAULT_WORKFLOW",
     "load_default_workflow",

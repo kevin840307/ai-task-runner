@@ -37,7 +37,7 @@ Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 H
 
 Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`StageResult` 只包含執行 facts，也可攜帶已驗證的動態 `next_steps`；`recover`、`restart_at` 這類靜態 routing 屬於 YAML `FlowNode`，Pipeline 對兩者都只做通用解讀。
 
-`workflow/mixed.yaml`、`file.yaml`、`ai.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance，並依 YAML 結構自動推導 Planner 可用的 dynamic Stage catalog；`validator: file|ai` 表示 validation capability。`workflow/rules.py` 只負責 durable state reducer；Resume、recovery routing 與動態 `next_steps` 執行都由 Pipeline 擁有。`PlanStage` 會把每個 TODO 與 ordered Stage names 一起保存並回傳 concrete next-step definitions；不再有 `expand`、`foreach` 或額外 subflow DSL。
+`workflow/builtin/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance，並依 YAML 結構自動推導 Planner 可用的 dynamic Stage catalog；`validator: file|ai` 表示 validation capability。`workflow/rules.py` 只負責 durable state reducer；Resume、recovery routing 與動態 `next_steps` 執行都由 Pipeline 擁有。`PlanStage` 會把每個 TODO 與 ordered Stage names 一起保存並回傳 concrete next-step definitions；不再有 `expand`、`foreach` 或額外 subflow DSL。
 
 每個 Stage instance 只負責一次 attempt，且可獨立建構／執行；一般 Stage implementation 不得建立／選擇另一個 Stage，也不取得 `recover` 或 `restart_at`。`PlanStage` 是刻意的例外：它只能從 Loader 提供且已驗證的 Stage catalog 中選擇 Stage，並以資料 `next_steps` 回傳，不直接執行。Result handler 只把 facts reduce 成 durable state；組合與 recovery 留在 YAML `FlowNode`。
 

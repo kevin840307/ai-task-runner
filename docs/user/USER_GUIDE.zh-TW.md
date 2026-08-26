@@ -52,7 +52,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ```
 
 ## Workflow YAML
-未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `mixed.yaml`、`file.yaml` 或 `ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
+未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `workflow/builtin/mixed.yaml`、`workflow/builtin/file.yaml` 或 `workflow/builtin/ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
 
 Planning 是刻意保留的特殊動態 Stage。YAML 不需要 `expand`、`foreach` 或額外 subflow DSL；不在頂層 static flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會自動成為 Planner 可選能力。`PlanStage` 會為每個 TODO 選擇 ordered Stage sequence，並以 `next_steps` 回傳。
 
@@ -135,7 +135,7 @@ flow:
   - validate_file
 ```
 
-`skip` 是 `skip_on_error` 的精簡 alias。`type: plan` 表示 Planning、`type: python` 表示 Python Validator；`type: base` 可以明寫，但一般可省略。`validator: file|ai` 表示 validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。動態規劃只來自已驗證的 `PlanStage.next_steps`；YAML 不再有 `expand`/`foreach`。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；`retry` 可為 `-1`、`0` 或有限非負整數。Final validation 必須放最後；同時有兩種 validator 時，file validation 必須先於 AI validation。
+`skip` 是 `skip_on_error` 的精簡 alias。`type: plan` 表示 Planning、`type: python` 表示 Python Validator；`type: base` 可以明寫，但一般可省略。`validator: file|ai` 表示 validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。動態規劃只來自已驗證的 `PlanStage.next_steps`；YAML 不再有 `expand`/`foreach`。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。Final validation 必須放最後；同時有兩種 validator 時，file validation 必須先於 AI validation。
 
 ## Validation 模式
 - Python/File Validator：`--validator path/to/validation.py`。

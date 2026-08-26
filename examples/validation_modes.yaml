@@ -1,17 +1,17 @@
 # Demonstrates automatic built-in Workflow selection by validation mode.
-# Python file validator only -> runner/workflow/file.yaml
+# Python file validator only -> runner/workflow/builtin/file.yaml
 - goal_file: 01_basic_python_validator/project/prompt.md
   project_root: 01_basic_python_validator/project
   validator: 01_basic_python_validator/project/validation.py
 
-# AI-only final validation -> runner/workflow/ai.yaml
+# AI-only final validation -> runner/workflow/builtin/ai.yaml
 - goal_file: 03_ai_validator_voting/project/prompt.md
   project_root: 03_ai_validator_voting/project
   validator: ai
   ai_validator_prompt_file: 03_ai_validator_voting/project/ai_validation.md
   ai_validator_count: 3
 
-# Python hard gate plus Final AI validation -> runner/workflow/mixed.yaml
+# Python hard gate plus Final AI validation -> runner/workflow/builtin/mixed.yaml
 - goal_file: 04_mixed_validation/project/prompt.md
   project_root: 04_mixed_validation/project
   validator: 04_mixed_validation/project/validation.py

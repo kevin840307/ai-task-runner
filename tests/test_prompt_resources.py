@@ -18,4 +18,6 @@ def test_setuptools_packages_central_prompt_resources():
     config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert '"runner.prompts.stages" = ["*.md"]' in config
     assert '"runner.prompts.system" = ["*.md"]' in config
+    assert '"runner.workflow.builtin"' in config
+    assert '"runner.workflow.builtin" = ["*.yaml"]' in config
     assert '"runner.project"' in config
