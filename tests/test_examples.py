@@ -22,6 +22,7 @@ EXPECTED = {
     "07_blackbox_medium",
     "08_config_driven_data_pipeline",
     "09_config_environment_auditor",
+    "10_skill_prompt_review_workflow",
 }
 
 
@@ -50,9 +51,10 @@ def test_example_python_files_compile():
         )
 
 
-def test_examples_yaml_runs_01_to_09_with_per_item_project_roots():
-    data = yaml.safe_load((EXAMPLES / "examples.yaml").read_text(encoding="utf-8"))
-    assert isinstance(data, list) and len(data) == 9
+def test_examples_yaml_runs_01_to_10_with_per_item_project_roots():
+    script = EXAMPLES / "examples.yaml"
+    data = yaml.safe_load(script.read_text(encoding="utf-8"))
+    assert isinstance(data, list) and len(data) == 10
     for index, item in enumerate(data, 1):
         prefix = f"{index:02d}_"
         goal_file = item.get("goal_file")
@@ -71,6 +73,21 @@ def test_examples_yaml_runs_01_to_09_with_per_item_project_roots():
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
+    assert data[9]["workflow_file"] == "workflows/skill_prompt_review_chain.yaml"
+    assert (EXAMPLES / data[9]["workflow_file"]).is_file()
+
+    items = load_yaml_script(script)
+    config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
+    workflow = build_script_item_config(config, items[9], 10).workflow
+    assert [stage["name"] for stage in workflow] == [
+        "run_prompt",
+        "review",
+        "run_prompt",
+        "review",
+        "run_prompt",
+        "review",
+        "validate_file",
+    ]
 
 
 def test_validation_modes_example_maps_to_builtin_workflows():
@@ -119,6 +136,7 @@ def test_starter_states_match_example_purpose():
         "07_blackbox_medium",
         "08_config_driven_data_pipeline",
         "09_config_environment_auditor",
+        "10_skill_prompt_review_workflow",
     ):
         result = run_validator(name)
         assert result.returncode != 0, f"starter unexpectedly passed: {name}\n{result.stdout}"

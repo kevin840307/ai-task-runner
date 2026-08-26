@@ -190,6 +190,12 @@ def arguments() -> argparse.Namespace:
             "omit the value to use examples/01_basic_python_validator/project"
         ),
     )
+    parser.add_argument(
+        "--example-smoke-workflow",
+        type=Path,
+        default=None,
+        help="optional workflow YAML for --example-smoke-project",
+    )
     parser.add_argument("--command", default="qwen.cmd" if os.name == "nt" else "qwen")
     parser.add_argument("--sandbox", action="store_true")
     parser.add_argument("--api-port", type=int, default=8080)
@@ -261,6 +267,7 @@ def runner_command(
     ai_only: bool = False,
     sandbox: bool | None = None,
     script: Path | None = None,
+    workflow: Path | None = None,
 ) -> list[str]:
     effective_sandbox = settings.sandbox if sandbox is None else sandbox
     validator = "ai" if ai_only else str(project / "validation.py")
@@ -286,6 +293,8 @@ def runner_command(
         command.extend(["--planning-timeout", whole_seconds_arg(settings.planning_timeout)])
     if effective_sandbox:
         command.append("--sandbox")
+    if workflow is not None and script is None:
+        command.extend(["--workflow", str(workflow)])
     if resume:
         command.append("--resume")
     else:
@@ -490,10 +499,15 @@ def copy_example_project(source: Path, root: Path) -> Path:
     return project
 
 
-def example_smoke_probe(settings: Settings, root: Path, source: Path) -> Path:
+def example_smoke_probe(
+    settings: Settings,
+    root: Path,
+    source: Path,
+    workflow: Path | None = None,
+) -> Path:
     project = copy_example_project(source.resolve(), root)
     code = run_command(
-        runner_command(settings, project),
+        runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
@@ -1161,6 +1175,8 @@ def main() -> int:
             raise SystemExit(
                 "example smoke project must contain prompt.md and validation.py"
             )
+        if args.example_smoke_workflow is not None and not args.example_smoke_workflow.is_file():
+            raise SystemExit("example smoke workflow must be an existing YAML file")
     if not shutil.which(args.command) and not Path(args.command).is_file():
         raise SystemExit(f"Qwen command not found: {args.command}")
     settings = Settings(
@@ -1202,7 +1218,12 @@ def main() -> int:
         if args.require_transient and not transient_observed:
             raise RuntimeError("no real transient API recovery was observed")
         example_smoke_project = (
-            example_smoke_probe(settings, run_root, args.example_smoke_project)
+            example_smoke_probe(
+                settings,
+                run_root,
+                args.example_smoke_project,
+                args.example_smoke_workflow,
+            )
             if example_smoke_enabled
             else None
         )
@@ -1235,6 +1256,9 @@ def main() -> int:
             "" if not example_smoke_enabled else str(args.example_smoke_project.resolve())
         ),
         "example_smoke_project": "" if example_smoke_project is None else str(example_smoke_project),
+        "example_smoke_workflow": (
+            "" if args.example_smoke_workflow is None else str(args.example_smoke_workflow.resolve())
+        ),
         "run_root": str(run_root),
     }
     (run_root / "summary.json").write_text(

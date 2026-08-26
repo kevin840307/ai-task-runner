@@ -680,12 +680,28 @@ def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_pref
         ("review", "prompts/review_documentation.md"),
     ]
     assert {item["name"] for item in workflow} == {"run_prompt", "review", "validate_file"}
+    assert all("result_handler" not in item for item in workflow if item["name"] == "review")
+    assert [item["name"] for item in workflow[-1]["recover"]] == ["run_prompt", "review"]
+    assert Path(workflow[-1]["recover"][0]["prompt"]).relative_to(example.parent).as_posix() == (
+        "prompts/fix_validation.md"
+    )
     for prompt in ("design.md", "implementation.md", "documentation.md"):
         text = (example.parent / "prompts" / prompt).read_text(encoding="utf-8")
         assert text.startswith("/skill-")
 
 
 def test_workflow_examples_reference_existing_prompt_assets():
+    def collect_refs(data):
+        refs = []
+        for stage in data:
+            refs.extend(
+                item
+                for item in (stage.get("prompt"), stage.get("instructions_file"))
+                if item
+            )
+            refs.extend(collect_refs(stage.get("recover", ())))
+        return refs
+
     for example in (Path(__file__).resolve().parents[1] / "examples" / "workflows").glob("*.yaml"):
         text = example.read_text(encoding="utf-8")
         import yaml
@@ -702,6 +718,10 @@ def test_workflow_examples_reference_existing_prompt_assets():
             for item in data.get("flow", [])
             if isinstance(item, dict) and item.get("prompt")
         )
+        refs.extend(collect_refs(load_workflow(example)))
         assert refs, example
         for ref in refs:
-            assert (example.parent / ref).is_file(), (example, ref)
+            path = Path(ref)
+            if not path.is_absolute():
+                path = example.parent / path
+            assert path.is_file(), (example, ref)

@@ -1,0 +1,10 @@
+protected_paths:
+  - prompt.md
+  - validation.py
+  - ai_task_runner_validator.py
+
+instructions:
+  always: |
+    Work only inside this example project.
+    Preserve protected files.
+    Use only Python standard-library code for the requested CLI.

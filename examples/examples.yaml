@@ -43,3 +43,8 @@
   validator: 09_config_environment_auditor/project/validation.py
   ai_validator_prompt_file: 09_config_environment_auditor/project/ai_validation.md
   ai_validator_count: 3
+
+- goal_file: 10_skill_prompt_review_workflow/project/prompt.md
+  project_root: 10_skill_prompt_review_workflow/project
+  validator: 10_skill_prompt_review_workflow/project/validation.py
+  workflow_file: workflows/skill_prompt_review_chain.yaml

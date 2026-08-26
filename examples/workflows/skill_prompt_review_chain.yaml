@@ -14,7 +14,6 @@ stages:
     backend_mode: review
     parser: review
     result_status: completed
-    result_handler: review
     retry_attr: review_retries
     skip_on_error: true
 
@@ -26,6 +25,11 @@ stages:
     mode: write
     actor: validator
     result_handler: validation
+    recover:
+      - stage: run_prompt
+        prompt: prompts/fix_validation.md
+      - stage: review
+        prompt: prompts/review_validation_fix.md
 
 flow:
   - stage: run_prompt

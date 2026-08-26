@@ -75,6 +75,7 @@ def test_runner_timeout_arguments_must_be_whole_seconds():
 def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
     assert live.arguments().example_smoke_project is None
+    assert live.arguments().example_smoke_workflow is None
 
     monkeypatch.setattr(
         sys,
@@ -169,3 +170,39 @@ def test_example_smoke_probe_copies_project_and_runs_regular_command(
     assert "--script" not in command
     assert "--workflow" not in command
     assert "--ai-validator-prompt" not in command
+
+
+def test_example_smoke_probe_can_run_custom_workflow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "prompt.md").write_text("build\n", encoding="utf-8")
+    (source / "validation.py").write_text("validate\n", encoding="utf-8")
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        captured["command"] = command
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            '{"completed": true, "stage": "completed"}', encoding="utf-8"
+        )
+        (work / "log.txt").write_text("{}\n", encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    live.example_smoke_probe(settings(tmp_path), tmp_path, source, workflow)
+
+    command = captured["command"]
+    assert command[command.index("--workflow") + 1] == str(workflow)
+    assert "--script" not in command
