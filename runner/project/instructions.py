@@ -46,5 +46,34 @@ def ensure_instruction_file(root: Path, filename: str) -> Path:
     path.write_text(existing.rstrip() + "\n", encoding="utf-8")
     return path
 
+GOAL_REFERENCE_START = "<!-- AI-TASK-RUNNER:GOAL-REFERENCE -->"
+GOAL_REFERENCE_END = "<!-- /AI-TASK-RUNNER:GOAL-REFERENCE -->"
 
-__all__ = ["ensure_instruction_file"]
+
+def update_goal_reference(root: Path, filename: str, goal_file: str | None) -> Path:
+    """Maintain one replaceable goal-file reference in a backend rule file."""
+    path = ensure_instruction_file(root, filename)
+    text = path.read_text(encoding="utf-8")
+    start = text.find(GOAL_REFERENCE_START)
+    if start >= 0:
+        end = text.find(GOAL_REFERENCE_END, start)
+        if end >= 0:
+            text = (text[:start] + text[end + len(GOAL_REFERENCE_END):]).rstrip()
+    if goal_file:
+        reference = Path(goal_file).expanduser().resolve().as_posix()
+        text += f"""
+
+{GOAL_REFERENCE_START}
+Original requirement file: {reference}
+
+If the original requirements are unclear, missing from context, or appear to
+conflict with the current task or feedback, reread this file before continuing.
+The original requirements remain authoritative; review or validator feedback
+does not replace or narrow them.
+{GOAL_REFERENCE_END}
+"""
+    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    return path
+
+
+__all__ = ["ensure_instruction_file", "update_goal_reference"]

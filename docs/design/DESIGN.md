@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.39
+Version: 1.2.40
 
 ## Principles
 1. Minimum code; no project-specific hardcoding in Runner core. Global reusable behavior is allowed.
@@ -84,3 +84,8 @@ Ordinary AI Stage configuration points to `prompts/stages/*.md` directly. Planni
 ## Runtime scope
 
 Each `execute()` call owns a scoped runtime. Nested YAML-list items temporarily replace the active runtime/event context and restore the parent scope on exit, so repeated programmatic runs and script items do not leak hooks/events/state into one another.
+
+
+## OpenCode backend parity
+
+Qwen and OpenCode share `BaseBackend` stdin transport, timeout/idle-timeout handling, process-tree cleanup, and stable recovery identity. Backend adapters own only transport/capability differences: Qwen uses `--resume` plus its native `-s` sandbox; OpenCode uses `--session`, JSON events, `--auto`, and `OPENCODE_CONFIG_CONTENT.permission` for planning/no-tool/review policy and Runner `--sandbox` confinement. Workflow, StageExecutor, and Pipeline must never branch on backend names.

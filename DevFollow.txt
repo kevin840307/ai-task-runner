@@ -25,3 +25,5 @@
 23. Deterministic Resume／snapshot／configuration 錯誤不可進入無限 retry；只有可能隨時間恢復的 runtime/service failure 才能持續 recovery。
 24. Active／Resume Run 必須凍結所有會影響 AI 行為的 file-based input，至少包含 Workflow／Stage Prompt／Goal File／Final-AI Prompt；YAML List child 亦同。
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。
+
+23. Backend parity: complete AI task prompts must use stdin. Session, sandbox/permission, error parsing, and timeout identity belong to each Backend adapter; Workflow/Stage must not branch on Qwen/OpenCode.

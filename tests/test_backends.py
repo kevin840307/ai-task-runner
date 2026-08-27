@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 
 import pytest
@@ -84,7 +85,7 @@ def test_core_has_no_backend_specific_command_logic():
 
 def test_sandbox_arguments_are_owned_by_the_backend_adapter():
     assert sandbox_supported("qwen") is True
-    assert sandbox_supported("opencode") is False
+    assert sandbox_supported("opencode") is True
     assert configure_backend_args("qwen", "runtime", [], sandbox=True).count("-s") == 1
     assert configure_backend_args(
         "qwen",
@@ -92,6 +93,98 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
         ["--sandbox"],
         sandbox=True,
     ).count("-s") == 0
+
+
+
+def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+
+    backend = OpenCodeBackend(sys.executable, tmp_path, configure_backend_args("opencode", "runtime", []))
+    captured = {}
+
+    def fake_run(command, idle_timeout_after_change=0, change_detected=None, input_text=None):
+        captured["command"] = list(command)
+        captured["input_text"] = input_text
+        return ProcessResult(
+            '\n'.join([
+                '{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}',
+                '{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"ok"}}',
+                '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","tokens":{"input":2,"output":1,"reasoning":0,"cache":{"read":1,"write":0}}}}',
+            ]),
+            0,
+        )
+
+    monkeypatch.setattr(backend, "_run", fake_run)
+    prompt = "OpenCode stdin prompt\n" + ("x" * 10000)
+    assert backend.ask(prompt, "ses_1").text == "ok"
+    assert captured["input_text"] == prompt
+    assert prompt not in captured["command"]
+    assert "--session" in captured["command"]
+    assert "--auto" in captured["command"]
+
+
+def test_opencode_json_parser_uses_text_events_and_error_message(tmp_path):
+    backend = OpenCodeBackend(sys.executable, tmp_path, [])
+    raw = '\n'.join([
+        '{"type":"step_start","sessionID":"ses_2","part":{"type":"step-start"}}',
+        '{"type":"tool_use","sessionID":"ses_2","part":{"type":"tool","state":{"output":"tool noise"}}}',
+        '{"type":"text","sessionID":"ses_2","part":{"type":"text","text":"final answer"}}',
+        '{"type":"step_finish","sessionID":"ses_2","part":{"type":"step-finish","tokens":{"input":10,"output":4,"reasoning":1,"cache":{"read":6,"write":0}}}}',
+    ])
+    decoded = backend.decode(raw)
+    assert decoded.session_id == "ses_2"
+    assert decoded.text == "final answer"
+    diagnostics = backend.extract_diagnostics(backend.parse_json_events(raw))
+    assert diagnostics["input_tokens"] == 10
+    assert diagnostics["output_tokens"] == 4
+    assert diagnostics["cache_read_input_tokens"] == 6
+    assert diagnostics["total_tokens"] == 15
+
+    error = '{"type":"error","sessionID":"ses_2","error":{"data":{"message":"provider unavailable"}}}'
+    assert backend.error_output(error) == "provider unavailable"
+
+
+def test_opencode_permission_policy_matches_stage_and_sandbox(tmp_path, monkeypatch):
+    backend = OpenCodeBackend(sys.executable, tmp_path, [])
+
+    backend.configure_runtime("no_tool")
+    assert json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"] == {"*": "deny"}
+
+    backend.configure_runtime("planning", allow_project_read=True)
+    planning = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert planning["*"] == "deny"
+    assert planning["read"] == "allow"
+    assert planning["grep"] == "allow"
+
+    backend.configure_runtime("review", sandbox=True)
+    review = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert review["edit"] == "deny"
+    assert review["bash"] == "deny"
+    assert review["external_directory"] == "deny"
+
+    backend.configure_runtime("runtime", sandbox=True)
+    runtime = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert runtime == {"external_directory": "deny"}
+
+
+def test_opencode_permission_policy_merges_inline_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", '{"model":"provider/model","permission":{"webfetch":"deny"}}')
+    backend = OpenCodeBackend(sys.executable, tmp_path, [])
+    backend.configure_runtime("runtime", sandbox=True)
+    value = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])
+    assert value["model"] == "provider/model"
+    assert value["permission"] == {"webfetch": "deny", "external_directory": "deny"}
+
+
+def test_opencode_goal_reference_matches_qwen_behavior(tmp_path):
+    goal = tmp_path / "goal.md"
+    goal.write_text("goal", encoding="utf-8")
+    backend = OpenCodeBackend(sys.executable, tmp_path, [])
+    backend.prepare_project()
+    backend.update_goal_reference(str(goal))
+    text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Original requirement file:" in text
+    assert goal.resolve().as_posix() in text
 
 
 def test_windows_quoted_command_path_is_unwrapped():
@@ -416,3 +509,22 @@ def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
     assert backend.compress_session("session-123") == "Compressed session"
     assert calls[0][:3] == [sys.executable, "-p", "/compress-fast"]
     assert calls[0][calls[0].index("--resume") + 1] == "session-123"
+
+
+def test_opencode_runtime_permission_environment_reaches_process_runner(tmp_path, monkeypatch):
+    import runner.backends.base as base_module
+    from runner.runtime.process_runner import ProcessResult
+
+    backend = OpenCodeBackend(sys.executable, tmp_path, [])
+    backend.configure_runtime("runtime", sandbox=True)
+    captured = {}
+
+    def fake_run_process(command, cwd, timeout, idle_timeout_after_change=0, change_detected=None, input_text=None, environment_overrides=None):
+        captured["environment"] = environment_overrides
+        return ProcessResult("ok", 0)
+
+    monkeypatch.setattr(base_module, "run_process", fake_run_process)
+    result = backend._run([sys.executable, "-c", "pass"], input_text="prompt")
+    assert result.return_code == 0
+    permission = json.loads(captured["environment"]["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert permission["external_directory"] == "deny"

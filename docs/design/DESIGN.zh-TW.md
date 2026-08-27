@@ -1,6 +1,6 @@
 # 設計
 
-Version: 1.2.39
+Version: 1.2.40
 
 ## 原則
 1. 最少 Code；Runner Core 禁止 project-specific hardcode，Global 通用行為不算 hardcode。
@@ -84,3 +84,8 @@ Version: 1.2.39
 ## Runtime Scope
 
 每次 `execute()` 都使用獨立 runtime scope。YAML List 子任務只暫時切換 active runtime/event context，結束後會恢復 parent scope，避免連續 programmatic run 或 script item 互相洩漏 Hook/Event/State。
+
+
+## OpenCode backend parity
+
+Qwen 與 OpenCode 共用 `BaseBackend` 的 stdin、timeout、idle-timeout、process-tree cleanup 與 stable recovery identity。Backend adapter 只擁有 transport/capability 差異：Qwen 使用 `--resume` + native `-s` sandbox；OpenCode 使用 `--session` + JSON event stream + `--auto`，並透過 `OPENCODE_CONFIG_CONTENT.permission` 套用 planning/no-tool/review 與 `--sandbox` 的 permission policy。Workflow、StageExecutor 與 Pipeline 不得依 backend 名稱分支。

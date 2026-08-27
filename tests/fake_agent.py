@@ -33,5 +33,6 @@ else:
 if is_qwen:
     print(json.dumps([{'type':'system','subtype':'session_start','session_id':session},{'type':'result','subtype':'success','session_id':session,'result':answer}]))
 else:
-    print(json.dumps({'type':'session','sessionID':session}))
-    print(json.dumps({'type':'message','part':{'type':'text','text':answer}}))
+    print(json.dumps({'type':'step_start','sessionID':session,'part':{'type':'step-start'}}))
+    print(json.dumps({'type':'text','sessionID':session,'part':{'type':'text','text':answer}}))
+    print(json.dumps({'type':'step_finish','sessionID':session,'part':{'type':'step-finish','tokens':{'input':1,'output':1,'reasoning':0,'cache':{'read':0,'write':0}}}}))

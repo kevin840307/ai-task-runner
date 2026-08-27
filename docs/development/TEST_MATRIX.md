@@ -1,10 +1,10 @@
 # Test Matrix
 
-Version: 1.2.39
+Version: 1.2.40
 
 ## Contract areas
 - CLI/API request validation and YAML script mode.
-- Qwen/OpenCode backend command/session parsing; Qwen stdin-only prompt and EOF.
+- Qwen/OpenCode backend command/session parsing; stdin-only prompt/EOF for both; OpenCode permission sandbox and stage-mode policy.
 - Plan Stage structured task contract, same/fresh recovery, minimum TODO contract, bounded scope, and the no-Understand/no-Judge flow.
 - Executor fresh/rebuilt Goal context, cross-TODO resume with next-TODO-only prompts, same-TODO short continuation, delayed session rebuild after repeated recoverable failures, and Current-TODO-only scope.
 - Review/read-only/finalize behavior.

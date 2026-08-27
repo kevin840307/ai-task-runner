@@ -1,8 +1,11 @@
 """Shared default values for the 24h runner contract."""
 from __future__ import annotations
 
+import os
+
 DEFAULT_BACKEND = "qwen"
 DEFAULT_QWEN_COMMAND = "qwen.cmd"
+DEFAULT_OPENCODE_COMMAND = "opencode.cmd" if os.name == "nt" else "opencode"
 DEFAULT_AGENT_TIMEOUT = 7200
 DEFAULT_PLANNING_TIMEOUT = 600
 DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT = 900

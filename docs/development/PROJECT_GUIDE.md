@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.39
+Version: 1.2.40
 
 ## Mandatory maintenance rules
 1. Minimum code; no project-specific hardcode in generic Runner code. Never branch on sample/project names, FAB/ENV/version values, filenames, business fields, or a specific AI identity to solve one case.

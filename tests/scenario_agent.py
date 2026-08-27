@@ -129,5 +129,6 @@ if is_qwen:
         {"type": "result", "subtype": "success", "session_id": session, "result": text},
     ]))
 else:
-    print(json.dumps({"type": "session", "sessionID": session}))
-    print(json.dumps({"type": "message", "part": {"type": "text", "text": text}}))
+    print(json.dumps({"type": "step_start", "sessionID": session, "part": {"type": "step-start"}}))
+    print(json.dumps({"type": "text", "sessionID": session, "part": {"type": "text", "text": text}}))
+    print(json.dumps({"type": "step_finish", "sessionID": session, "part": {"type": "step-finish", "tokens": {"input": 1, "output": 1, "reasoning": 0, "cache": {"read": 0, "write": 0}}}}))

@@ -68,7 +68,7 @@ def configure_sandbox_args(name: str, extra_args: Sequence[str], *, sandbox: boo
 
 
 def sandbox_supported(name: str) -> bool:
-    return bool(_backend_type(name).sandbox_flags)
+    return _backend_type(name).supports_sandbox
 
 
 def create_backend(

@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.39
+版本：1.2.40
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -215,3 +215,8 @@ Runner-managed instruction section 由 `runner/project/instructions.py` 維護�
 Workflow／Prompt editor 應使用 `save_workflow()`／`save_prompt()`，並搭配 `runner.resources.read_text()` 回傳的 `expected_hash`。存檔會先驗證，再 atomic replace 真正來源檔。執行中的任務使用自己 work directory 內的 Workflow／Stage Prompt／Goal File／Final-AI Prompt snapshot，因此來源修改或刪除只影響下一個 Run，不影響 active／resumed Run。
 
 使用者 Python 步驟使用 `type: python_script`，設定 `path` 與可選 `args`；它在 subprocess 執行，仍走一般 StageExecutor Hook/change/recovery boundary，不把 project Python import 進長時間 Runner process。
+
+
+## OpenCode runtime contract
+
+OpenCode 完整 AI task Prompt 與 Qwen 一樣走 stdin，不放在 argv。Resume 使用官方 `--session`；non-interactive call 自動加入 `--auto`。Planning/no-tool/review 的工具權限由 Backend adapter 透過 `OPENCODE_CONFIG_CONTENT` 的 `permission` runtime override 控制。`--sandbox` 會額外 deny `external_directory`。OpenCode 官方目前沒有 Qwen `-s` 的 container sandbox 等價旗標，因此這是 permission-based confinement；Runner 的 protected-path、Git guard、readonly restore 仍是共同的硬保護。

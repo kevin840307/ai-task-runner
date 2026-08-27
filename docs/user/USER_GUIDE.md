@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.39
+Version: 1.2.40
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -188,3 +188,8 @@ Future UI/CLI integrations share `runner.api.run()` rather than calling Pipeline
 Workflow and prompt editors must use `save_workflow()` / `save_prompt()` plus the `expected_hash` returned by `runner.resources.read_text()`. Saving validates first and atomically replaces the real source file. A running task uses the Workflow, Stage-prompt, Goal-file, and Final-AI-prompt snapshots stored in its own work directory, so source edits or deletion affect the next Run, not the active/resumed Run.
 
 A user Python step is declared as `type: python_script` with `path` and optional `args`. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.
+
+
+## OpenCode runtime contract
+
+OpenCode sends complete AI task prompts through stdin just like Qwen; prompts are never placed in argv. Resume uses the official `--session` flag and non-interactive calls add `--auto`. Planning/no-tool/review capability is enforced by backend-owned runtime `permission` overrides through `OPENCODE_CONFIG_CONTENT`. `--sandbox` additionally denies `external_directory`. OpenCode currently has no Qwen `-s` container-sandbox equivalent, so this is permission-based confinement; Runner protected-path, Git guard, and readonly restoration remain the shared hard guards.

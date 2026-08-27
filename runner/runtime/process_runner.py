@@ -37,6 +37,7 @@ def run_process(
     idle_timeout_after_change: float = 0,
     change_detected: Callable[[], bool] | None = None,
     input_text: str | None = None,
+    environment_overrides: dict[str, str] | None = None,
 ) -> ProcessResult:
     """Run one command and ensure timeout cleanup cannot wait forever."""
     environment = dict(os.environ)
@@ -51,6 +52,8 @@ def run_process(
     except RuntimeError:
         command = list(command)
         watchdog_interval = DEFAULT_WATCHDOG_INTERVAL
+    if environment_overrides:
+        environment.update(environment_overrides)
     options: dict[str, Any] = {
         "cwd": cwd,
         "text": True,

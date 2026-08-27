@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.39
+版本：1.2.40
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態）才算完成。正式 `runner.api.run()` 會自動 resume 未完成 state；CLI 只額外提供 worker-process crash isolation。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
@@ -102,3 +102,8 @@ flow:
 ```
 
 真正的新行為只新增一個帶 `spec_class` 的 Stage class，再做一次 `register_stage("type", StageClass)`。Registry 只保留 `type -> class`；retry、prompt、recovery、validator capability 與流程組合都放 YAML。Planning 專用動態 context 仍由 `PlanStage` 負責。Prompt 變數統一由 `runner/prompts/context.py` 管理；Template 使用 Jinja `StrictUndefined`。
+
+
+## OpenCode Backend
+
+OpenCode 與 Qwen 共用同一 Runner Stage/Session/Recovery contract：完整 Prompt 走 stdin、既有 Session 使用 `--session`、JSON event 解析 `text/error/step_finish`，且 non-interactive call 會使用 `--auto`。`--sandbox` 在 OpenCode 上映射為 runtime `permission`：禁止 `external_directory`；Planning/No-tool/Review 另外依 Stage mode 套用 read-only/no-tool 權限。這不是 Qwen 的 container sandbox；真正 protected path/Git/readonly 保護仍由 Runner Plugin 執行。

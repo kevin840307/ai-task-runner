@@ -25,7 +25,8 @@ def _records(state_dir: Path) -> list[dict]:
     ]
 
 
-def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("backend", ["qwen", "opencode"])
+def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch, backend):
     state_dir = tmp_path.parent / f"{tmp_path.name}-mock-state"
     monkeypatch.setenv("SCENARIO", "happy_path")
     monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
@@ -37,7 +38,7 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch):
         goal="Create the requested result",
         project_root=str(tmp_path),
         validator="ai",
-        backend="qwen",
+        backend=backend,
         command=_command(),
         max_attempts=3,
         retry_delay=0,
@@ -125,6 +126,32 @@ def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypat
         assert Counter(record["stage"] for record in records) == expected
         assert all(record["stage"] != "unknown" for record in records)
 
+
+
+@pytest.mark.parametrize("scenario", ["execution_model_error", "review_retry", "api_503"])
+def test_opencode_recovery_uses_same_runner_contract(tmp_path, monkeypatch, scenario):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-{scenario}-opencode-state"
+    monkeypatch.setenv("SCENARIO", scenario)
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+
+    result = run(RunRequest(
+        goal=f"Create the requested result for OpenCode {scenario}",
+        project_root=str(tmp_path),
+        validator="ai",
+        backend="opencode",
+        command=_command(),
+        max_attempts=3,
+        max_cycles=3,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        api_wait_timeout=10,
+    ))
+
+    assert result.completed is True
+    records = _records(state_dir)
+    assert all(record["stage"] != "unknown" for record in records)
+    assert any(record["resumed"] for record in records if record["stage"] == "execute")
 
 def test_generic_workflow_and_prompts_have_no_backend_or_example_literals():
     generic_paths = [

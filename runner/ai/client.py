@@ -70,6 +70,20 @@ class AIClient:
         self.extra_args = values
         self._backend.extra_args = values
 
+    def set_runtime(
+        self,
+        mode: str,
+        *,
+        allow_project_read: bool = False,
+        sandbox: bool = False,
+    ) -> None:
+        """Update backend stage/sandbox policy without replacing the session."""
+        self._backend.configure_runtime(
+            mode,
+            allow_project_read=allow_project_read,
+            sandbox=sandbox,
+        )
+
     def _publish_ai_event(
         self, kind: str, session_id: str, text: str, call_id: str = "", error: str = "", **metadata
     ) -> str:
@@ -219,17 +233,30 @@ def create_ai_client(config, root, debug_dir=None, *, mode="runtime", session_id
         if extra_args is not None
         else build_backend_args(config, mode, allow_project_read=allow_project_read)
     )
-    return constructor(
+    client = constructor(
         backend=config.backend, command=config.command, root=root, extra_args=args,
         session_id=session_id,
         timeout=getattr(config, "agent_timeout", DEFAULT_AGENT_TIMEOUT) if timeout is None else timeout,
         debug_dir=debug_dir,
     )
+    if hasattr(client, "set_runtime"):
+        client.set_runtime(
+            mode,
+            allow_project_read=allow_project_read,
+            sandbox=getattr(config, "sandbox", False),
+        )
+    return client
 
 
 def configure_ai_client(client, config, mode, *, allow_project_read=False):
     """Switch stage capabilities on an existing live AI session."""
     client.set_extra_args(build_backend_args(config, mode, allow_project_read=allow_project_read))
+    if hasattr(client, "set_runtime"):
+        client.set_runtime(
+            mode,
+            allow_project_read=allow_project_read,
+            sandbox=getattr(config, "sandbox", False),
+        )
 
 
 

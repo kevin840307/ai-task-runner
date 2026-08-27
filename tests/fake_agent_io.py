@@ -20,7 +20,7 @@ PromptStage = Literal[
 
 def read_prompt(args: list[str]) -> tuple[bool, str]:
     is_qwen = "--output-format" in args and "stream-json" in args
-    prompt = sys.stdin.buffer.read().decode("utf-8") if is_qwen else args[-1]
+    prompt = sys.stdin.buffer.read().decode("utf-8")
     return is_qwen, prompt
 
 

@@ -35,6 +35,7 @@ class BaseBackend(ABC):
     name: ClassVar[str]
     default_command: ClassVar[str]
     sandbox_flags: ClassVar[tuple[str, ...]] = ()
+    supports_sandbox: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -51,6 +52,9 @@ class BaseBackend(ABC):
         )
         self.extra_args = list(extra_args)
         self.timeout = timeout
+        self.mode: BackendMode = "runtime"
+        self.allow_project_read = False
+        self.sandbox = False
         self._validate_command(command)
 
     def ask(
@@ -114,6 +118,7 @@ class BaseBackend(ABC):
                 idle_timeout_after_change,
                 change_detected,
                 input_text,
+                self.process_environment(),
             )
         except OSError as error:
             raise BackendError(f"{self.name} failed: {error}") from error
@@ -127,6 +132,23 @@ class BaseBackend(ABC):
                 recovery_key=f"{self.name}:timeout:{self.timeout}",
             )
         return result
+
+
+    def configure_runtime(
+        self,
+        mode: BackendMode,
+        *,
+        allow_project_read: bool = False,
+        sandbox: bool = False,
+    ) -> None:
+        """Update per-stage backend capability state without replacing the session."""
+        self.mode = mode
+        self.allow_project_read = allow_project_read
+        self.sandbox = sandbox
+
+    def process_environment(self) -> dict[str, str]:
+        """Return backend-specific environment overrides for one model process."""
+        return {}
 
     def prepare_project(self) -> list[Path]:
         """Create optional backend-specific project files and return them."""

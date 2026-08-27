@@ -247,3 +247,17 @@ def test_cleanup_stale_safety_snapshots(tmp_path):
     assert not readonly.exists()
     assert not protected.exists()
     assert keep.exists()
+
+
+def test_run_process_applies_backend_environment_overrides(tmp_path):
+    from runner.runtime.process_runner import run_process
+
+    code = "import os; print(os.environ.get('RUNNER_BACKEND_TEST', 'missing'))"
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        10,
+        environment_overrides={"RUNNER_BACKEND_TEST": "present"},
+    )
+    assert result.return_code == 0
+    assert result.output.strip() == "present"

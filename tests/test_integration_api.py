@@ -623,3 +623,19 @@ def test_terminal_fit_keeps_short_cjk_line():
     line = "AI 正在處理目前任務"
     assert LiveUI._fit_terminal_line(line, 80) == line
     assert LiveUI._display_width(line) > len(line)
+
+
+def test_opencode_backend_runs_real_runner_flow_with_stdin(tmp_path):
+    result = run(RunRequest(
+        goal="Create done.txt and complete the current task.",
+        project_root=str(tmp_path),
+        validator=str(_validator(tmp_path / "validator.py")),
+        backend="opencode",
+        command=_fake_command(),
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        max_cycles=3,
+    ))
+    assert result.completed is True
+    assert (tmp_path / "done.txt").read_text(encoding="utf-8") == "done"
