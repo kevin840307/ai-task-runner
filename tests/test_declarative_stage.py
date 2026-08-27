@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.stages import BaseStage, PlanStage, PythonValidatorStage
+from runner.workflow.stages.python_script import PythonScriptStage
 
 
 def test_registry_contains_only_behavior_types():
@@ -9,6 +10,7 @@ def test_registry_contains_only_behavior_types():
         "base": BaseStage,
         "plan": PlanStage,
         "python": PythonValidatorStage,
+        "python_script": PythonScriptStage,
     }
 
 

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
+import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -27,16 +29,17 @@ from .config.defaults import (
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
 )
-from .errors import RunnerError, is_transient_error
+from .errors import ConfigurationError, RunnerError, is_transient_error
+from .extensions import discover_extensions
 from .plugins.registry import (
     merge_plugin_config,
     plugin_config_from_namespace,
     plugin_config_from_request,
 )
-from .script_loader import load_yaml_script
-from .script_runner import build_script_item_config
+from .utils import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
+from .workflow.snapshot import load_snapshot
 
 
 @dataclass
@@ -146,8 +149,14 @@ class RunRequest:
         on_event: EventHandler | None = None,
     ) -> RuntimeConfig:
         """Resolve public request inputs into the typed execution contract."""
+        discover_extensions()
         ai_validator_prompt = self._effective_ai_validator_prompt()
-        workflow = (
+        frozen = (
+            load_snapshot(self.project_root, self.work_dir)
+            if self.resume and not self.script and not self.force_new
+            else None
+        )
+        workflow = frozen or (
             load_workflow(self.workflow_file)
             if self.workflow_file
             else load_default_workflow(self.validator, ai_validator_prompt)
@@ -273,7 +282,7 @@ def run(
     request: RunRequest | Mapping[str, Any],
     on_event: EventHandler | None = None,
 ) -> RunResult:
-    """Execute one canonical request from any caller."""
+    """Run until Final Validator PASS (or plan-only), sharing recovery across all callers."""
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
 
@@ -281,18 +290,35 @@ def run(
     while True:
         try:
             exit_code = execute(config)
-            break
-        except RunnerError as error:
-            if not is_transient_error(error):
-                raise
-            config = replace(
-                config,
-                resume=any(path.is_file() for path in _state_files(request, config)),
-                force_new=False,
+            result = _result(request, exit_code)
+            if request.plan_only or result.completed:
+                return result
+            config = _resume_config(request, config, result.state_files)
+            _report_retry(
+                request,
+                on_event,
+                "run returned before Final Validator completion; resuming saved state",
             )
-            if config.stage_retry_delay:
-                time.sleep(config.stage_retry_delay)
-    state_files = _state_files(request, config)
+        except KeyboardInterrupt:
+            raise
+        except ConfigurationError:
+            raise
+        except RunnerError as error:
+            config = _resume_config(request, config)
+            kind = "service wait window exhausted" if is_transient_error(error) else "runner failure"
+            _report_retry(request, on_event, f"{kind}: {error}")
+        except Exception as error:
+            _log_unexpected(request, error)
+            config = _resume_config(request, config)
+            _report_retry(
+                request, on_event, f"{type(error).__name__}: {error}; retrying"
+            )
+        if config.stage_retry_delay:
+            time.sleep(config.stage_retry_delay)
+
+
+def _result(request: RunRequest, exit_code: int) -> RunResult:
+    state_files = _state_files(request)
     states = tuple(_read_state(path) for path in state_files if path.is_file())
     return RunResult(
         exit_code=exit_code,
@@ -301,17 +327,89 @@ def run(
     )
 
 
-def _state_files(request: RunRequest, config: RuntimeConfig) -> list[Path]:
+def _resume_config(
+    request: RunRequest,
+    config: RuntimeConfig,
+    state_files: tuple[str, ...] | list[str] | None = None,
+) -> RuntimeConfig:
+    paths = (
+        [Path(path) for path in state_files]
+        if state_files is not None
+        else _state_files(request)
+    )
+    return replace(
+        config,
+        resume=any(path.is_file() for path in paths),
+        force_new=False,
+    )
+
+
+def _log_unexpected(request: RunRequest, error: BaseException) -> None:
+    log = Path(request.project_root, request.work_dir, "exception.log").resolve()
+    append_bounded_log(
+        log,
+        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+        f"{type(error).__name__}: {error}\n{traceback.format_exc()}",
+    )
+
+
+def _report_retry(
+    request: RunRequest,
+    callback: EventHandler | None,
+    message: str,
+) -> None:
+    event = {
+        "schema_version": 1,
+        "runner_version": __version__,
+        "type": "runner.retry",
+        "action": "retry",
+        "timestamp": time.time(),
+        "message": message,
+    }
+    if callback is not None:
+        try:
+            callback(event)
+        except Exception:
+            pass
+    if request.json_events:
+        try:
+            print(json.dumps(event), flush=True)
+        except (BrokenPipeError, OSError):
+            pass
+    elif request.human_output:
+        print(f"ERROR: {message}", file=sys.stderr)
+
+
+def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
+    """Return durable state locations without loading Workflow or runtime plugins."""
+    if not isinstance(request, RunRequest):
+        request = RunRequest.from_mapping(request)
+    return tuple(str(path) for path in _state_files(request))
+
+
+def _state_files(request: RunRequest) -> list[Path]:
     root = Path(request.project_root).resolve()
-    work = root / request.work_dir
-    if request.script:
-        script = Path(config.script).resolve()
-        return [
-            Path(child.project_root, child.work_dir, "state.json")
-            for index, item in enumerate(load_yaml_script(script), 1)
-            for child in (build_script_item_config(config, item, index),)
-        ]
-    return [work / "state.json"]
+    if not request.script:
+        return [root / request.work_dir / "state.json"]
+
+    script = Path(request.script).expanduser().resolve()
+    try:
+        import yaml
+        data = yaml.safe_load(script.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+
+    result: list[Path] = []
+    for index, item in enumerate(data, 1):
+        child_root = root
+        if isinstance(item, dict) and isinstance(item.get("project_root"), str):
+            value = Path(item["project_root"]).expanduser()
+            child_root = (value if value.is_absolute() else root / value).resolve()
+        child_work = Path(request.work_dir) / "script" / f"{index:03d}"
+        result.append(child_root / child_work / "state.json")
+    return result
 
 
 def _read_state(path: Path) -> dict[str, Any]:
@@ -324,4 +422,5 @@ __all__ = [
     "RunResult",
     "__version__",
     "run",
+    "state_files",
 ]

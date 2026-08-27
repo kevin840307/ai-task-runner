@@ -8,6 +8,7 @@ from .registry import (
     configure_sandbox_args,
     create_backend,
     default_command,
+    register_backend,
     sandbox_supported,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "configure_sandbox_args",
     "create_backend",
     "default_command",
+    "register_backend",
     "ensure_opencode_rules",
     "ensure_qwen_rules",
     "sandbox_supported",

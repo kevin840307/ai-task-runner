@@ -190,7 +190,7 @@ def test_plan_rejects_task_without_write_stage_when_available(tmp_path):
 
 
 def test_registry_is_only_type_to_class():
-    assert set(STAGE_REGISTRY) == {"base", "plan", "python"}
+    assert set(STAGE_REGISTRY) == {"base", "plan", "python", "python_script"}
     assert all(isinstance(stage_class, type) for stage_class in STAGE_REGISTRY.values())
 
 

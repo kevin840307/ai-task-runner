@@ -2,34 +2,49 @@
 
 目錄本身就是架構圖：
 
-- `runner/api.py`、`bootstrap.py`、`task_runner.py`：外部 request、dependency 組裝、單次任務協調。
+- `runner/api.py`、`bootstrap.py`、`task_runner.py`：共用 request/recovery 邊界、dependency 組裝、單次任務協調。
 - `runner/script_loader.py`、`script_runner.py`：YAML 結構/檔案解析，以及經驗證的 child config 執行。
 - `runner/workflow/`：Workflow 定義、路由規則、特殊 Prompt/Result adapter 與 Stage Engine。
-- `runner/workflow/stages/`：Stage contract、factory、共用 executor、`BaseStage`、`PlanStage`、`PythonValidatorStage`。
+- `runner/workflow/stages/`：Stage contract、共用 executor、`BaseStage`、`PlanStage`、隔離執行的 `PythonScriptStage`、以及 authoritative `PythonValidatorStage`。
 - `runner/ai/`：AI Client、Backend contract、Session 判斷、Structured Output、AI diagnostics。
 - `runner/backends/`：Qwen/OpenCode 實作與 Backend registry/configuration。
 - `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
 - `runner/prompts/`：Strict Jinja loader、穩定 Prompt Context contract、Prompt resources。
-- `runner/runtime/`：Durable state、subprocess lifecycle、raw EventBus，以及 Workflow 使用的 semantic progress facade。
+- `runner/runtime/`：Durable state、subprocess lifecycle、worker crash supervisor、raw EventBus，以及 Workflow 使用的 semantic progress facade。
 - `runner/plugins/`：Safety、Console、History、Observability、Loop context 壓縮等橫切 Plugin/Hook。
 - `runner/config/`：Defaults 與唯一經驗證的 Runtime configuration contract。
+- `runner/extensions.py`、`resources.py`：Workflow 驗證前的 installed extension discovery，以及共用 atomic editable-resource I/O。
 - `runner/utils/`：只保留無狀態、通用的 file/text helper。
 
 ## 依賴方向
 
-`API/Bootstrap -> TaskRunner -> Workflow -> Stage -> AI contracts`
+`CLI / UI / Skill -> runner.api -> Bootstrap -> TaskRunner -> Workflow -> Stage -> bounded capability`
 
 `Backends -> AI contracts`
 
 `StageExecutor -> Project + Runtime semantic progress + generic hook contract`
 
-`Bootstrap -> backend/plugin registries`
+`Bootstrap -> runtime plugins`
+
+`Extension discovery -> Stage/backend registries -> Workflow validation`
 
 Workflow 不得直接依賴 Qwen/OpenCode、具體 Plugin、raw event schema 或 UI 行為；`runtime/progress.py` 是語意 facade，`runtime/events.py` 才負責 event transport/schema。AI subsystem 不得反向依賴 Workflow business stage。
 
-CLI parsing 在 `RunRequest.from_namespace()` 結束。`RunRequest.normalized_config()` 只做一次檔案解析與公開欄位映射；`RuntimeConfig.validate()` 是一般 request 與 YAML child item 共用的執行驗證。Runner 不再保留反向或內部 Namespace 相容層。
+CLI parsing 在 `RunRequest.from_namespace()` 結束。`runner.api.run()` 對所有入口統一負責 logical retry、未完成 normal return 的 resume、unexpected runtime recovery，以及 Final Validator completion guard。CLI 額外只有 `runtime/supervisor.py` 的 process-level crash isolation，不再擁有第二套 retry loop。`RunRequest.normalized_config()` 只做一次檔案解析與公開欄位映射；`RuntimeConfig.validate()` 是一般 request 與 YAML child item 共用的執行驗證。Runner 不再保留反向或內部 Namespace 相容層。
 
 Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 Hook Chain 回報錯誤；只有 Plugin 讀取壓縮設定與 Backend 的可選 context capability。
+
+## UI / Extension 邊界
+
+UI 是 Adapter，不是 execution Plugin。UI/CLI/Skill 只能依賴 `runner.api`、editable-resource function、event callback 與 Stage catalog metadata；Pipeline、StageExecutor、Stage 不得 import UI。整包移除 UI 時，Runner execution semantics 必須完全不變。
+
+外部 Python package 可透過 `ai_task_runner.extensions` entry point 在 Runtime 建立前註冊 `register_stage()`、Backend 等 runtime-independent capability；Discovery 發生在 Workflow validation 之前。Cross-cutting Runtime Plugin 則使用獨立的 `ai_task_runner.plugins` entry-point group，只有 Runtime 建立後才 attach。如此可擴充但不讓 Workflow Core 反向依賴 Plugin。
+
+`workflow.registry.stage_catalog()` 直接由已註冊 Stage 的 `spec_class` 產生，UI/Tooling 不得另外 hardcode 一份 Stage schema。使用者 Python automation 使用 `type: python_script`，一律透過共用 Python process helper 在 subprocess 執行；任意使用者 Python 不會 import 進 24H Runner process。
+
+`workflow.loader.save_workflow()`、`prompts.loader.save_prompt()` 先使用真正 Runner parser/schema 驗證，再 atomic replace；`expected_hash` 提供 UI/IDE optimistic concurrency protection。這只是共用檔案資源能力，不建立第二套 Workflow service/storage model。
+
+Concrete Run 開始時會把 normalized Workflow 與已解析的外部 prompt 持久化到該 Run work directory：`workflow.snapshot.json` 加上 content-addressed prompt resources。Run 執行中即使 UI/VS Code 修改來源檔，或 worker crash 後 `--resume`，該 Run 仍使用原本 Workflow/Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
 
 ## Workflow 契約
 

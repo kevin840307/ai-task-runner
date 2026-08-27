@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.33
+Version: 1.2.34
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -181,3 +181,10 @@ If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_t
 - OpenCode: `AGENTS.md`
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
+
+## UI-ready editing and Python Stage
+Future UI/CLI integrations share `runner.api.run()` rather than calling Pipeline or StageExecutor directly. `stage_catalog()` exposes installed Stage types from their real `spec_class`; external Stage/backend registration uses `ai_task_runner.extensions`, while cross-cutting runtime Plugins use `ai_task_runner.plugins`.
+
+Workflow and prompt editors must use `save_workflow()` / `save_prompt()` plus the `expected_hash` returned by `runner.resources.read_text()`. Saving validates first and atomically replaces the real source file. A running task uses the Workflow/prompt snapshot stored in its own work directory, so source edits affect the next Run, not the active/resumed Run.
+
+A user Python step is declared as `type: python_script` with `path` and optional `args`. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.

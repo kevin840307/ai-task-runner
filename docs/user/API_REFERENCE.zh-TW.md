@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.2.33
+版本：1.2.34
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
@@ -30,7 +30,7 @@ print(result.exit_code, result.completed)
 ```
 
 ## Events
-`run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。Transient service 等待視窗用盡後會自動 resume 可用的 direct 或 YAML item state；non-transient 與 deterministic configuration error 仍會交還 caller。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
+`run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。Transient service 等待視窗用盡或其他可恢復 Runner failure 時，會自動 resume 可用的 direct / YAML item state；deterministic `ConfigurationError` 與無效公開輸入仍會 fail-fast。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
 
 ## YAML script
 `runner.script_loader` 負責解析非空 YAML array、結構欄位、alias 與引用檔案；`runner.script_runner` 使用 `dataclasses.replace()` 建立 child，並套用 API/CLI 共用的 `RuntimeConfig.validate()`。YAML 不另外維護 timeout、retry、quorum 或 Plugin option 規則。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator` path 或 `ai`；相對 `goal_file`、`ai_validator_prompt_file`、`workflow_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、Final AI quorum alias、`project_root`、`workflow_file` 與通用 `plugins` mapping。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊 Plugin 欄位仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
@@ -40,3 +40,12 @@ print(result.exit_code, result.completed)
 Retry 與 cycle 上限統一使用同一 sentinel：`-1` 表示持續恢復直到 PASS，`0` 表示停用該 retry/cycle，正數表示有限上限。預設 `max_attempts=2` 仍會在最多兩次 Same Session 恢復後切換 Fresh Session；預設 `max_cycles=-1` 讓無人職守驗證持續到 PASS。
 
 Plugin 設定統一放在 `RunRequest.plugins` / `RuntimeConfig.plugins`。可設定的 Plugin 在自己的 module 內管理 CLI argument、YAML alias、預設值與驗證；新增 Plugin 不需要修改核心 config、YAML child 建立或 workflow。
+
+## UI／可編輯資源／Stage Catalog
+`runner.workflow.registry.stage_catalog()` 直接從每個已註冊 Stage 的 `spec_class` 輸出 metadata；UI/Tooling 不得另外維護 hardcode Stage schema。外部套件可使用 `ai_task_runner.extensions` entry-point group，在 Workflow validation 前註冊 Stage／Backend；只屬於 runtime 橫切能力的 Plugin 使用獨立 `ai_task_runner.plugins` group。
+
+`runner.workflow.loader.save_workflow()` 會先走真正 Workflow parser/schema 再 atomic replace；`runner.prompts.loader.save_prompt()` 會先驗證 Jinja syntax 再 atomic replace。`runner.resources.read_text()` 會回傳內容與 SHA-256；存檔／刪除時可把它當 `expected_hash`，避免 UI、IDE 或其他程序無聲互蓋。這些 API 修改的就是未來 Run 真正使用的檔案，不建立 UI 專用第二套 Workflow。
+
+Concrete Run 會在自己的 work directory 持久化 `workflow.snapshot.json` 與 content-addressed external prompt resource；執行中或之後 Resume 都沿用同一份 frozen input，所以 UI/IDE 修改只影響新的 Run。`runner.api.state_files()` 不需重新載入 Workflow 就能定位 direct／YAML child state，可供 process supervisor 使用。
+
+`type: python_script` 是通用使用者 Python Stage；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。

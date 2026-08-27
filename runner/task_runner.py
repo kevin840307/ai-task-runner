@@ -5,11 +5,12 @@ from pathlib import Path
 
 from .ai import create_ai_client
 from .config import RuntimeConfig
-from .errors import RunnerError
+from .errors import ConfigurationError, RunnerError
 from .project.files import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .workflow.loader import workflow_fingerprint
+from .workflow.snapshot import freeze_workflow, load_snapshot
 from .workflow.pipeline import build_pipeline
 from .workflow.stages import StageContext, StageExecutor
 
@@ -26,6 +27,14 @@ class TaskRunner:
         self.validator_is_ai = self.config.validator.lower() == "ai"
         self.validator_path = None if self.validator_is_ai else Path(self.config.validator).resolve()
         self.work = self.root / self.config.work_dir
+        if self.config.resume and not self.config.force_new:
+            frozen = load_snapshot(self.root, self.config.work_dir)
+            if frozen is not None:
+                self.config.workflow = frozen
+        else:
+            self.config.workflow = freeze_workflow(
+                self.config.workflow, self.root, self.config.work_dir
+            )
         self.state_store = StateStore(self.root, self.work)
         self.state_file = self.state_store.path
         self._validate_paths()
@@ -81,7 +90,7 @@ class TaskRunner:
         if not self.root.is_dir() or (
             self.validator_path is not None and not self.validator_path.is_file()
         ):
-            raise RunnerError("invalid project root or validator")
+            raise ConfigurationError("invalid project root or validator")
 
     def _save_state(self) -> None:
         self.state_store.save(self.state)

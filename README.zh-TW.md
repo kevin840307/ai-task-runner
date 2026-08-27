@@ -1,9 +1,9 @@
 # AI Task Runner
 
-版本：1.2.33
+版本：1.2.34
 
 
-執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態），CLI 才會退出。若 state 尚未完成，main 會自動 resume 繼續。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
+執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態）才算完成。正式 `runner.api.run()` 會自動 resume 未完成 state；CLI 只額外提供 worker-process crash isolation。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
 
 這是一個小型、可重用、適合長時間執行 AI coding task 的 Python orchestrator。它把模型工作與 deterministic validation 分離，保留可 Resume 的狀態，限制 Executor 只處理目前 TODO，並在模型或 CLI 不穩定時持續恢復，而不把專案需求 hardcode 進 Runner。
 
@@ -12,7 +12,9 @@
 - Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
 - TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Review 使用獨立 read-only client/session。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
-- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、Python API、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
+- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
+- UI-ready extension boundary：Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛、Stage catalog 直接由真正 spec 產生，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow/Prompt snapshot。
+- 通用 `python_script` Stage 會在 subprocess 執行 project/user Python；Python Validator 仍保留 authoritative deterministic gate 語意。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
 - `<project-root>/.ai-task-runner.yaml` 是專案 policy；policy 本身會自動受到保護。

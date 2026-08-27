@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.33
+Version: 1.2.34
 
 ## Mandatory maintenance rules
 1. Minimum code; no project-specific hardcode in generic Runner code. Never branch on sample/project names, FAB/ENV/version values, filenames, business fields, or a specific AI identity to solve one case.
@@ -37,6 +37,11 @@ Use `runner.api.RunRequest` / `runner.api.run()` as the shared entry for CLI/UI/
 
 `runner/bootstrap.py` is the composition root. Backend/plugin registries compose dependencies at the boundary; Workflow must not discover concrete plugins or backends itself.
 
+## UI / extension maintenance boundary
+UI is an adapter beside CLI, not a Workflow Plugin. Pipeline, StageExecutor, Stage, AI client, and Workflow loader must not import UI code. External Stage/backend registration happens before Workflow validation through installed extensions; runtime-only plugins attach later through the Hook/Event boundary. A new external Stage must not require a Stage-name branch in Pipeline.
+
+Editable Workflow/prompt files use the shared atomic resource functions and optimistic `expected_hash`; an active Run uses its durable Workflow/prompt snapshot. Keep one Run per worker process for isolation rather than adding in-process global runtime concurrency solely for UI.
+
 ## Project policy
 Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
 
@@ -67,7 +72,7 @@ Three validation modes are supported: AI-only, Python-only, and Mixed. Mixed val
 
 YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
 
-Workflow YAML has only two top-level keys: `stages` defines reusable named nodes and `flow` defines the static top-level sequence. `recover` may contain a static recovery Stage sequence; there is no reusable-subflow, `expand`, or `foreach` DSL. The registry is only `type -> class` (`base`, `plan`, `python` by default). Generic AI-backed nodes default to `type: base`, so the type may be omitted. `PlanStage` is intentionally special: Loader derives its available dynamic Stage catalog from YAML structure, Plan selects ordered Stage names per TODO, and Pipeline persists/runs the resulting `next_steps`. Ordinary Stage classes remain routing-agnostic.
+Workflow YAML has only two top-level keys: `stages` defines reusable named nodes and `flow` defines the static top-level sequence. `recover` may contain a static recovery Stage sequence; there is no reusable-subflow, `expand`, or `foreach` DSL. The registry is only `type -> class` (`base`, `plan`, `python`, `python_script` by default). Generic AI-backed nodes default to `type: base`, so the type may be omitted. `PlanStage` is intentionally special: Loader derives its available dynamic Stage catalog from YAML structure, Plan selects ordered Stage names per TODO, and Pipeline persists/runs the resulting `next_steps`. Ordinary Stage classes remain routing-agnostic.
 
 Use the shared 1-based `restart_at` YAML option when a top-level Stage must route logical FAIL or exhausted recovery to a current/earlier Workflow position. Keep session recovery, generated Planning children, and completion rules in their existing semantic owners; they are not arbitrary YAML topology.
 

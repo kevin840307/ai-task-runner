@@ -7,7 +7,6 @@ from typing import Any
 
 from .errors import RunnerError
 from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
-from .workflow.loader import load_workflow
 
 
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
@@ -87,7 +86,7 @@ def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
         path = Path(value).expanduser()
         if not path.is_absolute():
             path = script.parent / path
-        result["workflow"] = load_workflow(path)
+        result["workflow_file"] = str(path.resolve())
 
     aliases = {
         "review_retries": "review_retries",

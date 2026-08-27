@@ -8,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined, meta
 
 from ..project.policy import instruction_text
 from ..errors import RunnerError
+from ..resources import write_text
 from ..plugins.registry import collect_plugin_instructions
 from . import PROMPT_ROOT
 
@@ -53,6 +54,24 @@ def prompt_variables(filename: str, *, base: Path = PROMPT_ROOT) -> set[str]:
     return set(meta.find_undeclared_variables(_ENV.parse(source)))
 
 
+
+def save_prompt(
+    path: str | Path,
+    text: str,
+    *,
+    expected_hash: str | None = None,
+) -> str:
+    """Validate Jinja syntax and atomically save one editable prompt."""
+    target = Path(path).expanduser().resolve()
+
+    def validate(source_text: str) -> None:
+        try:
+            _ENV.parse(source_text)
+        except Exception as error:
+            raise RunnerError(f"invalid prompt template: {target}: {error}") from error
+
+    return write_text(target, text, expected_hash=expected_hash, validate=validate)
+
 def always_instructions(root: Path) -> str:
     text = instruction_text(root, "always")
     return f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
@@ -76,5 +95,6 @@ __all__ = [
     "always_instructions",
     "prompt_variables",
     "render_prompt",
+    "save_prompt",
     "structured_retry_prompt",
 ]

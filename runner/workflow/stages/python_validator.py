@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import shutil
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import RunnerError
-from ...runtime.process_runner import run_process
 from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
+from .python_process import run_python
 
 ResultHandler = Callable[[StageContext, StageResult], StageResult]
 
@@ -49,25 +48,19 @@ class PythonValidatorStage:
         validator = self._validator(ctx)
         if self.spec.clear_reports:
             clear_validator_reports(ctx.work)
-        command = [
-            sys.executable,
-            str(validator),
-            "--project-root",
-            str(ctx.root),
-            "--state-file",
-            str(ctx.state_file),
-            *ctx.config.validator_args,
-        ]
-        try:
-            result = run_process(command, ctx.root, ctx.config.validator_timeout)
-        except OSError as error:
-            raise RunnerError(f"validator failed: {error}") from error
-        if result.timed_out:
-            detail = "\n".join(item for item in [
-                f"validator timeout after {ctx.config.validator_timeout} seconds",
-                result.output[-4000:].strip(),
-            ] if item)
-            raise RunnerError(detail)
+        result = run_python(
+            ctx,
+            validator,
+            [
+                "--project-root",
+                str(ctx.root),
+                "--state-file",
+                str(ctx.state_file),
+                *ctx.config.validator_args,
+            ],
+            ctx.config.validator_timeout,
+            "validator",
+        )
         return StageResult(
             self.name,
             "pass" if result.return_code == 0 else "fail",

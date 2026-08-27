@@ -1,6 +1,6 @@
 # 設計
 
-Version: 1.2.33
+Version: 1.2.34
 
 ## 原則
 1. 最少 Code；Runner Core 禁止 project-specific hardcode，Global 通用行為不算 hardcode。

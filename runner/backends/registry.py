@@ -17,6 +17,17 @@ BACKENDS: dict[str, type[BaseBackend]] = {
 }
 
 
+
+def register_backend(name: str, backend_class: type[BaseBackend]) -> None:
+    """Register one backend type before RuntimeConfig validation."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("backend name must be a non-empty string")
+    if name in BACKENDS:
+        raise ValueError(f"duplicate backend registration: {name}")
+    if not isinstance(backend_class, type) or not issubclass(backend_class, BaseBackend):
+        raise ValueError(f"backend {name} must extend BaseBackend")
+    BACKENDS[name] = backend_class
+
 def backend_names() -> tuple[str, ...]:
     return tuple(BACKENDS)
 
@@ -78,5 +89,6 @@ __all__ = [
     "configure_sandbox_args",
     "create_backend",
     "default_command",
+    "register_backend",
     "sandbox_supported",
 ]

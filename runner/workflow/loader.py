@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import RunnerError
+from ..resources import write_text
 from .schema import (
     validate_restart_targets,
     validate_stage,
@@ -37,6 +38,29 @@ def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
         raise RunnerError(f"invalid workflow YAML: {error}") from error
     return normalize_workflow(data, source.resolve())
 
+
+
+def save_workflow(
+    path: str | Path,
+    text: str,
+    *,
+    expected_hash: str | None = None,
+) -> str:
+    """Validate Workflow text with the real loader contract, then atomically save it."""
+    target = Path(path).expanduser().resolve()
+
+    def validate(source_text: str) -> None:
+        try:
+            import yaml
+        except ImportError as error:
+            raise RunnerError("Workflow YAML requires PyYAML: pip install PyYAML") from error
+        try:
+            data = yaml.safe_load(source_text)
+        except yaml.YAMLError as error:
+            raise RunnerError(f"invalid workflow YAML: {error}") from error
+        normalize_workflow(data, target)
+
+    return write_text(target, text, expected_hash=expected_hash, validate=validate)
 
 def load_default_workflow(
     validator: str | None, ai_validator_prompt: str = ""
@@ -239,6 +263,7 @@ __all__ = [
     "load_default_workflow",
     "load_workflow",
     "normalize_workflow",
+    "save_workflow",
     "workflow_fingerprint",
     "workflow_has_planning",
     "workflow_validators",

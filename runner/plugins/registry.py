@@ -5,17 +5,28 @@ import importlib
 import pkgutil
 from collections.abc import Mapping
 from functools import lru_cache
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
+
+PLUGIN_ENTRYPOINT_GROUP = "ai_task_runner.plugins"
 
 
 @lru_cache
 def _plugin_modules() -> tuple[Any, ...]:
     package = importlib.import_module("runner.plugins")
-    return tuple(
+    internal = [
         importlib.import_module(f"runner.plugins.{item.name}")
         for item in sorted(pkgutil.iter_modules(package.__path__), key=lambda item: item.name)
+    ]
+    points = entry_points()
+    selected = (
+        points.select(group=PLUGIN_ENTRYPOINT_GROUP)
+        if hasattr(points, "select")
+        else points.get(PLUGIN_ENTRYPOINT_GROUP, ())
     )
+    external = [point.load() for point in sorted(selected, key=lambda item: item.name)]
+    return tuple((*internal, *external))
 
 
 def register_plugins(runtime: Any) -> None:
@@ -101,6 +112,7 @@ def collect_plugin_instructions(root: Path) -> str:
 
 
 __all__ = [
+    "PLUGIN_ENTRYPOINT_GROUP",
     "add_plugin_arguments",
     "collect_plugin_instructions",
     "merge_plugin_config",

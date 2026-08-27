@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from runner.errors import RunnerError
+from runner.extensions import discover_extensions
+from runner.prompts.loader import save_prompt
+from runner.resources import read_text
+from runner.workflow.loader import load_workflow, save_workflow
+from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog
+from runner.workflow.snapshot import freeze_workflow, load_snapshot
+from runner.workflow.stages.python_script import PythonScriptStage, PythonScriptStageSpec
+
+
+def _workflow_text(prompt: str = "") -> str:
+    prompt_line = f"    prompt: {prompt}\n" if prompt else ""
+    return (
+        "stages:\n"
+        "  execute:\n"
+        "    status: Execute\n"
+        f"{prompt_line}"
+        "  validate_file:\n"
+        "    type: python\n"
+        "    status: Validate\n"
+        "    validator: file\n"
+        "flow: [execute, validate_file]\n"
+    )
+
+
+def test_stage_catalog_uses_registered_spec_as_single_schema_source():
+    catalog = stage_catalog()
+    assert {"base", "plan", "python", "python_script"} <= set(catalog)
+    python_fields = {item["name"] for item in catalog["python_script"]["options"]}
+    assert {"name", "status", "path", "args", "retry"} <= python_fields
+
+
+def test_workflow_save_validates_then_atomically_replaces(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    first_hash = save_workflow(path, _workflow_text())
+    text, current_hash = read_text(path)
+    assert current_hash == first_hash
+    assert load_workflow(path)
+
+    with pytest.raises(RunnerError):
+        save_workflow(path, "stages: []\nflow: []\n", expected_hash=current_hash)
+    assert read_text(path)[0] == text
+
+
+def test_resource_hash_prevents_silent_overwrite(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    expected = save_workflow(path, _workflow_text())
+    path.write_text(_workflow_text().replace("Execute", "Changed"), encoding="utf-8")
+    with pytest.raises(RunnerError, match="changed since it was read"):
+        save_workflow(path, _workflow_text(), expected_hash=expected)
+
+
+def test_prompt_save_rejects_invalid_jinja_without_touching_file(tmp_path):
+    path = tmp_path / "prompt.md"
+    old_hash = save_prompt(path, "Hello {{ task }}")
+    with pytest.raises(RunnerError, match="invalid prompt template"):
+        save_prompt(path, "Hello {{", expected_hash=old_hash)
+    assert path.read_text(encoding="utf-8") == "Hello {{ task }}"
+
+
+def test_workflow_snapshot_freezes_local_prompt_content(tmp_path):
+    prompt = tmp_path / "execute.md"
+    prompt.write_text("version A", encoding="utf-8")
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(_workflow_text("execute.md"), encoding="utf-8")
+    workflow = load_workflow(workflow_file)
+
+    frozen = freeze_workflow(workflow, tmp_path, ".run")
+    prompt.write_text("version B", encoding="utf-8")
+    loaded = load_snapshot(tmp_path, ".run")
+
+    assert loaded == frozen
+    frozen_prompt = Path(frozen[0]["prompt"])
+    assert frozen_prompt.read_text(encoding="utf-8") == "version A"
+
+
+def test_python_script_stage_runs_out_of_process(tmp_path):
+    script = tmp_path / "stage.py"
+    script.write_text(
+        "from pathlib import Path\nPath('marker.txt').write_text('ok', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    stage = PythonScriptStage(PythonScriptStageSpec(name="script", status="Run", path="stage.py"))
+    ctx = SimpleNamespace(root=tmp_path, config=SimpleNamespace(agent_timeout=10))
+    result = stage.run(ctx)
+    assert result.status == "pass"
+    assert (tmp_path / "marker.txt").read_text(encoding="utf-8") == "ok"
+
+
+def test_extension_registration_happens_before_catalog_validation(monkeypatch):
+    import runner.extensions as extension_module
+
+    @dataclass(frozen=True)
+    class Spec:
+        name: str
+        status: str
+
+    class CustomStage:
+        spec_class = Spec
+
+        def __init__(self, spec):
+            self.spec = spec
+            self.name = spec.name
+
+    class Point:
+        name = "test"
+
+        @staticmethod
+        def load():
+            return lambda: register_stage("external_test", CustomStage)
+
+    class Points(list):
+        def select(self, *, group):
+            return self if group == extension_module.EXTENSION_GROUP else []
+
+    extension_module.discover_extensions.cache_clear()
+    monkeypatch.setattr(extension_module, "entry_points", lambda: Points([Point()]))
+    try:
+        assert discover_extensions() == ("test",)
+        assert "external_test" in stage_catalog()
+    finally:
+        STAGE_REGISTRY.pop("external_test", None)
+        extension_module.discover_extensions.cache_clear()
+
+
+def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path):
+    from runner.config import RuntimeConfig
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import build_script_item_config
+
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(_workflow_text(), encoding="utf-8")
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: validator.py\n  workflow_file: workflow.yaml\n",
+        encoding="utf-8",
+    )
+    args = RuntimeConfig(
+        project_root=str(tmp_path),
+        script=str(script),
+        goal="",
+        validator=None,
+        work_dir=".ai-task-runner",
+    )
+    first = build_script_item_config(args, load_yaml_script(script)[0], 1)
+    frozen = freeze_workflow(first.workflow, first.project_root, first.work_dir)
+    state = Path(first.project_root, first.work_dir, "state.json")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text("{}", encoding="utf-8")
+
+    workflow_file.write_text("invalid: [", encoding="utf-8")
+    args.resume = True
+    resumed = build_script_item_config(args, load_yaml_script(script)[0], 1)
+
+    assert resumed.resume is True
+    assert resumed.workflow == frozen

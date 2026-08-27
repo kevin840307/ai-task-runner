@@ -11,7 +11,8 @@ from .errors import ConfigurationError, RunnerError
 from .plugins.registry import merge_plugin_config
 from .runtime import events
 from .script_loader import load_yaml_script
-from .workflow.loader import load_default_workflow
+from .workflow.loader import load_default_workflow, load_workflow
+from .workflow.snapshot import load_snapshot
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
@@ -76,10 +77,11 @@ def build_script_item_config(
     project_root = str(item_root.resolve())
     resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
     ai_validator_prompt = item.get("ai_validator_prompt", "")
-    workflow, workflow_explicit = select_script_workflow(
-        args,
-        item,
-        ai_validator_prompt,
+    frozen = load_snapshot(project_root, work_dir) if resume else None
+    workflow, workflow_explicit = (
+        (frozen, True)
+        if frozen is not None
+        else select_script_workflow(args, item, ai_validator_prompt)
     )
     child = replace(
         args,
@@ -118,6 +120,8 @@ def select_script_workflow(
     """Apply workflow precedence for one YAML List item."""
     if item.get("workflow") is not None:
         return item["workflow"], True
+    if item.get("workflow_file") is not None:
+        return load_workflow(item["workflow_file"]), True
     if args.workflow_explicit:
         return args.workflow, True
     return load_default_workflow(item["validator"], ai_validator_prompt), False

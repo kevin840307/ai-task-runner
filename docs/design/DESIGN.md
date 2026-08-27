@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.33
+Version: 1.2.34
 
 ## Principles
 1. Minimum code; no project-specific hardcoding in Runner core. Global reusable behavior is allowed.

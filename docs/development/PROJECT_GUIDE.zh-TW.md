@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.33
+版本：1.2.34
 
 ## 強制維護規則
 1. 最少 Code；Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 AI identity 分支。
@@ -37,6 +37,11 @@ CLI/UI/Skill/Python 都應使用 `runner.api.RunRequest` / `runner.api.run()`；
 
 `runner/bootstrap.py` 是 composition root；Backend/Plugin registry 只在邊界組裝依賴。Workflow 不應自行 discover Plugin 或 Backend。
 
+## UI／Extension 維護邊界
+UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。Pipeline、StageExecutor、Stage、AI client、Workflow loader 都不得 import UI。外部 Stage／Backend 先透過 installed extension 在 Workflow validation 前註冊；runtime-only Plugin 之後才透過 Hook/Event boundary attach。新增外部 Stage 不得要求 Pipeline 增加 Stage-name branch。
+
+可編輯 Workflow／Prompt 使用共用 atomic resource function 與 optimistic `expected_hash`；active Run 一律使用自己的 durable Workflow／Prompt snapshot。UI 多 Run 優先採一個 Run 一個 worker process 做隔離，不要只為 UI 把全域 runtime 改造成複雜的 in-process concurrency。
+
 ## Project policy
 所有維護中的 smoke/example project root 都應有 `.ai-task-runner.yaml`。Policy 本身自動 protected。Immutable input/reference fixture 應列成 protected；Task 本來要修改的檔案不可 protected。
 
@@ -67,7 +72,7 @@ Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭
 
 YAML batch mode 已支援，並支援每筆獨立 `project_root`、`goal_file`、`workflow_file`、AI validation count/required passes。每筆使用自己的 nested state；runtime scope 必須在 child item 結束後恢復 parent，禁止全域 state leakage。
 
-Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，`flow` 定義靜態頂層順序。`recover` 可以直接包含靜態 recovery Stage sequence；不再有 reusable-subflow、`expand` 或 `foreach` DSL。Registry 只保留 `type -> class`（預設 `base`、`plan`、`python`）；一般 AI-backed node 預設 `type: base`，可省略。`PlanStage` 是刻意的特殊 Stage：Loader 從 YAML 結構推導可用 dynamic Stage catalog，Plan 為每個 TODO 選擇 ordered Stage names，Pipeline 持久化並執行 `next_steps`；一般 Stage class 仍完全不知道 routing。
+Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，`flow` 定義靜態頂層順序。`recover` 可以直接包含靜態 recovery Stage sequence；不再有 reusable-subflow、`expand` 或 `foreach` DSL。Registry 只保留 `type -> class`（預設 `base`、`plan`、`python`、`python_script`）；一般 AI-backed node 預設 `type: base`，可省略。`PlanStage` 是刻意的特殊 Stage：Loader 從 YAML 結構推導可用 dynamic Stage catalog，Plan 為每個 TODO 選擇 ordered Stage names，Pipeline 持久化並執行 `next_steps`；一般 Stage class 仍完全不知道 routing。
 
 頂層 Stage 的有效 FAIL 或 recovery 用盡後需要回到目前／更前面的 Workflow 位置時，使用共用的 1-based YAML `restart_at`。Session recovery、Planning 產生的 child group 與 completion rule 應留在既有語意 owner，不做成任意 YAML topology。
 

@@ -25,7 +25,7 @@ class ObservabilityObserver:
             return
         if not kind.startswith(("runner.", "script.")):
             return
-        public = {key: value for key, value in event.items() if key not in {"action", "state"}}
+        public = {key: value for key, value in event.items() if key != "state"}
         if self.callback is not None:
             try:
                 self.callback(public)

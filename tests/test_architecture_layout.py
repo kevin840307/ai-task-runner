@@ -2,6 +2,7 @@ from pathlib import Path
 
 from runner.workflow.registry import STAGE_REGISTRY
 from runner.workflow.stages import BaseStage, PlanStage, PythonValidatorStage
+from runner.workflow.stages.python_script import PythonScriptStage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,4 +21,5 @@ def test_workflow_has_one_minimal_type_registry():
         "base": BaseStage,
         "plan": PlanStage,
         "python": PythonValidatorStage,
+        "python_script": PythonScriptStage,
     }

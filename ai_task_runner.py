@@ -4,16 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import signal
-import subprocess
 import sys
 import time
-import traceback
 from collections.abc import Sequence
-from pathlib import Path
 
-from runner.api import RunRequest, run
+from runner.api import RunRequest, run, state_files
 from runner.backends import backend_names
 from runner.config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
@@ -30,13 +25,14 @@ from runner.config.defaults import (
     DEFAULT_WATCHDOG_INTERVAL,
 )
 from runner.errors import ConfigurationError
+from runner.extensions import discover_extensions
 from runner.plugins.registry import add_plugin_arguments
-from runner.runtime.process_runner import ACTIVE_PROCESS_FILE
-from runner.utils import append_bounded_log
+from runner.runtime.supervisor import supervise_cli
 from runner.version import __version__
 
 
 def parser() -> argparse.ArgumentParser:
+    discover_extensions()
     command_parser = argparse.ArgumentParser(description="Reusable AI task runner")
     command_parser.add_argument("--goal")
     command_parser.add_argument(
@@ -78,11 +74,7 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument("--agent-arg", action="append", default=[])
     command_parser.add_argument("--validator-arg", action="append", default=[])
     command_parser.add_argument("--protect-file", action="append", default=[])
-    command_parser.add_argument(
-        "--validator-timeout",
-        type=int,
-        default=DEFAULT_VALIDATOR_TIMEOUT,
-    )
+    command_parser.add_argument("--validator-timeout", type=int, default=DEFAULT_VALIDATOR_TIMEOUT)
     command_parser.add_argument(
         "--agent-timeout",
         type=int,
@@ -134,18 +126,8 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_CYCLES,
         help="maximum workflow/replan cycles; -1 means unlimited (default), 0 disables replan",
     )
-    command_parser.add_argument(
-        "--retry-delay",
-        type=float,
-        default=2,
-        help="logical task retry delay",
-    )
-    command_parser.add_argument(
-        "--retry-wait",
-        type=float,
-        default=5,
-        help="initial model-call retry wait",
-    )
+    command_parser.add_argument("--retry-delay", type=float, default=2, help="logical task retry delay")
+    command_parser.add_argument("--retry-wait", type=float, default=5, help="initial model-call retry wait")
     command_parser.add_argument(
         "--final-ai-validations",
         "--ai-validator-count",
@@ -160,19 +142,10 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_FINAL_AI_REQUIRED_PASSES,
         help="Final AI PASS results required; 0 uses strict majority (default)",
     )
-    command_parser.add_argument(
-        "--retry-max-wait",
-        type=float,
-        default=300,
-        help="maximum model-call retry wait",
-    )
+    command_parser.add_argument("--retry-max-wait", type=float, default=300, help="maximum model-call retry wait")
     add_plugin_arguments(command_parser)
     command_parser.add_argument("--work-dir", default=".ai-task-runner")
-    command_parser.add_argument(
-        "--json-events",
-        action="store_true",
-        help="emit JSON Lines progress events",
-    )
+    command_parser.add_argument("--json-events", action="store_true", help="emit JSON Lines progress events")
     command_parser.add_argument("--resume", action="store_true")
     command_parser.add_argument("--force-new", action="store_true")
     command_parser.add_argument(
@@ -185,66 +158,17 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     request = RunRequest.from_namespace(parser().parse_args(argv))
-    while True:
-        try:
-            result = run(request)
-            if request.plan_only or result.completed:
-                return result.exit_code
-            _continue_unfinished_run(request, result.state_files)
-        except KeyboardInterrupt:
-            _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
-            return 130
-        except (ConfigurationError, ValueError) as error:
-            _report_error(request, "runner.failed", str(error), 1)
-            return 1
-        except Exception as error:
-            _recover_from_unexpected_error(request, error)
+    try:
+        return run(request).exit_code
+    except KeyboardInterrupt:
+        _report_error(request, "runner.stopped", "Stopped; use --resume", 130)
+        return 130
+    except (ConfigurationError, ValueError) as error:
+        _report_error(request, "runner.failed", str(error), 1)
+        return 1
 
 
-
-def _continue_unfinished_run(
-    request: RunRequest,
-    state_files: Sequence[str],
-) -> None:
-    """Never trust a normal return as completion unless persisted state confirms it."""
-    if any(Path(path).is_file() for path in state_files):
-        request.resume, request.force_new = True, False
-        detail = "run returned before Final Validator completion; resuming saved state"
-    else:
-        request.resume, request.force_new = False, False
-        detail = "run returned without completed state; continuing original request"
-    _report_error(request, "runner.retry", detail, 0)
-    if request.retry_delay:
-        time.sleep(request.retry_delay)
-
-
-def _recover_from_unexpected_error(
-    request: RunRequest,
-    error: BaseException,
-) -> None:
-    log = Path(request.project_root, request.work_dir, "exception.log").resolve()
-    append_bounded_log(
-        log,
-        f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-        f"{type(error).__name__}: {error}\n{traceback.format_exc()}",
-    )
-
-    state_file = Path(request.project_root, request.work_dir, "state.json").resolve()
-    if state_file.is_file():
-        request.resume, request.force_new = True, False
-        detail = f"{error}; retrying from state"
-    else:
-        detail = f"{error}; retrying original request"
-    _report_error(request, "runner.retry", detail, 0)
-    time.sleep(max(1, request.retry_delay))
-
-
-def _report_error(
-    request: RunRequest,
-    event_type: str,
-    message: str,
-    exit_code: int,
-) -> None:
+def _report_error(request: RunRequest, event_type: str, message: str, exit_code: int) -> None:
     if request.json_events:
         print(
             json.dumps(
@@ -252,58 +176,31 @@ def _report_error(
                     "schema_version": 1,
                     "runner_version": __version__,
                     "type": event_type,
+                    "action": event_type.rsplit(".", 1)[-1],
                     "timestamp": time.time(),
                     "message": message,
                     "exit_code": exit_code,
-                },
+                }
             ),
             flush=True,
         )
         return
-
     prefix = "" if exit_code == 130 else "ERROR: "
     print(prefix + message, file=sys.stderr)
 
 
+def _request(argv: Sequence[str]) -> RunRequest:
+    return RunRequest.from_namespace(parser().parse_args(argv))
+
+
 def _supervise(argv: Sequence[str]) -> int:
-    if os.environ.get("AI_TASK_RUNNER_WORKER") == "1":
-        return main(argv)
-
-    request = RunRequest.from_namespace(parser().parse_args(argv))
-    worker_args = list(argv)
-    while True:
-        env = dict(os.environ)
-        env["AI_TASK_RUNNER_WORKER"] = "1"
-        worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), *worker_args], env=env)
-        try:
-            code = worker.wait()
-        except KeyboardInterrupt:
-            worker.terminate()
-            return 130
-        if code in (0, 1, 130):
-            return code
-        state = Path(request.project_root, request.work_dir, "state.json").resolve()
-        if not state.is_file():
-            return code
-        _cleanup_orphan(request, worker.pid)
-        _report_error(request, "runner.retry", f"worker exited unexpectedly ({code}); resuming saved state", 0)
-        worker_args = [arg for arg in worker_args if arg not in {"--resume", "--force-new"}] + ["--resume"]
-        time.sleep(max(1, request.retry_delay))
-
-
-def _cleanup_orphan(request: RunRequest, worker_pid: int) -> None:
-    path = Path(request.project_root, request.work_dir, ACTIVE_PROCESS_FILE).resolve()
-    try:
-        owner, child = map(int, path.read_text(encoding="ascii").split())
-        if owner != worker_pid:
-            return
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(child), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        else:
-            os.killpg(child, signal.SIGKILL)
-        path.unlink(missing_ok=True)
-    except (OSError, ValueError):
-        pass
+    return supervise_cli(
+        argv,
+        worker_script=__file__,
+        request_factory=_request,
+        worker_entry=main,
+        state_locator=state_files,
+    )
 
 
 if __name__ == "__main__":
