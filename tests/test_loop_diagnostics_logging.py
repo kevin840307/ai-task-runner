@@ -3,7 +3,7 @@ import pytest
 from runner.ai.errors import AIError, BackendError
 from runner.backends.base import BaseBackend
 from runner.bootstrap import runtime_scope
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.errors import diagnostic_detail
 
 
@@ -226,3 +226,28 @@ def test_loop_context_compression_records_skip_reason(tmp_path):
     diagnostics = _loop_error(agent, tmp_path, enabled=True, threshold=70.0).diagnostics
     assert diagnostics["context_compress_status"] == "skipped"
     assert diagnostics["context_compress_reason"] == "below_threshold"
+
+
+def test_context_compression_plugin_uses_public_client_contract():
+    from types import SimpleNamespace
+    from runner.plugins.context_compression import ContextCompressionPlugin
+
+    calls = []
+    client = SimpleNamespace(
+        session_id="",
+        context_snapshot=lambda session: calls.append(("snapshot", session)) or "Used 60%",
+        context_usage_percent=lambda snapshot: 60.0,
+        compress_session=lambda session: calls.append(("compress", session)) or "compressed",
+    )
+    error = SimpleNamespace(
+        session_id="session-1",
+        diagnostics={"loop_type": "loop_detection"},
+    )
+    config = SimpleNamespace(
+        plugins={"context_compression": {"enabled": True, "threshold": 50.0}}
+    )
+
+    ContextCompressionPlugin(config).model_error(client, error)
+
+    assert calls == [("snapshot", "session-1"), ("compress", "session-1")]
+    assert error.diagnostics["context_compress_status"] == "done"

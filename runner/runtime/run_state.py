@@ -13,8 +13,8 @@ from typing import Any
 
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
-from ..errors import RunnerError
-from ..utils import bounded_text
+from ..errors import ConfigurationError, RunnerError
+from ..utils.text import bounded_text
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
@@ -255,12 +255,12 @@ class StateStore:
 
     def _load_resume_state(self) -> RunState:
         if not self.path.is_file():
-            raise RunnerError(f"resume state not found: {self.path}")
+            raise ConfigurationError(f"resume state not found: {self.path}")
         loaded = self._read_state(self.path, strict=True)
         assert loaded is not None
         _, state = loaded
         if Path(state.project_root).resolve() != self.root:
-            raise RunnerError("resume state belongs to a different project_root")
+            raise ConfigurationError("resume state belongs to a different project_root")
         state.validator_output = bounded_text(
             state.validator_output,
             MAX_VALIDATOR_OUTPUT_CHARS,
@@ -281,7 +281,7 @@ class StateStore:
             return payload, state
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
             if strict:
-                raise RunnerError(f"invalid resume state: {error}") from error
+                raise ConfigurationError(f"invalid resume state: {error}") from error
             return None
 
 

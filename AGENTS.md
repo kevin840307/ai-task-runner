@@ -1,6 +1,6 @@
 # AI / Maintainer Development Rules
 
-These rules are mandatory for changes to this repository.
+These rules are mandatory for changes to this repository. `DevFollow.txt` is the concise owner contract and `Future.txt` is the UI-extension contract; maintenance must preserve both.
 
 ## Core engineering contract
 - Never hardcode project-specific names, paths, workflows, FABs, environments, versions, filenames, sample values, model names, or business values into generic Runner logic.
@@ -10,6 +10,7 @@ These rules are mandatory for changes to this repository.
 - Folder, Python filename, class/function, and field names must describe their actual responsibility. Split/merge only when it makes ownership clearer; avoid vague dumping-ground modules.
 - Preserve current behavior outside the requested scope.
 - Remove obsolete/dead compatibility code when its replacement is complete; do not keep parallel old/new implementations.
+- Public capabilities should have one clear owner/import path. Do not add re-export-only exposure modules or package-level compatibility aliases unless they enforce a real architectural boundary.
 - Keep all human-facing maintained documentation bilingual: English `.md` plus matching Traditional Chinese `.zh-TW.md`, with both versions aligned to current behavior.
 - Keep Workflow topology declarative so Stages can be added, moved, replaced, or removed without business branches in Pipeline/Executor.
 - Do not make tests pass by weakening production guarantees or by adding project-specific branches.

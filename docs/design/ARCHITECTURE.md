@@ -39,15 +39,15 @@ Loop-context inspection and compression is a model-error plugin. The AI client r
 
 ## UI / extension boundary
 
-UI is an adapter, not an execution Plugin. UI/CLI/Skill code may depend on `runner.api`, editable-resource functions, event callbacks, and Stage catalog metadata; Pipeline, StageExecutor, and individual Stages must never import UI code. A UI can therefore be removed without changing Runner execution semantics.
+UI is an adapter, not an execution Plugin. UI/CLI/Skill code may depend on `runner.api`, the owner modules for editable resources/catalog metadata, and event callbacks; Pipeline, StageExecutor, and individual Stages must never import UI code. A UI can therefore be removed without changing Runner execution semantics.
 
 Installed packages may publish `ai_task_runner.extensions` entry points for runtime-independent registration such as `register_stage()` or backend registration. Discovery occurs before Workflow validation. Runtime cross-cutting Plugins use the separate `ai_task_runner.plugins` entry-point group and attach only after a Runtime exists. This prevents a Plugin from being required by Workflow core while still allowing external packages to add capabilities without editing Runner source.
 
-`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; tooling must not maintain another hardcoded Stage schema. User Python automation uses `type: python_script` and always executes as a subprocess through the shared Python-process helper. Arbitrary user Python is never imported into the 24H Runner process.
+`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; UI/editor code must not maintain another hardcoded Stage schema. User Python automation uses `type: python_script` and always executes as a subprocess through the shared Python-process helper. Arbitrary user Python is never imported into the 24H Runner process.
 
 `workflow.loader.save_workflow()` and `prompts.loader.save_prompt()` validate against the real Runner parser/schema before using atomic replace. `expected_hash` provides optimistic concurrency protection for UI/IDE edits. These are file-resource helpers, not a second Workflow service or storage model.
 
-At concrete Run start, normalized Workflow data and resolved external prompt files are persisted under the Run work directory as `workflow.snapshot.json` plus content-addressed prompt resources. An active Run and its later `--resume` therefore keep the same Workflow/prompt inputs even if the editable source files change. YAML List children keep independent snapshots in their own nested work directories.
+At concrete Run start, normalized Workflow data, Stage prompt files, `goal_file`, and `ai_validator_prompt_file` are persisted under the Run work directory. Workflow Stage prompts remain content-addressed; Run-level goal/final-AI prompt resources use stable semantic resource names. Active Runs and later `--resume` therefore keep the same Workflow, Goal, and prompt inputs even when editable source files change or are removed. YAML List children keep independent snapshots in their own nested work directories.
 
 ## Workflow contract
 

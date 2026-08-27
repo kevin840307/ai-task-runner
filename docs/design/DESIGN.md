@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## Principles
 1. Minimum code; no project-specific hardcoding in Runner core. Global reusable behavior is allowed.
@@ -51,7 +51,7 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI 
 - A real Stage error retries the same usable session first with a short stage-aware delta prompt; it does not resend the full goal/task context.
 - After the configured same-session retry budget, StageExecutor clears cached sessions and retries fresh.
 - The same persistent failure after fresh recovery returns `replan`.
-- A different failure fingerprint resets the persistent-failure streak.
+- A different failure fingerprint resets the persistent-failure streak. Backend timeouts carry a stable semantic recovery key; volatile stderr details (for example sandbox/container identifiers) remain in diagnostics but do not change failure identity.
 - A write attempt that made meaningful project changes is treated as progress and is handed to Review/Validator rather than discarded.
 - Review skip does not complete the run; final validation still decides.
 

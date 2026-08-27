@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from ...ai.contracts import AIClientProtocol
-from ...config import RuntimeConfig
+from ...config.runtime import RuntimeConfig
 from ...errors import RunnerError
 from ...runtime.run_state import RunState, Task
 
@@ -93,6 +93,9 @@ class StageContext:
         self.save_state()
 
 
+ResultHandler = Callable[[StageContext, StageResult], StageResult]
+
+
 class Stage(Protocol):
     name: str
     mode: str
@@ -110,6 +113,7 @@ class Stage(Protocol):
 __all__ = [
     "MODE_READONLY",
     "MODE_WRITE",
+    "ResultHandler",
     "Stage",
     "StageContext",
     "StageExecution",

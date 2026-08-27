@@ -42,7 +42,7 @@ def register_stage(name: str, stage_class: type[Any]) -> None:
 
 
 def stage_catalog() -> dict[str, dict[str, Any]]:
-    """Return UI/tooling metadata from the same Stage specs used by execution."""
+    """Return UI/editor metadata from the same Stage specs used by execution."""
     from ..extensions import discover_extensions
     discover_extensions()
     return {
@@ -63,7 +63,7 @@ def _field_info(item: Any) -> dict[str, Any]:
     }
     if not required:
         default = item.default if item.default is not MISSING else item.default_factory()
-        if _json_value(default):
+        if default is None or isinstance(default, (str, int, float, bool, list, dict, tuple)):
             result["default"] = default
     return result
 
@@ -75,10 +75,6 @@ def _type_name(annotation: Any) -> str:
     args = ", ".join(_type_name(arg) for arg in get_args(annotation))
     name = getattr(origin, "__name__", str(origin).replace("typing.", ""))
     return f"{name}[{args}]" if args else name
-
-
-def _json_value(value: Any) -> bool:
-    return value is None or isinstance(value, (str, int, float, bool, list, dict, tuple))
 
 
 def _resolve_references(values: dict[str, Any]) -> None:

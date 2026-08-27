@@ -1,6 +1,6 @@
 # 保護與安全模型
 
-版本：1.2.34
+版本：1.2.39
 
 ## Project root
 Project root 是 task workspace boundary。Project policy 只從 `<project-root>/.ai-task-runner.yaml` 讀取，不會往 parent directory 搜尋。

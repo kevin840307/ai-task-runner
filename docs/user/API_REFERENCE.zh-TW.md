@@ -1,11 +1,11 @@
 # Python API 參考
 
-版本：1.2.34
+版本：1.2.39
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
 
-舊版 compatibility 名稱可能仍為既有 caller 保留，但不屬於 canonical API，新 integration 不應使用。純 internal、已無 production caller 的 compatibility shim 會直接移除。
+`runner.api` 是唯一公開的 execution import path；過時的 package-level execution re-export 直接移除，不維護平行 compatibility API。
 
 ## RunRequest 欄位
 `goal`、`goal_file`、`project_root`、`script`、`workflow_file`、`validator`、`validator_prompt`、`ai_validator_prompt`、`ai_validator_prompt_file`、`backend`、`command`、`sandbox`、`agent_args`、`validator_args`、`protect_files`、`validator_timeout`、`agent_timeout`、`planning_timeout`、`agent_idle_after_change_timeout`、`max_attempts`、`max_cycles`、`retry_delay`、`retry_wait`、`retry_max_wait`、`final_ai_validations`、`final_ai_required_passes`、`plugins`、`work_dir`、`resume`、`force_new`、`plan_only`、`human_output`、`json_events`。
@@ -44,8 +44,8 @@ Plugin 設定統一放在 `RunRequest.plugins` / `RuntimeConfig.plugins`。可�
 ## UI／可編輯資源／Stage Catalog
 `runner.workflow.registry.stage_catalog()` 直接從每個已註冊 Stage 的 `spec_class` 輸出 metadata；UI/Tooling 不得另外維護 hardcode Stage schema。外部套件可使用 `ai_task_runner.extensions` entry-point group，在 Workflow validation 前註冊 Stage／Backend；只屬於 runtime 橫切能力的 Plugin 使用獨立 `ai_task_runner.plugins` group。
 
-`runner.workflow.loader.save_workflow()` 會先走真正 Workflow parser/schema 再 atomic replace；`runner.prompts.loader.save_prompt()` 會先驗證 Jinja syntax 再 atomic replace。`runner.resources.read_text()` 會回傳內容與 SHA-256；存檔／刪除時可把它當 `expected_hash`，避免 UI、IDE 或其他程序無聲互蓋。這些 API 修改的就是未來 Run 真正使用的檔案，不建立 UI 專用第二套 Workflow。
+UI／Editor 直接使用真正 owner module：`runner.resources.read_text()` / `delete()`、`runner.workflow.loader.save_workflow()`、`runner.prompts.loader.save_prompt()`、`runner.workflow.registry.stage_catalog()`。刻意不再增加 `tooling` facade 或平行 API。Workflow save 使用真正 parser/schema，Prompt save 驗證 Jinja syntax；`expected_hash` 提供 optimistic conflict detection，atomic replace 避免半寫入檔案；若 caller 可能同時修改同一 Resource，必須自行 serialize 這些 mutation。這些 API 修改的就是未來 Run 真正使用的檔案，不建立 UI 專用第二套 Workflow。
 
-Concrete Run 會在自己的 work directory 持久化 `workflow.snapshot.json` 與 content-addressed external prompt resource；執行中或之後 Resume 都沿用同一份 frozen input，所以 UI/IDE 修改只影響新的 Run。`runner.api.state_files()` 不需重新載入 Workflow 就能定位 direct／YAML child state，可供 process supervisor 使用。
+Concrete Run 會在自己的 work directory 持久化 `workflow.snapshot.json`、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file`；執行中或之後 Resume 即使來源檔已修改或刪除，也沿用同一份 frozen input，所以 UI/IDE 修改只影響新的 Run。`runner.api.state_files()` 不需重新載入 Workflow 就能定位 direct／YAML child state，可供 process supervisor 使用。
 
 `type: python_script` 是通用使用者 Python Stage；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。

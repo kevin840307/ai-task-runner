@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import RuntimeConfig
+from .config.runtime import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
 from .runtime import events
@@ -62,15 +62,6 @@ def _event_context(config: RuntimeConfig) -> dict[str, int]:
     }
 
 
-def bootstrap_runtime(config: RuntimeConfig) -> Runtime:
-    """Install one runtime until another runtime is bootstrapped."""
-    global _current
-    runtime = _create_runtime(config)
-    _current = runtime
-    events.configure(runtime.events, _event_context(config))
-    register_plugins(runtime)
-    return runtime
-
 
 @contextmanager
 def runtime_scope(config: RuntimeConfig):
@@ -96,4 +87,4 @@ def execute(args: RuntimeConfig) -> int:
         return TaskRunner(args).run()
 
 
-__all__ = ["Runtime", "bootstrap_runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]
+__all__ = ["Runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]

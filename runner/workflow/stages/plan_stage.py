@@ -16,7 +16,7 @@ from ...errors import RunnerError
 from ...prompts.context import build_stage_prompt_context
 from ...prompts.loader import render_prompt
 from ...runtime.run_state import Task
-from ...utils import bounded_text
+from ...utils.text import bounded_text
 from .base_stage import BaseStage, BaseStageSpec
 from .contracts import MODE_READONLY, MODE_WRITE, StageContext, StageResult
 

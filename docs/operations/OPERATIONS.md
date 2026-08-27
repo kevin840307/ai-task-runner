@@ -1,9 +1,9 @@
 # Operations and Troubleshooting
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## Long-running behavior
-Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation.
+Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation. Timeout failures use a stable semantic recovery key while retaining full backend stderr for debugging, preventing changing sandbox/container IDs from indefinitely resetting same-failure escalation.
 
 ## Common recovery paths
 - Invalid structured JSON/schema -> send a short same-session JSON-only correction first; if still invalid, use the Stage-configured fresh fallback. Review model errors follow the normal Stage retry budget before an allowed fail-soft skip.
@@ -32,3 +32,7 @@ Provide state/event log, `current-prompt.txt`, `last-prompt.txt`, `last-result.t
 Transient API/network/rate-limit outages use bounded exponential backoff per delay interval but no retry-count exhaustion; they preserve current state/session. Persistent model/session problems use the normal reuse-then-rebuild policy.
 
 Safety snapshot temp directories use `ai-task-runner-readonly-*` / `ai-task-runner-protect-*`. Normal Stage completion removes them immediately; startup also removes stale abandoned snapshots so abnormal process termination does not accumulate them indefinitely.
+
+### Worker crash cleanup
+
+After an abnormal worker exit, the supervisor cleans active child-process markers from the actual durable work directories returned for that Run. This includes each YAML List child (`.../script/NNN/active-process`), not only the root work directory. `KeyboardInterrupt` and `SystemExit` are control-flow signals: Stage hooks may perform best-effort cleanup, but these signals are never converted into retryable Stage failures.

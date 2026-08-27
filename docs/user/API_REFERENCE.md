@@ -1,11 +1,11 @@
 # Python API Reference
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## Canonical integration surface
 External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI, future UI, and skills should adapt to this same request model instead of implementing another Runner flow.
 
-Legacy compatibility names may still exist for existing callers, but they are not the canonical API and should not be used by new integrations. Internal-only compatibility shims are removed when no production caller needs them.
+`runner.api` is the only public execution import path. Obsolete package-level execution re-exports are removed rather than maintained as parallel compatibility APIs.
 
 ## RunRequest fields
 `goal`, `goal_file`, `project_root`, `script`, `workflow_file`, `validator`, `validator_prompt`, `ai_validator_prompt`, `ai_validator_prompt_file`, `backend`, `command`, `sandbox`, `agent_args`, `validator_args`, `protect_files`, `validator_timeout`, `agent_timeout`, `planning_timeout`, `agent_idle_after_change_timeout`, `max_attempts`, `max_cycles`, `retry_delay`, `retry_wait`, `retry_max_wait`, `final_ai_validations`, `final_ai_required_passes`, `plugins`, `work_dir`, `resume`, `force_new`, `plan_only`, `human_output`, and `json_events`.
@@ -44,8 +44,8 @@ Plugin configuration is stored under `RunRequest.plugins` / `RuntimeConfig.plugi
 ## UI / editable resources / Stage catalog
 `runner.workflow.registry.stage_catalog()` exposes registered Stage metadata directly from each Stage `spec_class`; UI/tooling must not keep a parallel hardcoded Stage schema. Installed packages may register Stage/backend types through the `ai_task_runner.extensions` entry-point group before Workflow validation. Runtime-only cross-cutting plugins use the separate `ai_task_runner.plugins` group.
 
-`runner.workflow.loader.save_workflow()` validates the actual Workflow parser/schema before atomic replacement. `runner.prompts.loader.save_prompt()` validates Jinja syntax before atomic replacement. `runner.resources.read_text()` returns content plus SHA-256; pass that value as `expected_hash` when saving/deleting to prevent silent concurrent overwrite. These helpers edit the real files used by future Runs; they do not create a second UI Workflow store.
+UI/editor integrations call the owner modules directly: `runner.resources.read_text()` / `delete()`, `runner.workflow.loader.save_workflow()`, `runner.prompts.loader.save_prompt()`, and `runner.workflow.registry.stage_catalog()`. There is intentionally no extra tooling facade or parallel API. Workflow save uses the actual parser/schema; Prompt save validates Jinja syntax; `expected_hash` provides optimistic conflict detection and atomic replacement avoids partial files; callers that may write the same resource concurrently must serialize those mutations. These helpers edit the real files used by future Runs; they do not create a second UI Workflow store.
 
-Concrete Runs persist `workflow.snapshot.json` and content-addressed external prompt resources in their own work directory. Active Runs and later Resume use this frozen input, so UI/IDE edits affect only future Runs. `runner.api.state_files()` locates direct/YAML child state without reloading Workflow configuration and is suitable for process-level supervision.
+Concrete Runs persist `workflow.snapshot.json`, Stage prompt resources, `goal_file`, and `ai_validator_prompt_file` in their own work directory. Active Runs and later Resume use those frozen inputs even if source files change or disappear, so UI/IDE edits affect only future Runs. `runner.api.state_files()` locates direct/YAML child state without reloading Workflow configuration and is suitable for process-level supervision.
 
 `type: python_script` is the generic user Python Stage. It executes the configured script in a subprocess via the same process runner used by validator execution; arbitrary project Python is never imported into the long-running Runner process.

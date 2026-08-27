@@ -85,11 +85,11 @@ class ContextCompressionPlugin:
             context_compress_enabled=self.enabled,
             context_compress_threshold=self.threshold,
         )
-        snapshot = _safe_call(lambda: client._backend.context_snapshot(session))
+        snapshot = _safe_call(lambda: client.context_snapshot(session))
         if not snapshot:
             return
         diagnostics["context_snapshot"] = snapshot
-        usage = client._backend.context_usage_percent(snapshot)
+        usage = client.context_usage_percent(snapshot)
         if usage is None:
             diagnostics.update(
                 context_compress_status="skipped",
@@ -109,7 +109,7 @@ class ContextCompressionPlugin:
                 context_compress_reason="below_threshold",
             )
         else:
-            compression = _safe_call(lambda: client._backend.compress_session(session))
+            compression = _safe_call(lambda: client.compress_session(session))
             diagnostics["context_compression"] = compression or "OK"
             diagnostics["context_compress_status"] = (
                 "failed" if compression.startswith("ERROR:") else "done"

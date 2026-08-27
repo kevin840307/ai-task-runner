@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.2.34
+版本：1.2.39
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 

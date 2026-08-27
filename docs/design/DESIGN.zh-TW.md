@@ -1,6 +1,6 @@
 # 設計
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## 原則
 1. 最少 Code；Runner Core 禁止 project-specific hardcode，Global 通用行為不算 hardcode。
@@ -51,7 +51,7 @@ Version: 1.2.34
 - 真實 Stage error 先沿用可用 Same Session retry，使用短 Stage-aware delta prompt，只補 Stage 身分、新 failure evidence 與下一步，不重送完整 Goal/Task Context。
 - Same-session retry budget 用完後，StageExecutor 清除 cached session，Fresh retry。
 - Fresh 後仍持續相同 failure 才回 `replan`。
-- Failure fingerprint 改變時重新計數。
+- Failure fingerprint 改變時重新計數。Backend timeout 會提供穩定的語意 recovery key；sandbox/container identifier 等動態 stderr 仍保留在 diagnostics，但不參與 failure identity。
 - Write attempt 只要產生實際 project changes 就視為 progress，交給 Review/Validator 判斷，不直接丟棄。
 - Review skip 不代表完成；Final Validator 仍需把關。
 

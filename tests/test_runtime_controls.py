@@ -9,7 +9,7 @@ import pytest
 from ai_task_runner import parser
 from runner.backends.opencode import OpenCodeBackend
 from runner.backends.qwen import QwenBackend
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import DEFAULT_WATCHDOG_INTERVAL
 from runner.errors import ConfigurationError, RunnerError
 from runner.plugins.console import LiveUI

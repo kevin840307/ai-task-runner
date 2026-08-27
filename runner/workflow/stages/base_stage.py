@@ -11,14 +11,11 @@ from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
 from ...prompts.loader import render_prompt, structured_retry_prompt
-from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
+from .contracts import MODE_READONLY, ResultHandler, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
 StatusResolver = Callable[[Any], Literal["pass", "fail"]]
 Condition = Callable[[StageContext], bool]
-ResultHandler = Callable[[StageContext, StageResult], StageResult]
-
-
 @dataclass(frozen=True)
 class BaseStageSpec:
     name: str

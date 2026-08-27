@@ -159,7 +159,7 @@ class StageExecutor:
             result = stage.finish(ctx, result)
         except ConfigurationError:
             raise
-        except BaseException as error:
+        except Exception as error:
             result = StageResult.error_result(stage.name, error)
 
         ctx.execution = StageExecution()
@@ -182,7 +182,13 @@ class StageExecutor:
                 raise RunnerError(f"stage {stage.name} must return StageResult")
             if result.stage != stage.name:
                 result = replace(result, stage=stage.name)
-        except BaseException as error:
+        except (KeyboardInterrupt, SystemExit):
+            try:
+                self.hooks.after(action, tokens)
+            except BaseException:
+                pass
+            raise
+        except Exception as error:
             result = StageResult.error_result(stage.name, error)
 
         if before is not None:
@@ -198,7 +204,7 @@ class StageExecutor:
         hooks_failed = False
         try:
             violations = self.hooks.after(action, tokens)
-        except BaseException as error:
+        except Exception as error:
             violations = []
             hooks_failed = True
             if result.status != "error":
@@ -234,7 +240,8 @@ class StageExecutor:
         text = "\n".join(
             line.strip() for line in str(error).splitlines() if line.strip()
         )
-        normalized = text[-2000:] or type(error).__name__
+        recovery_key = getattr(error, "recovery_key", "")
+        normalized = recovery_key or text[-2000:] or type(error).__name__
         return scope, hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def _record_failure(

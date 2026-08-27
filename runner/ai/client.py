@@ -131,6 +131,7 @@ class AIClient:
         raise AIError(
             message,
             transient=is_transient_service_error(message),
+            recovery_key=error.recovery_key,
         ) from error
 
     def ask(
@@ -186,6 +187,15 @@ class AIClient:
 
     def update_goal_reference(self, goal_file: str | None) -> None:
         self._backend.update_goal_reference(goal_file)
+
+    def context_snapshot(self, session_id: str) -> str:
+        return self._backend.context_snapshot(session_id)
+
+    def context_usage_percent(self, snapshot: str) -> float | None:
+        return self._backend.context_usage_percent(snapshot)
+
+    def compress_session(self, session_id: str) -> str:
+        return self._backend.compress_session(session_id)
 
 
 

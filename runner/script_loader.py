@@ -16,7 +16,10 @@ def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
     return value.strip()
 
 
-def _read_item_file(script: Path, item: dict[str, Any], index: int, field_name: str, encoding: str = "utf-8") -> tuple[str, str] | None:
+def _read_item_file(
+    script: Path, item: dict[str, Any], index: int, field_name: str,
+    encoding: str = "utf-8", *, allow_missing: bool = False,
+) -> tuple[str, str] | None:
     value = item.get(field_name)
     if not value:
         return None
@@ -28,30 +31,39 @@ def _read_item_file(script: Path, item: dict[str, Any], index: int, field_name: 
     try:
         return path.read_text(encoding=encoding), str(path.resolve())
     except OSError as error:
+        if allow_missing:
+            return "", str(path.resolve())
         raise RunnerError(f"script item {index} {field_name} not found: {value}") from error
 
 
-def _goal(script: Path, item: dict[str, Any], index: int) -> tuple[str, str | None]:
+def _goal(
+    script: Path, item: dict[str, Any], index: int, *, allow_missing: bool = False,
+) -> tuple[str, str | None]:
     goal = item.get("prompt") or item.get("goal")
     goal_file = item.get("goal_file")
     if goal and goal_file:
         raise RunnerError(f"script item {index} must use either prompt or goal_file, not both")
-    loaded = _read_item_file(script, item, index, "goal_file")
+    loaded = _read_item_file(script, item, index, "goal_file", allow_missing=allow_missing)
     if loaded:
         goal, goal_file = loaded
-    if not isinstance(goal, str) or not goal.strip():
+    if not isinstance(goal, str) or (not goal.strip() and not (allow_missing and goal_file)):
         raise RunnerError(f"script item {index} requires prompt or goal_file")
     return goal.strip(), goal_file
 
 
-def _ai_validator_prompt(script: Path, item: dict[str, Any], index: int) -> tuple[str, str | None]:
+def _ai_validator_prompt(
+    script: Path, item: dict[str, Any], index: int, *, allow_missing: bool = False,
+) -> tuple[str, str | None]:
     prompt = _string_value(item, index, "ai_validator_prompt")
     prompt_file = item.get("ai_validator_prompt_file")
     if prompt and prompt_file:
         raise RunnerError(
             f"script item {index} must use either ai_validator_prompt or ai_validator_prompt_file, not both"
         )
-    loaded = _read_item_file(script, item, index, "ai_validator_prompt_file", "utf-8-sig")
+    loaded = _read_item_file(
+        script, item, index, "ai_validator_prompt_file", "utf-8-sig",
+        allow_missing=allow_missing,
+    )
     if loaded:
         prompt, prompt_file = loaded
     return prompt.strip(), prompt_file
@@ -100,14 +112,18 @@ def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
     return result
 
 
-def _parse_item(script: Path, item: Any, index: int) -> dict[str, Any]:
+def _parse_item(
+    script: Path, item: Any, index: int, *, allow_missing_files: bool = False,
+) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise RunnerError(f"script item {index} must be an object")
-    goal, goal_file = _goal(script, item, index)
+    goal, goal_file = _goal(script, item, index, allow_missing=allow_missing_files)
     validator = item.get("validator")
     if not isinstance(validator, str) or not validator.strip():
         raise RunnerError(f"script item {index} requires validator path or 'ai'")
-    ai_prompt, ai_prompt_file = _ai_validator_prompt(script, item, index)
+    ai_prompt, ai_prompt_file = _ai_validator_prompt(
+        script, item, index, allow_missing=allow_missing_files
+    )
     result = {
         "goal": goal,
         "validator": validator.strip(),
@@ -122,7 +138,9 @@ def _parse_item(script: Path, item: Any, index: int) -> dict[str, Any]:
     return result
 
 
-def load_yaml_script(path: Path) -> list[dict[str, Any]]:
+def load_yaml_script(
+    path: Path, *, allow_missing_files: bool = False,
+) -> list[dict[str, Any]]:
     try:
         import yaml
     except ImportError as error:
@@ -133,7 +151,10 @@ def load_yaml_script(path: Path) -> list[dict[str, Any]]:
         raise RunnerError(f"invalid YAML script: {error}") from error
     if not isinstance(data, list) or not data:
         raise RunnerError("YAML script must be a non-empty array")
-    return [_parse_item(path, item, index) for index, item in enumerate(data, 1)]
+    return [
+        _parse_item(path, item, index, allow_missing_files=allow_missing_files)
+        for index, item in enumerate(data, 1)
+    ]
 
 
 __all__ = ["load_yaml_script"]

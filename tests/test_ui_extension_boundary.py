@@ -132,7 +132,7 @@ def test_extension_registration_happens_before_catalog_validation(monkeypatch):
 
 
 def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path):
-    from runner.config import RuntimeConfig
+    from runner.config.runtime import RuntimeConfig
     from runner.script_loader import load_yaml_script
     from runner.script_runner import build_script_item_config
 
@@ -162,3 +162,90 @@ def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path
 
     assert resumed.resume is True
     assert resumed.workflow == frozen
+
+
+def test_ui_editor_uses_owner_modules_without_exposure_facade():
+    from runner.prompts.loader import save_prompt
+    from runner.resources import delete, read_text
+    from runner.workflow.loader import save_workflow
+    from runner.workflow.registry import stage_catalog
+
+    assert not Path("runner/tooling.py").exists()
+    assert all(callable(fn) for fn in (read_text, delete, save_prompt, save_workflow, stage_catalog))
+
+
+def test_resume_prefers_frozen_goal_and_ai_validator_prompt_when_sources_are_gone(tmp_path):
+    from runner.api import RunRequest
+    from runner.workflow.snapshot import freeze_run_resource
+
+    goal = tmp_path / "goal.md"
+    ai_prompt = tmp_path / "ai-validation.md"
+    goal.write_text("goal version A", encoding="utf-8")
+    ai_prompt.write_text("validator version A", encoding="utf-8")
+    freeze_run_resource(goal, tmp_path, ".run", "goal")
+    freeze_run_resource(ai_prompt, tmp_path, ".run", "ai_validator_prompt")
+    goal.unlink()
+    ai_prompt.unlink()
+
+    config = RunRequest(
+        goal_file=str(goal),
+        ai_validator_prompt_file=str(ai_prompt),
+        validator="ai",
+        project_root=str(tmp_path),
+        work_dir=".run",
+        resume=True,
+    ).normalized_config()
+
+    assert config.goal == "goal version A"
+    assert config.ai_validator_prompt == "validator version A"
+    assert Path(config.goal_file).read_text(encoding="utf-8") == "goal version A"
+    assert Path(config.ai_validator_prompt_file).read_text(encoding="utf-8") == "validator version A"
+
+
+def test_yaml_child_resume_uses_frozen_files_after_source_deletion(tmp_path):
+    from runner.config.runtime import RuntimeConfig
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import build_script_item_config
+    from runner.workflow.snapshot import freeze_run_resource
+
+    goal = tmp_path / "goal.md"
+    ai_prompt = tmp_path / "ai-validation.md"
+    goal.write_text("child goal A", encoding="utf-8")
+    ai_prompt.write_text("child validator A", encoding="utf-8")
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- goal_file: goal.md\n"
+        "  validator: ai\n"
+        "  ai_validator_prompt_file: ai-validation.md\n",
+        encoding="utf-8",
+    )
+    args = RuntimeConfig(
+        project_root=str(tmp_path),
+        script=str(script),
+        goal="",
+        validator=None,
+        work_dir=".ai-task-runner",
+    )
+    first_item = load_yaml_script(script)[0]
+    first = build_script_item_config(args, first_item, 1)
+    freeze_run_resource(first.goal_file, first.project_root, first.work_dir, "goal")
+    freeze_run_resource(
+        first.ai_validator_prompt_file,
+        first.project_root,
+        first.work_dir,
+        "ai_validator_prompt",
+    )
+    state = Path(first.project_root, first.work_dir, "state.json")
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text("{}", encoding="utf-8")
+    goal.unlink()
+    ai_prompt.unlink()
+
+    args.resume = True
+    resumed_item = load_yaml_script(script, allow_missing_files=True)[0]
+    resumed = build_script_item_config(args, resumed_item, 1)
+
+    assert resumed.goal == "child goal A"
+    assert resumed.ai_validator_prompt == "child validator A"
+    assert Path(resumed.goal_file).is_file()
+    assert Path(resumed.ai_validator_prompt_file).is_file()

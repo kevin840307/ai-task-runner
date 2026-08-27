@@ -4,9 +4,12 @@ from typing import Any
 from ..errors import RunnerError
 
 class AIError(RunnerError):
-    def __init__(self, message: str, *, transient: bool = False) -> None:
+    def __init__(
+        self, message: str, *, transient: bool = False, recovery_key: str = ""
+    ) -> None:
         super().__init__(message)
         self.transient = transient
+        self.recovery_key = recovery_key
 
 class BackendError(RunnerError):
     """Raised when a backend CLI call cannot produce a usable result."""
@@ -22,6 +25,7 @@ class BackendError(RunnerError):
         command_mode: str = "",
         session_source_event: str = "",
         diagnostics: dict[str, Any] | None = None,
+        recovery_key: str = "",
     ) -> None:
         super().__init__(message)
         self.session_id = session_id
@@ -31,6 +35,7 @@ class BackendError(RunnerError):
         self.command_mode = command_mode
         self.session_source_event = session_source_event
         self.diagnostics = dict(diagnostics or {})
+        self.recovery_key = recovery_key
 
 
 __all__ = ["AIError", "BackendError"]

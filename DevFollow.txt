@@ -18,4 +18,10 @@
 16. 文件要有中英版本, 要詳細一點並且跟現有功能有對齊
 17. retry -1則是測試到過為止, 但還是要遵守5. 6.
 18. workflow stage一樣要容易擴充和好維護, yaml也是, 一眼就能懂, 人類容易修改
+19. Recovery 的 failure identity 必須穩定且具語意；PID、timestamp、container/session 名稱等動態 log 只能用於 Debug，不可讓同一 failure 被誤判為不同 failure。
+20. 公開能力只保留一個明確 owner/import path；沒有 validation、lifecycle、isolation 等責任的純 re-export 暴露層應移除。
+21. KeyboardInterrupt/SystemExit 不可被 Stage retry/recovery 吞掉；中斷前可做必要 cleanup，但必須原樣往上傳遞。
+22. Worker hard crash 後的 orphan cleanup 必須依實際 durable state/work 路徑處理，Direct Run 與 YAML List child 都要涵蓋。
+23. Deterministic Resume／snapshot／configuration 錯誤不可進入無限 retry；只有可能隨時間恢復的 runtime/service failure 才能持續 recovery。
+24. Active／Resume Run 必須凍結所有會影響 AI 行為的 file-based input，至少包含 Workflow／Stage Prompt／Goal File／Final-AI Prompt；YAML List child 亦同。
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。

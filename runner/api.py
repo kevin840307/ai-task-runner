@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import execute
-from .config import EventHandler, RuntimeConfig
+from .config.runtime import EventHandler, RuntimeConfig
 from .config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
@@ -36,10 +36,11 @@ from .plugins.registry import (
     plugin_config_from_namespace,
     plugin_config_from_request,
 )
-from .utils import append_bounded_log
+from .runtime.events import retry_event
+from .utils.logs import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
-from .workflow.snapshot import load_snapshot
+from .workflow.snapshot import load_run_resource, load_snapshot
 
 
 @dataclass
@@ -150,10 +151,32 @@ class RunRequest:
     ) -> RuntimeConfig:
         """Resolve public request inputs into the typed execution contract."""
         discover_extensions()
-        ai_validator_prompt = self._effective_ai_validator_prompt()
+        frozen_run = self.resume and not self.script and not self.force_new
+        frozen_goal = (
+            load_run_resource(self.project_root, self.work_dir, "goal")
+            if frozen_run
+            else None
+        )
+        frozen_ai_prompt = (
+            load_run_resource(self.project_root, self.work_dir, "ai_validator_prompt")
+            if frozen_run
+            else None
+        )
+        goal = frozen_goal[1] if frozen_goal is not None else self._effective_goal()
+        goal_file = frozen_goal[0] if frozen_goal is not None else self.goal_file
+        ai_validator_prompt = (
+            frozen_ai_prompt[1]
+            if frozen_ai_prompt is not None
+            else self._effective_ai_validator_prompt()
+        )
+        ai_validator_prompt_file = (
+            frozen_ai_prompt[0]
+            if frozen_ai_prompt is not None
+            else self.ai_validator_prompt_file
+        )
         frozen = (
             load_snapshot(self.project_root, self.work_dir)
-            if self.resume and not self.script and not self.force_new
+            if frozen_run
             else None
         )
         workflow = frozen or (
@@ -162,14 +185,14 @@ class RunRequest:
             else load_default_workflow(self.validator, ai_validator_prompt)
         )
         return RuntimeConfig(
-            goal=self._effective_goal(),
-            goal_file=self.goal_file,
+            goal=goal,
+            goal_file=goal_file,
             project_root=self.project_root,
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
             ai_validator_prompt=ai_validator_prompt,
-            ai_validator_prompt_file=self.ai_validator_prompt_file,
+            ai_validator_prompt_file=ai_validator_prompt_file,
             workflow=workflow,
             workflow_explicit=bool(self.workflow_file),
             backend=self.backend,
@@ -358,14 +381,7 @@ def _report_retry(
     callback: EventHandler | None,
     message: str,
 ) -> None:
-    event = {
-        "schema_version": 1,
-        "runner_version": __version__,
-        "type": "runner.retry",
-        "action": "retry",
-        "timestamp": time.time(),
-        "message": message,
-    }
+    event = retry_event(message)
     if callback is not None:
         try:
             callback(event)

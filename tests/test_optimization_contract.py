@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import DEFAULT_REVIEW_RETRIES
 from runner.errors import RunnerError
 from runner.plugins.console import LiveUI

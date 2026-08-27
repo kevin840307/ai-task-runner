@@ -6,12 +6,16 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from ..errors import RunnerError
+from ..errors import ConfigurationError, RunnerError
 from ..resources import text_hash, write_text
 from .schema import validate_stage, validate_topology
 
 SNAPSHOT_FILE = "workflow.snapshot.json"
 RESOURCE_DIR = "resources"
+RUN_RESOURCE_FILES = {
+    "goal": "goal.txt",
+    "ai_validator_prompt": "ai-validator-prompt.txt",
+}
 
 
 def snapshot_path(project_root: str | Path, work_dir: str | Path) -> Path:
@@ -25,10 +29,57 @@ def load_snapshot(project_root: str | Path, work_dir: str | Path) -> list[dict[s
     try:
         workflow = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise RunnerError(f"invalid workflow snapshot: {path}: {error}") from error
-    _validate_snapshot(workflow)
+        raise ConfigurationError(f"invalid workflow snapshot: {path}: {error}") from error
+    try:
+        _validate_snapshot(workflow)
+    except RunnerError as error:
+        raise ConfigurationError(f"invalid workflow snapshot: {path}: {error}") from error
     return workflow
 
+
+
+def run_resource_path(
+    project_root: str | Path,
+    work_dir: str | Path,
+    name: str,
+) -> Path:
+    try:
+        filename = RUN_RESOURCE_FILES[name]
+    except KeyError as error:
+        raise ValueError(f"unknown run resource: {name}") from error
+    return Path(project_root).resolve() / work_dir / RESOURCE_DIR / filename
+
+
+def load_run_resource(
+    project_root: str | Path,
+    work_dir: str | Path,
+    name: str,
+) -> tuple[str, str] | None:
+    path = run_resource_path(project_root, work_dir, name)
+    if not path.is_file():
+        return None
+    try:
+        return str(path.resolve()), path.read_text(encoding="utf-8-sig")
+    except OSError as error:
+        raise ConfigurationError(f"cannot read run resource: {path}: {error}") from error
+
+
+def freeze_run_resource(
+    source: str | Path | None,
+    project_root: str | Path,
+    work_dir: str | Path,
+    name: str,
+) -> tuple[str, str] | None:
+    if not source:
+        return None
+    path = Path(source).expanduser()
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError as error:
+        raise ConfigurationError(f"cannot snapshot {name}: {path}: {error}") from error
+    target = run_resource_path(project_root, work_dir, name)
+    write_text(target, text)
+    return str(target.resolve()), text
 
 def freeze_workflow(
     workflow: list[dict[str, Any]],
@@ -92,4 +143,13 @@ def _validate_snapshot(workflow: Any) -> None:
     validate_topology(workflow)
 
 
-__all__ = ["RESOURCE_DIR", "SNAPSHOT_FILE", "freeze_workflow", "load_snapshot", "snapshot_path"]
+__all__ = [
+    "RESOURCE_DIR",
+    "SNAPSHOT_FILE",
+    "freeze_run_resource",
+    "freeze_workflow",
+    "load_run_resource",
+    "load_snapshot",
+    "run_resource_path",
+    "snapshot_path",
+]

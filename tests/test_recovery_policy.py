@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import DEFAULT_API_WAIT_TIMEOUT, DEFAULT_MAX_ATTEMPTS
 from runner.errors import RunnerError
 from runner.workflow.rules import handle_plan_result, prepare_replan
@@ -255,3 +255,16 @@ def test_api_retry_sleep_never_exceeds_remaining_wait_window(monkeypatch):
     with pytest.raises(RunnerError):
         ai_client_module._run_with_backoff(fail, 'api', '', 300, 300, max_elapsed=3600)
     assert sleeps == [100.0]
+
+
+def test_invalid_resume_state_is_configuration_error(tmp_path):
+    from runner.errors import ConfigurationError
+    from runner.runtime.run_state import StateStore
+
+    work = tmp_path / ".run"
+    work.mkdir()
+    (work / "state.json").write_text("{invalid", encoding="utf-8")
+    store = StateStore(tmp_path.resolve(), work)
+
+    with pytest.raises(ConfigurationError, match="invalid resume state"):
+        store.load_or_create("", resume=True, force_new=False)

@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.34
+版本：1.2.39
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態）才算完成。正式 `runner.api.run()` 會自動 resume 未完成 state；CLI 只額外提供 worker-process crash isolation。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
@@ -10,10 +10,11 @@
 ## 核心能力
 - 支援 Qwen / OpenCode；Qwen Prompt 僅走 stdin，不使用 `-p` 傳完整 Prompt。
 - Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
-- TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Review 使用獨立 read-only client/session。
+- TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Timeout recovery 使用穩定語意 failure key，因此 sandbox/container ID 等動態 backend output 不會把同一 failure 誤判成新 failure。Review 使用獨立 read-only client/session。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
-- UI-ready extension boundary：Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛、Stage catalog 直接由真正 spec 產生，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow/Prompt snapshot。
+- Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
+- UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
 - 通用 `python_script` Stage 會在 subprocess 執行 project/user Python；Python Validator 仍保留 authoritative deterministic gate 語意。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。

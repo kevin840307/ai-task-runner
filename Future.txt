@@ -1,5 +1,34 @@
-未來我想要加入UI UI會有這功能 請問目前的架構適不適合用外掛的方式新增(就是幾乎沒耦合 不需改現行的code 就能新建UI)
-1.支援 CRUD workflow
-2.支援stage使用python
-3.支援修改skill prompt
-4.支援對話框能立即看到任務, 跟chatgpt一樣可by專案建立對話
+未來 UI 需求（架構契約）
+
+目標：UI 是可整包移除的 Adapter；不能讓 Pipeline、StageExecutor、Stage、Workflow 依賴 UI。CLI / UI / Skill / Python 共用 runner.api 的執行邏輯，不建立第二套 retry / resume / validation。
+
+1. CRUD Workflow
+   - UI 修改的就是 Runner 真正使用的 Workflow 檔案，不建立 UI 專用 Workflow。
+   - 使用 `runner.resources.read_text/delete` 與 `runner.workflow.loader.save_workflow`。
+   - save 前走真正 Workflow parser/schema；使用 expected_hash 做 optimistic conflict detection，再 atomic replace。
+   - 同一 Resource 的並行修改由 UI/backend caller serialize；Runner Core 不為尚未需要的 UI concurrency 增加 lock framework。
+   - Active / Resume Run 使用自己的 durable snapshot（Workflow／Stage Prompt／Goal File／Final-AI Prompt）；UI 修改或刪除來源檔只影響下一個 Run。
+
+2. Stage 使用 Python
+   - 使用 type: python_script。
+   - Python 一律 subprocess 執行，不 import 任意使用者程式進 24H Runner process。
+   - 新 behavior Stage 透過 Extension + Stage registry 擴充，Pipeline 不增加 Stage-name branch。
+
+3. 修改 Skill / Prompt
+   - 使用 `runner.resources.read_text/delete` 與 `runner.prompts.loader.save_prompt`。
+   - Jinja syntax 驗證後才 atomic replace；active Run 使用自己的 frozen prompt/resource snapshot。
+   - 同一 Prompt/Skill 的並行寫入同樣由 UI/backend caller serialize。
+
+4. Project / Conversation UI
+   - UI 可依 Project 建立 Conversation / Message / Run 關聯，類似 ChatGPT。
+   - Project / Conversation / Message metadata 屬於 UI storage，不進 Runner Core / state.json。
+   - 即時任務畫面使用 runner.api event callback / JSON event + durable state snapshot。
+   - 多 Run 優先一個 Run 一個 worker process；不要只為 UI 增加 in-process global concurrency。
+
+公開邊界：
+- 執行：`runner.api`（`from runner.api import RunRequest, run`）
+- 編輯：`runner.resources` + domain owner；Stage metadata：`runner.workflow.registry`
+- 擴充 Stage/Backend：ai_task_runner.extensions
+- Runtime 橫切 Plugin：ai_task_runner.plugins
+
+驗收：移除 UI package 後，現有 CLI、YAML List、24H retry/resume、Same/Fresh Session、Final Validator 行為完全不變。

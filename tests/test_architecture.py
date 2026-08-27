@@ -151,3 +151,19 @@ def test_console_and_script_runner_do_not_own_event_transport():
         assert legacy not in console
     for transport in ("event_callback", "json_events", "human_output"):
         assert transport not in script
+
+
+def test_public_capabilities_use_owner_modules_without_reexport_only_facades():
+    assert not (ROOT / "runner/tooling.py").exists()
+    root_init = (ROOT / "runner/__init__.py").read_text(encoding="utf-8")
+    assert "__getattr__" not in root_init
+    assert "RunRequest" not in root_init
+    assert "RunResult" not in root_init
+    for relative in (
+        "runner/ai/__init__.py",
+        "runner/backends/__init__.py",
+        "runner/config/__init__.py",
+        "runner/utils/__init__.py",
+    ):
+        tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
+        assert not any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree)), relative

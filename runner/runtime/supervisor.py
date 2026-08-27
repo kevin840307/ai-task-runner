@@ -11,8 +11,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from ..runtime.process_runner import ACTIVE_PROCESS_FILE
-from ..version import __version__
+from .events import retry_event
+from .process_runner import ACTIVE_PROCESS_FILE
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
 RequestFactory = Callable[[Sequence[str]], Any]
@@ -33,6 +33,11 @@ def supervise_cli(
         return worker_entry(argv)
 
     request = request_factory(argv)
+    states = (
+        [Path(path) for path in state_locator(request)]
+        if state_locator is not None
+        else [Path(request.project_root, request.work_dir, "state.json").resolve()]
+    )
     worker_args = list(argv)
     while True:
         env = dict(os.environ)
@@ -45,17 +50,13 @@ def supervise_cli(
             code = worker.wait()
         except KeyboardInterrupt:
             worker.terminate()
+            cleanup_orphans(states, worker.pid)
             return 130
         if code in (0, 1, 130):
             return code
-        states = (
-            [Path(path) for path in state_locator(request)]
-            if state_locator is not None
-            else [Path(request.project_root, request.work_dir, "state.json").resolve()]
-        )
+        cleanup_orphans(states, worker.pid)
         if not any(path.is_file() for path in states):
             return code
-        cleanup_orphan(request, worker.pid)
         _report_retry(
             request,
             f"worker exited unexpectedly ({code}); resuming saved state",
@@ -66,9 +67,14 @@ def supervise_cli(
         time.sleep(max(1, request.retry_delay))
 
 
-def cleanup_orphan(request: Any, worker_pid: int) -> None:
-    """Kill a child process only when the active-process marker belongs to worker_pid."""
-    path = Path(request.project_root, request.work_dir, ACTIVE_PROCESS_FILE).resolve()
+def cleanup_orphans(state_files: Sequence[str | Path], worker_pid: int) -> None:
+    """Kill active children owned by one crashed worker across Direct/YAML runs."""
+    work_dirs = {Path(path).resolve().parent for path in state_files}
+    for work in work_dirs:
+        _cleanup_orphan_marker(work / ACTIVE_PROCESS_FILE, worker_pid)
+
+
+def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
     try:
         owner, child = map(int, path.read_text(encoding="ascii").split())
         if owner != worker_pid:
@@ -89,22 +95,9 @@ def cleanup_orphan(request: Any, worker_pid: int) -> None:
 
 def _report_retry(request: Any, message: str) -> None:
     if request.json_events:
-        print(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "runner_version": __version__,
-                    "type": "runner.retry",
-                    "action": "retry",
-                    "timestamp": time.time(),
-                    "message": message,
-                    "exit_code": 0,
-                }
-            ),
-            flush=True,
-        )
+        print(json.dumps(retry_event(message, exit_code=0)), flush=True)
     else:
         print(f"ERROR: {message}", file=sys.stderr)
 
 
-__all__ = ["WORKER_ENV", "cleanup_orphan", "supervise_cli"]
+__all__ = ["WORKER_ENV", "cleanup_orphans", "supervise_cli"]

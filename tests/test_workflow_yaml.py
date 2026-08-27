@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from runner.api import RunRequest
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.loader import (

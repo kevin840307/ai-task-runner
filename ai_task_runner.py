@@ -9,7 +9,7 @@ import time
 from collections.abc import Sequence
 
 from runner.api import RunRequest, run, state_files
-from runner.backends import backend_names
+from runner.backends.registry import backend_names
 from runner.config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,

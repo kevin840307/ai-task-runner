@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## Mandatory maintenance rules
 1. Minimum code; no project-specific hardcode in generic Runner code. Never branch on sample/project names, FAB/ENV/version values, filenames, business fields, or a specific AI identity to solve one case.
@@ -40,7 +40,7 @@ Use `runner.api.RunRequest` / `runner.api.run()` as the shared entry for CLI/UI/
 ## UI / extension maintenance boundary
 UI is an adapter beside CLI, not a Workflow Plugin. Pipeline, StageExecutor, Stage, AI client, and Workflow loader must not import UI code. External Stage/backend registration happens before Workflow validation through installed extensions; runtime-only plugins attach later through the Hook/Event boundary. A new external Stage must not require a Stage-name branch in Pipeline.
 
-Editable Workflow/prompt files use the shared atomic resource functions and optimistic `expected_hash`; an active Run uses its durable Workflow/prompt snapshot. Keep one Run per worker process for isolation rather than adding in-process global runtime concurrency solely for UI.
+Editable Workflow/prompt files use the shared atomic resource functions and optimistic `expected_hash`; an active Run uses its durable Workflow/Stage-prompt/Goal/final-AI-prompt snapshot. Keep one Run per worker process for isolation rather than adding in-process global runtime concurrency solely for UI.
 
 ## Project policy
 Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
@@ -61,7 +61,7 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 - Real failure: bounded same-session retry, default maximum two retries.
 - Same session still fails: fresh session + complete necessary context.
 - Same persistent failure after fresh recovery: return `replan` and create a new plan.
-- Different failure fingerprint: reset the persistent-failure streak.
+- Different failure fingerprint: reset the persistent-failure streak. Timeout identity must come from the backend semantic recovery key, not volatile raw stderr; keep the full stderr only for diagnostics.
 - Transient API/service failure: AI transport backoff; do not consume Stage failure budget. Canonical API resumes durable state after an exhausted wait window.
 - Final AI voting: every validation run starts a different fresh session.
 

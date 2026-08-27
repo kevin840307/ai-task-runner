@@ -3,14 +3,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .ai import create_ai_client
-from .config import RuntimeConfig
+from .ai.client import create_ai_client
+from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .project.files import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .workflow.loader import workflow_fingerprint
-from .workflow.snapshot import freeze_workflow, load_snapshot
+from .workflow.snapshot import (
+    freeze_run_resource,
+    freeze_workflow,
+    load_run_resource,
+    load_snapshot,
+)
 from .workflow.pipeline import build_pipeline
 from .workflow.stages import StageContext, StageExecutor
 
@@ -27,6 +32,7 @@ class TaskRunner:
         self.validator_is_ai = self.config.validator.lower() == "ai"
         self.validator_path = None if self.validator_is_ai else Path(self.config.validator).resolve()
         self.work = self.root / self.config.work_dir
+        self._bind_run_resources()
         if self.config.resume and not self.config.force_new:
             frozen = load_snapshot(self.root, self.config.work_dir)
             if frozen is not None:
@@ -47,7 +53,7 @@ class TaskRunner:
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
-            raise RunnerError("resume workflow differs from the saved workflow")
+            raise ConfigurationError("resume workflow differs from the saved workflow")
         new_fingerprint = not self.state.workflow_fingerprint
         self.state.workflow_fingerprint = fingerprint
         self.ai_client = create_ai_client(
@@ -79,6 +85,29 @@ class TaskRunner:
         )
         self.pipeline = build_pipeline(self.context)
         self.stage_executor = StageExecutor()
+
+
+    def _bind_run_resources(self) -> None:
+        resources = (
+            ("goal_file", "goal", "goal"),
+            ("ai_validator_prompt_file", "ai_validator_prompt", "ai_validator_prompt"),
+        )
+        for file_attr, content_attr, name in resources:
+            value = (
+                load_run_resource(self.root, self.config.work_dir, name)
+                if self.config.resume and not self.config.force_new
+                else freeze_run_resource(
+                    getattr(self.config, file_attr),
+                    self.root,
+                    self.config.work_dir,
+                    name,
+                )
+            )
+            if value is None:
+                continue
+            filename, text = value
+            setattr(self.config, file_attr, filename)
+            setattr(self.config, content_attr, text)
 
     def run(self) -> int:
         if self.config.plan_only and self.state.tasks:

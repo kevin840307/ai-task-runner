@@ -36,7 +36,7 @@ Loop context 檢查與壓縮是 model-error Plugin。AI Client 只透過通用 H
 
 ## UI / Extension 邊界
 
-UI 是 Adapter，不是 execution Plugin。UI/CLI/Skill 只能依賴 `runner.api`、editable-resource function、event callback 與 Stage catalog metadata；Pipeline、StageExecutor、Stage 不得 import UI。整包移除 UI 時，Runner execution semantics 必須完全不變。
+UI 是 Adapter，不是 execution Plugin。UI/CLI/Skill 只能依賴 `runner.api`、可編輯資源／catalog metadata 的 owner module 與 event callback；Pipeline、StageExecutor、Stage 不得 import UI。整包移除 UI 時，Runner execution semantics 必須完全不變。
 
 外部 Python package 可透過 `ai_task_runner.extensions` entry point 在 Runtime 建立前註冊 `register_stage()`、Backend 等 runtime-independent capability；Discovery 發生在 Workflow validation 之前。Cross-cutting Runtime Plugin 則使用獨立的 `ai_task_runner.plugins` entry-point group，只有 Runtime 建立後才 attach。如此可擴充但不讓 Workflow Core 反向依賴 Plugin。
 
@@ -44,7 +44,7 @@ UI 是 Adapter，不是 execution Plugin。UI/CLI/Skill 只能依賴 `runner.api
 
 `workflow.loader.save_workflow()`、`prompts.loader.save_prompt()` 先使用真正 Runner parser/schema 驗證，再 atomic replace；`expected_hash` 提供 UI/IDE optimistic concurrency protection。這只是共用檔案資源能力，不建立第二套 Workflow service/storage model。
 
-Concrete Run 開始時會把 normalized Workflow 與已解析的外部 prompt 持久化到該 Run work directory：`workflow.snapshot.json` 加上 content-addressed prompt resources。Run 執行中即使 UI/VS Code 修改來源檔，或 worker crash 後 `--resume`，該 Run 仍使用原本 Workflow/Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
+Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file` 持久化到該 Run work directory。Workflow Stage Prompt 維持 content-addressed；Run-level Goal／Final-AI Prompt 使用固定語意資源名稱。即使 UI/VS Code 修改或刪除來源檔，active Run 與 worker crash 後的 `--resume` 都沿用原本 Workflow／Goal／Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
 
 ## Workflow 契約
 

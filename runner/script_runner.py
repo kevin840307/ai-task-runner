@@ -6,13 +6,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .config import RuntimeConfig
+from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .plugins.registry import merge_plugin_config
 from .runtime import events
 from .script_loader import load_yaml_script
 from .workflow.loader import load_default_workflow, load_workflow
-from .workflow.snapshot import load_snapshot
+from .workflow.snapshot import load_run_resource, load_snapshot
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
@@ -23,7 +23,7 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
         raise ConfigurationError("invalid YAML script")
 
     try:
-        items = load_yaml_script(script)
+        items = load_yaml_script(script, allow_missing_files=args.resume)
     except RunnerError as error:
         raise ConfigurationError(str(error)) from error
     total = len(items)
@@ -76,7 +76,22 @@ def build_script_item_config(
     work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
     project_root = str(item_root.resolve())
     resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
-    ai_validator_prompt = item.get("ai_validator_prompt", "")
+    frozen_goal = load_run_resource(project_root, work_dir, "goal") if resume else None
+    frozen_ai_prompt = (
+        load_run_resource(project_root, work_dir, "ai_validator_prompt") if resume else None
+    )
+    goal = frozen_goal[1] if frozen_goal is not None else item["goal"]
+    goal_file = frozen_goal[0] if frozen_goal is not None else item.get("goal_file")
+    ai_validator_prompt = (
+        frozen_ai_prompt[1]
+        if frozen_ai_prompt is not None
+        else item.get("ai_validator_prompt", "")
+    )
+    ai_validator_prompt_file = (
+        frozen_ai_prompt[0]
+        if frozen_ai_prompt is not None
+        else item.get("ai_validator_prompt_file")
+    )
     frozen = load_snapshot(project_root, work_dir) if resume else None
     workflow, workflow_explicit = (
         (frozen, True)
@@ -86,13 +101,13 @@ def build_script_item_config(
     child = replace(
         args,
         script=None,
-        goal=item["goal"],
-        goal_file=item.get("goal_file"),
+        goal=goal,
+        goal_file=goal_file,
         project_root=project_root,
         validator=item["validator"],
         validator_prompt=item["validator_prompt"],
         ai_validator_prompt=ai_validator_prompt,
-        ai_validator_prompt_file=item.get("ai_validator_prompt_file"),
+        ai_validator_prompt_file=ai_validator_prompt_file,
         review_retries=item.get("review_retries", args.review_retries),
         final_ai_validations=item.get("final_ai_validations", args.final_ai_validations),
         final_ai_required_passes=item.get(

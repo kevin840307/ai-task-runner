@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from runner.backends import (
+from runner.backends.registry import (
     BACKENDS,
     backend_names,
     configure_backend_args,
@@ -12,7 +12,8 @@ from runner.backends import (
 )
 from runner.ai.contracts import BackendResult
 from runner.backends.base import BaseBackend, split_command
-from runner.ai.errors import BackendError
+from runner.ai.client import AIClient
+from runner.ai.errors import AIError, BackendError
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.backends.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
@@ -170,9 +171,26 @@ def test_backend_timeout_kills_call_and_raises_recoverable_error(tmp_path):
             return BackendResult(raw)
 
     backend = SlowBackend(sys.executable, tmp_path, [], timeout=1)
-    with pytest.raises(BackendError, match="timed out after 1 seconds"):
+    with pytest.raises(BackendError, match="timed out after 1 seconds") as captured:
         backend.ask("x")
+    assert captured.value.recovery_key == "slow:timeout:1"
 
+
+
+
+def test_ai_client_preserves_backend_recovery_key(tmp_path, monkeypatch):
+    client = AIClient("qwen", sys.executable, tmp_path, [], timeout=1)
+
+    def fail(*args, **kwargs):
+        raise BackendError(
+            "qwen timed out after 1 seconds:\nContainerName (regular): dynamic-99",
+            recovery_key="qwen:timeout:1",
+        )
+
+    monkeypatch.setattr(client._backend, "ask", fail)
+    with pytest.raises(AIError) as captured:
+        client.ask("x")
+    assert captured.value.recovery_key == "qwen:timeout:1"
 
 def test_zero_backend_timeout_disables_limit(tmp_path):
     class FastBackend(BaseBackend):

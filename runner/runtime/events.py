@@ -78,35 +78,35 @@ def scope(bus: EventBus, context: dict[str, Any] | None = None):
 def bind(state: RunState) -> None:
     global _state
     _state = state
-    _publish("runner.progress", "bind")
+    publish("runner.progress", "bind")
 
 
 def set_status(status: str, detail: str = "") -> None:
     global _status, _detail
     _status, _detail = status, detail
-    _publish("runner.status", "set")
+    publish("runner.status", "set")
 
 
 def start(status: str, detail: str = "") -> None:
     global _status, _detail
     _status, _detail = status, detail
-    _publish("runner.status", "start")
+    publish("runner.status", "start")
 
 
 def stop(status: str = "", detail: str = "") -> None:
     global _status, _detail
     if status:
         _status, _detail = status, detail
-        _publish("runner.status", "stop_set")
+        publish("runner.status", "stop_set")
     else:
-        _publish("runner.status", "stop")
+        publish("runner.status", "stop")
 
 
 def show_todo(state: RunState | None = None) -> None:
     if state is not None:
         bind(state)
     else:
-        _publish("runner.progress", "bind")
+        publish("runner.progress", "bind")
 
 
 
@@ -160,8 +160,21 @@ def session_fresh(previous_session: str) -> None:
     publish("runner.session", "fresh", previous_session=previous_session)
 
 
-def _publish(event_type: str, action: str) -> None:
-    publish(event_type, action)
+def retry_event(message: str, **payload: Any) -> dict[str, Any]:
+    """Build the transport-neutral retry event used by API and worker supervision."""
+    return {
+        "schema_version": 1,
+        "runner_version": __version__,
+        "type": "runner.retry",
+        "action": "retry",
+        "timestamp": time.time(),
+        "message": message,
+        **payload,
+    }
 
 
-__all__ = ["EventBus", "EventHandler", "bind", "configure", "scope", "publish", "service_wait_exhausted", "session_fresh", "set_status", "show_todo", "stage_finished", "stage_started", "start", "stop"]
+__all__ = [
+    "EventBus", "EventHandler", "bind", "configure", "scope", "publish",
+    "retry_event", "service_wait_exhausted", "session_fresh", "set_status",
+    "show_todo", "stage_finished", "stage_started", "start", "stop",
+]

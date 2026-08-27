@@ -77,7 +77,10 @@ class BaseBackend(ABC):
                 raise BackendError(
                     f"{self.name} idle timed out without activity "
                     f"for {idle_timeout_after_change:g} seconds:\n"
-                    f"{failure_output[-4000:]}"
+                    f"{failure_output[-4000:]}",
+                    recovery_key=(
+                        f"{self.name}:idle-timeout:{idle_timeout_after_change:g}"
+                    ),
                 )
             events = self.parse_json_events(output)
             session_id = self.find_session_id(events)
@@ -120,7 +123,8 @@ class BaseBackend(ABC):
             failure_output = self.error_output(result.output)
             raise BackendError(
                 f"{self.name} timed out after {self.timeout} seconds:\n"
-                f"{failure_output[-4000:]}"
+                f"{failure_output[-4000:]}",
+                recovery_key=f"{self.name}:timeout:{self.timeout}",
             )
         return result
 

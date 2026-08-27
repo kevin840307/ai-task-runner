@@ -1,9 +1,9 @@
 # 24H 運行與故障排查
 
-版本：1.2.34
+版本：1.2.39
 
 ## 長時間執行行為
-預設刻意允許模型長時間工作：runtime 7200 秒、planning 600 秒、validator 1200 秒、idle-after-change 900 秒。次數限制預設為 0（不以次數限制）。恢復依 error、session availability、no-progress fingerprint、Review 與 Final Validation 決定。
+預設刻意允許模型長時間工作：runtime 7200 秒、planning 600 秒、validator 1200 秒、idle-after-change 900 秒。次數限制預設為 0（不以次數限制）。恢復依 error、session availability、no-progress fingerprint、Review 與 Final Validation 決定。Timeout failure 使用穩定語意 recovery key，同時保留完整 backend stderr 供 Debug，避免 sandbox/container ID 每次改變而讓 same-failure escalation 永遠重新計數。
 
 ## 常見 Recovery
 - Structured JSON/schema 不合法 -> 先在同 session 發短 JSON-only correction；仍無法收斂才依該 Stage 設定 Fresh fallback。Review 的 model error 依 review retry budget 決定是否 fail-soft skip。
@@ -32,3 +32,7 @@ History 上限為最近 100 calls、50 MiB 總量、單一 history entry 2 MiB�
 API/network/rate-limit 暫時性異常使用逐步 backoff，但不耗盡 model/task recovery 次數，並保留 current state/session；持續的模型/session 異常才走 reuse-then-rebuild。
 
 Safety snapshot 暫存目錄使用 `ai-task-runner-readonly-*` / `ai-task-runner-protect-*`。正常 Stage 結束會立即清除；Runner 啟動時也會清除 stale abandoned snapshot，避免異常中止後長期累積。
+
+### Worker crash 清理
+
+Worker 異常退出後，Supervisor 會依該 Run 實際 durable state 對應的 work directory 清理 active child-process marker；YAML List 的每個 child（`.../script/NNN/active-process`）也包含在內，不只檢查 root work directory。`KeyboardInterrupt` 與 `SystemExit` 屬於控制流程訊號：Stage hook 可先做 best-effort cleanup，但不可將它們轉成可 Retry 的 Stage failure。

@@ -2,16 +2,12 @@
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from ...errors import RunnerError
-from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
+from .contracts import MODE_WRITE, ResultHandler, StageContext, StageMode, StageResult
 from .python_process import run_python
-
-ResultHandler = Callable[[StageContext, StageResult], StageResult]
-
 
 @dataclass(frozen=True)
 class PythonValidatorStageSpec:

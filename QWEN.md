@@ -1,6 +1,6 @@
 # Qwen Development Rules
 
-Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance.
+Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance. Also preserve the owner constraints in `DevFollow.txt` and the removable-UI boundary in `Future.txt`.
 
 - No hardcoded project-specific behavior in generic Runner code.
 - Reuse one shared function for the same behavior; do not duplicate implementations.
@@ -15,3 +15,5 @@ Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance.
 - Never modify protected paths or the project-root `.ai-task-runner.yaml`.
 - Never run `git add`, `git commit`, or `git push`.
 - Do not change validators or immutable fixtures to make a failing implementation pass.
+
+- Public capabilities should have one clear owner/import path. Do not add re-export-only exposure modules or package-level compatibility aliases unless they enforce a real architectural boundary.

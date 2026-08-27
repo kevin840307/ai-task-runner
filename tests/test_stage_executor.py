@@ -1,6 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from runner.ai.errors import AIError
 from runner.errors import RunnerError
 from runner.runtime import events
 from runner.runtime.events import EventBus
@@ -63,12 +66,60 @@ def context():
     )
 
 
+
+
+def test_timeout_recovery_key_ignores_dynamic_backend_output():
+    executor = StageExecutor(Hooks())
+    ctx = context()
+    first = AIError(
+        "qwen timed out after 1 seconds:\nContainerName (regular): qwen-code-0.21.0-20",
+        recovery_key="qwen:timeout:1",
+    )
+    second = AIError(
+        "qwen timed out after 1 seconds:\nContainerName (regular): qwen-code-0.21.0-51",
+        recovery_key="qwen:timeout:1",
+    )
+    assert executor._failure_key(Stage(), ctx, first) == executor._failure_key(
+        Stage(), ctx, second
+    )
+
+
+def test_different_semantic_recovery_keys_stay_different():
+    executor = StageExecutor(Hooks())
+    ctx = context()
+    one = AIError("timeout", recovery_key="qwen:timeout:1")
+    two = AIError("timeout", recovery_key="qwen:timeout:2")
+    assert executor._failure_key(Stage(), ctx, one) != executor._failure_key(
+        Stage(), ctx, two
+    )
+
 def test_executor_wraps_one_stage_once_with_hooks():
     hooks = Hooks()
     executor = StageExecutor(hooks)
     result = executor.run(Stage(), context())
     assert result.status == "pass"
     assert hooks.calls == [("before", "sample"), ("after", "sample")]
+
+
+def test_executor_propagates_keyboard_interrupt_after_hook_cleanup():
+    class Interrupted(Stage):
+        def run(self, ctx, previous=None):
+            raise KeyboardInterrupt()
+
+    hooks = Hooks()
+    with pytest.raises(KeyboardInterrupt):
+        StageExecutor(hooks)._attempt(Interrupted(), context(), None)
+    assert hooks.calls == [("before", "sample"), ("after", "sample")]
+
+
+def test_executor_propagates_system_exit_from_finish():
+    class ExitOnFinish(Stage):
+        def finish(self, ctx, result):
+            raise SystemExit(7)
+
+    with pytest.raises(SystemExit) as error:
+        StageExecutor(Hooks()).run(ExitOnFinish(), context())
+    assert error.value.code == 7
 
 
 def test_executor_converts_stage_exception_to_result():

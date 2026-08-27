@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sys
+
+import pytest
 from collections import Counter
 from pathlib import Path
 
@@ -142,3 +144,60 @@ def test_generic_workflow_and_prompts_have_no_backend_or_example_literals():
     }
 
     assert offenders == {}
+
+
+def _file_validator(path: Path) -> None:
+    path.write_text(
+        "from pathlib import Path\n"
+        "import argparse\n"
+        "p=argparse.ArgumentParser(); p.add_argument('--project-root'); p.add_argument('--state-file'); a,_=p.parse_known_args()\n"
+        "raise SystemExit(0 if (Path(a.project_root)/'done.txt').exists() else 5)\n",
+        encoding="utf-8",
+    )
+
+
+
+@pytest.mark.parametrize("scenario", ["execution_model_error", "review_retry", "api_503"])
+@pytest.mark.parametrize("mode", ["ai", "python", "mixed"])
+def test_recovery_scenarios_cross_ai_python_and_mixed_validation(
+    tmp_path, monkeypatch, scenario, mode
+):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-{scenario}-{mode}-state"
+    monkeypatch.setenv("SCENARIO", scenario)
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    validator = "ai"
+    ai_validator_prompt = ""
+    if mode != "ai":
+        validator_path = tmp_path / "validator.py"
+        _file_validator(validator_path)
+        validator = str(validator_path)
+        if mode == "mixed":
+            ai_validator_prompt = "Independently confirm done.txt exists."
+
+    result = run(RunRequest(
+        goal=f"Create requested result for {scenario} {mode}",
+        project_root=str(tmp_path),
+        validator=validator,
+        ai_validator_prompt=ai_validator_prompt,
+        backend="qwen",
+        command=_command(),
+        max_attempts=2,
+        max_cycles=3,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        api_wait_timeout=10,
+        agent_idle_after_change_timeout=0,
+        final_ai_validations=1,
+        final_ai_required_passes=1,
+    ))
+
+    assert result.completed is True
+    records = _records(state_dir)
+    assert any(record["stage"] == "execute" for record in records)
+    if mode == "ai":
+        assert any(record["stage"] == "validator" for record in records)
+    elif mode == "python":
+        assert all(record["stage"] != "validator" for record in records)
+    else:
+        assert any(record["stage"] == "validator" for record in records)

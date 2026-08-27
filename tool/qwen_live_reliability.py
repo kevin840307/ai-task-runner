@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -167,6 +168,7 @@ class SoakResult:
 class ProxyControl:
     port: int = 0
     fail: bool = False
+    disconnect: bool = False
     failures: int = 0
     successes: int = 0
 
@@ -256,11 +258,22 @@ def arguments() -> argparse.Namespace:
         help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, YAML, sandbox",
     )
     parser.add_argument(
+        "--long-api-outage-seconds",
+        type=float,
+        default=180,
+        help="disconnect the API for this many seconds in the long recovery probe",
+    )
+    parser.add_argument(
         "--require-transient",
         action="store_true",
         help="fail unless a real transient API recovery appears in logs",
     )
     return parser.parse_args()
+
+
+def case_prompt(prompt: str, case_id: str) -> str:
+    """Vary the first prompt line so live probes do not all share one cache prefix."""
+    return f"Reliability case {case_id}. Follow only this case.\n\n{prompt}"
 
 
 def create_project(
@@ -272,7 +285,7 @@ def create_project(
 ) -> Path:
     project = parent / name
     project.mkdir(parents=True, exist_ok=False)
-    (project / "prompt.md").write_text(prompt, encoding="utf-8")
+    (project / "prompt.md").write_text(case_prompt(prompt, name), encoding="utf-8")
     (project / "validation.py").write_text(validator, encoding="utf-8")
     (project / ".ai-task-runner.yaml").write_text(policy, encoding="utf-8")
     return project
@@ -330,7 +343,7 @@ def runner_command(
     if final_ai:
         command.extend([
             "--validator-prompt" if ai_only else "--ai-validator-prompt",
-            FINAL_AI_PROMPT,
+            case_prompt(FINAL_AI_PROMPT, f"{project.name}-final-ai"),
             "--final-ai-validations", "3",
             "--final-ai-required-passes", "2",
         ])
@@ -776,11 +789,11 @@ def yaml_list_resume_probe(
     script = batch / "tasks.yaml"
     script.write_text(json.dumps([
         {
-            "prompt": PROMPT,
+            "prompt": case_prompt(PROMPT, f"{name}-item-{index}"),
             "project_root": project.name,
             "validator": str(project / "validation.py"),
         }
-        for project in projects
+        for index, project in enumerate(projects, 1)
     ], indent=2), encoding="utf-8")
 
     first_log = console_log(batch, "first-console.jsonl")
@@ -880,6 +893,9 @@ def api_recovery_probe(
     settings: Settings,
     root: Path,
     name: str = "api-recovery-probe",
+    *,
+    outage_seconds: float = 15,
+    disconnect: bool = False,
 ) -> bool:
     with (
         transient_proxy(settings.api_port) as proxy,
@@ -913,14 +929,17 @@ def api_recovery_probe(
                 if not session_id and isinstance(current_session, str) and current_session:
                     session_id = current_session
                     successes_before_outage = proxy.successes
-                    proxy.fail = True
-                    outage_until = time.monotonic() + 15
-                if proxy.fail and time.monotonic() >= outage_until:
+                    proxy.disconnect = disconnect
+                    proxy.fail = not disconnect
+                    outage_until = time.monotonic() + outage_seconds
+                if (proxy.fail or proxy.disconnect) and time.monotonic() >= outage_until:
                     proxy.fail = False
+                    proxy.disconnect = False
                 recovered = recovered or (
                     session_id != ""
                     and proxy.failures > 0
                     and not proxy.fail
+                    and not proxy.disconnect
                     and proxy.successes > successes_before_outage
                 )
                 if (
@@ -934,6 +953,7 @@ def api_recovery_probe(
                 time.sleep(0.1)
         finally:
             proxy.fail = False
+            proxy.disconnect = False
             if process.poll() is None:
                 terminate(process)
             stream.close()
@@ -1077,6 +1097,14 @@ def transient_proxy(upstream_port: int):
         def _handle(self) -> None:
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length) if length else None
+            if control.disconnect:
+                control.failures += 1
+                try:
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                self.connection.close()
+                return
             if control.fail:
                 control.failures += 1
                 payload = b'{"error":{"message":"temporary live-test gateway outage"}}'
@@ -1232,11 +1260,12 @@ def main() -> int:
         or args.soak_timeout_every < 0
         or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
+        or args.long_api_outage_seconds <= 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
             "hours/pause/soak-* frequency values must be non-negative; "
-            "run-timeout, agent-timeout, planning-timeout, and api-port must be valid"
+            "run-timeout, agent-timeout, planning-timeout, long API outage, and api-port must be valid"
         )
     if args.example_smoke_matrix_workflow and not args.example_smoke_matrix_project:
         raise SystemExit(
@@ -1267,6 +1296,17 @@ def main() -> int:
         print("PASS protected-file policy probe", flush=True)
         transient_observed = api_recovery_probe(settings, run_root)
         print("PASS transient API/same-session recovery probe", flush=True)
+        api_recovery_probe(
+            settings,
+            run_root,
+            "api-disconnect-3m-probe",
+            outage_seconds=args.long_api_outage_seconds,
+            disconnect=True,
+        )
+        print(
+            f"PASS API disconnect/{args.long_api_outage_seconds:g}s same-session recovery probe",
+            flush=True,
+        )
         multi_todo_resume_probe(settings, run_root)
         print("PASS multi-TODO/checkpoint resume probe", flush=True)
         yaml_list_resume_probe(settings, run_root)
@@ -1317,6 +1357,8 @@ def main() -> int:
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
         "transient_observed": transient_observed,
+        "long_api_outage_seconds": args.long_api_outage_seconds,
+        "long_api_disconnect_recovered": True,
         "example_smoke": bool(example_results),
         "example_smoke_runs": len(example_results),
         "example_smoke_source": (

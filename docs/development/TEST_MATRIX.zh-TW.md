@@ -1,6 +1,6 @@
 # 測試矩陣
 
-Version: 1.2.34
+Version: 1.2.39
 
 ## 主要契約
 - CLI/API request validation 與 YAML script mode。
@@ -11,6 +11,7 @@ Version: 1.2.34
 - Generic structured result extraction + strict stage schemas。
 - Deterministic validator invocation、validator args、timeout/retry、Final AI validation。
 - Project policy/protected subtree/snapshot restore/Git guard。
+- deterministic 損壞／不相容 Resume state 必須 fail-fast；Goal／Final-AI Prompt durable resource（含 YAML child source 刪除後 Resume）需覆蓋。
 - Debug current/last/bounded history、Terminal single-line render。
 - Resume/state/no-progress/recovery。
 
@@ -24,9 +25,9 @@ Example/smoke validator 使用 local `validator_interface.py` report contract。
 Smoke/example Prompt 只保留 task-specific requirement，不重複 Runner 已統一處理的自主 inspect、retry、verify 等通用行為。Deterministic validator 不可偷偷增加 Prompt 未寫的格式，也不可綁 Planner 拆法。每個 hard assertion 應對應明確需求或 immutable fixture invariant；像「concise」這種主觀品質，除非 Prompt 有數字上限，否則原則上只做 warning。
 
 ## Qwen Live Reliability
-`python tool/qwen_live_reliability.py` 是 opt-in 的真實 Qwen 可靠性 gate。它驗證 process restart/resume 沿用 durable session、validator failure 驅動 repair、在衝突 prompt 下的 protected-file policy handling、注入 transient API outage 後在恢復前不替換 session、多 TODO checkpoint resume 不重做已完成工作、YAML List process restart/resume 不重做已完成 item、三個不同 session 的 Final AI 3/2 voting、Python + Final AI mixed validation，以及 bounded timeout recovery。
+`python tool/qwen_live_reliability.py` 是 opt-in 的真實 Qwen 可靠性 gate。它驗證 process restart/resume 沿用 durable session、validator failure 驅動 repair、在衝突 prompt 下的 protected-file policy handling、注入 transient API outage 後在恢復前不替換 session、多 TODO checkpoint resume 不重做已完成工作、YAML List process restart/resume 不重做已完成 item、三個不同 session 的 Final AI 3/2 voting、Python + Final AI mixed validation，bounded timeout recovery（即使 sandbox stderr 每次不同仍維持穩定 failure identity）、每個 case 使用不同 prompt marker 以降低 prompt cache 掩蓋真實情境，以及 API 真正斷線 180 秒後自動以同 session 恢復。
 
-24 小時 soak 使用 `python tool/qwen_live_reliability.py --hours 24 --pause 30`。Windows 可直接執行 `run_qwen_live_reliability.bat`；無參數時會跑建議的 0.5 小時 high-density gate，傳入參數則完全取代預設，例如 `run_qwen_live_reliability.bat --hours 24 --high-density --require-transient`。要宣稱通過 24H，command 必須真的走完 24 小時 wall-clock duration，且產生 PASS 的 `summary.json`；summary 會記錄 `soak_elapsed_seconds` 作為證據。Fault-injection probes 全綠是很強的 preflight evidence，但不能取代實際經過時間。需要整個 live gate 都覆蓋 Qwen sandbox mode 時，請加 `--sandbox`。收斂階段可使用 `python tool/qwen_live_reliability.py --hours 0.5 --high-density --require-transient`，它會降低 pause、用 `--agent-timeout 180` 與 `--planning-timeout 180` 限制一般 Qwen call，並在短 soak 中混入 Final AI validation、transient API recovery、timeout recovery、YAML List restart/resume，以及週期性 sandbox run；high-density 若未實際覆蓋每一種混合情境就會判定失敗。個別頻率可用 `--soak-final-ai-every N`、`--soak-transient-api-every N`、`--soak-timeout-every N`、`--soak-yaml-every N`、`--soak-sandbox-every N` 調整。加上 `--example-smoke-project` 會在 reliability probes/soak 最後複製並執行 `examples/01_basic_python_validator/project` 作為真 agent smoke；也可以傳入其他 project path。若該 example 需要 custom workflow，另加 `--example-smoke-workflow path/to/workflow.yaml`，例如 `tool/workflows/skill_prompt_review_chain.yaml`。要更廣覆蓋，可重複傳入 `--example-smoke-matrix-project` 與 `--example-smoke-matrix-workflow`，在 probes/soak 後交叉實跑真實 example project 與 workflow YAML。這是 opt-in，避免改變既有 soak 預設。每次 run 的 project、精簡 console JSONL、Runner events、state 與 diagnostics 都保存在 `.ai-task-runner-live/<timestamp>/`。
+24 小時 soak 使用 `python tool/qwen_live_reliability.py --hours 24 --pause 30`。Windows 可直接執行 `run_qwen_live_reliability.bat`；無參數時會跑建議的 0.5 小時 high-density gate，傳入參數則完全取代預設，例如 `run_qwen_live_reliability.bat --hours 24 --high-density --require-transient`。要宣稱通過 24H，command 必須真的走完 24 小時 wall-clock duration，且產生 PASS 的 `summary.json`；summary 會記錄 `soak_elapsed_seconds` 作為證據。Fault-injection probes 全綠是很強的 preflight evidence，但不能取代實際經過時間。需要整個 live gate 都覆蓋 Qwen sandbox mode 時，請加 `--sandbox`。收斂階段可使用 `python tool/qwen_live_reliability.py --hours 0.5 --high-density --require-transient`，它會降低 pause、用 `--agent-timeout 180` 與 `--planning-timeout 180` 限制一般 Qwen call，並在短 soak 中混入 Final AI validation、transient API recovery、timeout recovery、YAML List restart/resume，以及週期性 sandbox run；high-density 若未實際覆蓋每一種混合情境就會判定失敗。每個產生的 live probe 都會在 prompt 第一行加入 case-specific marker，避免大量案例共用完全相同的 prompt prefix。獨立 long API probe 預設會把本機 proxy 直接斷線 180 秒，可用 `--long-api-outage-seconds N` 調整。個別頻率可用 `--soak-final-ai-every N`、`--soak-transient-api-every N`、`--soak-timeout-every N`、`--soak-yaml-every N`、`--soak-sandbox-every N` 調整。加上 `--example-smoke-project` 會在 reliability probes/soak 最後複製並執行 `examples/01_basic_python_validator/project` 作為真 agent smoke；也可以傳入其他 project path。若該 example 需要 custom workflow，另加 `--example-smoke-workflow path/to/workflow.yaml`，例如 `tool/workflows/skill_prompt_review_chain.yaml`。要更廣覆蓋，可重複傳入 `--example-smoke-matrix-project` 與 `--example-smoke-matrix-workflow`，在 probes/soak 後交叉實跑真實 example project 與 workflow YAML。這是 opt-in，避免改變既有 soak 預設。每次 run 的 project、精簡 console JSONL、Runner events、state 與 diagnostics 都保存在 `.ai-task-runner-live/<timestamp>/`。
 
 Matrix command 範例：
 
@@ -35,3 +36,6 @@ python tool/qwen_live_reliability.py --hours 0.25 --high-density --require-trans
 ```
 
 Windows 便利 BAT 放在 `tool/`：`qwen_live_reliability_0_5h.bat` 是目標 95% 信心度的 preflight；`qwen_live_reliability_24h.bat` 是跑滿 24 小時後目標 99.99% 信心度的 soak。這些百分比是 PASS 後的信心目標，不是無條件保證；實際證據仍以輸出的 `summary.json` 為準。
+
+- Worker Supervisor regression 需涵蓋依 durable state directory 清理 Direct/YAML child orphan process。
+- StageExecutor regression 需確認 `KeyboardInterrupt` / `SystemExit` 直接往上傳遞，不進入 retry/recovery。

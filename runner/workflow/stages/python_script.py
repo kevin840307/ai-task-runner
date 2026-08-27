@@ -1,15 +1,11 @@
 """Generic out-of-process Python Stage for user/project automation."""
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ...errors import RunnerError
-from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
+from .contracts import MODE_WRITE, ResultHandler, StageContext, StageMode, StageResult
 from .python_process import run_python
-
-ResultHandler = Callable[[StageContext, StageResult], StageResult]
-
 
 @dataclass(frozen=True)
 class PythonScriptStageSpec:

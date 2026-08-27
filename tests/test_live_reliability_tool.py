@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import replace
 from pathlib import Path
 
@@ -55,13 +58,17 @@ def test_runner_command_inputs_select_builtin_validation_workflows(tmp_path: Pat
 
     mixed = live.runner_command(config, project, final_ai=True)
     assert _option(mixed, "--validator") == str(project / "validation.py")
-    assert _option(mixed, "--ai-validator-prompt") == live.FINAL_AI_PROMPT
+    assert _option(mixed, "--ai-validator-prompt") == live.case_prompt(
+        live.FINAL_AI_PROMPT, "project-final-ai"
+    )
     assert "--validator-prompt" not in mixed
     assert "--workflow" not in mixed
 
     ai_only = live.runner_command(config, project, final_ai=True, ai_only=True)
     assert _option(ai_only, "--validator") == "ai"
-    assert _option(ai_only, "--validator-prompt") == live.FINAL_AI_PROMPT
+    assert _option(ai_only, "--validator-prompt") == live.case_prompt(
+        live.FINAL_AI_PROMPT, "project-final-ai"
+    )
     assert "--ai-validator-prompt" not in ai_only
     assert "--workflow" not in ai_only
     assert _option(file_only, "--agent-timeout") == "30"
@@ -85,6 +92,21 @@ def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
         ["qwen_live_reliability.py", "--example-smoke-project"],
     )
     assert live.arguments().example_smoke_project == live.DEFAULT_EXAMPLE_SMOKE_PROJECT
+
+
+def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
+    assert live.arguments().long_api_outage_seconds == 180
+
+
+def test_live_probe_prompts_vary_from_the_first_line(tmp_path: Path):
+    first = live.create_project(tmp_path, "case-001")
+    second = live.create_project(tmp_path, "case-002")
+    first_prompt = (first / "prompt.md").read_text(encoding="utf-8")
+    second_prompt = (second / "prompt.md").read_text(encoding="utf-8")
+    assert first_prompt != second_prompt
+    assert first_prompt.splitlines()[0] == "Reliability case case-001. Follow only this case."
+    assert second_prompt.splitlines()[0] == "Reliability case case-002. Follow only this case."
 
 
 def test_example_smoke_matrix_builds_cross_product(tmp_path: Path):
@@ -128,6 +150,45 @@ def test_example_smoke_case_validation_rejects_missing_workflow(tmp_path: Path):
 
     with pytest.raises(SystemExit, match="workflow must be an existing YAML file"):
         live.validate_example_smoke_cases(cases)
+
+
+def test_transient_proxy_can_simulate_real_disconnect_and_recovery():
+    class UpstreamHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = b"{}"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            pass
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+    thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with live.transient_proxy(int(upstream.server_address[1])) as control:
+            control.disconnect = True
+            connection = http.client.HTTPConnection("127.0.0.1", control.port, timeout=2)
+            with pytest.raises((http.client.RemoteDisconnected, ConnectionResetError)):
+                connection.request("POST", "/v1/chat/completions", body=b"{}")
+                connection.getresponse()
+            connection.close()
+            assert control.failures >= 1
+
+            control.disconnect = False
+            connection = http.client.HTTPConnection("127.0.0.1", control.port, timeout=2)
+            connection.request("POST", "/v1/chat/completions", body=b"{}")
+            response = connection.getresponse()
+            assert response.status == 200
+            response.read()
+            connection.close()
+            assert control.successes >= 1
+    finally:
+        upstream.shutdown()
+        upstream.server_close()
+        thread.join(timeout=2)
 
 
 def test_dense_coverage_requires_every_mixed_probe():

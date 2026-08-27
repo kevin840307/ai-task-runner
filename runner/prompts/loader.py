@@ -43,7 +43,7 @@ def render_prompt(filename: str, values: dict[str, Any] | None = None, *, base: 
 
 
 def prompt_variables(filename: str, *, base: Path = PROMPT_ROOT) -> set[str]:
-    """Return undeclared top-level Jinja variables for contract tests/tooling."""
+    """Return undeclared top-level Jinja variables for contract tests/editors."""
     path = _resolve(filename, base)
     if not path.is_file():
         raise RunnerError(f"missing prompt template: {path}")

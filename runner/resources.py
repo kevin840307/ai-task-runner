@@ -1,4 +1,4 @@
-"""Small atomic text-resource helpers shared by CLI/UI tooling."""
+"""Atomic text-resource helpers for editor integrations."""
 from __future__ import annotations
 
 import hashlib
@@ -25,6 +25,13 @@ def read_text(path: str | Path) -> tuple[str, str]:
     return text, text_hash(text)
 
 
+def _check_expected_hash(path: Path, expected_hash: str | None) -> None:
+    if expected_hash is not None and (
+        not path.exists() or read_text(path)[1] != expected_hash
+    ):
+        raise RunnerError(f"resource changed since it was read: {path}")
+
+
 def write_text(
     path: str | Path,
     text: str,
@@ -38,12 +45,7 @@ def write_text(
     target = Path(path).expanduser().resolve()
     if validate is not None:
         validate(text)
-    if expected_hash is not None:
-        if not target.exists():
-            raise RunnerError(f"resource changed since it was read: {target}")
-        _, current_hash = read_text(target)
-        if current_hash != expected_hash:
-            raise RunnerError(f"resource changed since it was read: {target}")
+    _check_expected_hash(target, expected_hash)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     try:
@@ -60,12 +62,7 @@ def write_text(
 
 def delete(path: str | Path, *, expected_hash: str | None = None) -> None:
     target = Path(path).expanduser().resolve()
-    if expected_hash is not None:
-        if not target.exists():
-            raise RunnerError(f"resource changed since it was read: {target}")
-        _, current_hash = read_text(target)
-        if current_hash != expected_hash:
-            raise RunnerError(f"resource changed since it was read: {target}")
+    _check_expected_hash(target, expected_hash)
     try:
         target.unlink()
     except FileNotFoundError:

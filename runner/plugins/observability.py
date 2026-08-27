@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from ..utils import append_bounded_log
+from ..utils.logs import append_bounded_log
 
 
 class ObservabilityObserver:

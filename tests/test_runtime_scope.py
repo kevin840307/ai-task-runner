@@ -1,7 +1,7 @@
 import pytest
 
 from runner.bootstrap import current_runtime, runtime_scope
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.runtime import events
 
 
@@ -38,3 +38,9 @@ def test_nested_runtime_scope_restores_parent_runtime_and_events(tmp_path):
     assert "script_index" not in outer_events[-1]
     assert inner_events[-1]["script_index"] == 2
     assert inner_events[-1]["script_total"] == 3
+
+
+def test_bootstrap_has_single_scoped_runtime_entrypoint():
+    import runner.bootstrap as bootstrap
+
+    assert not hasattr(bootstrap, "bootstrap_runtime")

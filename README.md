@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.34
+Version: 1.2.39
 
 
 Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The canonical `runner.api.run()` resumes unfinished state automatically; the CLI only adds worker-process crash isolation. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
@@ -12,10 +12,11 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 ## Key properties
 - Qwen and OpenCode backends; Qwen prompt transport is stdin-only.
 - Declarative Planning: Plan produces the durable TODO list directly; planning failures use the shared same-session -> fresh-session -> replan recovery path, with no independent Understand/Judge Stage.
-- TODO execution runs Execute -> Review for each task. Same-task failures prefer the same session and rebuild only when needed; Review uses an independent read-only client/session.
+- TODO execution runs Execute -> Review for each task. Same-task failures prefer the same session and rebuild only when needed; timeout recovery uses a stable semantic failure key so volatile backend output such as sandbox/container IDs cannot reset the failure streak; Review uses an independent read-only client/session.
 - Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
 - Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, one canonical Python/CLI/UI API boundary, linear Workflow YAML, and YAML script mode with optional per-item `project_root`, `goal_file`, and `workflow_file`.
-- UI-ready extension boundary: installed Stage/backend registration before Workflow validation, external runtime Plugins, Stage catalog metadata, atomic Workflow/Prompt editing, and per-Run Workflow/Prompt snapshots.
+- Worker crash/interrupt cleanup follows each durable Run work directory, including YAML List children, so orphan AI/sandbox processes are not left behind; `KeyboardInterrupt`/`SystemExit` never enter Stage retry/recovery.
+- UI-ready extension boundary: owner-module editor/catalog APIs (`runner.resources`, `runner.workflow.loader` / `registry`, `runner.prompts.loader`), installed Stage/backend registration before Workflow validation, external runtime Plugins, atomic Workflow/Prompt editing, and per-Run Workflow/Stage-prompt/goal/final-AI-prompt snapshots.
 - Generic `python_script` Stage executes user/project Python out of process; Python validator keeps its authoritative deterministic-gate behavior.
 - Shared AI-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.

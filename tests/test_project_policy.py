@@ -8,7 +8,7 @@ import pytest
 
 from runner.task_runner import TaskRunner
 from runner import bootstrap
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.plugins.safety import git_subcommand
 from runner.project.policy import POLICY_FILENAME, protected_paths
@@ -83,10 +83,10 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(bootstrap, "_current", None)
-    bootstrap.bootstrap_runtime(RuntimeConfig(project_root=str(tmp_path), validator="ai", human_output=False))
-
-    version = run_process(["git", "--version"], tmp_path, 10)
-    blocked = run_process(["git", "-C", str(tmp_path), "add", "."], tmp_path, 10)
+    config = RuntimeConfig(project_root=str(tmp_path), validator="ai", human_output=False)
+    with bootstrap.runtime_scope(config):
+        version = run_process(["git", "--version"], tmp_path, 10)
+        blocked = run_process(["git", "-C", str(tmp_path), "add", "."], tmp_path, 10)
 
     assert version.return_code == 0
     assert "git version" in version.output.lower()

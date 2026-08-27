@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from runner.config import RuntimeConfig
+from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.script_loader import load_yaml_script
 from runner.script_runner import build_script_item_config, select_script_workflow

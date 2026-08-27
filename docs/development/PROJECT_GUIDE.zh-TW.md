@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.34
+版本：1.2.39
 
 ## 強制維護規則
 1. 最少 Code；Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 AI identity 分支。
@@ -40,7 +40,7 @@ CLI/UI/Skill/Python 都應使用 `runner.api.RunRequest` / `runner.api.run()`；
 ## UI／Extension 維護邊界
 UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。Pipeline、StageExecutor、Stage、AI client、Workflow loader 都不得 import UI。外部 Stage／Backend 先透過 installed extension 在 Workflow validation 前註冊；runtime-only Plugin 之後才透過 Hook/Event boundary attach。新增外部 Stage 不得要求 Pipeline 增加 Stage-name branch。
 
-可編輯 Workflow／Prompt 使用共用 atomic resource function 與 optimistic `expected_hash`；active Run 一律使用自己的 durable Workflow／Prompt snapshot。UI 多 Run 優先採一個 Run 一個 worker process 做隔離，不要只為 UI 把全域 runtime 改造成複雜的 in-process concurrency。
+可編輯 Workflow／Prompt 使用共用 atomic resource function 與 optimistic `expected_hash`；active Run 一律使用自己的 durable Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。UI 多 Run 優先採一個 Run 一個 worker process 做隔離，不要只為 UI 把全域 runtime 改造成複雜的 in-process concurrency。
 
 ## Project policy
 所有維護中的 smoke/example project root 都應有 `.ai-task-runner.yaml`。Policy 本身自動 protected。Immutable input/reference fixture 應列成 protected；Task 本來要修改的檔案不可 protected。
@@ -61,7 +61,7 @@ Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesyst
 - Real failure：Same Session bounded retry，預設最多 2 次。
 - Same Session 仍失敗：Fresh Session + 完整必要 Context。
 - Fresh Session 出現相同 persistent failure：回傳 `replan`，重新建立 Plan。
-- 不同 failure fingerprint：重新計數，不沿用舊 failure streak。
+- 不同 failure fingerprint：重新計數，不沿用舊 failure streak。Timeout identity 必須使用 backend 提供的穩定語意 recovery key，不可直接依賴會變動的 raw stderr；完整 stderr 只保留給 diagnostics。
 - API/service transient failure：使用 AI transport backoff，不消耗 Stage failure budget；等待視窗用盡後由 canonical API resume durable state。
 - Final AI voting：每個 validation run 都建立不同 Fresh Session。
 
