@@ -8,6 +8,15 @@ examples\run_examples.bat
 
 Pass normal Runner options through the BAT, for example `examples\run_examples.bat --backend qwen --resume`.
 
+Every BAT launcher now runs from a fresh temporary copy under `%TEMP%\ai-task-runner-examples\...`. The canonical `examples/` tree is never used as the writable project. The temporary workspace path is printed before and after execution and is kept for debugging; rerunning always creates a new clean copy.
+
+Run one example directly, for example:
+
+```bat
+examples\01_basic_python_validator\run_example.bat --backend qwen
+examples\11_regression_workflow_demo\run_example.bat --backend qwen
+```
+
 The suite is intentionally small and diagnostic:
 
 1. `01_basic_python_validator` — baseline Python hard validation.
@@ -20,6 +29,7 @@ The suite is intentionally small and diagnostic:
 8. `08_config_driven_data_pipeline` — mixed-validation data pipeline with black-box behavioral checks.
 9. `09_config_environment_auditor` — mixed-validation config auditor covering multiple file formats and clean reruns.
 10. `10_skill_prompt_review_workflow` — runnable custom workflow example that reuses one prompt Stage for `/skill...` prompts, review gates, and a final Python validator.
+11. `11_regression_workflow_demo` — six-action Regression workflow with shared Review/Grill/Fix skills, bounded recovery feedback, continuation prompts, and 5-agent fresh-session final validation.
 
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.

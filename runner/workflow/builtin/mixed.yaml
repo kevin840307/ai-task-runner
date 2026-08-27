@@ -18,6 +18,7 @@ stages:
     actor: executor
     track_changes: true
     prompt: stages/execution.md
+    continuation_prompt: stages/execution_continue.md
     result_handler: task
 
   review:
@@ -29,6 +30,7 @@ stages:
     client_cache_key: review_client
     timeout_attr: planning_timeout
     prompt: stages/review.md
+    continuation_prompt: stages/review_continue.md
     parser: review
     result_status: completed
     result_handler: review

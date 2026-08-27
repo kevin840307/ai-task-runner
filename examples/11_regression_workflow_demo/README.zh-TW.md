@@ -1,30 +1,19 @@
-# Regression Workflow Demo (Runner 1.2.41+)
+# Regression Workflow 範例（Runner 1.2.43+）
 
-這個範例只使用目前 Runner 已存在的 Workflow 能力：BaseStage、recover、`previous.data`、cached client/session、Final AI voting。
+可直接執行的六階段流程：Project Discovery → Documentation → E2E SPEC → Verification Design → Regression DSL → Execution & Qualification；中間包含 Review／Grill recovery gate，最後使用 5 個 Fresh Session AI 驗證，3 PASS 即通過。
 
-## Skill 數量
+範例會故意讓第一次 Documentation Grill FAIL。`fix.md` 必須收到 bounded `previous.data`、修正缺口，再回到同一個 Grill Session。Review／Grill 在同 Session 已看過完整 contract 後，只透過 continuation prompt 傳新的 target／evidence，不重送完整規則。
 
-只有 10 份：6 個業務 Action + 共用 `review.md`、`grill.md`、`fix.md`、`final_validation.md`。
+建議先跑 deterministic mock 驗證：
 
-## Session 設計
+`examples\11_regression_workflow_demo\run_test.bat`
 
-- `run_prompt` 與所有 Fix：共用 Writer client/session。
-- `review`：使用 `review_client`，所有 Review 共用自己的 session。
-- `grill_ai`：使用 `grill_client`，所有 Grill 共用自己的 session。
-- Final Validation：5 次，每次 `fresh_session_each_run: true`，3/5 PASS 即通過。
+若要保留 mock 執行後的 project state：
 
-Skill 不重複貼完整 Goal、歷史或 Review feedback。Recover 的 `fix.md` 直接讀 Runner 1.2.41 提供且有大小限制的 `previous.data`。
+`examples\11_regression_workflow_demo\run_mock.bat`
 
-## 測試
+真 Qwen：
 
-從專案根目錄執行：
+`examples\11_regression_workflow_demo\run_qwen.bat`
 
-`examples\10_regression_workflow_demo\run_mock.bat`
-
-Mock 會故意讓 Project Documentation 第一次 Grill FAIL，用來驗證：
-
-`Grill FAIL -> previous.data -> generic Fix -> same Writer session -> Grill again -> PASS`
-
-真實 Qwen：
-
-`examples\10_regression_workflow_demo\run_qwen.bat`
+所有 BAT（`run_example`、`run_qwen`、`run_mock`、`run_test`）都會從全新的暫存 repository 副本執行，並印出保留的 workspace 路徑供 Debug。

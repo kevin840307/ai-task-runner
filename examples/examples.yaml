@@ -48,3 +48,8 @@
   project_root: 10_skill_prompt_review_workflow/project
   validator: 10_skill_prompt_review_workflow/project/validation.py
   workflow_file: ../tool/workflows/skill_prompt_review_chain.yaml
+
+- goal_file: 11_regression_workflow_demo/project/prompt.md
+  project_root: 11_regression_workflow_demo/project
+  validator: ai
+  workflow_file: 11_regression_workflow_demo/workflow.yaml

@@ -32,3 +32,5 @@ Final AI validation：
 執行：
 
     run_example.bat --backend qwen
+
+`run_example.bat` 會先建立全新的暫存 repository 副本再執行，原始範例不會被修改。

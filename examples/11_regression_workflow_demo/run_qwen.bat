@@ -1,6 +1,4 @@
 @echo off
 setlocal
-set "EX=%~dp0"
-set "ROOT=%EX%project"
-python "%EX%..\..\ai_task_runner.py" --goal-file "%EX%goal.md" --project-root "%ROOT%" --workflow "%EX%workflow.yaml" --validator ai --backend qwen --final-ai-validations 5 --final-ai-required-passes 3 --force-new
-endlocal
+python "%~dp0..\..\tool\example_temp_runner.py" --example "11_regression_workflow_demo" -- --backend qwen %*
+exit /b %ERRORLEVEL%

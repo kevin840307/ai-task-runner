@@ -30,3 +30,5 @@ This package intentionally contains no implementation, runner state, debug scrip
 
 Run:
     run_example.bat --backend qwen
+
+`run_example.bat` runs this example from a fresh temporary repository copy; the source example is never modified.

@@ -741,3 +741,18 @@ def test_workflow_yaml_examples_reference_existing_prompt_assets():
             if not path.is_absolute():
                 path = example.parent / path
             assert path.is_file(), (example, ref)
+
+
+def test_custom_workflow_resolves_local_continuation_prompt(tmp_path):
+    workflow = tmp_path / "workflow.yaml"
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / "full.md").write_text("full", encoding="utf-8")
+    (skills / "continue.md").write_text("continue", encoding="utf-8")
+    workflow.write_text(
+        "stages:\n  work:\n    status: Work\n    prompt: skills/full.md\n    continuation_prompt: skills/continue.md\n  validate:\n    validator: ai\n    status: Validate\n    prompt: skills/full.md\n    parser: validation\n    result_status: validation\nflow: [work, validate]\n",
+        encoding="utf-8",
+    )
+    flow = load_workflow(workflow)
+    assert Path(flow[0]["prompt"]) == (skills / "full.md").resolve()
+    assert Path(flow[0]["continuation_prompt"]) == (skills / "continue.md").resolve()

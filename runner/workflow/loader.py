@@ -116,7 +116,7 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
     instructions_file = values.pop("instructions_file", None)
     if instructions_file is not None:
         values["instructions"] = _read_text(instructions_file, source, name)
-    _resolve_local_prompt(values, source)
+    _resolve_local_prompts(values, source)
     validate_stage(name, values)
     return values
 
@@ -182,16 +182,17 @@ def _read_text(value: Any, source: Path, name: str) -> str:
     return text
 
 
-def _resolve_local_prompt(values: dict[str, Any], source: Path) -> None:
-    value = values.get("prompt")
-    if not isinstance(value, str) or not value.strip():
-        return
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return
-    local = source.parent / path
-    if local.is_file():
-        values["prompt"] = str(local.resolve())
+def _resolve_local_prompts(values: dict[str, Any], source: Path) -> None:
+    for key in ("prompt", "continuation_prompt"):
+        value = values.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        path = Path(value).expanduser()
+        if path.is_absolute():
+            continue
+        local = source.parent / path
+        if local.is_file():
+            values[key] = str(local.resolve())
 
 
 def _normalize_sequence(
@@ -237,7 +238,7 @@ def _normalize_invocation(
     if "skip" in overrides and "skip_on_error" not in overrides:
         overrides["skip_on_error"] = bool(overrides.pop("skip"))
     node.update(overrides)
-    _resolve_local_prompt(node, source)
+    _resolve_local_prompts(node, source)
     validate_stage(str(node.get("name", ref)), node)
     if node.get("recover"):
         if ref in stack:

@@ -23,6 +23,7 @@ EXPECTED = {
     "08_config_driven_data_pipeline",
     "09_config_environment_auditor",
     "10_skill_prompt_review_workflow",
+    "11_regression_workflow_demo",
 }
 
 
@@ -37,6 +38,7 @@ def test_example_inventory_and_batch_launcher():
         project = folder / "project"
         assert (project / "prompt.md").is_file()
         assert (project / ".ai-task-runner.yaml").is_file()
+        assert (folder / "run_example.bat").is_file()
 
 
 def test_example_python_files_compile():
@@ -51,10 +53,10 @@ def test_example_python_files_compile():
         )
 
 
-def test_examples_yaml_runs_01_to_10_with_per_item_project_roots():
+def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     script = EXAMPLES / "examples.yaml"
     data = yaml.safe_load(script.read_text(encoding="utf-8"))
-    assert isinstance(data, list) and len(data) == 10
+    assert isinstance(data, list) and len(data) == 11
     for index, item in enumerate(data, 1):
         prefix = f"{index:02d}_"
         goal_file = item.get("goal_file")
@@ -87,6 +89,15 @@ def test_examples_yaml_runs_01_to_10_with_per_item_project_roots():
         "run_prompt",
         "review",
         "validate_file",
+    ]
+    assert data[10]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
+    assert data[10]["validator"] == "ai"
+    assert (EXAMPLES / data[10]["workflow_file"]).is_file()
+    regression = build_script_item_config(config, items[10], 11).workflow
+    assert [stage["name"] for stage in regression] == [
+        "run_prompt", "review", "run_prompt", "grill_ai", "review",
+        "run_prompt", "grill_ai", "review", "run_prompt", "review",
+        "run_prompt", "review", "run_prompt", "review", "final_validate",
     ]
 
 
@@ -216,3 +227,46 @@ def test_example_project_policies_protect_control_files():
             assert "ai_task_runner_validator.py" in protected
         if (project / "ai_validation.md").is_file():
             assert "ai_validation.md" in protected
+
+
+def test_regression_workflow_demo_mock_contract():
+    result = subprocess.run(
+        [sys.executable, str(EXAMPLES / "11_regression_workflow_demo" / "test_demo.py")],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90,
+    )
+    assert result.returncode == 0, result.stdout
+    assert "PASS regression workflow demo" in result.stdout
+
+
+def test_example_temp_runner_copies_workspace_and_preserves_source(tmp_path, monkeypatch):
+    from tool import example_temp_runner
+
+    monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(tmp_path))
+    original = EXAMPLES / "11_regression_workflow_demo" / "project" / "src" / "calculator.py"
+    before = original.read_bytes()
+    copied = example_temp_runner._copy_workspace("isolation")
+    target = copied / "examples" / "11_regression_workflow_demo" / "project" / "src" / "calculator.py"
+    target.write_text("changed only in temporary workspace\n", encoding="utf-8")
+    assert original.read_bytes() == before
+    assert target.read_bytes() != before
+
+
+def test_example_temp_runner_selects_one_yaml_item(tmp_path, monkeypatch):
+    from tool import example_temp_runner
+
+    monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(tmp_path))
+    copied = example_temp_runner._copy_workspace("selection")
+    selected = example_temp_runner._select_example(copied, "11_regression_workflow_demo")
+    data = yaml.safe_load(selected.read_text(encoding="utf-8"))
+    assert len(data) == 1
+    assert data[0]["project_root"] == "11_regression_workflow_demo/project"
+    assert data[0]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
+
+
+def test_example_bats_use_shared_temp_runner():
+    master = (EXAMPLES / "run_examples.bat").read_text(encoding="utf-8")
+    assert "example_temp_runner.py" in master and "--all" in master
+    for name in EXPECTED:
+        text = (EXAMPLES / name / "run_example.bat").read_text(encoding="utf-8")
+        assert "example_temp_runner.py" in text
+        assert f'--example "{name}"' in text

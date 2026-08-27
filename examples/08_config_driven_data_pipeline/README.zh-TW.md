@@ -18,3 +18,5 @@ Windows 執行：
 這個範例的 Python Validator 不檢查 source architecture、file count、class/function 數量或 line count；它只驗證 Goal 明確要求的 observable behavior，避免把 Planner strategy 或實作風格變成 hidden hard gate。
 
 YAML script 使用 root-level list，格式與 `examples/examples.yaml` 相同。每個 item 都由 Runner 建立獨立 nested state，並沿用相同 24H recovery/session/plugin contract。
+
+`run_example.bat` 會先建立全新的暫存 repository 副本再執行，原始範例不會被修改。

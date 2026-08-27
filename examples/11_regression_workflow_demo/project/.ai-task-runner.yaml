@@ -1,0 +1,4 @@
+protected_paths:
+  - prompt.md
+  - smoke_test.py
+  - src/calculator.py

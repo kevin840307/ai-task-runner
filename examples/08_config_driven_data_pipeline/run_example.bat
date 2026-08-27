@@ -1,4 +1,4 @@
 @echo off
 setlocal
-cd /d "%~dp0"
-python "..\..\ai_task_runner.py" --project-root "." --script "example.yaml" %*
+python "%~dp0..\..\tool\example_temp_runner.py" --example "08_config_driven_data_pipeline" -- %*
+exit /b %ERRORLEVEL%

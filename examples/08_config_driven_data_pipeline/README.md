@@ -18,3 +18,5 @@ Or add this task to the main examples YAML.
 The Python validator does not inspect source architecture, file count, classes, functions, or line count.
 
 YAML script files use a root-level list, matching AI Task Runner examples/examples.yaml.
+
+`run_example.bat` runs this example from a fresh temporary repository copy; the source example is never modified.

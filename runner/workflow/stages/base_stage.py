@@ -21,6 +21,7 @@ class BaseStageSpec:
     name: str
     status: str
     prompt: str = ""
+    continuation_prompt: str = ""
     instructions: str = ""
     detail: str = ""
     run_state: str = ""
@@ -166,6 +167,7 @@ class BaseStage:
                 ctx.config.api_retry_max_wait,
                 max_elapsed=ctx.config.api_retry_timeout,
             )
+            self._remember_prompt(ctx, client)
             status = spec.result_status(data) if spec.result_status else "pass"
         finally:
             if client is ctx.ai_client:
@@ -207,13 +209,32 @@ class BaseStage:
         return client
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
-        original = self._original_prompt(ctx, previous)
         mode = ctx.execution.retry_mode
+        if (
+            mode == "initial"
+            and self.spec.continuation_prompt
+            and self._prompt_seen(ctx, client)
+        ):
+            values = build_stage_prompt_context(ctx, self.spec.name, previous)
+            values["instructions"] = self.spec.instructions
+            return render_prompt(self.spec.continuation_prompt, values)
+        original = self._original_prompt(ctx, previous)
         if mode == "initial":
             return original
         if mode == "same" and getattr(client, "session_id", ""):
             return self._same_session_prompt(ctx)
         return self._fresh_session_prompt(original)
+
+    def _prompt_seen(self, ctx: StageContext, client) -> bool:
+        session = str(getattr(client, "session_id", "") or "")
+        if not session:
+            return False
+        return (self.spec.prompt, session) in ctx.scratch.get("prompt_contracts", set())
+
+    def _remember_prompt(self, ctx: StageContext, client) -> None:
+        session = str(getattr(client, "session_id", "") or "")
+        if session and self.spec.prompt:
+            ctx.scratch.setdefault("prompt_contracts", set()).add((self.spec.prompt, session))
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:

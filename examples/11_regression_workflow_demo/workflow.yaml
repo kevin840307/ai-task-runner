@@ -4,6 +4,7 @@ stages:
     run_state: executing
     mode: write
     actor: executor
+    track_changes: true
 
   review:
     status: AI reviewing result
@@ -13,6 +14,8 @@ stages:
     parser: review
     result_status: completed
     retry_attr: review_retries
+    continuation_prompt: skills/review_continue.md
+    skip_on_error: true
 
   grill_ai:
     status: Grill-AI challenging result
@@ -22,6 +25,7 @@ stages:
     parser: review
     result_status: completed
     retry_attr: review_retries
+    continuation_prompt: skills/grill_continue.md
 
   final_validate:
     validator: ai
@@ -33,9 +37,13 @@ stages:
     runs: 5
     required_passes: 3
     structured_retries: 2
+    retry: -1
     prompt: skills/final_validation.md
     parser: validation
     result_status: validation
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
 
 
 flow:

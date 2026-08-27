@@ -1,43 +1,40 @@
 #!/usr/bin/env python3
-import json
-import re
-import sys
-import uuid
+import json, sys, uuid
 from pathlib import Path
 
 root = Path.cwd()
 prompt = sys.stdin.read()
 args = sys.argv[1:]
-resume = ""
-if "--resume" in args:
-    resume = args[args.index("--resume") + 1]
+resume = args[args.index("--resume") + 1] if "--resume" in args else ""
 
 def write(path, text):
-    p = root / path
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8")
+    p = root / path; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(text, encoding="utf-8")
 
 def role():
     low = prompt.lower()
-    if "final independent read-only validation" in low:
-        return "final"
-    if "read-only adversarial challenge" in low:
-        return "grill"
-    if "read-only review" in low:
-        return "review"
+    if "final independent read-only validation" in low: return "final"
+    if "read-only adversarial" in low: return "grill"
+    if "read-only review" in low: return "review"
+    return "writer"
+
+def kind(r):
+    low = prompt.lower()
+    if r != "writer": return r
+    if "fix only the issues" in low: return "fix"
+    for key in ("project discovery","project documentation","e2e spec generation","verification design","regression dsl generation","execution & qualification"):
+        if key in low: return key
     return "writer"
 
 r = role()
-if resume:
-    session = resume
-elif r == "final":
-    session = f"final-{uuid.uuid4().hex[:12]}"
-elif r == "review":
-    session = "review-session"
-elif r == "grill":
-    session = "grill-session"
-else:
-    session = "writer-session"
+if resume: session = resume
+elif r == "final": session = f"final-{uuid.uuid4().hex[:12]}"
+elif r == "review": session = "review-session"
+elif r == "grill": session = "grill-session"
+else: session = "writer-session"
+
+log = root / ".ai-task-runner" / "demo-calls.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
+with log.open("a", encoding="utf-8") as f:
+    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Try to disprove completeness" in prompt}, ensure_ascii=False)+"\n")
 
 low = prompt.lower()
 if r == "writer":
@@ -54,45 +51,24 @@ if r == "writer":
     elif "execution & qualification" in low:
         write("artifacts/qualification.md", "# Qualification\nChecks: `python smoke_test.py` and regression cases inspection.\nResult: PASS. Core smoke behavior passed and DSL expectations match calculator behavior.\n")
     elif "fix only the issues" in low:
-        # prove previous.data reached the Fix prompt; fail loudly if not present
         if '"reason"' not in prompt or '"missing_items"' not in prompt:
             print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
             raise SystemExit(3)
-        # Generic fix: append evidence marker to the target named by feedback.
-        if "documentation" in low:
-            p = root / "artifacts/project_documentation.md"
-        elif "e2e" in low:
-            p = root / "artifacts/e2e_spec.md"
-        else:
-            p = root / "artifacts/project_discovery.md"
+        p = root / ("artifacts/project_documentation.md" if "documentation" in low else "artifacts/e2e_spec.md" if "e2e" in low else "artifacts/project_discovery.md")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text((p.read_text(encoding="utf-8") if p.exists() else "") + "\nReviewed gap fixed from previous.data.\n", encoding="utf-8")
     answer = "stage completed"
 elif r in {"review", "grill"}:
-    # First Project Documentation grill intentionally fails, then passes after generic Fix.
     target_doc = "project_documentation.md" in low or "project documentation" in low
     if r == "grill" and target_doc:
         p = root / "artifacts/project_documentation.md"
         fixed = p.exists() and "Reviewed gap fixed" in p.read_text(encoding="utf-8")
-        if not fixed:
-            answer = json.dumps({"completed": False, "reason": "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": ["Apply the generic Fix using this structured feedback."]})
-        else:
-            answer = json.dumps({"completed": True, "reason": "No remaining material gap in demo documentation.", "missing_items": []})
+        answer = json.dumps({"completed": fixed, "reason": "No remaining material gap in demo documentation." if fixed else "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": [] if fixed else ["Apply the generic Fix using this structured feedback."]})
     else:
         answer = json.dumps({"completed": True, "reason": "Target artifact is present and consistent for the demo.", "missing_items": []})
 else:
-    required = [
-        root / "artifacts/project_discovery.md",
-        root / "artifacts/project_documentation.md",
-        root / "artifacts/e2e_spec.md",
-        root / "artifacts/verification_design.md",
-        root / "regression/cases.yaml",
-        root / "artifacts/qualification.md",
-    ]
+    required = [root / p for p in ("artifacts/project_discovery.md","artifacts/project_documentation.md","artifacts/e2e_spec.md","artifacts/verification_design.md","regression/cases.yaml","artifacts/qualification.md")]
     missing = [p.relative_to(root).as_posix() for p in required if not p.exists()]
-    answer = json.dumps({"passed": not missing, "reason": "all demo deliverables exist" if not missing else "missing deliverables", "missing_items": missing, "checks_run": ["artifact existence"], "suggested_checks": []})
+    answer = json.dumps({"passed": not missing,"reason":"all demo deliverables exist" if not missing else "missing deliverables","missing_items":missing,"checks_run":["artifact existence"],"suggested_checks":[]})
 
-print(json.dumps([
-    {"type":"system","subtype":"session_start","session_id":session},
-    {"type":"result","subtype":"success","session_id":session,"result":answer},
-]))
+print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"success","session_id":session,"result":answer}]))
