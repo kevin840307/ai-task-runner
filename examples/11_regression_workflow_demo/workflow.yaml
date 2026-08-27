@@ -1,0 +1,129 @@
+stages:
+  run_prompt:
+    status: AI running skill
+    run_state: executing
+    mode: write
+    actor: executor
+
+  review:
+    status: AI reviewing result
+    run_state: reviewing
+    backend_mode: review
+    client_cache_key: review_client
+    parser: review
+    result_status: completed
+    retry_attr: review_retries
+
+  grill_ai:
+    status: Grill-AI challenging result
+    run_state: reviewing
+    backend_mode: review
+    client_cache_key: grill_client
+    parser: review
+    result_status: completed
+    retry_attr: review_retries
+
+  final_validate:
+    validator: ai
+    status: Final AI validation
+    run_state: validating
+    actor: validator
+    client_cache_key: final_validation_client
+    fresh_session_each_run: true
+    runs: 5
+    required_passes: 3
+    structured_retries: 2
+    prompt: skills/final_validation.md
+    parser: validation
+    result_status: validation
+
+
+flow:
+  # 1. Project Discovery
+  - stage: run_prompt
+    prompt: skills/project_discovery.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review project discovery.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # 2. Project Documentation
+  - stage: run_prompt
+    prompt: skills/project_documentation.md
+
+  - stage: grill_ai
+    prompt: skills/grill.md
+    instructions: Challenge the project documentation.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review the project documentation.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # 3. E2E SPEC Generation
+  - stage: run_prompt
+    prompt: skills/e2e_spec_generation.md
+
+  - stage: grill_ai
+    prompt: skills/grill.md
+    instructions: Challenge the E2E specification.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review the E2E specification.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # 4. Verification Design
+  - stage: run_prompt
+    prompt: skills/verification_design.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review the verification design.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # 5. Regression DSL Generation
+  - stage: run_prompt
+    prompt: skills/regression_dsl_generation.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review the generated regression DSL.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # 6. Regression Execution & Qualification
+  - stage: run_prompt
+    prompt: skills/execution_qualification.md
+
+  - stage: review
+    prompt: skills/review.md
+    instructions: Review the regression execution and qualification result.
+    recover:
+      - stage: run_prompt
+        prompt: skills/fix.md
+
+
+  # Final 5-agent vote
+  - stage: final_validate

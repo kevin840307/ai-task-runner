@@ -228,3 +228,78 @@ def test_recovery_scenarios_cross_ai_python_and_mixed_validation(
         assert all(record["stage"] != "validator" for record in records)
     else:
         assert any(record["stage"] == "validator" for record in records)
+
+
+def test_multi_task_same_session_sends_only_new_todo_context(tmp_path, monkeypatch):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-multi-context-state"
+    monkeypatch.setenv("SCENARIO", "multi_task_plan")
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    validator = tmp_path / "validator.py"
+    validator.write_text(
+        "from pathlib import Path\n"
+        "import argparse\n"
+        "p=argparse.ArgumentParser(); p.add_argument('--project-root'); p.add_argument('--state-file'); a=p.parse_args()\n"
+        "r=Path(a.project_root); raise SystemExit(0 if (r/'first.txt').exists() and (r/'second.txt').exists() else 5)\n",
+        encoding="utf-8",
+    )
+
+    result = run(RunRequest(
+        goal="Create first.txt then second.txt",
+        project_root=str(tmp_path),
+        validator=str(validator),
+        backend="qwen",
+        command=_command(),
+        max_attempts=2,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+    ))
+
+    assert result.completed is True
+    execute = [record for record in _records(state_dir) if record["stage"] == "execute"]
+    assert len(execute) == 2
+    assert execute[0]["resumed"] is True
+    assert "Goal (context/global constraints only):" in execute[0]["prompt"]
+    assert execute[1]["resumed"] is True
+    assert execute[1]["prompt"].startswith("Continue normal task execution in this same session.")
+    assert '"title": "Create second marker"' in execute[1]["prompt"]
+    assert "Goal (context/global constraints only):" not in execute[1]["prompt"]
+    assert "Hard rules:" not in execute[1]["prompt"]
+    assert execute[1]["chars"] < execute[0]["chars"] // 2
+
+
+def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatch):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-review-context-state"
+    monkeypatch.setenv("SCENARIO", "review_retry")
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+
+    result = run(RunRequest(
+        goal="Create the requested result",
+        project_root=str(tmp_path),
+        validator="ai",
+        backend="qwen",
+        command=_command(),
+        max_attempts=2,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        final_ai_validations=1,
+        final_ai_required_passes=1,
+    ))
+
+    assert result.completed is True
+    records = _records(state_dir)
+    reviews = [record for record in records if record["stage"] == "review"]
+    executes = [record for record in records if record["stage"] == "execute"]
+    assert len(reviews) == 2
+    assert reviews[1]["resumed"] is True
+    assert reviews[1]["prompt"].startswith(
+        "Continue reviewing the same current TODO in this same review session."
+    )
+    assert "Evidence order:" not in reviews[1]["prompt"]
+    assert "Decision:" not in reviews[1]["prompt"]
+    assert any(
+        record["prompt"].startswith("Continue normal task execution in this same session.")
+        and "Latest review:" in record["prompt"]
+        for record in executes
+    )

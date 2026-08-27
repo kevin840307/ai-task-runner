@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.41
+版本：1.2.42
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態）才算完成。正式 `runner.api.run()` 會自動 resume 未完成 state；CLI 只額外提供 worker-process crash isolation。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。
@@ -12,6 +12,7 @@
 - 支援 Qwen / OpenCode；兩者完整 AI task Prompt 都只走 stdin，session / permission 差異由 Backend adapter 負責。
 - Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
 - TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Timeout recovery 使用穩定語意 failure key，因此 sandbox/container ID 等動態 backend output 不會把同一 failure 誤判成新 failure。Review 使用獨立 read-only client/session。
+- Builtin Execute/Review 在同一 Session 已看過完整 Stage contract 後，使用 bounded `continuation_prompt` 只補新的 TODO／Repair／Review evidence，不重送 Goal/rules；第一次與 Fresh/Rebuilt Session 仍取得完整必要 Context。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。

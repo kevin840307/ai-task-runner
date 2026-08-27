@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.41
+Version: 1.2.42
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -61,6 +61,7 @@ stages:
     status: Execute
     mode: write
     prompt: stages/execution.md
+    continuation_prompt: stages/execution_continue.md
     result_handler: task
 
   security_review:
@@ -84,6 +85,8 @@ flow:
   - planning
   - validate_file
 ```
+
+`continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated builtin Execute/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
 
 For this YAML, Planner can choose `execute`, `security_review`, and `review_task`; it cannot choose `planning` or `validate_file`. A TODO may therefore produce `steps: [execute, security_review, review_task]`. The selected Stage names are validated before execution, stored with the durable TODO, converted to `StageResult.next_steps`, and then executed by Pipeline. When a review-capable Stage exists, the plan must end each TODO with one. A crash after planning can resume from the saved TODO steps without asking the model to plan again.
 

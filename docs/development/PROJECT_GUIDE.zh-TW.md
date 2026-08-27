@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.41
+版本：1.2.42
 
 ## 強制維護規則
 1. 最少 Code；Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 AI identity 分支。
@@ -51,7 +51,7 @@ Project 責任集中在：
 - `runner/project/instructions.py`：Runner-managed QWEN.md/AGENTS.md section。
 
 ## Current Task 執行契約
-Fresh/Rebuilt Executor 收到 Current Task、Original Goal 作為 global context、必要 validator/review feedback 與完整 Stage instruction。Same Session continuation 只收到 Stage identity、新 failure evidence、readonly reminder（若需要）與下一步要求。
+Fresh/Rebuilt Executor 收到 Current Task、Original Goal 作為 global context、必要 validator/review feedback 與完整 Stage instruction。正常 Same Session 已看過同一份 Stage Prompt contract 時，`continuation_prompt` 只補下一個 TODO 或新產生的 Review/Validator evidence；Recovery continuation 則更小，只帶 Stage identity、新 failure evidence、需要時的 readonly reminder 與下一步要求。
 Recovery 需要更多 evidence 時，只補與 Current Task 直接相關的 previous attempt output 或 diagnostic，不得因此擴大 scope。
 
 Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesystem 是目前實作真相；Resume 時先尊重已存在且有效的修改，不要無條件重做。

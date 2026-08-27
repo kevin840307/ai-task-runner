@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.2.41
+Version: 1.2.42
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 

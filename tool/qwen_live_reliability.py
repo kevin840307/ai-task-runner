@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run opt-in live Qwen restart, timeout, sandbox, and soak checks."""
+"""Run opt-in live Qwen workflow-contract, recovery, sandbox, and soak checks."""
 from __future__ import annotations
 
 import argparse
@@ -24,6 +24,10 @@ RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_python_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
+BUILTIN_WORKFLOWS = {
+    name: ROOT / "runner" / "workflow" / "builtin" / f"{name}.yaml"
+    for name in ("file", "ai", "mixed")
+}
 REPAIR_INITIAL = "INITIAL"
 REPAIR_FINAL = "RECOVERED"
 FINAL_AI_PROMPT = """Inspect only the deliverable required by the original goal.
@@ -171,6 +175,15 @@ class ProxyControl:
     disconnect: bool = False
     failures: int = 0
     successes: int = 0
+
+
+@dataclass(frozen=True)
+class PromptRecord:
+    stage: str
+    call_id: str
+    session: str
+    session_mode: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -452,6 +465,126 @@ def jsonl_events(path: Path) -> list[dict[str, object]]:
     return events
 
 
+def prompt_records(project: Path, work_dir: str = ".ai-task-runner") -> list[PromptRecord]:
+    """Correlate model.prompt log events with bounded history prompt snapshots."""
+    work = project / work_dir
+    current_stage = ""
+    result: list[PromptRecord] = []
+    for event in jsonl_events(work / "log.txt"):
+        if event.get("type") == "runner.stage":
+            action = event.get("action")
+            stage = str(event.get("stage", ""))
+            if action == "start":
+                current_stage = stage
+            elif action == "finish" and stage == current_stage:
+                current_stage = ""
+            continue
+        if event.get("type") != "model.prompt":
+            continue
+        call_id = str(event.get("call_id", ""))
+        path = work / "debug" / "history" / f"{call_id}-prompt.txt"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        result.append(PromptRecord(
+            current_stage,
+            call_id,
+            str(event.get("session", "")),
+            str(event.get("session_mode", "")),
+            text,
+        ))
+    return result
+
+
+def stage_prompt_records(project: Path, stage: str) -> list[PromptRecord]:
+    return [record for record in prompt_records(project) if record.stage == stage]
+
+
+def stage_result_sessions(project: Path, stage: str) -> list[str]:
+    current_stage = ""
+    sessions: list[str] = []
+    for event in runner_events(project):
+        if event.get("type") == "runner.stage":
+            action = event.get("action")
+            name = str(event.get("stage", ""))
+            if action == "start":
+                current_stage = name
+            elif action == "finish" and name == current_stage:
+                current_stage = ""
+        elif (
+            current_stage == stage
+            and event.get("type") == "model.result"
+            and not event.get("error")
+            and event.get("session")
+        ):
+            sessions.append(str(event["session"]))
+    return sessions
+
+
+def assert_prompt_transport_contract(project: Path) -> None:
+    """Lock Same/Fresh retry prompt rules without brittle token thresholds."""
+    records = prompt_records(project)
+    if not records:
+        raise RuntimeError("prompt audit found no model.prompt history")
+    for record in records:
+        text = record.text
+        if text.startswith("Continue the same " ) and " in a fresh session." not in text:
+            forbidden = (
+                "Goal (context/global constraints only):",
+                "Current TODO is the only executable scope.",
+                "Review only. Read-only:",
+                "Project root:",
+            )
+            if any(value in text for value in forbidden):
+                raise RuntimeError(
+                    f"same-session retry resent static stage context: {record.stage}"
+                )
+            if "Previous failure:" not in text:
+                raise RuntimeError(
+                    f"same-session retry omitted new failure evidence: {record.stage}"
+                )
+        if text.startswith("Continue the same " ) and " in a fresh session." in text:
+            if "Stage instructions:" not in text:
+                raise RuntimeError(
+                    f"fresh-session retry omitted stage instructions: {record.stage}"
+                )
+        if text.startswith("Continue normal task execution in this same session."):
+            if record.session_mode != "resume" or any(value in text for value in (
+                "Hard rules:",
+                "Goal (context/global constraints only):",
+                "Current TODO is the only executable scope.",
+            )):
+                raise RuntimeError("normal same-session execution resent static context")
+        if text.startswith("Continue reviewing the same current TODO in this same review session."):
+            if record.session_mode != "resume" or any(value in text for value in (
+                "Evidence order:",
+                "Decision:",
+                "Judge only the current TODO.",
+            )):
+                raise RuntimeError("same-session Review resent static review contract")
+
+
+def assert_builtin_topology(project: Path, workflow: str) -> None:
+    starts = [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    required = {"planning", "execute", "review"}
+    expected_validators = {
+        "file": {"validate_file"},
+        "ai": {"validate_ai"},
+        "mixed": {"validate_file", "validate_ai"},
+    }[workflow]
+    missing = sorted(required - set(starts))
+    validators = {name for name in starts if name.startswith("validate_")}
+    if missing or validators != expected_validators:
+        raise RuntimeError(
+            f"builtin/{workflow} topology mismatch: missing={missing}, validators={sorted(validators)}"
+        )
+
+
 def observed_session(project: Path, session_id: str, mode: str) -> bool:
     return any(
             event.get("type") == "model.prompt"
@@ -661,6 +794,78 @@ def resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("resume fell back to a new session instead of continuing")
 
 
+def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
+    project = create_project(root, f"builtin-{workflow}-probe")
+    ai_validation = workflow in {"ai", "mixed"}
+    code = run_command(
+        runner_command(
+            settings,
+            project,
+            final_ai=ai_validation,
+            ai_only=workflow == "ai",
+            workflow=BUILTIN_WORKFLOWS[workflow],
+        ),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code)
+    assert_builtin_topology(project, workflow)
+    assert_prompt_transport_contract(project)
+    if ai_validation and len(final_validation_sessions(project)) < 3:
+        raise RuntimeError(f"builtin/{workflow} reused Final AI validation sessions")
+
+
+REVIEW_REPAIR_PROMPT = """Create review.txt. The final file must contain exactly:
+READY
+REVIEW_REQUIRED
+
+Process contract for this reliability probe:
+- The Planner must create one bounded TODO ending in Review.
+- On the first Execute attempt, intentionally write only READY and stop.
+- Review must reject that incomplete result.
+- Repair must preserve READY and add REVIEW_REQUIRED.
+Do not add trailing whitespace or modify protected files.
+"""
+
+REVIEW_REPAIR_VALIDATOR = '''from __future__ import annotations
+import argparse
+from pathlib import Path
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+target = Path(a.project_root).resolve() / "review.txt"
+if not target.is_file() or target.read_text(encoding="utf-8") != "READY\nREVIEW_REQUIRED":
+    print("VALIDATION_FAILED: review.txt must contain READY then REVIEW_REQUIRED")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
+def review_repair_prompt_probe(settings: Settings, root: Path) -> None:
+    project = create_project(
+        root,
+        "review-repair-prompt-probe",
+        REVIEW_REPAIR_PROMPT,
+        REVIEW_REPAIR_VALIDATOR,
+    )
+    code = run_command(
+        runner_command(settings, project, workflow=BUILTIN_WORKFLOWS["file"]),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code, "review.txt", "READY\nREVIEW_REQUIRED")
+    if not observed_stage_result(project, "review", "fail"):
+        raise RuntimeError("review probe did not exercise Review FAIL")
+    repairs = stage_prompt_records(project, "repair")
+    if not repairs or not any(
+        "Latest review:" in record.text and "missing_items" in record.text
+        for record in repairs
+    ):
+        raise RuntimeError("Repair prompt did not receive bounded Review feedback")
+    assert_prompt_transport_contract(project)
+
+
 def validator_repair_probe(settings: Settings, root: Path) -> None:
     marker = root / "_harness-control" / "repair-first-value.txt"
     validator = f'''from __future__ import annotations
@@ -696,6 +901,21 @@ print("VALIDATION_PASSED")
     state = read_state(project)
     if marker.read_text(encoding="utf-8") != REPAIR_INITIAL or state.get("cycle", 1) < 2:
         raise RuntimeError("validator failure did not drive an observed repair cycle")
+    planning_sessions = stage_result_sessions(project, "planning")
+    repair_sessions = stage_result_sessions(project, "repair_plan")
+    repair_prompts = stage_prompt_records(project, "repair_plan")
+    if (
+        not planning_sessions
+        or not repair_sessions
+        or planning_sessions[-1] == repair_sessions[-1]
+        or not repair_prompts
+        or not any(
+            "Goal:" in record.text and "VALIDATION_FAILED" in record.text
+            for record in repair_prompts
+        )
+    ):
+        raise RuntimeError("validator repair plan did not use fresh necessary context")
+    assert_prompt_transport_contract(project)
 
 
 def file_protection_probe(settings: Settings, root: Path) -> None:
@@ -1290,6 +1510,11 @@ def main() -> int:
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
+        for workflow in ("file", "ai", "mixed"):
+            builtin_workflow_probe(settings, run_root, workflow)
+            print(f"PASS builtin/{workflow} topology + prompt contract probe", flush=True)
+        review_repair_prompt_probe(settings, run_root)
+        print("PASS Review FAIL/Repair feedback prompt probe", flush=True)
         validator_repair_probe(settings, run_root)
         print("PASS validator-fail/repair probe", flush=True)
         file_protection_probe(settings, run_root)
@@ -1343,6 +1568,9 @@ def main() -> int:
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
+        "builtin_workflow_contracts": ["file", "ai", "mixed"],
+        "review_repair_prompt_probe": True,
+        "validator_repair_prompt_contract": True,
         "yaml_list_resume_probe": True,
         "soak_runs_completed": soak_result.completed,
         "soak_elapsed_seconds": round(soak_result.elapsed_seconds, 3),

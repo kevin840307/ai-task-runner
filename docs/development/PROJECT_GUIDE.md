@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.41
+Version: 1.2.42
 
 ## Mandatory maintenance rules
 1. Minimum code; no project-specific hardcode in generic Runner code. Never branch on sample/project names, FAB/ENV/version values, filenames, business fields, or a specific AI identity to solve one case.
@@ -51,7 +51,7 @@ Project responsibilities are centralized in:
 - `runner/project/instructions.py`: Runner-managed QWEN.md/AGENTS.md sections.
 
 ## Current task execution contract
-A fresh/rebuilt Executor receives the Current Task, Original Goal as global context, necessary validator/review feedback, and the full Stage instruction. A same-session continuation receives only Stage identity, new failure evidence, a readonly reminder when applicable, and the required next action/output contract.
+A fresh/rebuilt Executor receives the Current Task, Original Goal as global context, necessary validator/review feedback, and the full Stage instruction. When a normal same session already knows the same Stage prompt contract, `continuation_prompt` sends only the next TODO or newly produced Review/Validator evidence. Recovery continuations remain even smaller: Stage identity, new failure evidence, a readonly reminder when applicable, and the required next action/output contract.
 When recovery needs more evidence, include only the relevant previous attempt output or diagnostic; do not broaden scope beyond the Current Task.
 
 Do not preload future TODOs into the Execute prompt. The project filesystem is the implementation truth; Resume should preserve valid existing work rather than blindly recreating it.

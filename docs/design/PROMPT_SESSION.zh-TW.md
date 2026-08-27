@@ -35,7 +35,7 @@ Planning 專用計算 context 由 `PlanStage` 處理。Write 與 Review 共用 `
 
 ## Session Policy
 
-- Initial：送完整 Stage Prompt。
+- Initial：送完整 Stage Prompt。同一 Session 之後再次遇到同一份 Stage Prompt contract 時，builtin Stage 可使用設定的 `continuation_prompt`，只補新的 TODO/evidence，不重送該 Session 已知的 Goal/rules。
 - Same-session recovery：只送短 Stage-aware delta，包含目前 Stage 身分、新 failure evidence、需要時的 readonly 提醒與原 output contract/下一步；不重送 session 已知完整 context。
 - Fresh/Rebuilt：只加一段很短的 recovery header，再重送原始完整 Stage Prompt。Goal、Task、Rules 由 Stage Prompt 本身負責，wrapper 不重複。
 - Final AI validation 每次 run 使用獨立 fresh session；設定 3 次就一定是 3 個不同 Session。

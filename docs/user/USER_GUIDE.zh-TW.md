@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.41
+版本：1.2.42
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -67,6 +67,7 @@ stages:
     status: Execute
     mode: write
     prompt: stages/execution.md
+    continuation_prompt: stages/execution_continue.md
     result_handler: task
 
   security_review:
@@ -90,6 +91,8 @@ flow:
   - planning
   - validate_file
 ```
+
+`continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 builtin Execute/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
 
 在這份 YAML 中，Planner 可以選 `execute`、`security_review`、`review_task`，但不能選 `planning` 或 `validate_file`。某個 TODO 因此可以產生 `steps: [execute, security_review, review_task]`。Stage 名稱會在執行前完成驗證，並和 TODO 一起寫入 durable state，再轉成 `StageResult.next_steps` 交給 Pipeline 執行。若存在 review-capable Stage，每個 TODO 的最後一步必須是 review Stage。Planning 完成後即使在 queue 寫入前 crash，Resume 也能從已保存的 TODO steps 重建，不需要重新問模型規劃。
 

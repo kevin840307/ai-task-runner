@@ -43,6 +43,7 @@ def prompt_stage(prompt: str) -> PromptStage:
         "Review only. You are a read-only task reviewer" in prompt
         or "Review only. Read-only: do not modify project files." in prompt
         or "Continue the same review stage." in prompt
+        or "Continue reviewing the same current TODO in this same review session." in prompt
     ):
         return "review"
     if (
@@ -59,6 +60,7 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Continue the current task. Fix the previous failure and finish it.",
             "Continue the same execute stage.",
             "Continue the same repair stage.",
+            "Continue normal task execution in this same session.",
             "Workflow Stage instructions:",
         )
     ):

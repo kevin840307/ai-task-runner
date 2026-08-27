@@ -35,7 +35,7 @@ Planning-specific computed context is handled inside `PlanStage`. Write and Revi
 
 ## Session policy
 
-- Initial call: render the full Stage prompt.
+- Initial call: render the full Stage prompt. When the same session later sees the same Stage prompt contract again, bundled Stages may use a configured `continuation_prompt` that sends only the new TODO/evidence instead of repeating Goal/rules already in that session.
 - Same-session recovery: send only a short stage-aware delta: current Stage identity, new failure evidence, readonly reminder when applicable, and the required next action/output contract. Do not resend known full context.
 - Fresh/rebuilt session: prepend only a short recovery header, then resend the original complete Stage prompt. The Stage prompt itself owns goal/task/rules, so the wrapper never duplicates them.
 - Final AI validation runs use independent fresh sessions; three configured runs therefore use three different sessions.

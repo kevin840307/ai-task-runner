@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -359,3 +360,98 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str):
     assert "runner\\workflow\\builtin\\file.yaml" in text
     assert "runner\\workflow\\builtin\\mixed.yaml" in text
     assert "tool\\workflows\\skill_prompt_review_chain.yaml" in text
+
+
+def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
+    work = tmp_path / ".ai-task-runner"
+    history = work / "debug" / "history"
+    history.mkdir(parents=True)
+    (work / "log.txt").write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    for call_id, prompt in prompts.items():
+        (history / f"{call_id}-prompt.txt").write_text(prompt, encoding="utf-8")
+    return tmp_path
+
+
+def test_prompt_records_correlate_stage_and_history(tmp_path: Path):
+    project = _write_prompt_audit_fixture(
+        tmp_path,
+        [
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
+            {"type": "model.prompt", "call_id": "c1", "session": "s1", "session_mode": "resume"},
+            {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+        ],
+        {"c1": "Continue the same execute stage.\nPrevious failure: x\n"},
+    )
+
+    records = live.prompt_records(project)
+
+    assert len(records) == 1
+    assert records[0].stage == "execute"
+    assert records[0].session == "s1"
+    assert records[0].text.startswith("Continue the same execute stage")
+
+
+def test_prompt_contract_rejects_static_context_on_same_session_retry(tmp_path: Path):
+    project = _write_prompt_audit_fixture(
+        tmp_path,
+        [
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
+            {"type": "model.prompt", "call_id": "c1", "session": "s1", "session_mode": "resume"},
+        ],
+        {
+            "c1": (
+                "Continue the same execute stage.\n"
+                "Previous failure: x\n"
+                "Goal (context/global constraints only): repeated\n"
+            )
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="resent static stage context"):
+        live.assert_prompt_transport_contract(project)
+
+
+def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Path):
+    project = _write_prompt_audit_fixture(
+        tmp_path,
+        [
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
+            {"type": "model.prompt", "call_id": "c1", "session": "", "session_mode": "new"},
+        ],
+        {"c1": "Continue the same execute stage in a fresh session.\n"},
+    )
+
+    with pytest.raises(RuntimeError, match="omitted stage instructions"):
+        live.assert_prompt_transport_contract(project)
+
+
+@pytest.mark.parametrize(
+    ("workflow", "validators"),
+    [
+        ("file", ["validate_file"]),
+        ("ai", ["validate_ai"]),
+        ("mixed", ["validate_file", "validate_ai"]),
+    ],
+)
+def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
+    stages = ["planning", "execute", "review", *validators]
+    project = tmp_path
+    work = project / ".ai-task-runner"
+    work.mkdir()
+    events = [
+        event
+        for stage in stages
+        for event in (
+            {"type": "runner.stage", "action": "start", "stage": stage},
+            {"type": "runner.stage", "action": "finish", "stage": stage, "result": "pass"},
+        )
+    ]
+    (work / "log.txt").write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+
+    live.assert_builtin_topology(project, workflow)
