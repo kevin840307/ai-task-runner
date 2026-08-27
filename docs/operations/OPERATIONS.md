@@ -1,6 +1,6 @@
 # Operations and Troubleshooting
 
-Version: 1.2.40
+Version: 1.2.41
 
 ## Long-running behavior
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation. Timeout failures use a stable semantic recovery key while retaining full backend stderr for debugging, preventing changing sandbox/container IDs from indefinitely resetting same-failure escalation.

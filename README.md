@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.40
+Version: 1.2.41
 
 
 Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The canonical `runner.api.run()` resumes unfinished state automatically; the CLI only adds worker-process crash isolation. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
@@ -10,6 +10,7 @@ The runner owns orchestration; backends, plugins, prompts, and validators provid
 A small reusable Python orchestrator for long-running AI coding tasks. It separates AI work from deterministic validation, keeps resumable state, isolates the current TODO, and tolerates model/CLI failures without embedding project-specific logic in the Runner.
 
 ## Key properties
+- Bounded structured Stage handoff: recover prompts can use `previous.data` (for example `reason` / `missing_items`) without replaying unbounded prior context.
 - Qwen and OpenCode backends; full task prompts for both backends are stdin-only, with backend-owned session/permission handling.
 - Declarative Planning: Plan produces the durable TODO list directly; planning failures use the shared same-session -> fresh-session -> replan recovery path, with no independent Understand/Judge Stage.
 - TODO execution runs Execute -> Review for each task. Same-task failures prefer the same session and rebuild only when needed; timeout recovery uses a stable semantic failure key so volatile backend output such as sandbox/container IDs cannot reset the failure streak; Review uses an independent read-only client/session.

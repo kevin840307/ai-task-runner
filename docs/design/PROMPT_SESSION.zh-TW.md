@@ -11,8 +11,17 @@ Prompt 變數是正式 contract，不是各 Stage 自行建立的任意 dict。`
 - `workflow`：Stage Template 真正需要的 cycle 與 validator feedback。
 - `validation`：validator path、feedback、額外 validator instructions。
 - `project`：project root。
+- `previous`：上一個 Stage 的 bounded handoff（`stage`、`status`、bounded `output`、bounded structured `data`）。Recover Prompt 應只使用 `reason`／`missing_items` 等具體新 feedback，不得重建或重送無關 Context。
 - `planning`：Planning 專用的 progress / inspection context。
 - `rules`、`always_instructions`：共用規則文字。
+
+
+Recover Prompt 範例：
+```jinja2
+{% if previous.data %}
+Review feedback: {{ previous.data | tojson }}
+{% endif %}
+```
 
 Template 禁止直接讀 `state`、`args`、`scratch` 等 Python internal object。
 

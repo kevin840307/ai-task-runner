@@ -11,8 +11,17 @@ Prompt variables are a public contract, not ad-hoc dictionaries. `runner/prompts
 - `workflow`: current cycle and validator feedback needed by Stage templates.
 - `validation`: validator path, feedback, and optional validator instructions.
 - `project`: project root.
+- `previous`: bounded previous-Stage handoff (`stage`, `status`, bounded `output`, and bounded structured `data`). Recover prompts should consume only concrete new feedback such as `reason` / `missing_items`; they must not rebuild or resend unrelated context.
 - `planning`: planning-only normalized progress/inspection context.
 - `rules`, `always_instructions`: shared rendered instruction text.
+
+
+Example recover prompt:
+```jinja2
+{% if previous.data %}
+Review feedback: {{ previous.data | tojson }}
+{% endif %}
+```
 
 Templates must not reference internal Python objects such as `state`, `args`, or `scratch`.
 

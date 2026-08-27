@@ -92,6 +92,27 @@ def test_recover_is_flow_node_routing_and_retries_original_stage():
     assert executor.seen == ["review", "repair", "review"]
 
 
+def test_recover_receives_failed_stage_structured_data():
+    workflow = [item("review", recover=[item("repair")])]
+    ctx = context(workflow)
+    failed = False
+
+    def callback(stage, _ctx, previous):
+        nonlocal failed
+        if stage.name == "review" and not failed:
+            failed = True
+            return StageResult(
+                "review",
+                "fail",
+                data={"completed": False, "reason": "missing", "missing_items": ["A"]},
+            )
+        if stage.name == "repair":
+            assert previous.data["missing_items"] == ["A"]
+        return StageResult(stage.name, "pass")
+
+    Pipeline(ctx, workflow).run(Executor(callback))
+
+
 def test_restart_at_is_owned_by_flow_node():
     workflow = [
         item("repair", _workflow_index=0),

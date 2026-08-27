@@ -24,6 +24,7 @@
    - Project / Conversation / Message metadata 屬於 UI storage，不進 Runner Core / state.json。
    - 即時任務畫面使用 runner.api event callback / JSON event + durable state snapshot。
    - 多 Run 優先一個 Run 一個 worker process；不要只為 UI 增加 in-process global concurrency。
+   - Stage/recover 的 structured feedback 使用 Core 既有 bounded `previous.data`；UI 不建立第二套 Stage data bus 或 recovery context。
 
 公開邊界：
 - 執行：`runner.api`（`from runner.api import RunRequest, run`）

@@ -1,9 +1,17 @@
 """Stable, minimal data contract for bundled Jinja prompts."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
+from ..utils.text import bounded_text
 from .loader import ai_rules, always_instructions
+
+PREVIOUS_OUTPUT_CHARS = 8_000
+PREVIOUS_DATA_CHARS = 6_000
+PREVIOUS_DATA_ITEMS = 12
+PREVIOUS_DATA_TEXT_CHARS = 500
+
 
 PROMPT_CONTEXT_KEYS = frozenset({
     "always_instructions",
@@ -37,6 +45,53 @@ def _task_data(task: Any | None) -> dict[str, Any] | None:
         "status": task.status,
         "steps": list(task.steps),
     }
+
+
+def _prompt_value(value: Any, depth: int = 0) -> Any:
+    """Project arbitrary Stage data into a small JSON-friendly prompt value."""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return bounded_text(value, PREVIOUS_DATA_TEXT_CHARS)
+    if depth >= 3:
+        return bounded_text(str(value), PREVIOUS_DATA_TEXT_CHARS)
+    if isinstance(value, dict):
+        return {
+            str(key): _prompt_value(item, depth + 1)
+            for key, item in list(value.items())[:PREVIOUS_DATA_ITEMS]
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            _prompt_value(item, depth + 1)
+            for item in value[:PREVIOUS_DATA_ITEMS]
+        ]
+    return bounded_text(str(value), PREVIOUS_DATA_TEXT_CHARS)
+
+
+def _previous_data(value: Any) -> Any:
+    """Keep structured previous-stage feedback useful without growing prompts unbounded."""
+    projected = _prompt_value(value)
+    if projected is None:
+        return None
+    encoded = json.dumps(projected, ensure_ascii=False, default=str)
+    if len(encoded) <= PREVIOUS_DATA_CHARS:
+        return projected
+
+    if not isinstance(projected, dict):
+        return {"truncated": True, "preview": bounded_text(encoded, PREVIOUS_DATA_CHARS)}
+
+    result: dict[str, Any] = {}
+    for key, item in projected.items():
+        result[key] = item
+        while len(json.dumps(result, ensure_ascii=False, default=str)) > PREVIOUS_DATA_CHARS:
+            current = result.get(key)
+            if isinstance(current, list) and current:
+                result[key] = current[:-1]
+                continue
+            result.pop(key, None)
+            result["truncated"] = True
+            break
+    return result
 
 
 def build_stage_prompt_context(
@@ -84,7 +139,8 @@ def build_stage_prompt_context(
         "previous": {
             "stage": getattr(previous, "stage", ""),
             "status": getattr(previous, "status", ""),
-            "output": str(getattr(previous, "output", ""))[-8000:],
+            "output": bounded_text(str(getattr(previous, "output", "")), PREVIOUS_OUTPUT_CHARS),
+            "data": _previous_data(getattr(previous, "data", None)),
         },
         "rules": ai_rules(ctx.root),
         "always_instructions": always_instructions(ctx.root),

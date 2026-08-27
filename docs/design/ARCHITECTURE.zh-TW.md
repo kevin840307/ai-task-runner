@@ -64,6 +64,9 @@ Durable state 會保存已完成的頂層 Workflow 位置與語意 fingerprint�
 
 `goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `planning`, `previous`, `instructions`, `rules`, `always_instructions`。
 
+
+`previous.data` 會暴露前一個 Stage 的 bounded structured facts，讓 YAML `recover` node 能直接使用具體 feedback，而不需要額外 data bus 或重送完整 Context。大小限制只套用在 Prompt transport；原始 `StageResult.data` 不會被修改。
+
 一般 AI Stage 直接指定 prompt path；沒有 prompt-builder registry。Planning / Repair Planning 的計算 context 直接由 `PlanStage` 管理。
 
 

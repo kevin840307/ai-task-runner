@@ -67,6 +67,9 @@ All bundled prompts use Jinja with `StrictUndefined`. Stage templates never rece
 
 `goal`, `stage`, `task`, `tasks`, `workflow`, `validation`, `project`, `planning`, `previous`, `instructions`, `rules`, `always_instructions`.
 
+
+`previous.data` exposes bounded structured facts from the immediately preceding Stage so YAML `recover` nodes can consume concrete feedback without a separate data bus or full-context replay. Oversized values are projected/truncated only for prompt transport; the original `StageResult.data` remains unchanged.
+
 Ordinary AI stages reference a prompt path directly. Planning-specific computed context is owned by `PlanStage`; there is no separate prompt-builder registry.
 
 
