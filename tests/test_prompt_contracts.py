@@ -45,3 +45,21 @@ def test_strict_undefined_fails_fast(tmp_path):
     template.write_text("{{ missing_value }}", encoding="utf-8")
     with pytest.raises(RunnerError, match="missing_value"):
         render_prompt(str(template), {})
+
+
+def test_review_prompts_require_semantically_consistent_pass_fail():
+    review = (PROMPT_ROOT / "stages" / "review.md").read_text(encoding="utf-8")
+    continuation = (PROMPT_ROOT / "stages" / "review_continue.md").read_text(encoding="utf-8")
+
+    assert "Never invent a `missing_items` entry merely to justify FAIL" in review
+    assert "If no concrete missing item exists, return PASS" in review
+    assert "do not reuse the previous verdict" in continuation
+    assert "Do not repeat a previous missing item if it is now satisfied" in continuation
+    assert "If no concrete missing item remains, return PASS" in continuation
+
+
+def test_structured_retry_forbids_invented_missing_items():
+    retry = (PROMPT_ROOT / "system" / "structured_output_retry.md").read_text(encoding="utf-8")
+    assert "if there is no concrete unsatisfied or blocking item, return PASS" in retry
+    assert "Never invent placeholder `missing_items` merely to satisfy the schema" in retry
+    assert "every missing item must describe a concrete unsatisfied requirement" in retry

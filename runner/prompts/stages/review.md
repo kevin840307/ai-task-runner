@@ -19,9 +19,10 @@ Executor evidence:
 {% endif %}
 
 Decision:
-- PASS only when every current-task acceptance criterion is satisfied.
-- FAIL only for concrete missing, incorrect, unverified, contradicted, or regressed current-task results.
-- `missing_items` must be concrete and actionable; never include later-task or whole-project work.
-- Never return FAIL with an empty `missing_items`.
+- PASS when every current-task acceptance criterion is satisfied and no concrete blocking defect remains.
+- FAIL only when at least one current-task acceptance criterion is concretely missing, incorrect, unverified, contradicted, or regressed.
+- Every `missing_items` entry must name a concrete unsatisfied current-task requirement and be actionable.
+- Never invent a `missing_items` entry merely to justify FAIL. If no concrete missing item exists, return PASS with `missing_items: []`.
+- Never include later-task, optional, or whole-project work in `missing_items`.
 
 {% include "stages/review_output_contract.md" %}

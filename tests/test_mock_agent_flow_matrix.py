@@ -293,9 +293,8 @@ def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatc
     executes = [record for record in records if record["stage"] == "execute"]
     assert len(reviews) == 2
     assert reviews[1]["resumed"] is True
-    assert reviews[1]["prompt"].startswith(
-        "Continue reviewing the same current TODO in this same review session."
-    )
+    assert "same read-only review session" in reviews[1]["prompt"]
+    assert "do not reuse the previous verdict" in reviews[1]["prompt"]
     assert "Evidence order:" not in reviews[1]["prompt"]
     assert "Decision:" not in reviews[1]["prompt"]
     assert any(
