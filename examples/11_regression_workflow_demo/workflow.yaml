@@ -15,7 +15,7 @@ stages:
     result_status: completed
     retry_attr: review_retries
     continuation_prompt: skills/review_continue.md
-    skip_on_error: true
+    skip_on_error: false
 
   grill_ai:
     status: Grill-AI challenging result
@@ -26,6 +26,7 @@ stages:
     result_status: completed
     retry_attr: review_retries
     continuation_prompt: skills/grill_continue.md
+    skip_on_error: false
 
   final_validate:
     validator: ai
@@ -65,7 +66,9 @@ flow:
 
   - stage: grill_ai
     prompt: skills/grill.md
-    instructions: Challenge the project documentation.
+    max_results: 3
+    instructions: >-
+      Check only these required demo documentation items: how to run the sample, supported calculator operations, expected normal behavior, and important observable errors. PASS if these are materially correct and sufficient; do not request unrelated production or enterprise topics.
     recover:
       - stage: run_prompt
         prompt: skills/fix.md
@@ -84,7 +87,9 @@ flow:
 
   - stage: grill_ai
     prompt: skills/grill.md
-    instructions: Challenge the E2E specification.
+    max_results: 3
+    instructions: >-
+      Check only these required demo E2E items: concrete normal arithmetic cases plus important calculator boundary/error behavior visible in the project, including divide-by-zero and unsupported operation behavior when applicable. PASS if these are materially covered; do not expand scope.
     recover:
       - stage: run_prompt
         prompt: skills/fix.md

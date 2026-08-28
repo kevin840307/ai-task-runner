@@ -17,3 +17,8 @@
 `examples\11_regression_workflow_demo\run_qwen.bat`
 
 所有 BAT（`run_example`、`run_qwen`、`run_mock`、`run_test`）都會從全新的暫存 repository 副本執行，並印出保留的 workspace 路徑供 Debug。
+
+## Grill 範圍
+
+這是一個簡單範例。Grill-AI 只檢查 Project Documentation 與 E2E SPEC 明確列出的必要項目，不得擴大到部署、監控、擴縮、Rollback、UI/Mobile、IoT 等非本範例需求，也不可因輕微文字或風格問題判定 FAIL。
+

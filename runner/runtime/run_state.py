@@ -89,6 +89,9 @@ class RunState:
     fresh_session_round: int = 0
     workflow_position: int = 0
     workflow_fingerprint: str = ""
+    flow_result_key: str = ""
+    flow_result_count: int = 0
+    flow_result_previous: dict[str, Any] = field(default_factory=dict)
     dynamic_steps: list[dict[str, Any]] = field(default_factory=list)
     dynamic_index: int = 0
 
@@ -114,6 +117,7 @@ class RunState:
             "failure_scope",
             "failure_key",
             "workflow_fingerprint",
+            "flow_result_key",
         ):
             value = getattr(self, name)
             if not isinstance(value, str):
@@ -122,12 +126,14 @@ class RunState:
             value = getattr(self, name)
             if not is_number(value) or value < 0:
                 raise ValueError(f"state.{name} must be a non-negative number")
-        for name in ("validator_failure_count", "same_failures", "fresh_session_round"):
+        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"state.{name} must be non-negative")
         if not is_integer(self.workflow_position) or self.workflow_position < 0:
             raise ValueError("state.workflow_position must be non-negative")
+        if not isinstance(self.flow_result_previous, dict):
+            raise ValueError("state.flow_result_previous must be an object")
         if not isinstance(self.dynamic_steps, list) or any(
             not isinstance(item, dict) for item in self.dynamic_steps
         ):

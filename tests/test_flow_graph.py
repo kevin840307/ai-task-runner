@@ -54,6 +54,8 @@ def context(workflow, tasks=None):
         validator_failure_count=0,
         ai_session_id="",
         replan_feedback="",
+        flow_result_key="",
+        flow_result_count=0,
     )
     return SimpleNamespace(
         state=state,
@@ -167,3 +169,172 @@ def test_generated_steps_run_as_generic_child_flow():
     assert ctx.state.dynamic_steps == []
     assert ctx.state.workflow_position == 1
 
+
+
+def test_max_results_is_opt_in_and_default_recovery_is_unchanged():
+    workflow = [item("review", recover=[item("repair")])]
+    ctx = context(workflow)
+    failures = 0
+
+    def callback(stage, *_):
+        nonlocal failures
+        if stage.name == "review" and failures < 3:
+            failures += 1
+            return StageResult("review", "fail")
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["review", "repair"] * 3 + ["review"]
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_counts_only_semantic_results_and_stops_after_final_recover():
+    workflow = [
+        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+    calls = 0
+
+    def callback(stage, *_):
+        nonlocal calls
+        if stage.name == "grill":
+            calls += 1
+            return StageResult("grill", "fail", data={"completed": False})
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert calls == 3
+    assert executor.seen == ["grill", "fix", "grill", "fix", "grill", "fix", "next"]
+    assert ctx.state.workflow_position == 2
+    assert ctx.state.flow_result_key == ""
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_pass_finishes_immediately():
+    workflow = [item("grill", max_results=3, recover=[item("fix")], _workflow_index=0)]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill"]
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_survives_crash_and_resume():
+    workflow = [
+        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+    crashed = False
+
+    def first(stage, *_):
+        nonlocal crashed
+        if stage.name == "grill":
+            return StageResult("grill", "fail")
+        if stage.name == "fix" and not crashed:
+            crashed = True
+            raise KeyboardInterrupt
+        return StageResult(stage.name, "pass")
+
+    with pytest.raises(KeyboardInterrupt):
+        Pipeline(ctx, workflow).run(Executor(first))
+    assert ctx.state.flow_result_count == 1
+    assert ctx.state.flow_result_key == "workflow:0"
+
+    grill_calls = 0
+    def resumed(stage, *_):
+        nonlocal grill_calls
+        if stage.name == "grill":
+            grill_calls += 1
+            return StageResult("grill", "fail")
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(resumed)
+    Pipeline(ctx, workflow).run(executor)
+    assert grill_calls == 2
+    assert executor.seen == ["grill", "fix", "grill", "fix", "next"]
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_does_not_count_non_semantic_error_result():
+    workflow = [
+        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "error"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill"]
+    assert ctx.state.flow_result_key == ""
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_does_not_count_exception_before_semantic_result():
+    workflow = [
+        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+
+    def callback(stage, *_):
+        raise RuntimeError("transport failure")
+
+    with pytest.raises(RuntimeError, match="transport failure"):
+        Pipeline(ctx, workflow).run(Executor(callback))
+    assert ctx.state.flow_result_key == ""
+    assert ctx.state.flow_result_count == 0
+
+
+def test_max_results_resume_after_final_failure_retries_recover_not_challenge():
+    workflow = [
+        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+    grill_calls = 0
+    fix_calls = 0
+
+    def first(stage, *_):
+        nonlocal grill_calls, fix_calls
+        if stage.name == "grill":
+            grill_calls += 1
+            return StageResult(
+                "grill",
+                "fail",
+                output=f"failure-{grill_calls}",
+                data={"missing_items": [f"gap-{grill_calls}"]},
+            )
+        if stage.name == "fix":
+            fix_calls += 1
+            if fix_calls == 3:
+                raise KeyboardInterrupt
+            return StageResult("fix", "pass")
+        return StageResult(stage.name, "pass")
+
+    with pytest.raises(KeyboardInterrupt):
+        Pipeline(ctx, workflow).run(Executor(first))
+    assert grill_calls == 3
+    assert ctx.state.flow_result_count == 3
+    assert ctx.state.flow_result_previous["data"] == {"missing_items": ["gap-3"]}
+
+    resumed_grills = 0
+    recovered_feedback = []
+
+    def resumed(stage, _ctx, previous=None):
+        nonlocal resumed_grills
+        if stage.name == "grill":
+            resumed_grills += 1
+        if stage.name == "fix":
+            recovered_feedback.append(previous.data)
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(resumed)
+    Pipeline(ctx, workflow).run(executor)
+    assert resumed_grills == 0
+    assert executor.seen == ["fix", "next"]
+    assert recovered_feedback == [{"missing_items": ["gap-3"]}]
+    assert ctx.state.flow_result_count == 0
+    assert ctx.state.flow_result_previous == {}

@@ -13,7 +13,7 @@ def write(path, text):
 def role():
     low = prompt.lower()
     if "final independent read-only validation" in low: return "final"
-    if "read-only adversarial" in low: return "grill"
+    if "read-only adversarial" in low or "read-only grill" in low: return "grill"
     if "read-only review" in low: return "review"
     return "writer"
 
@@ -34,11 +34,18 @@ else: session = "writer-session"
 
 log = root / ".ai-task-runner" / "demo-calls.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
 with log.open("a", encoding="utf-8") as f:
-    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Try to disprove completeness" in prompt}, ensure_ascii=False)+"\n")
+    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Required demo checks only" in prompt}, ensure_ascii=False)+"\n")
 
 low = prompt.lower()
 if r == "writer":
-    if "project discovery" in low:
+    if "fix only the issues" in low:
+        if '"reason"' not in prompt or '"missing_items"' not in prompt:
+            print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
+            raise SystemExit(3)
+        p = root / ("artifacts/project_documentation.md" if "documentation" in low else "artifacts/e2e_spec.md" if "e2e" in low else "artifacts/project_discovery.md")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text((p.read_text(encoding="utf-8") if p.exists() else "") + "\nReviewed gap fixed from previous.data.\n", encoding="utf-8")
+    elif "project discovery" in low:
         write("artifacts/project_discovery.md", "# Discovery\n- Entry: src/calculator.py\n- Operations: add, subtract, multiply, divide\n- divide by zero raises ValueError\n- unsupported operations raise ValueError\n")
     elif "project documentation" in low:
         write("artifacts/project_documentation.md", "# Project Documentation\nRun: `python smoke_test.py`\nOperations: add, subtract, multiply, divide.\nDivision by zero raises `ValueError: division by zero`.\nUnsupported operations raise `ValueError`.\n")
@@ -50,20 +57,13 @@ if r == "writer":
         write("regression/cases.yaml", "cases:\n  - {name: add, operation: add, a: 2, b: 3, expected: 5}\n  - {name: divide, operation: divide, a: 8, b: 2, expected: 4}\n  - {name: divide-zero, operation: divide, a: 1, b: 0, error: division by zero}\n")
     elif "execution & qualification" in low:
         write("artifacts/qualification.md", "# Qualification\nChecks: `python smoke_test.py` and regression cases inspection.\nResult: PASS. Core smoke behavior passed and DSL expectations match calculator behavior.\n")
-    elif "fix only the issues" in low:
-        if '"reason"' not in prompt or '"missing_items"' not in prompt:
-            print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
-            raise SystemExit(3)
-        p = root / ("artifacts/project_documentation.md" if "documentation" in low else "artifacts/e2e_spec.md" if "e2e" in low else "artifacts/project_discovery.md")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text((p.read_text(encoding="utf-8") if p.exists() else "") + "\nReviewed gap fixed from previous.data.\n", encoding="utf-8")
     answer = "stage completed"
 elif r in {"review", "grill"}:
-    target_doc = "project_documentation.md" in low or "project documentation" in low
+    target_doc = "project_documentation.md" in low or "project documentation" in low or "demo documentation" in low
     if r == "grill" and target_doc:
         p = root / "artifacts/project_documentation.md"
         fixed = p.exists() and "Reviewed gap fixed" in p.read_text(encoding="utf-8")
-        answer = json.dumps({"completed": fixed, "reason": "No remaining material gap in demo documentation." if fixed else "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": [] if fixed else ["Apply the generic Fix using this structured feedback."]})
+        answer = json.dumps({"completed": fixed, "reason": "No remaining material gap in demo documentation." if fixed else "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": [] if fixed else ["Project documentation: apply the generic Fix using this structured feedback."]})
     else:
         answer = json.dumps({"completed": True, "reason": "Target artifact is present and consistent for the demo.", "missing_items": []})
 else:

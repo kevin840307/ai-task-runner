@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +22,7 @@ class FlowNode:
     stage: Stage
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
+    max_results: int | None = None
     workflow_index: int | None = None
     task_index: int | None = None
     task_last: bool = False
@@ -30,6 +33,7 @@ class FlowNode:
             create_stage(definition),
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
+            definition.get("max_results"),
             definition.get("_workflow_index"),
             definition.get("_task_index"),
             bool(definition.get("_task_last", False)),
@@ -88,7 +92,20 @@ class Pipeline:
         for definition in flow:
             node = FlowNode.from_definition(definition)
             while True:
+                pending = self._limited_result_pending_recover(node)
+                if pending is not None:
+                    replacement, recovered, stop = self._run_steps(
+                        node.recover, executor, plan_only, pending
+                    )
+                    if replacement is not None or stop:
+                        return replacement, recovered or pending, stop
+                    previous = recovered or pending
+                    result = previous
+                    self._clear_limited_result(node)
+                    break
+
                 result = executor.run(node.stage, self.context, previous)
+                limit_reached = self._record_limited_result(node, result)
 
                 if result.status == "replan":
                     prepare_replan(self.context, result)
@@ -104,7 +121,13 @@ class Pipeline:
                     if replacement is not None or stop:
                         return replacement, recovered or result, stop
                     previous = recovered or result
+                    if limit_reached:
+                        result = previous
+                        self._clear_limited_result(node)
+                        break
                     continue
+                if result.status == "pass":
+                    self._clear_limited_result(node)
                 break
 
             if result.status in {"fail", "error"}:
@@ -244,6 +267,62 @@ class Pipeline:
             self.context.state.workflow_position = max(
                 self.context.state.workflow_position, node.workflow_index + 1
             )
+
+    def _record_limited_result(self, node: FlowNode, result: StageResult) -> bool:
+        if node.max_results is None or result.status not in {"pass", "fail"}:
+            return False
+        state = self.context.state
+        key = self._result_limit_key(node)
+        if state.flow_result_key != key:
+            state.flow_result_key = key
+            state.flow_result_count = 0
+        state.flow_result_count += 1
+        if result.status == "fail":
+            state.flow_result_previous = {
+                "stage": result.stage,
+                "status": result.status,
+                "output": result.output,
+                "data": json.loads(json.dumps(result.data, ensure_ascii=False, default=str)),
+            }
+        self.context.save_state()
+        return result.status == "fail" and state.flow_result_count >= node.max_results
+
+    def _limited_result_pending_recover(self, node: FlowNode) -> StageResult | None:
+        if node.max_results is None:
+            return None
+        state = self.context.state
+        if (
+            state.flow_result_key != self._result_limit_key(node)
+            or state.flow_result_count < node.max_results
+            or not state.flow_result_previous
+        ):
+            return None
+        saved = state.flow_result_previous
+        return StageResult(
+            str(saved.get("stage", node.stage.name)),
+            "fail",
+            output=str(saved.get("output", "")),
+            data=saved.get("data"),
+        )
+
+    def _clear_limited_result(self, node: FlowNode) -> None:
+        if node.max_results is None:
+            return
+        state = self.context.state
+        if state.flow_result_key == self._result_limit_key(node):
+            state.flow_result_key = ""
+            state.flow_result_count = 0
+            state.flow_result_previous = {}
+
+    @staticmethod
+    def _result_limit_key(node: FlowNode) -> str:
+        if node.workflow_index is not None:
+            return f"workflow:{node.workflow_index}"
+        if node.task_index is not None:
+            return f"task:{node.task_index}:{node.stage.name}"
+        spec = getattr(node.stage, "spec", None)
+        prompt = getattr(spec, "prompt", "")
+        return f"stage:{node.stage.name}:{prompt}"
 
     def _restart(
         self, target: str | None, result: StageResult

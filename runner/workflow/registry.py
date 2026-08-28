@@ -23,6 +23,7 @@ ROUTING_FIELDS = frozenset(
         "validator",
         "recover",
         "restart_at",
+        "max_results",
         "_workflow_index",
         "_task_index",
         "_task_last",

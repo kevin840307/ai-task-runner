@@ -756,3 +756,86 @@ def test_custom_workflow_resolves_local_continuation_prompt(tmp_path):
     flow = load_workflow(workflow)
     assert Path(flow[0]["prompt"]) == (skills / "full.md").resolve()
     assert Path(flow[0]["continuation_prompt"]) == (skills / "continue.md").resolve()
+
+
+def test_flow_node_max_results_is_normalized(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text("""
+stages:
+  grill:
+    status: Grill
+  fix:
+    status: Fix
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow:
+  - stage: grill
+    max_results: 3
+    recover: [fix]
+  - validate
+""", encoding="utf-8")
+    workflow = load_workflow(workflow_file)
+    assert workflow[0]["max_results"] == 3
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "3"])
+def test_flow_node_max_results_must_be_positive_integer(tmp_path, value):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(f"""
+stages:
+  grill:
+    status: Grill
+  fix:
+    status: Fix
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow:
+  - stage: grill
+    max_results: {str(value).lower() if isinstance(value, bool) else (repr(value) if isinstance(value, str) else value)}
+    recover: [fix]
+  - validate
+""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="max_results must be a positive integer"):
+        load_workflow(workflow_file)
+
+
+def test_flow_node_max_results_requires_recover(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text("""
+stages:
+  grill:
+    status: Grill
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow:
+  - stage: grill
+    max_results: 3
+  - validate
+""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="max_results requires recover"):
+        load_workflow(workflow_file)
+
+
+def test_workflow_stage_missing_required_option_fails_during_load(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """stages:
+  broken:
+    actor: ai
+  final:
+    status: Final
+    validator: ai
+flow:
+  - broken
+  - final
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="missing required options: status"):
+        load_workflow(workflow_file)

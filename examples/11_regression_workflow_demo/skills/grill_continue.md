@@ -1,3 +1,5 @@
-Continue the read-only adversarial challenge in this same Grill session for the new target below.
+Continue the read-only Grill in this same session for the new demo target below.
 {{ instructions }}
-Inspect only concrete current-project evidence. Return the same JSON contract already established in this session.
+
+Use the same bounded demo checklist already established in this session. Check only explicit required items and concrete current-project evidence. Do not expand scope or fail on optional improvements.
+Return the same JSON contract already established in this session.

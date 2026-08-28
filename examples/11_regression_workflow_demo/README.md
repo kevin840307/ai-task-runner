@@ -17,3 +17,8 @@ Run with real Qwen:
 `examples\11_regression_workflow_demo\run_qwen.bat`
 
 All BAT launchers (`run_example`, `run_qwen`, `run_mock`, `run_test`) execute from a fresh temporary repository copy and print the retained workspace path for debugging.
+
+## Grill scope
+
+This is a small demo. Grill-AI checks only the explicit required items for project documentation and E2E specification. It must not expand scope into optional production/enterprise topics or fail on minor wording/style improvements.
+

@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.46
+Version: 1.2.48
 
 Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 

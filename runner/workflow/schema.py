@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import MISSING, fields
 from typing import Any
 
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at"})
+ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 VALIDATORS = frozenset({"file", "ai"})
 
@@ -18,12 +18,23 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     if not isinstance(stage_type, str) or stage_type not in STAGE_REGISTRY:
         raise RunnerError(f"workflow stage {name} has unknown type: {stage_type}")
     _validate_validator(name, values, stage_type)
-    allowed = {
-        field.name for field in fields(STAGE_REGISTRY[stage_type].spec_class)
-    } | META_FIELDS
+    spec_fields = fields(STAGE_REGISTRY[stage_type].spec_class)
+    allowed = {field.name for field in spec_fields} | META_FIELDS
     unknown = sorted(str(key) for key in values if key not in allowed)
     if unknown:
         raise RunnerError(f"workflow stage {name} unknown options: {', '.join(unknown)}")
+    missing = [
+        field.name
+        for field in spec_fields
+        if field.name != "name"
+        and field.default is MISSING
+        and field.default_factory is MISSING
+        and field.name not in values
+    ]
+    if missing:
+        raise RunnerError(
+            f"workflow stage {name} missing required options: {', '.join(missing)}"
+        )
     _validate_numbers(name, values)
 
 
@@ -92,6 +103,11 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         not isinstance(retry, int) or isinstance(retry, bool) or retry < -1
     ):
         raise RunnerError(f"workflow stage {name} retry must be -1 or non-negative")
+    max_results = values.get("max_results")
+    if max_results is not None and (not isinstance(max_results, int) or isinstance(max_results, bool) or max_results <= 0):
+        raise RunnerError(f"workflow stage {name} max_results must be a positive integer")
+    if max_results is not None and not values.get("recover"):
+        raise RunnerError(f"workflow stage {name} max_results requires recover")
     runs, required = values.get("runs"), values.get("required_passes")
     if runs is not None and (
         not isinstance(runs, int) or isinstance(runs, bool) or runs <= 0

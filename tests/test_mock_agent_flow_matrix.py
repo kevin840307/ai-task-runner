@@ -303,3 +303,96 @@ def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatc
         and "Latest review:" in record["prompt"]
         for record in executes
     )
+
+
+
+def _max_results_workflow(tmp_path: Path) -> Path:
+    (tmp_path / "grill.md").write_text(
+        "Review only. You are a read-only task reviewer.\n"
+        "Return exactly one JSON object with completed, reason, and missing_items.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "fix.md").write_text(
+        "Workflow Stage instructions:\n"
+        "Apply only the immediately preceding review feedback.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "final.md").write_text(
+        "Final validation. This is a fresh independent read-only session.\n"
+        "Return the required validation JSON.\n",
+        encoding="utf-8",
+    )
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        """stages:
+  fix:
+    status: Fixing
+    mode: write
+    actor: executor
+  grill:
+    status: Challenging
+    mode: readonly
+    actor: ai
+    backend_mode: review
+    client_cache_key: grill_client
+    parser: review
+    result_status: completed
+    retry_attr: review_retries
+    skip_on_error: false
+  final:
+    status: Final validation
+    validator: ai
+    mode: readonly
+    actor: validator
+    fresh_session_each_run: true
+    runs: 1
+    required_passes: 1
+    parser: validation
+    result_status: validation
+flow:
+  - stage: grill
+    prompt: grill.md
+    max_results: 3
+    recover:
+      - stage: fix
+        prompt: fix.md
+  - stage: final
+    prompt: final.md
+""",
+        encoding="utf-8",
+    )
+    return workflow
+
+
+@pytest.mark.parametrize("backend", ["qwen", "opencode"])
+def test_max_results_cross_backend_stops_after_three_semantic_failures(
+    tmp_path, monkeypatch, backend
+):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-max-results-{backend}-state"
+    monkeypatch.setenv("SCENARIO", "stagnation")
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    workflow = _max_results_workflow(tmp_path)
+
+    result = run(RunRequest(
+        goal="Exercise the bounded semantic review loop",
+        project_root=str(tmp_path),
+        validator="ai",
+        workflow_file=str(workflow),
+        backend=backend,
+        command=_command(),
+        max_attempts=2,
+        review_retries=0,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        final_ai_validations=1,
+        final_ai_required_passes=1,
+    ))
+
+    assert result.completed is True
+    records = _records(state_dir)
+    assert Counter(record["stage"] for record in records) == {
+        "review": 3,
+        "execute": 3,
+        "validator": 1,
+    }
