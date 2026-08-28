@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.49
+Version: 1.2.50
 
 Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 
@@ -116,3 +116,21 @@ flow:
 ```
 
 A genuinely new behavior adds one Stage class exposing `spec_class`, then one `register_stage("type", StageClass)` entry. The registry is only `type -> class`; retry, prompt, recovery, validation capability, and composition belong to YAML. Planning-specific computed context remains owned by `PlanStage`. Prompt variables are centralized by `runner/prompts/context.py`; templates use Jinja `StrictUndefined` and must not read runtime internals directly.
+
+
+### Flow labels
+
+`status` belongs to the reusable Stage definition. An optional FlowNode `label` names the concrete work for that occurrence without changing Stage behavior:
+
+```yaml
+stages:
+  run_prompt:
+    status: AI running skill
+
+flow:
+  - stage: run_prompt
+    label: Project Documentation
+    prompt: skills/project_documentation.md
+```
+
+Runner events keep `status=AI running skill` and expose `label=Project Documentation`; console/UI detail uses the label. Omitting `label` preserves the existing behavior.

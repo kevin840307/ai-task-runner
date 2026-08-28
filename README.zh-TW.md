@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.49
+版本：1.2.50
 
 Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都只會把選定的 Example（`--all` 時才複製 examples 集合）複製到新的 `<repo>\.example_runs\...` 工作區，再由原專案 Runner 執行，因此 canonical fixture 每次測試後都維持原狀。
 
@@ -111,3 +111,21 @@ flow:
 ## OpenCode Backend
 
 OpenCode 與 Qwen 共用同一 Runner Stage/Session/Recovery contract：完整 Prompt 走 stdin、既有 Session 使用 `--session`、JSON event 解析 `text/error/step_finish`，且 non-interactive call 會使用 `--auto`。`--sandbox` 在 OpenCode 上映射為 runtime `permission`：禁止 `external_directory`；Planning/No-tool/Review 另外依 Stage mode 套用 read-only/no-tool 權限。這不是 Qwen 的 container sandbox；真正 protected path/Git/readonly 保護仍由 Runner Plugin 執行。
+
+
+### Flow Label
+
+`status` 屬於可重用的 Stage 定義；FlowNode 可選的 `label` 只描述這一次具體工作，不改變 Stage 行為：
+
+```yaml
+stages:
+  run_prompt:
+    status: AI running skill
+
+flow:
+  - stage: run_prompt
+    label: Project Documentation
+    prompt: skills/project_documentation.md
+```
+
+Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Documentation`；Console/UI detail 顯示 label。未設定 `label` 時完全維持既有行為。

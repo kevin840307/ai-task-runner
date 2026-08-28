@@ -35,9 +35,11 @@ class Executor:
     def __init__(self, callback):
         self.callback = callback
         self.seen = []
+        self.labels = []
 
-    def run(self, stage, ctx, previous=None):
+    def run(self, stage, ctx, previous=None, *, label=""):
         self.seen.append(stage.name)
+        self.labels.append(label)
         return self.callback(stage, ctx, previous)
 
 
@@ -65,6 +67,15 @@ def context(workflow, tasks=None):
         set_stage=lambda stage, detail="": setattr(state, "stage", stage),
         reset_sessions=lambda: None,
     )
+
+
+def test_pipeline_passes_optional_flow_label_without_changing_stage():
+    workflow = [item("a", label="Project Documentation", _workflow_index=0)]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["a"]
+    assert executor.labels == ["Project Documentation"]
 
 
 def test_pipeline_runs_stage_list_in_order():

@@ -128,13 +128,14 @@ def publish(event_type: str, action: str, **payload: Any) -> None:
 def stage_started(action: Any) -> None:
     global _status, _detail
     _status = str(getattr(action.stage, "status", "") or getattr(action, "name", ""))
-    _detail = str(getattr(action.stage, "detail", "") or "")
+    _detail = str(getattr(action, "label", "") or getattr(action.stage, "detail", "") or "")
     publish(
         "runner.stage",
         "start",
         stage=getattr(action, "name", ""),
         mode=getattr(action, "mode", "readonly"),
         actor=getattr(action, "actor", "stage"),
+        label=str(getattr(action, "label", "") or ""),
     )
     publish("runner.status", "start")
 
@@ -146,6 +147,7 @@ def stage_finished(action: Any, result: Any) -> None:
         stage=getattr(action, "name", ""),
         mode=getattr(action, "mode", "readonly"),
         actor=getattr(action, "actor", "stage"),
+        label=str(getattr(action, "label", "") or ""),
         result=getattr(result, "status", "error"),
         changed_files=list(getattr(result, "changed_files", []) or []),
         error=str(getattr(result, "error", "") or ""),

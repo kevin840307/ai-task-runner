@@ -23,6 +23,7 @@ class FlowNode:
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
     max_results: int | None = None
+    label: str = ""
     workflow_index: int | None = None
     task_index: int | None = None
     task_last: bool = False
@@ -34,6 +35,7 @@ class FlowNode:
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
             definition.get("max_results"),
+            str(definition.get("label", "") or ""),
             definition.get("_workflow_index"),
             definition.get("_task_index"),
             bool(definition.get("_task_last", False)),
@@ -104,7 +106,11 @@ class Pipeline:
                     self._clear_limited_result(node)
                     break
 
-                result = executor.run(node.stage, self.context, previous)
+                result = (
+                    executor.run(node.stage, self.context, previous, label=node.label)
+                    if node.label
+                    else executor.run(node.stage, self.context, previous)
+                )
                 limit_reached = self._record_limited_result(node, result)
 
                 if result.status == "replan":

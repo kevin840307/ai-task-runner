@@ -48,11 +48,13 @@ def test_routing_metadata_is_not_copied_to_stage():
             "status": "Write",
             "recover": [{"name": "repair"}],
             "restart_at": "write",
+            "label": "Concrete work",
         }
     )
     assert not hasattr(stage, "recover")
     assert not hasattr(stage, "workflow")
     assert not hasattr(stage, "restart_at")
+    assert not hasattr(stage, "label")
 
 
 def test_yaml_references_expose_only_semantic_names():

@@ -22,3 +22,6 @@
 
 這是一個簡單範例。Grill-AI 只檢查 Project Documentation 與 E2E SPEC 明確列出的必要項目，不得擴大到部署、監控、擴縮、Rollback、UI/Mobile、IoT 等非本範例需求，也不可因輕微文字或風格問題判定 FAIL。
 
+
+
+此 Workflow 使用 Stage `status` 表示可重用 Stage 的通用狀態，FlowNode `label` 表示 Log/UI 顯示的本次具體工作。兩個 Grill 節點皆使用 `max_results: 3`，只有合法 semantic PASS/FAIL 才會消耗次數。

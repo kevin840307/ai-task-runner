@@ -162,7 +162,7 @@ class BaseStage:
             output, data = client.run_with_retry(
                 call,
                 spec.status,
-                spec.detail,
+                ctx.execution.label or spec.detail,
                 ctx.config.api_retry_wait,
                 ctx.config.api_retry_max_wait,
                 max_elapsed=ctx.config.api_retry_timeout,

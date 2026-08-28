@@ -274,6 +274,74 @@ flow: [implement, validate]
     assert stage.spec.retry == -1
 
 
+def test_flow_node_label_is_not_allowed_in_reusable_stage_definition(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  implement:
+    status: Execute
+    label: Wrong place
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow: [implement, validate]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="label belongs to flow nodes"):
+        load_workflow(workflow_file)
+
+
+def test_flow_node_label_is_routing_metadata_not_stage_option(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  implement:
+    status: Execute
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow:
+  - stage: implement
+    label: Project Documentation
+  - stage: validate
+""",
+        encoding="utf-8",
+    )
+    definition = load_workflow(workflow_file)[0]
+    node = FlowNode.from_definition(definition)
+    assert node.label == "Project Documentation"
+    assert not hasattr(node.stage, "label")
+
+
+@pytest.mark.parametrize("value", ["", "   ", 3, True])
+def test_flow_node_label_must_be_non_empty_string(tmp_path, value):
+    workflow_file = tmp_path / "workflow.yaml"
+    rendered = repr(value) if not isinstance(value, str) else f'"{value}"'
+    workflow_file.write_text(
+        f"""
+stages:
+  implement:
+    status: Execute
+  validate:
+    type: python
+    validator: file
+    status: Validate
+flow:
+  - stage: implement
+    label: {rendered}
+  - stage: validate
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="label must be a non-empty string"):
+        load_workflow(workflow_file)
+
+
 def test_restart_routing_belongs_to_flow_node_not_stage(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(

@@ -99,6 +99,15 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         "run_prompt", "grill_ai", "review", "run_prompt", "review",
         "run_prompt", "review", "run_prompt", "review", "final_validate",
     ]
+    assert [stage.get("label", "") for stage in regression] == [
+        "Project Discovery", "Review Project Discovery",
+        "Project Documentation", "Grill Project Documentation", "Review Project Documentation",
+        "E2E SPEC Generation", "Grill E2E SPEC", "Review E2E SPEC",
+        "Verification Design", "Review Verification Design",
+        "Regression DSL Generation", "Review Regression DSL",
+        "Regression Execution & Qualification", "Review Execution & Qualification",
+        "Final AI Validation",
+    ]
     reviews = [stage for stage in regression if stage["name"] == "review"]
     grills = [stage for stage in regression if stage["name"] == "grill_ai"]
     assert reviews and all(stage["skip_on_error"] is False for stage in reviews)

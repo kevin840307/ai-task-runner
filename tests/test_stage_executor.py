@@ -149,6 +149,27 @@ def test_executor_preserves_stage_lifecycle_events():
     ]
 
 
+def test_executor_exposes_flow_label_as_event_detail_without_changing_stage_status():
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    StageExecutor(Hooks()).run(Stage(), context(), label="Project Documentation")
+
+    start = next(
+        event for event in records
+        if event["type"] == "runner.stage" and event["action"] == "start"
+    )
+    status = next(
+        event for event in records
+        if event["type"] == "runner.status" and event["action"] == "start"
+    )
+    assert start["stage"] == "sample"
+    assert start["label"] == "Project Documentation"
+    assert status["status"] == "Sample"
+    assert status["detail"] == "Project Documentation"
+
+
 def test_executor_does_not_restart_stage_lifecycle_for_retries():
     class RetryOnce(Stage):
         retry = 1

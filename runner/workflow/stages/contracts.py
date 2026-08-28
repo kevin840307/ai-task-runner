@@ -49,6 +49,7 @@ class StageExecution:
     attempt: int = 1
     retry_mode: Literal["initial", "same", "fresh"] = "initial"
     previous_error: str = ""
+    label: str = ""
 
 
 @dataclass

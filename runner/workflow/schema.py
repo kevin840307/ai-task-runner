@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results"})
+ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results", "label"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 VALIDATORS = frozenset({"file", "ai"})
 
@@ -35,6 +35,9 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} missing required options: {', '.join(missing)}"
         )
+    label = values.get("label")
+    if label is not None and (not isinstance(label, str) or not label.strip()):
+        raise RunnerError(f"workflow stage {name} label must be a non-empty string")
     _validate_numbers(name, values)
 
 

@@ -26,6 +26,7 @@ from .contracts import (
 class StageAction:
     stage: Stage
     context: StageContext
+    label: str = ""
 
     @property
     def name(self) -> str:
@@ -59,7 +60,12 @@ class StageExecutor:
         self.hooks = hooks or current_runtime().hooks
 
     def run(
-        self, stage: Stage, ctx: StageContext, previous: StageResult | None = None
+        self,
+        stage: Stage,
+        ctx: StageContext,
+        previous: StageResult | None = None,
+        *,
+        label: str = "",
     ) -> StageResult:
         if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(
             ctx
@@ -88,7 +94,7 @@ class StageExecutor:
         run_state = str(getattr(stage, "run_state", "") or "")
         if run_state:
             ctx.set_stage(run_state, "")
-        progress.stage_started(StageAction(stage, ctx))
+        progress.stage_started(StageAction(stage, ctx, label))
 
         while True:
             attempt += 1
@@ -96,6 +102,7 @@ class StageExecutor:
                 attempt=attempt,
                 retry_mode=retry_mode,
                 previous_error=previous_error,
+                label=label,
             )
             result = self._attempt(stage, ctx, previous)
 
@@ -164,7 +171,7 @@ class StageExecutor:
 
         ctx.execution = StageExecution()
         ctx.save_state()
-        progress.stage_finished(StageAction(stage, ctx), result)
+        progress.stage_finished(StageAction(stage, ctx, label), result)
         return result
 
     def _attempt(

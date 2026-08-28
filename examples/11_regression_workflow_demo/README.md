@@ -22,3 +22,6 @@ All BAT launchers (`run_example`, `run_qwen`, `run_mock`, `run_test`) execute fr
 
 This is a small demo. Grill-AI checks only the explicit required items for project documentation and E2E specification. It must not expand scope into optional production/enterprise topics or fail on minor wording/style improvements.
 
+
+
+The workflow uses Stage `status` for reusable stage meaning and FlowNode `label` for the concrete step shown in logs/UI. Both Grill nodes use `max_results: 3`; only valid semantic PASS/FAIL results consume that limit.

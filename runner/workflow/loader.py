@@ -110,6 +110,8 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
         raise RunnerError(f"workflow stage {name} must be an object")
     if "planner_stages" in definition:
         raise RunnerError(f"workflow stage {name} planner_stages is managed internally")
+    if "label" in definition:
+        raise RunnerError(f"workflow stage {name} label belongs to flow nodes")
     values = deepcopy(definition)
     values.setdefault("type", "base")
     values["name"] = name
