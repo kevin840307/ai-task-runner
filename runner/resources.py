@@ -47,7 +47,7 @@ def write_text(
         validate(text)
     _check_expected_hash(target, expected_hash)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_name(f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    temp = target.parent / f".tmp-{os.getpid()}-{uuid.uuid4().hex}"
     try:
         temp.write_text(text, encoding="utf-8")
         os.replace(temp, target)

@@ -1,8 +1,8 @@
 # AI Task Runner
 
-Version: 1.2.44
+Version: 1.2.46
 
-Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` create a fresh `%TEMP%\ai-task-runner-examples\...` repository copy before running, so canonical fixtures remain unchanged between tests.
+Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 
 
 Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The canonical `runner.api.run()` resumes unfinished state automatically; the CLI only adds worker-process crash isolation. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.

@@ -8,7 +8,8 @@ examples\run_examples.bat
 
 Pass normal Runner options through the BAT, for example `examples\run_examples.bat --backend qwen --resume`.
 
-Every BAT launcher now runs from a fresh temporary copy under `%TEMP%\ai-task-runner-examples\...`. The canonical `examples/` tree is never used as the writable project. The temporary workspace path is printed before and after execution and is kept for debugging; rerunning always creates a new clean copy.
+Every BAT launcher copies only the selected example into a fresh workspace under `<repo>\.example_runs\...`; `--all` copies the examples set only. Runner source stays in the original repository, and the canonical `examples/` tree is never used as the writable project. The temporary workspace path is printed before and after execution and is kept for debugging; rerunning always creates a new clean copy.
+Set `AI_TASK_RUNNER_EXAMPLE_TEMP` to override the base directory; otherwise `.example_runs/` under the repository root is used.
 
 Run one example directly, for example:
 

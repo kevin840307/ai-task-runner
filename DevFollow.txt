@@ -27,5 +27,5 @@
 25. Stage recovery 只傳必要的新 evidence；structured Stage 結果透過 bounded `previous.data` 傳遞，Prompt Context 必須限制大小，不可因 recover 重送大量既有內容。
 26. Backend parity: complete AI task prompts must use stdin. Session, sandbox/permission, error parsing, and timeout identity belong to each Backend adapter; Workflow/Stage must not branch on Qwen/OpenCode.
 27. Builtin 正常 Same Session 若已看過同一 Stage Prompt contract，只能透過 bounded continuation 補新 TODO／Review／Validator evidence；不得重送 Goal、Rules 或完整 Stage contract。對應 contract 必須由 deterministic test + qwen_live_reliability 鎖定。
-28. Example／Demo 執行不得污染 canonical fixture；可修改的範例一律從乾淨來源複製到獨立 temp workspace 後執行，每次 Run 都重新建立副本，並保留實際 work path 供 Debug。
+28. Example／Demo 執行不得污染 canonical fixture；單一 Example 只複製該 Example 到獨立 workspace，`--all` 才複製 examples 集合，不複製整個 Runner repo。每次 Run 都重新建立副本；預設放在 `.example_runs/`，可由環境變數覆寫並保留 work path 供 Debug。
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。

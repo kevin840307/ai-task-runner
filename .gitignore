@@ -6,3 +6,4 @@ __pycache__/
 .pytest_cache/
 .ai-task-runner/
 .ruff_cache/
+.example_runs/

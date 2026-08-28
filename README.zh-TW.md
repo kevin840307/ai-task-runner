@@ -1,8 +1,8 @@
 # AI Task Runner
 
-版本：1.2.44
+版本：1.2.46
 
-Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都會先建立新的 `%TEMP%\ai-task-runner-examples\...` 專案副本，再執行測試，因此 canonical fixture 每次測試後都維持原狀。
+Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都只會把選定的 Example（`--all` 時才複製 examples 集合）複製到新的 `<repo>\.example_runs\...` 工作區，再由原專案 Runner 執行，因此 canonical fixture 每次測試後都維持原狀。
 
 
 執行完成規則：內層正常 return 不代表任務完成；只有持久化 state 同時確認 `completed=true` 且 `stage=completed`（Final Validator PASS 狀態）才算完成。正式 `runner.api.run()` 會自動 resume 未完成 state；CLI 只額外提供 worker-process crash isolation。Task Recovery 依重複相同的無進展證據升級（same session -> fresh session -> replan），不依總 attempt 次數放棄。

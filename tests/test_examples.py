@@ -238,25 +238,70 @@ def test_regression_workflow_demo_mock_contract():
     assert "PASS regression workflow demo" in result.stdout
 
 
-def test_example_temp_runner_copies_workspace_and_preserves_source(tmp_path, monkeypatch):
+def test_example_temp_runner_copies_only_selected_example_and_preserves_source(tmp_path, monkeypatch):
     from tool import example_temp_runner
 
     monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(tmp_path))
     original = EXAMPLES / "11_regression_workflow_demo" / "project" / "src" / "calculator.py"
     before = original.read_bytes()
-    copied = example_temp_runner._copy_workspace("isolation")
-    target = copied / "examples" / "11_regression_workflow_demo" / "project" / "src" / "calculator.py"
+    workspace = example_temp_runner._new_workspace()
+    script = example_temp_runner._prepare_script(workspace, "11_regression_workflow_demo")
+    target = workspace / "examples" / "11_regression_workflow_demo" / "project" / "src" / "calculator.py"
     target.write_text("changed only in temporary workspace\n", encoding="utf-8")
     assert original.read_bytes() == before
     assert target.read_bytes() != before
+    assert script.is_file()
+    assert not (workspace / "runner").exists()
+    assert not (workspace / "tool").exists()
+    assert sorted(path.name for path in (workspace / "examples").iterdir() if path.is_dir()) == ["11_regression_workflow_demo"]
 
 
-def test_example_temp_runner_selects_one_yaml_item(tmp_path, monkeypatch):
+def test_example_temp_runner_defaults_to_repo_example_runs_with_short_workspace_name(tmp_path, monkeypatch):
+    from tool import example_temp_runner
+
+    source = tmp_path / "repo"
+    examples = source / "examples"
+    examples.mkdir(parents=True)
+    (examples / "examples.yaml").write_text("[]", encoding="utf-8")
+    monkeypatch.delenv("AI_TASK_RUNNER_EXAMPLE_TEMP", raising=False)
+    monkeypatch.setattr(example_temp_runner, "SOURCE_ROOT", source)
+
+    workspace = example_temp_runner._new_workspace()
+
+    assert workspace.parent == source / ".example_runs"
+    assert workspace.name.startswith("r-")
+    assert len(workspace.name) <= 24
+    assert (workspace / "examples").is_dir()
+
+
+def test_example_temp_runner_override_is_exact_base_directory(tmp_path, monkeypatch):
+    from tool import example_temp_runner
+
+    override = tmp_path / "custom-runs"
+    monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(override))
+    workspace = example_temp_runner._new_workspace()
+    assert workspace.parent == override.resolve()
+
+
+def test_example_temp_runner_external_workflow_stays_on_source_repo(tmp_path, monkeypatch):
     from tool import example_temp_runner
 
     monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(tmp_path))
-    copied = example_temp_runner._copy_workspace("selection")
-    selected = example_temp_runner._select_example(copied, "11_regression_workflow_demo")
+    workspace = example_temp_runner._new_workspace()
+    script = example_temp_runner._prepare_script(workspace, "10_skill_prompt_review_workflow")
+    data = yaml.safe_load(script.read_text(encoding="utf-8"))
+    workflow = Path(data[0]["workflow_file"])
+    assert workflow.is_absolute()
+    assert workflow == (ROOT / "tool" / "workflows" / "skill_prompt_review_chain.yaml").resolve()
+    assert not (workspace / "tool").exists()
+
+
+def test_example_temp_runner_selects_regression_workflow(tmp_path, monkeypatch):
+    from tool import example_temp_runner
+
+    monkeypatch.setenv("AI_TASK_RUNNER_EXAMPLE_TEMP", str(tmp_path))
+    workspace = example_temp_runner._new_workspace()
+    selected = example_temp_runner._prepare_script(workspace, "11_regression_workflow_demo")
     data = yaml.safe_load(selected.read_text(encoding="utf-8"))
     assert len(data) == 1
     assert data[0]["project_root"] == "11_regression_workflow_demo/project"

@@ -8,7 +8,8 @@ examples\run_examples.bat
 
 可把一般 Runner 參數直接接在 BAT 後，例如 `examples\run_examples.bat --backend qwen --resume`。
 
-現在所有 BAT 都會先把整個專案複製到 `%TEMP%\ai-task-runner-examples\...` 的全新暫存工作區，再從副本執行；canonical `examples/` 永遠只當乾淨來源，不會被 AI、Validator 或 Resume state 污染。執行前後都會印出暫存路徑並保留供 Debug；再次執行一定建立新的乾淨副本。
+現在所有 BAT 都只會把選定的 Example 複製到 `<repo>\.example_runs\...` 的全新工作區；只有 `--all` 才複製 examples 集合。Runner 程式仍從原專案執行，canonical `examples/` 永遠只當乾淨來源，不會被 AI、Validator 或 Resume state 污染。執行前後都會印出暫存路徑並保留供 Debug；再次執行一定建立新的乾淨副本。
+可用 `AI_TASK_RUNNER_EXAMPLE_TEMP` 覆寫基底目錄；未設定時固定使用專案根目錄下的 `.example_runs/`。
 
 也可以只跑單一範例，例如：
 

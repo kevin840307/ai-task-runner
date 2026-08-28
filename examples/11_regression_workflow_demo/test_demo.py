@@ -1,9 +1,9 @@
 from __future__ import annotations
-import json, shutil, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+ROOT = Path(os.environ.get("AI_TASK_RUNNER_SOURCE_ROOT", HERE.parents[1])).resolve()
 
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="runner-regression-demo-") as tmp:
