@@ -1,6 +1,6 @@
 # 保護與安全模型
 
-版本：1.2.42
+版本：1.2.52
 
 ## Project root
 Project root 是 task workspace boundary。Project policy 只從 `<project-root>/.ai-task-runner.yaml` 讀取，不會往 parent directory 搜尋。
@@ -20,4 +20,4 @@ Runner source/backend files 與 configured goal/validator 由 orchestrator 加�
 AI child-process PATH guard 阻擋 `git add`、`git commit`、`git push`；Git read/diagnostic 可使用。這是 guardrail，不是 OS sandbox；stage/commit/push 最終由人類負責。
 
 ## Backend capability limits
-Qwen Planning 是 read-only，當目前 planning step 需要證據時可 bounded 使用 project read tools；write/edit/shell 仍關閉。Review 關閉 write/edit/shell；Runtime 排除不相關 agent/skill/computer-use tools。這些 capability policy 是 filesystem protection 的額外一層。
+Qwen Planning 是 read-only，當目前 planning step 需要證據時可 bounded 使用 project read tools；write/edit/shell 仍關閉。Review 與 final AI validation 使用 read-only review backend policy，關閉 write/edit/shell tools，同時保留 bounded project reads。Runtime 排除不相關 agent/skill/computer-use tools。這些 capability policy 是 filesystem protection 的額外一層。

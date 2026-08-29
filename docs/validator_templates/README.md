@@ -1,6 +1,6 @@
 # Validator Interface and Templates
 
-Version: 1.2.42
+Version: 1.2.52
 
 Use the shared local `validator_interface.py` pattern for deterministic example/smoke validators. Keep project-specific checks in the validator itself; the interface only standardizes report/error/warning/final exit behavior.
 
@@ -10,4 +10,3 @@ A good validator checks observable requirements, uses deterministic local operat
 ## Diagnostic quality
 
 Keep failures close to the operation that caused them. For generated JSON or CLI JSON output, use `parse_json(text, label)` so empty or malformed output becomes an actionable validation failure instead of an `E999` crash. After mutating commands, validate the resulting observable state immediately when practical; report the command/step plus expected and actual values. Unexpected validator exceptions include a short traceback, but normal project failures should use `AssertionError`/`ValidatorReport.error` with deterministic evidence rather than relying on crashes. Do not include implementation-specific answers in the fix text.
-

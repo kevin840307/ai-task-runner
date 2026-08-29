@@ -120,12 +120,6 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "agent",
     *QWEN_COMPUTER_USE_TOOLS,
 )
-QWEN_REVIEW_EXCLUDED_TOOLS = (
-    "write_file",
-    "edit",
-    "notebook_edit",
-    "run_shell_command",
-)
 QWEN_RUNTIME_EXCLUDED_TOOLS = (
     "todo_write",
     "skill",
@@ -145,16 +139,20 @@ def configure_qwen_args(
     if mode in ("planning", "no_tool"):
         ensure_qwen_yolo(result)
         ensure_qwen_safe_mode(result)
-        excluded = tuple(
-            tool
-            for tool in QWEN_PLANNING_EXCLUDED_TOOLS
-            if (
-                tool not in QWEN_PLANNING_PROJECT_READ_TOOLS
-                if allow_project_read and mode == "planning"
-                else tool != QWEN_NO_TOOL_COMPAT_TOOL
-            )
+        exclude_qwen_tools(
+            result,
+            qwen_readonly_excluded_tools(
+                allow_project_read=allow_project_read and mode == "planning"
+            ),
         )
-        exclude_qwen_tools(result, excluded)
+        ensure_qwen_compat_tool(result)
+        return result
+
+    if mode == "review":
+        ensure_qwen_yolo(result)
+        ensure_qwen_safe_mode(result)
+        ensure_qwen_max_tool_calls(result)
+        exclude_qwen_tools(result, qwen_readonly_excluded_tools(allow_project_read=True))
         ensure_qwen_compat_tool(result)
         return result
 
@@ -162,10 +160,19 @@ def configure_qwen_args(
     ensure_qwen_max_tool_calls(result)
     exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)
     ensure_qwen_compat_tool(result)
-    if mode == "review":
-        exclude_qwen_tools(result, QWEN_REVIEW_EXCLUDED_TOOLS)
-        ensure_qwen_compat_tool(result)
     return result
+
+
+def qwen_readonly_excluded_tools(*, allow_project_read: bool) -> tuple[str, ...]:
+    return tuple(
+        tool
+        for tool in QWEN_PLANNING_EXCLUDED_TOOLS
+        if (
+            tool not in QWEN_PLANNING_PROJECT_READ_TOOLS
+            if allow_project_read
+            else tool != QWEN_NO_TOOL_COMPAT_TOOL
+        )
+    )
 
 
 def ensure_qwen_compat_tool(args: list[str]) -> None:
@@ -190,9 +197,12 @@ def ensure_qwen_safe_mode(args: list[str]) -> None:
         args.append("--safe-mode")
 
 
-def ensure_qwen_max_tool_calls(args: list[str]) -> None:
+def ensure_qwen_max_tool_calls(
+    args: list[str],
+    value: str = QWEN_DEFAULT_MAX_TOOL_CALLS,
+) -> None:
     if "--max-tool-calls" not in args:
-        args.extend(["--max-tool-calls", QWEN_DEFAULT_MAX_TOOL_CALLS])
+        args.extend(["--max-tool-calls", value])
 
 
 def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:

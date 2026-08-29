@@ -7,8 +7,9 @@ Verify the current project directly against every original requirement. Do not t
 Check completeness, required files, user-visible behavior, data formats, requested documentation, consistency, and relevant tests/build results.
 Also check evidence-backed blocking defects in destructive file/data behavior, security/injection/secrets, failure/concurrency/resource handling, portability, or major regressions.
 Do not fail for style preferences, optional refactoring, speculative risks, or non-blocking improvements.
+Read-only means do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools.
 
-Run reasonable focused checks when useful. If no reliable command is obvious, inspect the relevant files and record that in `checks_run`.
+Run reasonable focused read-only checks when useful and available. If no reliable command is obvious or available, inspect the relevant files and record that in `checks_run`.
 On FAIL, make `missing_items` concrete, actionable, evidence-based, and limited to blocking issues.
 {% if validation.instructions %}Additional validation instructions:
 {{ validation.instructions }}

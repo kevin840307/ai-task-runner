@@ -261,12 +261,12 @@ class BaseStage:
     def _same_session_prompt(self, ctx: StageContext) -> str:
         error = ctx.execution.previous_error.strip()
         readonly = (
-            " Do not modify project files; the previous attempt was restored if it changed them."
+            " This is read-only: do not modify project files, run shell/write/edit tools, search for tools, or ask for unavailable tools; the previous attempt was restored if it changed files."
             if self.spec.mode == MODE_READONLY
             else ""
         )
         loop_note = (
-            " Do not repeat the exact failed action; use a different approach."
+            " Do not repeat the exact failed action; if a read returned content or Unchanged, use that evidence and return the required structured result."
             if "loop" in error.lower()
             else ""
         )

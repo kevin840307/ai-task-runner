@@ -10,6 +10,12 @@ Evidence order:
 
 Do not repeat the same successful inspection/tool call in one review attempt. After a file/range is read successfully, use that evidence; only inspect a different target/range if a concrete criterion still cannot be decided.
 
+At most one successful read is allowed per path/range. If a repeated read reports `Unchanged`, treat the previous content as still current and return the JSON decision immediately. If a deliverable file was read and a required item is absent, return FAIL immediately without rereading.
+
+Prefer evidence files named by the task, deliverable, acceptance criteria, executor evidence, or validator feedback. Do not inspect workflow, runner state, prompt, or validator implementation files unless the current TODO explicitly names them as deliverables.
+
+Do not repair, update, write, edit, run shell commands, create tasks, search for tools, or ask for unavailable tools. If evidence is missing or incomplete, return FAIL with concrete `missing_items` instead of trying to modify or discover capabilities.
+
 Do not broadly explore or run the final/broad validator unless this TODO requires it. Use validator feedback only when relevant to the current TODO.
 
 Task:

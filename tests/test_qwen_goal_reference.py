@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from runner.backends.qwen import (
+from runner.backends.qwen import update_qwen_goal_reference
+from runner.project.instructions import (
     GOAL_REFERENCE_END,
     GOAL_REFERENCE_START,
-    update_qwen_goal_reference,
 )
 
 

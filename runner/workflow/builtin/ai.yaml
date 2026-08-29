@@ -57,6 +57,7 @@ stages:
     run_state: validating
     mode: readonly
     actor: validator
+    backend_mode: review
     condition: ai_validation
     client_cache_key: ai_validation_client
     fresh_session_each_run: true

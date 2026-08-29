@@ -24,6 +24,7 @@ def test_final_ai_validation_retries_until_pass():
     validate = next(item for item in load_workflow() if item.get("name") == "validate_ai")
     assert validate["type"] == "base"
     assert validate["retry"] == -1
+    assert validate["backend_mode"] == "review"
 
 
 def test_plan_stage_is_base_stage_with_only_plan_parser_difference():

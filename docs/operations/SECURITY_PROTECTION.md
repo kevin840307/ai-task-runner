@@ -1,6 +1,6 @@
 # Protection and Safety Model
 
-Version: 1.2.42
+Version: 1.2.52
 
 ## Project root
 The project root is the task workspace boundary. Project policy is read only from `<project-root>/.ai-task-runner.yaml`; parent directories are not searched.
@@ -20,4 +20,4 @@ Runner source/backend files and configured goal/validator files are added to pro
 AI child-process PATH guard blocks `git add`, `git commit`, and `git push`. Other Git reads/diagnostics are allowed. This is a guardrail, not an OS sandbox; human review owns staging/commit/push.
 
 ## Backend capability limits
-Qwen planning is read-only and may use bounded project read tools when the current planning step needs evidence; write/edit/shell remain excluded. Review disables write/edit/shell tools. Runtime excludes unrelated agent/skill/computer-use tools. These capability policies supplement filesystem protection.
+Qwen planning is read-only and may use bounded project read tools when the current planning step needs evidence; write/edit/shell remain excluded. Review and final AI validation use the read-only review backend policy, disabling write/edit/shell tools while keeping bounded project reads available. Runtime excludes unrelated agent/skill/computer-use tools. These capability policies supplement filesystem protection.

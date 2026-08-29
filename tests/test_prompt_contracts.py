@@ -58,6 +58,16 @@ def test_review_prompts_require_semantically_consistent_pass_fail():
     assert "If no concrete missing item remains, return PASS" in continuation
     assert "Do not repeat the same successful inspection/tool call" in review
     assert "Do not repeat the same successful inspection/tool call" in continuation
+    assert "Do not repair, update, write, edit, run shell commands" in review
+    assert "Do not repair, update, write, edit, run shell commands" in continuation
+    assert "search for tools, or ask for unavailable tools" in review
+    assert "search for tools, or ask for unavailable tools" in continuation
+    assert "Do not inspect workflow, runner state, prompt, or validator implementation files" in review
+    assert "Do not inspect workflow, runner state, prompt, or validator implementation files" in continuation
+    assert "At most one successful read is allowed per path/range" in review
+    assert "At most one successful read is allowed per path/range" in continuation
+    assert "If a repeated read reports `Unchanged`" in review
+    assert "If a repeated read reports `Unchanged`" in continuation
 
 
 def test_structured_retry_forbids_invented_missing_items():
@@ -65,3 +75,21 @@ def test_structured_retry_forbids_invented_missing_items():
     assert "if there is no concrete unsatisfied or blocking item, return PASS" in retry
     assert "Never invent placeholder `missing_items` merely to satisfy the schema" in retry
     assert "every missing item must describe a concrete unsatisfied requirement" in retry
+
+
+def test_ai_validator_prompt_is_readonly_and_tool_bounded():
+    prompt = (PROMPT_ROOT / "stages" / "ai_validator.md").read_text(encoding="utf-8")
+
+    assert "Final validation. This is a fresh independent read-only session." in prompt
+    assert "do not modify files, run shell/write/edit tools" in prompt
+    assert "create tasks, search for tools, or ask for unavailable tools" in prompt
+    assert "focused read-only checks" in prompt
+
+
+def test_planning_prompts_keep_acceptance_criteria_on_deliverables():
+    rules = (PROMPT_ROOT / "stages" / "plan_task_rules.md").read_text(encoding="utf-8")
+    contract = (PROMPT_ROOT / "stages" / "plan_output_contract.md").read_text(encoding="utf-8")
+
+    assert "resulting project artifact or behavior now" in rules
+    assert "future Stage behavior, review/repair/validator outcomes" in rules
+    assert "future Stage behavior, review/repair/validator outcomes" in contract

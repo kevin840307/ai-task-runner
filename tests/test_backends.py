@@ -95,6 +95,52 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
     ).count("-s") == 0
 
 
+def qwen_excluded_tools(args):
+    return {
+        args[index + 1]
+        for index, value in enumerate(args[:-1])
+        if value == "--exclude-tools"
+    } | {
+        value.split("=", 1)[1]
+        for value in args
+        if value.startswith("--exclude-tools=")
+    }
+
+
+def test_qwen_review_mode_is_read_only_and_project_readable():
+    args = configure_backend_args("qwen", "review", [])
+    excluded = qwen_excluded_tools(args)
+
+    assert "--safe-mode" in args
+    assert args[args.index("--max-tool-calls") + 1] == "-1"
+    assert {
+        "write_file",
+        "edit",
+        "notebook_edit",
+        "run_shell_command",
+        "tool_search",
+        "todo_write",
+        "web_fetch",
+        "agent",
+    } <= excluded
+    assert excluded.isdisjoint(
+        {
+            "read_file",
+            "read_many_files",
+            "list_directory",
+            "glob",
+            "grep_search",
+            "search_file_content",
+        }
+    )
+
+
+def test_qwen_review_mode_respects_explicit_tool_call_limit():
+    args = configure_backend_args("qwen", "review", ["--max-tool-calls", "8"])
+
+    assert args.count("--max-tool-calls") == 1
+    assert args[args.index("--max-tool-calls") + 1] == "8"
+
 
 def test_opencode_uses_stdin_session_json_and_auto_mode(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult

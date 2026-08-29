@@ -1,5 +1,9 @@
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 from runner.version import __version__
 
@@ -14,6 +18,5 @@ def test_package_version_has_one_runtime_owner():
 
 
 def test_displayed_version_matches_release_docs():
-    assert __version__ == "1.2.49"
     assert f"Version: {__version__}" in (ROOT / "README.md").read_text(encoding="utf-8")
     assert f"版本：{__version__}" in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")

@@ -31,12 +31,12 @@ All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or mi
 
 Ordinary AI work uses a BaseStage (`type: base`) with `actor: ai` and a Workflow-relative prompt or instruction file.
 
-Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; Review uses `mode: readonly` plus the review parser/result handler contract. There is no prompt-builder registry.
+Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; Review uses `mode: readonly` plus the review parser/result handler contract. Review prompts must return a verdict from available evidence instead of repairing, searching for tools, or requesting unavailable tools. There is no prompt-builder registry.
 
 ## Session policy
 
 - Initial call: render the full Stage prompt. When the same session later sees the same Stage prompt contract again, bundled Stages may use a configured `continuation_prompt` that sends only the new TODO/evidence instead of repeating Goal/rules already in that session.
-- Same-session recovery: send only a short stage-aware delta: current Stage identity, new failure evidence, readonly reminder when applicable, and the required next action/output contract. Do not resend known full context.
+- Same-session recovery: send only a short stage-aware delta: current Stage identity, new failure evidence, readonly reminder when applicable, and the required next action/output contract. Read-only recovery explicitly forbids write/shell/edit/tool-discovery actions so repeated tool or timeout failures converge to the Stage output contract. Do not resend known full context.
 - Fresh/rebuilt session: prepend only a short recovery header, then resend the original complete Stage prompt. The Stage prompt itself owns goal/task/rules, so the wrapper never duplicates them.
 - Final AI validation runs use independent fresh sessions; three configured runs therefore use three different sessions.
 - Structured-output parse failure first uses a short same-session JSON-only correction containing only parser feedback; configured fresh fallback starts a new session and resends the full Stage prompt.
@@ -46,7 +46,7 @@ Full AI task prompts are passed through stdin and never embedded in argv. Qwen `
 ## Prompt size rules
 
 - Global engineering/safety rules live in shared rules, not repeated in every TODO acceptance criterion.
-- Planning emits only task-specific, objectively checkable acceptance criteria.
+- Planning emits only task-specific, objectively checkable acceptance criteria for the TODO's resulting artifact or behavior, not future Stage/review/repair/validator outcomes.
 - When the Planner-visible Stage catalog contains a write Stage, every planned TODO must include at least one write Stage; read-only review-only TODOs are rejected.
 - Stage prompts prefer short scope/evidence/action/contract language over repeated prose or long example lists.
 - JSON output examples are intentionally retained because they materially improve structured-output reliability on smaller models.
