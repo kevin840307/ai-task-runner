@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.50
+Version: 1.2.52
 
 Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 
@@ -134,3 +134,8 @@ flow:
 ```
 
 Runner events keep `status=AI running skill` and expose `label=Project Documentation`; console/UI detail uses the label. Omitting `label` preserves the existing behavior.
+
+
+### Repeated semantic-failure escape
+
+A FlowNode may opt in to `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count, different semantic failures reset the count, and omitting the option preserves the previous behavior. Builtin Review uses `2` to escape stale verdict loops without resetting the writer session.

@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results", "label"})
+ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results", "fresh_after_same_failures", "label"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 VALIDATORS = frozenset({"file", "ai"})
 
@@ -106,6 +106,19 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         not isinstance(retry, int) or isinstance(retry, bool) or retry < -1
     ):
         raise RunnerError(f"workflow stage {name} retry must be -1 or non-negative")
+    fresh_after_same_failures = values.get("fresh_after_same_failures")
+    if fresh_after_same_failures is not None and (
+        not isinstance(fresh_after_same_failures, int)
+        or isinstance(fresh_after_same_failures, bool)
+        or fresh_after_same_failures <= 0
+    ):
+        raise RunnerError(
+            f"workflow stage {name} fresh_after_same_failures must be a positive integer"
+        )
+    if fresh_after_same_failures is not None and not values.get("recover"):
+        raise RunnerError(
+            f"workflow stage {name} fresh_after_same_failures requires recover"
+        )
     max_results = values.get("max_results")
     if max_results is not None and (not isinstance(max_results, int) or isinstance(max_results, bool) or max_results <= 0):
         raise RunnerError(f"workflow stage {name} max_results must be a positive integer")

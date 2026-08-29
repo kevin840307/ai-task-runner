@@ -42,6 +42,9 @@ class Executor:
         self.labels.append(label)
         return self.callback(stage, ctx, previous)
 
+    def fresh_session(self, stage, ctx):
+        self.seen.append(f"fresh:{stage.name}")
+
 
 def context(workflow, tasks=None):
     state = SimpleNamespace(
@@ -58,6 +61,10 @@ def context(workflow, tasks=None):
         replan_feedback="",
         flow_result_key="",
         flow_result_count=0,
+        flow_result_previous={},
+        semantic_failure_key="",
+        semantic_failure_fingerprint="",
+        semantic_failure_count=0,
     )
     return SimpleNamespace(
         state=state,
@@ -349,3 +356,96 @@ def test_max_results_resume_after_final_failure_retries_recover_not_challenge():
     assert recovered_feedback == [{"missing_items": ["gap-3"]}]
     assert ctx.state.flow_result_count == 0
     assert ctx.state.flow_result_previous == {}
+
+
+def test_repeated_same_semantic_failure_freshens_only_when_opted_in():
+    workflow = [
+        item(
+            "review",
+            fresh_after_same_failures=2,
+            recover=[item("repair")],
+            _workflow_index=0,
+        )
+    ]
+    ctx = context(workflow)
+    reviews = 0
+
+    def callback(stage, *_):
+        nonlocal reviews
+        if stage.name == "review":
+            reviews += 1
+            if reviews <= 2:
+                return StageResult(
+                    "review",
+                    "fail",
+                    data={
+                        "completed": False,
+                        "reason": "same verdict",
+                        "missing_items": ["A"],
+                    },
+                )
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == [
+        "review", "repair", "review", "fresh:review", "repair", "review"
+    ]
+    assert ctx.state.semantic_failure_count == 0
+
+
+def test_semantic_fresh_is_opt_in_and_different_failures_reset_count():
+    workflow = [item("review", recover=[item("repair")], _workflow_index=0)]
+    ctx = context(workflow)
+    results = iter([
+        StageResult("review", "fail", data={"missing_items": ["A"]}),
+        StageResult("review", "fail", data={"missing_items": ["A"]}),
+        StageResult("review", "pass"),
+    ])
+
+    def callback(stage, *_):
+        return next(results) if stage.name == "review" else StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert not any(name.startswith("fresh:") for name in executor.seen)
+    assert ctx.state.semantic_failure_count == 0
+
+    workflow = [item("review", fresh_after_same_failures=2, recover=[item("repair")], _workflow_index=0)]
+    ctx = context(workflow)
+    results = iter([
+        StageResult("review", "fail", data={"missing_items": ["A"]}),
+        StageResult("review", "fail", data={"missing_items": ["B"]}),
+        StageResult("review", "pass"),
+    ])
+    executor = Executor(lambda stage, *_: next(results) if stage.name == "review" else StageResult(stage.name, "pass"))
+    Pipeline(ctx, workflow).run(executor)
+    assert not any(name.startswith("fresh:") for name in executor.seen)
+
+
+def test_semantic_failure_count_survives_crash_before_next_review():
+    workflow = [item("review", fresh_after_same_failures=2, recover=[item("repair")], _workflow_index=0)]
+    ctx = context(workflow)
+
+    def first(stage, *_):
+        if stage.name == "review":
+            return StageResult("review", "fail", data={"missing_items": ["A"]})
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        Pipeline(ctx, workflow).run(Executor(first))
+    assert ctx.state.semantic_failure_count == 1
+
+    reviews = 0
+    def resumed(stage, *_):
+        nonlocal reviews
+        if stage.name == "review":
+            reviews += 1
+            if reviews == 1:
+                return StageResult("review", "fail", data={"missing_items": ["A"]})
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(resumed)
+    Pipeline(ctx, workflow).run(executor)
+    assert "fresh:review" in executor.seen
+    assert ctx.state.semantic_failure_count == 0

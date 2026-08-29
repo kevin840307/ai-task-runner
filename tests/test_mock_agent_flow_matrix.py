@@ -395,3 +395,95 @@ def test_max_results_cross_backend_stops_after_three_semantic_failures(
         "execute": 3,
         "validator": 1,
     }
+
+
+def _semantic_fresh_workflow(tmp_path: Path) -> Path:
+    (tmp_path / "review.md").write_text(
+        "Review only. You are a read-only task reviewer. Return review JSON.\n", encoding="utf-8"
+    )
+    (tmp_path / "review_continue.md").write_text(
+        "Re-review CURRENT result after repair in this same read-only review session. Return one review JSON decision.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "fix.md").write_text(
+        "Workflow Stage instructions:\nApply the previous review feedback only.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "final.md").write_text(
+        "Final validation. This is a fresh independent read-only session. Return validation JSON.\n", encoding="utf-8"
+    )
+    workflow = tmp_path / "semantic-fresh.yaml"
+    workflow.write_text(
+        """stages:
+  fix:
+    status: Fixing
+    mode: write
+    actor: executor
+  review:
+    status: Reviewing
+    mode: readonly
+    actor: ai
+    backend_mode: review
+    client_cache_key: review_client
+    parser: review
+    result_status: completed
+    continuation_prompt: review_continue.md
+    skip_on_error: false
+  final:
+    status: Final validation
+    validator: ai
+    mode: readonly
+    actor: validator
+    fresh_session_each_run: true
+    parser: validation
+    result_status: validation
+flow:
+  - stage: review
+    prompt: review.md
+    fresh_after_same_failures: 2
+    recover:
+      - stage: fix
+        prompt: fix.md
+  - stage: final
+    prompt: final.md
+""",
+        encoding="utf-8",
+    )
+    return workflow
+
+
+@pytest.mark.parametrize("backend", ["qwen", "opencode"])
+def test_repeated_semantic_failures_freshen_review_without_resetting_recover_session(
+    tmp_path, monkeypatch, backend
+):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-semantic-fresh-{backend}-state"
+    monkeypatch.setenv("SCENARIO", "semantic_stagnation")
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    workflow = _semantic_fresh_workflow(tmp_path)
+
+    result = run(RunRequest(
+        goal="Exercise repeated semantic review failure recovery",
+        project_root=str(tmp_path),
+        validator="ai",
+        workflow_file=str(workflow),
+        backend=backend,
+        command=_command(),
+        max_attempts=2,
+        review_retries=0,
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        final_ai_validations=1,
+        final_ai_required_passes=1,
+    ))
+
+    assert result.completed is True
+    records = _records(state_dir)
+    reviews = [record for record in records if record["stage"] == "review"]
+    fixes = [record for record in records if record["stage"] == "execute"]
+    assert len(reviews) == 3
+    assert [record["resumed"] for record in reviews] == [False, True, False]
+    assert len(fixes) == 2
+    assert fixes[1]["resumed"] is True
+    assert "Re-review CURRENT result after repair" in reviews[1]["prompt"]
+    assert "Review only. You are a read-only task reviewer" in reviews[2]["prompt"]

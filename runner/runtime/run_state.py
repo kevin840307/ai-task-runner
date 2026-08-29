@@ -92,6 +92,9 @@ class RunState:
     flow_result_key: str = ""
     flow_result_count: int = 0
     flow_result_previous: dict[str, Any] = field(default_factory=dict)
+    semantic_failure_key: str = ""
+    semantic_failure_fingerprint: str = ""
+    semantic_failure_count: int = 0
     dynamic_steps: list[dict[str, Any]] = field(default_factory=list)
     dynamic_index: int = 0
 
@@ -118,6 +121,8 @@ class RunState:
             "failure_key",
             "workflow_fingerprint",
             "flow_result_key",
+            "semantic_failure_key",
+            "semantic_failure_fingerprint",
         ):
             value = getattr(self, name)
             if not isinstance(value, str):
@@ -126,7 +131,7 @@ class RunState:
             value = getattr(self, name)
             if not is_number(value) or value < 0:
                 raise ValueError(f"state.{name} must be a non-negative number")
-        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count"):
+        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count", "semantic_failure_count"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"state.{name} must be non-negative")

@@ -1,4 +1,4 @@
-Review only. Read-only: do not modify project files.
+Review only. Read-only means inspect project evidence without modifying it; protected/source files may be read when needed.
 {{ always_instructions }}
 Judge only the current TODO. Later TODOs and whole-project completion are out of scope.
 
@@ -7,6 +7,8 @@ Evidence order:
 2. Executor evidence and current project state.
 3. Only the smallest related file subset needed to resolve uncertainty.
 4. Return the decision as soon as evidence is sufficient.
+
+Do not repeat the same successful inspection/tool call in one review attempt. After a file/range is read successfully, use that evidence; only inspect a different target/range if a concrete criterion still cannot be decided.
 
 Do not broadly explore or run the final/broad validator unless this TODO requires it. Use validator feedback only when relevant to the current TODO.
 

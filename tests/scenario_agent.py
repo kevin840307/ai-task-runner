@@ -100,8 +100,8 @@ elif stage == "review":
             (root / "review_mutation.txt").write_text("should be restored", encoding="utf-8")
         if scenario == "review_non_json":
             answer = "The task is complete, but this review is not JSON."
-        elif scenario == "stagnation":
-            completed = n >= 4
+        elif scenario in {"stagnation", "semantic_stagnation"}:
+            completed = n >= (3 if scenario == "semantic_stagnation" else 4)
             missing = [] if completed else ["same missing item"]
             answer = {"completed": completed, "reason": "checked", "missing_items": missing}
         else:

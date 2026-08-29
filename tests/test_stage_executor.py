@@ -227,3 +227,31 @@ def test_hook_chain_rolls_back_completed_before_hooks_when_later_before_fails():
     except RunnerError:
         pass
     assert calls == ["first.before", "second.before", ("first.after", "token")]
+
+
+def test_base_stage_fresh_session_resets_only_its_cached_client():
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+
+    ctx = context()
+    ctx.ai_client.session_id = "writer-session"
+    review = SimpleNamespace(session_id="review-session")
+    ctx.scratch["review_client"] = review
+    ctx.scratch["prompt_contracts"] = {
+        ("review.md", "review-session"),
+        ("execution.md", "writer-session"),
+    }
+    stage = BaseStage(
+        BaseStageSpec(
+            name="review",
+            status="Review",
+            prompt="review.md",
+            client_cache_key="review_client",
+        )
+    )
+
+    StageExecutor(Hooks()).fresh_session(stage, ctx)
+
+    assert review.session_id == ""
+    assert ctx.ai_client.session_id == "writer-session"
+    assert ("review.md", "review-session") not in ctx.scratch["prompt_contracts"]
+    assert ("execution.md", "writer-session") in ctx.scratch["prompt_contracts"]

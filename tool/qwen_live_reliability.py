@@ -815,17 +815,78 @@ def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> Non
         raise RuntimeError(f"builtin/{workflow} reused Final AI validation sessions")
 
 
-REVIEW_REPAIR_PROMPT = """Create review.txt. The final file must contain exactly:
+REVIEW_REPAIR_PROMPT = """Make review.txt contain exactly these two logical lines:
 READY
 REVIEW_REQUIRED
 
-Process contract for this reliability probe:
-- The Planner must create one bounded TODO ending in Review.
-- On the first Execute attempt, intentionally write only READY and stop.
-- Review must reject that incomplete result.
-- Repair must preserve READY and add REVIEW_REQUIRED.
-Do not add trailing whitespace or modify protected files.
+A standard final newline is allowed.
+The available write Stage deterministically seeds review.txt with only READY before Review.
+Review must reject that incomplete current-TODO result, and Repair must preserve READY and add REVIEW_REQUIRED.
+Modify review.txt only; do not modify protected files.
 """
+
+REVIEW_REPAIR_SEED = '''from pathlib import Path
+Path("review.txt").write_text("READY\\n", encoding="utf-8")
+'''
+
+REVIEW_REPAIR_WORKFLOW = '''stages:
+  planning:
+    type: plan
+    status: Planning deterministic Review/Repair probe
+    run_state: planning
+    mode: readonly
+    actor: ai
+    backend_mode: planning
+    timeout_attr: planning_timeout
+    result_handler: plan
+
+  seed:
+    type: python_script
+    status: Seeding incomplete Review/Repair state
+    run_state: executing
+    path: seed_review.py
+    result_handler: task
+
+  review:
+    status: Reviewing deterministic incomplete state
+    run_state: reviewing
+    mode: readonly
+    actor: ai
+    backend_mode: review
+    client_cache_key: review_client
+    timeout_attr: planning_timeout
+    prompt: stages/review.md
+    continuation_prompt: stages/review_continue.md
+    parser: review
+    result_status: completed
+    result_handler: review
+    retry_attr: review_retries
+    skip_on_error: false
+    recover: [repair]
+
+  repair:
+    status: Repairing deterministic Review gap
+    run_state: executing
+    mode: write
+    actor: executor
+    track_changes: true
+    prompt: stages/execution.md
+    continuation_prompt: stages/execution_continue.md
+    result_handler: task
+
+  validate_file:
+    type: python
+    validator: file
+    status: Validating deterministic Review/Repair probe
+    run_state: validating
+    mode: write
+    actor: validator
+    result_handler: validation
+
+flow:
+  - planning
+  - validate_file
+'''
 
 REVIEW_REPAIR_VALIDATOR = '''from __future__ import annotations
 import argparse
@@ -835,8 +896,9 @@ p.add_argument("--project-root", required=True)
 p.add_argument("--state-file", required=True)
 a = p.parse_args()
 target = Path(a.project_root).resolve() / "review.txt"
-if not target.is_file() or target.read_text(encoding="utf-8") != "READY\nREVIEW_REQUIRED":
-    print("VALIDATION_FAILED: review.txt must contain READY then REVIEW_REQUIRED")
+lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+if lines != ["READY", "REVIEW_REQUIRED"]:
+    print("VALIDATION_FAILED: review.txt must contain exactly two logical lines: READY and REVIEW_REQUIRED; modify review.txt only")
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
@@ -849,12 +911,17 @@ def review_repair_prompt_probe(settings: Settings, root: Path) -> None:
         REVIEW_REPAIR_PROMPT,
         REVIEW_REPAIR_VALIDATOR,
     )
+    (project / "seed_review.py").write_text(REVIEW_REPAIR_SEED, encoding="utf-8")
+    workflow = project / "workflow.yaml"
+    workflow.write_text(REVIEW_REPAIR_WORKFLOW, encoding="utf-8")
     code = run_command(
-        runner_command(settings, project, workflow=BUILTIN_WORKFLOWS["file"]),
+        runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
-    assert_completed(project, code, "review.txt", "READY\nREVIEW_REQUIRED")
+    assert_state_completed(project, code)
+    if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
+        raise RuntimeError("review repair probe produced unexpected logical lines")
     if not observed_stage_result(project, "review", "fail"):
         raise RuntimeError("review probe did not exercise Review FAIL")
     repairs = stage_prompt_records(project, "repair")

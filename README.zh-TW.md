@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.50
+版本：1.2.52
 
 Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都只會把選定的 Example（`--all` 時才複製 examples 集合）複製到新的 `<repo>\.example_runs\...` 工作區，再由原專案 Runner 執行，因此 canonical fixture 每次測試後都維持原狀。
 
@@ -129,3 +129,8 @@ flow:
 ```
 
 Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Documentation`；Console/UI detail 顯示 label。未設定 `label` 時完全維持既有行為。
+
+
+### 重複 Semantic FAIL 的 Fresh Session Escape
+
+FlowNode 可選設定 `fresh_after_same_failures: N`。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數；未設定時完全維持舊行為。Builtin Review 預設使用 `2`，避免 Same Session 卡在錯誤 verdict，同時保留 Writer Session。

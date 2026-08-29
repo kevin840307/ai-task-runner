@@ -192,6 +192,21 @@ class BaseStage:
             timeout=getattr(ctx.config, self.spec.timeout_attr),
         )
 
+    def reset_session(self, ctx: StageContext) -> str:
+        """Drop only this Stage's AI session so unrelated sessions remain reusable."""
+        client = self._client(ctx)
+        previous = str(getattr(client, "session_id", "") or "")
+        client.session_id = ""
+        if client is ctx.ai_client:
+            ctx.state.ai_session_id = ""
+        contracts = ctx.scratch.get("prompt_contracts")
+        if isinstance(contracts, set) and previous:
+            ctx.scratch["prompt_contracts"] = {
+                item for item in contracts if not (isinstance(item, tuple) and len(item) == 2 and item[1] == previous)
+            }
+        ctx.save_state()
+        return previous
+
     def _client(self, ctx: StageContext):
         key = self.spec.client_cache_key
         if not key:

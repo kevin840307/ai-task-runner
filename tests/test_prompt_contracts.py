@@ -56,6 +56,8 @@ def test_review_prompts_require_semantically_consistent_pass_fail():
     assert "do not reuse the previous verdict" in continuation
     assert "Do not repeat a previous missing item if it is now satisfied" in continuation
     assert "If no concrete missing item remains, return PASS" in continuation
+    assert "Do not repeat the same successful inspection/tool call" in review
+    assert "Do not repeat the same successful inspection/tool call" in continuation
 
 
 def test_structured_retry_forbids_invented_missing_items():

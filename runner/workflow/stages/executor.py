@@ -274,6 +274,14 @@ class StageExecutor:
         state.same_failures = 0
         state.fresh_session_round = 0
 
+    def fresh_session(self, stage: Stage, ctx: StageContext) -> None:
+        reset = getattr(stage, "reset_session", None)
+        if callable(reset):
+            previous = str(reset(ctx) or "")
+            progress.session_fresh(previous)
+            return
+        self._fresh_session(ctx)
+
     @staticmethod
     def _fresh_session(ctx: StageContext) -> None:
         previous = ctx.ai_client.session_id

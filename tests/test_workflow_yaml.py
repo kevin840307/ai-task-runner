@@ -907,3 +907,63 @@ flow:
     )
     with pytest.raises(RunnerError, match="missing required options: status"):
         load_workflow(workflow_file)
+
+
+def test_flow_node_fresh_after_same_failures_is_normalized(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text(
+        """
+stages:
+  review:
+    status: Review
+    prompt: review.md
+  fix:
+    status: Fix
+    mode: write
+  validate:
+    validator: ai
+    status: Validate
+    prompt: validate.md
+    parser: validation
+    result_status: validation
+flow:
+  - stage: review
+    fresh_after_same_failures: 2
+    recover: [fix]
+  - validate
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(path)
+    assert workflow[0]["fresh_after_same_failures"] == 2
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "2"])
+def test_fresh_after_same_failures_must_be_positive_integer(tmp_path, value):
+    path = tmp_path / "workflow.yaml"
+    encoded = str(value).lower() if isinstance(value, bool) else repr(value) if isinstance(value, str) else value
+    path.write_text(
+        f"""
+stages:
+  review:
+    status: Review
+    prompt: review.md
+  fix:
+    status: Fix
+    mode: write
+  validate:
+    validator: ai
+    status: Validate
+    prompt: validate.md
+    parser: validation
+    result_status: validation
+flow:
+  - stage: review
+    fresh_after_same_failures: {encoded}
+    recover: [fix]
+  - validate
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="fresh_after_same_failures must be a positive integer"):
+        load_workflow(path)

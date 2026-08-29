@@ -30,4 +30,5 @@
 28. Example／Demo 執行不得污染 canonical fixture；單一 Example 只複製該 Example 到獨立 workspace，`--all` 才複製 examples 集合，不複製整個 Runner repo。每次 Run 都重新建立副本；預設放在 `.example_runs/`，可由環境變數覆寫並保留 work path 供 Debug。
 29. `max_results` 是 FlowNode 的 opt-in semantic-result 上限：未設定時既有 Workflow 行為完全不變；只有成功產生合法 PASS/FAIL StageResult 才計數，timeout／API／backend／parser／structured retry／session recovery 等技術異常不計數；計數必須 durable，Resume 不可重置。
 30. `status` 屬於可重用 Stage 的通用執行狀態；FlowNode 若需描述本次具體工作使用可選 `label`。`label` 只作 runtime/UI/log metadata，不可改變 Stage、Prompt、Retry、Session 或 routing 行為；未設定時保持既有行為。
+31. Semantic dead-loop recovery 必須 opt-in 且與技術 retry 分離：`fresh_after_same_failures` 只計合法且相同的 semantic FAIL；達門檻只 Fresh 該 Stage Session，其他正常 Session 不得被連帶重置；未設定時舊 Workflow 行為完全不變。
 核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。

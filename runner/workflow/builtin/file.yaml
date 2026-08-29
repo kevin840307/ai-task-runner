@@ -36,6 +36,7 @@ stages:
     result_handler: review
     retry_attr: review_retries
     skip_on_error: true
+    fresh_after_same_failures: 2
     recover: [repair]
 
   repair:

@@ -24,6 +24,7 @@ ROUTING_FIELDS = frozenset(
         "recover",
         "restart_at",
         "max_results",
+        "fresh_after_same_failures",
         "label",
         "_workflow_index",
         "_task_index",

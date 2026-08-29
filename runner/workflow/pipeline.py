@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from collections.abc import Iterable
@@ -23,6 +24,7 @@ class FlowNode:
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
     max_results: int | None = None
+    fresh_after_same_failures: int | None = None
     label: str = ""
     workflow_index: int | None = None
     task_index: int | None = None
@@ -35,6 +37,7 @@ class FlowNode:
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
             definition.get("max_results"),
+            definition.get("fresh_after_same_failures"),
             str(definition.get("label", "") or ""),
             definition.get("_workflow_index"),
             definition.get("_task_index"),
@@ -112,6 +115,7 @@ class Pipeline:
                     else executor.run(node.stage, self.context, previous)
                 )
                 limit_reached = self._record_limited_result(node, result)
+                self._record_semantic_failure(node, result, executor)
 
                 if result.status == "replan":
                     prepare_replan(self.context, result)
@@ -134,6 +138,7 @@ class Pipeline:
                     continue
                 if result.status == "pass":
                     self._clear_limited_result(node)
+                    self._clear_semantic_failure(node)
                 break
 
             if result.status in {"fail", "error"}:
@@ -273,6 +278,58 @@ class Pipeline:
             self.context.state.workflow_position = max(
                 self.context.state.workflow_position, node.workflow_index + 1
             )
+
+
+    def _record_semantic_failure(
+        self, node: FlowNode, result: StageResult, executor: StageExecutor
+    ) -> None:
+        threshold = node.fresh_after_same_failures
+        if threshold is None or result.status != "fail":
+            return
+        state = self.context.state
+        key = self._result_limit_key(node)
+        fingerprint = self._semantic_result_fingerprint(result)
+        if (
+            state.semantic_failure_key != key
+            or state.semantic_failure_fingerprint != fingerprint
+        ):
+            state.semantic_failure_key = key
+            state.semantic_failure_fingerprint = fingerprint
+            state.semantic_failure_count = 1
+        else:
+            state.semantic_failure_count += 1
+        self.context.save_state()
+        if state.semantic_failure_count >= threshold:
+            executor.fresh_session(node.stage, self.context)
+            self._clear_semantic_failure(node)
+
+    def _clear_semantic_failure(self, node: FlowNode) -> None:
+        if node.fresh_after_same_failures is None:
+            return
+        state = self.context.state
+        if state.semantic_failure_key == self._result_limit_key(node):
+            state.semantic_failure_key = ""
+            state.semantic_failure_fingerprint = ""
+            state.semantic_failure_count = 0
+            self.context.save_state()
+
+    @staticmethod
+    def _semantic_result_fingerprint(result: StageResult) -> str:
+        value = result.data if result.data is not None else result.output
+
+        def normalize(item):
+            if isinstance(item, dict):
+                return {str(key): normalize(item[key]) for key in sorted(item)}
+            if isinstance(item, list):
+                return [normalize(value) for value in item]
+            if isinstance(item, str):
+                return " ".join(item.split())
+            return item
+
+        payload = json.dumps(
+            normalize(value), ensure_ascii=False, sort_keys=True, default=str
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _record_limited_result(self, node: FlowNode, result: StageResult) -> bool:
         if node.max_results is None or result.status not in {"pass", "fail"}:

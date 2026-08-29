@@ -42,7 +42,8 @@ def prompt_stage(prompt: str) -> PromptStage:
     if (
         "Review only. You are a read-only task reviewer" in prompt
         or "Review only. Read-only: do not modify project files." in prompt
-        or "Continue the same review stage." in prompt
+        or "Review only. Read-only means inspect project evidence" in prompt
+        or "Continue the same review stage" in prompt
         or ("same read-only review session" in prompt and "review JSON decision" in prompt)
     ):
         return "review"

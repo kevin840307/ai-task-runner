@@ -111,6 +111,7 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     reviews = [stage for stage in regression if stage["name"] == "review"]
     grills = [stage for stage in regression if stage["name"] == "grill_ai"]
     assert reviews and all(stage["skip_on_error"] is False for stage in reviews)
+    assert all(stage["fresh_after_same_failures"] == 2 for stage in reviews)
     assert len(grills) == 2
     assert all(stage["skip_on_error"] is False for stage in grills)
     assert all(stage["max_results"] == 3 for stage in grills)

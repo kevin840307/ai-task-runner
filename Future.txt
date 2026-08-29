@@ -27,6 +27,7 @@
    - Stage/recover 的 structured feedback 使用 Core 既有 bounded `previous.data`；UI 不建立第二套 Stage data bus 或 recovery context。
    - FlowNode 的 `max_results` 直接沿用 Core Workflow schema/durable state；UI 只編輯該 opt-in 欄位，不建立 Grill/Challenge 專用 loop 或 counter。
    - FlowNode 的 `label` 直接沿用 Core Workflow metadata；UI 以 Stage `status` 顯示通用狀態、以 FlowNode `label` 顯示本次具體工作，不建立 UI 專用 status/label schema。
+   - FlowNode 的 `fresh_after_same_failures` 直接沿用 Core semantic-dead-loop recovery；UI 只編輯這個 opt-in 欄位，不建立 Review 專用 Session/Retry 狀態機。
 
 公開邊界：
 - 執行：`runner.api`（`from runner.api import RunRequest, run`）

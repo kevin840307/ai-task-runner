@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tool import qwen_live_reliability as live
+from runner.workflow.loader import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -455,3 +456,121 @@ def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: li
     )
 
     live.assert_builtin_topology(project, workflow)
+
+@pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
+def test_review_repair_validator_accepts_two_logical_lines_with_optional_final_newline(
+    tmp_path: Path,
+    content: str,
+):
+    validator = tmp_path / "validation.py"
+    validator.write_text(live.REVIEW_REPAIR_VALIDATOR, encoding="utf-8")
+    (tmp_path / "review.txt").write_text(content, encoding="utf-8")
+    state = tmp_path / "state.json"
+    state.write_text("{}", encoding="utf-8")
+
+    result = __import__("subprocess").run(
+        [sys.executable, str(validator), "--project-root", str(tmp_path), "--state-file", str(state)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "VALIDATION_PASSED" in result.stdout
+
+
+def test_review_repair_validator_failure_points_only_to_review_file(tmp_path: Path):
+    validator = tmp_path / "validation.py"
+    validator.write_text(live.REVIEW_REPAIR_VALIDATOR, encoding="utf-8")
+    (tmp_path / "review.txt").write_text("READY\n", encoding="utf-8")
+    state = tmp_path / "state.json"
+    state.write_text("{}", encoding="utf-8")
+
+    result = __import__("subprocess").run(
+        [sys.executable, str(validator), "--project-root", str(tmp_path), "--state-file", str(state)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "modify review.txt only" in result.stdout
+    assert "validation.py" not in result.stdout
+
+
+def test_review_repair_probe_contract_does_not_require_exact_eof_bytes():
+    assert "A standard final newline is allowed." in live.REVIEW_REPAIR_PROMPT
+    assert "Modify review.txt only" in live.REVIEW_REPAIR_PROMPT
+    assert "splitlines()" in live.REVIEW_REPAIR_VALIDATOR
+
+
+def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1])
+        workflow = Path(command[command.index("--workflow") + 1])
+        assert workflow == project / "workflow.yaml"
+        assert workflow.read_text(encoding="utf-8") == live.REVIEW_REPAIR_WORKFLOW
+        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_REPAIR_SEED
+        work = project / ".ai-task-runner"
+        history = work / "debug" / "history"
+        history.mkdir(parents=True)
+        (work / "state.json").write_text(
+            '{"completed": true, "stage": "completed"}', encoding="utf-8"
+        )
+        events = [
+            {"type": "runner.stage", "action": "start", "stage": "review"},
+            {"type": "runner.stage", "action": "finish", "stage": "review", "result": "fail"},
+            {"type": "runner.stage", "action": "start", "stage": "repair"},
+            {
+                "type": "model.prompt",
+                "call_id": "repair-1",
+                "session": "execute-session",
+                "session_mode": "resume",
+            },
+            {"type": "runner.stage", "action": "finish", "stage": "repair", "result": "pass"},
+        ]
+        (work / "log.txt").write_text(
+            "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+        )
+        (history / "repair-1-prompt.txt").write_text(
+            'Continue normal task execution in this same session.\nLatest review: {"missing_items":["REVIEW_REQUIRED"]}\n',
+            encoding="utf-8",
+        )
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        (project / "review.txt").write_text("READY\nREVIEW_REQUIRED\n", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    live.review_repair_prompt_probe(settings(tmp_path), tmp_path)
+
+    # This probe owns review.txt, not the generic health.txt contract.
+    assert not (tmp_path / "review-repair-prompt-probe" / "health.txt").exists()
+
+
+def test_review_repair_probe_uses_deterministic_seed_stage():
+    assert "deterministically seeds review.txt with only READY" in live.REVIEW_REPAIR_PROMPT
+    assert 'type: python_script' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'path: seed_review.py' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'skip_on_error: false' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'recover: [repair]' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'READY\\n' in live.REVIEW_REPAIR_SEED
+    assert "intentionally write only READY" not in live.REVIEW_REPAIR_PROMPT
+
+
+def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
+    workflow_path = tmp_path / "workflow.yaml"
+    workflow_path.write_text(live.REVIEW_REPAIR_WORKFLOW, encoding="utf-8")
+    workflow = load_workflow(workflow_path)
+
+    assert [node["name"] for node in workflow] == ["planning", "validate_file"]
+    assert list(workflow[0]["planner_stages"]) == ["seed", "review"]
+    assert workflow[0]["planner_stages"]["seed"]["type"] == "python_script"
+    assert workflow[0]["planner_stages"]["review"]["recover"][0]["name"] == "repair"
+
+    compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")

@@ -57,6 +57,7 @@ flow:
   - stage: review
     label: Review Project Discovery
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review project discovery.
     recover:
       - stage: run_prompt
@@ -83,6 +84,7 @@ flow:
   - stage: review
     label: Review Project Documentation
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review the project documentation.
     recover:
       - stage: run_prompt
@@ -109,6 +111,7 @@ flow:
   - stage: review
     label: Review E2E SPEC
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review the E2E specification.
     recover:
       - stage: run_prompt
@@ -124,6 +127,7 @@ flow:
   - stage: review
     label: Review Verification Design
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review the verification design.
     recover:
       - stage: run_prompt
@@ -139,6 +143,7 @@ flow:
   - stage: review
     label: Review Regression DSL
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review the generated regression DSL.
     recover:
       - stage: run_prompt
@@ -154,6 +159,7 @@ flow:
   - stage: review
     label: Review Execution & Qualification
     prompt: skills/review.md
+    fresh_after_same_failures: 2
     instructions: Review the regression execution and qualification result.
     recover:
       - stage: run_prompt
