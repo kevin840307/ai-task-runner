@@ -10,6 +10,11 @@ Do not create other project files or folders. Runner-owned diagnostics such as
 `.ai-task-runner/`, `__pycache__/`, and `QWEN.md` may exist and should be
 preserved.
 
+`requests.txt` and `report.json` in the CLI command below are runtime input/output
+examples only. They are not project deliverables and must not remain in the
+project root. If you create them for manual verification, remove them before the
+stage finishes.
+
 `skill_runner.py` must:
 - expose a command line interface: `python skill_runner.py --input requests.txt --output report.json`
 - read UTF-8 text from the input file

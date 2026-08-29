@@ -1,6 +1,6 @@
 # Test Matrix
 
-Version: 1.2.52
+Version: 1.2.53
 
 ## Contract areas
 - CLI/API request validation and YAML script mode.

@@ -159,3 +159,24 @@ def test_all_smoke_and_example_project_roots_have_valid_self_protecting_policy()
         assert policy.resolve() in paths
         for path in paths:
             assert path == project.resolve() or path.is_relative_to(project.resolve())
+
+
+def test_restore_changed_cleans_snapshot_if_restore_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from runner.plugins import safety
+
+    protected = tmp_path / "locked"
+    protected.mkdir()
+    (protected / "keep.txt").write_text("original", encoding="utf-8")
+    saved = snapshot([protected])
+    backup = next(data for _hash, data in saved.values() if isinstance(data, Path))
+    backup_root = backup.parent
+    (protected / "keep.txt").write_text("changed", encoding="utf-8")
+
+    def fail_copytree(*_args, **_kwargs):
+        raise OSError("restore failed")
+
+    monkeypatch.setattr(safety.shutil, "copytree", fail_copytree)
+    with pytest.raises(OSError, match="restore failed"):
+        restore_changed(saved)
+
+    assert not backup_root.exists()

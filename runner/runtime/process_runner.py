@@ -12,13 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL
+from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
+from ..utils.text import bounded_text
 
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
 ACTIVE_PROCESS_FILE = "active-process"
 PROCESS_POLL_INTERVAL = 0.2
+OUTPUT_QUEUE_CHUNKS = 256
+OUTPUT_READ_CHARS = 4096
 WORK_DIR_ENV = "AI_TASK_RUNNER_WORK_DIR"
 
 
@@ -137,7 +140,7 @@ def _communicate_with_watchdog(
     last_activity_at = time.monotonic()
     next_watchdog_at = last_activity_at
     partial = ""
-    output_queue: queue.Queue[str] = queue.Queue()
+    output_queue: queue.Queue[str] = queue.Queue(maxsize=OUTPUT_QUEUE_CHUNKS)
 
     if process.stdout is None:
         output, _ = process.communicate(input=input_text, timeout=timeout or None)
@@ -160,7 +163,7 @@ def _communicate_with_watchdog(
     while True:
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
-        partial += output
+        partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
         changed = False
         if now >= next_watchdog_at:
             changed = _safe_change_detected(change_detected)
@@ -170,7 +173,10 @@ def _communicate_with_watchdog(
 
         if process.poll() is not None:
             reader.join(timeout=0.2)
-            partial += _drain_output(output_queue)[0]
+            partial = bounded_text(
+                partial + _drain_output(output_queue)[0],
+                MAX_PROCESS_OUTPUT_CHARS,
+            )
             return ProcessResult(partial, process.returncode or 0)
 
         if deadline is not None and now >= deadline:
@@ -208,9 +214,8 @@ def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
 
 def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
     try:
-        for line in iter(pipe.readline, ""):
-            if line:
-                output_queue.put(line)
+        while chunk := pipe.read(OUTPUT_READ_CHARS):
+            output_queue.put(chunk)
     except OSError:
         pass
 

@@ -145,25 +145,25 @@ def changed_snapshot_paths(saved: dict[Path, tuple[str | None, ProtectedData]]) 
 
 def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
     changed: list[str] = []
-    backup_roots: list[Path] = []
-    for path, (old_hash, old_data) in saved.items():
-        if isinstance(old_data, Path):
-            backup_roots.append(old_data.parent)
-        if digest(path) == old_hash:
-            continue
-        changed.append(str(path))
-        if path.exists() or path.is_symlink():
-            shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
-        if old_data is None:
-            continue
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(old_data, Path):
-            shutil.copytree(old_data, path, symlinks=True)
-        else:
-            path.write_bytes(old_data)
-    for backup_root in backup_roots:
-        shutil.rmtree(backup_root, ignore_errors=True)
-    return changed
+    backup_roots = [old_data.parent for _path, (_hash, old_data) in saved.items() if isinstance(old_data, Path)]
+    try:
+        for path, (old_hash, old_data) in saved.items():
+            if digest(path) == old_hash:
+                continue
+            changed.append(str(path))
+            if path.exists() or path.is_symlink():
+                shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+            if old_data is None:
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(old_data, Path):
+                shutil.copytree(old_data, path, symlinks=True)
+            else:
+                path.write_bytes(old_data)
+        return changed
+    finally:
+        for backup_root in backup_roots:
+            shutil.rmtree(backup_root, ignore_errors=True)
 
 
 @dataclass
@@ -210,14 +210,20 @@ class SafetyHook:
 
     def after_execution(self, context, token: _Token) -> list[HookViolation]:
         project_changed: list[str] = []
-        if token.before is not None and token.backup is not None:
-            after = tree_manifest(context.root, excluded_dirs(context.root, context.work))
-            project_changed = sorted(path for path in set(token.before) | set(after) if token.before.get(path) != after.get(path))
-            if project_changed:
-                restore_project_changes(context.root, token.backup, project_changed)
-        if token.backup_root is not None:
-            shutil.rmtree(token.backup_root, ignore_errors=True)
-        protected_changed = restore_changed(token.protected_snapshot)
+        protected_changed: list[str] = []
+        try:
+            if token.before is not None and token.backup is not None:
+                after = tree_manifest(context.root, excluded_dirs(context.root, context.work))
+                project_changed = sorted(
+                    path for path in set(token.before) | set(after)
+                    if token.before.get(path) != after.get(path)
+                )
+                if project_changed:
+                    restore_project_changes(context.root, token.backup, project_changed)
+        finally:
+            if token.backup_root is not None:
+                shutil.rmtree(token.backup_root, ignore_errors=True)
+            protected_changed = restore_changed(token.protected_snapshot)
         violations: list[HookViolation] = []
         if protected_changed:
             violations.append(HookViolation("protected file modified and restored: " + ", ".join(protected_changed), "protected", tuple(protected_changed)))

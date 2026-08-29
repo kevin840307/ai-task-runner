@@ -261,3 +261,23 @@ def test_run_process_applies_backend_environment_overrides(tmp_path):
     )
     assert result.return_code == 0
     assert result.output.strip() == "present"
+
+
+def test_watchdog_output_is_bounded_for_noisy_process(tmp_path):
+    from runner.config.defaults import MAX_PROCESS_OUTPUT_CHARS
+    from runner.runtime.process_runner import run_process
+
+    code = "import sys; sys.stdout.write('A' * 250000 + 'END\\n'); sys.stdout.flush()"
+    result = run_process(
+        [sys.executable, "-c", code],
+        tmp_path,
+        10,
+        idle_timeout_after_change=10,
+        change_detected=lambda: False,
+    )
+
+    assert result.return_code == 0
+    assert len(result.output) <= MAX_PROCESS_OUTPUT_CHARS
+    assert result.output.startswith("A")
+    assert result.output.endswith("END\n")
+    assert "omitted" in result.output

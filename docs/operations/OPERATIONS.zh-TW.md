@@ -1,6 +1,6 @@
 # 24H 運行與故障排查
 
-版本：1.2.52
+版本：1.2.53
 
 ## 長時間執行行為
 預設刻意允許模型長時間工作：runtime 7200 秒、planning 600 秒、validator 1200 秒、idle-after-change 900 秒。次數限制預設為 0（不以次數限制）。恢復依 error、session availability、no-progress fingerprint、Review 與 Final Validation 決定。Timeout failure 使用穩定語意 recovery key，同時保留完整 backend stderr 供 Debug，避免 sandbox/container ID 每次改變而讓 same-failure escalation 永遠重新計數。

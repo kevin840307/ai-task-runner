@@ -144,13 +144,15 @@ def main() -> int:
         )
         assert_bad_input_fails()
     except Exception as error:
+        detail = str(error)
         report.error(
             "E001",
             "Skill prompt review workflow example is incomplete",
-            [str(error)],
+            [detail],
             fix=(
-                "Create blueprint.md, skill_runner.py, and README.md; make the CLI parse "
-                "/skill-name request lines and write the expected JSON report."
+                "Fix only the concrete validation failure above and preserve valid existing "
+                "work. Runtime requests.txt/report.json files are not project deliverables; "
+                "remove them if the validator reports them as unexpected."
             ),
         )
     return report.finish()
