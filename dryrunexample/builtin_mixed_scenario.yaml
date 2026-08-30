@@ -1,0 +1,11 @@
+default: pass
+plan_steps:
+  - execute
+  - review
+stages:
+  review:
+    - fail
+    - pass
+  validate_file:
+    - fail
+    - pass

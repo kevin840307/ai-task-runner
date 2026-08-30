@@ -17,7 +17,8 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - Builtin Execute/Review 在同一 Session 已看過完整 Stage contract 後，使用 bounded `continuation_prompt` 只補新的 TODO／Repair／Review evidence，不重送 Goal/rules；第一次與 Fresh/Rebuilt Session 仍取得完整必要 Context。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
-- Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
+- Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
+- Resume 以合法的 project `state.json` 為 authoritative state，只有 primary state 缺失或損壞時才使用 temp backup，避免 crash window 後被 stale backup 回滾。
 - UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
 - 通用 `python_script` Stage 會在 subprocess 執行 project/user Python；Python Validator 仍保留 authoritative deterministic gate 語意。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
@@ -134,3 +135,23 @@ Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Docu
 ### 重複 Semantic FAIL 的 Fresh Session Escape
 
 FlowNode 可選設定 `fresh_after_same_failures: N`。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數；未設定時完全維持舊行為。Builtin Review 預設使用 `2`，避免 Same Session 卡在錯誤 verdict，同時保留 Writer Session。
+
+## Workflow Dry Run
+
+可使用 `tool/workflow_dryrun.py` 在不呼叫真實 Agent 的情況下驗證 `workflow.yaml` 是否能閉環。工具直接重用正式 Workflow Loader、Pipeline、StageResult 與 Stage finish/result handler，只 Mock 最底層 Stage 執行結果，因此不會建立第二套 Workflow Engine。
+
+```bat
+python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --scenario dryrunexample\builtin_mixed_scenario.yaml
+dryrunexample\run_dryrun.bat
+```
+
+`dryrunexample/` 同時示範 builtin workflow、既有自訂 workflow，以及 recover / `max_results` / `fresh_after_same_failures` 的閉環測試。Dry Run 是外部工具；刪除整個工具與範例不會改變 Runner Core 行為。
+自動 Failure Matrix：
+
+```bat
+python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix
+```
+
+`--matrix` 會測 Happy Path，並針對正式 normalized workflow 中每個具有 recover 的 Stage，自動注入一次 `FAIL -> recover -> closure`。非法 Workflow 參數會先由正式 Workflow Loader/schema 擋下；Dry Run 不維護第二套重複的 validation 規則。
+
+

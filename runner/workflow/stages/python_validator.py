@@ -21,6 +21,9 @@ class PythonValidatorStageSpec:
     tolerate_restored_changes: bool = False
     clear_reports: bool = True
     retry: int | None = None
+    retry_attr: str = ""
+    skip_on_error: bool = False
+    track_changes: bool = False
     result_handler: ResultHandler | None = None
 
 
@@ -37,6 +40,9 @@ class PythonValidatorStage:
         self.actor = spec.actor
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.retry = spec.retry
+        self.retry_attr = spec.retry_attr
+        self.skip_on_error = spec.skip_on_error
+        self.track_changes = spec.track_changes
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         if ctx.validator_is_ai and not self.spec.path:

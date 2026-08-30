@@ -239,8 +239,12 @@ class StateStore:
         force_new: bool,
     ) -> RunState:
         if resume:
-            self.restore_backup()
-            return self._load_resume_state()
+            try:
+                return self._load_resume_state()
+            except ConfigurationError as primary_error:
+                if not self.restore_backup():
+                    raise primary_error
+                return self._load_resume_state()
         if not goal:
             raise RunnerError("--goal is required")
         if self.path.exists() and not force_new:
@@ -256,13 +260,15 @@ class StateStore:
         _write_json(self.path, data)
         _write_json(self.backup_path, data)
 
-    def restore_backup(self) -> None:
+    def restore_backup(self) -> bool:
         loaded = self._read_state(self.backup_path, strict=False)
         if loaded is None:
-            return
+            return False
         payload, state = loaded
-        if Path(state.project_root).resolve() == self.root:
-            _write_json(self.path, payload)
+        if Path(state.project_root).resolve() != self.root:
+            return False
+        _write_json(self.path, payload)
+        return True
 
     def _load_resume_state(self) -> RunState:
         if not self.path.is_file():

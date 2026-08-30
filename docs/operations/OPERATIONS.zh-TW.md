@@ -36,3 +36,5 @@ Safety snapshot 暫存目錄使用 `ai-task-runner-readonly-*` / `ai-task-runner
 ### Worker crash 清理
 
 Worker 異常退出後，Supervisor 會依該 Run 實際 durable state 對應的 work directory 清理 active child-process marker；YAML List 的每個 child（`.../script/NNN/active-process`）也包含在內，不只檢查 root work directory。`KeyboardInterrupt` 與 `SystemExit` 屬於控制流程訊號：Stage hook 可先做 best-effort cleanup，但不可將它們轉成可 Retry 的 Stage failure。
+
+一般模式與 watchdog 模式的 subprocess stdout 都會 bounded，避免外部命令大量輸出時讓 Runner 記憶體無限制成長。

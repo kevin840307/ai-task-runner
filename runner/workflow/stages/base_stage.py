@@ -66,6 +66,7 @@ class BaseStage:
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.retry = spec.retry
         self.retry_attr = spec.retry_attr
+        self.track_changes = spec.track_changes
         self.plan_only_stop = spec.plan_only_stop
         self.fresh_session_on_start = spec.fresh_session_on_start
         self._completed_runs: list[StageResult] = []

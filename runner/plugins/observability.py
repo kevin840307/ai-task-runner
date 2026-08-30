@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
+from ..utils.files import atomic_write_text
 from ..utils.logs import append_bounded_log
 
 
@@ -50,23 +50,10 @@ class ObservabilityObserver:
             prompt = root / "current-prompt.txt"
             try:
                 if prompt.exists():
-                    self._atomic_write(root / "last-prompt.txt", prompt.read_text(encoding="utf-8"))
+                    atomic_write_text(root / "last-prompt.txt", prompt.read_text(encoding="utf-8"))
             except OSError:
                 pass
-        self._atomic_write(path, text)
-
-    @staticmethod
-    def _atomic_write(path: Path, text: str) -> None:
-        temp = path.with_suffix(path.suffix + ".tmp")
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temp.write_text(text, encoding="utf-8")
-            os.replace(temp, path)
-        except OSError:
-            try:
-                temp.unlink(missing_ok=True)
-            except OSError:
-                pass
+        atomic_write_text(path, text)
 
     def _write_log(self, event: dict) -> None:
         if self.log_path is None:

@@ -39,3 +39,4 @@ Windows convenience BAT files live under `tool/`: `qwen_live_reliability_0_5h.ba
 
 - Worker-supervisor regression covers Direct/YAML child orphan cleanup by durable state directory.
 - StageExecutor regression requires `KeyboardInterrupt` / `SystemExit` to propagate instead of entering retry/recovery.
+- Stage capability regression covers `retry: 0` fresh-session escalation, `skip_on_error: false`, `track_changes` exposure, and shared `retry_attr` / `skip_on_error` / `track_changes` options for Python Stage types.

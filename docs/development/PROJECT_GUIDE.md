@@ -83,6 +83,8 @@ Ordinary AI work is a `BaseStage` YAML instance; `type` defaults to `base` and i
 
 A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. Put state reduction in its injected result handler and put composition in generic Pipeline/routing data.
 
+Common Stage execution capabilities are owned by `StageExecutor`, not reimplemented inside each Stage. Registered Stage specs may expose `retry`, `retry_attr`, `skip_on_error`, `track_changes`, and `tolerate_restored_changes`; AI-backed Stages additionally own session/prompt capabilities such as `fresh_session_on_start`, `fresh_session_each_run`, `prompt`, and `parser`. Routing-only fields (`recover`, `max_results`, `fresh_after_same_failures`, `restart_at`, `label`) belong to `FlowNode` and are removed before Stage construction. `retry: 0` disables same-session retry and therefore escalates an error directly to the existing fresh-session recovery path; a zero retry budget does not permit `skip_on_error`.
+
 If the requirement is only conditional text/formatting, use Jinja. Only genuinely computed planning-specific context belongs in `PlanStage`.
 
 ## Plugin / event boundary

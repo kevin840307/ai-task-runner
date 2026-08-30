@@ -6,6 +6,8 @@
 Runner state 放在 project-relative work dir（預設 `.ai-task-runner`）。內容包含 run/cycle identity、current task index、task status/attempts/review、session id、progress/recovery metadata 與 Resume 需要的 completion state。實際 JSON 是內部 persistence format；Integration 應優先使用 Public API/Event，不要直接修改 state。
 
 ## Resume 規則
+合法的 project `state.json` 是 authoritative state；只有 primary state 缺失或損壞時才會還原 temp backup，因此較舊的 backup 不會覆蓋較新的 atomic primary write。
+
 `--resume` 載入相容 state。因為程式重啟會使本機 `AIClient` 消失，只有這條路徑允許用已保存的遠端 session id 重建新 client；同一個執行程序內的 continuation 一律重用既有 client/session。`--force-new` 開新 run。Script item 各自使用 nested state dir。Executor session id 在完成 TODO 後會保留，下一個 TODO 可在 session 仍可用時沿用；只有明確 rebuild/completion 條件才清除。真正 durable source of truth 是 project files + Runner state，不是 AI chat memory。
 
 ## JSON Events

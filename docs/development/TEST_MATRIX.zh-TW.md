@@ -39,3 +39,4 @@ Windows 便利 BAT 放在 `tool/`：`qwen_live_reliability_0_5h.bat` 是目標 9
 
 - Worker Supervisor regression 需涵蓋依 durable state directory 清理 Direct/YAML child orphan process。
 - StageExecutor regression 需確認 `KeyboardInterrupt` / `SystemExit` 直接往上傳遞，不進入 retry/recovery。
+- Stage capability regression 需涵蓋 `retry: 0` 直接升級 Fresh Session、`skip_on_error: false`、`track_changes` exposure，以及 Python Stage 共用的 `retry_attr` / `skip_on_error` / `track_changes` 選項。

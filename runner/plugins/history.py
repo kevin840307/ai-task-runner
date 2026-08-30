@@ -1,24 +1,14 @@
 """Optional bounded model-call history observer."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from ..utils.files import atomic_write_text
 
 _MAX_CALLS = 100
 _MAX_BYTES = 50 * 1024 * 1024
 
 
-def _write(path: Path, text: str) -> None:
-    temp = path.with_suffix(path.suffix + ".tmp")
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temp.write_text(text, encoding="utf-8")
-        os.replace(temp, path)
-    except OSError:
-        try:
-            temp.unlink(missing_ok=True)
-        except OSError:
-            pass
 
 
 def _pairs(history: Path) -> list[tuple[str, list[Path]]]:
@@ -65,13 +55,13 @@ class HistoryObserver:
         if kind == "model.parse_error":
             pairs = _pairs(history)
             if pairs:
-                _write(history / f"{pairs[-1][0]}-result.txt", text)
+                atomic_write_text(history / f"{pairs[-1][0]}-result.txt", text)
             return
         call_id = str(event.get("call_id", ""))
         if not call_id:
             return
         suffix = "prompt" if kind == "model.prompt" else "result"
-        _write(history / f"{call_id}-{suffix}.txt", text)
+        atomic_write_text(history / f"{call_id}-{suffix}.txt", text)
         _trim(history)
 
 

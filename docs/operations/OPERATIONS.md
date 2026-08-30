@@ -36,3 +36,5 @@ Safety snapshot temp directories use `ai-task-runner-readonly-*` / `ai-task-runn
 ### Worker crash cleanup
 
 After an abnormal worker exit, the supervisor cleans active child-process markers from the actual durable work directories returned for that Run. This includes each YAML List child (`.../script/NNN/active-process`), not only the root work directory. `KeyboardInterrupt` and `SystemExit` are control-flow signals: Stage hooks may perform best-effort cleanup, but these signals are never converted into retryable Stage failures.
+
+All subprocess stdout collection is bounded in both normal and watchdog modes, so a noisy external command cannot grow Runner memory without limit.

@@ -60,3 +60,17 @@ def copy_ignore(excluded: set[str]):
         base = Path(source)
         return [name for name in names if name in excluded and (base / name).is_dir()]
     return ignore
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Best-effort atomic UTF-8 text write for non-durable plugin snapshots."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass

@@ -83,6 +83,8 @@ Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，
 
 Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 放在注入的 result handler，串接放在通用 Pipeline/routing data。
 
+共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。已註冊 Stage 的 spec 可依需要 expose `retry`、`retry_attr`、`skip_on_error`、`track_changes`、`tolerate_restored_changes`；AI-backed Stage 另外擁有 `fresh_session_on_start`、`fresh_session_each_run`、`prompt`、`parser` 等 Session／Prompt 能力。Routing-only 欄位（`recover`、`max_results`、`fresh_after_same_failures`、`restart_at`、`label`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
+
 如果只是字串條件/format，優先用 Jinja；只有真正需要計算的 planning-specific context 才放在 `PlanStage`。
 
 ## Plugin / Event 邊界

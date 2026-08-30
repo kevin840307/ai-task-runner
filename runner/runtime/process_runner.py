@@ -76,24 +76,14 @@ def run_process(
     _active_process(process, True)
     _process_event("runner.process.start", process, command, cwd)
     try:
-        if idle_timeout_after_change and change_detected is not None:
-            return _communicate_with_watchdog(
-                process,
-                timeout,
-                idle_timeout_after_change,
-                change_detected,
-                input_text,
-                watchdog_interval,
-            )
-
-        try:
-            output, _ = process.communicate(input=input_text, timeout=timeout or None)
-            return ProcessResult(output or "", process.returncode or 0)
-        except subprocess.TimeoutExpired as error:
-            terminate_process_tree(process)
-            output = _drain_after_termination(process)
-            partial = output or _text_output(error.output)
-            return ProcessResult(partial, process.returncode or -1, timed_out=True)
+        return _communicate_bounded(
+            process,
+            timeout,
+            input_text,
+            idle_timeout_after_change=idle_timeout_after_change,
+            change_detected=change_detected,
+            watchdog_interval=watchdog_interval,
+        )
     finally:
         if process.poll() is None:
             terminate_process_tree(process)
@@ -136,6 +126,27 @@ def _communicate_with_watchdog(
     input_text: str | None,
     watchdog_interval: float,
 ) -> ProcessResult:
+    """Compatibility wrapper around the shared bounded process collector."""
+    return _communicate_bounded(
+        process,
+        timeout,
+        input_text,
+        idle_timeout_after_change=idle_timeout_after_change,
+        change_detected=change_detected,
+        watchdog_interval=watchdog_interval,
+    )
+
+
+def _communicate_bounded(
+    process: subprocess.Popen[str],
+    timeout: int,
+    input_text: str | None,
+    *,
+    idle_timeout_after_change: float = 0,
+    change_detected: Callable[[], bool] | None = None,
+    watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL,
+) -> ProcessResult:
+    """Collect stdout through one bounded streaming path with optional idle watchdog."""
     deadline = time.monotonic() + timeout if timeout else None
     last_activity_at = time.monotonic()
     next_watchdog_at = last_activity_at
@@ -144,7 +155,10 @@ def _communicate_with_watchdog(
 
     if process.stdout is None:
         output, _ = process.communicate(input=input_text, timeout=timeout or None)
-        return ProcessResult(output or "", process.returncode or 0)
+        return ProcessResult(
+            bounded_text(output or "", MAX_PROCESS_OUTPUT_CHARS),
+            process.returncode or 0,
+        )
 
     if input_text is not None:
         threading.Thread(
@@ -159,40 +173,83 @@ def _communicate_with_watchdog(
         daemon=True,
     )
     reader.start()
+    watchdog_enabled = idle_timeout_after_change > 0 and change_detected is not None
 
     while True:
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
         partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
-        changed = False
-        if now >= next_watchdog_at:
-            changed = _safe_change_detected(change_detected)
-            next_watchdog_at = now + watchdog_interval
-        if changed or had_output:
-            last_activity_at = now
+
+        if watchdog_enabled:
+            changed = False
+            if now >= next_watchdog_at:
+                changed = _safe_change_detected(change_detected)
+                next_watchdog_at = now + watchdog_interval
+            if changed or had_output:
+                last_activity_at = now
 
         if process.poll() is not None:
-            reader.join(timeout=0.2)
-            partial = bounded_text(
-                partial + _drain_output(output_queue)[0],
-                MAX_PROCESS_OUTPUT_CHARS,
-            )
+            partial = _finish_reader(reader, output_queue, partial)
             return ProcessResult(partial, process.returncode or 0)
 
         if deadline is not None and now >= deadline:
-            return _terminate_timeout(process, partial, idle=False)
-        if now - last_activity_at >= idle_timeout_after_change:
-            return _terminate_timeout(process, partial, idle=True)
-
-        time.sleep(
-            _next_poll_timeout(
-                now,
-                deadline,
-                last_activity_at,
-                idle_timeout_after_change,
+            terminate_process_tree(process)
+            partial = _finish_reader(reader, output_queue, partial)
+            return ProcessResult(
+                partial,
+                process.returncode or -1,
+                timed_out=True,
             )
-        )
 
+        if watchdog_enabled and now - last_activity_at >= idle_timeout_after_change:
+            terminate_process_tree(process)
+            partial = _finish_reader(reader, output_queue, partial)
+            return ProcessResult(
+                partial,
+                process.returncode or -1,
+                timed_out=True,
+                idle_timed_out=True,
+            )
+
+        time.sleep(_next_stream_poll_timeout(
+            now,
+            deadline,
+            last_activity_at if watchdog_enabled else None,
+            idle_timeout_after_change if watchdog_enabled else 0,
+        ))
+
+
+def _finish_reader(
+    reader: threading.Thread,
+    output_queue: queue.Queue[str],
+    partial: str,
+) -> str:
+    deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
+    while reader.is_alive() and time.monotonic() < deadline:
+        partial = bounded_text(
+            partial + _drain_output(output_queue)[0],
+            MAX_PROCESS_OUTPUT_CHARS,
+        )
+        reader.join(timeout=0.01)
+    return bounded_text(
+        partial + _drain_output(output_queue)[0],
+        MAX_PROCESS_OUTPUT_CHARS,
+    )
+
+
+def _next_stream_poll_timeout(
+    now: float,
+    deadline: float | None,
+    last_activity_at: float | None,
+    idle_timeout_after_change: float,
+) -> float:
+    timeout = PROCESS_POLL_INTERVAL
+    if deadline is not None:
+        timeout = min(timeout, max(0.01, deadline - now))
+    if last_activity_at is not None:
+        idle_deadline = last_activity_at + idle_timeout_after_change
+        timeout = min(timeout, max(0.01, idle_deadline - now))
+    return timeout
 
 
 def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
@@ -230,40 +287,11 @@ def _drain_output(output_queue: queue.Queue[str]) -> tuple[str, bool]:
     return "".join(chunks), bool(chunks)
 
 
-def _next_poll_timeout(
-    now: float,
-    deadline: float | None,
-    last_activity_at: float,
-    idle_timeout_after_change: float,
-) -> float:
-    timeout = PROCESS_POLL_INTERVAL
-    if deadline is not None:
-        timeout = min(timeout, max(0.01, deadline - now))
-    idle_deadline = last_activity_at + idle_timeout_after_change
-    timeout = min(timeout, max(0.01, idle_deadline - now))
-    return timeout
-
-
 def _safe_change_detected(change_detected: Callable[[], bool]) -> bool:
     try:
         return change_detected()
     except OSError:
         return False
-
-
-def _terminate_timeout(
-    process: subprocess.Popen[str],
-    partial: str,
-    idle: bool,
-) -> ProcessResult:
-    terminate_process_tree(process)
-    output = _drain_after_termination(process) or partial
-    return ProcessResult(
-        output,
-        process.returncode or -1,
-        timed_out=True,
-        idle_timed_out=idle,
-    )
 
 
 def terminate_process_tree(process: subprocess.Popen[str]) -> None:
@@ -291,33 +319,3 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> None:
             process.kill()
         except OSError:
             pass
-
-
-def _drain_after_termination(process: subprocess.Popen[str]) -> str:
-    """Collect remaining output without trusting descendants to close pipes."""
-    try:
-        output, _ = process.communicate(timeout=TERMINATION_GRACE_SECONDS)
-        return output or ""
-    except subprocess.TimeoutExpired:
-        if process.stdout is not None:
-            try:
-                process.stdout.close()
-            except OSError:
-                pass
-        try:
-            process.kill()
-        except OSError:
-            pass
-        try:
-            process.wait(timeout=TERMINATION_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            pass
-        return ""
-
-
-def _text_output(value: str | bytes | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
