@@ -163,3 +163,13 @@ python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --jso
 
 ### Command-backed Stages
 `command` 是唯一的 child-process Stage，統一執行 Python script、File Validator 與任意 argv，並共用 cwd、timeout、output capture、process-tree cleanup 與 exit-code semantics。
+
+## 本機 UI
+
+提供獨立入口的輕量 GPT-style 本機 UI：
+
+```bash
+python ui/main.py
+```
+
+UI 不 import Runner Core；它只啟動既有 CLI，並讀取 Project `.ai-task-runner` runtime files。一個 Project 對應一條持久對話。

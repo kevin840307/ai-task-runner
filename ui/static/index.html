@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Task Runner</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">AI Task Runner</div>
+    <button id="openProject" class="new-project">＋ Open Project</button>
+    <div id="projects" class="projects"></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="project-heading">
+        <h1 id="projectName">選擇一個 Project</h1>
+        <span id="projectPath"></span>
+      </div>
+      <div class="runtime-actions">
+        <span id="statusBadge" class="badge idle">Idle</span>
+        <button id="resumeButton" class="ghost" hidden>Resume</button>
+        <button id="rerunButton" class="ghost" hidden>Rerun</button>
+        <button id="stopButton" class="danger" hidden>Stop</button>
+      </div>
+    </header>
+
+    <section id="emptyState" class="empty-state">
+      <div class="empty-icon">⌘</div>
+      <h2>Open a project to start</h2>
+      <p>一個 Project 對應一條持久對話。</p>
+    </section>
+
+    <section id="chatShell" class="chat-shell" hidden>
+      <div id="messages" class="messages"></div>
+      <div id="liveCard" class="live-card" hidden>
+        <div class="live-head">
+          <span class="pulse"></span>
+          <strong id="liveTitle">Running</strong>
+          <span id="progressText"></span>
+        </div>
+        <div id="liveMeta" class="live-meta"></div>
+        <pre id="liveOutput"></pre>
+      </div>
+
+      <div class="composer-wrap">
+        <div class="options-line">
+          <select id="backend">
+            <option value="">Default backend</option>
+            <option value="qwen">qwen</option>
+            <option value="opencode">opencode</option>
+          </select>
+          <input id="validator" placeholder="Validator path (optional)" />
+          <input id="workflow" placeholder="Workflow path (optional)" />
+        </div>
+        <div class="composer">
+          <textarea id="messageInput" rows="2" placeholder="Ask AI Task Runner to work on this project..."></textarea>
+          <button id="sendButton" class="send">↑</button>
+        </div>
+        <div id="errorText" class="error-text"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

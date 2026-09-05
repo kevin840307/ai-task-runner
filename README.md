@@ -170,3 +170,13 @@ For external UI/AI editors, `python tool/workflow_catalog.py` emits the data-onl
 
 ### Command-backed Stages
 `command` is the single child-process Stage for Python scripts, validators, and arbitrary argv. It shares one boundary for cwd, timeout, output capture, process-tree cleanup, and exit-code semantics.
+
+## Local UI
+
+A lightweight GPT-style local UI is available as a separate entry point:
+
+```bash
+python ui/main.py
+```
+
+The UI does not import Runner Core. It launches the existing CLI and reads the project `.ai-task-runner` runtime files. One project maps to one persistent UI conversation.
