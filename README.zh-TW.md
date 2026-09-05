@@ -20,7 +20,7 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
 - Resume 以合法的 project `state.json` 為 authoritative state，只有 primary state 缺失或損壞時才使用 temp backup，避免 crash window 後被 stale backup 回滾。
 - UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
-- 本機 detached UI 可以完全不 import Runner：直接讀 project work directory 的 runtime visibility files（`state.json` 看目前 durable 狀態、`stream.log` 看最近 bounded subprocess output、`log.txt` / `debug/` 做診斷）。`stream.log` 只供顯示，絕不可改變 Runner 語意。
+- 本機 detached UI 可以完全不 import Runner：直接讀 project work directory 的 runtime visibility files（`state.json` 看目前 durable 狀態、`runner-process.json` 看 active Supervisor/Worker PID identity、`stream.log` 看最近 bounded subprocess output、`log.txt` / `debug/` 做診斷）。`stream.log` 與 `runner-process.json` 只提供 visibility/control metadata，絕不可改變 Workflow 語意。本機 detached UI 若要停止 Runtime，只需建立 `.ai-task-runner/stop.request`；Supervisor 會 consume request、終止目前 Worker/其 owned child process，並以 130 結束。Resume / Rerun 不使用 request file，而是重新啟動 CLI 並使用 `--resume` / `--force-new`。
 - 通用 `command` Stage 統一負責所有 subprocess execution，包括 project/user Python 與 deterministic File Validator。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。

@@ -210,3 +210,153 @@ def test_cleanup_orphans_use_each_state_work_directory(tmp_path, monkeypatch):
     assert str(child) == "200"
     assert not first_active.exists()
     assert second_active.exists()
+
+
+def test_supervisor_writes_and_removes_runtime_process_marker(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    request = _request(tmp_path)
+    worker = FakeWorker(0, 4242)
+    seen = {}
+
+    def fake_popen(command, env):
+        return worker
+
+    original_wait = worker.wait
+
+    def wait_and_capture():
+        marker = work / supervisor_module.RUNNER_PROCESS_FILE
+        assert marker.is_file()
+        import json
+        seen.update(json.loads(marker.read_text(encoding="utf-8")))
+        return original_wait()
+
+    worker.wait = wait_and_capture
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [],
+    )
+
+    assert result == 0
+    assert seen["schema_version"] == 1
+    assert seen["supervisor_pid"] == os.getpid()
+    assert seen["worker_pid"] == 4242
+    assert seen["project_root"] == str(tmp_path.resolve())
+    assert seen["work_dir"] == ".ai-task-runner"
+    assert seen["started_at"] > 0
+    assert not (work / supervisor_module.RUNNER_PROCESS_FILE).exists()
+
+
+def test_supervisor_runtime_marker_tracks_restarted_worker(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text("{}", encoding="utf-8")
+    request = _request(tmp_path)
+    workers = iter([FakeWorker(9, 101), FakeWorker(0, 202)])
+    seen = []
+
+    def fake_popen(command, env):
+        worker = next(workers)
+        original_wait = worker.wait
+
+        def wait_and_capture():
+            import json
+            marker = work / supervisor_module.RUNNER_PROCESS_FILE
+            seen.append(json.loads(marker.read_text(encoding="utf-8"))["worker_pid"])
+            return original_wait()
+
+        worker.wait = wait_and_capture
+        return worker
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(supervisor_module, "cleanup_orphans", lambda *args: None)
+    monkeypatch.setattr(supervisor_module, "_report_retry", lambda *args: None)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 0
+    assert seen == [101, 202]
+    assert not (work / supervisor_module.RUNNER_PROCESS_FILE).exists()
+
+
+def test_supervisor_stop_request_terminates_worker_and_cleans_children(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text("{}", encoding="utf-8")
+    request = _request(tmp_path)
+    stop_request = work / supervisor_module.STOP_REQUEST_FILE
+    calls = []
+
+    class RunningWorker(FakeWorker):
+        def __init__(self):
+            super().__init__(0, 31337)
+            self.poll_count = 0
+
+        def poll(self):
+            self.poll_count += 1
+            if self.poll_count == 1:
+                stop_request.write_text("stop\n", encoding="utf-8")
+            return None
+
+    worker = RunningWorker()
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", lambda command, env: worker)
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        supervisor_module,
+        "cleanup_orphans",
+        lambda states, pid: calls.append((tuple(states), pid)),
+    )
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 130
+    assert worker.terminated is True
+    assert calls == [((state,), 31337)]
+    assert not stop_request.exists()
+    assert not (work / supervisor_module.RUNNER_PROCESS_FILE).exists()
+
+
+def test_supervisor_clears_stale_stop_request_before_new_run(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    stop_request = work / supervisor_module.STOP_REQUEST_FILE
+    stop_request.write_text("stale\n", encoding="utf-8")
+    request = _request(tmp_path)
+    worker = FakeWorker(0, 77)
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", lambda command, env: worker)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [],
+    )
+
+    assert result == 0
+    assert not stop_request.exists()

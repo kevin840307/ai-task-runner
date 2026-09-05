@@ -32,6 +32,8 @@ History 上限為最近 100 calls、50 MiB 總量、單一 history entry 2 MiB�
 ## 發生問題時提供什麼
 提供 state/event log；若問題與即時輸出有關，再附 `stream.log`；另外提供 `current-prompt.txt`、`last-prompt.txt`、`last-result.txt`、相關 history pair、執行指令與畫面錯誤，通常即可還原 stage -> prompt -> model result -> parser/backend decision -> Runner recovery。
 
+`runner-process.json` 是 detached UI 使用的最小 Runtime identity marker，由最上層 Supervisor 管理，保存 `supervisor_pid`、目前 `worker_pid`、`started_at`、`project_root`、`work_dir`；Worker restart 時更新 `worker_pid`，Supervisor 正常結束時移除。既有 `active-process` 維持 Runner 內部 child/orphan cleanup 用途。PID metadata 不屬於 Workflow state，不得影響 PASS/FAIL、Retry、Session、routing 或 Resume。要停止 detached run，只需建立空的 `.ai-task-runner/stop.request`；Supervisor 在 Worker 執行期間與 restart backoff 期間都會檢查，收到後終止 Worker / owned child process、consume request，並以 130 結束。要繼續則以 `--resume` 重新啟動；要從頭重跑則以 `--force-new` 重新啟動。
+
 API/network/rate-limit 暫時性異常使用逐步 backoff，但不耗盡 model/task recovery 次數，並保留 current state/session；持續的模型/session 異常才走 reuse-then-rebuild。
 
 Safety snapshot 暫存目錄使用 `ai-task-runner-readonly-*` / `ai-task-runner-protect-*`。正常 Stage 結束會立即清除；Runner 啟動時也會清除 stale abandoned snapshot，避免異常中止後長期累積。

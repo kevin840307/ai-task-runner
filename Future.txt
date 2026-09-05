@@ -23,8 +23,10 @@
    - UI 可依 Project 建立 Conversation / Message / Run 關聯，類似 ChatGPT。
    - Project / Conversation / Message metadata 屬於 UI storage，不進 Runner Core / state.json。
    - 目前產品模型是一個 Project 同時間最多一個 Active Runtime；Conversation/Message 可以多筆，但不代表同 Project 內平行啟動多個 Runtime。
-   - 本機 detached UI 不 import Runner Core；顯示目前執行狀態時讀取 `.ai-task-runner/state.json` 的必要欄位，顯示即時 Agent/subprocess 輸出時讀取 `.ai-task-runner/stream.log`，需要歷史診斷才讀 `log.txt` / `debug/`。
+   - 本機 detached UI 不 import Runner Core；顯示目前執行狀態時讀取 `.ai-task-runner/state.json` 的必要欄位，以 `.ai-task-runner/runner-process.json` 辨識目前 Supervisor/Worker PID，顯示即時 Agent/subprocess 輸出時讀取 `.ai-task-runner/stream.log`，需要歷史診斷才讀 `log.txt` / `debug/`。
    - `stream.log` 是 bounded、可丟棄的 current-output visibility file；每個 subprocess 開始時清空，執行中持續覆寫最近輸出，不屬於 Resume state，也不可用來決定 PASS/FAIL、Retry、Session 或 routing。
+   - `runner-process.json` 由最上層 Supervisor 建立，保存 Supervisor PID、目前 Worker PID、started_at、project_root、work_dir；Worker crash/restart 時更新 Worker PID，正常結束時刪除。現有 `active-process` 不改，仍只供 Runner 內部 orphan child cleanup。UI Stop 必須以 runtime process identity 為準，不得把 log/stream 當 process ownership 判斷。
+   - Runtime control 只保留 `.ai-task-runner/stop.request`：UI 建立 request，Supervisor 在 Worker 執行與 restart backoff 期間 consume 並停止整棵 owned runtime；Resume / Rerun 仍重新 launch CLI，使用 `--resume` / `--force-new`，不新增 resume/rerun IPC。
    - Programmatic/remote integration 仍使用 `runner.api` event callback / `--json-events`；不要讓 detached UI 的檔案讀取取代正式執行 API。
    - 若未來真的需要多 Runtime，優先一個 Run 一個 worker process；不要只為 UI 增加 in-process global concurrency。
    - Stage/recover 的 structured feedback 使用 Core 既有 bounded `previous.data`；UI 不建立第二套 Stage data bus 或 recovery context。

@@ -46,6 +46,8 @@ UI 是 Adapter，不是 execution Plugin。Programmatic UI／CLI／Skill 可以�
 
 Runtime visibility 與 editable resource／execution control 分離。`state.json` 仍是 Runner-owned durable persistence；detached UI 只能唯讀自己需要的穩定欄位，不得修改。`stream.log` 是最近 subprocess stdout 的 bounded、可丟棄 snapshot，每個 subprocess 開始時重置，執行中持續更新。`log.txt` 與 `debug/` 維持 diagnostic/history 用途。這些 visibility files 都不是 command channel，也不是 PASS/FAIL/routing 的真相來源。
 
+`runner-process.json` 是 detached UI 使用的最小 Runtime identity marker，由最上層 Supervisor 管理，保存 `supervisor_pid`、目前 `worker_pid`、`started_at`、`project_root`、`work_dir`；Worker restart 時更新 `worker_pid`，Supervisor 正常結束時移除。既有 `active-process` 維持 Runner 內部 child/orphan cleanup 用途。PID metadata 不屬於 Workflow state，不得影響 PASS/FAIL、Retry、Session、routing 或 Resume。Runtime control 刻意維持最小：detached UI 可在 work directory 建立 `stop.request`；Supervisor 會輪詢並 consume request，終止目前 Worker 與其 owned child process，刪除 request，最後以 130 結束。Resume / Rerun 維持一般 CLI launch，分別使用 `--resume` / `--force-new`；不存在 `resume.request` / `rerun.request`。
+
 Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file` 持久化到該 Run work directory。Workflow Stage Prompt 維持 content-addressed；Run-level Goal／Final-AI Prompt 使用固定語意資源名稱。即使 UI/VS Code 修改或刪除來源檔，active Run 與 worker crash 後的 `--resume` 都沿用原本 Workflow／Goal／Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
 
 ## Workflow 契約

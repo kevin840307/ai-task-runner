@@ -21,6 +21,8 @@ Human UI 是同一份 state/event 的視覺化。Backend detail 的多行只在 
 ### Detached runtime visibility
 `stream.log` 是本機 detached UI 的 live-output surface，只保存最近 bounded subprocess stdout。每個新 subprocess 開始時會清空，執行中收到輸出就持續更新。它刻意是可丟棄資料：不是 Resume state、不是 event history，也不是 execution-control channel；需要歷史或診斷時使用 `log.txt` / `debug/`。
 
+`runner-process.json` 是 detached UI 使用的最小 Runtime identity marker，由最上層 Supervisor 管理，保存 `supervisor_pid`、目前 `worker_pid`、`started_at`、`project_root`、`work_dir`；Worker restart 時更新 `worker_pid`，Supervisor 正常結束時移除。既有 `active-process` 維持 Runner 內部 child/orphan cleanup 用途。PID metadata 不屬於 Workflow state，不得影響 PASS/FAIL、Retry、Session、routing 或 Resume。`stop.request` 是唯一的 file-based runtime control contract：檔案存在代表要求最上層 Supervisor 停止目前 Worker 與 owned child process、consume request，並以 130 結束；新 Supervisor run 啟動前會先清除 stale request。Resume / Rerun 是新的 CLI launch（`--resume` / `--force-new`），不是 control file。
+
 ## State ownership
 AI Agent 不可修改 Runner state。Project policy 自動 protected；Runner 自己對 debug/state 的寫入由 Runner 擁有，且不算一般 project change。
 

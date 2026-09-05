@@ -19,6 +19,8 @@ Human output is a rendering of the same state/event information. Multiline backe
 ### Detached runtime visibility
 `stream.log` is the local detached-UI surface for live output. It contains only the most recent bounded subprocess stdout, is cleared when a new subprocess starts, and is continuously refreshed while output arrives. It is intentionally disposable: it is not resume state, not an event history, and not an execution-control channel. `log.txt` / `debug/` provide history and diagnostics when needed.
 
+`runner-process.json` is a small detached-UI runtime identity marker owned by the top-level Supervisor. It stores `supervisor_pid`, the current `worker_pid`, `started_at`, `project_root`, and `work_dir`; worker restart updates `worker_pid`, and normal Supervisor exit removes the marker. The existing `active-process` marker remains Runner-internal child/orphan cleanup state. PID metadata is never Workflow state and must not drive PASS/FAIL, retry, session, routing, or resume decisions. `stop.request` is the only file-based runtime control contract: its presence asks the top-level Supervisor to stop the current Worker and owned child process, consume the request, and exit 130. A stale request is cleared before a new Supervisor run. Resume and rerun are new launches (`--resume` / `--force-new`), not control files.
+
 ## State ownership
 AI agents must not edit Runner state. The project policy file is automatically protected; Runner-managed debug/state mutations are owned by the Runner and are excluded from normal project-change semantics.
 

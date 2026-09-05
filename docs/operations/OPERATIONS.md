@@ -32,6 +32,8 @@ Human status/detail text is converted to one line before spinner rendering so em
 ## What to collect for a bug
 Provide state/event log, `stream.log` when live-output behavior matters, `current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, relevant history pair, command line, and visible error. This normally reconstructs stage -> prompt -> model result -> parser/backend decision -> Runner recovery.
 
+`runner-process.json` is a small detached-UI runtime identity marker owned by the top-level Supervisor. It stores `supervisor_pid`, the current `worker_pid`, `started_at`, `project_root`, and `work_dir`; worker restart updates `worker_pid`, and normal Supervisor exit removes the marker. The existing `active-process` marker remains Runner-internal child/orphan cleanup state. PID metadata is never Workflow state and must not drive PASS/FAIL, retry, session, routing, or resume decisions. To stop a detached run, create an empty `.ai-task-runner/stop.request`; the Supervisor checks it while the Worker is running and during restart backoff, terminates the Worker/owned child process, consumes the request, and exits 130. To continue, relaunch with `--resume`; to rerun from scratch, relaunch with `--force-new`.
+
 Transient API/network/rate-limit outages use bounded exponential backoff per delay interval but no retry-count exhaustion; they preserve current state/session. Persistent model/session problems use the normal reuse-then-rebuild policy.
 
 Safety snapshot temp directories use `ai-task-runner-readonly-*` / `ai-task-runner-protect-*`. Normal Stage completion removes them immediately; startup also removes stale abandoned snapshots so abnormal process termination does not accumulate them indefinitely.
