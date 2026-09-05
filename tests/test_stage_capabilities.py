@@ -67,14 +67,13 @@ def test_base_stage_exposes_track_changes_capability():
 
 def test_python_stage_specs_expose_common_execution_capabilities():
     catalog = stage_catalog()
-    for stage_type in ("python", "python_script"):
-        options = {item["name"] for item in catalog[stage_type]["options"]}
-        assert {"retry", "retry_attr", "skip_on_error", "track_changes", "tolerate_restored_changes"} <= options
+    options = {item["name"] for item in catalog["python"]["options"]}
+    assert {"retry", "retry_attr", "skip_on_error", "track_changes", "tolerate_restored_changes"} <= options
 
 
-def test_python_script_stage_receives_common_execution_capabilities():
+def test_python_stage_receives_common_execution_capabilities():
     stage = create_stage({
-        "type": "python_script",
+        "type": "python",
         "name": "script",
         "status": "script",
         "path": "tool.py",
@@ -113,12 +112,13 @@ def test_skip_on_error_false_never_converts_error_to_pass(tmp_path):
     assert result.skipped is False
 
 
-def test_python_validator_receives_common_execution_capabilities():
+def test_python_file_validator_receives_common_execution_capabilities():
     stage = create_stage({
         "type": "python",
         "name": "validate",
         "status": "validate",
         "path": "validate.py",
+        "validator": "file",
         "retry": 1,
         "retry_attr": "review_retries",
         "skip_on_error": True,
@@ -132,8 +132,8 @@ def test_python_validator_receives_common_execution_capabilities():
     assert stage.tolerate_restored_changes is True
 
 
-def test_python_validator_run_uses_process_result(monkeypatch, tmp_path):
-    from runner.workflow.stages import python_validator as module
+def test_python_file_validator_run_uses_process_result(monkeypatch, tmp_path):
+    from runner.workflow.stages import python_stage as module
 
     validator = tmp_path / "validate.py"
     validator.write_text("print('ok')", encoding="utf-8")
@@ -143,22 +143,65 @@ def test_python_validator_run_uses_process_result(monkeypatch, tmp_path):
     ctx.config.validator_timeout = 10
     monkeypatch.setattr(module, "run_python", lambda *args, **kwargs: SimpleNamespace(return_code=0, output="VALID"))
 
-    stage = create_stage({"type": "python", "name": "validate", "status": "validate", "path": str(validator)})
+    stage = create_stage({"type": "python", "name": "validate", "status": "validate", "validator": "file", "path": str(validator)})
     result = stage.run(ctx)
 
     assert result.status == "pass"
     assert result.output == "VALID"
 
 
-def test_python_script_run_uses_process_result(monkeypatch, tmp_path):
-    from runner.workflow.stages import python_script as module
+def test_generic_python_run_uses_process_result(monkeypatch, tmp_path):
+    from runner.workflow.stages import python_stage as module
 
     ctx = context(tmp_path)
     ctx.config.agent_timeout = 10
     monkeypatch.setattr(module, "run_python", lambda *args, **kwargs: SimpleNamespace(return_code=1, output="FAIL"))
-    stage = create_stage({"type": "python_script", "name": "script", "status": "script", "path": "tool.py"})
+    stage = create_stage({"type": "python", "name": "script", "status": "script", "path": "tool.py"})
 
     result = stage.run(ctx)
 
     assert result.status == "fail"
     assert result.output == "FAIL"
+
+
+def test_python_file_validator_and_ai_validator_are_distinct_stages(tmp_path):
+    from runner.workflow.loader import load_workflow
+    from runner.workflow.stages import BaseStage, PythonStage
+
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  validate_file:
+    type: python
+    validator: file
+    status: File validate
+  validate_ai:
+    validator: ai
+    status: AI validate
+    backend_mode: review
+flow: [validate_file, validate_ai]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    file_stage = create_stage(workflow[0])
+    ai_stage = create_stage(workflow[1])
+
+    assert isinstance(file_stage, PythonStage)
+    assert file_stage.spec.validator == "file"
+    assert isinstance(ai_stage, BaseStage)
+    assert file_stage is not ai_stage
+
+
+def test_generic_python_does_not_inherit_validator_conventions():
+    stage = create_stage({
+        "type": "python",
+        "name": "script",
+        "status": "Run script",
+        "path": "tool.py",
+        "args": ["--mode", "check"],
+    })
+    assert stage.spec.validator == ""
+    assert stage.spec.timeout_attr == "agent_timeout"
+    assert stage.spec.args == ["--mode", "check"]

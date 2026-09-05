@@ -20,7 +20,7 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
 - Resume 以合法的 project `state.json` 為 authoritative state，只有 primary state 缺失或損壞時才使用 temp backup，避免 crash window 後被 stale backup 回滾。
 - UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
-- 通用 `python_script` Stage 會在 subprocess 執行 project/user Python；Python Validator 仍保留 authoritative deterministic gate 語意。
+- 單一通用 `python` Stage 會在 subprocess 執行 project/user Python；加上 `validator: file` 時啟用 authoritative deterministic gate 慣例，不再維護第二套 Python Stage。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
 - `<project-root>/.ai-task-runner.yaml` 是專案 policy；policy 本身會自動受到保護。
@@ -88,7 +88,7 @@ Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 
 - Plan 會把每個 TODO 與其 ordered Stage names 一起存入 durable state。Planner 可用 Stage 由 YAML 結構自動推導：不是頂層 flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會成為可用能力。`PlanStage` 驗證名稱後回傳 `next_steps`，Pipeline 持久化並執行；若剛好在規劃完成與 queue 寫入之間 crash，Resume 可由 TODO 的 `steps` 重建。
 
 
-Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 或 Python Validator 這種特殊行為才使用 `PlanStage` / `PythonValidatorStage`。
+Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 特殊行為使用 `PlanStage`；Python 執行統一由單一 `PythonStage` 負責。
 
 
 ## 新增普通 AI Stage

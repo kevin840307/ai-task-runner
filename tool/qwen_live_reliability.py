@@ -841,7 +841,7 @@ REVIEW_REPAIR_WORKFLOW = '''stages:
     result_handler: plan
 
   seed:
-    type: python_script
+    type: python
     status: Seeding incomplete Review/Repair state
     run_state: executing
     path: seed_review.py

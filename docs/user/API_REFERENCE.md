@@ -48,4 +48,4 @@ UI/editor integrations call the owner modules directly: `runner.resources.read_t
 
 Concrete Runs persist `workflow.snapshot.json`, Stage prompt resources, `goal_file`, and `ai_validator_prompt_file` in their own work directory. Active Runs and later Resume use those frozen inputs even if source files change or disappear, so UI/IDE edits affect only future Runs. `runner.api.state_files()` locates direct/YAML child state without reloading Workflow configuration and is suitable for process-level supervision.
 
-`type: python_script` is the generic user Python Stage. It executes the configured script in a subprocess via the same process runner used by validator execution; arbitrary project Python is never imported into the long-running Runner process.
+`type: python` is the single generic Python Stage. Add `validator: file` for deterministic validation conventions. It executes the configured script in a subprocess via the same process runner used by validator execution; arbitrary project Python is never imported into the long-running Runner process.

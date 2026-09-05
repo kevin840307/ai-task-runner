@@ -4,20 +4,20 @@ from runner.workflow.stages import (
     BaseStageSpec,
     PlanStage,
     PlanStageSpec,
-    PythonValidatorStage,
-    PythonValidatorStageSpec,
+    PythonStage,
+    PythonStageSpec,
 )
-from runner.workflow.stages.python_validator import clear_validator_reports
+from runner.workflow.stages.python_stage import clear_validator_reports
 
 
-def test_only_base_plan_and_python_validator_stage_implementations_exist():
-    assert BaseStage and PlanStage and PythonValidatorStage
+def test_only_base_plan_and_python_stage_implementations_exist():
+    assert BaseStage and PlanStage and PythonStage
 
 
 def test_retry_is_common_executor_metadata():
     assert BaseStageSpec(name="x", status="x").retry is None
     assert PlanStageSpec(name="plan", status="plan").retry is None
-    assert PythonValidatorStageSpec(name="validate", status="validate").retry is None
+    assert PythonStageSpec(name="validate", status="validate").retry is None
 
 
 def test_final_ai_validation_retries_until_pass():

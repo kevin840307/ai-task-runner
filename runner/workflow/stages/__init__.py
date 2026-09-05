@@ -4,15 +4,15 @@ from .base_stage import BaseStage, BaseStageSpec
 from .contracts import Stage, StageContext, StageExecution, StageResult, StageStatus
 from .executor import StageAction, StageExecutor
 from .plan_stage import PlanStage, PlanStageSpec
-from .python_validator import PythonValidatorStage, PythonValidatorStageSpec
+from .python_stage import PythonStage, PythonStageSpec
 
 __all__ = [
     "BaseStage",
     "BaseStageSpec",
     "PlanStage",
     "PlanStageSpec",
-    "PythonValidatorStage",
-    "PythonValidatorStageSpec",
+    "PythonStage",
+    "PythonStageSpec",
     "Stage",
     "StageAction",
     "StageContext",

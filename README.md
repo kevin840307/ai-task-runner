@@ -22,7 +22,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - Worker crash/interrupt cleanup follows each durable Run work directory, including YAML List children, so orphan AI/sandbox processes are not left behind; all subprocess stdout paths are bounded, and `KeyboardInterrupt`/`SystemExit` never enter Stage retry/recovery.
 - Resume treats a valid project `state.json` as authoritative and uses the temp backup only when the primary state is missing or invalid, preventing stale-backup rollback after a crash window.
 - UI-ready extension boundary: owner-module editor/catalog APIs (`runner.resources`, `runner.workflow.loader` / `registry`, `runner.prompts.loader`), installed Stage/backend registration before Workflow validation, external runtime Plugins, atomic Workflow/Prompt editing, and per-Run Workflow/Stage-prompt/goal/final-AI-prompt snapshots.
-- Generic `python_script` Stage executes user/project Python out of process; Python validator keeps its authoritative deterministic-gate behavior.
+- One generic `python` Stage executes user/project Python out of process; `validator: file` enables authoritative deterministic-gate conventions without a second Python Stage implementation.
 - Shared AI-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
 - Project policy in `<project-root>/.ai-task-runner.yaml`; the policy file protects itself automatically.
@@ -101,7 +101,7 @@ Unified execution rules:
 - Plan stores each durable TODO together with its ordered Stage names. Planner-visible Stages are inferred from YAML: dynamic nodes are Stage definitions that are not top-level flow nodes, recovery-only nodes, planners, or validators. `PlanStage` validates those names, returns `next_steps`, and Pipeline persists/runs them. Resume can rebuild missing generated steps from the saved TODO `steps` if a crash occurs between planning and queue persistence.
 
 
-Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `BaseStage` instances are reusable, while special behavior may use dedicated `PlanStage` or `PythonValidatorStage`.
+Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `BaseStage` instances are reusable, while special behavior may use dedicated `PlanStage`; Python execution uses the single `PythonStage` implementation.
 
 Normal AI work is declarative: YAML contains only `stages` and `flow`. `stages` defines reusable nodes; `flow` composes them and may override fields such as `prompt`, `retry`, or `skip` per invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted. `type` is written only for specialized behavior such as `plan`, `python`, or a custom Stage class.
 

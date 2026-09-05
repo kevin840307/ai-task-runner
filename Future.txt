@@ -10,7 +10,9 @@
    - Active / Resume Run 使用自己的 durable snapshot（Workflow／Stage Prompt／Goal File／Final-AI Prompt）；UI 修改或刪除來源檔只影響下一個 Run。
 
 2. Stage 使用 Python
-   - 使用 type: python_script。
+   - 只保留一個通用 `type: python` / `PythonStage`；一般 Python 直接設定 `path` / `args`。
+   - Deterministic Python validation 仍是獨立 Stage node：`type: python` + `validator: file`。
+   - AI validation 是另一個獨立 AI Stage node：`validator: ai`；不可與 Python validation 合成同一 Stage。
    - Python 一律 subprocess 執行，不 import 任意使用者程式進 24H Runner process。
    - 新 behavior Stage 透過 Extension + Stage registry 擴充，Pipeline 不增加 Stage-name branch。
 

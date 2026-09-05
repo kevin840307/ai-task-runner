@@ -13,7 +13,7 @@ from runner.resources import read_text
 from runner.workflow.loader import load_workflow, save_workflow
 from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog
 from runner.workflow.snapshot import freeze_workflow, load_snapshot
-from runner.workflow.stages.python_script import PythonScriptStage, PythonScriptStageSpec
+from runner.workflow.stages.python_stage import PythonStage, PythonStageSpec
 
 
 def _workflow_text(prompt: str = "") -> str:
@@ -33,8 +33,8 @@ def _workflow_text(prompt: str = "") -> str:
 
 def test_stage_catalog_uses_registered_spec_as_single_schema_source():
     catalog = stage_catalog()
-    assert {"base", "plan", "python", "python_script"} <= set(catalog)
-    python_fields = {item["name"] for item in catalog["python_script"]["options"]}
+    assert set(catalog) >= {"base", "plan", "python"}
+    python_fields = {item["name"] for item in catalog["python"]["options"]}
     assert {"name", "status", "path", "args", "retry"} <= python_fields
 
 
@@ -82,13 +82,13 @@ def test_workflow_snapshot_freezes_local_prompt_content(tmp_path):
     assert frozen_prompt.read_text(encoding="utf-8") == "version A"
 
 
-def test_python_script_stage_runs_out_of_process(tmp_path):
+def test_python_stage_runs_out_of_process(tmp_path):
     script = tmp_path / "stage.py"
     script.write_text(
         "from pathlib import Path\nPath('marker.txt').write_text('ok', encoding='utf-8')\n",
         encoding="utf-8",
     )
-    stage = PythonScriptStage(PythonScriptStageSpec(name="script", status="Run", path="stage.py"))
+    stage = PythonStage(PythonStageSpec(name="script", status="Run", path="stage.py"))
     ctx = SimpleNamespace(root=tmp_path, config=SimpleNamespace(agent_timeout=10))
     result = stage.run(ctx)
     assert result.status == "pass"

@@ -32,7 +32,7 @@ def test_task_runner_uses_stage_executor_and_never_concrete_stage_types():
     source = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
     assert "StageExecutor" in source
     assert "build_pipeline" in source
-    for name in ("BaseStage", "PlanStage", "PythonValidatorStage", "ReviewStage", "ValidateStage"):
+    for name in ("BaseStage", "PlanStage", "PythonStage", "ReviewStage", "ValidateStage"):
         assert name not in source
 
 

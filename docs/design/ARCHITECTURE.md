@@ -5,7 +5,7 @@ The directory structure is intentionally the architecture map:
 - `runner/api.py`, `bootstrap.py`, `task_runner.py`: canonical request/recovery boundary, dependency composition, and one-run orchestration.
 - `runner/script_loader.py`, `script_runner.py`: YAML structure/file parsing and validated child-config execution.
 - `runner/workflow/`: declarative workflow definitions, routing rules, result parsers, and the Stage engine.
-- `runner/workflow/stages/`: Stage contracts, shared executor, generic `BaseStage`, `PlanStage`, isolated `PythonScriptStage`, and authoritative `PythonValidatorStage`.
+- `runner/workflow/stages/`: Stage contracts, shared executor, generic `BaseStage`, `PlanStage`, and one isolated `PythonStage` for both user Python and deterministic file validation.
 - `runner/ai/`: AI client, backend contracts, session classification, structured-output handling, and AI diagnostics.
 - `runner/backends/`: Qwen/OpenCode implementations plus backend registry/configuration.
 - `runner/project/`: project file snapshots/restores, project policy, and QWEN.md/AGENTS.md instruction-file lifecycle.
@@ -43,7 +43,7 @@ UI is an adapter, not an execution Plugin. UI/CLI/Skill code may depend on `runn
 
 Installed packages may publish `ai_task_runner.extensions` entry points for runtime-independent registration such as `register_stage()` or backend registration. Discovery occurs before Workflow validation. Runtime cross-cutting Plugins use the separate `ai_task_runner.plugins` entry-point group and attach only after a Runtime exists. This prevents a Plugin from being required by Workflow core while still allowing external packages to add capabilities without editing Runner source.
 
-`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; UI/editor code must not maintain another hardcoded Stage schema. User Python automation uses `type: python_script` and always executes as a subprocess through the shared Python-process helper. Arbitrary user Python is never imported into the 24H Runner process.
+`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; UI/editor code must not maintain another hardcoded Stage schema. User Python automation uses `type: python`; `validator: file` enables deterministic validator conventions on the same Stage implementation. Python always executes in a subprocess. Arbitrary user Python is never imported into the 24H Runner process.
 
 `workflow.loader.save_workflow()` and `prompts.loader.save_prompt()` validate against the real Runner parser/schema before using atomic replace. `expected_hash` provides optimistic concurrency protection for UI/IDE edits. These are file-resource helpers, not a second Workflow service or storage model.
 

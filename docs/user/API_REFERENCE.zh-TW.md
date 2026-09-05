@@ -48,4 +48,4 @@ UI／Editor 直接使用真正 owner module：`runner.resources.read_text()` / `
 
 Concrete Run 會在自己的 work directory 持久化 `workflow.snapshot.json`、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file`；執行中或之後 Resume 即使來源檔已修改或刪除，也沿用同一份 frozen input，所以 UI/IDE 修改只影響新的 Run。`runner.api.state_files()` 不需重新載入 Workflow 就能定位 direct／YAML child state，可供 process supervisor 使用。
 
-`type: python_script` 是通用使用者 Python Stage；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。
+`type: python` 是唯一的通用 Python Stage；加上 `validator: file` 即啟用 deterministic validation 慣例；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。

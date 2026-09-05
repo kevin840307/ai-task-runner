@@ -555,7 +555,7 @@ def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
 
 def test_review_repair_probe_uses_deterministic_seed_stage():
     assert "deterministically seeds review.txt with only READY" in live.REVIEW_REPAIR_PROMPT
-    assert 'type: python_script' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'type: python' in live.REVIEW_REPAIR_WORKFLOW
     assert 'path: seed_review.py' in live.REVIEW_REPAIR_WORKFLOW
     assert 'skip_on_error: false' in live.REVIEW_REPAIR_WORKFLOW
     assert 'recover: [repair]' in live.REVIEW_REPAIR_WORKFLOW
@@ -570,7 +570,7 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
 
     assert [node["name"] for node in workflow] == ["planning", "validate_file"]
     assert list(workflow[0]["planner_stages"]) == ["seed", "review"]
-    assert workflow[0]["planner_stages"]["seed"]["type"] == "python_script"
+    assert workflow[0]["planner_stages"]["seed"]["type"] == "python"
     assert workflow[0]["planner_stages"]["review"]["recover"][0]["name"] == "repair"
 
     compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")

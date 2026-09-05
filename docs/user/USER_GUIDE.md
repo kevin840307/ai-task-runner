@@ -190,7 +190,7 @@ Future UI/CLI integrations share `runner.api.run()` rather than calling Pipeline
 
 Workflow and prompt editors must use `save_workflow()` / `save_prompt()` plus the `expected_hash` returned by `runner.resources.read_text()`. Saving validates first and atomically replaces the real source file. A running task uses the Workflow, Stage-prompt, Goal-file, and Final-AI-prompt snapshots stored in its own work directory, so source edits or deletion affect the next Run, not the active/resumed Run.
 
-A user Python step is declared as `type: python_script` with `path` and optional `args`. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.
+A user Python step is declared as `type: python` with `path` and optional `args`. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.
 
 
 ## OpenCode runtime contract

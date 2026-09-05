@@ -9,14 +9,12 @@ from typing import Any, get_args, get_origin
 from ..errors import RunnerError
 from .stages.base_stage import BaseStage
 from .stages.plan_stage import PlanStage
-from .stages.python_script import PythonScriptStage
-from .stages.python_validator import PythonValidatorStage
+from .stages.python_stage import PythonStage
 
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
     "plan": PlanStage,
-    "python": PythonValidatorStage,
-    "python_script": PythonScriptStage,
+    "python": PythonStage,
 }
 ROUTING_FIELDS = frozenset(
     {
@@ -105,7 +103,8 @@ def create_stage(definition: dict[str, Any]):
     stage_type = str(values.pop("type", "base"))
     name = str(values.get("name", ""))
     for field in ROUTING_FIELDS:
-        values.pop(field, None)
+        if field != "validator" or stage_type != "python":
+            values.pop(field, None)
     try:
         stage_class = STAGE_REGISTRY[stage_type]
     except KeyError as error:

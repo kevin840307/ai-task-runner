@@ -5,7 +5,7 @@
 - `runner/api.py`、`bootstrap.py`、`task_runner.py`：共用 request/recovery 邊界、dependency 組裝、單次任務協調。
 - `runner/script_loader.py`、`script_runner.py`：YAML 結構/檔案解析，以及經驗證的 child config 執行。
 - `runner/workflow/`：Workflow 定義、路由規則、特殊 Prompt/Result adapter 與 Stage Engine。
-- `runner/workflow/stages/`：Stage contract、共用 executor、`BaseStage`、`PlanStage`、隔離執行的 `PythonScriptStage`、以及 authoritative `PythonValidatorStage`。
+- `runner/workflow/stages/`：Stage contract、共用 executor、`BaseStage`、`PlanStage`，以及同時負責一般 Python 與 deterministic file validation 的單一隔離 `PythonStage`。
 - `runner/ai/`：AI Client、Backend contract、Session 判斷、Structured Output、AI diagnostics。
 - `runner/backends/`：Qwen/OpenCode 實作與 Backend registry/configuration。
 - `runner/project/`：Project snapshot/restore、policy、QWEN.md/AGENTS.md instruction file lifecycle。
@@ -40,7 +40,7 @@ UI 是 Adapter，不是 execution Plugin。UI/CLI/Skill 只能依賴 `runner.api
 
 外部 Python package 可透過 `ai_task_runner.extensions` entry point 在 Runtime 建立前註冊 `register_stage()`、Backend 等 runtime-independent capability；Discovery 發生在 Workflow validation 之前。Cross-cutting Runtime Plugin 則使用獨立的 `ai_task_runner.plugins` entry-point group，只有 Runtime 建立後才 attach。如此可擴充但不讓 Workflow Core 反向依賴 Plugin。
 
-`workflow.registry.stage_catalog()` 直接由已註冊 Stage 的 `spec_class` 產生，UI/Tooling 不得另外 hardcode 一份 Stage schema。使用者 Python automation 使用 `type: python_script`，一律透過共用 Python process helper 在 subprocess 執行；任意使用者 Python 不會 import 進 24H Runner process。
+`workflow.registry.stage_catalog()` 直接由已註冊 Stage 的 `spec_class` 產生，UI/Tooling 不得另外 hardcode 一份 Stage schema。使用者 Python automation 使用 `type: python`；加上 `validator: file` 時由同一個 Stage 啟用 deterministic validator 慣例。Python 一律在 subprocess 執行；任意使用者 Python 不會 import 進 24H Runner process。
 
 `workflow.loader.save_workflow()`、`prompts.loader.save_prompt()` 先使用真正 Runner parser/schema 驗證，再 atomic replace；`expected_hash` 提供 UI/IDE optimistic concurrency protection。這只是共用檔案資源能力，不建立第二套 Workflow service/storage model。
 
