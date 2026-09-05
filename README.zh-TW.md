@@ -14,7 +14,7 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - 支援 Qwen / OpenCode；兩者完整 AI task Prompt 都只走 stdin，session / permission 差異由 Backend adapter 負責。
 - Declarative Planning：Plan 直接產生 durable TODO list；Planning failure 走共用 same-session -> fresh-session -> replan recovery，沒有獨立 Understand/Judge Stage。
 - TODO 隔離執行：每個 TODO 依序 Execute -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Timeout recovery 使用穩定語意 failure key，因此 sandbox/container ID 等動態 backend output 不會把同一 failure 誤判成新 failure。Review 使用獨立 read-only client/session。
-- Builtin Execute/Review 在同一 Session 已看過完整 Stage contract 後，使用 bounded `continuation_prompt` 只補新的 TODO／Repair／Review evidence，不重送 Goal/rules；第一次與 Fresh/Rebuilt Session 仍取得完整必要 Context。
+- System Execute/Review 在同一 Session 已看過完整 Stage contract 後，使用 bounded `continuation_prompt` 只補新的 TODO／Repair／Review evidence，不重送 Goal/rules；第一次與 Fresh/Rebuilt Session 仍取得完整必要 Context。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
 - Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
@@ -71,7 +71,7 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入標準 `execute -> review` 的逐 TODO SOP，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。
+Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入標準 `execute -> review` 的逐 TODO SOP，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。`task` / `review` profile 也可以在自訂 Prompt 不依賴 TODO 資料時當作一般 top-level linear Stage；此模式不會修改 durable TODO state。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
@@ -136,28 +136,26 @@ Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Docu
 
 ### 重複 Semantic FAIL 的 Fresh Session Escape
 
-FlowNode 可用 `fresh_after_same_failures: N` 覆寫預設值。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數。`ReviewStage` 在有 recovery 時直接擁有語意預設 `2`；其他 Stage 仍是 opt-in。這樣 builtin YAML 不必重複 implementation policy，但需要特殊門檻時仍可由 Workflow 明確 override。
+FlowNode 可用 `fresh_after_same_failures: N` 覆寫預設值。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數。`ReviewStage` 在有 recovery 時直接擁有語意預設 `2`；其他 Stage 仍是 opt-in。這樣 system YAML 不必重複 implementation policy，但需要特殊門檻時仍可由 Workflow 明確 override。
 
 ## Workflow Dry Run
 
 可使用 `tool/workflow_dryrun.py` 在不呼叫真實 Agent 的情況下驗證 `workflow.yaml` 是否能閉環。工具直接重用正式 Workflow Loader、Pipeline、StageResult 與 Stage finish 與 result reducer，只 Mock 最底層 Stage 執行結果，因此不會建立第二套 Workflow Engine。
 
 ```bat
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --scenario dryrunexample\builtin_mixed_scenario.yaml
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --scenario dryrunexample\system_mixed_scenario.yaml
 dryrunexample\run_dryrun.bat
 ```
 
-`dryrunexample/` 同時示範 builtin workflow，以及使用 `task`、`review`、recover、`repeat` 的精簡自訂 workflow 閉環測試。Dry Run 是外部工具；刪除整個工具與範例不會改變 Runner Core 行為。
+`dryrunexample/` 同時示範 system workflow，以及使用 `task`、`review`、recover、`repeat` 的精簡自訂 workflow 閉環測試。Dry Run 是外部工具；刪除整個工具與範例不會改變 Runner Core 行為。
 自動 Failure Matrix：
 
 ```bat
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --json
-
-`--matrix` 現在會依 Workflow 實際存在的 `recover`、`repeat`、`restart_at` 產生 deterministic routing cases，並回報偵測到的 task producer/task scope/review/validation 等 feature；`--matrix --json` 可直接供 CI、UI 與 reliability gate 使用。
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix --json
 ```
 
-`--matrix` 會測 Happy Path，並針對正式 normalized workflow 中每個具有 recover 的 Stage，自動注入一次 `FAIL -> recover -> closure`。非法 Workflow 參數會先由正式 Workflow Loader/schema 擋下；Dry Run 不維護第二套重複的 validation 規則。
+`--matrix` 會依正式 Workflow 的 `recover`、`repeat`、`restart_at`、`fresh_after_same_failures` 產生 deterministic closure cases；對 semantic failure 的 Fresh Session 門檻也會驗證真的有觸發。JSON contract 會回報 task producer/task scope/review/validation 等 feature，可直接供 CI、UI Save/Import gate、Workflow Builder publish 與 reliability preflight 使用。非法 Workflow 參數仍由正式 Workflow Loader/schema 先擋下，Dry Run 不維護第二套 schema。
 
 
 
@@ -172,4 +170,6 @@ python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --jso
 python ui/main.py
 ```
 
-UI 不 import Runner Core；它只啟動既有 CLI，並讀取 Project `.ai-task-runner` runtime files。一個 Project 對應一條持久對話。
+UI 不 import Runner Core；Windows 啟動 Runner 時使用 hidden-console flags，不會跳出 CMD 視窗，並只讀寫 Project `.ai-task-runner` 的 runtime/UI contract。現在 UI 以 Workflow Task 為主，不提供一般聊天模式；Run / Stop / Continue / Reset / Rerun 共用一條 Project task history。Workflow Studio 將 `runner/workflow/system` 與 `runner/prompts/system|stages` 顯示為不可修改的 **System**，將 `runner/workflow/custom` 與 `runner/prompts/custom` 顯示為可編輯 **Custom**，並支援 Project-local asset 與 AI Workflow Builder。所有 Workflow Save / Import / Generate 都必須先通過驗證才能寫入正式位置。
+
+System Workflow Builder 也可以由 CLI / 其他整合直接呼叫 `workflow_builder/run.py`；它會先產生 Draft，再用 `workflow_builder/validation.py` + 正式 dry-run matrix 驗證，通過後才 publish。

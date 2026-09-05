@@ -1,0 +1,20 @@
+stages:
+  build_workflow:
+    status: AI 正在建立 Workflow
+    mode: write
+    actor: executor
+    track_changes: true
+    prompt: ../../prompts/system/workflow_builder.md
+
+  validate_workflow:
+    type: command
+    status: 正在驗證 Workflow
+    run_state: validating
+    actor: validator
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    recover: [build_workflow]
+
+flow:
+  - build_workflow
+  - validate_workflow

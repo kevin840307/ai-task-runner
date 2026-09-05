@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -22,7 +23,34 @@ MESSAGES_FILE = "messages.jsonl"
 CHAT_STATE_FILE = "chat-state.json"
 RUNTIME_DIR = ".ai-task-runner"
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
-SYSTEM_SCOPES = {"builtin", "runner"}
+SYSTEM_SCOPES = {"system"}
+
+
+def _background_process_kwargs() -> dict:
+    """Launch long-running UI child processes without opening a console window."""
+    kwargs: dict = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        flags = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+        if flags:
+            kwargs["creationflags"] = flags
+        try:
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+            startup.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+            kwargs["startupinfo"] = startup
+        except AttributeError:
+            pass
+    else:
+        kwargs["start_new_session"] = True
+    return kwargs
 
 
 class _IndentedSafeDumper(yaml.SafeDumper):
@@ -104,6 +132,11 @@ class UIState:
         running = bool(pid_value and self._pid_alive(pid_value))
         stale = bool(marker and not running)
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
+        resettable = bool(
+            not running
+            and runtime.exists()
+            and any(child.name != "ui" for child in runtime.iterdir())
+        )
         current = int(state.get("current", 0) or 0)
         current_task = ""
         if tasks and 0 <= current < len(tasks):
@@ -123,7 +156,9 @@ class UIState:
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
             "completed": bool(state.get("completed")),
+            "has_state": bool(state),
             "resumable": bool(state and not state.get("completed")),
+            "resettable": resettable,
             "last_error": state.get("last_error") or "",
             "stream": stream,
             "updated_at": state.get("last_activity_at") or marker.get("started_at") or 0,
@@ -206,8 +241,30 @@ class UIState:
         os.replace(tmp, path)
 
     def launch_message(self, project: Path, message: str, *, backend: str = "", validator: str = "", workflow: str = "") -> None:
-        with self._chat_lock:
-            request = self._create_run_request(project, message, backend=backend, validator=validator, workflow=workflow)
+        """Start one Workflow task from an immutable UI request snapshot.
+
+        A completed prior run is reset automatically. An interrupted/stopped run
+        must be explicitly Continued or Reset so a new task cannot silently
+        discard recoverable state.
+        """
+        with self._chat_lock, self._lifecycle_lock:
+            if not str(workflow or "").strip():
+                raise ValueError("Select a Workflow before Run")
+            runtime = self.read_runtime(project)
+            if runtime.get("running"):
+                raise ValueError("This project already has an active runtime")
+            if runtime.get("resumable"):
+                raise ValueError("Previous task is stopped or interrupted. Continue it or Reset before starting a new task.")
+            if runtime.get("completed") or runtime.get("stale"):
+                self._reset_runtime_locked(project)
+            request = self._create_run_request(
+                project,
+                message,
+                backend=backend,
+                validator=validator,
+                workflow=workflow,
+                request_mode="workflow",
+            )
             try:
                 self.launch(
                     project,
@@ -266,17 +323,8 @@ class UIState:
                 command += ["--validator", validator]
             if workflow:
                 command += ["--workflow", workflow]
-            kwargs: dict = {
-                "cwd": str(self.repo_root),
-                "stdin": subprocess.DEVNULL,
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-                "close_fds": True,
-            }
-            if os.name == "nt":
-                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            else:
-                kwargs["start_new_session"] = True
+            kwargs = _background_process_kwargs()
+            kwargs["cwd"] = str(self.repo_root)
             subprocess.Popen(command, **kwargs)
 
     def _create_run_request(
@@ -287,6 +335,7 @@ class UIState:
         backend: str = "",
         validator: str = "",
         workflow: str = "",
+        request_mode: str = "workflow",
     ) -> dict:
         text = str(message or "").strip()
         if not text:
@@ -326,6 +375,7 @@ class UIState:
             "created_at": time.time(),
             "project": str(project),
             "backend": backend or "",
+            "mode": request_mode,
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
             "validator": validator_value,
@@ -342,17 +392,44 @@ class UIState:
         runtime.mkdir(parents=True, exist_ok=True)
         (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
 
+    def reset_runtime(self, project: Path) -> dict:
+        """Clear Runner-owned state for a new task while preserving UI history."""
+        with self._lifecycle_lock:
+            if self.read_runtime(project).get("running"):
+                raise ValueError("Stop the active runtime before Reset")
+            removed = self._reset_runtime_locked(project)
+            return {"ok": True, "removed": removed}
+
+    def _reset_runtime_locked(self, project: Path) -> list[str]:
+        runtime = self.runtime_dir(project)
+        if not runtime.exists():
+            return []
+        removed: list[str] = []
+        for child in list(runtime.iterdir()):
+            if child.name == "ui":
+                continue
+            try:
+                if child.is_symlink() or child.is_file():
+                    child.unlink()
+                else:
+                    shutil.rmtree(child)
+                removed.append(child.name)
+            except OSError as exc:
+                raise ValueError(f"Cannot reset runtime artifact {child.name}: {exc}") from exc
+        return sorted(removed)
+
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
         workflows: list[dict] = []
         prompts: list[dict] = []
         roots: list[tuple[str, Path]] = [
-            ("builtin", self.repo_root / "runner" / "workflow" / "builtin"),
-            ("custom", self.repo_root / "tool" / "workflows"),
+            ("system", self.repo_root / "runner" / "workflow" / "system"),
+            ("custom", self.repo_root / "runner" / "workflow" / "custom"),
         ]
         prompt_roots: list[tuple[str, Path]] = [
-            ("runner", self.repo_root / "runner" / "prompts"),
-            ("custom", self.repo_root / "tool" / "workflows" / "prompts"),
+            ("system", self.repo_root / "runner" / "prompts" / "stages"),
+            ("system", self.repo_root / "runner" / "prompts" / "system"),
+            ("custom", self.repo_root / "runner" / "prompts" / "custom"),
         ]
         if project is not None:
             roots.append(("project", project))
@@ -388,9 +465,10 @@ class UIState:
                     seen.add(item["id"])
                     prompts.append(item)
 
+        order = {"system": 0, "custom": 1, "project": 2}
         return {
-            "workflows": sorted(workflows, key=lambda x: (x["scope"], x["name"].lower())),
-            "prompts": sorted(prompts, key=lambda x: (x["scope"], x["name"].lower())),
+            "workflows": sorted(workflows, key=lambda x: (order.get(x["scope"], 9), x["name"].lower())),
+            "prompts": sorted(prompts, key=lambda x: (order.get(x["scope"], 9), x["name"].lower())),
             "guard": self.edit_guard(),
         }
 
@@ -454,10 +532,8 @@ class UIState:
             })
         return {"tags": tags, "source": str(context_file)}
 
-    def studio_prompt_check(self, file_id: str, content: str, project: Path | None = None) -> dict:
-        _path, kind, _scope = self._resolve_studio_file(file_id, project)
-        if kind != "prompt":
-            raise ValueError("Prompt check is available only for Prompt files")
+    def _check_prompt_content(self, content: str) -> dict:
+        """Validate Jinja syntax and top-level Runner prompt context variables."""
         env = Environment(autoescape=False)
         try:
             parsed = env.parse(content)
@@ -472,6 +548,12 @@ class UIState:
             "summary": "Prompt valid" if not unknown else f"Unknown prompt variable(s): {', '.join(unknown)}",
             "unknown": unknown,
         }
+
+    def studio_prompt_check(self, file_id: str, content: str, project: Path | None = None) -> dict:
+        _path, kind, _scope = self._resolve_studio_file(file_id, project)
+        if kind != "prompt":
+            raise ValueError("Prompt check is available only for Prompt files")
+        return self._check_prompt_content(content)
 
     def studio_workflow_create(self, name: str, destination: str, project: Path | None = None) -> dict:
         """Create one blank workflow without touching Runner/Core code."""
@@ -494,7 +576,7 @@ class UIState:
                 if not self._is_within(target, project.resolve()):
                     raise ValueError("Workflow path is outside the Project")
             elif destination == "custom":
-                root = (self.repo_root / "tool" / "workflows").resolve()
+                root = (self.repo_root / "runner" / "workflow" / "custom").resolve()
                 root.mkdir(parents=True, exist_ok=True)
                 target = (root / raw).resolve()
                 if not self._is_within(target, root):
@@ -503,7 +585,8 @@ class UIState:
                 raise ValueError("Workflow destination must be project or custom")
             if target.exists():
                 raise ValueError(f"Workflow already exists: {target.name}")
-            content = "stages: {}\n\nflow: []\n"
+            content = "stages:\n  planning:\n    type: plan\n\nflow:\n  - planning\n"
+            self._validate_workflow_before_write(target, content)
             try:
                 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
                 with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
@@ -541,10 +624,12 @@ class UIState:
             if expected_hash and expected_hash != current_hash:
                 raise ValueError("File changed on disk. Reload before saving to avoid overwriting another editor.")
             if kind == "workflow":
-                self._validate_workflow_prompt_refs(path, content)
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_text(content, encoding="utf-8")
-            os.replace(tmp, path)
+                self._validate_workflow_before_write(path, content)
+            elif kind == "prompt":
+                check = self._check_prompt_content(content)
+                if not check["ok"]:
+                    raise ValueError("Prompt validation failed: " + check["summary"])
+            self._atomic_write(path, content)
             return self.studio_read(file_id, project)
 
     def studio_visual(self, file_id: str, project: Path | None = None) -> dict:
@@ -632,9 +717,8 @@ class UIState:
                         end = i
                         break
                 updated = "".join(lines[:start]) + flow_text + "".join(lines[end:])
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_text(updated, encoding="utf-8")
-            os.replace(tmp, path)
+            self._validate_workflow_before_write(path, updated)
+            self._atomic_write(path, updated)
             return self.studio_read(file_id, project)
 
     def studio_stage_save(
@@ -648,8 +732,9 @@ class UIState:
         flow_index: int | None = None,
         scope: str = "",
         flow_fields: dict | None = None,
+        validate_only: bool = False,
     ) -> dict:
-        """Patch direct Stage fields without rewriting unrelated YAML/comments."""
+        """Patch or validate direct Stage/Flow fields without rewriting unrelated YAML/comments."""
         with self._edit_lock:
             self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
@@ -700,7 +785,7 @@ class UIState:
                 row["stage"] = stage_name
                 updates = dict(flow_fields or {})
                 updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "restart_at", "repeat", "fresh_after_same_failures"}
+                allowed_flow = {"scope", "label", "restart_at", "repeat", "fresh_after_same_failures", "status", "prompt"}
                 unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
                 if unknown_flow:
                     raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
@@ -713,7 +798,9 @@ class UIState:
                 flow[flow_index] = row if len(row) > 1 else stage_name
                 updated = self._replace_flow_block(updated, flow)
 
-            self._validate_workflow_prompt_refs(path, updated)
+            validation = self._validate_workflow_before_write(path, updated)
+            if validate_only:
+                return {"ok": True, "summary": "Validation passed", "output": validation.get("output", "")[-20000:]}
             self._atomic_write(path, updated)
             return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
 
@@ -768,7 +855,7 @@ class UIState:
                 flow = list(flow) if isinstance(flow, list) else []
                 flow.append(name)
                 updated = self._replace_flow_block(updated, flow)
-            self._validate_workflow_prompt_refs(path, updated)
+            self._validate_workflow_before_write(path, updated)
             self._atomic_write(path, updated)
             return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
 
@@ -823,6 +910,12 @@ class UIState:
         label = updates.get("label")
         if label is not None and (not isinstance(label, str) or not label.strip()):
             raise ValueError("Flow label must be a non-empty string")
+        status = updates.get("status")
+        if status is not None and (not isinstance(status, str) or not status.strip()):
+            raise ValueError("Flow status must be a non-empty string")
+        prompt = updates.get("prompt")
+        if prompt is not None and (not isinstance(prompt, str) or not prompt.strip()):
+            raise ValueError("Flow prompt must be a non-empty string")
         restart_at = updates.get("restart_at")
         if restart_at:
             allowed = set()
@@ -964,6 +1057,36 @@ class UIState:
         tmp.write_text(content, encoding="utf-8")
         os.replace(tmp, path)
 
+    def _validate_workflow_before_write(self, path: Path, content: str) -> dict:
+        """Run prompt-reference checks and the real dry-run before any Workflow write."""
+        self._load_workflow_yaml(content)
+        self._validate_workflow_prompt_refs(path, content)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        suffix = path.suffix if path.suffix.lower() in {".yaml", ".yml"} else ".yaml"
+        temporary = path.with_name(f".{path.stem}.ui-validate-{uuid.uuid4().hex[:8]}{suffix}")
+        temporary.write_text(content, encoding="utf-8")
+        try:
+            command = [sys.executable, str(self.repo_root / "tool" / "workflow_dryrun.py"), str(temporary), "--matrix", "--json", "--max-steps", "500"]
+            try:
+                result = subprocess.run(command, cwd=self.repo_root, capture_output=True, text=True, timeout=45)
+            except subprocess.TimeoutExpired as exc:
+                raise ValueError("Workflow validation timed out after 45 seconds") from exc
+            output = (result.stdout or result.stderr or "").strip()
+            if result.returncode != 0:
+                raise ValueError("Workflow validation failed: " + output[-12000:])
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Workflow validation returned invalid JSON") from exc
+            if not payload.get("closed"):
+                raise ValueError("Workflow validation matrix did not reach closure")
+            return {"ok": True, "output": output, "payload": payload}
+        finally:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+
     def _require_studio_writable(self, scope: str) -> None:
         if scope in SYSTEM_SCOPES:
             raise ValueError("System workflow/prompt is read only. Create or import a Custom copy to edit it.")
@@ -1016,7 +1139,10 @@ class UIState:
         if not value:
             return None
         raw = Path(value).expanduser()
-        candidates = [raw] if raw.is_absolute() else [workflow_path.parent / raw, self.repo_root / "runner" / "prompts" / raw]
+        candidates = [raw] if raw.is_absolute() else [
+            workflow_path.parent / raw,
+            self.repo_root / "runner" / "prompts" / raw,
+        ]
         for candidate in candidates:
             try:
                 resolved = candidate.resolve()
@@ -1072,7 +1198,7 @@ class UIState:
             raise ValueError("Workflow references missing Prompt(s): " + "; ".join(missing[:12]))
 
     def _known_workflow_paths(self, project: Path | None = None) -> list[Path]:
-        roots = [self.repo_root / "runner" / "workflow" / "builtin", self.repo_root / "tool" / "workflows"]
+        roots = [self.repo_root / "runner" / "workflow" / "system", self.repo_root / "runner" / "workflow" / "custom"]
         paths: list[Path] = []
         for root in roots:
             if not root.is_dir():
@@ -1129,7 +1255,7 @@ class UIState:
                     raise ValueError("Select a Project before creating a Project Prompt")
                 root = (project / "prompts").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "project"
             elif destination == "custom":
-                root = (self.repo_root / "tool" / "workflows" / "prompts").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "custom"
+                root = (self.repo_root / "runner" / "prompts" / "custom").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "custom"
             else:
                 raise ValueError("Prompt destination must be project or custom")
             target = (root / raw).resolve()
@@ -1181,7 +1307,7 @@ class UIState:
                 if kind == "prompt": root.mkdir(parents=True, exist_ok=True)
                 scope = "project"
             elif destination == "custom":
-                root = (self.repo_root / "tool" / "workflows").resolve() if kind == "workflow" else (self.repo_root / "tool" / "workflows" / "prompts").resolve()
+                root = (self.repo_root / "runner" / "workflow" / "custom").resolve() if kind == "workflow" else (self.repo_root / "runner" / "prompts" / "custom").resolve()
                 root.mkdir(parents=True, exist_ok=True); scope = "custom"
             else:
                 raise ValueError("Import destination must be project or custom")
@@ -1204,39 +1330,116 @@ class UIState:
             if not text.strip():
                 raise ValueError("Imported content is empty")
             if kind == "workflow":
-                self._load_workflow_yaml(text)
-                self._validate_workflow_prompt_refs(target, text)
+                self._validate_workflow_before_write(target, text)
             else:
-                env = Environment(autoescape=False)
-                try: env.parse(text)
-                except Exception as exc: raise ValueError(f"Invalid Prompt template: {exc}") from exc
+                check = self._check_prompt_content(text)
+                if not check["ok"]:
+                    raise ValueError("Invalid Prompt template: " + check["summary"])
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
                 handle.write(text)
             item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
-    def studio_validate(self, file_id: str, project: Path | None = None) -> dict:
+    def studio_validate(
+        self,
+        file_id: str,
+        project: Path | None = None,
+        *,
+        content: str | None = None,
+        flow: object | None = None,
+    ) -> dict:
+        """Validate the current Workflow draft without writing it.
+
+        YAML mode can pass ``content`` while Visual mode can pass the current ``flow``.
+        The real Workflow file remains untouched; the existing dry-run gate receives only
+        a temporary validation copy.
+        """
         path, kind, _ = self._resolve_studio_file(file_id, project)
         if kind != "workflow":
             raise ValueError("Only workflow YAML can be validated")
-        command = [sys.executable, str(self.repo_root / "tool" / "workflow_dryrun.py"), str(path), "--json"]
+        draft = path.read_text(encoding="utf-8") if content is None else str(content)
+        if flow is not None:
+            if not isinstance(flow, list):
+                return {"ok": False, "summary": "Validation failed", "output": "Workflow flow must be a list"}
+            draft = self._replace_flow_block(draft, flow)
         try:
-            result = subprocess.run(command, cwd=self.repo_root, capture_output=True, text=True, timeout=30)
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "summary": "Validation timed out", "output": "workflow_dryrun exceeded 30 seconds"}
-        output = (result.stdout or result.stderr or "").strip()
-        summary = "Validation passed" if result.returncode == 0 else "Validation failed"
-        return {"ok": result.returncode == 0, "summary": summary, "output": output[-20000:]}
+            result = self._validate_workflow_before_write(path, draft)
+        except ValueError as exc:
+            return {"ok": False, "summary": "Validation failed", "output": str(exc)}
+        return {"ok": True, "summary": "Validation passed", "output": result.get("output", "")[-20000:]}
 
     def studio_draft_info(self) -> dict:
-        draft_root = self.ui_root / "data" / "workflow-drafts"
-        draft_root.mkdir(parents=True, exist_ok=True)
+        builder = self.repo_root / "workflow_builder" / "run.py"
+        workflow = self.repo_root / "runner" / "workflow" / "system" / "workflow_builder.yaml"
+        validator = self.repo_root / "workflow_builder" / "validation.py"
+        available = all(path.is_file() for path in (builder, workflow, validator))
         return {
-            "available": False,
-            "draft_root": str(draft_root),
-            "message": "AI workflow generation will connect here when the generator workflow is added.",
+            "available": available,
+            "builder": str(builder),
+            "workflow": str(workflow),
+            "validator": str(validator),
+            "message": "AI Workflow Builder is ready." if available else "AI Workflow Builder files are incomplete.",
         }
+
+    def studio_generate_workflow(
+        self,
+        project: Path,
+        name: str,
+        destination: str,
+        request: str,
+        backend: str = "",
+    ) -> dict:
+        """Launch the external Workflow Builder; publication happens only after validation."""
+        with self._lifecycle_lock:
+            self._require_editable()
+            info = self.studio_draft_info()
+            if not info.get("available"):
+                raise ValueError(info.get("message") or "AI Workflow Builder is unavailable")
+            if self.read_runtime(project).get("running"):
+                raise ValueError("Stop the active runtime before generating a Workflow")
+            raw = str(name or "").strip()
+            if not raw:
+                raise ValueError("Workflow name is required")
+            if "/" in raw or "\\" in raw or raw in {".", ".."}:
+                raise ValueError("Workflow name must be a file name, not a path")
+            if not raw.lower().endswith((".yaml", ".yml")):
+                raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
+            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
+                raise ValueError("Workflow file name contains unsupported characters")
+            request = str(request or "").strip()
+            if not request:
+                raise ValueError("Workflow requirements are required")
+            destination = str(destination or "custom").strip().lower()
+            if destination == "custom":
+                output_workflow = (self.repo_root / "runner" / "workflow" / "custom" / raw).resolve()
+                output_prompt_dir = (self.repo_root / "runner" / "prompts" / "custom").resolve()
+            elif destination == "project":
+                output_workflow = (project / raw).resolve()
+                output_prompt_dir = (project / "prompts").resolve()
+            else:
+                raise ValueError("Workflow destination must be project or custom")
+            if output_workflow.exists():
+                raise ValueError(f"Workflow already exists: {output_workflow.name}")
+            command = [
+                sys.executable,
+                str(self.repo_root / "workflow_builder" / "run.py"),
+                "--project-root", str(project),
+                "--request", request,
+                "--output-workflow", str(output_workflow),
+                "--output-prompt-dir", str(output_prompt_dir),
+            ]
+            if backend:
+                command += ["--backend", backend]
+            kwargs = _background_process_kwargs()
+            kwargs["cwd"] = str(self.repo_root)
+            subprocess.Popen(command, **kwargs)
+            return {
+                "ok": True,
+                "workflow": str(output_workflow),
+                "prompt_dir": str(output_prompt_dir),
+                "message": "Workflow Builder started. The final Workflow will be published only after validation passes.",
+            }
 
     def _studio_item(self, path: Path, scope: str, kind: str) -> dict:
         resolved = path.resolve()
@@ -1272,16 +1475,20 @@ class UIState:
             raise ValueError("Workflow/prompt file does not exist")
 
         valid = False
-        if scope == "builtin" and kind == "workflow":
-            valid = self._is_within(path, (self.repo_root / "runner" / "workflow" / "builtin").resolve())
+        if scope == "system" and kind == "workflow":
+            valid = self._is_within(path, (self.repo_root / "runner" / "workflow" / "system").resolve())
         elif scope == "custom" and kind == "workflow":
-            tool_root = (self.repo_root / "tool" / "workflows").resolve()
-            prompt_root = (self.repo_root / "tool" / "workflows" / "prompts").resolve()
+            tool_root = (self.repo_root / "runner" / "workflow" / "custom").resolve()
+            prompt_root = (self.repo_root / "runner" / "prompts" / "custom").resolve()
             valid = self._is_within(path, tool_root) and not self._is_within(path, prompt_root)
-        elif scope == "runner" and kind == "prompt":
-            valid = self._is_within(path, (self.repo_root / "runner" / "prompts").resolve())
+        elif scope == "system" and kind == "prompt":
+            system_prompt_roots = (
+                (self.repo_root / "runner" / "prompts" / "stages").resolve(),
+                (self.repo_root / "runner" / "prompts" / "system").resolve(),
+            )
+            valid = any(self._is_within(path, root) for root in system_prompt_roots)
         elif scope == "custom" and kind == "prompt":
-            valid = self._is_within(path, (self.repo_root / "tool" / "workflows" / "prompts").resolve())
+            valid = self._is_within(path, (self.repo_root / "runner" / "prompts" / "custom").resolve())
         elif scope == "project" and project is not None and kind == "workflow":
             valid = path.parent == project.resolve() and (path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower())
         elif scope == "project" and project is not None and kind == "prompt":
@@ -1467,12 +1674,20 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True})
             if parsed.path == "/api/projects/pick":
                 return self._pick_folder()
+            if parsed.path == "/api/files/pick":
+                return self._pick_file(str(body.get("kind", "file")))
             if parsed.path == "/api/project/message":
                 project = self._project(body)
                 text = str(body.get("message", "")).strip()
                 if not text:
                     raise ValueError("Message is empty")
-                self.state.launch_message(project, text, backend=str(body.get("backend", "")), validator=str(body.get("validator", "")), workflow=str(body.get("workflow", "")))
+                self.state.launch_message(
+                    project,
+                    text,
+                    backend=str(body.get("backend", "")),
+                    validator=str(body.get("validator", "")),
+                    workflow=str(body.get("workflow", "")),
+                )
                 return self._json({"ok": True})
             if parsed.path == "/api/project/stop":
                 self.state.stop(self._project(body))
@@ -1481,26 +1696,41 @@ class Handler(SimpleHTTPRequestHandler):
                 project = self._project(body)
                 self.state.launch(project, None, mode="resume", backend=str(body.get("backend", "")), validator=str(body.get("validator", "")), workflow=str(body.get("workflow", "")))
                 return self._json({"ok": True})
+            if parsed.path == "/api/project/reset":
+                return self._json(self.state.reset_runtime(self._project(body)))
             if parsed.path == "/api/project/rerun":
                 project = self._project(body)
                 last = next((m["content"] for m in reversed(self.state.messages(project)) if m.get("role") == "user"), "")
+                if not last:
+                    raise ValueError("No previous task to rerun")
+                self.state.reset_runtime(project)
                 request = self.state._create_run_request(
                     project,
                     last,
                     backend=str(body.get("backend", "")),
                     validator=str(body.get("validator", "")),
                     workflow=str(body.get("workflow", "")),
+                    request_mode="workflow",
                 )
                 self.state.launch(
                     project,
                     None,
-                    mode="rerun",
+                    mode="run",
                     backend=str(body.get("backend", "")),
                     validator=request["validator"],
                     workflow=request["workflow"],
                     goal_file=request["prompt_file"],
                 )
                 return self._json({"ok": True})
+            if parsed.path == "/api/studio/generate":
+                project = self._project(body)
+                return self._json(self.state.studio_generate_workflow(
+                    project,
+                    str(body.get("name", "")),
+                    str(body.get("destination", "custom")),
+                    str(body.get("request", "")),
+                    str(body.get("backend", "")),
+                ))
             if parsed.path == "/api/studio/workflow/create":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "custom")), project))
@@ -1521,10 +1751,18 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_save(str(body.get("id", "")), str(body.get("content", "")), str(body.get("hash", "")), project))
             if parsed.path == "/api/studio/validate":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_validate(str(body.get("id", "")), project))
+                content = str(body.get("content", "")) if "content" in body else None
+                flow = body.get("flow") if "flow" in body else None
+                return self._json(self.state.studio_validate(str(body.get("id", "")), project, content=content, flow=flow))
             if parsed.path == "/api/studio/visual/save":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_visual_save(str(body.get("id", "")), body.get("flow", []), str(body.get("hash", "")), project))
+            if parsed.path == "/api/studio/stage/validate":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_stage_save(
+                    str(body.get("id", "")), str(body.get("stage", "")), body.get("fields", {}), str(body.get("hash", "")), project,
+                    flow_index=body.get("flow_index"), scope=str(body.get("scope", "")), flow_fields=body.get("flow_fields", {}), validate_only=True,
+                ))
             if parsed.path == "/api/studio/stage/save":
                 project = self._optional_project(str(body.get("project", "")))
                 flow_index = body.get("flow_index")
@@ -1562,6 +1800,22 @@ class Handler(SimpleHTTPRequestHandler):
             root.destroy()
         except Exception as exc:
             raise ValueError(f"Folder picker unavailable: {exc}") from exc
+        if not path:
+            return self._json({"cancelled": True})
+        return self._json({"cancelled": False, "path": str(Path(path).expanduser().resolve())})
+
+    def _pick_file(self, kind: str = "file") -> None:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            filetypes = [("Python validation", "*.py"), ("All files", "*.*")] if kind == "python" else [("All files", "*.*")]
+            path = filedialog.askopenfilename(title="Choose file", filetypes=filetypes)
+            root.destroy()
+        except Exception as exc:
+            raise ValueError(f"File picker unavailable: {exc}") from exc
         if not path:
             return self._json({"cancelled": True})
         return self._json({"cancelled": False, "path": str(Path(path).expanduser().resolve())})

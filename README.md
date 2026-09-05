@@ -84,7 +84,7 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 ## Flow engine architecture
 
-The runner uses a small YAML-driven flow pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns only `StageResult` facts/effects. `FlowNode` owns static YAML routing such as `recover`, `restart_at`, and `scope`. `PlanStage` is the built-in Task producer and automatically enters the standard `execute -> review` per-TODO SOP, so normal Plan-driven YAML does not repeat those flow nodes. Other Stages may still declare `produces: tasks`; advanced/custom producers can use an explicit contiguous `scope: task` block when they need a custom per-TODO SOP.
+The runner uses a small YAML-driven flow pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns only `StageResult` facts/effects. `FlowNode` owns static YAML routing such as `recover`, `restart_at`, and `scope`. `PlanStage` is the built-in Task producer and automatically enters the standard `execute -> review` per-TODO SOP, so normal Plan-driven YAML does not repeat those flow nodes. Other Stages may still declare `produces: tasks`; advanced/custom producers can use an explicit contiguous `scope: task` block when they need a custom per-TODO SOP. `task` / `review` profiles may also be reused as ordinary top-level linear Stages when a custom Prompt does not depend on TODO data; in that mode they do not mutate durable TODO state.
 
 Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, read-only enforcement, and optional loop-context compression register as plugins. Core stages and the AI client do not import those concrete plugins.
 
@@ -141,28 +141,26 @@ Runner events keep `status=AI running skill` and expose `label=Project Documenta
 
 ### Repeated semantic-failure escape
 
-A FlowNode may override `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count and different semantic failures reset the count. `ReviewStage` owns the semantic default `2` whenever it has recovery; other Stage types remain opt-in. This keeps builtin YAML small while preserving an explicit override when a Workflow needs a different threshold.
+A FlowNode may override `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count and different semantic failures reset the count. `ReviewStage` owns the semantic default `2` whenever it has recovery; other Stage types remain opt-in. This keeps system YAML small while preserving an explicit override when a Workflow needs a different threshold.
 
 ## Workflow Dry Run
 
 Use `tool/workflow_dryrun.py` to validate whether a `workflow.yaml` can reach closure without calling a real agent. The tool reuses the production Workflow Loader, Pipeline, StageResult, and Stage finish and result reducers, and mocks only the bottom-level Stage execution result, so it does not create a second workflow engine.
 
 ```bat
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --scenario dryrunexample\builtin_mixed_scenario.yaml
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --scenario dryrunexample\system_mixed_scenario.yaml
 dryrunexample\run_dryrun.bat
 ```
 
-`dryrunexample/` covers a builtin workflow plus a concise semantic custom workflow with `task`, `review`, recover, and `repeat`. Dry Run is an external tool; removing it and its examples does not change Runner Core behavior.
+`dryrunexample/` covers a system workflow plus a concise semantic custom workflow with `task`, `review`, recover, and `repeat`. Dry Run is an external tool; removing it and its examples does not change Runner Core behavior.
 Auto failure matrix:
 
 ```bat
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix
-python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --json
-
-`--matrix` now generates deterministic routing cases for the Workflow's actual `recover`, `repeat`, and `restart_at` features and reports detected task-producer/task-scope/review/validation features. `--matrix --json` is suitable for CI, UI, and reliability gates.
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix
+python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix --json
 ```
 
-`--matrix` runs the happy path plus one deterministic `FAIL -> recover -> closure` case for every recoverable Stage that the real normalized workflow exposes. Invalid workflow options are rejected by the production Workflow Loader/schema before simulation; Dry Run does not maintain a duplicate validation schema.
+`--matrix` generates deterministic closure cases for the Workflow's real `recover`, `repeat`, `restart_at`, and `fresh_after_same_failures` routing. For semantic-failure session rotation it also verifies that the configured fresh-session threshold actually fires. The JSON contract reports task-producer/task-scope/review/validation features and is suitable for CI, UI Save/Import gates, Workflow Builder publication, and reliability preflight. Invalid Workflow options still fail through the production Workflow Loader/schema before simulation; Dry Run does not maintain a duplicate schema.
 
 For external UI/AI editors, `python tool/workflow_catalog.py` emits the data-only Stage/flow schema as JSON, and `python tool/workflow_dryrun.py workflow.yaml --json` emits a machine-readable closure result. The UI can therefore CRUD YAML/MD/PY without importing Runner Core.
 
@@ -179,4 +177,6 @@ A lightweight GPT-style local UI is available as a separate entry point:
 python ui/main.py
 ```
 
-The UI does not import Runner Core. It launches the existing CLI and reads the project `.ai-task-runner` runtime files. One project maps to one persistent UI conversation.
+The UI does not import Runner Core. It launches the existing CLI with hidden-console flags on Windows and reads the Project `.ai-task-runner` runtime files. The current UI is Workflow-task oriented rather than a general chat client: Run/Stop/Continue/Reset/Rerun operate on one Project task history. Workflow Studio exposes immutable **System** assets under `runner/workflow/system` / `runner/prompts/system|stages`, editable **Custom** assets under `runner/workflow/custom` / `runner/prompts/custom`, Project-local assets, and an AI Workflow Builder. All Workflow writes/imports/generation are validated before publication.
+
+The same System Workflow Builder can be called from CLI/other integrations through `workflow_builder/run.py`; it drafts first, runs `workflow_builder/validation.py` + the real dry-run matrix, then publishes only after validation passes.

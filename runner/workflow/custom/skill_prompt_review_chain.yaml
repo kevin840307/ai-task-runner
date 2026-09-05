@@ -1,0 +1,48 @@
+stages:
+  run_prompt:
+    type: task
+    status: AI running workflow skill
+
+  review:
+    type: review
+    status: Reviewing result
+
+  validate_file:
+    type: command
+    status: Running Python validation
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    recover:
+      - stage: run_prompt
+        status: Fixing validation failure
+        prompt: custom/fix_validation.md
+      - stage: review
+        status: Reviewing validation fix
+        prompt: custom/review_validation_fix.md
+
+flow:
+  - stage: run_prompt
+    status: Designing solution
+    prompt: custom/design.md
+
+  - stage: review
+    status: Reviewing design
+    prompt: custom/review_design.md
+
+  - stage: run_prompt
+    status: Implementing changes
+    prompt: custom/implementation.md
+
+  - stage: review
+    status: Reviewing implementation
+    prompt: custom/review_implementation.md
+
+  - stage: run_prompt
+    status: Updating documentation
+    prompt: custom/documentation.md
+
+  - stage: review
+    status: Reviewing documentation
+    prompt: custom/review_documentation.md
+
+  - validate_file

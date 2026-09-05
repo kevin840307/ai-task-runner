@@ -19,12 +19,14 @@ packages = [
     "runner.prompts",
     "runner.prompts.stages",
     "runner.prompts.system",
+    "runner.prompts.custom",
     "runner.backends",
     "runner.config",
     "runner.plugins",
     "runner.project",
     "runner.workflow",
-    "runner.workflow.builtin",
+    "runner.workflow.system",
+    "runner.workflow.custom",
     "runner.runtime",
     "runner.workflow.stages",
     "runner.utils",
@@ -41,4 +43,6 @@ version = {attr = "runner.version.__version__"}
 [tool.setuptools.package-data]
 "runner.prompts.stages" = ["*.md"]
 "runner.prompts.system" = ["*.md"]
-"runner.workflow.builtin" = ["*.yaml"]
+"runner.prompts.custom" = ["*.md"]
+"runner.workflow.system" = ["*.yaml"]
+"runner.workflow.custom" = ["*.yaml"]

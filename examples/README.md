@@ -35,13 +35,13 @@ The suite is intentionally small and diagnostic:
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
 
-Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../tool/workflows/skill_prompt_review_chain.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project and validator.
+Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../runner/workflow/custom/skill_prompt_review_chain.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project and validator.
 
 Validation-mode workflow example: `validation_modes.yaml` shows the automatic built-in mapping:
 
-- Python file validator only selects `runner/workflow/builtin/file.yaml`.
-- `validator: ai` selects `runner/workflow/builtin/ai.yaml`.
-- Python file validator plus `ai_validator_prompt` or `ai_validator_prompt_file` selects `runner/workflow/builtin/mixed.yaml`.
+- Python file validator only selects `runner/workflow/system/file.yaml`.
+- `validator: ai` selects `runner/workflow/system/ai.yaml`.
+- Python file validator plus `ai_validator_prompt` or `ai_validator_prompt_file` selects `runner/workflow/system/mixed.yaml`.
 
 ## Current custom Workflow examples
 
@@ -50,6 +50,6 @@ Use the current semantic Stage types instead of older low-level fields such as `
 - `workflow_multi_prompt.yaml`: reuses `type: task` and `type: review` with different prompts.
 - `custom_workflow_latest.yaml`: latest generic custom Workflow. A a `command` Stage produces `Task[]`, the task-scoped SOP executes/reviews them, and a final `command` Stage runs without requiring Plan or a Validator.
 - `custom_task_producer.py`: Task JSON producer used by the custom Workflow.
-- `../tool/workflows/skill_prompt_review_chain.yaml`: real multi-prompt + Review + File Validator workflow.
+- `../runner/workflow/custom/skill_prompt_review_chain.yaml`: real multi-prompt + Review + File Validator workflow.
 
 For the full contract and more examples, see `docs/user/CUSTOM_WORKFLOW.md`.

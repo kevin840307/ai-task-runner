@@ -48,7 +48,7 @@ def _option(command: list[str], name: str) -> str:
     return command[command.index(name) + 1]
 
 
-def test_runner_command_inputs_select_builtin_validation_workflows(tmp_path: Path):
+def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path):
     project = tmp_path / "project"
     config = replace(settings(tmp_path), agent_timeout=30.0, planning_timeout=40.0)
 
@@ -358,9 +358,9 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str):
     assert f"--hours {hours}" in text
     assert "--high-density --require-transient" in text
     assert "--example-smoke-matrix-project" in text
-    assert "runner\\workflow\\builtin\\file.yaml" in text
-    assert "runner\\workflow\\builtin\\mixed.yaml" in text
-    assert "tool\\workflows\\skill_prompt_review_chain.yaml" in text
+    assert "runner\\workflow\\system\\file.yaml" in text
+    assert "runner\\workflow\\system\\mixed.yaml" in text
+    assert "runner\\workflow\\custom\\skill_prompt_review_chain.yaml" in text
 
 
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
@@ -437,7 +437,7 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
         ("mixed", ["validate_file", "validate_ai"]),
     ],
 )
-def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
+def test_system_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
     stages = ["planning", "execute", "review", *validators]
     project = tmp_path
     work = project / ".ai-task-runner"
@@ -455,7 +455,7 @@ def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: li
         encoding="utf-8",
     )
 
-    live.assert_builtin_topology(project, workflow)
+    live.assert_system_topology(project, workflow)
 
 @pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
 def test_review_repair_validator_accepts_two_logical_lines_with_optional_final_newline(
@@ -579,11 +579,14 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
     compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")
 
 
-def test_workflow_dryrun_preflight_covers_builtins_and_custom_task_producer():
+def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 5
+    assert len(results) == 6
     assert all(item["closed"] is True for item in results)
     assert sum(int(item["paths_total"]) for item in results) >= 10
+    linear = next(item for item in results if str(item["workflow"]).endswith("skill_prompt_review_chain.yaml"))
+    assert linear["features"]["task_producer"] is False
+    assert linear["features"]["task_scope"] is False
     custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))
     assert custom["features"]["task_producer"] is True
     assert custom["features"]["task_scope"] is True

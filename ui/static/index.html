@@ -6,17 +6,17 @@
   <title>AI Task Runner</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body class="workflow-mode">
   <aside class="projects">
     <div class="projects-head"><div class="brand">Agent Workflow</div></div>
     <nav class="project-nav" aria-label="Application navigation">
-      <button id="chatNav" class="project-nav-link active" type="button"><span>Run</span><strong>Chat</strong></button>
+      <button id="chatNav" class="project-nav-link active" type="button"><span>Run</span><strong>Tasks</strong></button>
       <button id="workflowNav" class="project-nav-link" type="button"><span>Cfg</span><strong>Workflows</strong></button>
     </nav>
     <button id="openProject" class="primary wide new-project-button" type="button"><span class="button-icon">+</span><span class="button-text">Open Project</span></button>
     <div class="project-section-label">Projects</div>
     <div id="projectList" class="project-list"></div>
-    <div class="sidebar-foot">One project · one conversation</div>
+    <div class="sidebar-foot">One project · one task history</div>
   </aside>
 
   <main class="workspace">
@@ -28,8 +28,9 @@
         </div>
         <div class="runtime-actions">
           <span id="statusBadge" class="runtime-badge">Idle</span>
-          <button id="resumeButton" class="action-button" type="button" hidden>Resume</button>
+          <button id="resumeButton" class="action-button" type="button" hidden>Continue</button>
           <button id="rerunButton" class="action-button" type="button" hidden>Rerun</button>
+          <button id="resetButton" class="action-button" type="button" hidden>Reset</button>
           <button id="stopButton" class="action-button danger" type="button" hidden>Stop</button>
         </div>
       </header>
@@ -43,7 +44,7 @@
       <section id="emptyState" class="empty-state">
         <div class="empty-state-mark">A</div>
         <h2>Open a project to start</h2>
-        <p>每個 Project 保留一條持久對話；Runner 狀態與 Live Output 直接讀取專案的 .ai-task-runner。</p>
+        <p>每個 Project 保留一條 Task history；Runner 狀態與 Live Output 直接讀取專案的 .ai-task-runner。</p>
       </section>
       <section id="messages" class="history" hidden></section>
 
@@ -61,7 +62,11 @@
             </div>
             <label id="validatorPicker" class="validator-picker" hidden>
               <span class="workflow-picker-label">Python validation</span>
-              <input id="validator" placeholder="validation.py path" autocomplete="off" />
+              <div class="compact-file-picker">
+                <input id="validator" placeholder="Choose validation.py" autocomplete="off" readonly title="" />
+                <button id="browseValidatorButton" class="file-choice-button compact" type="button">Choose…</button>
+                <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>Clear</button>
+              </div>
             </label>
           </div>
           <div id="optionsPanel" class="options-panel" hidden>
@@ -180,10 +185,6 @@
           </main>
         </section>
 
-        <div id="generatePanel" class="generate-panel" hidden>
-          <div><strong>Generate Workflow with AI</strong><p id="generateMessage">AI workflow generator 尚未接上；未來會產生 Draft，Validate 通過後再 Apply。</p></div>
-          <button id="closeGeneratePanel" type="button">Close</button>
-        </div>
       </div>
     </section>
   </main>
@@ -199,7 +200,7 @@
       <label class="modal-label" for="projectPathInput">Path</label>
       <div class="project-path-row">
         <input id="projectPathInput" class="modal-input" placeholder="C:\\work\\my-project" />
-        <button id="browseProjectButton" type="button">Browse…</button>
+        <button id="browseProjectButton" class="file-choice-button" type="button">Browse…</button>
       </div>
       <div id="projectModalHint" class="modal-hint">可直接貼上路徑，或使用 Browse 選擇資料夾。</div>
       <div class="modal-actions"><button id="projectModalCancel" class="modal-secondary" type="button">Cancel</button><button id="projectModalConfirm" class="primary modal-primary" type="button">Open Project</button></div>
@@ -217,9 +218,12 @@
         <div class="modal-section-label">Workflow file</div>
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newWorkflowName" class="designer-input" placeholder="regression.workflow.yaml" /><span class="designer-form-hint">未輸入副檔名時會自動建立 .workflow.yaml。</span></label>
         <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select><span class="designer-form-hint">Custom workflow 可被多個 Project 使用；Project workflow 跟著目前專案。</span></label>
-        <div class="workflow-create-preview"><span class="designer-eyebrow">Initial YAML</span><code>stages: {}
+        <div class="workflow-create-preview"><span class="designer-eyebrow">Initial YAML</span><code>stages:
+  planning:
+    type: plan
 
-flow: []</code></div>
+flow:
+  - planning</code></div>
         <div id="newWorkflowHint" class="modal-hint"></div>
       </div>
       <div class="modal-actions"><button id="newWorkflowCancel" class="modal-secondary" type="button">Cancel</button><button id="newWorkflowConfirm" class="primary modal-primary" type="button">Create Workflow</button></div>
@@ -244,6 +248,24 @@ flow: []</code></div>
   </div>
 
   <!-- Static-style Import modal for both Workflow and Prompt assets. -->
+  <!-- AI Workflow Builder modal. -->
+  <div id="generateWorkflowBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card workflow-generate-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowTitle">
+      <div class="modal-head">
+        <div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">AI</span><div><h2 id="generateWorkflowTitle">Generate Workflow with AI</h2><p>使用 System Workflow Builder 產生 Draft；只有 Python validation + dry-run 通過後才會發佈到指定位置。</p></div></div>
+        <button id="generateWorkflowClose" class="modal-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <div class="modal-section-label">Output</div>
+        <label class="designer-form-row"><span class="designer-label">Name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label>
+        <label class="designer-form-row"><span class="designer-label">Destination</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
+        <label class="designer-form-row designer-form-wide"><span class="designer-label">Requirements</span><textarea id="generateWorkflowRequest" class="designer-textarea workflow-generate-request" placeholder="Describe stages, validation gates, retry/recovery rules, expected prompts, and any constraints..."></textarea><span class="designer-form-hint">Builder 只會先寫 Draft；驗證成功才 publish Workflow / Prompt。</span></label>
+        <div id="generateWorkflowHint" class="modal-hint"></div>
+      </div>
+      <div class="modal-actions"><button id="generateWorkflowCancel" class="modal-secondary" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary modal-primary" type="button">Generate</button></div>
+    </div>
+  </div>
+
   <div id="importAssetBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card import-asset-card" role="dialog" aria-modal="true" aria-labelledby="importAssetTitle">
       <div class="modal-head">
@@ -252,8 +274,8 @@ flow: []</code></div>
       </div>
       <div class="modal-scroll-body import-asset-body">
         <div class="designer-import-grid">
-          <section class="designer-form-grid">
-            <label class="designer-form-row"><span class="designer-label">Choose File</span><input id="importAssetFile" class="designer-input" type="file" accept=".json,.yaml,.yml,.md,application/json,text/yaml,text/markdown,text/plain" /></label>
+          <section class="designer-form-grid import-asset-form">
+            <div class="designer-form-row"><span class="designer-label">Choose File</span><div class="asset-file-picker"><input id="importAssetFile" class="visually-hidden-file" type="file" accept=".json,.yaml,.yml,.md,application/json,text/yaml,text/markdown,text/plain" /><button id="importAssetChooseButton" class="file-choice-button" type="button">Choose file</button><span id="importAssetFileName" class="selected-file-name">No file selected</span></div></div>
             <label class="designer-form-row"><span class="designer-label">Name</span><input id="importAssetName" class="designer-input" placeholder="workflow.yaml" /></label>
             <label class="designer-form-row"><span class="designer-label">Destination</span><select id="importAssetDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
             <label class="designer-form-row designer-import-json-wrap"><span class="designer-label">Content</span><textarea id="importAssetContent" class="designer-textarea designer-import-json" placeholder="Paste YAML / Markdown or exported JSON here"></textarea></label>

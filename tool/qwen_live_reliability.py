@@ -25,8 +25,8 @@ RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
-BUILTIN_WORKFLOWS = {
-    name: ROOT / "runner" / "workflow" / "builtin" / f"{name}.yaml"
+SYSTEM_WORKFLOWS = {
+    name: ROOT / "runner" / "workflow" / "system" / f"{name}.yaml"
     for name in ("file", "ai", "mixed")
 }
 REPAIR_INITIAL = "INITIAL"
@@ -607,7 +607,7 @@ def assert_prompt_transport_contract(project: Path) -> None:
                 raise RuntimeError("same-session Review resent static review contract")
 
 
-def assert_builtin_topology(project: Path, workflow: str) -> None:
+def assert_system_topology(project: Path, workflow: str) -> None:
     starts = [
         str(event.get("stage", ""))
         for event in runner_events(project)
@@ -623,7 +623,7 @@ def assert_builtin_topology(project: Path, workflow: str) -> None:
     validators = {name for name in starts if name.startswith("validate_")}
     if missing or validators != expected_validators:
         raise RuntimeError(
-            f"builtin/{workflow} topology mismatch: missing={missing}, validators={sorted(validators)}"
+            f"system/{workflow} topology mismatch: missing={missing}, validators={sorted(validators)}"
         )
 
 
@@ -780,7 +780,8 @@ def _slug(path: Path | None) -> str:
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
-        *BUILTIN_WORKFLOWS.values(),
+        *SYSTEM_WORKFLOWS.values(),
+        ROOT / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml",
         ROOT / "examples" / "custom_workflow_latest.yaml",
     ]
     tool = ROOT / "tool" / "workflow_dryrun.py"
@@ -948,8 +949,8 @@ def custom_task_producer_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("custom Task Producer task did not complete")
 
 
-def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
-    project = create_project(root, f"builtin-{workflow}-probe")
+def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
+    project = create_project(root, f"system-{workflow}-probe")
     ai_validation = workflow in {"ai", "mixed"}
     code = run_command(
         runner_command(
@@ -957,16 +958,16 @@ def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> Non
             project,
             final_ai=ai_validation,
             ai_only=workflow == "ai",
-            workflow=BUILTIN_WORKFLOWS[workflow],
+            workflow=SYSTEM_WORKFLOWS[workflow],
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
     assert_completed(project, code)
-    assert_builtin_topology(project, workflow)
+    assert_system_topology(project, workflow)
     assert_prompt_transport_contract(project)
     if ai_validation and len(final_validation_sessions(project)) < 3:
-        raise RuntimeError(f"builtin/{workflow} reused Final AI validation sessions")
+        raise RuntimeError(f"system/{workflow} reused Final AI validation sessions")
 
 
 REVIEW_REPAIR_PROMPT = """Make review.txt contain exactly these two logical lines:
@@ -1718,8 +1719,8 @@ def main() -> int:
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
         for workflow in ("file", "ai", "mixed"):
-            builtin_workflow_probe(settings, run_root, workflow)
-            print(f"PASS builtin/{workflow} topology + prompt contract probe", flush=True)
+            system_workflow_probe(settings, run_root, workflow)
+            print(f"PASS system/{workflow} topology + prompt contract probe", flush=True)
         custom_task_producer_probe(settings, run_root)
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
         review_repair_prompt_probe(settings, run_root)
@@ -1780,7 +1781,7 @@ def main() -> int:
         "workflow_dryrun_preflight": True,
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,
-        "builtin_workflow_contracts": ["file", "ai", "mixed"],
+        "system_workflow_contracts": ["file", "ai", "mixed"],
         "custom_task_producer_probe": True,
         "review_repair_prompt_probe": True,
         "validator_repair_prompt_contract": True,

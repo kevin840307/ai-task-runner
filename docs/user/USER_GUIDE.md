@@ -46,9 +46,9 @@ Protected paths are project-relative and may name files or directories. The poli
 ```
 
 ## Workflow YAML
-Without `--workflow`, Runner selects `workflow/builtin/mixed.yaml`, `workflow/builtin/file.yaml`, or `workflow/builtin/ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
+Without `--workflow`, Runner selects `workflow/system/mixed.yaml`, `workflow/system/file.yaml`, or `workflow/system/ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
 
-Task production is an effect, not a Plan-only privilege. `PlanStage` is the built-in AI Task producer and automatically uses the standard `execute -> review` per-TODO SOP. Normal Plan-driven YAML therefore lists only `planning` and later top-level stages. `command` or future Stages may still declare `produces: tasks`; explicit `scope: task` is the advanced form for non-Plan producers or a custom per-TODO SOP.
+Task production is an effect, not a Plan-only privilege. `PlanStage` is the built-in AI Task producer and automatically uses the standard `execute -> review` per-TODO SOP. Normal Plan-driven YAML therefore lists only `planning` and later top-level stages. `command` or future Stages may still declare `produces: tasks`; explicit `scope: task` is the advanced form for non-Plan producers or a custom per-TODO SOP. A `task` or `review` profile may also appear at top level without pending TODOs when its custom Prompt is linear/global rather than task-data driven; in that case its semantic result participates in normal Recovery routing but no per-TODO state is written.
 
 A non-Plan producer uses the same contract:
 
@@ -101,7 +101,7 @@ flow:
   - validate_file
 ```
 
-`continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated builtin Execute/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
+`continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated system/default Execute/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
 
 For this YAML, if Plan creates TODO A, B, and C, every TODO runs `execute -> security_review -> review_task` in that fixed YAML order before final validation. Durable state needs only the current TODO, `task_step`, and `workflow_position`; it does not persist AI-generated Stage topology.
 

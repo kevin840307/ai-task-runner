@@ -26,7 +26,7 @@
 24. Active／Resume Run 必須凍結所有會影響 AI 行為的 file-based input，至少包含 Workflow／Stage Prompt／Goal File／Final-AI Prompt；YAML List child 亦同。
 25. Stage recovery 只傳必要的新 evidence；structured Stage 結果透過 bounded `previous.data` 傳遞，Prompt Context 必須限制大小，不可因 recover 重送大量既有內容。
 26. Backend parity: complete AI task prompts must use stdin. Session, sandbox/permission, error parsing, and timeout identity belong to each Backend adapter; Workflow/Stage must not branch on Qwen/OpenCode.
-27. Builtin 正常 Same Session 若已看過同一 Stage Prompt contract，只能透過 bounded continuation 補新 TODO／Review／Validator evidence；不得重送 Goal、Rules 或完整 Stage contract。對應 contract 必須由 deterministic test + qwen_live_reliability 鎖定。
+27. System 正常 Same Session 若已看過同一 Stage Prompt contract，只能透過 bounded continuation 補新 TODO／Review／Validator evidence；不得重送 Goal、Rules 或完整 Stage contract。對應 contract 必須由 deterministic test + qwen_live_reliability 鎖定。
 28. Example／Demo 執行不得污染 canonical fixture；單一 Example 只複製該 Example 到獨立 workspace，`--all` 才複製 examples 集合，不複製整個 Runner repo。每次 Run 都重新建立副本；預設放在 `.example_runs/`，可由環境變數覆寫並保留 work path 供 Debug。
 29. `max_results` 是 FlowNode 的 opt-in semantic-result 上限：未設定時既有 Workflow 行為完全不變；只有成功產生合法 PASS/FAIL StageResult 才計數，timeout／API／backend／parser／structured retry／session recovery 等技術異常不計數；計數必須 durable，Resume 不可重置。
 30. `status` 屬於可重用 Stage 的通用執行狀態；FlowNode 若需描述本次具體工作使用可選 `label`。`label` 只作 runtime/UI/log metadata，不可改變 Stage、Prompt、Retry、Session 或 routing 行為；未設定時保持既有行為。

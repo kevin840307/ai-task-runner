@@ -18,6 +18,10 @@ class UIStateTests(unittest.TestCase):
         (self.root / "ui" / "data").mkdir(parents=True)
         self.project = self.root / "project"
         self.project.mkdir()
+        custom = self.root / "runner" / "workflow" / "custom"
+        custom.mkdir(parents=True)
+        self.workflow = custom / "task.workflow.yaml"
+        self.workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
         self.state = UIState(self.root)
 
     def tearDown(self) -> None:
@@ -96,12 +100,67 @@ class UIStateTests(unittest.TestCase):
     def test_launch_message_appends_user_only_after_successful_launch(self) -> None:
         with patch.object(self.state, "launch", side_effect=ValueError("boom")):
             with self.assertRaisesRegex(ValueError, "boom"):
-                self.state.launch_message(self.project, "hello")
+                self.state.launch_message(self.project, "hello", workflow=str(self.workflow))
         self.assertEqual(self.state.messages(self.project), [])
 
         with patch.object(self.state, "launch", return_value=None):
-            self.state.launch_message(self.project, "hello")
+            self.state.launch_message(self.project, "hello", workflow=str(self.workflow))
         self.assertEqual([m["content"] for m in self.state.messages(self.project)], ["hello"])
+
+    def test_launch_message_requires_selected_workflow_and_creates_request_snapshot(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Select a Workflow"):
+            self.state.launch_message(self.project, "what does this project do?")
+        with patch.object(self.state, "launch", return_value=None) as launch:
+            self.state.launch_message(self.project, "run the task", workflow=str(self.workflow))
+        kwargs = launch.call_args.kwargs
+        self.assertEqual(Path(kwargs["workflow"]).resolve(), self.workflow.resolve())
+        self.assertEqual(kwargs["validator"], "")
+        request_files = list((self.project / ".ai-task-runner" / "ui" / "requests").glob("*/request.json"))
+        self.assertEqual(len(request_files), 1)
+        manifest = json.loads(request_files[0].read_text(encoding="utf-8"))
+        self.assertEqual(manifest["mode"], "workflow")
+        self.assertEqual(Path(manifest["workflow"]).resolve(), self.workflow.resolve())
+        self.assertTrue(Path(manifest["prompt_file"]).is_file())
+        self.assertEqual(self.state.messages(self.project)[0]["content"], "run the task")
+
+    def test_reset_runtime_preserves_ui_history_and_removes_runner_state(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        (runtime / "debug").mkdir(parents=True)
+        (runtime / "state.json").write_text("{}", encoding="utf-8")
+        (runtime / "debug" / "last-result.txt").write_text("old", encoding="utf-8")
+        self.append = self.state.append_message(self.project, "user", "keep me")
+        request = runtime / "ui" / "requests" / "r1"
+        request.mkdir(parents=True)
+        (request / "prompt.md").write_text("keep request", encoding="utf-8")
+        result = self.state.reset_runtime(self.project)
+        self.assertIn("state.json", result["removed"])
+        self.assertFalse((runtime / "state.json").exists())
+        self.assertFalse((runtime / "debug").exists())
+        self.assertEqual(self.state.messages(self.project)[0]["content"], "keep me")
+        self.assertTrue((request / "prompt.md").is_file())
+
+    def test_reset_runtime_rejects_active_runtime(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"running": True}):
+            with self.assertRaisesRegex(ValueError, "Stop the active runtime"):
+                self.state.reset_runtime(self.project)
+
+    def test_new_task_after_completed_run_auto_resets_old_runtime(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True)
+        (runtime / "state.json").write_text(json.dumps({"run_id": "old", "completed": True}), encoding="utf-8")
+        (runtime / "old.log").write_text("old", encoding="utf-8")
+        with patch.object(self.state, "launch", return_value=None):
+            self.state.launch_message(self.project, "next task", workflow=str(self.workflow))
+        self.assertFalse((runtime / "old.log").exists())
+        self.assertTrue(any((runtime / "ui" / "requests").glob("*/prompt.md")))
+
+    def test_new_task_does_not_discard_resumable_state(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True)
+        (runtime / "state.json").write_text(json.dumps({"run_id": "old", "completed": False}), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Continue it or Reset"):
+            self.state.launch_message(self.project, "new task", workflow=str(self.workflow))
+        self.assertTrue((runtime / "state.json").exists())
 
     def test_launch_uses_detached_cli_contract(self) -> None:
         with patch.object(self.state, "read_runtime", return_value={"running": False}), patch("ui.server.subprocess.Popen") as popen:
@@ -218,16 +277,17 @@ class WorkflowStudioTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / "ui" / "data").mkdir(parents=True)
-        (self.root / "runner" / "workflow" / "builtin").mkdir(parents=True)
+        (self.root / "runner" / "workflow" / "system").mkdir(parents=True)
         (self.root / "runner" / "prompts" / "stages").mkdir(parents=True)
-        (self.root / "tool" / "workflows" / "prompts").mkdir(parents=True)
+        (self.root / "runner" / "workflow" / "custom").mkdir(parents=True)
+        (self.root / "runner" / "prompts" / "custom").mkdir(parents=True)
         (self.root / "tool").mkdir(exist_ok=True)
-        (self.root / "tool" / "workflow_dryrun.py").write_text("print('{}')\n", encoding="utf-8")
-        self.system_workflow = self.root / "runner" / "workflow" / "builtin" / "file.yaml"
-        self.system_workflow.write_text("flow:\n  - planning\n", encoding="utf-8")
-        self.workflow = self.root / "tool" / "workflows" / "custom.workflow.yaml"
+        (self.root / "tool" / "workflow_dryrun.py").write_text("print('{\"closed\": true, \"valid\": true, \"paths_passed\": 1, \"paths_total\": 1}')\n", encoding="utf-8")
+        self.system_workflow = self.root / "runner" / "workflow" / "system" / "file.yaml"
+        self.system_workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
+        self.workflow = self.root / "runner" / "workflow" / "custom" / "custom.workflow.yaml"
         self.workflow.parent.mkdir(parents=True, exist_ok=True)
-        self.workflow.write_text("flow:\n  - planning\n", encoding="utf-8")
+        self.workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
         self.prompt = self.root / "runner" / "prompts" / "stages" / "execution.md"
         self.prompt.write_text("Do the task.\n", encoding="utf-8")
         (self.root / "runner" / "prompts" / "stages" / "continue.md").write_text("Continue.\n", encoding="utf-8")
@@ -259,7 +319,7 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertTrue(any(item["name"] == "execution.md" for item in files["prompts"]))
         self.assertTrue(files["guard"]["editable"])
 
-    def test_system_assets_are_readonly_and_tool_assets_are_custom(self) -> None:
+    def test_system_assets_are_readonly_and_custom_assets_are_editable(self) -> None:
         files = self.state.studio_files(self.project)
         system = next(item for item in files["workflows"] if item["path"] == str(self.system_workflow.resolve()))
         custom = next(item for item in files["workflows"] if item["path"] == str(self.workflow.resolve()))
@@ -273,10 +333,10 @@ class WorkflowStudioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "read only"):
             self.state.studio_delete(prompt["id"], self.project)
 
-    def test_tool_skill_workflow_and_prompt_are_classified_custom(self) -> None:
-        skill = self.root / "tool" / "workflows" / "skill_prompt_review_chain.yaml"
+    def test_custom_skill_workflow_and_prompt_are_classified_custom(self) -> None:
+        skill = self.root / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
         skill.write_text("stages: {}\nflow: []\n", encoding="utf-8")
-        custom_prompt = self.root / "tool" / "workflows" / "prompts" / "review.md"
+        custom_prompt = self.root / "runner" / "prompts" / "custom" / "review.md"
         custom_prompt.write_text("{{goal}}\n", encoding="utf-8")
         files = self.state.studio_files(self.project)
         self.assertEqual(next(x for x in files["workflows"] if x["path"] == str(skill.resolve()))["group"], "Custom")
@@ -297,11 +357,21 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertFalse(bad["ok"])
         self.assertEqual(bad["unknown"], ["made_up_variable"])
 
+    def test_prompt_save_is_server_side_validated(self) -> None:
+        custom_prompt = self.root / "runner" / "prompts" / "custom" / "editable.md"
+        custom_prompt.write_text("{{ goal }}\n", encoding="utf-8")
+        item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(custom_prompt.resolve()))
+        opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "Prompt validation failed"):
+            self.state.studio_save(item["id"], "{{ unknown_ui_variable }}\n", opened["hash"], self.project)
+        saved = self.state.studio_save(item["id"], "{{ goal }} / {{ project.root }}\n", opened["hash"], self.project)
+        self.assertIn("project.root", saved["content"])
+
     def test_manual_workflow_create_is_exclusive_and_immediately_listed(self) -> None:
         created = self.state.studio_workflow_create("regression", "project", self.project)
         path = self.project / "regression.workflow.yaml"
         self.assertTrue(path.is_file())
-        self.assertEqual(path.read_text(encoding="utf-8"), "stages: {}\n\nflow: []\n")
+        self.assertEqual(path.read_text(encoding="utf-8"), "stages:\n  planning:\n    type: plan\n\nflow:\n  - planning\n")
         self.assertEqual(created["file"]["name"], "regression.workflow.yaml")
         self.assertTrue(any(row["name"] == "regression.workflow.yaml" for row in self.state.studio_files(self.project)["workflows"]))
         with self.assertRaisesRegex(ValueError, "already exists"):
@@ -351,7 +421,7 @@ class WorkflowStudioTests(unittest.TestCase):
     def test_file_id_cannot_escape_allowed_roots(self) -> None:
         outside = self.root / "secret.md"
         outside.write_text("secret", encoding="utf-8")
-        file_id = self.state._encode_file_id(outside, "prompt", "runner")
+        file_id = self.state._encode_file_id(outside, "prompt", "system")
         with self.assertRaisesRegex(ValueError, "outside allowed"):
             self.state.studio_read(file_id, self.project)
 
@@ -365,6 +435,54 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual([stage["name"] for stage in visual["stages"]], ["planning", "review"])
         self.assertEqual([row["stage"] for row in visual["flow"]], ["planning", "review"])
         self.assertEqual(visual["flow"][1]["scope"], "task")
+
+    def test_visual_flow_status_and_prompt_override_round_trip(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  run_prompt:\n    type: task\n    status: Default status\n    prompt: stages/execution.md\nflow:\n  - stage: run_prompt\n    status: Flow status\n    prompt: stages/continue.md\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        stage = visual["stages"][0]
+        flow = visual["flow"][0]
+        self.assertEqual(stage["status"], "Default status")
+        self.assertEqual(stage["prompt"], "stages/execution.md")
+        self.assertEqual(flow["status"], "Flow status")
+        self.assertEqual(flow["prompt"], "stages/continue.md")
+
+        opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_save(
+            item["id"], "run_prompt", {}, opened["hash"], self.project,
+            flow_index=0, scope="",
+            flow_fields={"status": "Changed flow status", "prompt": "stages/execution.md"},
+        )
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertEqual(data["stages"]["run_prompt"]["status"], "Default status")
+        self.assertEqual(data["stages"]["run_prompt"]["prompt"], "stages/execution.md")
+        self.assertEqual(data["flow"][0]["status"], "Changed flow status")
+        self.assertEqual(data["flow"][0]["prompt"], "stages/execution.md")
+
+    def test_stage_draft_validation_does_not_write_workflow(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  review:\n    type: review\n    status: Before\nflow:\n  - review\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        original = self.workflow.read_text(encoding="utf-8")
+        result = self.state.studio_stage_save(
+            item["id"], "review", {"status": "Draft only"}, opened["hash"], self.project,
+            flow_index=0, scope="", validate_only=True,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), original)
+
+    def test_yaml_draft_validation_does_not_write_workflow(self) -> None:
+        item = self._workflow_item()
+        original = self.workflow.read_text(encoding="utf-8")
+        result = self.state.studio_validate(item["id"], self.project, content=original + "# draft validation only\n")
+        self.assertTrue(result["ok"])
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), original)
 
     def test_visual_save_reorders_only_through_ui_guard(self) -> None:
         self.workflow.write_text(
@@ -390,15 +508,27 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertIn("# keep this comment", updated)
         self.assertLess(updated.index("- execute"), updated.index("- planning", updated.index("flow:")))
 
+    def test_workflow_save_is_blocked_when_dryrun_matrix_fails(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        original = self.workflow.read_text(encoding="utf-8")
+        failed = subprocess.CompletedProcess(args=[], returncode=1, stdout='{"closed":false,"valid":true}', stderr="")
+        with patch("ui.server.subprocess.run", return_value=failed):
+            with self.assertRaisesRegex(ValueError, "Workflow validation failed"):
+                self.state.studio_save(item["id"], original + "# invalid closure\n", opened["hash"], self.project)
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), original)
+
     def test_validate_runs_existing_dryrun_tool_without_importing_core(self) -> None:
         item = self._workflow_item()
-        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"valid":true}', stderr="")
+        fake = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"closed":true,"valid":true,"paths_passed":1,"paths_total":1}', stderr="")
         with patch("ui.server.subprocess.run", return_value=fake) as run:
             result = self.state.studio_validate(item["id"], self.project)
         self.assertTrue(result["ok"])
         command = run.call_args.args[0]
         self.assertIn("workflow_dryrun.py", " ".join(map(str, command)))
         self.assertIn("--json", command)
+        self.assertIn("--matrix", command)
+        self.assertIn("--max-steps", command)
     def test_stage_save_updates_supported_fields_and_flow_scope(self) -> None:
         self.workflow.write_text(
             "stages:\n  review:\n    type: review\n    status: Old\n# keep workflow comment\nflow:\n  - stage: review\n    scope: task\n",
@@ -536,8 +666,8 @@ flow: [validate]
         self.assertEqual(request["validator"], str(validator.resolve())); self.assertTrue(request["requires_python_validator"])
 
     def test_ai_validator_is_detected_without_creating_separate_ai_request_file(self) -> None:
-        prompt = self.root / "tool" / "workflows" / "prompts" / "validate.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
-        self.workflow.write_text("stages:\n  ai:\n    type: ai_validator\n    prompt: prompts/validate.md\nflow: [ai]\n", encoding="utf-8")
+        prompt = self.root / "runner" / "prompts" / "custom" / "validate.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
+        self.workflow.write_text("stages:\n  ai:\n    type: ai_validator\n    prompt: custom/validate.md\nflow: [ai]\n", encoding="utf-8")
         request = self.state._create_run_request(self.project, "x", workflow=str(self.workflow))
         self.assertTrue(request["has_ai_validator"]); self.assertEqual(request["validator"], "")
         names = {p.name for p in Path(request["request_dir"]).iterdir()}
@@ -549,8 +679,8 @@ flow: [validate]
             self.state._create_run_request(self.project, "x", workflow=str(outside))
 
     def test_prompt_delete_is_blocked_while_custom_workflow_uses_it(self) -> None:
-        prompt = self.root / "tool" / "workflows" / "prompts" / "used.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
-        self.workflow.write_text("stages:\n  work:\n    type: task\n    prompt: prompts/used.md\nflow: [work]\n", encoding="utf-8")
+        prompt = self.root / "runner" / "prompts" / "custom" / "used.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
+        self.workflow.write_text("stages:\n  work:\n    type: task\n    prompt: custom/used.md\nflow: [work]\n", encoding="utf-8")
         item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(prompt.resolve()))
         with self.assertRaisesRegex(ValueError, "still used"):
             self.state.studio_delete(item["id"], self.project)
@@ -559,8 +689,8 @@ flow: [validate]
         bad = "stages:\n  work:\n    type: task\n    prompt: prompts/missing.md\nflow: [work]\n"
         with self.assertRaisesRegex(ValueError, "missing Prompt"):
             self.state.studio_import("workflow", "bad.yaml", bad, "custom", self.project)
-        prompt = self.root / "tool" / "workflows" / "prompts" / "exists.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
-        good = bad.replace("missing.md", "exists.md")
+        prompt = self.root / "runner" / "prompts" / "custom" / "exists.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
+        good = bad.replace("prompts/missing.md", "custom/exists.md")
         result = self.state.studio_import("workflow", "good.yaml", good, "custom", self.project)
         self.assertEqual(result["item"]["group"], "Custom")
 
@@ -575,6 +705,37 @@ flow: [validate]
         self.assertEqual(result["item"]["group"], "Custom")
         exported = self.state.studio_export(result["item"]["id"], self.project)
         self.assertEqual(exported["kind"], "prompt"); self.assertIn("{{goal}}", exported["content"])
+
+    def test_ai_workflow_builder_launches_external_wrapper_hidden_and_targets_custom(self) -> None:
+        builder_dir = self.root / "workflow_builder"
+        builder_dir.mkdir()
+        (builder_dir / "run.py").write_text("print('builder')\n", encoding="utf-8")
+        (builder_dir / "validation.py").write_text("print('validator')\n", encoding="utf-8")
+        (self.root / "runner" / "workflow" / "system" / "workflow_builder.yaml").write_text(
+            "stages: {}\nflow: []\n", encoding="utf-8"
+        )
+        with patch.object(self.state, "read_runtime", return_value={"running": False}), patch("ui.server.subprocess.Popen") as popen:
+            result = self.state.studio_generate_workflow(
+                self.project, "generated", "custom", "Create a review + validation workflow", backend="qwen"
+            )
+        command = popen.call_args.args[0]
+        self.assertIn(str(builder_dir / "run.py"), command)
+        self.assertIn("--project-root", command); self.assertIn(str(self.project), command)
+        self.assertIn("--request", command); self.assertIn("Create a review + validation workflow", command)
+        self.assertIn("--output-workflow", command)
+        output = Path(command[command.index("--output-workflow") + 1])
+        self.assertEqual(output, (self.root / "runner" / "workflow" / "custom" / "generated.workflow.yaml").resolve())
+        self.assertIn("--backend", command); self.assertIn("qwen", command)
+        self.assertEqual(result["workflow"], str(output))
+        self.assertEqual(popen.call_args.kwargs["stdout"], subprocess.DEVNULL)
+        if os.name == "nt":
+            self.assertTrue(popen.call_args.kwargs.get("creationflags", 0))
+        else:
+            self.assertTrue(popen.call_args.kwargs.get("start_new_session"))
+
+    def test_ai_workflow_builder_rejects_incomplete_system_builder(self) -> None:
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            self.state.studio_generate_workflow(self.project, "generated", "custom", "Create workflow")
 
     def test_studio_check_reports_yaml_location(self) -> None:
         item = self._workflow_item()

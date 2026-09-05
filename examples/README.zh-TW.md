@@ -37,13 +37,13 @@ examples\11_regression_workflow_demo\run_example.bat --backend qwen
 
 每個 YAML item 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。每個 project 會把 `prompt.md`、Python `validation.py` 與可選的 `ai_validation.md` 放在自己的 root 內，並由 `.ai-task-runner.yaml` 的 `protected_paths` 明確保護；policy 本身也會自動受保護。`examples.yaml` 使用 `goal_file` 與 `ai_validator_prompt_file` 引用這些檔案。
 
-Workflow Schema 範例放在擁有它的資料夾中。`workflow_multi_prompt.yaml` 保留為原本精簡的 multi-prompt 範例。Qwen live reliability 的客製化 workflow 放在 `../tool/workflows/skill_prompt_review_chain.yaml`；`10_skill_prompt_review_workflow` 會用真實 project 和 validator 實跑這個 workflow。
+Workflow Schema 範例放在擁有它的資料夾中。`workflow_multi_prompt.yaml` 保留為原本精簡的 multi-prompt 範例。Qwen live reliability 的客製化 workflow 放在 `../runner/workflow/custom/skill_prompt_review_chain.yaml`；`10_skill_prompt_review_workflow` 會用真實 project 和 validator 實跑這個 workflow。
 
 驗證模式 Workflow 範例：`validation_modes.yaml` 展示自動內建對應：
 
-- 只有 Python file validator 時選用 `runner/workflow/builtin/file.yaml`。
-- `validator: ai` 時選用 `runner/workflow/builtin/ai.yaml`。
-- Python file validator 加上 `ai_validator_prompt` 或 `ai_validator_prompt_file` 時選用 `runner/workflow/builtin/mixed.yaml`。
+- 只有 Python file validator 時選用 `runner/workflow/system/file.yaml`。
+- `validator: ai` 時選用 `runner/workflow/system/ai.yaml`。
+- Python file validator 加上 `ai_validator_prompt` 或 `ai_validator_prompt_file` 時選用 `runner/workflow/system/mixed.yaml`。
 
 ## 最新自訂 Workflow 範例
 
@@ -52,6 +52,6 @@ Workflow Schema 範例放在擁有它的資料夾中。`workflow_multi_prompt.ya
 - `workflow_multi_prompt.yaml`：同一個 `type: task` / `type: review` 搭配不同 prompt 重用。
 - `custom_workflow_latest.yaml`：最新通用自訂 Workflow。`command` 先產生 `Task[]`，再由 task-scoped SOP 執行／Review，最後執行 `command`；不需要 Plan，也不需要 Validator。
 - `custom_task_producer.py`：上面 Workflow 使用的 Task JSON Producer。
-- `../tool/workflows/skill_prompt_review_chain.yaml`：真實 multi-prompt + Review + File Validator Workflow。
+- `../runner/workflow/custom/skill_prompt_review_chain.yaml`：真實 multi-prompt + Review + File Validator Workflow。
 
 完整 contract 與更多寫法請看 `docs/user/CUSTOM_WORKFLOW.zh-TW.md`。

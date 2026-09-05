@@ -17,13 +17,15 @@ from .schema import (
     workflow_has_task_producer,
     workflow_validators,
 )
-BUILTIN_WORKFLOW_DIR = Path(__file__).with_name("builtin")
-BUILTIN_WORKFLOWS = {
-    "mixed": BUILTIN_WORKFLOW_DIR / "mixed.yaml",
-    "file": BUILTIN_WORKFLOW_DIR / "file.yaml",
-    "ai": BUILTIN_WORKFLOW_DIR / "ai.yaml",
+SYSTEM_WORKFLOW_DIR = Path(__file__).with_name("system")
+CUSTOM_WORKFLOW_DIR = Path(__file__).with_name("custom")
+SYSTEM_WORKFLOWS = {
+    "mixed": SYSTEM_WORKFLOW_DIR / "mixed.yaml",
+    "file": SYSTEM_WORKFLOW_DIR / "file.yaml",
+    "ai": SYSTEM_WORKFLOW_DIR / "ai.yaml",
+    "workflow_builder": SYSTEM_WORKFLOW_DIR / "workflow_builder.yaml",
 }
-DEFAULT_WORKFLOW = BUILTIN_WORKFLOWS["mixed"]
+DEFAULT_WORKFLOW = SYSTEM_WORKFLOWS["mixed"]
 
 
 def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
@@ -65,7 +67,7 @@ def save_workflow(
 def load_default_workflow(
     validator: str | None, ai_validator_prompt: str = ""
 ) -> list[dict[str, Any]]:
-    return load_workflow(BUILTIN_WORKFLOWS[
+    return load_workflow(SYSTEM_WORKFLOWS[
         default_workflow_name(validator, ai_validator_prompt)
     ])
 
@@ -327,8 +329,9 @@ def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
 
 
 __all__ = [
-    "BUILTIN_WORKFLOW_DIR",
-    "BUILTIN_WORKFLOWS",
+    "SYSTEM_WORKFLOW_DIR",
+    "CUSTOM_WORKFLOW_DIR",
+    "SYSTEM_WORKFLOWS",
     "DEFAULT_WORKFLOW",
     "default_workflow_name",
     "load_default_workflow",

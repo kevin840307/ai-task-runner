@@ -34,7 +34,7 @@ Version: 1.2.61
 
 ## 責任
 
-- `workflow/builtin/*.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
+- `workflow/system/*.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
 - `workflow/registry.py`：明確的 `type -> Stage class` Registry，並提供 UI/editor catalog metadata；不持有 Workflow topology 或 Stage instance。
 - `workflow/rules.py`：少量 `StageResult.kind` reducer 與 durable-state transition（`tasks`、`task`、`review`、`validation`、`generic`）。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。

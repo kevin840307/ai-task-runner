@@ -34,7 +34,15 @@ def handle_tasks_result(ctx: StageContext, result: StageResult) -> StageResult:
 
 
 def handle_task_result(ctx: StageContext, result: StageResult) -> StageResult:
-    task = ctx.require_task(result.stage)
+    task = ctx.task
+    if task is None:
+        # A task-profile Stage may also be used as a normal top-level linear
+        # Workflow step with a custom prompt. In that mode there is no durable
+        # TODO to mutate; keep only the AI session continuity. Task-scoped SOPs
+        # still always have a pending TODO and use the reducer below.
+        ctx.save_session()
+        return result
+
     task.attempts += 1
     task.changed_files = list(
         dict.fromkeys([*task.changed_files, *result.changed_files])
@@ -48,8 +56,25 @@ def handle_task_result(ctx: StageContext, result: StageResult) -> StageResult:
 
 
 def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
-    task = ctx.require_task(result.stage)
+    task = ctx.task
     review = result.data if isinstance(result.data, dict) else None
+
+    if task is None:
+        # Linear review stages are valid without a TODO. Their PASS/FAIL result
+        # is consumed by RecoveryPolicy; there is simply no per-task review
+        # record to persist. Keep review-client lifecycle/status behavior.
+        if result.skipped or result.status == "pass":
+            ctx.scratch.pop("review_client", None)
+        if result.skipped:
+            progress.set_status(
+                "Review 異常，暫時跳過", "final validator will decide"
+            )
+        elif result.status == "pass":
+            progress.set_status("Review PASS", result.stage)
+        elif result.status == "fail":
+            progress.set_status("Review 未通過，進入 Recovery", result.output)
+        return result
+
     if review is not None:
         task.last_review = review
 

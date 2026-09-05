@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "name": "Visual Studio 2015",
+    "path": "C:\\Users\\kevin\\OneDrive\\文件\\Visual Studio 2015"
+  },
+  {
+    "name": "Ai",
+    "path": "C:\\Users\\kevin\\OneDrive\\文件\\Ai",
+    "exists": true
+  }
+]

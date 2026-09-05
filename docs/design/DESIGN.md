@@ -34,7 +34,7 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Va
 
 ## Ownership
 
-- `workflow/builtin/*.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
+- `workflow/system/*.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
 - `workflow/registry.py`: the explicit `type -> Stage class` registry plus UI/editor catalog metadata; it does not own workflow topology or Stage instances.
 - `workflow/rules.py`: the small `StageResult.kind` reducers and durable-state transitions (`tasks`, `task`, `review`, `validation`, `generic`).
 - `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.

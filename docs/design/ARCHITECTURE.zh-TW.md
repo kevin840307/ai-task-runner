@@ -56,7 +56,7 @@ Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` �
 
 Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`StageResult` 只包含執行 facts；`recover`、`restart_at` 這類靜態 routing 屬於 YAML `FlowNode`，Pipeline 對兩者都只做通用解讀。
 
-`workflow/builtin/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance 與 validation capability；`workflow/rules.py` 負責 durable state reducer；Pipeline 擁有 Resume 與 recovery routing。頂層 `PlanStage` 由 `workflow/loader.py` 在內部展開標準 `execute -> review` 逐 TODO SOP，因此一般 YAML 不需要重複寫；顯式 `scope: task` 只保留給非 Plan／自訂 Task Producer 的進階靜態 SOP。`PlanStage` 只保存 TODO 內容，不再有 generated-step queue、`expand`、`foreach` 或額外 subflow DSL。
+`workflow/system/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance 與 validation capability；`workflow/rules.py` 負責 durable state reducer；Pipeline 擁有 Resume 與 recovery routing。頂層 `PlanStage` 由 `workflow/loader.py` 在內部展開標準 `execute -> review` 逐 TODO SOP，因此一般 YAML 不需要重複寫；顯式 `scope: task` 只保留給非 Plan／自訂 Task Producer 的進階靜態 SOP。`PlanStage` 只保存 TODO 內容，不再有 generated-step queue、`expand`、`foreach` 或額外 subflow DSL。
 
 每個 Stage instance 只負責一次 attempt，且可獨立建構／執行；Stage 不選擇或直接執行另一個 Stage。`PlanStage` 只是內建 AI Task Producer。Task 產生是通用 Stage effect（`produces: tasks`），因此 Python/command/extension 可回傳相同 Task JSON contract，Pipeline 不需要判斷 Stage class；組合與 recovery 留在 normalized `FlowNode`；標準 Plan task SOP 是 Loader 預設，不是 AI 產生的 topology。
 

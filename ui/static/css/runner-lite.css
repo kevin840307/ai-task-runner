@@ -309,3 +309,29 @@ body {
   #chatView > .compose-panel { padding: 18px 8px 8px; }
   .validator-picker { min-width: 0; width: 100%; }
 }
+
+#workflowDropdownMenu.workflow-dropdown-portal {
+  position: fixed !important;
+  z-index: 5000 !important;
+  margin: 0 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  pointer-events: auto;
+}
+#workflowDropdownMenu.workflow-dropdown-portal::after {
+  display: none;
+}
+.message .message-body {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Project action menus portal to body so the scrollable Project list can never clip them. */
+.project-action-menu.project-action-menu-portal {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 4900 !important;
+  margin: 0 !important;
+}

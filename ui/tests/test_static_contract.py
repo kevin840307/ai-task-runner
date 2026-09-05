@@ -183,7 +183,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('-1 = keep retrying until PASS', self.js)
 
     def test_flow_routing_fields_are_editable_in_stage_modal(self):
-        for token in ("stageFlowLabel", "stageRestartAt", "stageRepeat", "stageFreshAfterSameFailures", "flow_fields: changedFlowFields()"):
+        for token in ("stageFlowLabel", "stageRestartAt", "stageRepeat", "stageFreshAfterSameFailures", "flow_fields: changedFlowFields(item)"):
             self.assertIn(token, self.js)
 
     def test_stage_editor_is_modal_but_workflow_studio_is_page(self):
@@ -196,18 +196,23 @@ class LayoutRegressionTests(unittest.TestCase):
     def test_composer_has_real_workflow_selector_and_contextual_python_validator(self):
         self.assertIn('id="workflowSelect"', self.html)
         self.assertIn('id="validatorPicker"', self.html)
+        self.assertIn('id="browseValidatorButton"', self.html)
+        self.assertIn('id="clearValidatorButton"', self.html)
         self.assertNotIn('id="workflow" placeholder="Workflow path', self.html)
         self.assertIn("selectedWorkflowItem()", self.js)
         self.assertIn('workflow: workflow?.path || ""', self.js)
-        self.assertIn('validator: workflow?.requires_python_validator ?', self.js)
-        self.assertIn("validatorPicker.hidden = !workflow?.requires_python_validator", self.js)
+        self.assertIn('validator: workflow?.requires_python_validator ? $("validator").value.trim() : ""', self.js)
+        self.assertIn('validatorPicker.hidden = !workflow?.requires_python_validator', self.js)
         self.assertIn("renderWorkflowPicker()", self.js)
+        self.assertIn("browseValidator()", self.js)
 
     def test_workflow_dropdown_can_escape_picker_and_floating_composer(self):
         css = "".join(self.runner_css.split())
         self.assertIn("#workflowPicker{position:relative;z-index:20;overflow:visible!important", css)
-        self.assertIn("#workflowPicker.open{z-index:220", css)
-        self.assertIn("#workflowDropdownMenu{z-index:500", css)
+        self.assertIn("#workflowDropdownMenu.workflow-dropdown-portal{position:fixed!important;z-index:5000!important", css)
+        self.assertIn("document.body.appendChild(menu)", self.js)
+        self.assertIn("positionWorkflowDropdown", self.js)
+        self.assertIn("closeWorkflowDropdown", self.js)
 
     def test_available_params_has_chips_without_redundant_descriptions(self):
         self.assertIn("Available Params", self.html)
@@ -232,6 +237,80 @@ class LayoutRegressionTests(unittest.TestCase):
         repo = self.root.parent
         source = (repo / "runner" / "workflow" / "stages" / "ai_stage.py").read_text(encoding="utf-8")
         self.assertIn("ctx.config.workflow_explicit or ctx.validator_is_ai", source)
+
+    def test_stage_status_is_primary_title_with_ellipsis(self):
+        self.assertIn('const displayTitle = String(item?.status ?? cfg.status ?? "").trim() || name || "Unnamed"', self.js)
+        css = "".join(self.studio_css.split())
+        self.assertIn(".visual-flow-copystrong{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", css)
+        self.assertIn(".visual-flow-copystrong{font-size:10.5px", css)
+
+    def test_import_editor_is_bounded_inside_modal(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".import-asset-card{display:grid;grid-template-rows:autominmax(0,1fr)auto;overflow:hidden", css)
+        self.assertIn("#importAssetContent.designer-import-json{box-sizing:border-box;width:100%;height:100%;min-height:160px", css)
+        self.assertIn("resize:none", css)
+        self.assertIn('class="designer-form-grid import-asset-form"', self.html)
+
+    def test_floating_stage_panel_expands_above_fixed_toggle(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".workflow-page.designer-step-floating-actions>.designer-action-toggle{position:absolute;right:0;bottom:0", css)
+        self.assertIn(".workflow-page.designer-step-floating-actions>.designer-floating-panel{position:absolute;right:0;bottom:calc(100%+8px)", css)
+        self.assertIn(".workflow-page.designer-step-floating-actions.designer-action-toggle:hover{transform:none", css)
+
+    def test_validation_toast_is_top_center_and_reusable(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".app-toast-stack{top:18px;left:50%;right:auto;transform:translateX(-50%)", css)
+        self.assertIn('function showToast(message, tone = "success", duration = 2200)', self.js)
+
+    def test_validation_supports_unsaved_workflow_and_stage_drafts(self):
+        for token in ('body.content = $("studioTextarea").value', 'body.flow = state.visual?.flow || []', 'id="validateStageButton"', 'function validateStageEditor(index, name, cfg, item)', '/api/studio/stage/validate'):
+            self.assertIn(token, self.js)
+        self.assertIn('showActionError(error.message, "Workflow validation failed")', self.js)
+
+    def test_stage_editor_uses_effective_flow_prompt_and_status(self):
+        self.assertIn('item?.status ?? cfg.status ?? ""', self.js)
+        self.assertIn('promptOptionRows(item?.prompt ?? cfg.prompt ?? "")', self.js)
+        self.assertIn('Object.prototype.hasOwnProperty.call(item, "prompt")', self.js)
+        self.assertIn('Object.prototype.hasOwnProperty.call(item, "status")', self.js)
+
+    def test_project_actions_use_static_menu_and_confirmed_remove(self):
+        for token in ("project-action-menu", "project-menu-button", 'remove.textContent = "Remove project"', 'title: "Remove Project?"'):
+            self.assertIn(token, self.js)
+
+    def test_project_action_menu_portals_out_of_scroll_container(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn(".project-action-menu.project-action-menu-portal{position:fixed!important", css)
+        for token in ("function openProjectMenu(menu, anchor, row)", "document.body.appendChild(menu)", "function positionProjectMenu(menu, anchor)"):
+            self.assertIn(token, self.js)
+
+    def test_composer_is_workflow_task_only_for_now(self):
+        for token in ('id="modeWorkflow"', 'id="modeChat"', 'function setRunMode(mode)', 'state.runMode === "chat"'):
+            self.assertNotIn(token, self.html + self.js)
+        self.assertIn('Select a Workflow before Run', (self.root.parent / "server.py").read_text(encoding="utf-8") if (self.root.parent / "server.py").exists() else "Select a Workflow before Run")
+
+    def test_runtime_controls_expose_stop_continue_and_reset_new_task(self):
+        for token in ('id="stopButton"', 'id="resumeButton"', 'id="resetButton"'):
+            self.assertIn(token, self.html)
+        for token in ('/api/project/stop', '/api/project/resume', '/api/project/reset', '$("resetButton").textContent = runtime.completed ? "New Task" : "Reset"'):
+            self.assertIn(token, self.js)
+
+    def test_visual_helper_copy_is_small(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".studio-topbarp{font-size:10px", css)
+
+    def test_ai_workflow_builder_modal_is_wired_to_real_generate_endpoint(self):
+        for token in ('id="generateWorkflowBackdrop"', 'id="generateWorkflowName"', 'id="generateWorkflowRequest"', 'id="generateWorkflowConfirm"'):
+            self.assertIn(token, self.html)
+        for token in ("openGenerateWorkflowModal", "confirmGenerateWorkflow", 'api("/api/studio/generate"', '$("generateWorkflowButton").onclick = openGenerateWorkflowModal'):
+            self.assertIn(token, self.js)
+        for stale in ("generatePanel", "generateMessage", "closeGeneratePanel"):
+            self.assertNotIn(stale, self.js)
+
+    def test_custom_import_file_picker_button_is_wired(self):
+        self.assertIn('id="importAssetChooseButton"', self.html)
+        self.assertIn('id="importAssetFileName"', self.html)
+        self.assertIn('$("importAssetChooseButton").onclick = () => $("importAssetFile").click()', self.js)
+        self.assertIn('$("importAssetFileName").textContent = file.name', self.js)
 
 
 if __name__ == "__main__":

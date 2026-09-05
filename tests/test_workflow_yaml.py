@@ -11,8 +11,8 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.loader import (
-    BUILTIN_WORKFLOW_DIR,
-    BUILTIN_WORKFLOWS,
+    SYSTEM_WORKFLOW_DIR,
+    SYSTEM_WORKFLOWS,
     default_workflow_name,
     load_workflow,
     workflow_fingerprint,
@@ -119,7 +119,7 @@ flow:
     assert [item.get("scope") for item in workflow[1:4]] == ["task"] * 3
 
 def test_plan_stage_generates_todos_only(tmp_path):
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     stage = create_stage(workflow[0])
     payload = json.dumps({
@@ -139,7 +139,7 @@ def test_plan_stage_generates_todos_only(tmp_path):
     assert not hasattr(result, "next_steps")
 
 def test_plan_ignores_stage_topology_and_parses_todo_content(tmp_path):
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     stage = create_stage(workflow[0])
     payload = json.dumps({
@@ -370,12 +370,12 @@ flow: [repair, validate]
         ("ai", "", ["planning", "execute", "review", "validate_ai"]),
     ],
 )
-def test_validation_options_select_builtin_workflow(validator, ai_prompt, names):
+def test_validation_options_select_system_workflow(validator, ai_prompt, names):
     workflow = RunRequest(
         goal="goal", validator=validator, ai_validator_prompt=ai_prompt
     ).to_runtime_config().workflow
     assert _names(workflow) == names
-    assert set(BUILTIN_WORKFLOWS) == {"mixed", "file", "ai"}
+    assert set(SYSTEM_WORKFLOWS) == {"mixed", "file", "ai", "workflow_builder"}
 
 
 @pytest.mark.parametrize(
@@ -391,9 +391,9 @@ def test_default_workflow_name_is_explicit(validator, ai_prompt, workflow_name):
     assert default_workflow_name(validator, ai_prompt) == workflow_name
 
 
-def test_builtin_workflow_yaml_lives_in_dedicated_folder():
-    assert BUILTIN_WORKFLOW_DIR.name == "builtin"
-    assert all(path.parent == BUILTIN_WORKFLOW_DIR for path in BUILTIN_WORKFLOWS.values())
+def test_system_workflow_yaml_lives_in_dedicated_folder():
+    assert SYSTEM_WORKFLOW_DIR.name == "system"
+    assert all(path.parent == SYSTEM_WORKFLOW_DIR for path in SYSTEM_WORKFLOWS.values())
 
 
 @pytest.mark.parametrize(
@@ -424,7 +424,7 @@ def test_invalid_workflow_is_rejected(tmp_path, body, message):
 def test_resume_runs_only_remaining_task_scoped_work(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     state = RunState(
         "run",
         "goal",
@@ -462,7 +462,7 @@ def test_plan_todos_run_same_task_scoped_sop_in_order(tmp_path):
     from runner.workflow.pipeline import Pipeline
     from runner.workflow.rules import reduce_result
 
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
 
     class RecordingExecutor:
@@ -563,7 +563,7 @@ flow:
 def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     context.state.workflow_position = len(workflow) - 1
 
@@ -579,7 +579,7 @@ def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
 def test_validator_failure_resume_uses_yaml_repair_plan(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     context.state.workflow_position = len(workflow) - 1
     context.set_stage = lambda stage, _detail: setattr(context.state, "stage", stage)
@@ -618,7 +618,7 @@ flow: [validate]
 def test_resume_restarts_current_todo_from_saved_task_step(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     state = RunState(
         "run",
         "goal",
@@ -717,37 +717,39 @@ def test_multi_prompt_example_reuses_same_task_stage():
 
 
 def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
-    example = (
-        Path(__file__).resolve().parents[1]
-        / "tool"
-        / "workflows"
-        / "skill_prompt_review_chain.yaml"
-    )
+    root = Path(__file__).resolve().parents[1]
+    example = root / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
     workflow = load_workflow(example)
     pairs = [
-        (
-            item["name"],
-            Path(item["prompt"]).relative_to(example.parent).as_posix(),
-        )
+        (item["name"], item["prompt"])
         for item in workflow
         if item["name"] != "validate_file"
     ]
     assert pairs == [
-        ("run_prompt", "prompts/design.md"),
-        ("review", "prompts/review_design.md"),
-        ("run_prompt", "prompts/implementation.md"),
-        ("review", "prompts/review_implementation.md"),
-        ("run_prompt", "prompts/documentation.md"),
-        ("review", "prompts/review_documentation.md"),
+        ("run_prompt", "custom/design.md"),
+        ("review", "custom/review_design.md"),
+        ("run_prompt", "custom/implementation.md"),
+        ("review", "custom/review_implementation.md"),
+        ("run_prompt", "custom/documentation.md"),
+        ("review", "custom/review_documentation.md"),
     ]
     assert {item["name"] for item in workflow} == {"run_prompt", "review", "validate_file"}
     assert all("result_handler" not in item for item in workflow if item["name"] == "review")
     assert [item["name"] for item in workflow[-1]["recover"]] == ["run_prompt", "review"]
-    assert Path(workflow[-1]["recover"][0]["prompt"]).relative_to(example.parent).as_posix() == (
-        "prompts/fix_validation.md"
-    )
+    assert workflow[-1]["recover"][0]["prompt"] == "custom/fix_validation.md"
+    assert [item["status"] for item in workflow[:-1]] == [
+        "Designing solution",
+        "Reviewing design",
+        "Implementing changes",
+        "Reviewing implementation",
+        "Updating documentation",
+        "Reviewing documentation",
+    ]
+    assert workflow[-1]["status"] == "Running Python validation"
+    assert workflow[-1]["recover"][0]["status"] == "Fixing validation failure"
+    assert workflow[-1]["recover"][1]["status"] == "Reviewing validation fix"
     for prompt in ("design.md", "implementation.md", "documentation.md"):
-        text = (example.parent / "prompts" / prompt).read_text(encoding="utf-8")
+        text = (root / "runner" / "prompts" / "custom" / prompt).read_text(encoding="utf-8")
         assert text.startswith("/skill-")
 
 
@@ -895,8 +897,8 @@ flow:
 
 
 
-def test_builtin_review_owns_semantic_fresh_default():
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+def test_system_review_owns_semantic_fresh_default():
+    workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     review = next(item for item in workflow if item["name"] == "review")
     assert "fresh_after_same_failures" not in review
     stage = create_stage(review)
@@ -1121,3 +1123,66 @@ flow:
 
     assert simplified_flow == explicit_flow
     assert workflow_fingerprint(simplified_flow) == workflow_fingerprint(explicit_flow)
+
+
+def test_top_level_task_and_review_can_run_without_planned_todo(tmp_path):
+    """Custom linear SOPs may reuse task/review profiles without Plan/TODO state."""
+    from runner.workflow.pipeline import Pipeline
+    from runner.workflow.rules import reduce_result
+
+    workflow = load_workflow(
+        Path(__file__).resolve().parents[1]
+        / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
+    )
+    context = _context(tmp_path, workflow)
+
+    class LinearExecutor:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, stage, ctx, previous=None, **kwargs):
+            self.calls.append(stage.name)
+            if stage.name == "review":
+                raw = StageResult(
+                    stage.name,
+                    "pass",
+                    output="PASS",
+                    data={"completed": True, "reason": "ok", "missing_items": []},
+                    kind="review",
+                )
+            elif stage.name == "run_prompt":
+                raw = StageResult(stage.name, "pass", output="done", kind="task")
+            else:
+                raw = StageResult(stage.name, "pass", output="PASS", kind="validation")
+            return reduce_result(ctx, raw)
+
+    executor = LinearExecutor()
+    Pipeline(context, workflow).run(executor)
+
+    assert executor.calls == [
+        "run_prompt", "review",
+        "run_prompt", "review",
+        "run_prompt", "review",
+        "validate_file",
+    ]
+    assert context.state.tasks == []
+    assert context.state.current == 0
+    assert context.state.completed is True
+
+
+def test_top_level_linear_review_fail_does_not_require_todo(tmp_path):
+    from runner.workflow.rules import reduce_result
+
+    context = _context(tmp_path, [])
+    result = reduce_result(
+        context,
+        StageResult(
+            "review",
+            "fail",
+            output="missing item",
+            data={"completed": False, "reason": "missing", "missing_items": ["x"]},
+            kind="review",
+        ),
+    )
+    assert result.status == "fail"
+    assert context.state.tasks == []

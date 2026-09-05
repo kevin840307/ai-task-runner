@@ -52,9 +52,9 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ```
 
 ## Workflow YAML
-未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `workflow/builtin/mixed.yaml`、`workflow/builtin/file.yaml` 或 `workflow/builtin/ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
+未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `workflow/system/mixed.yaml`、`workflow/system/file.yaml` 或 `workflow/system/ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
 
-Task 產生是一種 Stage effect，不是 Plan 專屬權限。`PlanStage` 是內建 AI Task Producer，並會自動套用標準 `execute -> review` 逐 TODO SOP；因此一般 Plan-driven YAML 只列 `planning` 與後續頂層 Stage。`command` 或未來 Stage 仍可宣告 `produces: tasks`；顯式 `scope: task` 是非 Plan Producer 或自訂逐 TODO SOP 的進階寫法。
+Task 產生是一種 Stage effect，不是 Plan 專屬權限。`PlanStage` 是內建 AI Task Producer，並會自動套用標準 `execute -> review` 逐 TODO SOP；因此一般 Plan-driven YAML 只列 `planning` 與後續頂層 Stage。`command` 或未來 Stage 仍可宣告 `produces: tasks`；顯式 `scope: task` 是非 Plan Producer 或自訂逐 TODO SOP 的進階寫法。`task` / `review` profile 也可以在沒有 pending TODO 時作為 top-level linear Stage；只要自訂 Prompt 不依賴 TODO 欄位，其 semantic result 仍走一般 Recovery routing，但不會寫入逐 TODO durable state。
 
 非 Plan 的 Task Producer 也使用同一契約：
 
@@ -107,7 +107,7 @@ flow:
   - validate_file
 ```
 
-`continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 builtin Execute/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
+`continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 system/default Execute/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
 
 在這份 YAML 中，如果 Plan 產生 TODO A、B、C，每個 TODO 都會依 YAML 固定執行 `execute -> security_review -> review_task`，全部完成後才進 Final Validator。Durable state 只需要 current TODO、`task_step` 與 `workflow_position`，不需要保存 AI 產生的 Stage topology。
 

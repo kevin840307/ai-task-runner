@@ -309,9 +309,14 @@ def _walk_definitions(flow: list[dict[str, Any]]):
         yield from visit(definition, "flow")
 
 
-def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario]]:
-    """Build deterministic closure paths for routing features present in a workflow."""
-    cases: list[tuple[str, Scenario]] = [("happy path", Scenario())]
+def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario, int]]:
+    """Build deterministic closure paths for routing features present in a workflow.
+
+    The third tuple item is the minimum number of fresh-session rotations expected
+    from that path. This keeps dry-run focused on orchestration semantics while
+    still proving configured semantic-failure session rotation actually fires.
+    """
+    cases: list[tuple[str, Scenario, int]] = [("happy path", Scenario(), 0)]
     added: set[tuple[str, str]] = set()
     for definition, _source in _walk_definitions(flow):
         name = str(definition.get("name", ""))
@@ -322,6 +327,7 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario]]:
             cases.append((
                 f"{name} FAIL -> recover -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+                0,
             ))
         repeat = definition.get("repeat")
         if (
@@ -335,12 +341,28 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario]]:
             cases.append((
                 f"{name} FAIL x{repeat} -> bounded recover -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail"] * repeat}}),
+                0,
             ))
         if definition.get("restart_at") and ("restart", name) not in added:
             added.add(("restart", name))
             cases.append((
                 f"{name} FAIL -> restart_at -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+                0,
+            ))
+        fresh_after = definition.get("fresh_after_same_failures")
+        if (
+            isinstance(fresh_after, int)
+            and not isinstance(fresh_after, bool)
+            and fresh_after > 0
+            and definition.get("recover")
+            and ("fresh", name) not in added
+        ):
+            added.add(("fresh", name))
+            cases.append((
+                f"{name} FAIL x{fresh_after} -> fresh session -> closure",
+                Scenario({"default": "pass", "stages": {name: ["fail"] * fresh_after + ["pass"]}}),
+                1,
             ))
     return cases
 
@@ -361,9 +383,10 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
         ),
         "repeat": sum(item.get("repeat") is not None for item in definitions),
         "restart_at": sum(bool(item.get("restart_at")) for item in definitions),
+        "fresh_after_same_failures": sum(item.get("fresh_after_same_failures") is not None for item in definitions),
         "review": sum(str(item.get("type", "")) == "review" for item in definitions),
         "validation": sum(
-            str(item.get("type", "")) in {"python", "python_validator", "ai_validator"}
+            stage_result_kind(item) == "validation"
             for item in definitions
         ),
     }
@@ -372,15 +395,19 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
 def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
     flow = load_workflow(workflow_path)
     cases = []
-    for title, scenario in _matrix_cases(flow):
+    for title, scenario, min_fresh_sessions in _matrix_cases(flow):
         ctx, executor, error = _execute(flow, scenario, max_steps)
         try:
+            fresh_sessions = len(executor.fresh_sessions)
+            completed = bool(ctx.state.completed) and not error
+            fresh_ok = fresh_sessions >= min_fresh_sessions
             cases.append({
                 "name": title,
-                "passed": bool(ctx.state.completed) and not error,
+                "passed": completed and fresh_ok,
                 "executions": executor.calls,
-                "fresh_sessions": len(executor.fresh_sessions),
-                "error": error or None,
+                "fresh_sessions": fresh_sessions,
+                "expected_fresh_sessions": min_fresh_sessions,
+                "error": error or (None if fresh_ok else f"expected at least {min_fresh_sessions} fresh session(s)"),
             })
         finally:
             _close_context(ctx)

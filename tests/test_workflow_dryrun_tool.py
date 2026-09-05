@@ -20,11 +20,11 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_builtin_mixed_dryrun_reaches_closure():
+def test_system_mixed_dryrun_reaches_closure():
     result = run(
-        "runner/workflow/builtin/mixed.yaml",
+        "runner/workflow/system/mixed.yaml",
         "--scenario",
-        "dryrunexample/builtin_mixed_scenario.yaml",
+        "dryrunexample/system_mixed_scenario.yaml",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "DRYRUN_PASSED" in result.stdout
@@ -81,8 +81,8 @@ stages:
     assert "did not converge" in result.stdout
 
 
-def test_dryrun_matrix_covers_builtin_recovery_paths():
-    result = run("runner/workflow/builtin/mixed.yaml", "--matrix")
+def test_dryrun_matrix_covers_system_recovery_paths():
+    result = run("runner/workflow/system/mixed.yaml", "--matrix")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "WORKFLOW_CLOSED" in result.stdout
     assert "review FAIL -> recover -> closure" in result.stdout
@@ -131,7 +131,7 @@ def test_dryrun_supports_generic_task_producer():
 def test_dryrun_json_contract_is_machine_readable():
     import json
 
-    result = run("runner/workflow/builtin/file.yaml", "--json")
+    result = run("runner/workflow/system/file.yaml", "--json")
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
     assert payload["valid"] is True
@@ -188,6 +188,33 @@ flow:
 
 
 
+def test_dryrun_matrix_proves_fresh_session_threshold(tmp_path: Path):
+    workflow = tmp_path / "fresh.yaml"
+    workflow.write_text(
+        """stages:
+  check:
+    type: command
+    command: [python, -c, "print('CHECK')"]
+    fresh_after_same_failures: 2
+    recover: [repair]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+flow:
+  - check
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["features"]["fresh_after_same_failures"] == 1
+    fresh = next(case for case in payload["cases"] if "fresh session" in case["name"])
+    assert fresh["passed"] is True
+    assert fresh["expected_fresh_sessions"] == 1
+    assert fresh["fresh_sessions"] >= 1
+
+
 def test_dryrun_handles_twelve_stage_composable_sop(tmp_path: Path):
     stages = [
         f"  s{i:02d}:\n    type: command\n    command: [python, -c, \"print('S{i:02d}')\"]"
@@ -218,3 +245,13 @@ def test_dryrun_handles_twelve_stage_composable_sop(tmp_path: Path):
     assert payload["features"]["repeat"] == 1
     assert payload["features"]["recover"] >= 2
     assert payload["features"]["restart_at"] == 1
+
+
+def test_system_custom_skill_prompt_review_chain_linear_dryrun_closes():
+    result = run("runner/workflow/custom/skill_prompt_review_chain.yaml", "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+    assert payload["features"]["task_scope"] is False
+    assert payload["features"]["task_producer"] is False
+    assert any(case["name"] == "validate_file FAIL -> recover -> closure" for case in payload["cases"])
