@@ -5,7 +5,10 @@ import argparse
 import webbrowser
 from pathlib import Path
 
-from server import UIServer
+try:
+    from .server import UIServer
+except ImportError:
+    from server import UIServer
 
 
 def main() -> int:

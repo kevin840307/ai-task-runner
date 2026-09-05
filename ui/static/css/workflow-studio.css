@@ -1,0 +1,646 @@
+/* Workflow Studio Lite: use static(1) Designer + Modal components, adding only
+   the file-based workflow/prompt editor behavior needed by this project. */
+.workflow-page {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.workflow-page[hidden] { display: none !important; }
+.studio-main {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px 22px 24px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.studio-topbar { margin-bottom: 12px; }
+.studio-lock-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #d5a642;
+  border-radius: 10px;
+  background: rgba(213,166,66,.10);
+  font-size: 13px;
+}
+.studio-designer-body {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0,1fr);
+  gap: 14px;
+}
+.studio-workflow-sidebar {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.studio-workflow-main { min-width: 0; min-height: 0; overflow: hidden; }
+.studio-workflow-editor {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr) auto auto;
+  gap: 12px;
+}
+.studio-overview { margin: 0; grid-template-columns: 1fr; }
+.studio-overview .designer-workflow-summary-card { margin: 0; }
+.studio-visual-panel { min-height: 0; overflow: auto; }
+.studio-step-panel { min-height: 100%; }
+.studio-step-panel .designer-step-list { padding: 12px; }
+.studio-footer { min-height: 36px; display: flex; align-items: center; }
+.studio-status { color: var(--muted); font-size: 12px; }
+.studio-status.error { color: var(--fail); }
+.validation-output {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+  font: 12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  white-space: pre-wrap;
+}
+.studio-empty { height: 100%; display: grid; place-content: center; text-align: center; color: var(--muted); }
+.studio-empty h2 { margin-bottom: 6px; color: var(--text); }
+
+/* Workflow / Prompt source selector in YAML mode. */
+.studio-source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin: 10px 0 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.studio-source-tabs button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.studio-source-tabs button.active { background: #fff; color: var(--accent-dark); box-shadow: var(--shadow-sm); }
+.studio-file-list { display: grid; gap: 7px; }
+.studio-file-item {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+}
+.studio-file-item strong,.studio-file-item small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.studio-file-item small { color:var(--muted); font-size:11px; }
+.studio-file-item.active { border-color:rgba(15,118,110,.55); background:#effaf7; box-shadow:0 0 0 2px rgba(15,118,110,.10); }
+
+/* Visual flow cards keep static Designer interaction, with one lightweight list. */
+.visual-flow-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: grab;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, background 140ms ease;
+}
+.visual-flow-card:hover,.visual-flow-card.active { transform: translateY(-1px); border-color:rgba(29,78,216,.38); background:#f8fbff; box-shadow:0 5px 16px rgba(15,23,42,.06); }
+.visual-flow-card.dragging { opacity:.45; }
+.visual-flow-index { display:grid; place-items:center; width:30px; height:30px; border-radius:9px; background:#eaf1ff; color:var(--blue); font-size:11px; font-weight:900; }
+.visual-flow-copy { min-width:0; display:grid; gap:2px; }
+.visual-flow-copy strong,.visual-flow-copy small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.visual-flow-copy small { color:var(--muted); font-size:11px; }
+.visual-flow-actions { display:inline-flex; gap:5px; }
+
+/* YAML / Prompt code editor. It intentionally stays dependency-free. */
+.studio-yaml-panel {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0,1fr);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.studio-code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.studio-code-language { color: var(--text); font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.studio-code-hint { color: var(--muted); font-size: 11px; }
+.studio-code-editor {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0,1fr);
+  background: #fbfcfe;
+}
+.studio-line-numbers {
+  min-height: 0;
+  margin: 0;
+  padding: 16px 10px;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: #f5f7fa;
+  color: #94a3b8;
+  text-align: right;
+  user-select: none;
+  white-space: pre;
+  font: 13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.studio-textarea {
+  width:100%;
+  height:100%;
+  min-height:0;
+  resize:none;
+  border:0;
+  outline:0;
+  padding:16px 18px;
+  overflow:auto;
+  background:transparent;
+  color:var(--text);
+  font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  tab-size:2;
+  white-space:pre;
+}
+.studio-textarea:focus { box-shadow: inset 0 0 0 2px rgba(15,118,110,.08); }
+.studio-syntax-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 850;
+}
+.studio-syntax-badge.valid { background:#eef9f1; color:var(--pass); }
+.studio-syntax-badge.invalid { background:#fee4df; color:var(--fail); }
+
+/* Stage Editor: keep static's real modal shell, but only three useful tabs. */
+.studio-stage-tabs { grid-template-columns: repeat(3, minmax(0,1fr)) !important; }
+.studio-stage-tabs .designer-tab[hidden] { display:none !important; }
+.stage-modal-close {
+  display:inline-grid;
+  place-items:center;
+  width:34px;
+  height:34px;
+  padding:0;
+  border-radius:999px;
+  color:var(--muted);
+  background:var(--panel-2);
+  font-size:22px;
+  line-height:1;
+}
+.stage-form-two-col { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 14px; align-items:start; }
+.stage-form-wide { grid-column:1 / -1; }
+.stage-type-specific { grid-column:1 / -1; display:grid; gap:12px; margin-top:4px; }
+.stage-section-head {
+  grid-column:1 / -1;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin:2px 0 0;
+  padding-bottom:9px;
+  border-bottom:1px solid var(--line);
+}
+.stage-section-head > div { display:grid; gap:3px; }
+.stage-section-head strong { color:var(--text); font-size:13px; }
+.stage-section-head span { color:var(--muted); font-size:11px; line-height:1.45; }
+.stage-switch-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.stage-prompt-editor-row { margin-top:4px; }
+.stage-modal-save-actions { display:inline-flex; align-items:center; gap:8px; }
+.studio-prompt-path {
+  display:block;
+  margin-bottom:8px;
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel-2);
+  overflow-wrap:anywhere;
+  color:#475569;
+  font-size:11px;
+}
+.studio-prompt-textarea { width:100%; min-height:360px; resize:vertical; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.designer-step-modal-settings .designer-form-grid { align-content:start; }
+.designer-step-modal-settings textarea.designer-textarea { width:100%; }
+.designer-step-modal-footer #stageEditorStatus.error { color:var(--fail); }
+
+/* Add Project / Add Stage use static's shared modal shell plus polished content. */
+.modal-title-with-icon { min-width:0; display:flex; align-items:flex-start; gap:12px; }
+.modal-title-icon {
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),#14b8a6);
+  color:#fff;
+  font-size:13px;
+  font-weight:950;
+  box-shadow:0 10px 24px rgba(15,118,110,.20);
+}
+.modal-title-icon.stage { background:linear-gradient(135deg,#1d4ed8,#60a5fa); box-shadow:0 10px 24px rgba(29,78,216,.18); }
+.modal-section-label { margin:4px 0 9px; color:var(--muted); font-size:10px; font-weight:900; letter-spacing:.07em; text-transform:uppercase; }
+.project-modal-card { width:min(650px,100%); }
+.project-path-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:9px; }
+.project-path-row button { min-width:92px; border-radius:13px; font-weight:800; }
+.add-stage-card { width:min(760px,100%); }
+.add-stage-preview {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:14px;
+  padding:11px 12px;
+  border:1px solid rgba(29,78,216,.16);
+  border-radius:14px;
+  background:#f7faff;
+}
+.add-stage-preview > div { min-width:0; display:grid; gap:2px; }
+.add-stage-preview strong { font-size:13px; }
+.add-stage-preview span:not(.designer-step-type) { color:var(--muted); font-size:11px; }
+.add-stage-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 14px; }
+.add-stage-wide { grid-column:1 / -1; }
+.add-stage-flow-toggle {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-top:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-2);
+  font-size:12px;
+  font-weight:750;
+}
+
+.generate-panel { position:absolute; top:72px; right:22px; z-index:60; width:min(520px,calc(100% - 44px)); display:flex; gap:14px; justify-content:space-between; padding:14px; border:1px solid var(--line); border-radius:var(--radius-lg); background:#fff; box-shadow:var(--shadow-md); }
+.generate-panel p { margin:5px 0 0; color:var(--muted); font-size:12px; line-height:1.5; }
+
+@media (max-width: 900px) {
+  .studio-main { padding:14px; }
+  .studio-designer-body { grid-template-columns:200px minmax(0,1fr); gap:10px; }
+  .stage-form-two-col,.stage-switch-grid { grid-template-columns:1fr; }
+  .stage-form-wide { grid-column:auto; }
+}
+@media (max-width: 620px) {
+  .studio-main { overflow:auto; grid-template-rows:auto auto auto; }
+  .studio-designer-body { grid-template-columns:1fr; }
+  .studio-workflow-sidebar { max-height:190px; }
+  .studio-workflow-main { min-height:560px; }
+  .project-path-row,.add-stage-grid { grid-template-columns:1fr; }
+  .add-stage-wide { grid-column:auto; }
+  .designer-step-modal-box { padding:6px; }
+  .designer-step-modal-card { width:100%; height:min(96dvh,900px); max-height:96dvh; }
+  .designer-step-modal-nav { display:none; }
+  .designer-step-modal-footer { grid-template-columns:1fr; }
+  .designer-step-modal-footer-nav { display:none; }
+  .stage-modal-save-actions { justify-content:flex-end; }
+  .studio-code-hint { display:none; }
+}
+
+/* Round 3: keep Workflow / Prompt navigation fixed and let only file/content areas scroll. */
+.studio-workflow-sidebar {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+}
+.studio-list-head { min-height: 30px; }
+.studio-file-list,
+.studio-workflow-sidebar .designer-custom-list {
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+  padding-right: 2px;
+}
+.studio-workflow-main,
+.studio-workflow-editor,
+.studio-visual-panel,
+.studio-yaml-panel,
+.studio-prompt-panel { height: 100%; min-height: 0; }
+.studio-visual-panel { overflow: hidden; }
+.studio-step-panel {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.studio-step-panel .designer-step-list {
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+/* Prompt is a first-class editor in both Visual and YAML modes. */
+.studio-prompt-panel {
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.studio-prompt-panel .studio-code-toolbar > div { display: inline-flex; align-items: center; gap: 8px; }
+.studio-prompt-editor-grid {
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+  gap: 12px;
+}
+.studio-prompt-editor-wrap { height: 100%; min-height: 0; }
+.studio-prompt-textarea-main {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  resize: none;
+  overflow: auto;
+}
+.studio-prompt-param-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.studio-prompt-param-panel .designer-param-list { align-content: start; }
+.studio-prompt-param-panel .designer-template-diagnostics { margin-top: 10px; }
+
+/* Stage modal: Prompt content lives in Prompt Editor; Stage only selects references. */
+.studio-stage-tabs { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+#stagePromptSelectRow,
+#stageContinuationPromptRow { background: rgba(15,118,110,.035); border-radius: 12px; padding: 8px; }
+
+/* Shared modal body: header/footer stay visible; content scrolls inside the viewport. */
+.modal-scroll-body { min-height: 0; overflow: auto; padding-right: 3px; }
+.add-stage-card,
+.workflow-create-card {
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.add-stage-card { width: min(760px, 100%); }
+.add-stage-body { padding: 1px 2px 4px 0; }
+.add-stage-card > .modal-actions,
+.workflow-create-card > .modal-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.modal-title-icon.workflow { background: linear-gradient(135deg, var(--accent), #14b8a6); }
+.workflow-create-card { width: min(620px,100%); }
+.workflow-create-card .modal-scroll-body { display: grid; gap: 12px; }
+.workflow-create-preview {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+}
+.workflow-create-preview code { white-space: pre; font: 12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color: #475569; }
+
+@media (max-height: 700px) {
+  .modal-backdrop { padding: 8px; }
+  .add-stage-card,
+  .workflow-create-card { max-height: calc(100dvh - 16px); }
+  .modal-head { margin-bottom: 9px; }
+  .add-stage-preview { margin-bottom: 9px; }
+}
+@media (max-width: 900px) {
+  .studio-prompt-editor-grid { grid-template-columns: minmax(0,1fr) 190px; }
+}
+@media (max-width: 620px) {
+  .studio-workflow-sidebar { overflow: hidden; }
+  .studio-prompt-editor-grid { grid-template-columns: 1fr; grid-template-rows: minmax(360px,1fr) auto; overflow: auto; }
+  .studio-prompt-param-panel { max-height: 210px; }
+  .add-stage-card,
+  .workflow-create-card { width: 100%; max-height: 96dvh; }
+}
+
+/* Keep the main Designer body in the flexible row even when the lock banner is hidden.
+   Without explicit grid rows, display:none removes the banner from auto-placement and
+   the Designer body falls into the banner's auto-height row, leaving the 1fr row empty. */
+.studio-main > .studio-topbar { grid-row: 1; }
+.studio-main > .studio-lock-banner { grid-row: 2; }
+.studio-main > .studio-designer-body { grid-row: 3; min-height: 0; height: 100%; }
+.studio-prompt-panel .designer-template-diagnostics:empty { display: none; }
+
+/* Round 5: static Designer interaction and aligned editor surfaces. */
+.studio-file-list,
+.studio-workflow-sidebar .designer-custom-list {
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* The right editor surface must end on the same baseline as the workflow sidebar. */
+.studio-workflow-editor {
+  position: relative;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.studio-workflow-editor > .studio-overview { grid-row: 1; }
+.studio-workflow-editor > .studio-visual-panel,
+.studio-workflow-editor > .studio-yaml-panel,
+.studio-workflow-editor > .studio-prompt-panel { grid-row: 2; min-height: 0; height: 100%; }
+.studio-footer {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  z-index: 5;
+  min-height: 0;
+  pointer-events: none;
+}
+.validation-output {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 38px;
+  z-index: 8;
+  max-height: min(220px, 38%);
+  box-shadow: var(--shadow-md);
+}
+
+/* Stage selection follows static: click selects, double-click edits, floating FAB controls movement. */
+.visual-flow-card {
+  cursor: default;
+  user-select: none;
+}
+.visual-flow-card.active {
+  border-color: rgba(15,118,110,.58);
+  box-shadow: 0 0 0 2px rgba(15,118,110,.10);
+  background: #f4fbf9;
+}
+.visual-flow-card:focus-visible {
+  outline: 2px solid rgba(15,118,110,.35);
+  outline-offset: 2px;
+}
+.workflow-page .designer-step-floating-actions {
+  right: 24px;
+  bottom: 24px;
+}
+
+/* Keep the common Stage surface compact; rarely-used runtime overrides stay available. */
+.stage-identity-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.stage-identity-strip > span {
+  display: inline-grid;
+  gap: 1px;
+  min-width: 120px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.stage-identity-strip strong { color: var(--text); font-size: 12px; }
+.stage-identity-strip small { color: var(--muted); font-size: 10px; }
+.stage-advanced-overrides {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(248,250,252,.72);
+  overflow: hidden;
+}
+.stage-advanced-overrides > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.stage-advanced-overrides > summary::-webkit-details-marker { display: none; }
+.stage-advanced-overrides > summary span:first-child { display: grid; gap: 2px; }
+.stage-advanced-overrides > summary strong { font-size: 12px; }
+.stage-advanced-overrides > summary small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.stage-advanced-overrides[open] > summary { border-bottom: 1px solid var(--line); }
+.stage-advanced-grid { padding: 12px; }
+.stage-switch-grid > span { display: contents; }
+
+@media (max-width: 620px) {
+  .workflow-page .designer-step-floating-actions { right: 12px; bottom: 12px; }
+  .stage-identity-strip > span { flex: 1 1 120px; }
+}
+
+/* Static-like switch rows used by Stage reliability/type-specific settings. */
+.designer-switch-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+.designer-switch-row > input { margin: 3px 0 0; }
+.designer-switch-row > span { min-width: 0; display: grid; gap: 2px; }
+.designer-switch-row strong { font-size: 12px; line-height: 1.25; }
+.designer-switch-row small { color: var(--muted); font-size: 10px; line-height: 1.35; font-weight: 500; }
+
+/* Round 6: reusable asset groups, import dialog, toast and aligned Add Stage. */
+.studio-file-list {
+  min-height: 0;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  align-content: start;
+}
+.studio-file-group {
+  margin: 10px 2px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.studio-file-group:first-child { margin-top: 2px; }
+.studio-file-item.readonly { background: #f8fafc; }
+
+.add-stage-grid .designer-input,
+.add-stage-grid .designer-select {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+}
+.add-stage-grid .designer-form-row { align-content: start; }
+
+.modal-title-icon.prompt { background: #f2f7ff; color: var(--blue); }
+.modal-title-icon.import { background: #f5f3ff; color: #6d28d9; }
+.import-asset-card { width: min(900px, 94vw); max-height: min(760px, calc(100dvh - 28px)); }
+.import-asset-body { min-height: 0; overflow-y: auto; }
+.designer-import-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr); gap:16px; min-height:0; }
+.designer-import-json-wrap { min-height: 260px; }
+.designer-import-json { min-height: 240px; resize: vertical; font: 12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.designer-import-preview { min-height: 220px; padding: 14px; border:1px solid var(--line); border-radius:var(--radius-lg); background:var(--panel-2); overflow:auto; }
+
+.app-toast-stack {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 2000;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 36px));
+  pointer-events: none;
+}
+.app-toast {
+  transform: translateY(-8px);
+  opacity: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 14px 38px rgba(15,23,42,.16);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.app-toast.show { transform: translateY(0); opacity: 1; }
+.app-toast.success { border-color: #9fd2b0; background: #f3fbf5; color: var(--pass); }
+.app-toast.error { border-color: #f5a99e; background: #fff5f3; color: var(--fail); }
+
+@media (max-width: 760px) {
+  .designer-import-grid { grid-template-columns:1fr; }
+  .import-asset-card { width: min(96vw, 760px); }
+}

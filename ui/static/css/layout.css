@@ -1,0 +1,84 @@
+/* App regions */
+.projects,
+.details {
+  background: var(--panel);
+  min-height: 0;
+  overflow: auto;
+}
+
+.projects {
+  border-right: 1px solid var(--line);
+  padding: 18px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.details {
+  border-left: 1px solid var(--line);
+  display: grid;
+  /* Header, progress, tabs, active panel. Explicit rows prevent the panel
+     from creating an implicit track that stretches or covers the tabs. */
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.rail-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 80;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rail-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.rail-resizer:hover::before,
+.rail-resizer:focus-visible::before,
+body.rail-resizing .rail-resizer::before {
+  background: rgba(15, 118, 110, 0.38);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.10);
+}
+
+.rail-resizer-left {
+  left: var(--rail-left);
+  transform: translateX(-50%);
+}
+
+.rail-resizer-right {
+  right: var(--rail-right);
+  transform: translateX(50%);
+}
+
+body.rail-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.rail-resizing {
+  transition: none;
+}
+
+body.projects-collapsed .rail-resizer-left,
+body.details-collapsed .rail-resizer-right {
+  display: none;
+}

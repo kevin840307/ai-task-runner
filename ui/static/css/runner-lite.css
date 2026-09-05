@@ -1,0 +1,311 @@
+/* Lite-only overrides. static(1) remains the visual source of truth. */
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0 !important;
+  grid-template-columns: var(--rail-left) minmax(0, 1fr);
+  overflow: hidden !important;
+}
+[hidden] { display: none !important; }
+
+/* One app view owns the full viewport-height workspace. This deliberately
+   overrides static's <=760px `height:auto`, so browser zoom/font scaling can
+   never leave the composer floating above the viewport bottom. */
+.workspace {
+  position: relative;
+  display: block !important;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+#chatView {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--bg);
+}
+#chatView[hidden] { display: none !important; }
+#chatView > .header { grid-row: 1; }
+#chatView > .summary { grid-row: 2; }
+#chatView > .empty-state,
+#chatView > .history { grid-row: 3; min-height: 0; }
+#chatView > .history { overflow: auto; }
+#chatView > .compose-panel {
+  grid-row: 4;
+  width: 100%;
+  margin: 0;
+  align-self: end;
+  box-sizing: border-box;
+}
+
+/* Projects are always natural top-down flow. Only the list scrolls. */
+.projects {
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.projects .projects-head,
+.projects .project-nav,
+.projects .new-project-button,
+.projects .project-section-label,
+.projects .sidebar-foot { flex: 0 0 auto; }
+.project-section-label {
+  margin: 14px 8px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.projects .project-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  grid-auto-rows: max-content;
+  margin-top: 2px;
+}
+.sidebar-foot {
+  margin-top: 0;
+  padding: 12px 8px 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.project-copy { min-width: 0; display: grid; gap: 2px; }
+.project-copy strong,
+.project-copy small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-copy small { color: var(--muted); font-size: 10px; }
+.project-mark { width: 8px; height: 8px; border-radius: 999px; background: #cbd5e1; }
+.project-row.active .project-mark { background: var(--accent); }
+.project-row.missing { opacity: 0.55; }
+.project-nav button.project-nav-link { width: 100%; text-align: left; }
+
+.runtime-actions,
+.studio-header-actions { display: inline-flex; align-items: center; gap: 8px; }
+.runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.runtime-badge.running { border-color: #f4c56a; background: #fff3d8; color: var(--run); }
+.runtime-badge.completed { border-color: #9fd2b0; background: #eef9f1; color: var(--pass); }
+.runtime-badge.failed,
+.runtime-badge.interrupted { border-color: #f5a99e; background: #fee4df; color: var(--fail); }
+.action-button { min-height: 32px; padding: 0 10px; }
+.action-button.danger { color: var(--fail); }
+
+.empty-state {
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  min-height: 0;
+  padding: 30px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--bg);
+}
+.empty-state-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 900;
+  box-shadow: var(--shadow-sm);
+}
+.empty-state h2 { margin: 0; color: var(--text); font-size: 18px; }
+.empty-state p { max-width: 430px; font-size: 12px; line-height: 1.5; }
+
+/* Live output is display-only and lives inside chat history. */
+.live-activity {
+  align-self: flex-start;
+  width: min(900px, 100%);
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: var(--radius-lg);
+  background: #f4fbf9;
+}
+.live-activity-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #14b8a6; }
+.live-activity-head small { margin-left: auto; color: var(--muted); font-size: 10px; }
+.live-meta { margin-top: 6px; color: var(--muted); font-size: 10px; }
+.live-output {
+  max-height: 145px;
+  margin: 9px 0 0;
+  padding-top: 9px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  color: #4b5563;
+  white-space: pre-wrap;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* static composer geometry stays intact; only Lite controls are added. */
+.options-panel {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+}
+.options-panel select,
+.options-panel input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+}
+.options-button {
+  min-height: 29px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.options-button.active { border-color: rgba(15,118,110,.42); color: var(--accent); background: #effaf7; }
+.send-button { min-width: 72px; min-height: 32px; border-radius: var(--radius-md); font-weight: 800; }
+.error-text { min-height: 16px; padding: 0 4px; color: var(--fail); font-size: 10px; }
+.simple-composer-topbar { min-height: 32px; }
+#workflowSelect.workflow-native-select {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+#workflowPicker { width: auto; max-width: min(520px, 60vw); }
+
+@media (max-width: 720px) {
+  body { grid-template-columns: 190px minmax(0, 1fr); height: 100dvh !important; min-height: 0 !important; }
+  .projects { display: flex !important; max-height: none !important; }
+  .options-panel { grid-template-columns: 1fr; }
+  .header { align-items: flex-start; }
+  .runtime-actions { flex-wrap: wrap; justify-content: flex-end; }
+  #workflowPicker { max-width: 100%; }
+}
+@media (max-width: 520px) {
+  body { grid-template-columns: 150px minmax(0, 1fr); }
+  .projects { padding: 10px 8px; }
+  .brand { font-size: 12px; }
+  .new-project-button { min-height: 38px; }
+  .project-nav-link strong { font-size: 11px; }
+  .compose-panel { padding-inline: 8px; }
+}
+
+/* Round 6: GPT/static-style floating composer. The history owns the full
+   remaining viewport and reserves bottom scroll-space for the floating box. */
+#chatView {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  --composer-reserve: 170px;
+}
+#chatView > .empty-state,
+#chatView > .history {
+  grid-row: 3;
+}
+#chatView > .history {
+  overflow-y: auto;
+  padding-bottom: calc(var(--composer-reserve) + 18px);
+  scroll-padding-bottom: calc(var(--composer-reserve) + 18px);
+}
+#chatView > .compose-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  width: 100%;
+  margin: 0;
+  padding: 24px 14px 14px;
+  border-top: 0;
+  overflow: visible;
+  background: linear-gradient(to bottom, rgba(247,249,252,0), var(--bg) 24px, var(--bg) 100%);
+  pointer-events: none;
+}
+#chatView > .compose-panel > .composer-box {
+  pointer-events: auto;
+}
+.composer-box textarea#messageInput {
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 72px !important;
+  overflow-y: auto !important;
+}
+.simple-composer-topbar {
+  position: relative;
+  z-index: 5;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+#workflowPicker {
+  position: relative;
+  z-index: 20;
+  overflow: visible !important;
+}
+#workflowPicker.open { z-index: 220; }
+#workflowDropdownMenu {
+  z-index: 500;
+}
+.validator-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(360px, 42vw);
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(15,118,110,.28);
+  border-radius: 999px;
+  background: linear-gradient(180deg,#fff,#f8fbfb);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.validator-picker[hidden] { display: none !important; }
+.validator-picker input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.options-panel { grid-template-columns: minmax(160px, 320px); }
+
+@media (max-width: 720px) {
+  #chatView > .compose-panel { padding: 18px 8px 8px; }
+  .validator-picker { min-width: 0; width: 100%; }
+}

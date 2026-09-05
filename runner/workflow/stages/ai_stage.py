@@ -68,7 +68,10 @@ class AIValidatorStage(BaseStage):
     required_passes_config_attr = "final_ai_required_passes"
 
     def enabled(self, ctx: StageContext) -> bool:
-        return bool(ctx.validator_is_ai or ctx.config.ai_validator_prompt.strip())
+        # An explicit Workflow owns its validation topology: if ai_validator is
+        # present in that Workflow, its presence is the user's intent to run it.
+        # Legacy/default workflow selection still uses validator/AI-prompt gates.
+        return bool(ctx.config.workflow_explicit or ctx.validator_is_ai or ctx.config.ai_validator_prompt.strip())
 
     def result_status(self, data) -> str:
         return "pass" if bool(data["passed"]) else "fail"

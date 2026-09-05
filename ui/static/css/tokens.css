@@ -1,0 +1,121 @@
+/*
+  Agent Workflow UI
+  Structure guideline:
+  1. Design tokens
+  2. App layout regions
+  3. Reusable controls
+  4. Feature regions: projects, header, summary, chat, composer, details
+  5. State classes: run-*, *-collapsed
+  6. Responsive rules
+*/
+
+:root {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --panel-2: #fbfcfe;
+  --line: #d8dee8;
+  --text: #17202c;
+  --muted: #687487;
+  --accent: #0f766e;
+  --accent-dark: #115e59;
+  --fail: #b42318;
+  --pass: #147a3f;
+  --run: #9a5b00;
+  --blue: #1d4ed8;
+  --shadow-sm: 0 1px 2px rgba(23, 32, 44, 0.06);
+  --shadow-md: 0 10px 28px rgba(23, 32, 44, 0.08);
+  --shadow-popover: 0 18px 45px rgba(23, 32, 44, 0.16);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --rail-left: clamp(220px, 18vw, 280px);
+  --rail-right: clamp(360px, 32vw, 520px);
+  --rail-collapsed: 64px;
+  --details-collapsed: 52px;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body { height: 100%; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--rail-right);
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  transition: grid-template-columns 180ms ease;
+}
+
+button,
+textarea,
+select,
+input { font: inherit; }
+
+button {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+h1,
+p { margin: 0; }
+
+h1 {
+  font-size: 16px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.primary:hover:not(:disabled) { background: var(--accent-dark); }
+.wide { width: 100%; }
+
+
+/* Consistent lightweight scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 34px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.38);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.58);
+  background-clip: content-box;
+}
