@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.53
+版本：1.2.61
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -38,7 +38,7 @@ Protected path 以 project root 為基準，可指定檔案或資料夾。Policy
 Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；重複提供相同 Goal 也可以。
 
 ## YAML script mode
-`--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
+`--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一。除非該 item 明確提供 `workflow_file`/`workflow`，否則必須提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
 
 可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`、`workflow_file`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
 
@@ -54,67 +54,77 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## Workflow YAML
 未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `workflow/builtin/mixed.yaml`、`workflow/builtin/file.yaml` 或 `workflow/builtin/ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
 
-Planning 是刻意保留的特殊動態 Stage。YAML 不需要 `expand`、`foreach` 或額外 subflow DSL；不在頂層 static flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會自動成為 Planner 可選能力。`PlanStage` 會為每個 TODO 選擇 ordered Stage sequence，並以 `next_steps` 回傳。
+Task 產生是一種 Stage effect，不是 Plan 專屬權限。`PlanStage` 是內建 AI Task Producer，並會自動套用標準 `execute -> review` 逐 TODO SOP；因此一般 Plan-driven YAML 只列 `planning` 與後續頂層 Stage。`command` 或未來 Stage 仍可宣告 `produces: tasks`；顯式 `scope: task` 是非 Plan Producer 或自訂逐 TODO SOP 的進階寫法。
+
+非 Plan 的 Task Producer 也使用同一契約：
+
+```yaml
+stages:
+  discover_cases:
+    type: command
+    command: "{python} stages/discover_cases.py"
+    produces: tasks
+
+  execute:
+    type: task
+
+flow:
+  - discover_cases
+  - stage: execute
+    scope: task
+```
+
+Producer 輸出 `{"tasks":[...]}`；`scope: task` 只看 pending tasks，不判斷 Stage 是否為 Plan。
 
 ```yaml
 stages:
   planning:
     type: plan
-    status: Plan
-    result_handler: plan
 
   execute:
-    status: Execute
-    mode: write
-    prompt: stages/execution.md
-    continuation_prompt: stages/execution_continue.md
-    result_handler: task
+    type: task
 
   security_review:
-    status: Security review
+    type: task
     prompt: prompts/security_review.md
 
   review_task:
-    status: Review
-    prompt: stages/review.md
-    parser: review
-    result_status: completed
-    result_handler: review
+    type: review
 
   validate_file:
-    type: python
-    validator: file
-    status: Validate
-    result_handler: validation
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
   - planning
+  - stage: execute
+    scope: task
+  - stage: security_review
+    scope: task
+  - stage: review_task
+    scope: task
   - validate_file
 ```
 
 `continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 builtin Execute/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
 
-在這份 YAML 中，Planner 可以選 `execute`、`security_review`、`review_task`，但不能選 `planning` 或 `validate_file`。某個 TODO 因此可以產生 `steps: [execute, security_review, review_task]`。Stage 名稱會在執行前完成驗證，並和 TODO 一起寫入 durable state，再轉成 `StageResult.next_steps` 交給 Pipeline 執行。若存在 review-capable Stage，每個 TODO 的最後一步必須是 review Stage。Planning 完成後即使在 queue 寫入前 crash，Resume 也能從已保存的 TODO steps 重建，不需要重新問模型規劃。
+在這份 YAML 中，如果 Plan 產生 TODO A、B、C，每個 TODO 都會依 YAML 固定執行 `execute -> security_review -> review_task`，全部完成後才進 Final Validator。Durable state 只需要 current TODO、`task_step` 與 `workflow_position`，不需要保存 AI 產生的 Stage topology。
 
 同一個可重用 `BaseStage` 可以在 flow 中重複使用，且每次給不同 prompt：
 
 ```yaml
 stages:
   run_prompt:
-    status: Run prompt
-    mode: write
+    type: task
 
   review:
-    status: Review
-    mode: readonly
-    parser: review
-    result_status: completed
+    type: review
 
   validate_file:
-    type: python
-    validator: file
-    status: Validate
-    result_handler: validation
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
   - stage: run_prompt
@@ -138,16 +148,19 @@ flow:
   - validate_file
 ```
 
-`skip` 是 `skip_on_error` 的精簡 alias。`type: plan` 表示 Planning、`type: python` 表示 Python Validator；`type: base` 可以明寫，但一般可省略。`validator: file|ai` 表示 validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。動態規劃只來自已驗證的 `PlanStage.next_steps`；YAML 不再有 `expand`/`foreach`。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。Final validation 必須放最後；同時有兩種 validator 時，file validation 必須先於 AI validation。
+`skip` 是 `skip_on_error` 的精簡 alias。Semantic Stage type（`plan`、`task`、`review`、`ai_validator`、`command`）自己擁有合理預設，因此 YAML 只需要描述真正的 Workflow 差異。`result_kind: validation` 表示外部 command validation gate；`validator: ai` 表示 AI validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。頂層 Plan 使用 Loader 提供的標準 task SOP；只有刻意自訂逐 Task 流程時才使用顯式 `scope: task`。Runtime 不再產生 `next_steps`、`expand` 或 `foreach` graph。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。如果 Workflow 有 Validation Stage，最後一個 validation Stage 必須放在 flow 最後；同時有 file 與 AI validator 時，file validation 必須先於 AI validation。
+
+
+完整自訂 Workflow 範例請看 `docs/user/CUSTOM_WORKFLOW.zh-TW.md` 與 `examples/custom_workflow_latest.yaml`。
 
 ## Validation 模式
 - Python/File Validator：`--validator path/to/validation.py`。
 - AI-only Validator：`--validator ai`，可搭配 `--validator-prompt`。
-- Mixed Validation：使用 file `--validator`，再加 `--ai-validator-prompt` 或 `--ai-validator-prompt-file`。Python Validator 是 deterministic hard gate，必須先 PASS；之後 Final AI voting 才會執行，而且兩個 gate 都要 PASS。
+- Mixed Validation：使用 file `--validator`，再加 `--ai-validator-prompt` 或 `--ai-validator-prompt-file`。File Validator 是 deterministic hard gate，必須先 PASS；之後 Final AI voting 才會執行，而且兩個 gate 都要 PASS。
 - `--final-ai-validations`（alias `--ai-validator-count`）控制獨立的 Fresh Session 驗證次數。
 - `--final-ai-required-passes 0` 使用嚴格過半；設為正整數時，必須達到明確指定的 PASS 數。
 
-例如 `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` 代表 Python Validator 必須 PASS，接著 3 個不同 Fresh Session 獨立驗證；未指定 required passes 時至少 2/3 PASS。
+例如 `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` 代表 File Validator 必須 PASS，接著 3 個不同 Fresh Session 獨立驗證；未指定 required passes 時至少 2/3 PASS。
 
 若設定 `--ai-validator-required-passes 3`，則必須 3/3 PASS。
 
@@ -159,7 +172,7 @@ flow:
 - Structured Output correction 最多先做 2 次 Same Session retry，仍失敗才依設定 Fresh fallback。
 
 ## JSON events / Integration
-`--json-events` 輸出 JSON Lines。Python caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`；未來 UI/Skill 也應適配同一個 API，不建立第二套 orchestration。
+`--json-events` 輸出 JSON Lines。Python caller 與 programmatic/remote integration 應使用 `runner.api.RunRequest` 與 `runner.api.run()`，這仍是 canonical execution surface。本機 detached UI 若只做監看，可以完全不 import Runner，直接唯讀 configured work directory 的 `state.json`、`stream.log`、`log.txt` 與 `debug/`。
 
 Workflow 不直接依賴 raw event schema 或具體 Plugin；Workflow 只透過 semantic progress facade 回報狀態，raw event type/schema 由 runtime 層管理。
 
@@ -175,6 +188,7 @@ Readonly Stage 如果嘗試修改檔案，Safety Plugin 會還原修改並把該
 
 ## Debug
 診斷 AI 行為時可查看：
+- `<project-root>/.ai-task-runner/stream.log`：只保存目前 subprocess 最近 bounded output，每個 subprocess 開始時重置，僅供 live display，不是完整 history。
 - `<project-root>/.ai-task-runner/debug/current-prompt.txt`
 - `last-prompt.txt`
 - `last-result.txt`
@@ -213,13 +227,24 @@ OpenCode 官方 project rule filename 是 `AGENTS.md`，不是 `AGENT.md`。
 Runner-managed instruction section 由 `runner/project/instructions.py` 維護；project 自己的既有內容要被保留，不應由 Backend 任意覆寫。
 
 ## UI-ready 編輯與 Python Stage
-未來 UI／CLI integration 共用 `runner.api.run()`，不直接呼叫 Pipeline 或 StageExecutor。`stage_catalog()` 直接從真正的 `spec_class` 提供已安裝 Stage type；外部 Stage／Backend 使用 `ai_task_runner.extensions` 註冊，runtime 橫切 Plugin 則使用 `ai_task_runner.plugins`。
+Programmatic UI／CLI integration 共用 `runner.api.run()`，不直接呼叫 Pipeline 或 StageExecutor；本機 detached UI 若只做監看，可以維持純 file-based 並完全不 import Runner module。`stage_catalog()` 直接從真正的 `spec_class` 提供已安裝 Stage type；外部 Stage／Backend 使用 `ai_task_runner.extensions` 註冊，runtime 橫切 Plugin 則使用 `ai_task_runner.plugins`。
 
 Workflow／Prompt editor 應使用 `save_workflow()`／`save_prompt()`，並搭配 `runner.resources.read_text()` 回傳的 `expected_hash`。存檔會先驗證，再 atomic replace 真正來源檔。執行中的任務使用自己 work directory 內的 Workflow／Stage Prompt／Goal File／Final-AI Prompt snapshot，因此來源修改或刪除只影響下一個 Run，不影響 active／resumed Run。
 
-使用者 Python 步驟使用 `type: python`，設定 `path` 與可選 `args`；它在 subprocess 執行，仍走一般 StageExecutor Hook/change/recovery boundary，不把 project Python import 進長時間 Runner process。
+使用者 Python 步驟使用 `type: command`，一般可直接寫 `command: "{python} path/to/script.py --flag value"`；只有複雜 quoting/argument boundary 才需要 YAML list；它在 subprocess 執行，仍走一般 StageExecutor Hook/change/recovery boundary，不把 project Python import 進長時間 Runner process。
 
 
 ## OpenCode runtime contract
 
 OpenCode 完整 AI task Prompt 與 Qwen 一樣走 stdin，不放在 argv。Resume 使用官方 `--session`；non-interactive call 自動加入 `--auto`。Planning/no-tool/review 的工具權限由 Backend adapter 透過 `OPENCODE_CONFIG_CONTENT` 的 `permission` runtime override 控制。`--sandbox` 會額外 deny `external_directory`。OpenCode 官方目前沒有 Qwen `-s` 的 container sandbox 等價旗標，因此這是 permission-based confinement；Runner 的 protected-path、Git guard、readonly restore 仍是共同的硬保護。
+
+## 外部 UI / AI Workflow Editor Contract
+UI 不需要 import Runner Python module。把 YAML／Markdown／Python 檔案加上 JSON tool output 當成穩定 boundary：
+
+```text
+workflows/*.yaml   Workflow CRUD
+prompts/*.md       Prompt CRUD
+stages/*.py        使用者 Python Stage CRUD
+```
+
+`python tool/workflow_catalog.py` 會輸出目前 Stage／Flow editor schema JSON；AI 或 UI 產生／修改 Workflow 後，可先執行 `python tool/workflow_dryrun.py workflow.yaml --json` 再 publish。也就是「用 Workflow 產生 Workflow」仍走相同資料契約：產 YAML → production loader 驗證 → Dry Run → PASS 後保存／發布。

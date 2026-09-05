@@ -207,7 +207,7 @@ def test_console_observer_ignores_duplicate_stage_start_event(tmp_path):
 def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
     import subprocess
     import time
-    from runner.runtime.process_runner import _communicate_with_watchdog
+    from runner.runtime.process_runner import _communicate_bounded
 
     process = subprocess.Popen(
         [sys.executable, "-c", "print('ok')"],
@@ -217,7 +217,7 @@ def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
         stderr=subprocess.STDOUT,
     )
     started = time.monotonic()
-    result = _communicate_with_watchdog(
+    result = _communicate_bounded(
         process,
         timeout=10,
         idle_timeout_after_change=10,

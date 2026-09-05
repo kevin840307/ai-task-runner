@@ -5,7 +5,7 @@ The directory structure is intentionally the architecture map:
 - `runner/api.py`, `bootstrap.py`, `task_runner.py`: canonical request/recovery boundary, dependency composition, and one-run orchestration.
 - `runner/script_loader.py`, `script_runner.py`: YAML structure/file parsing and validated child-config execution.
 - `runner/workflow/`: declarative workflow definitions, routing rules, result parsers, and the Stage engine.
-- `runner/workflow/stages/`: Stage contracts, shared executor, generic `BaseStage`, `PlanStage`, and one isolated `PythonStage` for both user Python and deterministic file validation.
+- `runner/workflow/stages/`: Stage contracts, shared executor, generic `BaseStage`, `PlanStage`, generic `CommandStage` for all subprocess execution.
 - `runner/ai/`: AI client, backend contracts, session classification, structured-output handling, and AI diagnostics.
 - `runner/backends/`: Qwen/OpenCode implementations plus backend registry/configuration.
 - `runner/project/`: project file snapshots/restores, project policy, and QWEN.md/AGENTS.md instruction-file lifecycle.
@@ -21,7 +21,7 @@ The directory structure is intentionally the architecture map:
 The runner owns orchestration; backends, plugins, prompts, and validators provide bounded capabilities behind explicit contracts.
 
 
-`CLI / UI / Skill -> runner.api -> Bootstrap -> TaskRunner -> Workflow -> Stage -> bounded capability`
+`CLI / Programmatic UI / Skill -> runner.api -> Bootstrap -> TaskRunner -> Workflow -> Stage -> bounded capability`
 
 `Backends -> AI contracts`
 
@@ -39,13 +39,15 @@ Loop-context inspection and compression is a model-error plugin. The AI client r
 
 ## UI / extension boundary
 
-UI is an adapter, not an execution Plugin. UI/CLI/Skill code may depend on `runner.api`, the owner modules for editable resources/catalog metadata, and event callbacks; Pipeline, StageExecutor, and individual Stages must never import UI code. A UI can therefore be removed without changing Runner execution semantics.
+UI is an adapter, not an execution Plugin. Programmatic UI/CLI/Skill integrations may depend on `runner.api`, the owner modules for editable resources/catalog metadata, and event callbacks; Pipeline, StageExecutor, and individual Stages must never import UI code. A detached local UI may choose an even narrower boundary and import no Runner Python at all: it reads runtime visibility files from the configured work directory. A UI can therefore be removed without changing Runner execution semantics.
 
 Installed packages may publish `ai_task_runner.extensions` entry points for runtime-independent registration such as `register_stage()` or backend registration. Discovery occurs before Workflow validation. Runtime cross-cutting Plugins use the separate `ai_task_runner.plugins` entry-point group and attach only after a Runtime exists. This prevents a Plugin from being required by Workflow core while still allowing external packages to add capabilities without editing Runner source.
 
-`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; UI/editor code must not maintain another hardcoded Stage schema. User Python automation uses `type: python`; `validator: file` enables deterministic validator conventions on the same Stage implementation. Python always executes in a subprocess. Arbitrary user Python is never imported into the 24H Runner process.
+`workflow.registry.stage_catalog()` is generated directly from each registered Stage `spec_class`; UI/editor code must not maintain another hardcoded Stage schema. User Python automation uses `type: command` and always executes as a subprocess through the shared Python-process helper. Arbitrary user Python is never imported into the 24H Runner process.
 
 `workflow.loader.save_workflow()` and `prompts.loader.save_prompt()` validate against the real Runner parser/schema before using atomic replace. `expected_hash` provides optimistic concurrency protection for UI/IDE edits. These are file-resource helpers, not a second Workflow service or storage model.
+
+Runtime visibility is separate from editable resources and execution control. `state.json` remains Runner-owned durable persistence; detached UI code may read only the stable fields it needs and must never edit the file. `stream.log` is a bounded, disposable snapshot of the most recent subprocess stdout, reset for each subprocess and updated while it runs. `log.txt` and `debug/` remain diagnostic/history surfaces. None of these visibility files is a command channel or a source of PASS/FAIL/routing truth.
 
 At concrete Run start, normalized Workflow data, Stage prompt files, `goal_file`, and `ai_validator_prompt_file` are persisted under the Run work directory. Workflow Stage prompts remain content-addressed; Run-level goal/final-AI prompt resources use stable semantic resource names. Active Runs and later `--resume` therefore keep the same Workflow, Goal, and prompt inputs even when editable source files change or are removed. YAML List children keep independent snapshots in their own nested work directories.
 
@@ -53,11 +55,11 @@ At concrete Run start, normalized Workflow data, Stage prompt files, `goal_file`
 
 `Pipeline -> StageExecutor -> Stage.run() -> StageResult -> Stage.finish() -> next Stage`
 
-A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `StageResult` contains execution facts and may carry validated generated `next_steps`. `FlowNode` owns static YAML routing (`recover`, `restart_at`); Pipeline interprets both forms generically.
+A Stage performs one attempt. `StageExecutor` owns hooks, project change tracking, retry/session escalation, exception conversion, and lifecycle events. `StageResult` contains execution facts only. `FlowNode` owns static YAML routing (`recover`, `restart_at`); Pipeline interprets both forms generically.
 
-`workflow/builtin/*.yaml` contains only `stages` and top-level `flow`. `workflow/registry.py` is intentionally minimal: Stage behavior `type -> class` only. `workflow/loader.py` normalizes Stage instances, derives Planner-visible dynamic Stage candidates from YAML structure, and marks `validator: file|ai` capability. `workflow/rules.py` only reduces durable state; Pipeline owns resume, recovery routing, and execution of generated `next_steps`. `PlanStage` stores each TODO with its ordered Stage names and emits concrete next-step definitions; no `expand`, `foreach`, or separate subflow DSL exists.
+`workflow/builtin/*.yaml` contains only `stages` and top-level `flow`. `workflow/registry.py` is intentionally minimal: Stage behavior `type -> class` only. `workflow/loader.py` normalizes Stage instances and validation capability. `workflow/rules.py` reduces durable state; Pipeline owns resume and recovery routing. For top-level `PlanStage`, `workflow/loader.py` expands the standard `execute -> review` per-TODO SOP internally, so normal YAML does not repeat it. Explicit `scope: task` remains an advanced static SOP for non-Plan/custom task producers. `PlanStage` stores TODO content only; there is no generated-step queue, `expand`, `foreach`, or separate subflow DSL.
 
-Each Stage instance owns exactly one attempt and can be constructed/executed independently. Ordinary Stage implementations never instantiate/select another Stage and never receive `recover` or `restart_at`. `PlanStage` is the deliberate exception that selects only validated Stage instances from the loader-provided catalog and returns them as data (`next_steps`), without directly executing them. Result handlers reduce facts into durable state; composition and recovery stay in YAML `FlowNode` data.
+Each Stage instance owns exactly one attempt and can be constructed/executed independently. No Stage selects or executes another Stage. `PlanStage` is only the built-in AI Task producer. Task production is a generic Stage effect (`produces: tasks`), so Python/command/extensions can return the same Task JSON contract without Pipeline class checks. Composition and recovery stay in normalized `FlowNode` data; the standard Plan task SOP is a loader default, not AI-generated topology.
 
 The durable state stores the completed top-level Workflow position and a semantic fingerprint. Legacy state without these fields is normalized compatibly. A resumed custom Workflow must match its saved fingerprint so reordered Stages cannot be silently skipped or repeated.
 

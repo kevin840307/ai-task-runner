@@ -1,9 +1,11 @@
 # State and Events
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## State
 Runner state lives under the project-relative work directory (default `.ai-task-runner`). It records run/cycle identity, current task index, task status/attempts/review information, session identifiers, progress/recovery metadata, and completion state needed for resume. The exact JSON is an internal persistence format; integrations should prefer the public API/events instead of editing state directly.
+
+Detached local UI code may read a small stable subset of `state.json` for display (for example run id, current stage/task/progress/completion/error timestamps), but it must treat the file as read-only and tolerate additional internal fields. Do not couple UI behavior to the full persistence schema.
 
 ## Resume rules
 `--resume` loads compatible state. A valid project `state.json` is authoritative; the temp backup is only restored when that primary state is missing or invalid, so an older backup cannot roll back a newer atomic primary write. Because a process restart destroys local `AIClient` objects, this is the only path that may reconstruct a new client from a saved remote session id. Within one running process, continuation always reuses the existing client/session. `--force-new` starts a new run. Script items use independent nested state directories. Executor session ids are preserved across completed TODOs and reused for the next TODO when usable. They are cleared only for explicit rebuild/completion conditions; project files and Runner state remain the durable source of truth.
@@ -13,6 +15,9 @@ With `--json-events`, progress is emitted as JSON Lines. Core events include sch
 
 ## Human UI
 Human output is a rendering of the same state/event information. Multiline backend detail is normalized to one line only for the terminal; raw diagnostics keep the original content.
+
+### Detached runtime visibility
+`stream.log` is the local detached-UI surface for live output. It contains only the most recent bounded subprocess stdout, is cleared when a new subprocess starts, and is continuously refreshed while output arrives. It is intentionally disposable: it is not resume state, not an event history, and not an execution-control channel. `log.txt` / `debug/` provide history and diagnostics when needed.
 
 ## State ownership
 AI agents must not edit Runner state. The project policy file is automatically protected; Runner-managed debug/state mutations are owned by the Runner and are excluded from normal project-change semantics.

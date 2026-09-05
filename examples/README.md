@@ -14,13 +14,13 @@ Set `AI_TASK_RUNNER_EXAMPLE_TEMP` to override the base directory; otherwise `.ex
 Run one example directly, for example:
 
 ```bat
-examples\01_basic_python_validator\run_example.bat --backend qwen
+examples\01_basic_command_validator\run_example.bat --backend qwen
 examples\11_regression_workflow_demo\run_example.bat --backend qwen
 ```
 
 The suite is intentionally small and diagnostic:
 
-1. `01_basic_python_validator` — baseline Python hard validation.
+1. `01_basic_command_validator` — baseline Python hard validation.
 2. `02_repair_cycle` — starter bug intended to exercise Validator FAIL → repair.
 3. `03_ai_validator_voting` — AI-only final validation with 3 independent fresh-session votes.
 4. `04_mixed_validation` — Python hard gate plus AI semantic majority vote.
@@ -29,7 +29,7 @@ The suite is intentionally small and diagnostic:
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 8. `08_config_driven_data_pipeline` — mixed-validation data pipeline with black-box behavioral checks.
 9. `09_config_environment_auditor` — mixed-validation config auditor covering multiple file formats and clean reruns.
-10. `10_skill_prompt_review_workflow` — runnable custom workflow example that reuses one prompt Stage for `/skill...` prompts, review gates, and a final Python validator.
+10. `10_skill_prompt_review_workflow` — runnable custom workflow example that reuses one prompt Stage for `/skill...` prompts, review gates, and a final file validator.
 11. `11_regression_workflow_demo` — six-action Regression workflow with shared Review/Grill/Fix skills, bounded recovery feedback, continuation prompts, and 5-agent fresh-session final validation.
 
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
@@ -42,3 +42,14 @@ Validation-mode workflow example: `validation_modes.yaml` shows the automatic bu
 - Python file validator only selects `runner/workflow/builtin/file.yaml`.
 - `validator: ai` selects `runner/workflow/builtin/ai.yaml`.
 - Python file validator plus `ai_validator_prompt` or `ai_validator_prompt_file` selects `runner/workflow/builtin/mixed.yaml`.
+
+## Current custom Workflow examples
+
+Use the current semantic Stage types instead of older low-level fields such as `run_state`, `actor`, `mode`, `result_handler`, or `retry_attr` unless a real override is required.
+
+- `workflow_multi_prompt.yaml`: reuses `type: task` and `type: review` with different prompts.
+- `custom_workflow_latest.yaml`: latest generic custom Workflow. A a `command` Stage produces `Task[]`, the task-scoped SOP executes/reviews them, and a final `command` Stage runs without requiring Plan or a Validator.
+- `custom_task_producer.py`: Task JSON producer used by the custom Workflow.
+- `../tool/workflows/skill_prompt_review_chain.yaml`: real multi-prompt + Review + File Validator workflow.
+
+For the full contract and more examples, see `docs/user/CUSTOM_WORKFLOW.md`.

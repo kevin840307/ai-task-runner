@@ -119,14 +119,19 @@ def _parse_item(
         raise RunnerError(f"script item {index} must be an object")
     goal, goal_file = _goal(script, item, index, allow_missing=allow_missing_files)
     validator = item.get("validator")
-    if not isinstance(validator, str) or not validator.strip():
-        raise RunnerError(f"script item {index} requires validator path or 'ai'")
+    explicit_workflow = bool(item.get("workflow_file") or item.get("workflow"))
+    if validator is None and explicit_workflow:
+        validator = ""
+    if not isinstance(validator, str) or (not validator.strip() and not explicit_workflow):
+        raise RunnerError(
+            f"script item {index} requires validator path/'ai' unless it supplies a workflow"
+        )
     ai_prompt, ai_prompt_file = _ai_validator_prompt(
         script, item, index, allow_missing=allow_missing_files
     )
     result = {
         "goal": goal,
-        "validator": validator.strip(),
+        "validator": validator.strip() or None,
         "validator_prompt": _string_value(item, index, "validator_prompt"),
         "ai_validator_prompt": ai_prompt,
         **_options(script, item, index),

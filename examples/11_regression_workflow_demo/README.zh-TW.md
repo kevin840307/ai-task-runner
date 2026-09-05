@@ -1,4 +1,4 @@
-# Regression Workflow 範例（Runner 1.2.43+）
+# Regression Workflow 範例（Runner 1.2.60）
 
 可直接執行的六階段流程：Project Discovery → Documentation → E2E SPEC → Verification Design → Regression DSL → Execution & Qualification；中間包含 Review／Grill recovery gate，最後使用 5 個 Fresh Session AI 驗證，3 PASS 即通過。
 
@@ -24,4 +24,4 @@
 
 
 
-此 Workflow 使用 Stage `status` 表示可重用 Stage 的通用狀態，FlowNode `label` 表示 Log/UI 顯示的本次具體工作。兩個 Grill 節點皆使用 `max_results: 3`，只有合法 semantic PASS/FAIL 才會消耗次數。
+此 Workflow 已改用語意化 `type: task`、`type: review`、`type: ai_validator` 預設；FlowNode `label` 只負責 Log/UI 顯示的本次具體工作。兩個 Grill 節點皆使用 `repeat: 3`，只有合法 semantic PASS/FAIL 才會消耗次數。Review 直接使用內建 semantic-failure Fresh Session 門檻，只有真的需要不同 policy 才 override。

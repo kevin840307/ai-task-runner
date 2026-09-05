@@ -1,6 +1,6 @@
-- goal_file: 01_basic_python_validator/project/prompt.md
-  project_root: 01_basic_python_validator/project
-  validator: 01_basic_python_validator/project/validation.py
+- goal_file: 01_basic_command_validator/project/prompt.md
+  project_root: 01_basic_command_validator/project
+  validator: 01_basic_command_validator/project/validation.py
 
 - goal_file: 02_repair_cycle/project/prompt.md
   project_root: 02_repair_cycle/project

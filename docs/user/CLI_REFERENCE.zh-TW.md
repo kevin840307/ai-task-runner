@@ -1,6 +1,6 @@
 # CLI 完整參考
 
-版本：1.2.53
+版本：1.2.61
 
 所有 CLI option 都會映射到正式 `RunRequest`。可重複 option 每出現一次就附加一個 argv element。
 
@@ -11,7 +11,7 @@
 | `--project-root` | Agent 可工作的專案邊界 | `.` |
 | `--script` | YAML task array；item 可用 `prompt`/`goal` 或 `goal_file` | 與 goal mode 互斥 |
 | `--workflow` | 線性 Workflow YAML | 省略時依 validator 參數選擇 Mixed、File-only 或 AI-only |
-| `--validator` | Python validator path 或 `ai` | 非 script mode 必填 |
+| `--validator` | file validator path 或 `ai` | 除了 script mode 或明確指定 `--workflow` 之外必填 |
 | `--validator-prompt` | `--validator ai` 的 Final AI 額外指示 | 空字串 |
 | `--ai-validator-prompt` | file validator PASS 後追加的 Final AI 驗證指示 | 空字串/關閉 |
 | `--ai-validator-prompt-file` | AI 驗證 Prompt UTF-8 檔案；與 `--ai-validator-prompt` 二選一 | 空/關閉 |
@@ -34,6 +34,8 @@
 | `--final-ai-validations`, `--ai-validator-count` | fresh session 的獨立 Final AI 投票數 | 1 |
 | `--final-ai-required-passes` | 必要 PASS 數 | 0 = 嚴格過半；否則不可超過總票數 |
 | `--work-dir` | project root 內 Runner state dir | `.ai-task-runner` |
+
+Work directory 也包含顯示／診斷用途的檔案。`stream.log` 是給 detached local UI／live inspection 使用的最近 bounded subprocess output；每個 subprocess 會重置，且不屬於 CLI control 或 Resume semantics。
 | `--json-events` | 輸出 JSON Lines progress | 預設關閉 |
 | `--resume` | Resume state | 預設關閉 |
 | `--force-new` | 強制新 run | 與 resume 衝突 |

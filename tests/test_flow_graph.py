@@ -14,7 +14,6 @@ class Stage:
     status = "test"
     detail = ""
     retry = 0
-    plan_only_stop = False
 
     def __init__(self, name):
         self.name = name
@@ -52,8 +51,7 @@ def context(workflow, tasks=None):
         workflow_position=0,
         current=0,
         tasks=list(tasks or []),
-        dynamic_steps=[],
-        dynamic_index=0,
+        task_step=0,
         stage="created",
         validator_failure_key="",
         validator_failure_count=0,
@@ -153,26 +151,23 @@ def test_restart_at_is_owned_by_flow_node():
     assert executor.seen == ["repair", "validate", "repair", "validate"]
 
 
-def test_generated_steps_run_as_generic_child_flow():
+def test_task_scoped_stages_run_for_each_planned_todo():
     tasks = [
-        Task("t1", "one", "d", ["a"], "o", steps=["execute", "review"]),
-        Task("t2", "two", "d", ["a"], "o", steps=["execute", "review"]),
-        Task("t3", "three", "d", ["a"], "o", steps=["execute", "review"]),
+        Task("t1", "one", "d", ["a"], "o"),
+        Task("t2", "two", "d", ["a"], "o"),
+        Task("t3", "three", "d", ["a"], "o"),
     ]
-    workflow = [item("planning", _workflow_index=0)]
+    workflow = [
+        item("planning", _workflow_index=0),
+        item("execute", scope="task", _workflow_index=1),
+        item("review", scope="task", _workflow_index=2),
+    ]
     ctx = context(workflow)
-    next_steps = []
-    for task_index in range(3):
-        next_steps.extend([
-            item("execute", _task_index=task_index, _task_last=False),
-            item("review", _task_index=task_index, _task_last=True),
-        ])
 
     def callback(stage, ctx, _previous):
         if stage.name == "planning":
             ctx.state.tasks = list(tasks)
             ctx.state.current = 0
-            return StageResult(stage.name, "pass", data=tasks, next_steps=next_steps)
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
@@ -184,12 +179,10 @@ def test_generated_steps_run_as_generic_child_flow():
         "execute", "review",
     ]
     assert ctx.state.current == 3
-    assert ctx.state.dynamic_steps == []
-    assert ctx.state.workflow_position == 1
+    assert ctx.state.task_step == 0
+    assert ctx.state.workflow_position == 3
 
-
-
-def test_max_results_is_opt_in_and_default_recovery_is_unchanged():
+def test_repeat_is_opt_in_and_default_recovery_is_unchanged():
     workflow = [item("review", recover=[item("repair")])]
     ctx = context(workflow)
     failures = 0
@@ -207,9 +200,9 @@ def test_max_results_is_opt_in_and_default_recovery_is_unchanged():
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_counts_only_semantic_results_and_stops_after_final_recover():
+def test_repeat_counts_only_semantic_results_and_stops_after_final_recover():
     workflow = [
-        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("grill", repeat=3, recover=[item("fix")], _workflow_index=0),
         item("next", _workflow_index=1),
     ]
     ctx = context(workflow)
@@ -231,8 +224,8 @@ def test_max_results_counts_only_semantic_results_and_stops_after_final_recover(
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_pass_finishes_immediately():
-    workflow = [item("grill", max_results=3, recover=[item("fix")], _workflow_index=0)]
+def test_repeat_pass_finishes_immediately():
+    workflow = [item("grill", repeat=3, recover=[item("fix")], _workflow_index=0)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
     Pipeline(ctx, workflow).run(executor)
@@ -240,9 +233,9 @@ def test_max_results_pass_finishes_immediately():
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_survives_crash_and_resume():
+def test_repeat_survives_crash_and_resume():
     workflow = [
-        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("grill", repeat=3, recover=[item("fix")], _workflow_index=0),
         item("next", _workflow_index=1),
     ]
     ctx = context(workflow)
@@ -277,9 +270,9 @@ def test_max_results_survives_crash_and_resume():
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_does_not_count_non_semantic_error_result():
+def test_repeat_does_not_count_non_semantic_error_result():
     workflow = [
-        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("grill", repeat=3, recover=[item("fix")], _workflow_index=0),
         item("next", _workflow_index=1),
     ]
     ctx = context(workflow)
@@ -290,9 +283,9 @@ def test_max_results_does_not_count_non_semantic_error_result():
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_does_not_count_exception_before_semantic_result():
+def test_repeat_does_not_count_exception_before_semantic_result():
     workflow = [
-        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("grill", repeat=3, recover=[item("fix")], _workflow_index=0),
         item("next", _workflow_index=1),
     ]
     ctx = context(workflow)
@@ -306,9 +299,9 @@ def test_max_results_does_not_count_exception_before_semantic_result():
     assert ctx.state.flow_result_count == 0
 
 
-def test_max_results_resume_after_final_failure_retries_recover_not_challenge():
+def test_repeat_resume_after_final_failure_retries_recover_not_challenge():
     workflow = [
-        item("grill", max_results=3, recover=[item("fix")], _workflow_index=0),
+        item("grill", repeat=3, recover=[item("fix")], _workflow_index=0),
         item("next", _workflow_index=1),
     ]
     ctx = context(workflow)
@@ -449,3 +442,66 @@ def test_semantic_failure_count_survives_crash_before_next_review():
     Pipeline(ctx, workflow).run(executor)
     assert "fresh:review" in executor.seen
     assert ctx.state.semantic_failure_count == 0
+
+def test_recovery_restarts_task_sop_only_after_actual_tasks_result():
+    old = Task("old", "old", "d", ["a"], "o")
+    new = Task("new", "new", "d", ["a"], "o")
+    workflow = [
+        item("execute", scope="task", _workflow_index=0),
+        item(
+            "validate",
+            _workflow_index=1,
+            recover=[item("generate", produces="tasks")],
+        ),
+    ]
+    ctx = context(workflow, [old])
+    failed = False
+
+    def callback(stage, ctx, _previous):
+        nonlocal failed
+        if stage.name == "validate" and not failed:
+            failed = True
+            return StageResult("validate", "fail")
+        if stage.name == "generate":
+            ctx.state.tasks = [new]
+            ctx.state.current = 0
+            return StageResult("generate", "pass", kind="tasks")
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+
+    assert executor.seen == ["execute", "validate", "generate", "execute", "validate"]
+    assert ctx.state.current == 1
+    assert ctx.state.completed is True
+
+
+def test_recovery_does_not_restart_from_task_producer_declaration_alone():
+    task = Task("t1", "one", "d", ["a"], "o")
+    workflow = [
+        item("execute", scope="task", _workflow_index=0),
+        item(
+            "validate",
+            _workflow_index=1,
+            recover=[item("generate", produces="tasks")],
+        ),
+    ]
+    ctx = context(workflow, [task])
+    failed = False
+
+    def callback(stage, _ctx, _previous):
+        nonlocal failed
+        if stage.name == "validate" and not failed:
+            failed = True
+            return StageResult("validate", "fail")
+        # Deliberately no tasks effect: Pipeline must react to the actual result,
+        # not merely to the YAML declaration on this recovery node.
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+
+    assert executor.seen == ["execute", "validate", "generate", "validate"]
+    assert ctx.state.current == 1
+    assert ctx.state.completed is True
+

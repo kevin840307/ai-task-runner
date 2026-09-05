@@ -1,9 +1,9 @@
 # Python API Reference
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## Canonical integration surface
-External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI, future UI, and skills should adapt to this same request model instead of implementing another Runner flow.
+External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI, programmatic/remote UI integrations, and skills should adapt to this same request model instead of implementing another Runner flow. A detached local monitoring UI may intentionally use no Python API at all and read display-only runtime visibility files from the work directory.
 
 `runner.api` is the only public execution import path. Obsolete package-level execution re-exports are removed rather than maintained as parallel compatibility APIs.
 
@@ -30,10 +30,12 @@ print(result.exit_code, result.completed)
 ```
 
 ## Events
+Detached local monitoring is not an alternate execution API. `state.json` may be read for current display state, `stream.log` for the latest bounded subprocess output, and `log.txt` / `debug/` for diagnostics. These files are Runner-owned and read-only to external UI code; `stream.log` is disposable and never controls PASS/FAIL, retry, session, or routing.
+
 `run(request, on_event=callback)` forwards Runner progress/status/script events to a callback. Callback exceptions are fail-soft and do not stop the run. Exhausted transient service windows and recoverable Runner failures resume available direct or YAML item state. Deterministic `ConfigurationError` / invalid public input still fails fast. `RunResult` returns `exit_code`, `state_files`, parsed `states`, and a `completed` property.
 
 ## YAML scripts
-`runner.script_loader` parses the non-empty YAML array, structural fields, aliases, and referenced files. `runner.script_runner` creates each child with `dataclasses.replace()` and applies the same `RuntimeConfig.validate()` used by API/CLI execution; YAML does not maintain a second set of timeout, retry, quorum, or plugin-option rules. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus a `validator` path or `ai`. Relative `goal_file`, `ai_validator_prompt_file`, and `workflow_file` paths are resolved from the YAML file directory. Optional per-item fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, Final AI quorum aliases, `project_root`, `workflow_file`, and the generic `plugins` mapping. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Legacy plugin fields remain valid. Each item receives an isolated nested work directory and stops the sequence on first non-zero result.
+`runner.script_loader` parses the non-empty YAML array, structural fields, aliases, and referenced files. `runner.script_runner` creates each child with `dataclasses.replace()` and applies the same `RuntimeConfig.validate()` used by API/CLI execution; YAML does not maintain a second set of timeout, retry, quorum, or plugin-option rules. Each item requires exactly one of `prompt`/`goal` or `goal_file`. A `validator` path or `ai` is required unless the item supplies an explicit Workflow. Relative `goal_file`, `ai_validator_prompt_file`, and `workflow_file` paths are resolved from the YAML file directory. Optional per-item fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, Final AI quorum aliases, `project_root`, `workflow_file`, and the generic `plugins` mapping. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Legacy plugin fields remain valid. Each item receives an isolated nested work directory and stops the sequence on first non-zero result.
 
 `workflow_file` is normalized once into `RuntimeConfig.workflow`. It uses the same linear format documented in the User Guide. When omitted, direct requests and each YAML List item select `workflow/builtin/mixed.yaml`, `workflow/builtin/file.yaml`, or `workflow/builtin/ai.yaml` from their validator settings. An explicit parent Workflow is inherited by YAML children unless an item supplies its own `workflow_file`; `dataclasses.replace()` carries the normalized child Workflow without a second execution path.
 
@@ -48,4 +50,4 @@ UI/editor integrations call the owner modules directly: `runner.resources.read_t
 
 Concrete Runs persist `workflow.snapshot.json`, Stage prompt resources, `goal_file`, and `ai_validator_prompt_file` in their own work directory. Active Runs and later Resume use those frozen inputs even if source files change or disappear, so UI/IDE edits affect only future Runs. `runner.api.state_files()` locates direct/YAML child state without reloading Workflow configuration and is suitable for process-level supervision.
 
-`type: python` is the single generic Python Stage. Add `validator: file` for deterministic validation conventions. It executes the configured script in a subprocess via the same process runner used by validator execution; arbitrary project Python is never imported into the long-running Runner process.
+`type: command` is the generic user Python Stage. It executes the configured script in a subprocess via the same process runner used by validator execution; arbitrary project Python is never imported into the long-running Runner process.

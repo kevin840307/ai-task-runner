@@ -245,7 +245,7 @@ def test_base_stage_fresh_session_resets_only_its_cached_client():
             name="review",
             status="Review",
             prompt="review.md",
-            client_cache_key="review_client",
+            session_key="review_client",
         )
     )
 

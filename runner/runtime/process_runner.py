@@ -13,12 +13,15 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
+from ..utils.files import atomic_write_text
 from ..utils.text import bounded_text
 
 
 TERMINATION_GRACE_SECONDS = 5
 TASKKILL_TIMEOUT_SECONDS = 10
 ACTIVE_PROCESS_FILE = "active-process"
+STREAM_FILE = "stream.log"
+STREAM_OUTPUT_CHARS = 12000
 PROCESS_POLL_INTERVAL = 0.2
 OUTPUT_QUEUE_CHUNKS = 256
 OUTPUT_READ_CHARS = 4096
@@ -73,6 +76,7 @@ def run_process(
         options["start_new_session"] = True
 
     process = subprocess.Popen(command, **options)
+    _write_stream("")
     _active_process(process, True)
     _process_event("runner.process.start", process, command, cwd)
     try:
@@ -89,6 +93,15 @@ def run_process(
             terminate_process_tree(process)
         _process_event("runner.process.exit", process, command, cwd)
         _active_process(process, False)
+
+
+def _write_stream(text: str) -> None:
+    """Expose only the latest subprocess output for detached UIs."""
+    try:
+        from ..bootstrap import current_runtime
+        atomic_write_text(current_runtime().work / STREAM_FILE, text)
+    except (RuntimeError, OSError):
+        pass
 
 
 def _active_process(process: subprocess.Popen[str], active: bool) -> None:
@@ -116,25 +129,6 @@ def _process_event(kind: str, process: subprocess.Popen[str], command: Sequence[
         })
     except (RuntimeError, OSError):
         pass
-
-
-def _communicate_with_watchdog(
-    process: subprocess.Popen[str],
-    timeout: int,
-    idle_timeout_after_change: float,
-    change_detected: Callable[[], bool],
-    input_text: str | None,
-    watchdog_interval: float,
-) -> ProcessResult:
-    """Compatibility wrapper around the shared bounded process collector."""
-    return _communicate_bounded(
-        process,
-        timeout,
-        input_text,
-        idle_timeout_after_change=idle_timeout_after_change,
-        change_detected=change_detected,
-        watchdog_interval=watchdog_interval,
-    )
 
 
 def _communicate_bounded(
@@ -179,6 +173,8 @@ def _communicate_bounded(
         now = time.monotonic()
         output, had_output = _drain_output(output_queue)
         partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
+        if had_output:
+            _write_stream(partial[-STREAM_OUTPUT_CHARS:])
 
         if watchdog_enabled:
             changed = False
@@ -226,15 +222,16 @@ def _finish_reader(
 ) -> str:
     deadline = time.monotonic() + TERMINATION_GRACE_SECONDS
     while reader.is_alive() and time.monotonic() < deadline:
-        partial = bounded_text(
-            partial + _drain_output(output_queue)[0],
-            MAX_PROCESS_OUTPUT_CHARS,
-        )
+        output, had_output = _drain_output(output_queue)
+        partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
+        if had_output:
+            _write_stream(partial[-STREAM_OUTPUT_CHARS:])
         reader.join(timeout=0.01)
-    return bounded_text(
-        partial + _drain_output(output_queue)[0],
-        MAX_PROCESS_OUTPUT_CHARS,
-    )
+    output, had_output = _drain_output(output_queue)
+    partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
+    if had_output:
+        _write_stream(partial[-STREAM_OUTPUT_CHARS:])
+    return partial
 
 
 def _next_stream_poll_timeout(

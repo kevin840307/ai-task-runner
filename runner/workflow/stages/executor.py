@@ -71,15 +71,12 @@ class StageExecutor:
             ctx
         ):
             self._fresh_session(ctx)
-        configured_retry = getattr(stage, "retry", None)
-        retry_attr = str(getattr(stage, "retry_attr", "") or "")
-        if retry_attr:
-            configured_retry = getattr(ctx.config, retry_attr)
-        effective_retry = (
-            ctx.config.same_session_retries
-            if configured_retry is None
-            else configured_retry
-        )
+        retry_limit = getattr(stage, "retry_limit", None)
+        if callable(retry_limit):
+            configured_retry = retry_limit(ctx)
+        else:
+            configured_retry = getattr(stage, "retry", None)
+        effective_retry = ctx.config.same_session_retries if configured_retry is None else configured_retry
         unlimited_retry = effective_retry == -1
         # Unlimited recovery still rotates sessions after the normal per-session budget.
         per_session_retry = (
@@ -164,6 +161,12 @@ class StageExecutor:
 
         try:
             result = stage.finish(ctx, result)
+            from ..rules import reduce_result
+            produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
+            kind = produces or str(getattr(stage, "result_kind", "generic") or "generic")
+            if result.kind != kind:
+                result = replace(result, kind=kind)
+            result = reduce_result(ctx, result)
         except ConfigurationError:
             raise
         except Exception as error:

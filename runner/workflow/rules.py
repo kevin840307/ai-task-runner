@@ -4,19 +4,14 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
-from functools import partial
-from typing import Any
-
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..runtime import progress
 from ..runtime.run_state import RunState, Task
 from ..utils.text import bounded_text
 from .stages.contracts import StageContext, StageResult
+from .task_output import decode_tasks
 
-
-def _resolve_boolean_status(result: Any, field: str) -> str:
-    return "pass" if bool(result[field]) else "fail"
 
 
 def prepare_replan(ctx: StageContext, result: StageResult) -> StageResult:
@@ -28,10 +23,12 @@ def prepare_replan(ctx: StageContext, result: StageResult) -> StageResult:
     return result
 
 
-def handle_plan_result(ctx: StageContext, result: StageResult) -> StageResult:
-    if result.status != "pass" or not isinstance(result.data, list):
+def handle_tasks_result(ctx: StageContext, result: StageResult) -> StageResult:
+    if result.status != "pass":
         return result
-    install_plan(ctx.state, result.data, ctx.ai_client.session_id)
+    source = result.data if result.data is not None else result.output
+    tasks = decode_tasks(source, cycle=ctx.state.cycle)
+    install_plan(ctx.state, tasks, ctx.ai_client.session_id)
     progress.show_todo(ctx.state)
     return result
 
@@ -90,6 +87,19 @@ def handle_validation_result(ctx: StageContext, result: StageResult) -> StageRes
     return result
 
 
+def reduce_result(ctx: StageContext, result: StageResult) -> StageResult:
+    """Apply the one durable-state reducer selected by StageResult.kind."""
+    if result.kind == "tasks":
+        return handle_tasks_result(ctx, result)
+    if result.kind == "task":
+        return handle_task_result(ctx, result)
+    if result.kind == "review":
+        return handle_review_result(ctx, result)
+    if result.kind == "validation":
+        return handle_validation_result(ctx, result)
+    return result
+
+
 def finish_run(ctx: StageContext) -> None:
     """Mark the run complete after the top-level flow succeeds end-to-end."""
     if any(task.status != "completed" for task in ctx.state.tasks):
@@ -97,7 +107,7 @@ def finish_run(ctx: StageContext) -> None:
     complete_run(ctx.state)
     ctx.ai_client.session_id = ""
     ctx.set_stage("completed", "")
-    progress.set_status("全部完成", "Final Validator PASS")
+    progress.set_status("全部完成", "Workflow PASS")
 
 
 def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
@@ -115,9 +125,6 @@ def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
     progress.set_status("最終驗證失敗，保留修改並進入 Repair Plan", result.stage)
 
 
-def needs_ai_validation(ctx: StageContext) -> bool:
-    return bool(ctx.validator_is_ai or ctx.config.ai_validator_prompt.strip())
-
 
 def install_plan(
     state: RunState,
@@ -128,8 +135,7 @@ def install_plan(
     state.tasks = list(tasks)
     state.current = 0
     state.replan_feedback = ""
-    state.dynamic_steps = []
-    state.dynamic_index = 0
+    state.task_step = 0
 
 
 def complete_task(state: RunState, task: Task, session_id: str) -> None:
@@ -140,10 +146,10 @@ def complete_task(state: RunState, task: Task, session_id: str) -> None:
 
 
 def finish_task(ctx: StageContext) -> None:
-    """Complete the current TODO after its planned Stage sequence succeeds."""
+    """Complete the current TODO after its task-scoped SOP succeeds."""
     state = ctx.state
     if state.current >= len(state.tasks):
-        raise ConfigurationError("generated workflow has no pending task to complete")
+        raise ConfigurationError("task-scoped workflow has no pending task to complete")
     task = state.tasks[state.current]
     complete_task(state, task, ctx.ai_client.session_id)
     progress.set_status("任務完成", task.title)
@@ -154,8 +160,7 @@ def complete_run(state: RunState) -> None:
     state.validator_failure_count = 0
     state.ai_session_id = ""
     state.replan_feedback = ""
-    state.dynamic_steps = []
-    state.dynamic_index = 0
+    state.task_step = 0
     state.completed = True
 
 
@@ -171,35 +176,16 @@ def invalidate_plan(
         raise ConfigurationError(f"max cycles reached: {limit}")
     state.cycle += 1
     state.current = len(state.tasks)
-    state.dynamic_steps = []
-    state.dynamic_index = 0
+    state.task_step = 0
     state.completed = False
     if reset_workflow:
         state.workflow_position = 0
     state.replan_feedback = feedback[-4000:]
 
 
-RESULT_HANDLERS = {
-    "plan": handle_plan_result,
-    "task": handle_task_result,
-    "review": handle_review_result,
-    "validation": handle_validation_result,
-}
-
-STATUS_RESOLVERS = {
-    "completed": partial(_resolve_boolean_status, field="completed"),
-    "validation": partial(_resolve_boolean_status, field="passed"),
-}
-
-CONDITIONS = {
-    "ai_validation": needs_ai_validation,
-}
-
 __all__ = [
-    "CONDITIONS",
-    "RESULT_HANDLERS",
-    "STATUS_RESOLVERS",
     "finish_run",
     "finish_task",
     "prepare_replan",
+    "reduce_result",
 ]

@@ -14,13 +14,13 @@ examples\run_examples.bat
 也可以只跑單一範例，例如：
 
 ```bat
-examples\01_basic_python_validator\run_example.bat --backend qwen
+examples\01_basic_command_validator\run_example.bat --backend qwen
 examples\11_regression_workflow_demo\run_example.bat --backend qwen
 ```
 
 這套範例刻意保持小而容易定位問題：
 
-1. `01_basic_python_validator`：Python 硬性驗證 baseline。
+1. `01_basic_command_validator`：Python 硬性驗證 baseline。
 2. `02_repair_cycle`：內建 starter bug，驗證 Validator FAIL → Repair。
 3. `03_ai_validator_voting`：AI-only Final Validator，3 個獨立 fresh session 投票。
 4. `04_mixed_validation`：Python hard gate + AI semantic majority vote。
@@ -29,7 +29,7 @@ examples\11_regression_workflow_demo\run_example.bat --backend qwen
 7. `07_blackbox_medium`：中型黑盒案例，Validator 只驗 CLI output，完全不檢查實作結構。
 8. `08_config_driven_data_pipeline`：混合驗證的資料管線案例，以黑盒行為檢查為主。
 9. `09_config_environment_auditor`：混合驗證的設定檔稽核案例，涵蓋多種格式與乾淨重跑。
-10. `10_skill_prompt_review_workflow`：可實跑的 custom workflow 範例，重用單一 prompt Stage 執行 `/skill...` prompt、review gate，最後由 Python validator 驗證。
+10. `10_skill_prompt_review_workflow`：可實跑的 custom workflow 範例，重用單一 prompt Stage 執行 `/skill...` prompt、review gate，最後由 file validator 驗證。
 11. `11_regression_workflow_demo` — 六階段 Regression workflow，包含共用 Review／Grill／Fix、bounded recovery feedback、continuation prompt 與 5-agent Fresh Session 最終驗證。
 
 所有 Python example Validator 都統一使用共用的 `ai_task_runner_validator.ValidatorReport` 契約。功能失敗透過 `ValidatorReport.error()` 回報；適用的 JSON output 使用 `parse_json()`；完整報告會寫入各 project 的 `.ai-task-runner/validator-reports/`。
@@ -44,3 +44,14 @@ Workflow Schema 範例放在擁有它的資料夾中。`workflow_multi_prompt.ya
 - 只有 Python file validator 時選用 `runner/workflow/builtin/file.yaml`。
 - `validator: ai` 時選用 `runner/workflow/builtin/ai.yaml`。
 - Python file validator 加上 `ai_validator_prompt` 或 `ai_validator_prompt_file` 時選用 `runner/workflow/builtin/mixed.yaml`。
+
+## 最新自訂 Workflow 範例
+
+現在優先使用語意化 Stage type；除非真的需要 override，否則不要再把 `run_state`、`actor`、`mode`、`result_handler`、`retry_attr` 這類舊版 implementation detail 寫進 YAML。
+
+- `workflow_multi_prompt.yaml`：同一個 `type: task` / `type: review` 搭配不同 prompt 重用。
+- `custom_workflow_latest.yaml`：最新通用自訂 Workflow。`command` 先產生 `Task[]`，再由 task-scoped SOP 執行／Review，最後執行 `command`；不需要 Plan，也不需要 Validator。
+- `custom_task_producer.py`：上面 Workflow 使用的 Task JSON Producer。
+- `../tool/workflows/skill_prompt_review_chain.yaml`：真實 multi-prompt + Review + File Validator Workflow。
+
+完整 contract 與更多寫法請看 `docs/user/CUSTOM_WORKFLOW.zh-TW.md`。

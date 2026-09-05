@@ -33,7 +33,6 @@ class Task:
     review_skipped: bool = False
     review_skip_reason: str = ""
     changed_files: list[str] = field(default_factory=list)
-    steps: list[str] = field(default_factory=list)
 
     def validate(self, index: int) -> None:
         prefix = f"tasks[{index}]"
@@ -57,10 +56,6 @@ class Task:
             for item in self.changed_files
         ):
             raise ValueError(f"{prefix}.changed_files must be strings")
-        if not isinstance(self.steps, list) or any(
-            not isinstance(item, str) or not item.strip() for item in self.steps
-        ):
-            raise ValueError(f"{prefix}.steps must be strings")
         if not is_integer(self.attempts) or self.attempts < 0:
             raise ValueError(f"{prefix}.attempts must be non-negative")
 
@@ -95,8 +90,7 @@ class RunState:
     semantic_failure_key: str = ""
     semantic_failure_fingerprint: str = ""
     semantic_failure_count: int = 0
-    dynamic_steps: list[dict[str, Any]] = field(default_factory=list)
-    dynamic_index: int = 0
+    task_step: int = 0
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -139,12 +133,8 @@ class RunState:
             raise ValueError("state.workflow_position must be non-negative")
         if not isinstance(self.flow_result_previous, dict):
             raise ValueError("state.flow_result_previous must be an object")
-        if not isinstance(self.dynamic_steps, list) or any(
-            not isinstance(item, dict) for item in self.dynamic_steps
-        ):
-            raise ValueError("state.dynamic_steps must be an array of objects")
-        if not is_integer(self.dynamic_index) or not 0 <= self.dynamic_index <= len(self.dynamic_steps):
-            raise ValueError("state.dynamic_index is outside dynamic_steps")
+        if not is_integer(self.task_step) or self.task_step < 0:
+            raise ValueError("state.task_step must be non-negative")
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):
@@ -157,7 +147,11 @@ class RunState:
         values = dict(data)
         if "ai_session_id" not in values:
             values["ai_session_id"] = values.pop("model_session_id", values.pop("agent_session_id", ""))
-        legacy_task_workflow = values.pop("task_workflow", None)
+        # Legacy dynamic-workflow state is intentionally ignored.
+        # The slim runner resumes the current TODO through the static task-scoped SOP.
+        values.pop("task_workflow", None)
+        values.pop("dynamic_steps", None)
+        values.pop("dynamic_index", None)
         raw_tasks = values.get("tasks", [])
         if not isinstance(raw_tasks, list):
             raise ValueError("state.tasks must be an array")
@@ -168,19 +162,6 @@ class RunState:
             allowed = {field.name for field in fields(Task)}
             tasks.append(Task(**{key: value for key, value in item.items() if key in allowed}))
         values["tasks"] = tasks
-        if "dynamic_steps" not in values and isinstance(legacy_task_workflow, list) and legacy_task_workflow:
-            current = int(values.get("current", 0) or 0)
-            dynamic_steps: list[dict[str, Any]] = []
-            for task_index in range(current, len(tasks)):
-                for step_index, step in enumerate(legacy_task_workflow):
-                    if not isinstance(step, dict):
-                        continue
-                    item = dict(step)
-                    item["_task_index"] = task_index
-                    item["_task_last"] = step_index == len(legacy_task_workflow) - 1
-                    dynamic_steps.append(item)
-            values["dynamic_steps"] = dynamic_steps
-            values["dynamic_index"] = 0
         allowed_state = {item.name for item in fields(cls)}
         state = cls(**{key: value for key, value in values.items() if key in allowed_state})
         state.validate()

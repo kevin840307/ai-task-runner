@@ -6,11 +6,11 @@ from dataclasses import MISSING, fields
 from typing import Any
 
 from ..errors import RunnerError
-from .registry import STAGE_REGISTRY
+from .registry import STAGE_REGISTRY, stage_result_kind
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at", "max_results", "fresh_after_same_failures", "label"})
+ROUTING_FIELDS = frozenset({"recover", "restart_at", "repeat", "fresh_after_same_failures", "label", "scope"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
-VALIDATORS = frozenset({"file", "ai"})
+VALIDATORS = frozenset({"ai"})
 
 
 def validate_stage(name: str, values: dict[str, Any]) -> None:
@@ -38,6 +38,12 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     label = values.get("label")
     if label is not None and (not isinstance(label, str) or not label.strip()):
         raise RunnerError(f"workflow stage {name} label must be a non-empty string")
+    scope = values.get("scope")
+    if scope not in {None, "task"}:
+        raise RunnerError(f"workflow stage {name} scope must be task when specified")
+    produces = values.get("produces")
+    if produces not in {None, "", "tasks"}:
+        raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
     _validate_numbers(name, values)
 
 
@@ -60,27 +66,37 @@ def validate_restart_targets(result: list[dict[str, Any]], top_level: bool) -> N
 
 
 def validate_topology(workflow: list[dict[str, Any]]) -> None:
-    plans = _indexes(workflow, "type", "plan")
-    files = _indexes(workflow, "validator", "file")
+    """Validate only generic flow invariants; Stage capabilities stay optional."""
+    files = _file_validation_indexes(workflow)
     finals = _indexes(workflow, "validator", "ai")
-    if len(plans) > 1:
-        raise RunnerError("workflow allows at most one top-level planning stage")
-    if len(files) > 1 or len(finals) > 1 or not (files or finals):
-        raise RunnerError("workflow requires one file validator, one AI validator, or both")
+    task_nodes = [index for index, item in enumerate(workflow) if item.get("scope") == "task"]
+
+    if len(files) > 1 or len(finals) > 1:
+        raise RunnerError("workflow allows at most one file validator and one AI validator")
     if files and finals and files[0] > finals[0]:
         raise RunnerError("file validation must run before AI validation")
-    if (finals[0] if finals else files[0]) != len(workflow) - 1:
+    validators = [*files, *finals]
+    if validators and max(validators) != len(workflow) - 1:
         raise RunnerError("workflow must end with its final validation stage")
+
+    if task_nodes:
+        if task_nodes != list(range(task_nodes[0], task_nodes[-1] + 1)):
+            raise RunnerError("task-scoped workflow stages must form one contiguous block")
+        if any(workflow[index].get("validator") for index in task_nodes):
+            raise RunnerError("validator stages cannot use scope: task")
+        if validators and task_nodes[-1] >= min(validators):
+            raise RunnerError("task-scoped workflow stages must run before validation")
 
 
 def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
-    return bool(_indexes(workflow, "validator", "file")), bool(
+    return bool(_file_validation_indexes(workflow)), bool(
         _indexes(workflow, "validator", "ai")
     )
 
 
-def workflow_has_planning(workflow: list[dict[str, Any]]) -> bool:
-    return bool(_indexes(workflow, "type", "plan"))
+
+def workflow_has_task_producer(workflow: list[dict[str, Any]]) -> bool:
+    return any(stage_result_kind(definition) == "tasks" for definition in workflow)
 
 
 def _validate_validator(
@@ -91,12 +107,11 @@ def _validate_validator(
     validator = values.get("validator")
     if validator is None:
         return
-    if validator not in VALIDATORS:
+    if validator != "ai":
         raise RunnerError(f"workflow stage {name} has invalid validator: {validator}")
-    expected = "python" if validator == "file" else "base"
-    if stage_type != expected:
+    if stage_type != "ai_validator":
         raise RunnerError(
-            f"workflow stage {name} validator {validator} requires type: {expected}"
+            f"workflow stage {name} validator ai requires type: ai_validator"
         )
 
 
@@ -119,11 +134,13 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} fresh_after_same_failures requires recover"
         )
-    max_results = values.get("max_results")
-    if max_results is not None and (not isinstance(max_results, int) or isinstance(max_results, bool) or max_results <= 0):
-        raise RunnerError(f"workflow stage {name} max_results must be a positive integer")
-    if max_results is not None and not values.get("recover"):
-        raise RunnerError(f"workflow stage {name} max_results requires recover")
+    repeat = values.get("repeat")
+    if repeat is not None and (
+        not isinstance(repeat, int) or isinstance(repeat, bool) or repeat <= 0
+    ):
+        raise RunnerError(f"workflow stage {name} repeat must be a positive integer")
+    if repeat is not None and repeat > 1 and not values.get("recover"):
+        raise RunnerError(f"workflow stage {name} repeat requires recover")
     runs, required = values.get("runs"), values.get("required_passes")
     if runs is not None and (
         not isinstance(runs, int) or isinstance(runs, bool) or runs <= 0
@@ -137,6 +154,15 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(f"workflow stage {name} required_passes cannot exceed runs")
 
 
+def _file_validation_indexes(workflow: list[dict[str, Any]]) -> list[int]:
+    return [
+        index
+        for index, definition in enumerate(workflow)
+        if definition.get("type") == "command"
+        and definition.get("result_kind") == "validation"
+    ]
+
+
 def _indexes(workflow: list[dict[str, Any]], field: str, value: str) -> list[int]:
     return [
         index for index, definition in enumerate(workflow) if definition.get(field) == value
@@ -147,6 +173,6 @@ __all__ = [
     "validate_restart_targets",
     "validate_stage",
     "validate_topology",
-    "workflow_has_planning",
+    "workflow_has_task_producer",
     "workflow_validators",
 ]

@@ -16,13 +16,18 @@ from runner.workflow.loader import (
     default_workflow_name,
     load_workflow,
     workflow_fingerprint,
-    workflow_has_planning,
     workflow_validators,
 )
 from runner.workflow.pipeline import FlowNode
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.rules import handle_validation_result
 from runner.workflow.stages.contracts import StageContext, StageResult
+python = "{python}"
+validator = "{validator}"
+project_root = "{project_root}"
+state_file = "{state_file}"
+validator_args = "{validator_args}"
+
 
 
 class FakeAI:
@@ -63,50 +68,17 @@ def _names(workflow):
     return [item["name"] for item in workflow]
 
 
-def test_default_workflow_plan_receives_dynamic_stage_catalog():
+def test_default_workflow_plan_uses_static_task_scope():
     workflow = load_workflow()
-    assert _names(workflow) == ["planning", "validate_file", "validate_ai"]
-    catalog = workflow[0]["planner_stages"]
-    assert list(catalog) == ["execute", "review"]
-    assert catalog["review"]["recover"][0]["name"] == "repair"
-    assert "expand" not in workflow[0]
-
-
-def test_planner_catalog_auto_includes_new_dynamic_stage(tmp_path):
-    workflow_file = tmp_path / "workflow.yaml"
-    workflow_file.write_text(
-        """
-stages:
-  planning:
-    type: plan
-    status: Plan
-    result_handler: plan
-  execute:
-    status: Execute
-    result_handler: task
-  security_review:
-    status: Security review
-  review:
-    status: Review
-    result_handler: review
-  repair:
-    status: Repair
-  validate:
-    type: python
-    validator: file
-    status: Validate
-    recover: [repair]
-flow: [planning, validate]
-""",
-        encoding="utf-8",
-    )
-    workflow = load_workflow(workflow_file)
-    assert list(workflow[0]["planner_stages"]) == [
-        "execute", "security_review", "review"
+    assert _names(workflow) == [
+        "planning", "execute", "review", "validate_file", "validate_ai"
     ]
+    assert [item.get("scope") for item in workflow] == [
+        None, "task", "task", None, None
+    ]
+    assert "planner_stages" not in workflow[0]
 
-
-def test_plan_stage_generates_selected_dynamic_stage_sequence(tmp_path):
+def test_task_sop_explicitly_includes_new_stage(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(
         """
@@ -124,73 +96,87 @@ stages:
     status: Review
     result_handler: review
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
-flow: [planning, validate]
+flow:
+  - planning
+  - stage: execute
+    scope: task
+  - stage: security_review
+    scope: task
+  - stage: review
+    scope: task
+  - validate
 """,
         encoding="utf-8",
     )
     workflow = load_workflow(workflow_file)
+    assert _names(workflow) == [
+        "planning", "execute", "security_review", "review", "validate"
+    ]
+    assert [item.get("scope") for item in workflow[1:4]] == ["task"] * 3
+
+def test_plan_stage_generates_todos_only(tmp_path):
+    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     stage = create_stage(workflow[0])
     payload = json.dumps({
         "tasks": [{
             "title": "Secure feature",
-            "description": "Implement and security-check the feature",
-            "deliverable": "Feature is implemented and reviewed",
+            "description": "Implement the feature",
+            "deliverable": "Feature is implemented",
             "acceptance_criteria": ["Feature works"],
-            "steps": ["execute", "security_review", "review"],
         }]
     })
     tasks = stage.spec.parser(payload, context)
     result = stage.finish(context, StageResult("planning", "pass", data=tasks))
 
-    assert context.state.tasks[0].steps == [
-        "execute", "security_review", "review"
-    ]
-    assert [item["name"] for item in result.next_steps] == [
-        "execute", "security_review", "review"
-    ]
-    assert result.next_steps[-1]["_task_last"] is True
+    assert result.data == tasks
+    assert tasks[0].title == "Secure feature"
+    assert not hasattr(tasks[0], "steps")
+    assert not hasattr(result, "next_steps")
 
-
-def test_plan_rejects_static_or_unknown_stage_name(tmp_path):
+def test_plan_ignores_stage_topology_and_parses_todo_content(tmp_path):
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     stage = create_stage(workflow[0])
     payload = json.dumps({
         "tasks": [{
-            "title": "Bad plan",
-            "description": "Try to call a static validator",
-            "deliverable": "Invalid",
-            "acceptance_criteria": ["Invalid"],
-            "steps": ["execute", "validate_file"],
+            "title": "Plan only work",
+            "description": "Planner describes the work, not Stage names",
+            "deliverable": "Done",
+            "acceptance_criteria": ["Done"],
         }]
     })
-    with pytest.raises(RunnerError, match="unavailable Stage: validate_file"):
-        stage.spec.parser(payload, context)
+    tasks = stage.spec.parser(payload, context)
+    assert len(tasks) == 1
+    assert tasks[0].title == "Plan only work"
 
-
-def test_plan_rejects_task_without_write_stage_when_available(tmp_path):
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
-    context = _context(tmp_path, workflow)
-    stage = create_stage(workflow[0])
-    payload = json.dumps({
-        "tasks": [{
-            "title": "Review-only non-work",
-            "description": "Incorrectly skip implementation",
-            "deliverable": "No project change",
-            "acceptance_criteria": ["A writable task stage was used"],
-            "steps": ["review"],
-        }]
-    })
-    with pytest.raises(RunnerError, match="must include a write Stage"):
-        stage.spec.parser(payload, context)
-
+def test_task_producer_does_not_require_task_scope(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  planning:
+    type: plan
+  validate:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+flow: [planning, validate]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert _names(workflow) == ["planning", "execute", "review", "validate"]
+    assert [item["name"] for item in workflow if item.get("scope") == "task"] == [
+        "execute", "review"
+    ]
 
 def test_registry_is_only_type_to_class():
-    assert set(STAGE_REGISTRY) == {"base", "plan", "python"}
+    assert set(STAGE_REGISTRY) == {"base", "task", "review", "ai_validator", "command", "plan"}
     assert all(isinstance(stage_class, type) for stage_class in STAGE_REGISTRY.values())
 
 
@@ -205,8 +191,9 @@ stages:
     status: Probe
     value: configured
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - probe_check
@@ -222,7 +209,7 @@ flow:
     assert stage.spec.value == "configured"
 
 
-def test_topology_uses_stage_type_and_validator_capability(tmp_path):
+def test_topology_uses_stage_type_validator_and_task_scope(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(
         """
@@ -236,17 +223,22 @@ stages:
     status: Review
     result_handler: review
   gate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Gate
-flow: [plan, gate]
+flow:
+  - plan
+  - gate
 """,
         encoding="utf-8",
     )
     workflow = load_workflow(workflow_file)
-    assert workflow_has_planning(workflow)
+    assert any(item.get("type") == "plan" for item in workflow)
     assert workflow_validators(workflow) == (True, False)
-    assert list(workflow[0]["planner_stages"]) == ["execute", "review"]
+    assert [item["name"] for item in workflow if item.get("scope") == "task"] == [
+        "execute", "review"
+    ]
 
 def test_custom_base_stage_loads_relative_instructions(tmp_path):
     (tmp_path / "task.md").write_text("Implement the report.", encoding="utf-8")
@@ -261,8 +253,9 @@ stages:
     instructions_file: task.md
     retry: -1
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow: [implement, validate]
 """,
@@ -283,8 +276,9 @@ stages:
     status: Execute
     label: Wrong place
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow: [implement, validate]
 """,
@@ -302,8 +296,9 @@ stages:
   implement:
     status: Execute
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - stage: implement
@@ -328,8 +323,9 @@ stages:
   implement:
     status: Execute
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - stage: implement
@@ -351,8 +347,9 @@ stages:
     type: base
     status: Repair
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
     restart_at: repair
 flow: [repair, validate]
@@ -368,9 +365,9 @@ flow: [repair, validate]
 @pytest.mark.parametrize(
     ("validator", "ai_prompt", "names"),
     [
-        ("validator.py", "AI check", ["planning", "validate_file", "validate_ai"]),
-        ("validator.py", "", ["planning", "validate_file"]),
-        ("ai", "", ["planning", "validate_ai"]),
+        ("validator.py", "AI check", ["planning", "execute", "review", "validate_file", "validate_ai"]),
+        ("validator.py", "", ["planning", "execute", "review", "validate_file"]),
+        ("ai", "", ["planning", "execute", "review", "validate_ai"]),
     ],
 )
 def test_validation_options_select_builtin_workflow(validator, ai_prompt, names):
@@ -408,7 +405,7 @@ def test_builtin_workflow_yaml_lives_in_dedicated_folder():
             "unknown type",
         ),
         (
-            "stages:\n  x:\n    status: X\n    nope: 1\n  v:\n    type: python\n    validator: file\n    status: V\nflow: [x, v]\n",
+            "stages:\n  x:\n    status: X\n    nope: 1\nflow: [x]\n",
             "unknown options: nope",
         ),
         (
@@ -424,30 +421,22 @@ def test_invalid_workflow_is_rejected(tmp_path, body, message):
         load_workflow(workflow_file)
 
 
-def test_resume_runs_only_remaining_generated_steps(tmp_path):
+def test_resume_runs_only_remaining_task_scoped_work(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
-    catalog = workflow[0]["planner_stages"]
-    dynamic_steps = []
-    for task_index in (1, 2):
-        for step_index, name in enumerate(("execute", "review")):
-            step = dict(catalog[name])
-            step["_task_index"] = task_index
-            step["_task_last"] = step_index == 1
-            dynamic_steps.append(step)
     state = RunState(
         "run",
         "goal",
         str(tmp_path),
         tasks=[
-            Task("t1", "one", "do", ["done"], "out", status="completed", steps=["execute", "review"]),
-            Task("t2", "two", "do", ["done"], "out", steps=["execute", "review"]),
-            Task("t3", "three", "do", ["done"], "out", steps=["execute", "review"]),
+            Task("t1", "one", "do", ["done"], "out", status="completed"),
+            Task("t2", "two", "do", ["done"], "out"),
+            Task("t3", "three", "do", ["done"], "out"),
         ],
         current=1,
-        workflow_position=0,
-        dynamic_steps=dynamic_steps,
+        workflow_position=1,
+        task_step=0,
     )
     context = _context(tmp_path, workflow, state)
 
@@ -455,7 +444,7 @@ def test_resume_runs_only_remaining_generated_steps(tmp_path):
         def __init__(self):
             self.calls = []
 
-        def run(self, stage, ctx, previous=None):
+        def run(self, stage, ctx, previous=None, **kwargs):
             self.calls.append(stage.name)
             return StageResult(stage.name, "pass")
 
@@ -465,44 +454,34 @@ def test_resume_runs_only_remaining_generated_steps(tmp_path):
     assert executor.calls == [
         "execute", "review", "execute", "review", "validate_file"
     ]
-    assert context.state.workflow_position == 2
-    assert context.state.dynamic_steps == []
+    assert context.state.workflow_position == len(workflow)
+    assert context.state.task_step == 0
     assert context.state.current == 3
 
-class RecordingExecutor:
-    def __init__(self, workflow):
-        self.calls = []
-        self.catalog = workflow[0]["planner_stages"]
-
-    def run(self, stage, ctx, previous=None):
-        self.calls.append(stage.name)
-        if stage.name == "planning":
-            tasks = [
-                Task(
-                    f"t{i}", f"task {i}", "do", ["done"], "out",
-                    steps=["execute", "review"],
-                )
-                for i in range(1, 4)
-            ]
-            ctx.state.tasks = tasks
-            ctx.state.current = 0
-            next_steps = []
-            for task_index, task in enumerate(tasks):
-                for step_index, name in enumerate(task.steps):
-                    step = dict(self.catalog[name])
-                    step["_task_index"] = task_index
-                    step["_task_last"] = step_index == len(task.steps) - 1
-                    next_steps.append(step)
-            return StageResult(stage.name, "pass", data=tasks, next_steps=next_steps)
-        return StageResult(stage.name, "pass")
-
-def test_plan_generated_steps_run_in_order_for_each_task(tmp_path):
+def test_plan_todos_run_same_task_scoped_sop_in_order(tmp_path):
     from runner.workflow.pipeline import Pipeline
+    from runner.workflow.rules import reduce_result
 
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
-    executor = RecordingExecutor(workflow)
 
+    class RecordingExecutor:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, stage, ctx, previous=None, **kwargs):
+            self.calls.append(stage.name)
+            if stage.name == "planning":
+                tasks = [
+                    Task(f"t{i}", f"task {i}", "do", ["done"], "out")
+                    for i in range(1, 4)
+                ]
+                return reduce_result(
+                    ctx, StageResult(stage.name, "pass", data=tasks, kind="tasks")
+                )
+            return StageResult(stage.name, "pass")
+
+    executor = RecordingExecutor()
     Pipeline(context, workflow).run(executor)
 
     assert executor.calls == [
@@ -513,7 +492,7 @@ def test_plan_generated_steps_run_in_order_for_each_task(tmp_path):
         "validate_file",
     ]
     assert context.state.current == 3
-    assert context.state.dynamic_steps == []
+    assert context.state.task_step == 0
 
 def test_generic_stage_instances_can_be_reused_and_overridden(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
@@ -538,8 +517,9 @@ stages:
     result_status: completed
 
   validate_file:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: 正在執行 File Validator
     run_state: validating
     mode: write
@@ -577,7 +557,7 @@ flow:
     assert workflow[1]["retry"] == 1
     assert workflow[1]["skip_on_error"] is True
     assert workflow[3]["skip_on_error"] is False
-    assert workflow[-1]["type"] == "python"
+    assert workflow[-1]["type"] == "command"
 
 
 def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
@@ -585,7 +565,7 @@ def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
 
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
-    context.state.workflow_position = 1
+    context.state.workflow_position = len(workflow) - 1
 
     class ValidatorExecutor:
         def run(self, stage, ctx, previous=None):
@@ -593,7 +573,7 @@ def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
 
     Pipeline(context, workflow).run(ValidatorExecutor())
     assert context.state.completed
-    assert context.state.workflow_position == 2
+    assert context.state.workflow_position == len(workflow)
 
 
 def test_validator_failure_resume_uses_yaml_repair_plan(tmp_path):
@@ -601,15 +581,14 @@ def test_validator_failure_resume_uses_yaml_repair_plan(tmp_path):
 
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
-    context.state.workflow_position = 1
+    context.state.workflow_position = len(workflow) - 1
     context.set_stage = lambda stage, _detail: setattr(context.state, "stage", stage)
     handle_validation_result(
         context, StageResult("validate_file", "fail", output="broken")
     )
-    flow = Pipeline(context, workflow)._initial_flow()
-    assert flow[0]["name"] == "repair_plan"
-    assert list(flow[0]["planner_stages"]) == ["execute", "review"]
-    assert flow[1]["name"] == "validate_file"
+
+    assert context.state.stage == "validator_failed"
+    assert workflow[-1]["recover"][0]["name"] == "repair_plan"
 
 def test_workflow_fingerprint_changes_with_yaml_semantics():
     workflow = load_workflow()
@@ -618,26 +597,25 @@ def test_workflow_fingerprint_changes_with_yaml_semantics():
     assert workflow_fingerprint(workflow) != workflow_fingerprint(changed)
 
 
-def test_legacy_role_scope_metadata_is_not_part_of_new_schema(tmp_path):
+def test_scope_belongs_to_flow_node_not_stage_definition(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(
         """
 stages:
   validate:
-    type: python
-    validator: file
-    role: file_validation
-    scope: run
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    scope: task
     status: Validate
 flow: [validate]
 """,
         encoding="utf-8",
     )
-    with pytest.raises(RunnerError, match="unknown options: role, scope"):
+    with pytest.raises(RunnerError, match="scope belongs to flow nodes"):
         load_workflow(workflow_file)
 
-
-def test_resume_rebuilds_generated_steps_from_durable_task_plan(tmp_path):
+def test_resume_restarts_current_todo_from_saved_task_step(tmp_path):
     from runner.workflow.pipeline import Pipeline
 
     workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
@@ -645,10 +623,11 @@ def test_resume_rebuilds_generated_steps_from_durable_task_plan(tmp_path):
         "run",
         "goal",
         str(tmp_path),
-        tasks=[Task("t1", "repair", "do", ["done"], "out", steps=["execute", "review"])],
+        tasks=[Task("t1", "repair", "do", ["done"], "out")],
         current=0,
         workflow_position=1,
-        stage="planning",
+        task_step=1,
+        stage="reviewing",
     )
     context = _context(tmp_path, workflow, state)
 
@@ -656,35 +635,33 @@ def test_resume_rebuilds_generated_steps_from_durable_task_plan(tmp_path):
         def __init__(self):
             self.calls = []
 
-        def run(self, stage, ctx, previous=None):
+        def run(self, stage, ctx, previous=None, **kwargs):
             self.calls.append(stage.name)
             return StageResult(stage.name, "pass")
 
     executor = Executor()
     Pipeline(context, workflow).run(executor)
-    assert executor.calls == ["execute", "review", "validate_file"]
+    assert executor.calls == ["review", "validate_file"]
     assert context.state.completed
 
-
-def test_legacy_task_workflow_state_migrates_to_dynamic_steps(tmp_path):
-    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
-    catalog = workflow[0]["planner_stages"]
+def test_legacy_generated_workflow_state_is_ignored_safely(tmp_path):
     state = RunState.load({
         "run_id": "run",
         "goal": "goal",
         "project_root": str(tmp_path),
         "tasks": [
-            {"id": "t1", "title": "one", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "status": "completed"},
-            {"id": "t2", "title": "two", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"]},
+            {"id": "t1", "title": "one", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "status": "completed", "steps": ["execute", "review"]},
+            {"id": "t2", "title": "two", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "steps": ["execute", "review"]},
         ],
         "current": 1,
-        "workflow_position": 0,
-        "task_workflow": [catalog["execute"], catalog["review"]],
+        "workflow_position": 1,
+        "dynamic_steps": [{"name": "review", "_task_index": 1}],
+        "dynamic_index": 0,
     })
-    assert [item["name"] for item in state.dynamic_steps] == ["execute", "review"]
-    assert state.dynamic_steps[-1]["_task_index"] == 1
-    assert state.dynamic_steps[-1]["_task_last"] is True
-
+    assert state.current == 1
+    assert state.task_step == 0
+    assert not hasattr(state, "dynamic_steps")
+    assert not hasattr(state.tasks[1], "steps")
 
 def test_base_type_is_default_and_can_be_explicit(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
@@ -699,8 +676,9 @@ stages:
     status: Explicit
     prompt: two.md
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow: [implicit, explicit, validate]
 """,
@@ -716,8 +694,9 @@ def test_workflow_schema_has_only_stages_and_flow(tmp_path):
         """
 stages:
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 workflows:
   unused: [validate]
@@ -729,12 +708,12 @@ flow: [validate]
         load_workflow(workflow_file)
 
 
-def test_multi_prompt_example_reuses_same_base_stage():
+def test_multi_prompt_example_reuses_same_task_stage():
     example = Path(__file__).resolve().parents[1] / "examples" / "workflow_multi_prompt.yaml"
     workflow = load_workflow(example)
     prompts = [item.get("prompt") for item in workflow if item["name"] == "run_prompt"]
     assert prompts == ["prompts/step_a.md", "prompts/step_b.md", "prompts/step_c.md"]
-    assert all(item["type"] == "base" for item in workflow if item["name"] == "run_prompt")
+    assert all(item["type"] == "task" for item in workflow if item["name"] == "run_prompt")
 
 
 def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
@@ -826,7 +805,7 @@ def test_custom_workflow_resolves_local_continuation_prompt(tmp_path):
     assert Path(flow[0]["continuation_prompt"]) == (skills / "continue.md").resolve()
 
 
-def test_flow_node_max_results_is_normalized(tmp_path):
+def test_flow_node_repeat_is_normalized(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text("""
 stages:
@@ -835,21 +814,22 @@ stages:
   fix:
     status: Fix
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - stage: grill
-    max_results: 3
+    repeat: 3
     recover: [fix]
   - validate
 """, encoding="utf-8")
     workflow = load_workflow(workflow_file)
-    assert workflow[0]["max_results"] == 3
+    assert workflow[0]["repeat"] == 3
 
 
 @pytest.mark.parametrize("value", [0, -1, True, "3"])
-def test_flow_node_max_results_must_be_positive_integer(tmp_path, value):
+def test_flow_node_repeat_must_be_positive_integer(tmp_path, value):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(f"""
 stages:
@@ -858,56 +838,69 @@ stages:
   fix:
     status: Fix
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - stage: grill
-    max_results: {str(value).lower() if isinstance(value, bool) else (repr(value) if isinstance(value, str) else value)}
+    repeat: {str(value).lower() if isinstance(value, bool) else (repr(value) if isinstance(value, str) else value)}
     recover: [fix]
   - validate
 """, encoding="utf-8")
-    with pytest.raises(RunnerError, match="max_results must be a positive integer"):
+    with pytest.raises(RunnerError, match="repeat must be a positive integer"):
         load_workflow(workflow_file)
 
 
-def test_flow_node_max_results_requires_recover(tmp_path):
+def test_flow_node_repeat_requires_recover(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text("""
 stages:
   grill:
     status: Grill
   validate:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validate
 flow:
   - stage: grill
-    max_results: 3
+    repeat: 3
   - validate
 """, encoding="utf-8")
-    with pytest.raises(RunnerError, match="max_results requires recover"):
+    with pytest.raises(RunnerError, match="repeat requires recover"):
         load_workflow(workflow_file)
 
 
-def test_workflow_stage_missing_required_option_fails_during_load(tmp_path):
+def test_base_stage_status_uses_simple_default_when_omitted(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(
         """stages:
-  broken:
+  work:
     actor: ai
+    prompt: work.md
   final:
-    status: Final
+    type: ai_validator
     validator: ai
 flow:
-  - broken
+  - work
   - final
 """,
         encoding="utf-8",
     )
-    with pytest.raises(RunnerError, match="missing required options: status"):
-        load_workflow(workflow_file)
+    workflow = load_workflow(workflow_file)
+    stage = create_stage(workflow[0])
+    assert stage.status == "AI Stage"
 
+
+
+
+def test_builtin_review_owns_semantic_fresh_default():
+    workflow = load_workflow(BUILTIN_WORKFLOWS["file"])
+    review = next(item for item in workflow if item["name"] == "review")
+    assert "fresh_after_same_failures" not in review
+    stage = create_stage(review)
+    assert stage.semantic_failure_threshold == 2
 
 def test_flow_node_fresh_after_same_failures_is_normalized(tmp_path):
     path = tmp_path / "workflow.yaml"
@@ -967,3 +960,164 @@ flow:
     )
     with pytest.raises(RunnerError, match="fresh_after_same_failures must be a positive integer"):
         load_workflow(path)
+
+
+def test_command_stage_can_produce_tasks_without_plan(tmp_path):
+    import sys
+    from runner.workflow.pipeline import Pipeline
+    from runner.workflow.stages.executor import StageExecutor
+    from runner.plugins.contracts import HookChain
+
+    producer = tmp_path / "produce.py"
+    producer.write_text(
+        "import json\nprint(json.dumps({'tasks':["
+        "{'title':'A','description':'a','deliverable':'a','acceptance_criteria':['a']},"
+        "{'title':'B','description':'b','deliverable':'b','acceptance_criteria':['b']}]}))\n",
+        encoding="utf-8",
+    )
+    worker = tmp_path / "work.py"
+    worker.write_text(
+        "from pathlib import Path\n"
+        "p=Path('count.txt')\n"
+        "p.write_text(str(int(p.read_text())+1) if p.exists() else '1')\n",
+        encoding="utf-8",
+    )
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        f"""
+stages:
+  produce:
+    type: command
+    command: ["{python}", "produce.py"]
+    produces: tasks
+  work:
+    type: command
+    command: [{json.dumps(sys.executable)}, {json.dumps(str(worker))}]
+flow:
+  - produce
+  - stage: work
+    scope: task
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    context = _context(tmp_path, workflow)
+    context.config.workflow_explicit = True
+    context.validator_is_ai = False
+
+    Pipeline(context, workflow).run(StageExecutor(HookChain()))
+
+    assert [task.title for task in context.state.tasks] == ["A", "B"]
+    assert context.state.current == 2
+    assert context.state.completed
+    assert (tmp_path / "count.txt").read_text() == "2"
+
+
+def test_generic_workflow_does_not_require_plan_or_validator(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  prepare:
+    type: command
+    command: [python, -c, "print('ok')"]
+flow: [prepare]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert _names(workflow) == ["prepare"]
+    assert workflow_validators(workflow) == (False, False)
+    assert all(item.get("type") != "plan" for item in workflow)
+
+
+def test_task_scope_without_tasks_fails_at_runtime_not_schema(tmp_path):
+    from runner.workflow.pipeline import Pipeline
+    from runner.workflow.stages.executor import StageExecutor
+    from runner.plugins.contracts import HookChain
+
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  work:
+    type: command
+    command: [python, -c, "print('ok')"]
+flow:
+  - stage: work
+    scope: task
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    with pytest.raises(RunnerError, match="requires tasks from an earlier Stage or input"):
+        Pipeline(_context(tmp_path, workflow), workflow).run(StageExecutor(HookChain()))
+
+
+def test_explicit_workflow_request_does_not_require_validator(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  work:
+    type: command
+    command: [python, -c, "print('ok')"]
+flow: [work]
+""",
+        encoding="utf-8",
+    )
+    request = RunRequest(
+        goal="run generic workflow",
+        project_root=str(tmp_path),
+        workflow_file=str(workflow_file),
+    )
+    config = request.normalized_config()
+    assert config.validator is None
+    assert config.workflow_explicit is True
+
+
+def test_simplified_plan_flow_keeps_legacy_normalized_fingerprint(tmp_path):
+    simplified = tmp_path / "simplified.yaml"
+    explicit = tmp_path / "explicit.yaml"
+    stages = """
+stages:
+  planning:
+    type: plan
+  execute:
+    type: task
+  review:
+    type: review
+    recover: [repair]
+  repair:
+    type: task
+  validate:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+"""
+    simplified.write_text(
+        stages + """
+flow:
+  - planning
+  - validate
+""",
+        encoding="utf-8",
+    )
+    explicit.write_text(
+        stages + """
+flow:
+  - planning
+  - stage: execute
+    scope: task
+  - stage: review
+    scope: task
+  - validate
+""",
+        encoding="utf-8",
+    )
+
+    simplified_flow = load_workflow(simplified)
+    explicit_flow = load_workflow(explicit)
+
+    assert simplified_flow == explicit_flow
+    assert workflow_fingerprint(simplified_flow) == workflow_fingerprint(explicit_flow)

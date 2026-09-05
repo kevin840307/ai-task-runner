@@ -84,10 +84,10 @@ class RuntimeConfig:
             raise ValueError("project_root must be a non-empty string")
         if not self.script and not self.resume and not self.goal.strip():
             raise ValueError("goal is required unless script or resume is used")
-        if not self.script and not (
+        if not self.script and not self.workflow_explicit and not (
             isinstance(self.validator, str) and self.validator.strip()
         ):
-            raise ValueError("validator is required unless script is used")
+            raise ValueError("validator is required unless script or explicit workflow is used")
         if self.backend not in backend_names():
             raise ValueError(f"unsupported backend: {self.backend}")
         if not isinstance(self.sandbox, bool):
@@ -142,7 +142,7 @@ class RuntimeConfig:
             raise ValueError("workflow must be a non-empty list")
         if not isinstance(self.workflow_explicit, bool):
             raise ValueError("workflow_explicit must be a boolean")  # noqa: TRY004
-        from ..workflow.loader import workflow_has_planning, workflow_validators
+        from ..workflow.loader import workflow_has_task_producer, workflow_validators
 
         has_file_validation, has_ai_validation = workflow_validators(self.workflow)
         if self.validator:
@@ -151,8 +151,8 @@ class RuntimeConfig:
                 raise ValueError("file validator workflow requires validate_file")
             if (validator_is_ai or self.ai_validator_prompt.strip()) and not has_ai_validation:
                 raise ValueError("AI validation workflow requires validate_ai")
-        if self.plan_only and not workflow_has_planning(self.workflow):
-            raise ValueError("plan_only requires a planning stage")
+        if self.plan_only and not workflow_has_task_producer(self.workflow):
+            raise ValueError("plan_only requires a task-producing stage")
         self.plugins = normalize_plugin_config(self.plugins)
 
 

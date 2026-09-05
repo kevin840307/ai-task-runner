@@ -1,6 +1,6 @@
 # Documentation Index
 
-Version: 1.2.53
+Version: 1.2.61
 
 - `design/DESIGN.md`: complete behavior and recovery design.
 - `design/ARCHITECTURE.md`: modules, boundaries, and data flow.
@@ -16,3 +16,5 @@ Version: 1.2.53
 - `validator_templates/README.md`: deterministic validator conventions.
 
 Every human-facing maintained document must have an English `.md` and a matching Traditional Chinese `.zh-TW.md` version describing the same current behavior. Prompt resources, QWEN.md/AGENTS.md, and sample-project task inputs are executable resources and are excluded.
+
+- [Custom Workflow Guide](user/CUSTOM_WORKFLOW.md)

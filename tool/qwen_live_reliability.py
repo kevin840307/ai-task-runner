@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -22,7 +23,7 @@ from urllib.parse import urlsplit, urlunsplit
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
-DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_python_validator" / "project"
+DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
 BUILTIN_WORKFLOWS = {
     name: ROOT / "runner" / "workflow" / "builtin" / f"{name}.yaml"
@@ -140,6 +141,47 @@ print("VALIDATION_PASSED")
 '''
 
 
+CUSTOM_TASK_PRODUCER = '''from __future__ import annotations
+import json
+
+print(json.dumps({
+    "tasks": [
+        {
+            "title": "Create health probe",
+            "description": "Create health.txt exactly as required by the project goal.",
+            "deliverable": "health.txt with the exact required text and no trailing newline.",
+            "acceptance_criteria": [
+                "health.txt exists",
+                "health.txt content exactly matches the requested text",
+                "protected files are unchanged"
+            ]
+        }
+    ]
+}, ensure_ascii=False))
+'''
+
+CUSTOM_TASK_WORKFLOW = '''stages:
+  discover:
+    type: command
+    command: "{python} task_producer.py"
+    produces: tasks
+
+  execute:
+    type: task
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+
+flow:
+  - discover
+  - stage: execute
+    scope: task
+  - validate_file
+'''
+
+
 @dataclass(frozen=True)
 class Settings:
     workspace: Path
@@ -209,7 +251,7 @@ def arguments() -> argparse.Namespace:
         default=None,
         help=(
             "copy and run this example project as the final real-agent smoke; "
-            "omit the value to use examples/01_basic_python_validator/project"
+            "omit the value to use examples/01_basic_command_validator/project"
         ),
     )
     parser.add_argument(
@@ -735,6 +777,98 @@ def _slug(path: Path | None) -> str:
     return "-".join("".join(chars).split("-")) or "case"
 
 
+def workflow_dryrun_preflight() -> list[dict[str, object]]:
+    """Exercise representative Workflow routing deterministically before live Qwen calls."""
+    workflows = [
+        *BUILTIN_WORKFLOWS.values(),
+        ROOT / "examples" / "custom_workflow_latest.yaml",
+    ]
+    tool = ROOT / "tool" / "workflow_dryrun.py"
+    results: list[dict[str, object]] = []
+    def run_one(workflow: Path) -> dict[str, object]:
+        if not workflow.is_file():
+            raise RuntimeError(f"dry-run preflight workflow missing: {workflow}")
+        completed = subprocess.run(
+            [sys.executable, str(tool), str(workflow), "--matrix", "--json"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout)[-4000:]
+            raise RuntimeError(f"workflow dry-run preflight failed for {workflow}: {detail}")
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"workflow dry-run returned invalid JSON for {workflow}") from error
+        if payload.get("closed") is not True:
+            raise RuntimeError(f"workflow dry-run did not close: {workflow}")
+        return payload
+
+    for workflow in workflows:
+        results.append(run_one(workflow))
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-12-stage-") as directory:
+        path = Path(directory) / "workflow.yaml"
+        stage_lines = []
+        flow_lines = []
+        for index in range(1, 13):
+            name = f"s{index:02d}"
+            stage_lines.extend([
+                f"  {name}:",
+                "    type: command",
+                f'    command: ["{{python}}", -c, "print(\'{name}\')"]',
+            ])
+            if index == 5:
+                flow_lines.extend(["  - stage: s05", "    repeat: 3", "    recover: [repair]"])
+            elif index == 9:
+                flow_lines.extend(["  - stage: s09", "    recover: [repair]"])
+            elif index == 10:
+                flow_lines.extend(["  - stage: s10", "    restart_at: s08"])
+            else:
+                flow_lines.append(f"  - {name}")
+        stage_lines.extend([
+            "  repair:",
+            "    type: command",
+            '    command: ["{python}", -c, "print(\'repair\')"]',
+        ])
+        path.write_text(
+            "stages:\n" + "\n".join(stage_lines) + "\nflow:\n" + "\n".join(flow_lines) + "\n",
+            encoding="utf-8",
+        )
+        twelve = run_one(path)
+        twelve["workflow"] = "synthetic://12-stage-composability"
+        results.append(twelve)
+
+    custom = next(
+        (item for item in results if str(item.get("workflow", "")).endswith("custom_workflow_latest.yaml")),
+        None,
+    )
+    features = custom.get("features", {}) if isinstance(custom, dict) else {}
+    if not isinstance(features, dict) or not features.get("task_producer") or not features.get("task_scope"):
+        raise RuntimeError("custom Task Producer dry-run preflight did not cover task production + task scope")
+    return results
+
+
+def loop_detection_contract_preflight() -> None:
+    """Lock the known Qwen loop signal to diagnostics + fresh-session reset semantics."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from runner.ai.session import should_reset_session
+    from runner.backends.base import BaseBackend
+
+    message = (
+        "Loop detection halted the run "
+        "(consecutive_identical_tool_calls: repeated call)."
+    )
+    diagnostics = BaseBackend.extract_diagnostics([], message)
+    if diagnostics.get("loop_type") != "consecutive_identical_tool_calls":
+        raise RuntimeError("Qwen loop diagnostic classification contract changed")
+    if not should_reset_session(message):
+        raise RuntimeError("Qwen loop signal no longer forces session reset")
+
+
 def resume_probe(settings: Settings, root: Path) -> None:
     project = create_project(root, "resume-probe")
     first_log = console_log(project, "first-console.jsonl")
@@ -794,6 +928,26 @@ def resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("resume fell back to a new session instead of continuing")
 
 
+def custom_task_producer_probe(settings: Settings, root: Path) -> None:
+    """Prove a non-Plan Python Stage can produce Task[] for a real Qwen task run."""
+    project = create_project(root, "custom-task-producer-probe")
+    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
+    workflow = project / "workflow.yaml"
+    workflow.write_text(CUSTOM_TASK_WORKFLOW, encoding="utf-8")
+    code = run_command(
+        runner_command(settings, project, workflow=workflow),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code)
+    state = read_state(project)
+    tasks = state.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != 1:
+        raise RuntimeError("custom Task Producer did not install exactly one durable Task")
+    if tasks[0].get("status") != "completed":
+        raise RuntimeError("custom Task Producer task did not complete")
+
+
 def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
     project = create_project(root, f"builtin-{workflow}-probe")
     ai_validation = workflow in {"ai", "mixed"}
@@ -833,58 +987,37 @@ REVIEW_REPAIR_WORKFLOW = '''stages:
   planning:
     type: plan
     status: Planning deterministic Review/Repair probe
-    run_state: planning
-    mode: readonly
-    actor: ai
-    backend_mode: planning
-    timeout_attr: planning_timeout
-    result_handler: plan
 
   seed:
-    type: python
+    type: command
     status: Seeding incomplete Review/Repair state
     run_state: executing
-    path: seed_review.py
-    result_handler: task
+    command: "{python} seed_review.py"
 
   review:
+    type: review
     status: Reviewing deterministic incomplete state
-    run_state: reviewing
-    mode: readonly
-    actor: ai
-    backend_mode: review
-    client_cache_key: review_client
-    timeout_attr: planning_timeout
     prompt: stages/review.md
     continuation_prompt: stages/review_continue.md
-    parser: review
-    result_status: completed
-    result_handler: review
-    retry_attr: review_retries
     skip_on_error: false
     recover: [repair]
 
   repair:
+    type: task
     status: Repairing deterministic Review gap
-    run_state: executing
-    mode: write
-    actor: executor
-    track_changes: true
-    prompt: stages/execution.md
-    continuation_prompt: stages/execution_continue.md
-    result_handler: task
 
   validate_file:
-    type: python
-    validator: file
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validating deterministic Review/Repair probe
-    run_state: validating
-    mode: write
-    actor: validator
-    result_handler: validation
 
 flow:
   - planning
+  - stage: seed
+    scope: task
+  - stage: review
+    scope: task
   - validate_file
 '''
 
@@ -1574,12 +1707,21 @@ def main() -> int:
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
+    dryrun_results = workflow_dryrun_preflight()
+    print(
+        f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
+        flush=True,
+    )
+    loop_detection_contract_preflight()
+    print("PASS Qwen loop-detection/reset contract preflight", flush=True)
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
         for workflow in ("file", "ai", "mixed"):
             builtin_workflow_probe(settings, run_root, workflow)
             print(f"PASS builtin/{workflow} topology + prompt contract probe", flush=True)
+        custom_task_producer_probe(settings, run_root)
+        print("PASS custom Python Task Producer -> task-scope probe", flush=True)
         review_repair_prompt_probe(settings, run_root)
         print("PASS Review FAIL/Repair feedback prompt probe", flush=True)
         validator_repair_probe(settings, run_root)
@@ -1635,7 +1777,11 @@ def main() -> int:
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
+        "workflow_dryrun_preflight": True,
+        "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
+        "loop_detection_contract_preflight": True,
         "builtin_workflow_contracts": ["file", "ai", "mixed"],
+        "custom_task_producer_probe": True,
         "review_repair_prompt_probe": True,
         "validator_repair_prompt_contract": True,
         "yaml_list_resume_probe": True,

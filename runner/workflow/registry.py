@@ -8,25 +8,28 @@ from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
 from .stages.base_stage import BaseStage
+from .stages.ai_stage import AIValidatorStage, ReviewStage, TaskStage
+from .stages.command import CommandStage
 from .stages.plan_stage import PlanStage
-from .stages.python_stage import PythonStage
 
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
+    "task": TaskStage,
+    "review": ReviewStage,
+    "ai_validator": AIValidatorStage,
+    "command": CommandStage,
     "plan": PlanStage,
-    "python": PythonStage,
 }
 ROUTING_FIELDS = frozenset(
     {
         "validator",
         "recover",
         "restart_at",
-        "max_results",
+        "repeat",
         "fresh_after_same_failures",
         "label",
+        "scope",
         "_workflow_index",
-        "_task_index",
-        "_task_last",
     }
 )
 
@@ -49,7 +52,11 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
     return {
         name: {
             "type": name,
-            "options": [_field_info(item) for item in fields(stage_class.spec_class)],
+            "options": [
+                _field_info(item)
+                for item in fields(stage_class.spec_class)
+                if item.name != "name"
+            ],
         }
         for name, stage_class in sorted(STAGE_REGISTRY.items())
     }
@@ -62,6 +69,13 @@ def _field_info(item: Any) -> dict[str, Any]:
         "required": required,
         "type": _type_name(item.type),
     }
+    if item.name == "parser":
+        from .result_parsers import PARSERS
+        result["type"] = "enum"
+        result["values"] = sorted(PARSERS)
+    if item.name == "produces":
+        result["type"] = "enum"
+        result["values"] = ["", "tasks"]
     if not required:
         default = item.default if item.default is not MISSING else item.default_factory()
         if default is None or isinstance(default, (str, int, float, bool, list, dict, tuple)):
@@ -78,23 +92,43 @@ def _type_name(annotation: Any) -> str:
     return f"{name}[{args}]" if args else name
 
 
+
+def stage_result_kind(definition: dict[str, Any]) -> str:
+    """Return a Stage's declared effect without coupling Pipeline to a Stage class."""
+    produces = str(definition.get("produces", "") or "")
+    if produces:
+        return produces
+    declared = str(definition.get("result_kind", "") or "")
+    if declared:
+        return declared
+    stage_type = str(definition.get("type", "base"))
+    stage_class = STAGE_REGISTRY.get(stage_type)
+    return str(getattr(stage_class, "result_kind", "generic") or "generic")
+
+def workflow_catalog() -> dict[str, Any]:
+    """External editor contract; contains data only and requires no UI imports."""
+    return {
+        "stage_types": stage_catalog(),
+        "flow_options": {
+            "scope": {"type": "enum", "values": ["task"]},
+            "label": {"type": "string"},
+            "recover": {"type": "stage[]"},
+            "restart_at": {"type": "stage"},
+            "repeat": {"type": "integer", "minimum": 1},
+            "fresh_after_same_failures": {"type": "integer", "minimum": 1},
+        },
+    }
+
+
 def _resolve_references(values: dict[str, Any]) -> None:
     from .result_parsers import PARSERS
-    from .rules import CONDITIONS, RESULT_HANDLERS, STATUS_RESOLVERS
 
-    for field, mapping in {
-        "result_handler": RESULT_HANDLERS,
-        "parser": PARSERS,
-        "result_status": STATUS_RESOLVERS,
-        "condition": CONDITIONS,
-    }.items():
-        value = values.get(field)
-        if not isinstance(value, str):
-            continue
+    value = values.get("parser")
+    if isinstance(value, str):
         try:
-            values[field] = mapping[value]
+            values["parser"] = PARSERS[value]
         except KeyError as error:
-            raise RunnerError(f"unknown {field}: {value}") from error
+            raise RunnerError(f"unknown parser: {value}") from error
 
 
 def create_stage(definition: dict[str, Any]):
@@ -103,8 +137,7 @@ def create_stage(definition: dict[str, Any]):
     stage_type = str(values.pop("type", "base"))
     name = str(values.get("name", ""))
     for field in ROUTING_FIELDS:
-        if field != "validator" or stage_type != "python":
-            values.pop(field, None)
+        values.pop(field, None)
     try:
         stage_class = STAGE_REGISTRY[stage_type]
     except KeyError as error:
@@ -117,4 +150,4 @@ def create_stage(definition: dict[str, Any]):
         raise RunnerError(f"invalid workflow Stage {name or stage_type}: {error}") from error
 
 
-__all__ = ["STAGE_REGISTRY", "create_stage", "register_stage", "stage_catalog"]
+__all__ = ["STAGE_REGISTRY", "create_stage", "register_stage", "stage_catalog", "stage_result_kind", "workflow_catalog"]

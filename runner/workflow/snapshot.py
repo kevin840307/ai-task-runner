@@ -129,15 +129,12 @@ def _validate_snapshot(workflow: Any) -> None:
             values = {
                 key: value
                 for key, value in item.items()
-                if key not in {"_workflow_index", "_task_index", "_task_last"}
+                if key != "_workflow_index"
             }
             validate_stage(str(item.get("name", "")), values)
             recover = item.get("recover")
             if isinstance(recover, list):
                 visit(recover)
-            planner = item.get("planner_stages")
-            if isinstance(planner, dict):
-                visit(list(planner.values()))
 
     visit(workflow)
     validate_topology(workflow)

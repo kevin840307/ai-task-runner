@@ -1,6 +1,6 @@
 # Project and Maintainer Guide
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## Mandatory maintenance rules
 1. Minimum code; no project-specific hardcode in generic Runner code. Never branch on sample/project names, FAB/ENV/version values, filenames, business fields, or a specific AI identity to solve one case.
@@ -33,7 +33,7 @@ Core: minimum code, zero project hardcode, low coupling, pluggable, extensible, 
 - Are both English and Traditional Chinese docs plus tests updated with the real behavior?
 
 ## Public integration
-Use `runner.api.RunRequest` / `runner.api.run()` as the shared entry for CLI/UI/skills. Do not build a second orchestration path for a UI or skill.
+Use `runner.api.RunRequest` / `runner.api.run()` as the shared execution entry for CLI/programmatic UI/skills. Do not build a second orchestration path for a UI or skill. A detached local monitoring UI may remain fully file-based, but those files are display-only and never become an alternate execution/control path.
 
 `runner/bootstrap.py` is the composition root. Backend/plugin registries compose dependencies at the boundary; Workflow must not discover concrete plugins or backends itself.
 
@@ -41,6 +41,8 @@ Use `runner.api.RunRequest` / `runner.api.run()` as the shared entry for CLI/UI/
 UI is an adapter beside CLI, not a Workflow Plugin. Pipeline, StageExecutor, Stage, AI client, and Workflow loader must not import UI code. External Stage/backend registration happens before Workflow validation through installed extensions; runtime-only plugins attach later through the Hook/Event boundary. A new external Stage must not require a Stage-name branch in Pipeline.
 
 Editable Workflow/prompt files use the shared atomic resource functions and optimistic `expected_hash`; an active Run uses its durable Workflow/Stage-prompt/Goal/final-AI-prompt snapshot. Keep one Run per worker process for isolation rather than adding in-process global runtime concurrency solely for UI.
+
+For the current product model, one Project has at most one active Runtime. Conversation/message metadata belongs to UI storage and must not enter Runner durable state. Detached UI runtime visibility is deliberately small: read-only `state.json`, latest bounded `stream.log`, and diagnostic `log.txt` / `debug/`. Do not add an EventBus, DB, service layer, or UI-specific state machine solely to mirror information already available through these boundaries.
 
 ## Project policy
 Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
@@ -68,22 +70,22 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 ## Validation and YAML List
 Validator feedback in state is bounded to 20,000 characters with the start and end preserved. Runner sets `AI_TASK_RUNNER_WORK_DIR` for validator processes, and maintained templates write reports under its `validator-reports/` directory (falling back to `.ai-task-runner` when run standalone). External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`.
 
-Three validation modes are supported: AI-only, Python-only, and Mixed. Mixed validation always runs the Python hard gate before Final AI voting.
+Three validation modes are supported: AI-only, File-only, and Mixed. Mixed validation always runs the Python hard gate before Final AI voting.
 
 YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
 
-Workflow YAML has only two top-level keys: `stages` defines reusable named nodes and `flow` defines the static top-level sequence. `recover` may contain a static recovery Stage sequence; there is no reusable-subflow, `expand`, or `foreach` DSL. The registry is only `type -> class` (`base`, `plan`, `python` by default). Generic AI-backed nodes default to `type: base`, so the type may be omitted. `PlanStage` is intentionally special: Loader derives its available dynamic Stage catalog from YAML structure, Plan selects ordered Stage names per TODO, and Pipeline persists/runs the resulting `next_steps`. Ordinary Stage classes remain routing-agnostic.
+Workflow YAML has only two top-level keys: `stages` defines reusable named nodes and `flow` defines the static top-level sequence. `recover` may contain a static recovery Stage sequence; there is no reusable-subflow, `expand`, or `foreach` DSL. The registry is only `type -> class`. Prefer semantic built-ins (`plan`, `task`, `review`, `ai_validator`, `command`) so their safe defaults stay out of YAML; use `base` only for deliberately generic AI behavior. `PlanStage` is the built-in Task producer. A top-level Plan automatically enters the standard `execute -> review` task SOP through loader normalization, so normal YAML does not repeat those flow nodes. Any Stage may still declare `produces: tasks`; explicit contiguous `scope: task` nodes are reserved for advanced/custom task producers or custom per-TODO SOPs. Ordinary Stage classes remain routing-agnostic.
 
-Use the shared 1-based `restart_at` YAML option when a top-level Stage must route logical FAIL or exhausted recovery to a current/earlier Workflow position. Keep session recovery, generated Planning children, and completion rules in their existing semantic owners; they are not arbitrary YAML topology.
+Use the shared 1-based `restart_at` YAML option when a top-level Stage must route logical FAIL or exhausted recovery to a current/earlier Workflow position. Keep session recovery, Task production, and completion rules in their existing semantic owners; they are not arbitrary YAML topology.
 
 ## Prompt contract
 All bundled Stage prompts use Jinja + `StrictUndefined`. Top-level template variables come only from `runner/prompts/context.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly.
 
-Ordinary AI work is a `BaseStage` YAML instance; `type` defaults to `base` and is normally omitted. A genuinely new behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader and Pipeline must not gain Stage-name-specific branches.
+Ordinary write work should use `type: task`, and read-only verdict work should use `type: review`; use `type: base` only for intentionally generic AI behavior. A genuinely new behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader and Pipeline must not gain Stage-name-specific branches.
 
-A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. Put state reduction in its injected result handler and put composition in generic Pipeline/routing data.
+A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. `StageResult.kind` selects the small durable-state reducer (`tasks`, `task`, `review`, `validation`, or `generic`); composition stays in generic Pipeline/routing data.
 
-Common Stage execution capabilities are owned by `StageExecutor`, not reimplemented inside each Stage. Registered Stage specs may expose `retry`, `retry_attr`, `skip_on_error`, `track_changes`, and `tolerate_restored_changes`; AI-backed Stages additionally own session/prompt capabilities such as `fresh_session_on_start`, `fresh_session_each_run`, `prompt`, and `parser`. Routing-only fields (`recover`, `max_results`, `fresh_after_same_failures`, `restart_at`, `label`) belong to `FlowNode` and are removed before Stage construction. `retry: 0` disables same-session retry and therefore escalates an error directly to the existing fresh-session recovery path; a zero retry budget does not permit `skip_on_error`.
+Common Stage execution capabilities are owned by `StageExecutor`, not reimplemented inside each Stage. User-facing Stage specs expose direct overrides such as `retry`, `timeout`, `skip_on_error`, `track_changes`, `session_key`, `prompt`, and `parser`; implementation lookup names such as `retry_attr`, `timeout_attr`, and `client_cache_key` are accepted only by the legacy YAML loader; Stage execution uses direct `retry`/`timeout` values or Stage-owned defaults. Routing-only fields (`recover`, `repeat`, `fresh_after_same_failures`, `restart_at`, `label`, `scope`) belong to `FlowNode` and are removed before Stage construction. `retry: 0` disables same-session retry and therefore escalates an error directly to the existing fresh-session recovery path; a zero retry budget does not permit `skip_on_error`.
 
 If the requirement is only conditional text/formatting, use Jinja. Only genuinely computed planning-specific context belongs in `PlanStage`.
 

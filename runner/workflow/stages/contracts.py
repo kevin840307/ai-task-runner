@@ -14,6 +14,7 @@ from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error", "replan"]
 StageMode = Literal["readonly", "write"]
+StageResultKind = Literal["generic", "tasks", "task", "review", "validation"]
 MODE_READONLY: StageMode = "readonly"
 MODE_WRITE: StageMode = "write"
 
@@ -29,7 +30,7 @@ class StageResult:
     changed_files: list[str] = field(default_factory=list)
     skipped: bool = False
     data: object | None = None
-    next_steps: list[dict[str, Any]] = field(default_factory=list)
+    kind: StageResultKind = "generic"
 
     @classmethod
     def error_result(cls, stage: str, error: BaseException) -> StageResult:
@@ -94,8 +95,6 @@ class StageContext:
         self.save_state()
 
 
-ResultHandler = Callable[[StageContext, StageResult], StageResult]
-
 
 class Stage(Protocol):
     name: str
@@ -114,11 +113,11 @@ class Stage(Protocol):
 __all__ = [
     "MODE_READONLY",
     "MODE_WRITE",
-    "ResultHandler",
     "Stage",
     "StageContext",
     "StageExecution",
     "StageMode",
+    "StageResultKind",
     "StageResult",
     "StageStatus",
 ]

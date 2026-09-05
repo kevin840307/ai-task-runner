@@ -7,6 +7,14 @@ import os
 from pathlib import Path
 
 FORMAT = "PROJECT_BUNDLE_V1"
+DEFAULT_EXCLUDES = [
+    ".git", ".git/**",
+    ".pytest_cache", ".pytest_cache/**",
+    "__pycache__", "**/__pycache__", "**/__pycache__/**",
+    "*.pyc", "**/*.pyc",
+    ".ai-task-runner", "**/.ai-task-runner", "**/.ai-task-runner/**",
+    "validator-reports", "**/validator-reports", "**/validator-reports/**",
+]
 
 
 def sha256(data: bytes) -> str:
@@ -15,6 +23,9 @@ def sha256(data: bytes) -> str:
 
 def excluded(rel: str, patterns: list[str]) -> bool:
     p = Path(rel)
+    runtime_dirs = {".git", ".pytest_cache", "__pycache__", ".ai-task-runner", "validator-reports"}
+    if any(part in runtime_dirs for part in p.parts) or p.suffix == ".pyc":
+        return True
     return any(p.match(x) for x in patterns)
 
 
@@ -177,7 +188,7 @@ def main() -> None:
 
     try:
         if args.command == "pack":
-            pack(args.folder, args.bundle, args.exclude)
+            pack(args.folder, args.bundle, [*DEFAULT_EXCLUDES, *args.exclude])
         elif args.command == "unpack":
             unpack(args.bundle, args.output)
         else:

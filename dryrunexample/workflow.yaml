@@ -1,25 +1,18 @@
 stages:
   work:
-    status: Mock work
     mode: write
-    actor: executor
 
   check:
-    status: Mock quality check
-    mode: readonly
     fresh_after_same_failures: 2
-    max_results: 3
+    repeat: 3
     recover: [fix]
 
   fix:
-    status: Mock fix
     mode: write
-    actor: executor
 
   final:
+    type: ai_validator
     validator: ai
-    status: Mock final gate
-    mode: readonly
 
 flow:
   - work

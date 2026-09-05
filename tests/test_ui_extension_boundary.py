@@ -11,9 +11,8 @@ from runner.extensions import discover_extensions
 from runner.prompts.loader import save_prompt
 from runner.resources import read_text
 from runner.workflow.loader import load_workflow, save_workflow
-from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog
+from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog, workflow_catalog
 from runner.workflow.snapshot import freeze_workflow, load_snapshot
-from runner.workflow.stages.python_stage import PythonStage, PythonStageSpec
 
 
 def _workflow_text(prompt: str = "") -> str:
@@ -24,18 +23,24 @@ def _workflow_text(prompt: str = "") -> str:
         "    status: Execute\n"
         f"{prompt_line}"
         "  validate_file:\n"
-        "    type: python\n"
+        "    type: command\n"
         "    status: Validate\n"
-        "    validator: file\n"
+        "    result_kind: validation\n"
+        "    command: \"{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}\"\n"
         "flow: [execute, validate_file]\n"
     )
 
 
 def test_stage_catalog_uses_registered_spec_as_single_schema_source():
     catalog = stage_catalog()
-    assert set(catalog) >= {"base", "plan", "python"}
-    python_fields = {item["name"] for item in catalog["python"]["options"]}
-    assert {"name", "status", "path", "args", "retry"} <= python_fields
+    assert {"base", "command", "plan"} <= set(catalog)
+    command_fields = {item["name"] for item in catalog["command"]["options"]}
+    assert {"status", "command", "cwd", "result_kind", "clean_work", "retry"} <= command_fields
+    assert "name" not in command_fields
+    contract = workflow_catalog()
+    assert "command" in contract["stage_types"]
+    assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "plan", "review", "task"}
+    assert contract["flow_options"]["scope"]["values"] == ["task"]
 
 
 def test_workflow_save_validates_then_atomically_replaces(tmp_path):
@@ -82,14 +87,23 @@ def test_workflow_snapshot_freezes_local_prompt_content(tmp_path):
     assert frozen_prompt.read_text(encoding="utf-8") == "version A"
 
 
-def test_python_stage_runs_out_of_process(tmp_path):
+def test_command_stage_runs_python_out_of_process(tmp_path):
+    from runner.config.runtime import RuntimeConfig
+    from runner.runtime.run_state import RunState
+    from runner.workflow.registry import create_stage
+    from runner.workflow.stages.contracts import StageContext
+
     script = tmp_path / "stage.py"
-    script.write_text(
-        "from pathlib import Path\nPath('marker.txt').write_text('ok', encoding='utf-8')\n",
-        encoding="utf-8",
+    script.write_text("from pathlib import Path\nPath('marker.txt').write_text('ok', encoding='utf-8')\n", encoding="utf-8")
+    work = tmp_path / ".work"
+    work.mkdir()
+    ctx = StageContext(
+        config=RuntimeConfig(agent_timeout=10), root=tmp_path, work=work,
+        state=RunState("run", "goal", str(tmp_path)), ai_client=SimpleNamespace(session_id=""),
+        state_file=tmp_path / "state.json", validator_path=None, validator_is_ai=False,
+        save_state=lambda: None, set_stage=lambda *_: None,
     )
-    stage = PythonStage(PythonStageSpec(name="script", status="Run", path="stage.py"))
-    ctx = SimpleNamespace(root=tmp_path, config=SimpleNamespace(agent_timeout=10))
+    stage = create_stage({"type":"command","name":"script","status":"Run","command":["{python}","stage.py"]})
     result = stage.run(ctx)
     assert result.status == "pass"
     assert (tmp_path / "marker.txt").read_text(encoding="utf-8") == "ok"
@@ -249,3 +263,24 @@ def test_yaml_child_resume_uses_frozen_files_after_source_deletion(tmp_path):
     assert resumed.ai_validator_prompt == "child validator A"
     assert Path(resumed.goal_file).is_file()
     assert Path(resumed.ai_validator_prompt_file).is_file()
+
+
+def test_workflow_catalog_tool_is_json_process_boundary():
+    import json
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "tool/workflow_catalog.py"],
+        cwd=Path(__file__).resolve().parents[1],
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert set(payload["stage_types"]) == {"ai_validator", "base", "command", "plan", "review", "task"}
+    assert "command" in payload["stage_types"]
+    assert payload["flow_options"]["scope"]["values"] == ["task"]
+    assert payload["flow_options"]["repeat"]["minimum"] == 1

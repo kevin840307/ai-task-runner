@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from ...ai.client import configure_ai_client, create_ai_client
@@ -11,15 +11,13 @@ from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
 from ...prompts.loader import render_prompt, structured_retry_prompt
-from .contracts import MODE_READONLY, ResultHandler, StageContext, StageMode, StageResult
+from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
-StatusResolver = Callable[[Any], Literal["pass", "fail"]]
-Condition = Callable[[StageContext], bool]
 @dataclass(frozen=True)
 class BaseStageSpec:
     name: str
-    status: str
+    status: str = "AI Stage"
     prompt: str = ""
     continuation_prompt: str = ""
     instructions: str = ""
@@ -27,32 +25,35 @@ class BaseStageSpec:
     run_state: str = ""
     mode: StageMode = MODE_READONLY
     actor: str = "ai"
-    backend_mode: str = "runtime"
     allow_project_read: bool = False
     parser: ResultParser | None = None
-    result_status: StatusResolver | None = None
-    condition: Condition | None = None
     structured_retries: int = 1
     structured_fresh_retries: int = 0
     retry: int | None = None
-    retry_attr: str = ""
-    runs: int = 1
-    runs_field: str = ""
-    required_passes: int = 0
-    required_passes_field: str = ""
+    runs: int | None = None
+    required_passes: int | None = None
     track_changes: bool = False
     tolerate_restored_changes: bool = False
-    timeout_attr: str = "agent_timeout"
-    client_cache_key: str = ""
+    timeout: float | None = None
+    session_key: str = ""
     fresh_session_each_run: bool = False
     fresh_session_on_start: bool = False
     skip_on_error: bool = False
-    result_handler: ResultHandler | None = None
-    plan_only_stop: bool = False
+    produces: str = ""
+
 
 
 class BaseStage:
     """Perform one or more AI interactions and return only resulting facts."""
+
+    result_kind = "generic"
+    parser_name = ""
+    backend_mode = "runtime"
+    timeout_config_attr = "agent_timeout"
+    retry_config_attr = ""
+    runs_config_attr = ""
+    required_passes_config_attr = ""
+    client_cache_key = ""
 
     def __init__(self, spec: BaseStageSpec) -> None:
         self.spec = spec
@@ -62,27 +63,26 @@ class BaseStage:
         self.run_state = spec.run_state
         self.mode = spec.mode
         self.actor = spec.actor
+        self.retry = spec.retry
         self.skip_on_error = spec.skip_on_error
         self.tolerate_restored_changes = spec.tolerate_restored_changes
-        self.retry = spec.retry
-        self.retry_attr = spec.retry_attr
         self.track_changes = spec.track_changes
-        self.plan_only_stop = spec.plan_only_stop
         self.fresh_session_on_start = spec.fresh_session_on_start
+        if spec.parser is None and self.parser_name:
+            from ..result_parsers import PARSERS
+            self.spec = replace(spec, parser=PARSERS[self.parser_name])
         self._completed_runs: list[StageResult] = []
         self._run_pending = False
         self._attempt_checkpoint = 0
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         """Perform one Stage attempt. Retry/Hook/Event are owned by StageExecutor."""
-        if self.spec.condition is not None and not self.spec.condition(ctx):
+        if not self.enabled(ctx):
             return StageResult(self.name, "pass", output="STAGE_SKIPPED", skipped=True)
 
-        runs = self._configured_int(ctx, self.spec.runs_field, self.spec.runs)
+        runs = self._configured_int(ctx, self.spec.runs, self.runs_config_attr, 1)
         required = self._configured_int(
-            ctx,
-            self.spec.required_passes_field,
-            self.spec.required_passes,
+            ctx, self.spec.required_passes, self.required_passes_config_attr, 0
         ) or (runs // 2 + 1)
         if runs < 1 or not 1 <= required <= runs:
             raise ConfigurationError(
@@ -121,13 +121,22 @@ class BaseStage:
         )
 
     def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
-        try:
-            if self.spec.result_handler is None:
-                return result
-            return self.spec.result_handler(ctx, result)
-        finally:
-            self._completed_runs.clear()
-            self._run_pending = False
+        self._completed_runs.clear()
+        self._run_pending = False
+        return result
+
+    def enabled(self, ctx: StageContext) -> bool:
+        return True
+
+    def result_status(self, data: Any) -> Literal["pass", "fail"]:
+        return "pass"
+
+    def retry_limit(self, ctx: StageContext) -> int | None:
+        if self.spec.retry is not None:
+            return self.spec.retry
+        if self.retry_config_attr:
+            return int(getattr(ctx.config, self.retry_config_attr))
+        return None
 
     def discard_attempt_results(self) -> None:
         """Discard votes produced by an attempt rejected by execution hooks."""
@@ -139,7 +148,7 @@ class BaseStage:
         configure_ai_client(
             client,
             ctx.config,
-            spec.backend_mode,
+            self.backend_mode,
             allow_project_read=spec.allow_project_read,
         )
         try:
@@ -169,7 +178,7 @@ class BaseStage:
                 max_elapsed=ctx.config.api_retry_timeout,
             )
             self._remember_prompt(ctx, client)
-            status = spec.result_status(data) if spec.result_status else "pass"
+            status = self.result_status(data)
         finally:
             if client is ctx.ai_client:
                 configure_ai_client(client, ctx.config, "runtime")
@@ -177,7 +186,11 @@ class BaseStage:
         return StageResult(self.name, status, output=output, data=data)
 
     @staticmethod
-    def _configured_int(ctx: StageContext, field: str, default: int) -> int:
+    def _configured_int(
+        ctx: StageContext, explicit: int | None, field: str, default: int
+    ) -> int:
+        if explicit is not None:
+            return int(explicit)
         return int(getattr(ctx.config, field)) if field else int(default)
 
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
@@ -190,7 +203,7 @@ class BaseStage:
             prompt,
             idle_timeout_after_change=ctx.config.agent_idle_after_change_timeout,
             change_detected=ctx.execution.change_detected,
-            timeout=getattr(ctx.config, self.spec.timeout_attr),
+            timeout=self._timeout(ctx),
         )
 
     def reset_session(self, ctx: StageContext) -> str:
@@ -208,8 +221,13 @@ class BaseStage:
         ctx.save_state()
         return previous
 
+    def _timeout(self, ctx: StageContext) -> float:
+        if self.spec.timeout is not None:
+            return float(self.spec.timeout)
+        return float(getattr(ctx.config, self.timeout_config_attr))
+
     def _client(self, ctx: StageContext):
-        key = self.spec.client_cache_key
+        key = self.spec.session_key or self.client_cache_key
         if not key:
             return ctx.ai_client
         client = ctx.scratch.get(key)
@@ -218,8 +236,8 @@ class BaseStage:
                 ctx.config,
                 ctx.root,
                 ctx.work / "debug",
-                mode=self.spec.backend_mode,
-                timeout=getattr(ctx.config, self.spec.timeout_attr),
+                mode=self.backend_mode,
+                timeout=self._timeout(ctx),
             )
             ctx.scratch[key] = client
         return client
@@ -289,4 +307,4 @@ class BaseStage:
 
 BaseStage.spec_class = BaseStageSpec
 
-__all__ = ["BaseStage", "BaseStageSpec", "ResultHandler"]
+__all__ = ["BaseStage", "BaseStageSpec"]

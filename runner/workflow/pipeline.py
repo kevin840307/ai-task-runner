@@ -1,34 +1,30 @@
-"""Execute normalized declarative flow nodes."""
+"""Execute a static declarative SOP over durable planned TODOs."""
 
 from __future__ import annotations
-
-import hashlib
-import json
 
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from ..errors import RunnerError
+from .recovery import RecoveryPolicy
 from .registry import create_stage
 from .rules import finish_run, finish_task, prepare_replan
 from .stages import Stage, StageContext, StageExecutor, StageResult
-from .stages.plan_stage import build_task_steps
 
 
 @dataclass(frozen=True)
 class FlowNode:
-    """One Stage plus the routing/runtime facts owned by the workflow engine."""
+    """One Stage plus routing/runtime facts owned by the workflow engine."""
 
     stage: Stage
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
-    max_results: int | None = None
+    repeat: int | None = None
     fresh_after_same_failures: int | None = None
     label: str = ""
+    scope: str = ""
     workflow_index: int | None = None
-    task_index: int | None = None
-    task_last: bool = False
 
     @classmethod
     def from_definition(cls, definition: dict[str, Any]) -> "FlowNode":
@@ -36,56 +32,124 @@ class FlowNode:
             create_stage(definition),
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
-            definition.get("max_results"),
+            definition.get("repeat"),
             definition.get("fresh_after_same_failures"),
             str(definition.get("label", "") or ""),
+            str(definition.get("scope", "") or ""),
             definition.get("_workflow_index"),
-            definition.get("_task_index"),
-            bool(definition.get("_task_last", False)),
         )
 
 
 class Pipeline:
-    """Small interpreter for static flow, generated steps, recovery, and restart."""
+    """Run static top-level stages and repeat task-scoped stages for every TODO."""
 
     def __init__(self, context: StageContext, flow: Iterable[dict[str, Any]]) -> None:
         self.context = context
-        self.workflow = list(flow)
+        self.workflow = [
+            {**item, "_workflow_index": item.get("_workflow_index", index)}
+            for index, item in enumerate(flow)
+        ]
         self.positions = {
             item["name"]: index
             for index, item in enumerate(self.workflow)
             if item.get("name")
         }
+        self.recovery = RecoveryPolicy(context)
+        self._task_generation = 0
 
     def run(self, executor: StageExecutor, *, plan_only: bool = False) -> int:
+        state = self.context.state
         previous: StageResult | None = None
         stop = False
-        replacement: tuple[dict[str, Any], ...] | None = None
 
-        if not self._has_dynamic_steps():
-            self._restore_dynamic_steps()
-        if self._has_dynamic_steps():
-            replacement, previous, stop = self._run_dynamic(
-                executor, plan_only, previous
-            )
+        # A previous final-validator failure resumes by running that validator's
+        # configured repair plan before returning to the static task SOP.
+        if state.stage == "validator_failed" and state.workflow_position < len(self.workflow):
+            definition = self.workflow[state.workflow_position]
+            recover = tuple(definition.get("recover", ()))
+            if recover:
+                generation = self._task_generation
+                _, previous, stop = self._run_steps(recover, executor, plan_only, previous)
+                if stop:
+                    return 0
+                if self._task_generation != generation and self._has_pending_task():
+                    self._restart_task_sop()
 
-        flow = list(replacement) if replacement is not None else self._initial_flow()
-        while flow and not stop and not self.context.state.completed:
+        while (
+            state.workflow_position < len(self.workflow)
+            and not stop
+            and not state.completed
+        ):
+            position = state.workflow_position
+            definition = self.workflow[position]
+
+            if definition.get("scope") == "task":
+                end = self._task_block_end(position)
+                replacement, previous, stop = self._run_task_block(
+                    position, end, executor, plan_only, previous
+                )
+                if replacement is not None:
+                    continue
+                if stop:
+                    break
+                state.workflow_position = end
+                state.task_step = 0
+                self.context.save_state()
+                continue
+
             replacement, previous, stop = self._run_steps(
-                flow, executor, plan_only, previous
+                [definition], executor, plan_only, previous
             )
-            flow = list(replacement or ())
+            if replacement is not None:
+                continue
+            if stop:
+                break
 
         if (
             not plan_only
             and not stop
             and previous is not None
             and previous.status == "pass"
-            and self.context.state.workflow_position >= len(self.workflow)
+            and state.workflow_position >= len(self.workflow)
         ):
             finish_run(self.context)
             self.context.save_state()
         return 0
+
+    def _run_task_block(
+        self,
+        start: int,
+        end: int,
+        executor: StageExecutor,
+        plan_only: bool,
+        previous: StageResult | None,
+    ) -> tuple[tuple[dict[str, Any], ...] | None, StageResult | None, bool]:
+        state = self.context.state
+        block = self.workflow[start:end]
+        if not block:
+            raise RunnerError("task-scoped workflow block is empty")
+        if not state.tasks:
+            raise RunnerError(
+                "task-scoped workflow requires tasks from an earlier Stage or input"
+            )
+
+        while state.current < len(state.tasks):
+            if state.task_step > len(block):
+                raise RunnerError("saved task_step is outside the task-scoped SOP")
+            while state.task_step < len(block):
+                definition = block[state.task_step]
+                replacement, previous, stop = self._run_steps(
+                    [definition], executor, plan_only, previous, advance_top_level=False
+                )
+                if replacement is not None or stop:
+                    return replacement, previous, stop
+                state.task_step += 1
+                self.context.save_state()
+
+            finish_task(self.context)
+            state.task_step = 0
+            self.context.save_state()
+        return None, previous, False
 
     def _run_steps(
         self,
@@ -93,20 +157,21 @@ class Pipeline:
         executor: StageExecutor,
         plan_only: bool,
         previous: StageResult | None,
+        *,
+        advance_top_level: bool = True,
     ) -> tuple[tuple[dict[str, Any], ...] | None, StageResult | None, bool]:
         for definition in flow:
             node = FlowNode.from_definition(definition)
             while True:
-                pending = self._limited_result_pending_recover(node)
+                pending = self.recovery.pending_recovery(node)
                 if pending is not None:
                     replacement, recovered, stop = self._run_steps(
-                        node.recover, executor, plan_only, pending
+                        node.recover, executor, plan_only, pending, advance_top_level=False
                     )
                     if replacement is not None or stop:
                         return replacement, recovered or pending, stop
-                    previous = recovered or pending
-                    result = previous
-                    self._clear_limited_result(node)
+                    result = recovered or pending
+                    self.recovery.clear_repeat(node)
                     break
 
                 result = (
@@ -114,164 +179,46 @@ class Pipeline:
                     if node.label
                     else executor.run(node.stage, self.context, previous)
                 )
-                limit_reached = self._record_limited_result(node, result)
-                self._record_semantic_failure(node, result, executor)
+                if result.status == "pass" and result.kind == "tasks":
+                    self._task_generation += 1
+                action = self.recovery.decide(node, result, executor)
 
-                if result.status == "replan":
+                if action.kind == "replan":
                     prepare_replan(self.context, result)
-                if result.status == "replan" or (
-                    result.status == "fail" and node.restart_at is not None
-                ):
                     return self._restart(node.restart_at, result), result, False
-
-                if result.status == "fail" and node.recover:
+                if action.kind == "restart":
+                    return self._restart(node.restart_at, result), result, False
+                if action.kind == "stop":
+                    return None, result, True
+                if action.kind == "recover":
+                    generation = self._task_generation
                     replacement, recovered, stop = self._run_steps(
-                        node.recover, executor, plan_only, result
+                        node.recover, executor, plan_only, result, advance_top_level=False
                     )
                     if replacement is not None or stop:
                         return replacement, recovered or result, stop
                     previous = recovered or result
-                    if limit_reached:
+                    if self._task_generation != generation and self._has_pending_task():
+                        return self._restart_task_sop(result), previous, False
+                    if action.limit_reached:
                         result = previous
-                        self._clear_limited_result(node)
+                        self.recovery.clear_repeat(node)
                         break
                     continue
-                if result.status == "pass":
-                    self._clear_limited_result(node)
-                    self._clear_semantic_failure(node)
                 break
 
-            if result.status in {"fail", "error"}:
-                return None, result, True
-
-            if result.next_steps:
-                if node.task_index is not None:
-                    raise RunnerError("generated task Stage cannot emit next_steps")
-                self._start_dynamic_steps(result.next_steps)
-
-            if plan_only and getattr(node.stage, "plan_only_stop", False):
-                self.context.save_state()
-                return None, result, True
-
-            effective_result = result
-            if result.next_steps:
-                replacement, generated, stop = self._run_dynamic(
-                    executor, plan_only, result
-                )
-                effective_result = generated or result
-                if replacement is not None or stop:
-                    return replacement, effective_result, stop
-
-            if node.task_last:
-                finish_task(self.context)
-
-            self._advance(node)
-            self.context.save_state()
-            previous = effective_result
-        return None, previous, False
-
-    def _run_dynamic(
-        self,
-        executor: StageExecutor,
-        plan_only: bool,
-        previous: StageResult | None,
-    ) -> tuple[tuple[dict[str, Any], ...] | None, StageResult | None, bool]:
-        state = self.context.state
-        while state.dynamic_index < len(state.dynamic_steps):
-            definition = state.dynamic_steps[state.dynamic_index]
-            task_index = definition.get("_task_index")
-            if isinstance(task_index, int):
-                if state.current > task_index:
-                    state.dynamic_index += 1
-                    self.context.save_state()
-                    continue
-                if state.current < task_index:
-                    raise RunnerError(
-                        "generated workflow reached the next TODO before completing the current TODO"
-                    )
-
-            replacement, previous, stop = self._run_steps(
-                [definition],
-                executor,
-                plan_only,
-                previous,
-            )
-            if replacement is not None or stop:
-                return replacement, previous, stop
-            state.dynamic_index += 1
+            if advance_top_level:
+                self._advance(node)
             self.context.save_state()
 
-        current = self._current_definition()
-        self._clear_dynamic_steps()
-        if current and current.get("planner_stages"):
-            state.workflow_position += 1
-        self.context.save_state()
+            # Plan-only must persist the cursor *after* Planning. Otherwise a
+            # later --resume reruns PlanStage even though durable TODOs already
+            # exist instead of entering the task-scoped SOP.
+            if plan_only and result.kind == "tasks":
+                return None, result, True
+
+            previous = result
         return None, previous, False
-
-    def _start_dynamic_steps(
-        self,
-        steps: list[dict[str, Any]],
-    ) -> None:
-        if not steps:
-            return
-        state = self.context.state
-        state.dynamic_steps = [dict(step) for step in steps]
-        state.dynamic_index = 0
-        self.context.save_state()
-
-    def _restore_dynamic_steps(self) -> None:
-        """Recover generated work if a crash happened before Pipeline queued it."""
-        state = self.context.state
-        if state.current >= len(state.tasks):
-            return
-        current = self._current_definition()
-        if current is None:
-            return
-
-        plan = current if current.get("planner_stages") else self._find_plan(
-            current.get("recover", ())
-        )
-        if not plan:
-            return
-        steps = build_task_steps(
-            state.tasks,
-            plan.get("planner_stages", {}),
-            start=state.current,
-        )
-        self._start_dynamic_steps(steps)
-
-    def _current_definition(self) -> dict[str, Any] | None:
-        position = self.context.state.workflow_position
-        return self.workflow[position] if position < len(self.workflow) else None
-
-    @classmethod
-    def _find_plan(cls, flow: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
-        for definition in flow:
-            if definition.get("planner_stages"):
-                return definition
-            nested = cls._find_plan(definition.get("recover", ()))
-            if nested is not None:
-                return nested
-        return None
-
-    def _has_dynamic_steps(self) -> bool:
-        state = self.context.state
-        return state.dynamic_index < len(state.dynamic_steps)
-
-    def _clear_dynamic_steps(self) -> None:
-        state = self.context.state
-        state.dynamic_steps = []
-        state.dynamic_index = 0
-
-    def _initial_flow(self) -> list[dict[str, Any]]:
-        if self.context.state.completed:
-            return []
-        remaining = self.workflow[self.context.state.workflow_position :]
-        if self.context.state.stage == "validator_failed" and remaining:
-            recover = remaining[0].get("recover", ())
-            if recover:
-                return [*recover, *remaining]
-        return list(remaining)
 
     def _advance(self, node: FlowNode) -> None:
         if node.workflow_index is not None:
@@ -279,113 +226,38 @@ class Pipeline:
                 self.context.state.workflow_position, node.workflow_index + 1
             )
 
+    def _task_block_end(self, start: int) -> int:
+        end = start
+        while end < len(self.workflow) and self.workflow[end].get("scope") == "task":
+            end += 1
+        return end
 
-    def _record_semantic_failure(
-        self, node: FlowNode, result: StageResult, executor: StageExecutor
-    ) -> None:
-        threshold = node.fresh_after_same_failures
-        if threshold is None or result.status != "fail":
-            return
+    def _task_block_start(self, position: int) -> int:
+        start = position
+        while start > 0 and self.workflow[start - 1].get("scope") == "task":
+            start -= 1
+        return start
+
+    def _first_task_scope(self) -> int | None:
+        for index, definition in enumerate(self.workflow):
+            if definition.get("scope") == "task":
+                return self._task_block_start(index)
+        return None
+
+    def _restart_task_sop(self, result: StageResult | None = None) -> tuple[dict[str, Any], ...]:
+        start = self._first_task_scope()
+        if start is None:
+            raise RunnerError("task-producing recovery requires at least one task-scoped Stage")
         state = self.context.state
-        key = self._result_limit_key(node)
-        fingerprint = self._semantic_result_fingerprint(result)
-        if (
-            state.semantic_failure_key != key
-            or state.semantic_failure_fingerprint != fingerprint
-        ):
-            state.semantic_failure_key = key
-            state.semantic_failure_fingerprint = fingerprint
-            state.semantic_failure_count = 1
-        else:
-            state.semantic_failure_count += 1
+        state.workflow_position = start
+        state.task_step = 0
+        if result is not None:
+            self.context.set_stage("workflow_restart", result.output)
         self.context.save_state()
-        if state.semantic_failure_count >= threshold:
-            executor.fresh_session(node.stage, self.context)
-            self._clear_semantic_failure(node)
+        return tuple(self.workflow[start:])
 
-    def _clear_semantic_failure(self, node: FlowNode) -> None:
-        if node.fresh_after_same_failures is None:
-            return
-        state = self.context.state
-        if state.semantic_failure_key == self._result_limit_key(node):
-            state.semantic_failure_key = ""
-            state.semantic_failure_fingerprint = ""
-            state.semantic_failure_count = 0
-            self.context.save_state()
-
-    @staticmethod
-    def _semantic_result_fingerprint(result: StageResult) -> str:
-        value = result.data if result.data is not None else result.output
-
-        def normalize(item):
-            if isinstance(item, dict):
-                return {str(key): normalize(item[key]) for key in sorted(item)}
-            if isinstance(item, list):
-                return [normalize(value) for value in item]
-            if isinstance(item, str):
-                return " ".join(item.split())
-            return item
-
-        payload = json.dumps(
-            normalize(value), ensure_ascii=False, sort_keys=True, default=str
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-    def _record_limited_result(self, node: FlowNode, result: StageResult) -> bool:
-        if node.max_results is None or result.status not in {"pass", "fail"}:
-            return False
-        state = self.context.state
-        key = self._result_limit_key(node)
-        if state.flow_result_key != key:
-            state.flow_result_key = key
-            state.flow_result_count = 0
-        state.flow_result_count += 1
-        if result.status == "fail":
-            state.flow_result_previous = {
-                "stage": result.stage,
-                "status": result.status,
-                "output": result.output,
-                "data": json.loads(json.dumps(result.data, ensure_ascii=False, default=str)),
-            }
-        self.context.save_state()
-        return result.status == "fail" and state.flow_result_count >= node.max_results
-
-    def _limited_result_pending_recover(self, node: FlowNode) -> StageResult | None:
-        if node.max_results is None:
-            return None
-        state = self.context.state
-        if (
-            state.flow_result_key != self._result_limit_key(node)
-            or state.flow_result_count < node.max_results
-            or not state.flow_result_previous
-        ):
-            return None
-        saved = state.flow_result_previous
-        return StageResult(
-            str(saved.get("stage", node.stage.name)),
-            "fail",
-            output=str(saved.get("output", "")),
-            data=saved.get("data"),
-        )
-
-    def _clear_limited_result(self, node: FlowNode) -> None:
-        if node.max_results is None:
-            return
-        state = self.context.state
-        if state.flow_result_key == self._result_limit_key(node):
-            state.flow_result_key = ""
-            state.flow_result_count = 0
-            state.flow_result_previous = {}
-
-    @staticmethod
-    def _result_limit_key(node: FlowNode) -> str:
-        if node.workflow_index is not None:
-            return f"workflow:{node.workflow_index}"
-        if node.task_index is not None:
-            return f"task:{node.task_index}:{node.stage.name}"
-        spec = getattr(node.stage, "spec", None)
-        prompt = getattr(spec, "prompt", "")
-        return f"stage:{node.stage.name}:{prompt}"
+    def _has_pending_task(self) -> bool:
+        return self.context.state.current < len(self.context.state.tasks)
 
     def _restart(
         self, target: str | None, result: StageResult
@@ -394,7 +266,15 @@ class Pipeline:
         if target not in self.positions:
             raise ValueError(f"restart target is not a top-level Stage: {target}")
         position = self.positions[target]
-        self.context.state.workflow_position = position
+        state = self.context.state
+        if self.workflow[position].get("scope") == "task":
+            start = self._task_block_start(position)
+            state.workflow_position = start
+            state.task_step = position - start
+            position = start
+        else:
+            state.workflow_position = position
+            state.task_step = 0
         self.context.set_stage("workflow_restart", result.output)
         self.context.save_state()
         return tuple(self.workflow[position:])

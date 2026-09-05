@@ -8,7 +8,7 @@ import pytest
 from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import DEFAULT_API_WAIT_TIMEOUT, DEFAULT_MAX_ATTEMPTS
 from runner.errors import RunnerError
-from runner.workflow.rules import handle_plan_result, prepare_replan
+from runner.workflow.rules import prepare_replan, reduce_result
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
 from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
@@ -205,12 +205,11 @@ def test_plan_installs_tasks_without_expanding_task_flows(tmp_path):
         Task('t1', 'one', 'd1', ['a1'], 'o1'),
         Task('t2', 'two', 'd2', ['a2'], 'o2'),
     ]
-    result = handle_plan_result(ctx, StageResult('planning', 'pass', data=tasks))
+    result = reduce_result(ctx, StageResult('planning', 'pass', data=tasks, kind='tasks'))
     assert result.status == 'pass'
     assert ctx.state.tasks == tasks
     assert ctx.state.current == 0
-    assert ctx.state.dynamic_steps == []
-    assert ctx.state.dynamic_index == 0
+    assert ctx.state.task_step == 0
 
 
 def test_api_retry_window_defaults_to_one_hour_and_does_not_use_task_failures(monkeypatch):

@@ -8,6 +8,7 @@ replacing only Stage execution with deterministic mock results.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import sys
 import tempfile
@@ -23,6 +24,8 @@ if str(ROOT) not in sys.path:
 from runner.runtime.run_state import RunState, Task, set_stage
 from runner.workflow.loader import load_workflow
 from runner.workflow.pipeline import Pipeline
+from runner.workflow.registry import stage_result_kind
+from runner.workflow.rules import reduce_result
 from runner.workflow.stages import StageResult
 
 
@@ -93,7 +96,6 @@ class Scenario:
         self.default = str(data.get("default", "pass")).lower()
         self.stages = self._normalize(data.get("stages", {}))
         self.labels = self._normalize(data.get("labels", {}))
-        self.plan_steps = [str(item) for item in data.get("plan_steps", [])]
         self._counts: dict[tuple[str, str], int] = defaultdict(int)
 
     @staticmethod
@@ -143,6 +145,11 @@ class MockStageExecutor:
         status = self.scenario.next(stage.name, label)
         raw = self._result(stage, ctx, status)
         result = stage.finish(ctx, raw)
+        produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
+        kind = produces or str(getattr(stage, "result_kind", "generic") or "generic")
+        if result.kind != kind:
+            result = replace(result, kind=kind)
+        result = reduce_result(ctx, result)
         self.trace.append((self.calls, stage.name, label, result.status))
         return result
 
@@ -158,16 +165,15 @@ class MockStageExecutor:
             return StageResult.error_result(stage.name, RuntimeError("simulated dry-run error"))
 
         spec = getattr(stage, "spec", None)
-        planner_stages = getattr(spec, "planner_stages", None)
-        if planner_stages:
+        produces = str(getattr(spec, "produces", "") or "")
+        result_kind = produces or str(getattr(stage, "result_kind", "generic") or "generic")
+        if result_kind == "tasks":
             if status == "fail":
-                return StageResult(stage.name, "fail", output="simulated planning failure")
-            tasks = [self._plan_task(ctx, planner_stages)]
-            return StageResult(stage.name, "pass", output="DRYRUN_PLAN", data=tasks)
+                return StageResult(stage.name, "fail", output="simulated task-producer failure")
+            tasks = [self._plan_task(ctx)]
+            return StageResult(stage.name, "pass", output="DRYRUN_TASKS", data=tasks)
 
-        handler = getattr(spec, "result_handler", None)
-        handler_name = getattr(handler, "__name__", "")
-        if handler_name == "handle_review_result":
+        if result_kind == "review":
             completed = status == "pass"
             return StageResult(
                 stage.name,
@@ -179,7 +185,7 @@ class MockStageExecutor:
                     "missing_items": [] if completed else ["simulated missing item"],
                 },
             )
-        if handler_name == "handle_validation_result" or getattr(spec, "validator", None):
+        if result_kind == "validation":
             passed = status == "pass"
             return StageResult(
                 stage.name,
@@ -189,33 +195,13 @@ class MockStageExecutor:
             )
         return StageResult(stage.name, status, output=f"DRYRUN_{status.upper()}")
 
-    def _plan_task(self, ctx: DryRunContext, planner_stages: dict[str, dict[str, Any]]) -> Task:
-        steps = list(self.scenario.plan_steps)
-        if not steps:
-            write = [
-                name for name, definition in planner_stages.items()
-                if definition.get("mode") == "write"
-            ]
-            review = [
-                name for name, definition in planner_stages.items()
-                if definition.get("result_handler") == "review"
-            ]
-            if write:
-                steps.append(write[0])
-            if review and review[0] not in steps:
-                steps.append(review[0])
-            if not steps:
-                steps.append(next(iter(planner_stages)))
-        unknown = [name for name in steps if name not in planner_stages]
-        if unknown:
-            raise ValueError(f"scenario plan_steps contains unavailable Stage: {unknown[0]}")
+    def _plan_task(self, ctx: DryRunContext) -> Task:
         return Task(
             id=f"c{ctx.state.cycle:02d}-t001",
             title="Dry-run task",
-            description="Exercise generated workflow routing.",
+            description="Exercise task-scoped workflow routing.",
             deliverable="Dry-run only",
             acceptance_criteria=["Workflow reaches closure."],
-            steps=steps,
         )
 
 
@@ -250,6 +236,33 @@ def _close_context(ctx: DryRunContext) -> None:
     temporary = ctx.scratch.pop("_temporary", None)
     if temporary is not None:
         temporary.cleanup()
+
+
+def _result_payload(
+    workflow_path: Path,
+    scenario_path: Path | None,
+    flow: list[dict[str, Any]],
+    ctx: DryRunContext,
+    executor: MockStageExecutor,
+    error: str,
+) -> dict[str, Any]:
+    completed = bool(ctx.state.completed) and not error
+    return {
+        "valid": True,
+        "completed": completed,
+        "workflow": str(workflow_path),
+        "scenario": str(scenario_path) if scenario_path else None,
+        "workflow_position": ctx.state.workflow_position,
+        "workflow_size": len(flow),
+        "stage": ctx.state.stage,
+        "executions": executor.calls,
+        "error": error or None,
+        "fresh_sessions": list(executor.fresh_sessions),
+        "transitions": [
+            {"number": number, "stage": stage, "label": label or None, "status": status}
+            for number, stage, label, status in executor.trace
+        ],
+    }
 
 
 def _print_result(workflow_path: Path, scenario_path: Path | None, flow: list[dict[str, Any]], ctx: DryRunContext, executor: MockStageExecutor, error: str) -> int:
@@ -291,59 +304,140 @@ def _walk_definitions(flow: list[dict[str, Any]]):
         yield definition, source
         for nested in definition.get("recover", ()):
             yield from visit(nested, source)
-        for name, nested in definition.get("planner_stages", {}).items():
-            yield from visit(nested, f"plan:{definition.get('name')}:{name}")
 
     for definition in flow:
         yield from visit(definition, "flow")
 
 
 def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario]]:
+    """Build deterministic closure paths for routing features present in a workflow."""
     cases: list[tuple[str, Scenario]] = [("happy path", Scenario())]
-    added: set[str] = set()
-    for definition, source in _walk_definitions(flow):
+    added: set[tuple[str, str]] = set()
+    for definition, _source in _walk_definitions(flow):
         name = str(definition.get("name", ""))
-        if not name or not definition.get("recover") or name in added:
+        if not name:
             continue
-        added.add(name)
-        data: dict[str, Any] = {"default": "pass", "stages": {name: ["fail", "pass"]}}
-        if source.startswith("plan:"):
-            data["plan_steps"] = [name]
-        cases.append((f"{name} FAIL -> recover -> closure", Scenario(data)))
+        if definition.get("recover") and ("recover", name) not in added:
+            added.add(("recover", name))
+            cases.append((
+                f"{name} FAIL -> recover -> closure",
+                Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+            ))
+        repeat = definition.get("repeat")
+        if (
+            isinstance(repeat, int)
+            and not isinstance(repeat, bool)
+            and repeat > 1
+            and definition.get("recover")
+            and ("repeat", name) not in added
+        ):
+            added.add(("repeat", name))
+            cases.append((
+                f"{name} FAIL x{repeat} -> bounded recover -> closure",
+                Scenario({"default": "pass", "stages": {name: ["fail"] * repeat}}),
+            ))
+        if definition.get("restart_at") and ("restart", name) not in added:
+            added.add(("restart", name))
+            cases.append((
+                f"{name} FAIL -> restart_at -> closure",
+                Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+            ))
     return cases
 
 
-def run_matrix(workflow_path: Path, max_steps: int) -> int:
+def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
+    definitions = [definition for definition, _ in _walk_definitions(flow)]
+    top_level = list(flow)
+    return {
+        "stages": len(top_level),
+        "definitions": len(definitions),
+        "task_scope": any(item.get("scope") == "task" for item in top_level),
+        "task_producer": any(stage_result_kind(item) == "tasks" for item in definitions),
+        "recover": sum(bool(item.get("recover")) for item in definitions),
+        "nested_recover": any(
+            nested.get("recover")
+            for item in definitions
+            for nested in item.get("recover", ())
+        ),
+        "repeat": sum(item.get("repeat") is not None for item in definitions),
+        "restart_at": sum(bool(item.get("restart_at")) for item in definitions),
+        "review": sum(str(item.get("type", "")) == "review" for item in definitions),
+        "validation": sum(
+            str(item.get("type", "")) in {"python", "python_validator", "ai_validator"}
+            for item in definitions
+        ),
+    }
+
+
+def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
     flow = load_workflow(workflow_path)
-    results: list[tuple[str, bool, str, int]] = []
-    print(f"Workflow Dry Run Matrix\nWorkflow: {workflow_path}\n")
+    cases = []
     for title, scenario in _matrix_cases(flow):
         ctx, executor, error = _execute(flow, scenario, max_steps)
         try:
-            passed = bool(ctx.state.completed) and not error
-            results.append((title, passed, error, executor.calls))
+            cases.append({
+                "name": title,
+                "passed": bool(ctx.state.completed) and not error,
+                "executions": executor.calls,
+                "fresh_sessions": len(executor.fresh_sessions),
+                "error": error or None,
+            })
         finally:
             _close_context(ctx)
-    width = max(len(title) for title, *_ in results)
-    for title, passed, error, calls in results:
-        suffix = f" ({calls} executions)"
-        if error:
-            suffix += f" - {error}"
-        print(f"{title:<{width}}  {'PASS' if passed else 'FAIL'}{suffix}")
-    passed_count = sum(1 for _, passed, _, _ in results if passed)
-    print(f"\n{passed_count}/{len(results)} paths converged")
-    if passed_count == len(results):
+    passed = sum(bool(case["passed"]) for case in cases)
+    return {
+        "valid": True,
+        "closed": passed == len(cases),
+        "workflow": str(workflow_path),
+        "features": _workflow_features(flow),
+        "paths_passed": passed,
+        "paths_total": len(cases),
+        "cases": cases,
+    }
+
+
+def run_matrix(workflow_path: Path, max_steps: int, *, json_output: bool = False) -> int:
+    payload = matrix_payload(workflow_path, max_steps)
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0 if payload["closed"] else 1
+
+    print(f"Workflow Dry Run Matrix\nWorkflow: {workflow_path}\n")
+    results = payload["cases"]
+    width = max(len(str(item["name"])) for item in results)
+    for item in results:
+        suffix = f" ({item['executions']} executions)"
+        if item["fresh_sessions"]:
+            suffix += f"; fresh_sessions={item['fresh_sessions']}"
+        if item["error"]:
+            suffix += f" - {item['error']}"
+        print(f"{item['name']:<{width}}  {'PASS' if item['passed'] else 'FAIL'}{suffix}")
+    features = payload["features"]
+    print("\nDetected features: " + ", ".join(
+        f"{key}={value}" for key, value in features.items()
+    ))
+    print(f"\n{payload['paths_passed']}/{payload['paths_total']} paths converged")
+    if payload["closed"]:
         print("WORKFLOW_CLOSED")
         return 0
     print("WORKFLOW_NOT_CLOSED")
     return 1
 
-
-def run_dryrun(workflow_path: Path, scenario_path: Path | None, max_steps: int) -> int:
+def run_dryrun(
+    workflow_path: Path,
+    scenario_path: Path | None,
+    max_steps: int,
+    *,
+    json_output: bool = False,
+) -> int:
     flow = load_workflow(workflow_path)
     scenario = load_scenario(scenario_path)
     ctx, executor, error = _execute(flow, scenario, max_steps)
     try:
+        if json_output:
+            payload = _result_payload(workflow_path, scenario_path, flow, ctx, executor, error)
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            return 0 if payload["completed"] else 1
         return _print_result(workflow_path, scenario_path, flow, ctx, executor, error)
     finally:
         _close_context(ctx)
@@ -354,6 +448,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--scenario", type=Path, help="Optional dry-run scenario YAML")
     value.add_argument("--max-steps", type=int, default=100, help="Stop non-converging workflows after N Stage executions")
     value.add_argument("--matrix", action="store_true", help="Auto-test happy path and one FAIL/recovery path for every recoverable Stage")
+    value.add_argument("--json", action="store_true", help="Emit machine-readable JSON for UI/automation consumers")
     return value
 
 
@@ -368,8 +463,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.scenario:
                 print("--matrix cannot be combined with --scenario", file=sys.stderr)
                 return 2
-            return run_matrix(workflow, args.max_steps)
-        return run_dryrun(workflow, args.scenario.resolve() if args.scenario else None, args.max_steps)
+            return run_matrix(workflow, args.max_steps, json_output=args.json)
+        return run_dryrun(
+            workflow,
+            args.scenario.resolve() if args.scenario else None,
+            args.max_steps,
+            json_output=args.json,
+        )
     except Exception as exc:
         print(f"DRYRUN_ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

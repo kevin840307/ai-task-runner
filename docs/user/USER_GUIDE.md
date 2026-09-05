@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,7 +34,7 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`, plus `validator`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, `project_root`, and `workflow_file`. Relative per-item file paths, including `workflow_file`, are resolved from the script YAML directory. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`. A `validator` is required unless that item supplies an explicit `workflow_file`/`workflow`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, `project_root`, and `workflow_file`. Relative per-item file paths, including `workflow_file`, are resolved from the script YAML directory. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
 
 ```yaml
 - goal_file: prompts/example-a.md
@@ -48,67 +48,77 @@ Protected paths are project-relative and may name files or directories. The poli
 ## Workflow YAML
 Without `--workflow`, Runner selects `workflow/builtin/mixed.yaml`, `workflow/builtin/file.yaml`, or `workflow/builtin/ai.yaml` from validator settings. Workflow YAML keeps only two top-level keys: `stages` defines reusable nodes and `flow` defines execution order. A flow item may override its Stage instance for that invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted.
 
-Planning is the one intentional dynamic Stage. YAML does not declare `expand`, `foreach`, or another subflow DSL. Instead, Stage definitions outside the static top-level flow become Planner candidates automatically unless they are recovery-only, planners, or validators. `PlanStage` chooses an ordered Stage sequence for every TODO and returns it as `next_steps`.
+Task production is an effect, not a Plan-only privilege. `PlanStage` is the built-in AI Task producer and automatically uses the standard `execute -> review` per-TODO SOP. Normal Plan-driven YAML therefore lists only `planning` and later top-level stages. `command` or future Stages may still declare `produces: tasks`; explicit `scope: task` is the advanced form for non-Plan producers or a custom per-TODO SOP.
+
+A non-Plan producer uses the same contract:
+
+```yaml
+stages:
+  discover_cases:
+    type: command
+    command: "{python} stages/discover_cases.py"
+    produces: tasks
+
+  execute:
+    type: task
+
+flow:
+  - discover_cases
+  - stage: execute
+    scope: task
+```
+
+The producer prints `{"tasks":[...]}`. `scope: task` depends on pending tasks, not on `PlanStage`.
 
 ```yaml
 stages:
   planning:
     type: plan
-    status: Plan
-    result_handler: plan
 
   execute:
-    status: Execute
-    mode: write
-    prompt: stages/execution.md
-    continuation_prompt: stages/execution_continue.md
-    result_handler: task
+    type: task
 
   security_review:
-    status: Security review
+    type: task
     prompt: prompts/security_review.md
 
   review_task:
-    status: Review
-    prompt: stages/review.md
-    parser: review
-    result_status: completed
-    result_handler: review
+    type: review
 
   validate_file:
-    type: python
-    validator: file
-    status: Validate
-    result_handler: validation
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
   - planning
+  - stage: execute
+    scope: task
+  - stage: security_review
+    scope: task
+  - stage: review_task
+    scope: task
   - validate_file
 ```
 
 `continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated builtin Execute/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
 
-For this YAML, Planner can choose `execute`, `security_review`, and `review_task`; it cannot choose `planning` or `validate_file`. A TODO may therefore produce `steps: [execute, security_review, review_task]`. The selected Stage names are validated before execution, stored with the durable TODO, converted to `StageResult.next_steps`, and then executed by Pipeline. When a review-capable Stage exists, the plan must end each TODO with one. A crash after planning can resume from the saved TODO steps without asking the model to plan again.
+For this YAML, if Plan creates TODO A, B, and C, every TODO runs `execute -> security_review -> review_task` in that fixed YAML order before final validation. Durable state needs only the current TODO, `task_step`, and `workflow_position`; it does not persist AI-generated Stage topology.
 
 The same reusable BaseStage can be invoked many times with different prompts:
 
 ```yaml
 stages:
   run_prompt:
-    status: Run prompt
-    mode: write
+    type: task
 
   review:
-    status: Review
-    mode: readonly
-    parser: review
-    result_status: completed
+    type: review
 
   validate_file:
-    type: python
-    validator: file
-    status: Validate
-    result_handler: validation
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
   - stage: run_prompt
@@ -132,7 +142,10 @@ flow:
   - validate_file
 ```
 
-`skip` is a compact alias for `skip_on_error`. `type: plan` identifies planning behavior; `type: python` identifies the Python validator; `type: base` may be written explicitly but is optional. `validator: file|ai` marks validation capability. `recover` contains static recovery Stage sequences, while `restart_at` remains FlowNode routing metadata. Dynamic planned work comes only from validated `PlanStage` `next_steps`; there is no `expand`/`foreach` YAML setting. `instructions_file` loads UTF-8 instructions relative to the Workflow YAML. Relative `prompt` paths first resolve beside the Workflow YAML when that file exists; otherwise they remain bundled prompt paths such as `stages/execution.md`. `retry` accepts `-1`, `0`, or a finite non-negative count. Final validation must remain last; when both validators exist, file validation must precede AI validation.
+`skip` is a compact alias for `skip_on_error`. Semantic Stage types (`plan`, `task`, `review`, `ai_validator`, `command`) own their normal defaults, so YAML only needs real workflow differences. `result_kind: validation` marks an external command validation gate; `validator: ai` marks AI validation capability. `recover` contains static recovery Stage sequences, while `restart_at` remains FlowNode routing metadata. Top-level Plan uses the loader-provided standard task SOP; explicit `scope: task` remains available only when the Workflow deliberately needs a custom task SOP. There is no generated `next_steps`, `expand`, or `foreach` runtime graph. `instructions_file` loads UTF-8 instructions relative to the Workflow YAML. Relative `prompt` paths first resolve beside the Workflow YAML when that file exists; otherwise they remain bundled prompt paths such as `stages/execution.md`. `retry` accepts `-1`, `0`, or a finite non-negative count. When validation Stages are present, the final validation Stage must be last; when both file and AI validators exist, file validation must precede AI validation.
+
+
+For a focused end-to-end custom Workflow reference, see `docs/user/CUSTOM_WORKFLOW.md` and `examples/custom_workflow_latest.yaml`.
 
 ## Validation modes
 - File validator: `--validator path/to/validation.py`.
@@ -140,7 +153,7 @@ flow:
 - Mixed validation: use a file `--validator` plus `--ai-validator-prompt` or `--ai-validator-prompt-file`. The file validator is the hard gate; AI voting runs only after it passes, and both gates must pass.
 - `--final-ai-validations` (alias `--ai-validator-count`) controls independent fresh-session votes. `--final-ai-required-passes 0` uses strict majority; a positive value explicitly sets the threshold.
 
-Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` requires the Python validator plus at least 2 of 3 independent AI PASS votes.
+Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` requires the file validator plus at least 2 of 3 independent AI PASS votes.
 
 ## Session recovery
 - Same Session is the normal first recovery path. It sends only new Stage/failure evidence and the next instruction.
@@ -150,7 +163,7 @@ Example: `--validator validation.py --ai-validator-prompt-file ai_validation.md 
 - Structured-output correction is bounded to at most two Same Session retries before configured Fresh fallback.
 
 ## JSON events / integration
-`--json-events` emits JSON Lines. Python callers should use `runner.api.RunRequest` and `runner.api.run()`; this is the canonical integration surface for future UI/skills. Workflow uses a semantic progress facade and does not depend on raw event schema or concrete Plugin implementations.
+`--json-events` emits JSON Lines. Python callers and programmatic/remote integrations should use `runner.api.RunRequest` and `runner.api.run()`; this remains the canonical execution surface. A detached local UI may avoid Runner imports entirely and read the configured work directory for display-only runtime visibility (`state.json`, `stream.log`, `log.txt`, `debug/`). Workflow uses a semantic progress facade and does not depend on raw event schema or concrete Plugin implementations.
 
 ## Backend arguments
 Repeat `--agent-arg` per backend argv item. Use `--command` only to override the backend executable. `--sandbox` enables backend sandboxing when supported; Qwen receives `-s`. Full AI task prompts are always stdin-only. Qwen `/context` and `/compress-fast` are short backend control commands, not task prompts, and may use CLI control arguments.
@@ -159,7 +172,7 @@ Repeat `--agent-arg` per backend argv item. Use `--command` only to override the
 Repeat `--protect-file` for additional paths. Project policy is preferred for stable project-owned rules. If a readonly Stage attempts a write, Safety restores the change and the attempt is treated as a failure; same-session recovery sends only the new stage/failure delta.
 
 ## Debug
-Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing AI behavior. Logs/events stay concise but retain Stage, session mode, retry/recovery, process exit, and validator evidence needed for 24H debugging. `log.txt` and `exception.log` rotate at 10 MB and retain one previous file; model-call history keeps its separate bounded policy.
+For live detached inspection, read `<project-root>/.ai-task-runner/stream.log`; it shows only the latest bounded subprocess output and is reset per subprocess. Inspect `<project-root>/.ai-task-runner/debug/current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, and `debug/history/` when diagnosing AI behavior. Logs/events stay concise but retain Stage, session mode, retry/recovery, process exit, and validator evidence needed for 24H debugging. `log.txt` and `exception.log` rotate at 10 MB and retain one previous file; model-call history keeps its separate bounded policy.
 
 ## Timeout defaults
 | Option | Default |
@@ -185,14 +198,25 @@ If the real validator is an exe, bat, jar, or another CLI, use `docs/validator_t
 
 OpenCode's official project rule filename is `AGENTS.md`, not `AGENT.md`.
 
-## UI-ready editing and Python Stage
-Future UI/CLI integrations share `runner.api.run()` rather than calling Pipeline or StageExecutor directly. `stage_catalog()` exposes installed Stage types from their real `spec_class`; external Stage/backend registration uses `ai_task_runner.extensions`, while cross-cutting runtime Plugins use `ai_task_runner.plugins`.
+## UI-ready editing and command Stage
+Programmatic UI/CLI integrations share `runner.api.run()` rather than calling Pipeline or StageExecutor directly. A detached local UI may stay fully file-based for monitoring and import no Runner modules. `stage_catalog()` exposes installed Stage types from their real `spec_class`; external Stage/backend registration uses `ai_task_runner.extensions`, while cross-cutting runtime Plugins use `ai_task_runner.plugins`.
 
 Workflow and prompt editors must use `save_workflow()` / `save_prompt()` plus the `expected_hash` returned by `runner.resources.read_text()`. Saving validates first and atomically replaces the real source file. A running task uses the Workflow, Stage-prompt, Goal-file, and Final-AI-prompt snapshots stored in its own work directory, so source edits or deletion affect the next Run, not the active/resumed Run.
 
-A user Python step is declared as `type: python` with `path` and optional `args`. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.
+A user Python step is declared as `type: command` with a simple string such as `command: "{python} path/to/script.py --flag value"`; use a YAML list only when quoting/argument boundaries are complex. It runs in a subprocess and participates in the normal StageExecutor Hook/change/recovery boundary without importing project Python into the long-running Runner process.
 
 
 ## OpenCode runtime contract
 
 OpenCode sends complete AI task prompts through stdin just like Qwen; prompts are never placed in argv. Resume uses the official `--session` flag and non-interactive calls add `--auto`. Planning/no-tool/review capability is enforced by backend-owned runtime `permission` overrides through `OPENCODE_CONFIG_CONTENT`. `--sandbox` additionally denies `external_directory`. OpenCode currently has no Qwen `-s` container-sandbox equivalent, so this is permission-based confinement; Runner protected-path, Git guard, and readonly restoration remain the shared hard guards.
+
+## External UI / AI Workflow Editor Contract
+A UI does not need to import Runner Python modules. Treat YAML/Markdown/Python files plus JSON-returning tools as the boundary:
+
+```text
+workflows/*.yaml   Workflow CRUD
+prompts/*.md       Prompt CRUD
+project scripts     referenced by `command` Stage
+```
+
+Use `python tool/workflow_catalog.py` to obtain the current Stage/flow editor schema as JSON, and use `python tool/workflow_dryrun.py workflow.yaml --json` before publishing a generated or edited Workflow. The same path works for an AI-generated Workflow: generate YAML, validate/load it, dry-run it, then save/publish only after success.

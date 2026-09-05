@@ -1,8 +1,8 @@
 # Demonstrates automatic built-in Workflow selection by validation mode.
 # Python file validator only -> runner/workflow/builtin/file.yaml
-- goal_file: 01_basic_python_validator/project/prompt.md
-  project_root: 01_basic_python_validator/project
-  validator: 01_basic_python_validator/project/validation.py
+- goal_file: 01_basic_command_validator/project/prompt.md
+  project_root: 01_basic_command_validator/project
+  validator: 01_basic_command_validator/project/validation.py
 
 # AI-only final validation -> runner/workflow/builtin/ai.yaml
 - goal_file: 03_ai_validator_voting/project/prompt.md

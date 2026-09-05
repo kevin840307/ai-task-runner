@@ -25,12 +25,16 @@ class TaskRunner:
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        if not self.config.validator:
-            raise RunnerError("--validator is required unless --script is used")
+        if not self.config.validator and not self.config.workflow_explicit:
+            raise RunnerError("--validator is required unless an explicit workflow is used")
 
         self.root = Path(self.config.project_root).resolve()
-        self.validator_is_ai = self.config.validator.lower() == "ai"
-        self.validator_path = None if self.validator_is_ai else Path(self.config.validator).resolve()
+        self.validator_is_ai = bool(self.config.validator) and self.config.validator.lower() == "ai"
+        self.validator_path = (
+            None
+            if not self.config.validator or self.validator_is_ai
+            else Path(self.config.validator).resolve()
+        )
         self.work = self.root / self.config.work_dir
         self._bind_run_resources()
         if self.config.resume and not self.config.force_new:

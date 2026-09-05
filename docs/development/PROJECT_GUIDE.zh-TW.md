@@ -1,6 +1,6 @@
 # 專案與 AI / 維護者開發指南
 
-版本：1.2.53
+版本：1.2.61
 
 ## 強制維護規則
 1. 最少 Code；Generic Runner 禁止 project-specific hardcode。不可為單一 sample/project 寫專案名稱、FAB/ENV/version、filename、business field 或特定 AI identity 分支。
@@ -33,7 +33,7 @@
 - 真實行為變更後，中英文 docs 與 tests 是否同步？
 
 ## 共用入口
-CLI/UI/Skill/Python 都應使用 `runner.api.RunRequest` / `runner.api.run()`；不要為 UI/Skill 再建立第二套 orchestration。
+CLI／programmatic UI／Skill／Python 都應使用 `runner.api.RunRequest` / `runner.api.run()` 作為 execution 入口；不要為 UI/Skill 再建立第二套 orchestration。本機 detached monitoring UI 可以維持純 file-based，但這些檔案只能顯示，不得變成另一套 execution/control path。
 
 `runner/bootstrap.py` 是 composition root；Backend/Plugin registry 只在邊界組裝依賴。Workflow 不應自行 discover Plugin 或 Backend。
 
@@ -41,6 +41,8 @@ CLI/UI/Skill/Python 都應使用 `runner.api.RunRequest` / `runner.api.run()`；
 UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。Pipeline、StageExecutor、Stage、AI client、Workflow loader 都不得 import UI。外部 Stage／Backend 先透過 installed extension 在 Workflow validation 前註冊；runtime-only Plugin 之後才透過 Hook/Event boundary attach。新增外部 Stage 不得要求 Pipeline 增加 Stage-name branch。
 
 可編輯 Workflow／Prompt 使用共用 atomic resource function 與 optimistic `expected_hash`；active Run 一律使用自己的 durable Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。UI 多 Run 優先採一個 Run 一個 worker process 做隔離，不要只為 UI 把全域 runtime 改造成複雜的 in-process concurrency。
+
+目前產品模型是一個 Project 同時間最多一個 Active Runtime。Conversation／Message metadata 屬於 UI storage，不得進 Runner durable state。Detached UI 的 runtime visibility 必須維持很小：唯讀 `state.json`、最近 bounded `stream.log`、以及 diagnostic `log.txt` / `debug/`。不可只為了 mirror 這些既有資訊就再新增 EventBus、DB、service layer 或 UI 專用 state machine。
 
 ## Project policy
 所有維護中的 smoke/example project root 都應有 `.ai-task-runner.yaml`。Policy 本身自動 protected。Immutable input/reference fixture 應列成 protected；Task 本來要修改的檔案不可 protected。
@@ -68,22 +70,22 @@ Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesyst
 ## Validation 與 YAML List
 Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭與結尾。Runner 會為 Validator process 設定 `AI_TASK_RUNNER_WORK_DIR`；維護中的模板會把報告寫到其 `validator-reports/` 下，單獨執行時則 fallback 到 `.ai-task-runner`。External Validator（exe、bat、jar、Java CLI 等）應使用 `docs/validator_templates/external_command_validator.py`。
 
-支援三種 validation：AI-only、Python-only、Mixed。Mixed 一律先 Python hard gate，再 Final AI voting。
+支援三種 validation：AI-only、File-only、Mixed。Mixed 一律先 Python hard gate，再 Final AI voting。
 
 YAML batch mode 已支援，並支援每筆獨立 `project_root`、`goal_file`、`workflow_file`、AI validation count/required passes。每筆使用自己的 nested state；runtime scope 必須在 child item 結束後恢復 parent，禁止全域 state leakage。
 
-Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，`flow` 定義靜態頂層順序。`recover` 可以直接包含靜態 recovery Stage sequence；不再有 reusable-subflow、`expand` 或 `foreach` DSL。Registry 只保留 `type -> class`（預設 `base`、`plan`、`python`）；一般 AI-backed node 預設 `type: base`，可省略。`PlanStage` 是刻意的特殊 Stage：Loader 從 YAML 結構推導可用 dynamic Stage catalog，Plan 為每個 TODO 選擇 ordered Stage names，Pipeline 持久化並執行 `next_steps`；一般 Stage class 仍完全不知道 routing。
+Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，`flow` 定義靜態頂層順序。`recover` 可以直接包含靜態 recovery Stage sequence；不再有 reusable-subflow、`expand` 或 `foreach` DSL。Registry 只保留 `type -> class`。優先使用語意化內建 Stage（`plan`、`task`、`review`、`ai_validator`、`command`），讓安全預設留在 Stage 本身；只有刻意需要通用 AI 行為時才用 `base`。`PlanStage` 是內建 Task Producer。頂層 Plan 會透過 Loader normalization 自動進入標準 `execute -> review` task SOP，因此一般 YAML 不需要重複寫這兩個 flow node。任何 Stage 仍可宣告 `produces: tasks`；顯式連續 `scope: task` 只保留給進階／自訂 Task Producer 或自訂逐 TODO SOP，一般 Stage class 仍完全不知道 routing。
 
-頂層 Stage 的有效 FAIL 或 recovery 用盡後需要回到目前／更前面的 Workflow 位置時，使用共用的 1-based YAML `restart_at`。Session recovery、Planning 產生的 child group 與 completion rule 應留在既有語意 owner，不做成任意 YAML topology。
+頂層 Stage 的有效 FAIL 或 recovery 用盡後需要回到目前／更前面的 Workflow 位置時，使用共用的 1-based YAML `restart_at`。Session recovery、Task production 與 completion rule 應留在既有語意 owner，不做成任意 YAML topology。
 
 ## Prompt Contract
 所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Top-level template variable 只能由 `runner/prompts/context.py` 提供，不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。
 
-一般 AI 工作就是 `BaseStage` YAML instance；`type` 預設為 `base`，通常省略。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、Pipeline 禁止增加 Stage-name-specific branch。
+一般寫入型 AI 工作使用 `type: task`，唯讀 verdict 工作使用 `type: review`；只有刻意需要通用 AI 行為時才使用 `type: base`。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、Pipeline 禁止增加 Stage-name-specific branch。
 
-Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 放在注入的 result handler，串接放在通用 Pipeline/routing data。
+Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 由 `StageResult.kind` 選擇少量 reducer（`tasks`、`task`、`review`、`validation`、`generic`），串接留在通用 Pipeline/routing data。
 
-共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。已註冊 Stage 的 spec 可依需要 expose `retry`、`retry_attr`、`skip_on_error`、`track_changes`、`tolerate_restored_changes`；AI-backed Stage 另外擁有 `fresh_session_on_start`、`fresh_session_each_run`、`prompt`、`parser` 等 Session／Prompt 能力。Routing-only 欄位（`recover`、`max_results`、`fresh_after_same_failures`、`restart_at`、`label`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
+共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。User-facing Stage spec 只 expose 直接 override，例如 `retry`、`timeout`、`skip_on_error`、`track_changes`、`session_key`、`prompt`、`parser`；`retry_attr`、`timeout_attr`、`client_cache_key` 這類 implementation lookup name 只由舊版 YAML Loader 相容層接受；Stage 執行本身只使用直接的 `retry` / `timeout` 或 Stage-owned default。Routing-only 欄位（`recover`、`repeat`、`fresh_after_same_failures`、`restart_at`、`label`、`scope`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
 
 如果只是字串條件/format，優先用 Jinja；只有真正需要計算的 planning-specific context 才放在 `PlanStage`。
 

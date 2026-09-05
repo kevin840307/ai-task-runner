@@ -555,8 +555,8 @@ def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
 
 def test_review_repair_probe_uses_deterministic_seed_stage():
     assert "deterministically seeds review.txt with only READY" in live.REVIEW_REPAIR_PROMPT
-    assert 'type: python' in live.REVIEW_REPAIR_WORKFLOW
-    assert 'path: seed_review.py' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'type: command' in live.REVIEW_REPAIR_WORKFLOW
+    assert 'command: "{python} seed_review.py"' in live.REVIEW_REPAIR_WORKFLOW
     assert 'skip_on_error: false' in live.REVIEW_REPAIR_WORKFLOW
     assert 'recover: [repair]' in live.REVIEW_REPAIR_WORKFLOW
     assert 'READY\\n' in live.REVIEW_REPAIR_SEED
@@ -568,9 +568,68 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
     workflow_path.write_text(live.REVIEW_REPAIR_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
 
-    assert [node["name"] for node in workflow] == ["planning", "validate_file"]
-    assert list(workflow[0]["planner_stages"]) == ["seed", "review"]
-    assert workflow[0]["planner_stages"]["seed"]["type"] == "python"
-    assert workflow[0]["planner_stages"]["review"]["recover"][0]["name"] == "repair"
+    assert [node["name"] for node in workflow] == [
+        "planning", "seed", "review", "validate_file"
+    ]
+    assert workflow[1]["scope"] == "task"
+    assert workflow[1]["type"] == "command"
+    assert workflow[2]["scope"] == "task"
+    assert workflow[2]["recover"][0]["name"] == "repair"
 
     compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")
+
+
+def test_workflow_dryrun_preflight_covers_builtins_and_custom_task_producer():
+    results = live.workflow_dryrun_preflight()
+    assert len(results) == 5
+    assert all(item["closed"] is True for item in results)
+    assert sum(int(item["paths_total"]) for item in results) >= 10
+    custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))
+    assert custom["features"]["task_producer"] is True
+    assert custom["features"]["task_scope"] is True
+    twelve = next(item for item in results if item["workflow"] == "synthetic://12-stage-composability")
+    assert twelve["features"]["stages"] == 12
+    assert twelve["features"]["repeat"] == 1
+    assert twelve["features"]["restart_at"] == 1
+
+
+def test_loop_detection_contract_preflight_accepts_known_qwen_signal():
+    live.loop_detection_contract_preflight()
+
+
+
+def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_completed_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured = {}
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        captured["command"] = command
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            json.dumps({
+                "completed": True,
+                "stage": "completed",
+                "tasks": [{"status": "completed"}],
+            }),
+            encoding="utf-8",
+        )
+        (work / "log.txt").write_text("{}\n", encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+    live.custom_task_producer_probe(settings(tmp_path), tmp_path)
+
+    command = captured["command"]
+    workflow = Path(command[command.index("--workflow") + 1])
+    assert workflow.name == "workflow.yaml"
+    assert "produces: tasks" in workflow.read_text(encoding="utf-8")
+    assert (workflow.parent / "task_producer.py").is_file()

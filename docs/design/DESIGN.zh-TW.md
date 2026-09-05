@@ -1,6 +1,6 @@
 # 設計
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## 原則
 1. 最少 Code；Runner Core 禁止 project-specific hardcode，Global 通用行為不算 hardcode。
@@ -21,22 +21,22 @@ Version: 1.2.53
 
 ## 主流程
 
-內建預設：`Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
+內建預設：`Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
 
 - 沒有獨立 Understand Stage。
-- Plan 寫入 durable TODO list，並回傳 TODO execution groups。
+- `PlanStage` 是內建 AI Task Producer，透過通用 `tasks` result effect 安裝 durable TODO。
 - Review 是局部 semantic gate；有設定 retry 時可 fail-soft/skip，但不能取代 Final Validator。
-- Python Validator 是 deterministic gate；混合驗證時一定先於 AI Validator。
-- Validator FAIL 回到 `validator_repair`：Repair Plan -> TODO execution -> validators again。
+- File Validator 是 deterministic gate；混合驗證時一定先於 AI Validator。
+- Validator FAIL 走該 Stage 設定的 recovery path，通常是 Repair Plan -> task-scoped SOP -> validators again。
 - Stage 可用共用的 1-based YAML `restart_at` 覆蓋 FAIL/replan recovery；未設定時保留上述內建路由。
-- 只有設定的 final validation path PASS 才記錄完成。
-- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。Planning 會把每個 TODO 與其選定 Stage sequence 一起保存並回傳已驗證的 `next_steps`，Pipeline 執行完成後再進 final validation。可用 dynamic Stage 由 YAML 結構自動推導，不需要 `expand` 或 `foreach`。
+- 內建 Regression Workflow 只有 configured final validation path PASS 才完成；明確指定的 generic Workflow 可以沒有 Validator，flow 全部成功結束即可完成。
+- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。`PlanStage` 會自動使用標準 `execute -> review` task SOP，因此一般 Plan-driven flow 只需要列 Planning 與後續頂層 gate。其他 Stage 仍可用 `produces: tasks` 產生公開 Task contract；顯式 `scope: task` 保留給進階／自訂逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不再產生 `next_steps`、`expand` 或 `foreach` topology。
 
 ## 責任
 
 - `workflow/builtin/*.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
-- `workflow/registry.py`：明確的 `type -> Stage class` Registry，並負責 semantic parser/handler/condition 解析；不持有 Workflow topology 或 Stage instance。
-- `workflow/rules.py`：內部 TODO/repair subflow、conditions、result handlers、durable-state transition 與 routing。
+- `workflow/registry.py`：明確的 `type -> Stage class` Registry，並提供 UI/editor catalog metadata；不持有 Workflow topology 或 Stage instance。
+- `workflow/rules.py`：少量 `StageResult.kind` reducer 與 durable-state transition（`tasks`、`task`、`review`、`validation`、`generic`）。
 - `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。
 - `ai/`：AI interaction/session/structured output。
@@ -57,9 +57,9 @@ Version: 1.2.53
 
 ## Validation Modes
 
-- AI-only：Python Validator Stage skip，Final AI Validator 決定。
-- Python-only：Python Validator 是 final configured gate，AI Stage condition skip。
-- Mixed：Python Validator PASS 後才跑 Final AI Validator，兩者都必須 PASS。
+- AI-only：AI Validator 是 configured final gate。
+- File-only：File Validator 是 configured final gate。
+- Mixed：File Validator PASS 後才跑 Final AI Validator，兩者都必須 PASS。
 - Final AI Validator 每次 run 使用獨立 Fresh Session；`final_ai_required_passes=0` 採嚴格多數決，明確設定時則必須達到指定 PASS 數。Structured Output 格式錯誤先 bounded same-session correction，再依設定 Fresh fallback。
 
 ## Prompt Contract
@@ -78,7 +78,7 @@ Version: 1.2.53
 
 ## Process Survivability
 
-`runtime/process_runner.py` 統一管理 subprocess wait、timeout、idle-after-change detection、termination。外層 supervisor/worker 依 durable state 支援 abnormal worker disappearance 後 resume。
+`runtime/process_runner.py` 統一管理 subprocess wait、timeout、idle-after-change detection、termination。外層 supervisor/worker 依 durable state 支援 abnormal worker disappearance 後 resume。它也會把最近 bounded subprocess stdout mirror 到 `<work-dir>/stream.log`，供 detached local live display 使用。此檔每個 subprocess 都會重置，刻意是可丟棄資料，而且絕不參與 Resume、Validation、Retry、Session 或 routing 判斷。
 
 
 ## Runtime Scope

@@ -174,6 +174,7 @@ def test_run_process_logs_pid_return_code_and_clears_active_file(tmp_path, monke
     assert events[1]["pid"] == events[0]["pid"]
     assert events[1]["return_code"] == 0
     assert not (work / process_module.ACTIVE_PROCESS_FILE).exists()
+    assert (work / process_module.STREAM_FILE).read_text(encoding="utf-8").strip() == str(work)
 
 
 def test_cleanup_orphans_use_each_state_work_directory(tmp_path, monkeypatch):

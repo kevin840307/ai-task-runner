@@ -1,6 +1,6 @@
 # Design
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## Principles
 1. Minimum code; no project-specific hardcoding in Runner core. Global reusable behavior is allowed.
@@ -21,22 +21,22 @@ Version: 1.2.53
 
 ## Main flow
 
-Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI Validator? -> PASS`
+Bundled default: `Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
 
 - No independent Understand Stage.
-- Plan writes the durable TODO list and returns the TODO execution groups.
+- `PlanStage` is the built-in AI Task producer and installs durable TODOs through the generic `tasks` result effect.
 - Review is a local semantic gate. With configured review retries it may fail-soft/skip; final validation remains authoritative.
 - Python validation is deterministic and runs before AI validation when both are enabled.
-- Validator FAIL returns `validator_repair`: Repair Plan -> TODO execution -> validators again.
+- Validator FAIL runs the configured recovery path, typically Repair Plan -> task-scoped SOP -> validators again.
 - A Stage may override FAIL/replan recovery with the shared 1-based `restart_at` YAML option; omitted values preserve the routes above.
-- Completion is recorded only after the configured final validation path passes.
-- A custom Workflow YAML contains only named `stages` and top-level `flow`. Planning stores each TODO with its selected Stage sequence and returns validated `next_steps`; Pipeline executes them before final validation. Dynamic Stage candidates are inferred from YAML structure, so there is no `expand` or `foreach` setting.
+- Built-in Regression workflows complete only after their configured final validation path passes. Explicit generic workflows may omit validators and complete when their flow ends successfully.
+- A custom Workflow YAML contains only named `stages` and top-level `flow`. `PlanStage` automatically uses the standard `execute -> review` task SOP, so normal Plan-driven flow lists only Planning and later top-level gates. Other Stages may produce the public Task contract with `produces: tasks`; explicit `scope: task` remains available for advanced/custom per-TODO SOPs. A custom flow may use Plan, another Task producer, or no tasks at all. There is no generated `next_steps`, `expand`, or `foreach` topology.
 
 ## Ownership
 
 - `workflow/builtin/*.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
-- `workflow/registry.py`: the explicit `type -> Stage class` registry plus semantic parser/handler/condition resolution; it does not own workflow topology or Stage instances.
-- `workflow/rules.py`: internal TODO/repair subflows, conditions, result handlers, durable-state transitions, and routing.
+- `workflow/registry.py`: the explicit `type -> Stage class` registry plus UI/editor catalog metadata; it does not own workflow topology or Stage instances.
+- `workflow/rules.py`: the small `StageResult.kind` reducers and durable-state transitions (`tasks`, `task`, `review`, `validation`, `generic`).
 - `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.
 - `ai/`: AI interaction/session/structured output only.
@@ -57,9 +57,9 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> Python Validator? -> AI 
 
 ## Validation modes
 
-- AI-only: Python validator Stage skips; Final AI Validator decides.
-- Python-only: Python validator is the final configured gate; AI Stage condition skips.
-- Mixed: Python validator must PASS before Final AI Validator runs; both gates must pass.
+- AI-only: the AI Validator is the configured final gate.
+- File-only: the File Validator is the configured final gate.
+- Mixed: file validator must PASS before Final AI Validator runs; both gates must pass.
 - Final AI validation runs use fresh independent sessions. `final_ai_required_passes=0` uses strict majority; an explicit value requires that many PASS results. Structured-output correction uses bounded same-session retries before configured fresh fallback.
 
 ## Prompt contract
@@ -79,6 +79,7 @@ Ordinary AI Stage configuration points to `prompts/stages/*.md` directly. Planni
 ## Process survivability
 
 `runtime/process_runner.py` owns subprocess waiting, timeout, idle-after-change detection, and termination. The outer supervisor/worker recovery keeps durable state and can resume after abnormal worker disappearance.
+It also mirrors the most recent bounded subprocess stdout to `<work-dir>/stream.log` for detached local live display. This file is reset per subprocess, is intentionally disposable, and never participates in resume, validation, retry, session, or routing decisions.
 
 
 ## Runtime scope

@@ -173,7 +173,7 @@ def test_yaml_item_uses_default_workflow_when_no_explicit_workflow(tmp_path):
         "",
     )
 
-    assert [stage["name"] for stage in workflow] == ["planning", "validate_file"]
+    assert [stage["name"] for stage in workflow] == ["planning", "execute", "review", "validate_file"]
     assert explicit is False
 
 

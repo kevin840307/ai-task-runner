@@ -38,7 +38,7 @@ These rules are mandatory for changes to this repository. `DevFollow.txt` is the
 - Debug/history files must remain diagnostic side effects only and must not influence changed-file detection, progress, validation, or resume semantics.
 
 ## Validation
-- Deterministic Python validator is the authoritative correctness gate when configured.
+- Configured deterministic file validation is the authoritative correctness gate; it executes through the generic `command` Stage.
 - Validators should check observable requirements, not how the Planner happened to split TODOs, except smoke tests explicitly testing planning behavior.
 - Reuse `validator_interface.py` for validator reporting/entry handling.
 - Keep validators deterministic and independent of model output.

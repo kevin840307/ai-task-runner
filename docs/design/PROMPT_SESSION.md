@@ -29,9 +29,9 @@ All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or mi
 
 ## Stage prompt ownership
 
-Ordinary AI work uses a BaseStage (`type: base`) with `actor: ai` and a Workflow-relative prompt or instruction file.
+Ordinary write work should normally use semantic `type: task`; read-only verdict work should use `type: review`. Use `type: base` only when a custom AI Stage intentionally needs BaseStage defaults.
 
-Planning-specific computed context is handled inside `PlanStage`. Write and Review behavior share `BaseStage`; Review uses `mode: readonly` plus the review parser/result handler contract. Review prompts must return a verdict from available evidence instead of repairing, searching for tools, or requesting unavailable tools. There is no prompt-builder registry.
+Planning-specific computed context is handled inside `PlanStage`. `TaskStage` and `ReviewStage` remain thin semantic profiles over the shared AI Stage implementation; Review owns readonly mode and structured verdict parsing by default. Review prompts must return a verdict from available evidence instead of repairing, searching for tools, or requesting unavailable tools. There is no prompt-builder registry.
 
 ## Session policy
 

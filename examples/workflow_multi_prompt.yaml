@@ -1,28 +1,14 @@
 stages:
   run_prompt:
-    status: AI 正在執行 Prompt
-    run_state: executing
-    mode: write
-    actor: executor
-    track_changes: true
+    type: task
 
   review:
-    status: AI 正在執行 Review
-    run_state: reviewing
-    mode: readonly
-    actor: ai
-    backend_mode: review
-    parser: review
-    result_status: completed
+    type: review
 
   validate_file:
-    type: python
-    validator: file
-    status: 正在執行 File Validator
-    run_state: validating
-    mode: write
-    actor: validator
-    result_handler: validation
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
   - stage: run_prompt

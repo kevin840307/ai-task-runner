@@ -70,10 +70,10 @@ def test_default_and_replan_flows_do_not_force_understand_stage():
     assert "understand" not in STAGE_REGISTRY
     workflow = load_default_workflow("validator.py", "ai")
     assert [stage["name"] for stage in workflow] == [
-        "planning", "validate_file", "validate_ai"
+        "planning", "execute", "review", "validate_file", "validate_ai"
     ]
-    assert list(workflow[0]["planner_stages"]) == ["execute", "review"]
-    assert "expand" not in workflow[0]
+    assert [stage.get("scope") for stage in workflow[1:3]] == ["task", "task"]
+    assert "planner_stages" not in workflow[0]
 
 
 def test_repeated_tty_start_does_not_restart_spinner_or_add_lines(

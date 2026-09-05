@@ -1,6 +1,6 @@
 # CLI Reference
 
-Version: 1.2.53
+Version: 1.2.61
 
 All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
 
@@ -11,7 +11,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--project-root` | writable project boundary | `.` |
 | `--script` | YAML task array; items may use `prompt`/`goal` or `goal_file` | exclusive with goal |
 | `--workflow` | linear Workflow YAML | omitted: select Mixed, File-only, or AI-only from validator options |
-| `--validator` | Python validator path or `ai` | required outside script mode |
+| `--validator` | file validator path or `ai` | required unless script mode or an explicit `--workflow` is used |
 | `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
 | `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |
 | `--ai-validator-prompt-file` | UTF-8 file containing Final AI validation instructions; mutually exclusive with `--ai-validator-prompt` | empty/off |
@@ -34,6 +34,8 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--final-ai-validations`, `--ai-validator-count` | independent fresh-session Final AI votes | 1 |
 | `--final-ai-required-passes` | required PASS count | 0 = strict majority; otherwise <= runs |
 | `--work-dir` | Runner state dir inside project root | `.ai-task-runner` |
+
+The work directory also contains display/diagnostic surfaces. `stream.log` is the latest bounded subprocess output for detached local UI/live inspection; it is reset per subprocess and is not part of CLI control or resume semantics.
 | `--json-events` | emit JSON Lines progress | off |
 | `--resume` | resume state | off |
 | `--force-new` | create new run | off; conflicts with resume |

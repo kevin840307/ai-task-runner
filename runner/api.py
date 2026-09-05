@@ -257,10 +257,10 @@ class RunRequest:
             and not self._effective_goal().strip()
         ):
             raise ValueError("goal or goal_file is required unless script or resume is used")
-        if not self.script and not (
+        if not self.script and not self.workflow_file and not (
             isinstance(self.validator, str) and self.validator.strip()
         ):
-            raise ValueError("validator is required unless script is used")
+            raise ValueError("validator is required unless script or workflow_file is used")
 
     def _effective_goal(self) -> str:
         if isinstance(self.goal, str):
@@ -305,7 +305,7 @@ def run(
     request: RunRequest | Mapping[str, Any],
     on_event: EventHandler | None = None,
 ) -> RunResult:
-    """Run until Final Validator PASS (or plan-only), sharing recovery across all callers."""
+    """Run until the selected Workflow completes (or plan-only)."""
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
 
@@ -320,7 +320,7 @@ def run(
             _report_retry(
                 request,
                 on_event,
-                "run returned before Final Validator completion; resuming saved state",
+                "run returned before Workflow completion; resuming saved state",
             )
         except KeyboardInterrupt:
             raise

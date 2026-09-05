@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -104,8 +105,7 @@ def test_dryrun_rejects_invalid_workflow_options(tmp_path: Path):
         "bad_fresh_failures": """stages:\n  check:\n    fresh_after_same_failures: 0\n    recover: [fix]\n  fix: {}\n  final:\n    validator: ai\nflow: [check, final]\n""",
         "required_passes_gt_runs": """stages:\n  final:\n    validator: ai\n    runs: 2\n    required_passes: 3\nflow: [final]\n""",
         "unknown_stage": """stages:\n  final:\n    validator: ai\nflow: [missing, final]\n""",
-        "no_validator": """stages:\n  work: {}\nflow: [work]\n""",
-        "bad_validator_type": """stages:\n  final:\n    type: python\n    validator: ai\nflow: [final]\n""",
+        "bad_validator_type": """stages:\n  final:\n    type: command\n    validator: ai\nflow: [final]\n""",
     }
     for name, text in cases.items():
         workflow = tmp_path / f"{name}.yaml"
@@ -113,3 +113,108 @@ def test_dryrun_rejects_invalid_workflow_options(tmp_path: Path):
         result = run(str(workflow))
         assert result.returncode == 2, f"{name}: {result.stdout}{result.stderr}"
         assert "DRYRUN_ERROR" in result.stderr, name
+
+
+def test_dryrun_supports_generic_task_producer():
+    import json
+
+    result = run("examples/custom_workflow_latest.yaml", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["valid"] is True
+    assert payload["completed"] is True
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "discover_tasks", "execute", "review", "done"
+    ]
+
+
+def test_dryrun_json_contract_is_machine_readable():
+    import json
+
+    result = run("runner/workflow/builtin/file.yaml", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["valid"] is True
+    assert payload["completed"] is True
+    assert payload["workflow_size"] == 4
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "planning", "execute", "review", "validate_file"
+    ]
+
+
+def test_dryrun_matrix_json_reports_repeat_and_restart_paths(tmp_path: Path):
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        """
+stages:
+  start:
+    type: command
+    command: [python, -c, "print('START')"]
+  challenge:
+    type: command
+    command: [python, -c, "print('CHALLENGE')"]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+  restartable:
+    type: command
+    command: [python, -c, "print('RESTARTABLE')"]
+flow:
+  - start
+  - stage: challenge
+    repeat: 3
+    recover: [repair]
+  - stage: restartable
+    restart_at: start
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(TOOL), str(workflow), "--matrix", "--json"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["closed"] is True
+    assert payload["features"]["repeat"] == 1
+    assert payload["features"]["restart_at"] == 1
+    names = {item["name"] for item in payload["cases"]}
+    assert "challenge FAIL x3 -> bounded recover -> closure" in names
+    assert "restartable FAIL -> restart_at -> closure" in names
+
+
+
+def test_dryrun_handles_twelve_stage_composable_sop(tmp_path: Path):
+    stages = [
+        f"  s{i:02d}:\n    type: command\n    command: [python, -c, \"print('S{i:02d}')\"]"
+        for i in range(1, 13)
+    ]
+    stages.append("  repair:\n    type: command\n    command: [python, -c, \"print('REPAIR')\"]")
+    flow = []
+    for i in range(1, 13):
+        if i == 5:
+            flow.extend(["  - stage: s05", "    repeat: 3", "    recover: [repair]"])
+        elif i == 9:
+            flow.extend(["  - stage: s09", "    recover: [repair]"])
+        elif i == 10:
+            flow.extend(["  - stage: s10", "    restart_at: s08"])
+        else:
+            flow.append(f"  - s{i:02d}")
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        "stages:\n" + "\n".join(stages) + "\nflow:\n" + "\n".join(flow) + "\n",
+        encoding="utf-8",
+    )
+
+    completed = run(str(workflow), "--matrix", "--json")
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+    payload = json.loads(completed.stdout)
+    assert payload["closed"] is True
+    assert payload["features"]["stages"] == 12
+    assert payload["features"]["repeat"] == 1
+    assert payload["features"]["recover"] >= 2
+    assert payload["features"]["restart_at"] == 1

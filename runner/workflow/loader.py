@@ -14,7 +14,7 @@ from .schema import (
     validate_restart_targets,
     validate_stage,
     validate_topology,
-    workflow_has_planning,
+    workflow_has_task_producer,
     workflow_validators,
 )
 BUILTIN_WORKFLOW_DIR = Path(__file__).with_name("builtin")
@@ -97,22 +97,57 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         str(name): _normalize_stage(name, definition, source)
         for name, definition in raw_stages.items()
     }
-    _inject_planner_catalog(stages, raw_flow, source)
     result = _normalize_sequence(raw_flow, stages, top_level=True, source=source)
+    result = _expand_plan_task_flow(result, stages, source)
+    for index, node in enumerate(result):
+        node["_workflow_index"] = index
+    validate_restart_targets(result, True)
     validate_topology(result)
     return result
 
+
+
+def _expand_plan_task_flow(
+    flow: list[dict[str, Any]],
+    stages: dict[str, dict[str, Any]],
+    source: Path,
+) -> list[dict[str, Any]]:
+    """Attach the standard per-TODO SOP after top-level Plan stages.
+
+    PlanStage owns task production, so normal YAML does not need to repeat
+    ``execute/review + scope: task``.  Explicit task-scoped nodes are still
+    accepted for advanced/custom task producers or custom per-task SOPs.
+    """
+    result: list[dict[str, Any]] = []
+    for index, node in enumerate(flow):
+        result.append(node)
+        if node.get("type") != "plan" or node.get("repair_plan"):
+            continue
+        if index + 1 < len(flow) and flow[index + 1].get("scope") == "task":
+            continue
+        defaults = {"execute": {"type": "task"}, "review": {"type": "review"}}
+        for name in ("execute", "review"):
+            if name in stages:
+                task_node = _normalize_invocation(
+                    {"stage": name, "scope": "task"}, stages, (), source
+                )
+            else:
+                task_node = _normalize_stage(name, defaults[name], source)
+                task_node["scope"] = "task"
+            result.append(task_node)
+    return result
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:
     if not isinstance(name, str) or not name.strip():
         raise RunnerError("workflow stage name must be a non-empty string")
     if not isinstance(definition, dict):
         raise RunnerError(f"workflow stage {name} must be an object")
-    if "planner_stages" in definition:
-        raise RunnerError(f"workflow stage {name} planner_stages is managed internally")
     if "label" in definition:
         raise RunnerError(f"workflow stage {name} label belongs to flow nodes")
+    if "scope" in definition:
+        raise RunnerError(f"workflow stage {name} scope belongs to flow nodes")
     values = deepcopy(definition)
+    _upgrade_legacy_stage(values)
     values.setdefault("type", "base")
     values["name"] = name
     instructions_file = values.pop("instructions_file", None)
@@ -123,51 +158,82 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
     return values
 
 
-def _inject_planner_catalog(
-    stages: dict[str, dict[str, Any]], raw_flow: Any, source: Path
-) -> None:
-    plans = [definition for definition in stages.values() if definition.get("type") == "plan"]
-    if not plans:
-        return
 
-    top_level = _sequence_refs(raw_flow)
-    recovery = set()
-    for definition in stages.values():
-        recovery.update(_sequence_refs(definition.get("recover", ())))
+def _upgrade_legacy_stage(values: dict[str, Any]) -> None:
+    """Normalize pre-1.2.56 implementation knobs into semantic Stage types."""
+    if "max_results" in values and "repeat" not in values:
+        values["repeat"] = values.pop("max_results")
 
-    candidates = [
-        name
-        for name, definition in stages.items()
-        if name not in top_level
-        and name not in recovery
-        and definition.get("type") != "plan"
-        and definition.get("validator") is None
-    ]
-    if not candidates:
-        raise RunnerError("planning workflow requires at least one dynamic Stage")
+    handler = values.pop("result_handler", None)
+    status = values.pop("result_status", None)
+    condition = values.pop("condition", None)
+    stage_type = values.get("type")
+    validator = values.get("validator")
 
-    catalog = {
-        name: _normalize_invocation(name, stages, (), source)
-        for name in candidates
-    }
-    for definition in plans:
-        definition["planner_stages"] = deepcopy(catalog)
-        validate_stage(definition["name"], definition)
+    if not stage_type:
+        if handler == "plan":
+            stage_type = "plan"
+        elif handler == "task":
+            stage_type = "task"
+        elif handler == "review" or status == "completed":
+            stage_type = "review"
+        elif validator == "ai" or (handler == "validation" and status == "validation"):
+            stage_type = "ai_validator"
+        else:
+            stage_type = "base"
+    elif stage_type == "base" and validator == "ai":
+        stage_type = "ai_validator"
+    values["type"] = stage_type
 
+    if status not in (None, "completed", "validation"):
+        raise RunnerError(f"unsupported legacy result_status: {status}")
+    if handler not in (None, "plan", "task", "review", "validation"):
+        raise RunnerError(f"unsupported legacy result_handler: {handler}")
+    if condition not in (None, "ai_validation"):
+        raise RunnerError(f"unsupported legacy condition: {condition}")
+    if condition == "ai_validation" and stage_type != "ai_validator":
+        raise RunnerError("condition: ai_validation requires an AI validator Stage")
 
-def _sequence_refs(data: Any) -> set[str]:
-    if isinstance(data, str):
-        return {data}
-    if not isinstance(data, (list, tuple)):
-        return set()
-    refs = set()
-    for item in data:
-        if isinstance(item, str):
-            refs.add(item)
-        elif isinstance(item, dict) and isinstance(item.get("stage"), str):
-            refs.add(item["stage"])
-    return refs
+    session_key = values.pop("client_cache_key", None)
+    if session_key:
+        values.setdefault("session_key", session_key)
 
+    expected_backend = {
+        "plan": "planning",
+        "review": "review",
+        "ai_validator": "review",
+    }.get(stage_type, "runtime")
+    backend = values.pop("backend_mode", None)
+    if backend not in (None, expected_backend):
+        raise RunnerError(
+            f"legacy backend_mode {backend!r} does not match type: {stage_type}"
+        )
+
+    expected_timeout = {
+        "plan": "planning_timeout",
+        "review": "planning_timeout",
+    }.get(stage_type, "agent_timeout")
+    timeout_attr = values.pop("timeout_attr", None)
+    if timeout_attr not in (None, expected_timeout):
+        raise RunnerError(
+            f"legacy timeout_attr {timeout_attr!r} is no longer configurable; use timeout"
+        )
+
+    expected_retry = "review_retries" if stage_type == "review" else ""
+    retry_attr = values.pop("retry_attr", None)
+    if retry_attr not in (None, "", expected_retry):
+        raise RunnerError(
+            f"legacy retry_attr {retry_attr!r} is no longer configurable; use retry"
+        )
+
+    runs_field = values.pop("runs_field", None)
+    required_field = values.pop("required_passes_field", None)
+    if runs_field not in (None, "", "final_ai_validations"):
+        raise RunnerError("legacy runs_field is no longer configurable; use runs")
+    if required_field not in (None, "", "final_ai_required_passes"):
+        raise RunnerError(
+            "legacy required_passes_field is no longer configurable; use required_passes"
+        )
 
 def _read_text(value: Any, source: Path, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
@@ -239,6 +305,8 @@ def _normalize_invocation(
     node = deepcopy(stages[ref])
     if "skip" in overrides and "skip_on_error" not in overrides:
         overrides["skip_on_error"] = bool(overrides.pop("skip"))
+    if "max_results" in overrides and "repeat" not in overrides:
+        overrides["repeat"] = overrides.pop("max_results")
     node.update(overrides)
     _resolve_local_prompts(node, source)
     validate_stage(str(node.get("name", ref)), node)
@@ -268,6 +336,6 @@ __all__ = [
     "normalize_workflow",
     "save_workflow",
     "workflow_fingerprint",
-    "workflow_has_planning",
+    "workflow_has_task_producer",
     "workflow_validators",
 ]

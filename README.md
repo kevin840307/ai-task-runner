@@ -1,11 +1,11 @@
 # AI Task Runner
 
-Version: 1.2.53
+Version: 1.2.61
 
 Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 
 
-Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed` (the Final Validator PASS state). The canonical `runner.api.run()` resumes unfinished state automatically; the CLI only adds worker-process crash isolation. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
+Runtime completion rule: a normal internal return is not treated as completion unless persisted state confirms both `completed=true` with `stage=completed`. Regression workflows still end at their configured validator gate; explicit generic workflows may complete without a validator when every FlowNode succeeds. In the built-in regression profiles, completion still means **Final Validator PASS**. The canonical `runner.api.run()` resumes unfinished state automatically; the CLI only adds worker-process crash isolation. Recoverable task failures escalate by repeated identical progress evidence (same session -> fresh session -> replan), not by total attempt count.
 
 The runner owns orchestration; backends, plugins, prompts, and validators provide bounded capabilities behind explicit contracts.
 
@@ -22,7 +22,8 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - Worker crash/interrupt cleanup follows each durable Run work directory, including YAML List children, so orphan AI/sandbox processes are not left behind; all subprocess stdout paths are bounded, and `KeyboardInterrupt`/`SystemExit` never enter Stage retry/recovery.
 - Resume treats a valid project `state.json` as authoritative and uses the temp backup only when the primary state is missing or invalid, preventing stale-backup rollback after a crash window.
 - UI-ready extension boundary: owner-module editor/catalog APIs (`runner.resources`, `runner.workflow.loader` / `registry`, `runner.prompts.loader`), installed Stage/backend registration before Workflow validation, external runtime Plugins, atomic Workflow/Prompt editing, and per-Run Workflow/Stage-prompt/goal/final-AI-prompt snapshots.
-- One generic `python` Stage executes user/project Python out of process; `validator: file` enables authoritative deterministic-gate conventions without a second Python Stage implementation.
+- Detached local UI may stay fully outside Runner imports: read the project work directory for runtime visibility (`state.json` for current durable status, `stream.log` for the latest bounded subprocess output, and `log.txt` / `debug/` for diagnostics). `stream.log` is display-only and never controls Runner semantics.
+- Generic `command` Stage owns all subprocess execution, including user/project Python and deterministic file validation.
 - Shared AI-result parser: lenient JSON envelope, strict stage payload/schema.
 - Bounded debug history with current/last prompt-result files.
 - Project policy in `<project-root>/.ai-task-runner.yaml`; the policy file protects itself automatically.
@@ -83,14 +84,14 @@ YAML task items may also set `loop_context_compress: true` and `loop_context_com
 
 ## Flow engine architecture
 
-The runner uses a small YAML-driven flow pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns only `StageResult` facts. `FlowNode` owns static YAML routing such as `recover` and `restart_at`. `PlanStage` is the intentional dynamic exception: it returns validated `next_steps` chosen from the Stage catalog derived from YAML, and Pipeline executes those steps generically without hardcoding execute/review names.
+The runner uses a small YAML-driven flow pipeline. `StageExecutor` owns shared retry, Hook, semantic progress reporting, and exception handling. Each Stage performs one job and returns only `StageResult` facts/effects. `FlowNode` owns static YAML routing such as `recover`, `restart_at`, and `scope`. `PlanStage` is the built-in Task producer and automatically enters the standard `execute -> review` per-TODO SOP, so normal Plan-driven YAML does not repeat those flow nodes. Other Stages may still declare `produces: tasks`; advanced/custom producers can use an explicit contiguous `scope: task` block when they need a custom per-TODO SOP.
 
 Cross-cutting features stay outside the flow: status events feed UI/logging/diagnostics, while Git restrictions, protected files, read-only enforcement, and optional loop-context compression register as plugins. Core stages and the AI client do not import those concrete plugins.
 
 
 ## Stage execution architecture
 
-`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> next_steps/recovery -> next FlowNode`
+`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> recovery / next FlowNode`
 
 Unified execution rules:
 - API/service failures use exponential backoff inside the AI client for one configured wait window (default 1 hour) and do not count as Stage failures. If a window is exhausted, canonical `runner.api.run()` resumes durable direct/YAML state and opens another window until the task passes.
@@ -98,12 +99,12 @@ Unified execution rules:
 - Repeated identical failures in the fresh session return `replan`, causing the default flow to start a fresh planning session and generate a new plan. A Stage may set the shared 1-based YAML `restart_at` option to restart from a specific current/earlier top-level Stage instead. Different failures reset the failure streak.
 - A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.
 - Review may skip after its retry budget is exhausted; the skip is recorded and Final Validator remains the completion gate.
-- Plan stores each durable TODO together with its ordered Stage names. Planner-visible Stages are inferred from YAML: dynamic nodes are Stage definitions that are not top-level flow nodes, recovery-only nodes, planners, or validators. `PlanStage` validates those names, returns `next_steps`, and Pipeline persists/runs them. Resume can rebuild missing generated steps from the saved TODO `steps` if a crash occurs between planning and queue persistence.
+- Task producers store only durable TODO content (`title`, `description`, `deliverable`, `acceptance_criteria`). `PlanStage` is one built-in producer; `command` or future Stage types can opt into the same effect with `produces: tasks`. For Plan-driven flows, the loader expands the standard `execute -> review` task SOP internally and `workflow_position` remains the durable execution cursor. Explicit `scope: task` is reserved for advanced/custom task producers or custom per-TODO SOPs.
 
 
-Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `BaseStage` instances are reusable, while special behavior may use dedicated `PlanStage`; Python execution uses the single `PythonStage` implementation.
+Stages perform one attempt only. `StageExecutor` owns hooks/semantic progress/change tracking; retry and routing stay in Flow. Generic `BaseStage` instances are reusable, while special behavior uses dedicated semantic AI stages such as `PlanStage`; subprocess work uses `CommandStage`.
 
-Normal AI work is declarative: YAML contains only `stages` and `flow`. `stages` defines reusable nodes; `flow` composes them and may override fields such as `prompt`, `retry`, or `skip` per invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted. `type` is written only for specialized behavior such as `plan`, `python`, or a custom Stage class.
+Normal AI work is declarative: YAML contains only `stages` and `flow`. `stages` defines reusable nodes; `flow` composes them and may override fields such as `prompt`, `retry`, or `skip` per invocation. Generic AI-backed nodes use `BaseStage`; `type` defaults to `base`, so it is normally omitted. `type` is written only for specialized behavior such as `plan`, `task`, `review`, `ai_validator`, `command`, or a custom Stage class.
 
 ```yaml
 stages:
@@ -126,6 +127,7 @@ A genuinely new behavior adds one Stage class exposing `spec_class`, then one `r
 ```yaml
 stages:
   run_prompt:
+    type: task
     status: AI running skill
 
 flow:
@@ -139,24 +141,32 @@ Runner events keep `status=AI running skill` and expose `label=Project Documenta
 
 ### Repeated semantic-failure escape
 
-A FlowNode may opt in to `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count, different semantic failures reset the count, and omitting the option preserves the previous behavior. Builtin Review uses `2` to escape stale verdict loops without resetting the writer session.
+A FlowNode may override `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count and different semantic failures reset the count. `ReviewStage` owns the semantic default `2` whenever it has recovery; other Stage types remain opt-in. This keeps builtin YAML small while preserving an explicit override when a Workflow needs a different threshold.
 
 ## Workflow Dry Run
 
-Use `tool/workflow_dryrun.py` to validate whether a `workflow.yaml` can reach closure without calling a real agent. The tool reuses the production Workflow Loader, Pipeline, StageResult, and Stage finish/result handlers, and mocks only the bottom-level Stage execution result, so it does not create a second workflow engine.
+Use `tool/workflow_dryrun.py` to validate whether a `workflow.yaml` can reach closure without calling a real agent. The tool reuses the production Workflow Loader, Pipeline, StageResult, and Stage finish and result reducers, and mocks only the bottom-level Stage execution result, so it does not create a second workflow engine.
 
 ```bat
 python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --scenario dryrunexample\builtin_mixed_scenario.yaml
 dryrunexample\run_dryrun.bat
 ```
 
-`dryrunexample/` covers a builtin workflow, an existing custom workflow, and closure through recover / `max_results` / `fresh_after_same_failures`. Dry Run is an external tool; removing it and its examples does not change Runner Core behavior.
+`dryrunexample/` covers a builtin workflow plus a concise semantic custom workflow with `task`, `review`, recover, and `repeat`. Dry Run is an external tool; removing it and its examples does not change Runner Core behavior.
 Auto failure matrix:
 
 ```bat
 python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix
+python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --json
+
+`--matrix` now generates deterministic routing cases for the Workflow's actual `recover`, `repeat`, and `restart_at` features and reports detected task-producer/task-scope/review/validation features. `--matrix --json` is suitable for CI, UI, and reliability gates.
 ```
 
 `--matrix` runs the happy path plus one deterministic `FAIL -> recover -> closure` case for every recoverable Stage that the real normalized workflow exposes. Invalid workflow options are rejected by the production Workflow Loader/schema before simulation; Dry Run does not maintain a duplicate validation schema.
 
+For external UI/AI editors, `python tool/workflow_catalog.py` emits the data-only Stage/flow schema as JSON, and `python tool/workflow_dryrun.py workflow.yaml --json` emits a machine-readable closure result. The UI can therefore CRUD YAML/MD/PY without importing Runner Core.
 
+
+
+### Command-backed Stages
+`command` is the single child-process Stage for Python scripts, validators, and arbitrary argv. It shares one boundary for cwd, timeout, output capture, process-tree cleanup, and exit-code semantics.

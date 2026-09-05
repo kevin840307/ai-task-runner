@@ -1,75 +1,27 @@
 stages:
-  planning: &planning
+  planning:
     type: plan
-    status: AI 正在產生任務規劃
-    run_state: planning
-    mode: readonly
-    actor: ai
-    backend_mode: planning
-    timeout_attr: planning_timeout
-    result_handler: plan
-    plan_only_stop: true
 
-
-  execute: &execute
-    status: AI 正在處理目前任務
-    run_state: executing
-    mode: write
-    actor: executor
-    track_changes: true
-    prompt: stages/execution.md
-    continuation_prompt: stages/execution_continue.md
-    result_handler: task
+  execute:
+    type: task
 
   review:
-    status: AI 正在確認任務是否完成
-    run_state: reviewing
-    mode: readonly
-    actor: ai
-    backend_mode: review
-    client_cache_key: review_client
-    timeout_attr: planning_timeout
-    prompt: stages/review.md
-    continuation_prompt: stages/review_continue.md
-    parser: review
-    result_status: completed
-    result_handler: review
-    retry_attr: review_retries
-    skip_on_error: true
-    fresh_after_same_failures: 2
+    type: review
     recover: [repair]
 
   repair:
-    <<: *execute
+    type: task
     status: AI 正在修復目前任務
-    result_handler: task
 
   repair_plan:
-    <<: *planning
+    type: plan
     status: AI 正在建立修復規劃
     repair_plan: true
     fresh_session_on_start: true
-    plan_only_stop: false
 
   validate_ai:
+    type: ai_validator
     validator: ai
-    status: 正在執行最終 AI 驗證
-    run_state: validating
-    mode: readonly
-    actor: validator
-    backend_mode: review
-    condition: ai_validation
-    client_cache_key: ai_validation_client
-    fresh_session_each_run: true
-    structured_retries: 2
-    structured_fresh_retries: 1
-    retry: -1
-    runs_field: final_ai_validations
-    required_passes_field: final_ai_required_passes
-    prompt: stages/ai_validator.md
-    parser: validation
-    result_status: validation
-    result_handler: validation
     recover: [repair_plan]
 
 flow:

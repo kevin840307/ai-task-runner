@@ -1,47 +1,28 @@
 stages:
   run_prompt:
-    status: AI running skill
-    run_state: executing
-    mode: write
-    actor: executor
-    track_changes: true
+    type: task
 
   review:
-    status: AI reviewing result
-    run_state: reviewing
-    backend_mode: review
-    client_cache_key: review_client
-    parser: review
-    result_status: completed
-    retry_attr: review_retries
+    type: review
     continuation_prompt: skills/review_continue.md
     skip_on_error: false
 
   grill_ai:
-    status: Grill-AI challenging result
-    run_state: reviewing
-    backend_mode: review
-    client_cache_key: grill_client
-    parser: review
-    result_status: completed
-    retry_attr: review_retries
+    type: review
+    session_key: grill_client
     continuation_prompt: skills/grill_continue.md
     skip_on_error: false
 
   final_validate:
+    type: ai_validator
     validator: ai
-    status: Final AI validation
-    run_state: validating
-    actor: validator
-    client_cache_key: final_validation_client
+    session_key: final_validation_client
     fresh_session_each_run: true
     runs: 5
     required_passes: 3
     structured_retries: 2
     retry: -1
     prompt: skills/final_validation.md
-    parser: validation
-    result_status: validation
     recover:
       - stage: run_prompt
         label: Fix Current Result
@@ -57,7 +38,6 @@ flow:
   - stage: review
     label: Review Project Discovery
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review project discovery.
     recover:
       - stage: run_prompt
@@ -73,7 +53,7 @@ flow:
   - stage: grill_ai
     label: Grill Project Documentation
     prompt: skills/grill.md
-    max_results: 3
+    repeat: 3
     instructions: >-
       Check only these required demo documentation items: how to run the sample, supported calculator operations, expected normal behavior, and important observable errors. PASS if these are materially correct and sufficient; do not request unrelated production or enterprise topics.
     recover:
@@ -84,7 +64,6 @@ flow:
   - stage: review
     label: Review Project Documentation
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review the project documentation.
     recover:
       - stage: run_prompt
@@ -100,7 +79,7 @@ flow:
   - stage: grill_ai
     label: Grill E2E SPEC
     prompt: skills/grill.md
-    max_results: 3
+    repeat: 3
     instructions: >-
       Check only these required demo E2E items: concrete normal arithmetic cases plus important calculator boundary/error behavior visible in the project, including divide-by-zero and unsupported operation behavior when applicable. PASS if these are materially covered; do not expand scope.
     recover:
@@ -111,7 +90,6 @@ flow:
   - stage: review
     label: Review E2E SPEC
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review the E2E specification.
     recover:
       - stage: run_prompt
@@ -127,7 +105,6 @@ flow:
   - stage: review
     label: Review Verification Design
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review the verification design.
     recover:
       - stage: run_prompt
@@ -143,7 +120,6 @@ flow:
   - stage: review
     label: Review Regression DSL
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review the generated regression DSL.
     recover:
       - stage: run_prompt
@@ -159,7 +135,6 @@ flow:
   - stage: review
     label: Review Execution & Qualification
     prompt: skills/review.md
-    fresh_after_same_failures: 2
     instructions: Review the regression execution and qualification result.
     recover:
       - stage: run_prompt

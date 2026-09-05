@@ -95,6 +95,7 @@ def test_bilingual_document_set_is_complete_and_linked():
         ("docs/user/USER_GUIDE.md", "docs/user/USER_GUIDE.zh-TW.md"),
         ("docs/user/CLI_REFERENCE.md", "docs/user/CLI_REFERENCE.zh-TW.md"),
         ("docs/user/API_REFERENCE.md", "docs/user/API_REFERENCE.zh-TW.md"),
+        ("docs/user/CUSTOM_WORKFLOW.md", "docs/user/CUSTOM_WORKFLOW.zh-TW.md"),
         ("docs/design/PROMPT_SESSION.md", "docs/design/PROMPT_SESSION.zh-TW.md"),
         ("docs/design/STATE_EVENTS.md", "docs/design/STATE_EVENTS.zh-TW.md"),
         ("docs/operations/SECURITY_PROTECTION.md", "docs/operations/SECURITY_PROTECTION.zh-TW.md"),
@@ -171,6 +172,6 @@ def test_bilingual_core_docs_cover_current_architecture_and_recovery():
             assert token.lower() in zh.lower(), (chinese, token)
 
     readme_zh = (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")
-    assert "next_steps" in readme_zh
+    assert "scope: task" in readme_zh
     assert "expand: [execute, review]" not in readme_zh
     assert "重新理解目前專案" not in (ROOT / "README.zh-TW.md").read_text(encoding="utf-8")

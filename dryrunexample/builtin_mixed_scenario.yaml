@@ -1,7 +1,4 @@
 default: pass
-plan_steps:
-  - execute
-  - review
 stages:
   review:
     - fail

@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.53
+版本：1.2.61
 
 Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都只會把選定的 Example（`--all` 時才複製 examples 集合）複製到新的 `<repo>\.example_runs\...` 工作區，再由原專案 Runner 執行，因此 canonical fixture 每次測試後都維持原狀。
 
@@ -20,7 +20,8 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
 - Resume 以合法的 project `state.json` 為 authoritative state，只有 primary state 缺失或損壞時才使用 temp backup，避免 crash window 後被 stale backup 回滾。
 - UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
-- 單一通用 `python` Stage 會在 subprocess 執行 project/user Python；加上 `validator: file` 時啟用 authoritative deterministic gate 慣例，不再維護第二套 Python Stage。
+- 本機 detached UI 可以完全不 import Runner：直接讀 project work directory 的 runtime visibility files（`state.json` 看目前 durable 狀態、`stream.log` 看最近 bounded subprocess output、`log.txt` / `debug/` 做診斷）。`stream.log` 只供顯示，絕不可改變 Runner 語意。
+- 通用 `command` Stage 統一負責所有 subprocess execution，包括 project/user Python 與 deterministic File Validator。
 - 所有模型 structured result 共用同一套 parser：外層寬鬆、payload/schema 嚴格。
 - bounded debug history，保留 current/last prompt/result 與最近歷史。
 - `<project-root>/.ai-task-runner.yaml` 是專案 policy；policy 本身會自動受到保護。
@@ -40,7 +41,7 @@ Hard + AI 混合驗證：
 ```bat
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
 ```
-Python validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半；`--ai-validator-required-passes` 可明確要求例如 3/3。
+file validator 必須先 PASS；之後 3 個 fresh AI session 獨立投票，預設採嚴格過半；`--ai-validator-required-passes` 可明確要求例如 3/3。
 
 ## 文件地圖
 - [完整文件索引](docs/INDEX.zh-TW.md) / [English index](docs/INDEX.md)
@@ -70,14 +71,14 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts。`recover`、`restart_at` 這類靜態 routing 屬於 `FlowNode`。`PlanStage` 是刻意保留的動態特例：它會從 YAML 自動推導出的 Stage catalog 中選擇合法 Stage，回傳 `next_steps`；Pipeline 只通用執行這些 steps，不 hardcode execute/review 名稱。
+Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入標準 `execute -> review` 的逐 TODO SOP，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
 
 ## Stage 執行架構
 
-`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> next_steps/recovery -> next FlowNode`
+`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> recovery / next FlowNode`
 
 統一執行規則：
 - API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。視窗用盡後，正式 `runner.api.run()` 會從 direct/YAML durable state 自動 resume 並開啟下一個視窗，直到任務 PASS。
@@ -85,15 +86,15 @@ Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 
 - fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；Stage 也可用共用的 1-based YAML `restart_at` 改從目前或更前面的指定頂層 Stage 開始；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
-- Plan 會把每個 TODO 與其 ordered Stage names 一起存入 durable state。Planner 可用 Stage 由 YAML 結構自動推導：不是頂層 flow、不是 recovery-only、不是 planner/validator 的 Stage 定義會成為可用能力。`PlanStage` 驗證名稱後回傳 `next_steps`，Pipeline 持久化並執行；若剛好在規劃完成與 queue 寫入之間 crash，Resume 可由 TODO 的 `steps` 重建。
+- Task Producer 只保存 durable TODO 內容（`title`、`description`、`deliverable`、`acceptance_criteria`）。`PlanStage` 是內建 Producer；`command` 或未來 Stage 也可用 `produces: tasks` 產生相同效果。Plan-driven flow 由 Loader 內部展開標準 `execute -> review` task SOP，`workflow_position` 仍是 durable cursor；顯式 `scope: task` 保留給進階／自訂 Task Producer 或自訂逐 Task SOP。
 
 
-Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 特殊行為使用 `PlanStage`；Python 執行統一由單一 `PythonStage` 負責。
+Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 等 AI 特殊語意使用專用 Stage；所有 subprocess 工作統一使用 `CommandStage`。
 
 
 ## 新增普通 AI Stage
 
-一般 AI 工作只使用 YAML 的 `stages` 與 `flow`：`stages` 定義可重用 node，`flow` 組裝流程，且每次 invocation 都能覆寫 `prompt`、`retry`、`skip` 等欄位。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常可省略；只有 `plan`、`python` 或真正的自訂 Stage 才需要明寫 `type`。
+一般 AI 工作只使用 YAML 的 `stages` 與 `flow`：`stages` 定義可重用 node，`flow` 組裝流程，且每次 invocation 都能覆寫 `prompt`、`retry`、`skip` 等欄位。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常可省略；只有 `plan`、`task`、`review`、`ai_validator`、`command` 或真正的自訂 Stage 才需要明寫 `type`。
 
 ```yaml
 stages:
@@ -121,6 +122,7 @@ OpenCode 與 Qwen 共用同一 Runner Stage/Session/Recovery contract：完整 P
 ```yaml
 stages:
   run_prompt:
+    type: task
     status: AI running skill
 
 flow:
@@ -134,24 +136,30 @@ Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Docu
 
 ### 重複 Semantic FAIL 的 Fresh Session Escape
 
-FlowNode 可選設定 `fresh_after_same_failures: N`。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數；未設定時完全維持舊行為。Builtin Review 預設使用 `2`，避免 Same Session 卡在錯誤 verdict，同時保留 Writer Session。
+FlowNode 可用 `fresh_after_same_failures: N` 覆寫預設值。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數。`ReviewStage` 在有 recovery 時直接擁有語意預設 `2`；其他 Stage 仍是 opt-in。這樣 builtin YAML 不必重複 implementation policy，但需要特殊門檻時仍可由 Workflow 明確 override。
 
 ## Workflow Dry Run
 
-可使用 `tool/workflow_dryrun.py` 在不呼叫真實 Agent 的情況下驗證 `workflow.yaml` 是否能閉環。工具直接重用正式 Workflow Loader、Pipeline、StageResult 與 Stage finish/result handler，只 Mock 最底層 Stage 執行結果，因此不會建立第二套 Workflow Engine。
+可使用 `tool/workflow_dryrun.py` 在不呼叫真實 Agent 的情況下驗證 `workflow.yaml` 是否能閉環。工具直接重用正式 Workflow Loader、Pipeline、StageResult 與 Stage finish 與 result reducer，只 Mock 最底層 Stage 執行結果，因此不會建立第二套 Workflow Engine。
 
 ```bat
 python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --scenario dryrunexample\builtin_mixed_scenario.yaml
 dryrunexample\run_dryrun.bat
 ```
 
-`dryrunexample/` 同時示範 builtin workflow、既有自訂 workflow，以及 recover / `max_results` / `fresh_after_same_failures` 的閉環測試。Dry Run 是外部工具；刪除整個工具與範例不會改變 Runner Core 行為。
+`dryrunexample/` 同時示範 builtin workflow，以及使用 `task`、`review`、recover、`repeat` 的精簡自訂 workflow 閉環測試。Dry Run 是外部工具；刪除整個工具與範例不會改變 Runner Core 行為。
 自動 Failure Matrix：
 
 ```bat
 python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix
+python tool\workflow_dryrun.py runner\workflow\builtin\mixed.yaml --matrix --json
+
+`--matrix` 現在會依 Workflow 實際存在的 `recover`、`repeat`、`restart_at` 產生 deterministic routing cases，並回報偵測到的 task producer/task scope/review/validation 等 feature；`--matrix --json` 可直接供 CI、UI 與 reliability gate 使用。
 ```
 
 `--matrix` 會測 Happy Path，並針對正式 normalized workflow 中每個具有 recover 的 Stage，自動注入一次 `FAIL -> recover -> closure`。非法 Workflow 參數會先由正式 Workflow Loader/schema 擋下；Dry Run 不維護第二套重複的 validation 規則。
 
 
+
+### Command-backed Stages
+`command` 是唯一的 child-process Stage，統一執行 Python script、File Validator 與任意 argv，並共用 cwd、timeout、output capture、process-tree cleanup 與 exit-code semantics。

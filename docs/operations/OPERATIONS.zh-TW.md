@@ -1,6 +1,6 @@
 # 24H 運行與故障排查
 
-版本：1.2.53
+版本：1.2.61
 
 ## 長時間執行行為
 預設刻意允許模型長時間工作：runtime 7200 秒、planning 600 秒、validator 1200 秒、idle-after-change 900 秒。次數限制預設為 0（不以次數限制）。恢復依 error、session availability、no-progress fingerprint、Review 與 Final Validation 決定。Timeout failure 使用穩定語意 recovery key，同時保留完整 backend stderr 供 Debug，避免 sandbox/container ID 每次改變而讓 same-failure escalation 永遠重新計數。
@@ -17,6 +17,9 @@
 Qwen Prompt 固定 stdin-only。Qwen non-zero exit 仍可能已經輸出有用 stdout；Runner 會保存 raw result/diagnostic，由各 stage fail-soft 策略決定是否可繼續。Windows `3221226505` (`0xC0000409`) 是 process fast-fail，不是正常 success exit。
 
 ## Debug files
+### Live output
+- `<work-dir>/stream.log`：給 detached local UI／現場觀察使用的最近 bounded subprocess stdout。每個新 subprocess 開始時會清空，之後隨新輸出覆寫；它不是完整 transcript，也不可用來推導 PASS/FAIL 或 routing。
+
 - `current-prompt.txt`：目前 call 的 Prompt，在送入 backend 前立即寫入。
 - `last-prompt.txt`：上一筆完成或失敗 call 的 Prompt。
 - `last-result.txt`：同一筆 call 的 Result/Error/parse diagnostic。
@@ -27,7 +30,7 @@ History 上限為最近 100 calls、50 MiB 總量、單一 history entry 2 MiB�
 人類 Terminal status/detail 在 spinner render 前會壓成單行，backend error 的 `\n` 不會每次刷新都往下新增行。Raw JSON events/debug 仍保留完整內容。
 
 ## 發生問題時提供什麼
-提供 state/event log、`current-prompt.txt`、`last-prompt.txt`、`last-result.txt`、相關 history pair、執行指令與畫面錯誤，通常即可還原 stage -> prompt -> model result -> parser/backend decision -> Runner recovery。
+提供 state/event log；若問題與即時輸出有關，再附 `stream.log`；另外提供 `current-prompt.txt`、`last-prompt.txt`、`last-result.txt`、相關 history pair、執行指令與畫面錯誤，通常即可還原 stage -> prompt -> model result -> parser/backend decision -> Runner recovery。
 
 API/network/rate-limit 暫時性異常使用逐步 backoff，但不耗盡 model/task recovery 次數，並保留 current state/session；持續的模型/session 異常才走 reuse-then-rebuild。
 

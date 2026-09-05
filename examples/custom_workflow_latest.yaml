@@ -1,0 +1,29 @@
+# Latest custom Workflow example.
+# No PlanStage is required because discover_tasks itself produces Task[].
+stages:
+  discover_tasks:
+    type: command
+    command: "{python} custom_task_producer.py"
+    produces: tasks
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+  done:
+    type: command
+    command: ["{python}", -c, "print('CUSTOM_WORKFLOW_PASS')"]
+
+flow:
+  - discover_tasks
+  - stage: execute
+    scope: task
+  - stage: review
+    scope: task
+  - done

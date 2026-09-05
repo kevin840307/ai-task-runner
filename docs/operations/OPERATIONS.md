@@ -1,6 +1,6 @@
 # Operations and Troubleshooting
 
-Version: 1.2.53
+Version: 1.2.61
 
 ## Long-running behavior
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation. Timeout failures use a stable semantic recovery key while retaining full backend stderr for debugging, preventing changing sandbox/container IDs from indefinitely resetting same-failure escalation.
@@ -17,6 +17,9 @@ Defaults intentionally allow long model calls: runtime 7200s, planning 600s, val
 Qwen prompt is stdin-only. A non-zero Qwen exit may still contain useful stdout; the Runner records raw result/diagnostics and stage fail-soft behavior determines whether work can continue. Windows `3221226505` (`0xC0000409`) is a process fast-fail and is not considered a normal successful exit.
 
 ## Debug files
+### Live output
+- `<work-dir>/stream.log`: latest bounded subprocess stdout for detached local UI/live inspection. It is cleared for each new subprocess and overwritten as newer output arrives; it is not a complete transcript and must not be used to infer PASS/FAIL or routing.
+
 - `current-prompt.txt`: active prompt; written immediately before the backend call.
 - `last-prompt.txt`: prompt paired with the most recently finished call.
 - `last-result.txt`: result/error/parse diagnostics paired with that call.
@@ -27,7 +30,7 @@ History is bounded to 100 calls, 50 MiB total, 2 MiB per history entry; oversize
 Human status/detail text is converted to one line before spinner rendering so embedded `\n` from backend errors cannot flood the terminal. Raw JSON events and debug files keep full detail.
 
 ## What to collect for a bug
-Provide state/event log, `current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, relevant history pair, command line, and visible error. This normally reconstructs stage -> prompt -> model result -> parser/backend decision -> Runner recovery.
+Provide state/event log, `stream.log` when live-output behavior matters, `current-prompt.txt`, `last-prompt.txt`, `last-result.txt`, relevant history pair, command line, and visible error. This normally reconstructs stage -> prompt -> model result -> parser/backend decision -> Runner recovery.
 
 Transient API/network/rate-limit outages use bounded exponential backoff per delay interval but no retry-count exhaustion; they preserve current state/session. Persistent model/session problems use the normal reuse-then-rebuild policy.
 

@@ -13,7 +13,7 @@ from runner.script_runner import build_script_item_config
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXPECTED = {
-    "01_basic_python_validator",
+    "01_basic_command_validator",
     "02_repair_cycle",
     "03_ai_validator_voting",
     "04_mixed_validation",
@@ -111,10 +111,25 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     reviews = [stage for stage in regression if stage["name"] == "review"]
     grills = [stage for stage in regression if stage["name"] == "grill_ai"]
     assert reviews and all(stage["skip_on_error"] is False for stage in reviews)
-    assert all(stage["fresh_after_same_failures"] == 2 for stage in reviews)
+    assert all("fresh_after_same_failures" not in stage for stage in reviews)
     assert len(grills) == 2
     assert all(stage["skip_on_error"] is False for stage in grills)
-    assert all(stage["max_results"] == 3 for stage in grills)
+    assert all(stage["repeat"] == 3 for stage in grills)
+
+
+def test_latest_custom_workflow_uses_python_task_producer():
+    from runner.workflow.loader import load_workflow
+
+    workflow = load_workflow(EXAMPLES / "custom_workflow_latest.yaml")
+    assert [stage["name"] for stage in workflow] == [
+        "discover_tasks", "execute", "review", "done"
+    ]
+    assert workflow[0]["type"] == "command"
+    assert workflow[0]["produces"] == "tasks"
+    assert workflow[1]["scope"] == "task"
+    assert workflow[2]["scope"] == "task"
+    assert workflow[2]["type"] == "review"
+    assert workflow[3]["type"] == "command"
 
 
 def test_validation_modes_example_maps_to_builtin_workflows():
@@ -128,9 +143,9 @@ def test_validation_modes_example_maps_to_builtin_workflows():
     ]
 
     assert workflows == [
-        ["planning", "validate_file"],
-        ["planning", "validate_ai"],
-        ["planning", "validate_file", "validate_ai"],
+        ["planning", "execute", "review", "validate_file"],
+        ["planning", "execute", "review", "validate_ai"],
+        ["planning", "execute", "review", "validate_file", "validate_ai"],
     ]
     assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 
@@ -156,7 +171,7 @@ def run_validator(name: str) -> subprocess.CompletedProcess[str]:
 def test_starter_states_match_example_purpose():
     # These cases intentionally start incomplete or broken so the Runner has work to do.
     for name in (
-        "01_basic_python_validator",
+        "01_basic_command_validator",
         "02_repair_cycle",
         "04_mixed_validation",
         "06_yaml_driven_tool",

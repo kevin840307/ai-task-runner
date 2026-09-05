@@ -1,6 +1,6 @@
 # 文件索引
 
-版本：1.2.53
+版本：1.2.61
 
 - `design/DESIGN.zh-TW.md`：完整流程、Retry/Recovery 設計。
 - `design/ARCHITECTURE.zh-TW.md`：模組、責任邊界、資料流。
@@ -16,3 +16,5 @@
 - `validator_templates/README.zh-TW.md`：Deterministic validator 慣例。
 
 所有 human-facing 維護文件都必須同時有英文 `.md` 與繁中 `.zh-TW.md` 版本，並描述相同的現行功能。Prompt resource、`QWEN.md`/`AGENTS.md` 與 sample project task input 屬於執行/輸入資源，不要求翻譯 duplicate。
+
+- [自訂 Workflow 指南](user/CUSTOM_WORKFLOW.zh-TW.md)

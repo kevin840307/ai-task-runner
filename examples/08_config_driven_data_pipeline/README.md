@@ -15,7 +15,7 @@ Run on Windows:
 
 Or add this task to the main examples YAML.
 
-The Python validator does not inspect source architecture, file count, classes, functions, or line count.
+The file validator does not inspect source architecture, file count, classes, functions, or line count.
 
 YAML script files use a root-level list, matching AI Task Runner examples/examples.yaml.
 

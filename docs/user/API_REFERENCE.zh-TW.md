@@ -1,9 +1,9 @@
 # Python API 參考
 
-版本：1.2.53
+版本：1.2.61
 
 ## 正式共用入口
-外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、未來 UI、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。
+外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、programmatic/remote UI integration、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。本機 detached monitoring UI 可以刻意完全不使用 Python API，只讀 work directory 的 display-only runtime visibility files。
 
 `runner.api` 是唯一公開的 execution import path；過時的 package-level execution re-export 直接移除，不維護平行 compatibility API。
 
@@ -30,10 +30,12 @@ print(result.exit_code, result.completed)
 ```
 
 ## Events
+Detached local monitoring 不是另一套 execution API。UI 可以唯讀 `state.json` 顯示目前狀態、讀 `stream.log` 顯示最近 bounded subprocess output，並在需要診斷時讀 `log.txt` / `debug/`。這些檔案由 Runner 擁有；`stream.log` 是可丟棄資料，絕不可拿來控制 PASS/FAIL、retry、session 或 routing。
+
 `run(request, on_event=callback)` 會把 progress/status/script event 傳給 callback。Callback 自己失敗是 fail-soft，不會中止 Runner。Transient service 等待視窗用盡或其他可恢復 Runner failure 時，會自動 resume 可用的 direct / YAML item state；deterministic `ConfigurationError` 與無效公開輸入仍會 fail-fast。`RunResult` 提供 `exit_code`、`state_files`、parsed `states` 與 `completed`。
 
 ## YAML script
-`runner.script_loader` 負責解析非空 YAML array、結構欄位、alias 與引用檔案；`runner.script_runner` 使用 `dataclasses.replace()` 建立 child，並套用 API/CLI 共用的 `RuntimeConfig.validate()`。YAML 不另外維護 timeout、retry、quorum 或 Plugin option 規則。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一，並提供 `validator` path 或 `ai`；相對 `goal_file`、`ai_validator_prompt_file`、`workflow_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、Final AI quorum alias、`project_root`、`workflow_file` 與通用 `plugins` mapping。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊 Plugin 欄位仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
+`runner.script_loader` 負責解析非空 YAML array、結構欄位、alias 與引用檔案；`runner.script_runner` 使用 `dataclasses.replace()` 建立 child，並套用 API/CLI 共用的 `RuntimeConfig.validate()`。YAML 不另外維護 timeout、retry、quorum 或 Plugin option 規則。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一；除非該 item 明確提供自訂 Workflow，否則必須提供 `validator` path 或 `ai`；相對 `goal_file`、`ai_validator_prompt_file`、`workflow_file` 都以 YAML 檔案所在目錄為基準。每筆可選 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、Final AI quorum alias、`project_root`、`workflow_file` 與通用 `plugins` mapping。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持原本共用 root 行為。舊 Plugin 欄位仍相容。每筆使用獨立 nested work dir；遇到第一個 non-zero 結果即停止整個 sequence。
 
 `workflow_file` 只會 normalization 一次，成為 `RuntimeConfig.workflow`；格式與 User Guide 的線性 Workflow 相同。未指定時，direct request 與每個 YAML List item 都依自己的 validator 設定選擇 `workflow/builtin/mixed.yaml`、`workflow/builtin/file.yaml` 或 `workflow/builtin/ai.yaml`。明確指定的 parent Workflow 會由 YAML child 繼承；item 提供自己的 `workflow_file` 時，`dataclasses.replace()` 直接帶入已 normalization 的 child Workflow，不建立第二條執行路徑。
 
@@ -48,4 +50,4 @@ UI／Editor 直接使用真正 owner module：`runner.resources.read_text()` / `
 
 Concrete Run 會在自己的 work directory 持久化 `workflow.snapshot.json`、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file`；執行中或之後 Resume 即使來源檔已修改或刪除，也沿用同一份 frozen input，所以 UI/IDE 修改只影響新的 Run。`runner.api.state_files()` 不需重新載入 Workflow 就能定位 direct／YAML child state，可供 process supervisor 使用。
 
-`type: python` 是唯一的通用 Python Stage；加上 `validator: file` 即啟用 deterministic validation 慣例；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。
+`type: command` 是通用使用者 Python Stage；script 透過與 validator 共用的 process runner 在 subprocess 執行，任意 project Python 不會 import 進長時間 Runner process。
