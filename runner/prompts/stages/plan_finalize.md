@@ -1,7 +1,7 @@
 {% include "stages/planning_rules.md" %}
 {{ always_instructions }}
 
-Create the {{ planning.mode }} implementation plan now. Do not use more tools.
+Create the {{ planning.mode }} implementation plan now. Use read-only inspection only when the available evidence is insufficient; do not inspect files merely because tools are available.
 
 Goal:
 {{ goal }}

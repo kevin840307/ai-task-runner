@@ -21,3 +21,19 @@ def test_setuptools_packages_central_prompt_resources():
     assert '"runner.workflow.system"' in config
     assert '"runner.workflow.system" = ["*.yaml"]' in config
     assert '"runner.project"' in config
+
+
+def test_plan_defaults_to_optional_readonly_filesystem_inspection():
+    from runner.workflow.stages.plan_stage import PlanStageSpec
+
+    assert PlanStageSpec(name="planning").allow_project_read is True
+    root = Path(__file__).resolve().parents[1]
+    rules = (root / "runner" / "prompts" / "stages" / "planning_rules.md").read_text(encoding="utf-8")
+    fresh = (root / "runner" / "prompts" / "stages" / "plan_finalize.md").read_text(encoding="utf-8")
+    same = (root / "runner" / "prompts" / "stages" / "plan_finalize_same_session.md").read_text(encoding="utf-8")
+    assert "any readable path" in rules
+    assert "outside the current Project" in rules
+    assert "Do not use more tools" not in fresh
+    assert "Do not use more tools" not in same
+    assert "only when" in fresh
+    assert "only when" in same

@@ -686,7 +686,7 @@ function renderStageEditorContent(cfg, item) {
       <span id="stageFreshEachRunRow">${switchRow("stageFreshEachRun", "Fresh session each run", "Use a new session for every multi-run validation.", cfg.fresh_session_each_run, disabled)}</span>
       ${switchRow("stageTrackChanges", "Track changes", "Track project changes produced by this Stage.", cfg.track_changes, disabled)}
       ${switchRow("stageTolerateRestored", "Tolerate restored changes", "Allow restored readonly changes without failing the Stage.", cfg.tolerate_restored_changes, disabled)}
-      <span id="stageAllowProjectReadRow">${switchRow("stageAllowProjectRead", "Allow project read", "Permit readonly AI stages to inspect project files.", cfg.allow_project_read, disabled)}</span>
+      <span id="stageAllowProjectReadRow">${switchRow("stageAllowProjectRead", "Allow readonly file read", "For Plan, permit readonly inspection of any readable filesystem path, including outside the current Project.", cfg.allow_project_read ?? ((cfg.type || "base") === "plan"), disabled)}</span>
     </div>`;
 
   $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); }); renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
@@ -712,6 +712,7 @@ function syncStageTypeUi(cfg) {
   if ($("stageInstructionsRow")) $("stageInstructionsRow").hidden = !promptAllowed;
   for (const id of ["stageStructuredRetriesRow", "stageStructuredFreshRetriesRow", "stageFreshOnStartRow", "stageFreshEachRunRow", "stageAllowProjectReadRow"]) if ($(id)) $(id).hidden = !aiBacked;
   if ($("stageCleanWorkRow")) $("stageCleanWorkRow").hidden = type !== "command";
+  if ($("stageAllowProjectRead") && cfg.allow_project_read === undefined) $("stageAllowProjectRead").checked = type === "plan";
   const chip = box.querySelector(".designer-step-type"); if (chip) chip.textContent = type;
 }
 function valueOrNull(id) { const value = fieldValue(id).trim(); return value === "" ? null : value; }
@@ -733,7 +734,11 @@ function changedFields(cfg, item) {
   if (type === "plan") { candidates.min_tasks = numberOrNull("stageMinTasks"); candidates.repair_plan = checked("stageRepairPlan"); }
   if (type === "ai_validator") candidates.validator = valueOrNull("stageValidator") || "ai";
   const booleanKeys = new Set(["skip_on_error", "fresh_session_on_start", "fresh_session_each_run", "track_changes", "tolerate_restored_changes", "allow_project_read", "repair_plan"]); const result = {};
-  for (const [key, value] of Object.entries(candidates)) { if (booleanKeys.has(key) && cfg[key] === undefined && value === false) continue; const before = cfg[key] === undefined ? null : cfg[key]; if (JSON.stringify(before) !== JSON.stringify(value)) result[key] = value; }
+  for (const [key, value] of Object.entries(candidates)) {
+    const implicitBoolean = key === "allow_project_read" && type === "plan";
+    if (booleanKeys.has(key) && cfg[key] === undefined && value === implicitBoolean) continue;
+    const before = cfg[key] === undefined ? null : cfg[key]; if (JSON.stringify(before) !== JSON.stringify(value)) result[key] = value;
+  }
   if (type !== "command" && cfg.type === "command") for (const key of ["command", "result_kind", "cwd", "clean_work"]) if (cfg[key] !== undefined) result[key] = null;
   if (type !== "plan" && cfg.type === "plan") for (const key of ["min_tasks", "repair_plan"]) if (cfg[key] !== undefined) result[key] = null;
   if (type !== "ai_validator" && cfg.type === "ai_validator" && cfg.validator !== undefined) result.validator = null;
@@ -941,7 +946,7 @@ async function confirmImportAsset() {
 }
 async function exportStudioAsset() {
   if (!state.studioFile) return;
-  try { const data = await api(`/api/studio/export?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`); const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${data.name}.export.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(`${data.kind === "prompt" ? "Prompt" : "Workflow"} exported`); }
+  try { const data = await api(`/api/studio/export?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`); const name = String(data.name || (data.kind === "prompt" ? "prompt.md" : "workflow.yaml")); const ext = name.toLowerCase().split(".").pop(); const mime = ext === "md" ? "text/markdown;charset=utf-8" : (ext === "yaml" || ext === "yml" ? "application/yaml;charset=utf-8" : "text/plain;charset=utf-8"); const blob = new Blob([String(data.content ?? "")], { type: mime }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(`${data.kind === "prompt" ? "Prompt" : "Workflow"} exported`); }
   catch (error) { setStudioStatus(error.message, true); showActionError(error.message, "Export failed"); }
 }
 async function deleteStudioAsset() {

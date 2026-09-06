@@ -107,6 +107,38 @@ def qwen_excluded_tools(args):
     }
 
 
+
+
+def test_qwen_planning_read_mode_is_read_only_and_file_readable():
+    args = configure_backend_args("qwen", "planning", [], allow_project_read=True)
+    excluded = qwen_excluded_tools(args)
+
+    assert "--safe-mode" in args
+    assert {
+        "write_file",
+        "edit",
+        "notebook_edit",
+        "run_shell_command",
+        "web_fetch",
+        "agent",
+    } <= excluded
+    assert excluded.isdisjoint(
+        {
+            "read_file",
+            "read_many_files",
+            "list_directory",
+            "glob",
+            "grep_search",
+            "search_file_content",
+        }
+    )
+
+
+def test_qwen_planning_read_can_be_explicitly_disabled():
+    args = configure_backend_args("qwen", "planning", [], allow_project_read=False)
+    excluded = qwen_excluded_tools(args)
+    assert {"read_many_files", "list_directory", "glob", "grep_search", "search_file_content"} <= excluded
+
 def test_qwen_review_mode_is_read_only_and_project_readable():
     args = configure_backend_args("qwen", "review", [])
     excluded = qwen_excluded_tools(args)
@@ -201,6 +233,9 @@ def test_opencode_permission_policy_matches_stage_and_sandbox(tmp_path, monkeypa
     assert planning["*"] == "deny"
     assert planning["read"] == "allow"
     assert planning["grep"] == "allow"
+    assert planning["external_directory"] == "allow"
+    assert planning.get("edit", "deny") == "deny"
+    assert planning.get("bash", "deny") == "deny"
 
     backend.configure_runtime("review", sandbox=True)
     review = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
@@ -210,7 +245,7 @@ def test_opencode_permission_policy_matches_stage_and_sandbox(tmp_path, monkeypa
 
     backend.configure_runtime("runtime", sandbox=True)
     runtime = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
-    assert runtime == {"external_directory": "deny"}
+    assert runtime == {"external_directory": "deny", "task": "deny"}
 
 
 def test_opencode_permission_policy_merges_inline_config(tmp_path, monkeypatch):
@@ -219,7 +254,7 @@ def test_opencode_permission_policy_merges_inline_config(tmp_path, monkeypatch):
     backend.configure_runtime("runtime", sandbox=True)
     value = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])
     assert value["model"] == "provider/model"
-    assert value["permission"] == {"webfetch": "deny", "external_directory": "deny"}
+    assert value["permission"] == {"webfetch": "deny", "external_directory": "deny", "task": "deny"}
 
 
 def test_opencode_goal_reference_matches_qwen_behavior(tmp_path):

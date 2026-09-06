@@ -225,6 +225,11 @@ class LayoutRegressionTests(unittest.TestCase):
         for token in ('id="importAssetButton"', 'id="exportStudioButton"', 'id="deleteStudioButton"', 'id="importAssetBackdrop"'):
             self.assertIn(token, self.html)
 
+    def test_export_downloads_original_asset_instead_of_json_package(self):
+        self.assertIn('new Blob([String(data.content ?? "")]', self.js)
+        self.assertIn('a.download = name', self.js)
+        self.assertNotIn('.export.json', self.js)
+
     def test_stage_remove_supports_flow_only_or_definition_delete(self):
         self.assertIn('choiceDialog({ title: "Remove Stage?"', self.js)
         self.assertIn('value: "flow"', self.js)

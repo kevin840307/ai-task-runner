@@ -14,6 +14,7 @@ from ..project.instructions import ensure_instruction_file, update_goal_referenc
 from .base import BaseBackend
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
+_PERMISSION_ACTIONS = frozenset({"allow", "ask", "deny"})
 
 
 class OpenCodeBackend(BaseBackend):
@@ -90,10 +91,8 @@ class OpenCodeBackend(BaseBackend):
                 raise BackendError("OPENCODE_CONFIG_CONTENT must contain a JSON object")
             content.update(parsed)
 
-        existing = content.get("permission")
-        merged = dict(existing) if isinstance(existing, dict) else {}
-        merged.update(permission)
-        content["permission"] = merged
+        content["permission"] = _merge_permission_cap(content.get("permission"), permission)
+        self._apply_agent_permission_cap(content, permission)
         return {OPENCODE_CONFIG_CONTENT: json.dumps(content, separators=(",", ":"))}
 
     def _permission_policy(self) -> dict[str, Any]:
@@ -107,6 +106,9 @@ class OpenCodeBackend(BaseBackend):
                     "glob": "allow",
                     "grep": "allow",
                     "lsp": "allow",
+                    # Keep the legacy option name for YAML/API compatibility, but
+                    # Planning read access is intentionally not project-root scoped.
+                    "external_directory": "allow",
                 })
             return policy
         if self.mode == "review":
@@ -120,10 +122,64 @@ class OpenCodeBackend(BaseBackend):
             return policy
         if self.sandbox:
             # OpenCode has no Qwen-style container flag. Its public isolation
-            # primitive is permission policy; runner safety/protection plugins
-            # remain the hard project-write guard.
-            return {"external_directory": "deny"}
+            # primitive is permission policy. Deny subagent delegation too: an
+            # OpenCode subagent owns its own permissions and could otherwise
+            # bypass the parent agent's external-directory restriction.
+            return {"external_directory": "deny", "task": "deny"}
         return {}
+
+    def _apply_agent_permission_cap(
+        self,
+        content: dict[str, Any],
+        permission: dict[str, Any],
+    ) -> None:
+        """Apply Runner capability limits at the active-agent layer too.
+
+        OpenCode merges per-agent permissions after global permissions, so a
+        configured agent can otherwise re-allow an action denied by the Runner.
+        Inline config has high precedence, so a partial agent override is enough
+        to cap the active agent without replacing its prompt/model settings.
+        """
+        agents = content.get("agent")
+        if agents is None:
+            agents = {}
+        elif not isinstance(agents, dict):
+            raise BackendError("OPENCODE_CONFIG_CONTENT agent must be a JSON object")
+        else:
+            agents = dict(agents)
+
+        names = set(agents)
+        selected = self._selected_agent(content)
+        if selected:
+            names.add(selected)
+
+        for name in names:
+            value = agents.get(name)
+            if value is None:
+                value = {}
+            elif not isinstance(value, dict):
+                raise BackendError(
+                    f"OPENCODE_CONFIG_CONTENT agent.{name} must be a JSON object"
+                )
+            else:
+                value = dict(value)
+            value["permission"] = _merge_permission_cap(value.get("permission"), permission)
+            agents[name] = value
+
+        if agents:
+            content["agent"] = agents
+
+    def _selected_agent(self, content: dict[str, Any]) -> str:
+        for index, value in enumerate(self.extra_args):
+            if value == "--agent" and index + 1 < len(self.extra_args):
+                return self.extra_args[index + 1].strip()
+            if value.startswith("--agent="):
+                return value.split("=", 1)[1].strip()
+        default_agent = content.get("default_agent")
+        if isinstance(default_agent, str) and default_agent.strip():
+            return default_agent.strip()
+        # OpenCode's default primary agent when no explicit/default agent exists.
+        return "build"
 
     @staticmethod
     def _find_last_text(values: Sequence[Any]) -> str | None:
@@ -187,6 +243,60 @@ class OpenCodeBackend(BaseBackend):
                 if total:
                     diagnostics["total_tokens"] = total
         return diagnostics
+
+
+def _normalize_permission(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, str):
+        if value not in _PERMISSION_ACTIONS:
+            raise BackendError(f"invalid OpenCode permission action: {value}")
+        return {"*": value}
+    if isinstance(value, dict):
+        return dict(value)
+    raise BackendError("OpenCode permission must be an action or JSON object")
+
+
+def _permission_intersection(user_rule: Any, runner_action: str) -> Any:
+    """Return a rule no broader than either user policy or Runner cap."""
+    if runner_action == "deny":
+        return "deny"
+    if user_rule is None:
+        return runner_action
+    if isinstance(user_rule, dict):
+        # Runner currently only grants explicit exceptions from a deny-all cap.
+        # Keeping a user's granular rule preserves any stricter deny/ask entries.
+        return dict(user_rule)
+    if isinstance(user_rule, str) and user_rule in _PERMISSION_ACTIONS:
+        rank = {"deny": 0, "ask": 1, "allow": 2}
+        return user_rule if rank[user_rule] <= rank[runner_action] else runner_action
+    return runner_action
+
+
+def _merge_permission_cap(existing: Any, runner_policy: dict[str, Any]) -> dict[str, Any]:
+    """Merge Runner permissions as a capability ceiling, never an expansion."""
+    original = _normalize_permission(existing)
+    wildcard = runner_policy.get("*")
+
+    if wildcard in _PERMISSION_ACTIONS:
+        # A Runner wildcard is authoritative. Explicit Runner exceptions may only
+        # restore capability that the user's original policy also permits.
+        result: dict[str, Any] = {"*": wildcard}
+        for key, runner_action in runner_policy.items():
+            if key == "*":
+                continue
+            user_rule = original.get(key, original.get("*"))
+            result[key] = _permission_intersection(user_rule, runner_action)
+        return result
+
+    result = dict(original)
+    for key, runner_action in runner_policy.items():
+        if runner_action == "deny":
+            result[key] = "deny"
+            continue
+        user_rule = original.get(key, original.get("*"))
+        result[key] = _permission_intersection(user_rule, runner_action)
+    return result
 
 
 def ensure_opencode_rules(root: Path) -> Path:

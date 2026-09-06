@@ -43,6 +43,7 @@ The UI writes only UI/control files:
 - `.ai-task-runner/stop.request` — request the Supervisor to stop.
 - `.ai-task-runner/ui/messages.jsonl` — UI-owned persistent conversation.
 - `.ai-task-runner/ui/chat-state.json` — UI-owned run-id completion deduplication.
+- `.ai-task-runner/ui/launching.json` — short-lived UI-owned launch reservation that closes the gap between `Popen()` and the Supervisor publishing `runner-process.json`; it is not Workflow state and is removed when Runner runtime identity takes over.
 - `.ai-task-runner/ui/requests/<request-id>/prompt.md` — immutable user goal snapshot for a new Run/Rerun.
 - `.ai-task-runner/ui/requests/<request-id>/request.json` — UI-owned input manifest (workflow/backend and optional Python validator path).
 
@@ -56,6 +57,7 @@ Runtime lifecycle stays explicit:
 - **Completed -> next Run** automatically resets old Runner runtime state before creating the next request.
 - **Stopped/Interrupted -> new Run** is blocked until the user chooses Continue or Reset, so resumable work is never silently discarded.
 - **Rerun** creates a fresh immutable `prompt.md` snapshot and starts a new run after resetting old runtime state.
+- **Duplicate launch protection** reserves the Project before `Popen()`. Double-clicks, concurrent browser requests, and a reopened UI therefore cannot start a second CLI during the short interval before `runner-process.json` exists. A dead reservation is discarded automatically; a live Supervisor marker supersedes and removes it.
 
 On Windows, UI-launched Runner/Workflow Builder subprocesses use hidden-console creation flags; opening the browser UI does not flash a CMD window.
 
@@ -69,7 +71,7 @@ It presents assets in three groups:
 - **Custom** — `runner/workflow/custom/*.yaml|yml` and `runner/prompts/custom/**/*.md`; user-editable shared assets. `skill_prompt_review_chain.yaml` and its related Prompts live here.
 - **Project** — selected-project top-level `.ai-task-runner.yaml` / `*workflow*.yaml|yml` and `prompts/**/*.md`; user-editable project-local assets.
 
-Custom is a real repository location rather than a UI-only label. New/imported assets can target Custom or Project. Workflow/Prompt export produces a small JSON package; import validates syntax and Workflow Prompt references before creating a new file and never overwrites an existing asset. Prompt deletion is rejected while any known Workflow Stage still resolves to that Prompt.
+Custom is a real repository location rather than a UI-only label. New/imported assets can target Custom or Project. Workflow/Prompt export downloads the original asset content using its original `.yaml` / `.yml` / `.md` filename so the file can be copied directly back into a repository. Import validates syntax and Workflow Prompt references before creating a new file and never overwrites an existing asset. Prompt deletion is rejected while any known Workflow Stage still resolves to that Prompt.
 
 Safety rules:
 

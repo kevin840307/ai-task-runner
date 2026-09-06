@@ -144,7 +144,7 @@ body.projects-collapsed .project-nav-link strong {
   background:
     radial-gradient(circle at 0% 0%, rgba(15, 118, 110, 0.11), transparent 34%),
     linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  padding: 16px 14px;
+  padding: 10px;
 }
 
 .projects-head {
@@ -236,6 +236,7 @@ body.projects-collapsed .project-nav-link strong {
 }
 
 .project-tree {
+  position: relative;
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -257,7 +258,7 @@ body.projects-collapsed .project-nav-link strong {
   gap: 6px;
   min-width: 0;
   min-height: 34px;
-  padding: 0 26px 0 10px;
+  padding: 0 38px 0 10px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -321,7 +322,7 @@ body.projects-collapsed .project-nav-link strong {
 .project-menu-button {
   position: absolute;
   top: 5px;
-  right: 6px;
+  right: 8px;
   display: inline-grid;
   place-items: center;
   width: 24px;

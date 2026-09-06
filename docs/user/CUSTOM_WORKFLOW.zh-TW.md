@@ -54,7 +54,7 @@ flow:
   - validate_file
 ```
 
-頂層 `PlanStage` 會自動讓每個 TODO 依序執行標準 `execute -> review` SOP。只有需要覆寫預設（例如 Review recovery）時才需要定義 `execute` / `review`；顯式 `scope: task` 仍保留給非 Plan Producer 或刻意自訂的逐 TODO SOP。
+頂層 `PlanStage` 會自動讓每個 TODO 依序執行標準 `execute -> review` SOP。Planning 維持 read-only，且預設採「需要才讀」：AI 可以從 host account 可讀取的任何 path（包含目前 Project 之外）讀取最小且相關的 evidence，但不要求規劃前一定掃檔。若顯式設定 `allow_project_read: false`，就會關閉 Planning 的讀檔能力；欄位名稱為了相容既有 YAML 保留不改。只有需要覆寫預設（例如 Review recovery）時才需要定義 `execute` / `review`；顯式 `scope: task` 仍保留給非 Plan Producer 或刻意自訂的逐 TODO SOP。
 
 ## 3. Python Stage 也能產生 Task[]
 

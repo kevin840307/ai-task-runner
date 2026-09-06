@@ -21,6 +21,8 @@ from urllib.parse import parse_qs, urlparse
 UI_STATE_DIR = ".ai-task-runner/ui"
 MESSAGES_FILE = "messages.jsonl"
 CHAT_STATE_FILE = "chat-state.json"
+LAUNCH_STATE_FILE = "launching.json"
+LAUNCH_RESERVATION_GRACE = 30.0
 RUNTIME_DIR = ".ai-task-runner"
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
 SYSTEM_SCOPES = {"system"}
@@ -168,6 +170,109 @@ class UIState:
     def runtime_dir(self, project: Path) -> Path:
         return project / RUNTIME_DIR
 
+    def _launch_state_path(self, project: Path) -> Path:
+        return project / UI_STATE_DIR / LAUNCH_STATE_FILE
+
+    @staticmethod
+    def _marker_pid(value: object) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _active_launch_reservation(self, project: Path) -> dict:
+        """Return a live UI launch reservation, removing stale reservations."""
+        path = self._launch_state_path(project)
+        marker = self._read_json(path)
+        if marker is None:
+            if not path.exists():
+                return {}
+            try:
+                modified_at = path.stat().st_mtime
+                age = max(0.0, time.time() - modified_at)
+            except OSError:
+                return {}
+            # Another UI process may be between exclusive create and JSON write.
+            if age <= LAUNCH_RESERVATION_GRACE:
+                return {"created_at": modified_at}
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            return {}
+
+        child_pid = self._marker_pid(marker.get("child_pid"))
+        owner_pid = self._marker_pid(marker.get("owner_pid"))
+        try:
+            created_at = float(marker.get("created_at") or 0.0)
+        except (TypeError, ValueError):
+            created_at = 0.0
+        if child_pid:
+            active = self._pid_alive(child_pid)
+        else:
+            active = bool(
+                owner_pid
+                and self._pid_alive(owner_pid)
+                and time.time() - created_at <= LAUNCH_RESERVATION_GRACE
+            )
+        if active:
+            return marker
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return {}
+
+    def _reserve_launch(self, project: Path, mode: str) -> tuple[str, dict]:
+        path = self._launch_state_path(project)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        payload = {
+            "token": token,
+            "owner_pid": os.getpid(),
+            "child_pid": 0,
+            "created_at": time.time(),
+            "mode": mode,
+        }
+        for _ in range(2):
+            if self._active_launch_reservation(project):
+                raise ValueError("This project already has an active runtime")
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                continue
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, ensure_ascii=False)
+            except Exception:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+                raise
+            return token, payload
+        raise ValueError("This project already has an active runtime")
+
+    def _update_launch_reservation(self, project: Path, token: str, payload: dict) -> None:
+        path = self._launch_state_path(project)
+        current = self._read_json(path) or {}
+        if current.get("token") != token:
+            raise ValueError("Launch reservation was lost before Runner startup")
+        tmp = path.with_name(f"{path.name}.{token}.tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+
+    def _clear_launch_reservation(self, project: Path, token: str = "") -> None:
+        path = self._launch_state_path(project)
+        if token:
+            marker = self._read_json(path) or {}
+            if marker.get("token") not in {None, token}:
+                return
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
     @staticmethod
     def _task_mark(state: dict, index: int, task: dict) -> str:
         if task.get("status") == "completed":
@@ -182,12 +287,11 @@ class UIState:
         runtime = self.runtime_dir(project)
         state = self._read_json(runtime / "state.json") or {}
         marker = self._read_json(runtime / "runner-process.json") or {}
-        pid = marker.get("supervisor_pid")
-        try:
-            pid_value = int(pid or 0)
-        except (TypeError, ValueError):
-            pid_value = 0
+        pid_value = self._marker_pid(marker.get("supervisor_pid"))
         if pid_value and self._pid_alive(pid_value):
+            self._clear_launch_reservation(project)
+            return "running"
+        if self._active_launch_reservation(project):
             return "running"
         if bool(state.get("completed")):
             return "completed"
@@ -283,13 +387,17 @@ class UIState:
         state = self._read_json(runtime / "state.json") or {}
         marker = self._read_json(runtime / "runner-process.json") or {}
         stream = self._display_stream(self._read_text(runtime / "stream.log", limit=12000))
-        pid = marker.get("supervisor_pid")
-        try:
-            pid_value = int(pid or 0)
-        except (TypeError, ValueError):
-            pid_value = 0
-        running = bool(pid_value and self._pid_alive(pid_value))
-        stale = bool(marker and not running)
+        supervisor_pid = self._marker_pid(marker.get("supervisor_pid"))
+        supervisor_running = bool(supervisor_pid and self._pid_alive(supervisor_pid))
+        if supervisor_running:
+            self._clear_launch_reservation(project)
+            launch = {}
+        else:
+            launch = self._active_launch_reservation(project)
+        launching = bool(launch)
+        running = supervisor_running or launching
+        stale = bool(marker and not supervisor_running and not launching)
+        pid = marker.get("supervisor_pid") if supervisor_running else (launch.get("child_pid") or launch.get("owner_pid") or marker.get("supervisor_pid"))
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
         console, console_snapshot_exists = self._console_view(runtime, state)
         resettable = bool(
@@ -307,6 +415,7 @@ class UIState:
             self.sync_completion(project)
         return {
             "running": running,
+            "launching": launching,
             "run_id": state.get("run_id") or "",
             "stale": stale,
             "pid": pid,
@@ -327,7 +436,7 @@ class UIState:
             "cli_detail": str(console.get("detail") or ""),
             "completed_count": int(console.get("completed_count") or 0),
             "console_snapshot_exists": console_snapshot_exists,
-            "updated_at": state.get("last_activity_at") or marker.get("started_at") or 0,
+            "updated_at": state.get("last_activity_at") or marker.get("started_at") or launch.get("created_at") or 0,
         }
 
     def active_projects(self) -> list[dict]:
@@ -489,9 +598,22 @@ class UIState:
                 command += ["--validator", validator]
             if workflow:
                 command += ["--workflow", workflow]
-            kwargs = _background_process_kwargs()
-            kwargs["cwd"] = str(self.repo_root)
-            subprocess.Popen(command, **kwargs)
+            token, reservation = self._reserve_launch(project, mode)
+            try:
+                kwargs = _background_process_kwargs()
+                kwargs["cwd"] = str(self.repo_root)
+                process = subprocess.Popen(command, **kwargs)
+            except Exception:
+                self._clear_launch_reservation(project, token)
+                raise
+            reservation["child_pid"] = self._marker_pid(getattr(process, "pid", 0))
+            try:
+                self._update_launch_reservation(project, token, reservation)
+            except (OSError, ValueError):
+                # The pre-launch owner reservation is already durable. Do not report
+                # a failed launch after Popen succeeded; Runner will shortly publish
+                # runner-process.json and take over runtime identity.
+                pass
 
     def _create_run_request(
         self,

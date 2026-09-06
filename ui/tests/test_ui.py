@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -258,10 +259,64 @@ class UIStateTests(unittest.TestCase):
             self.state.launch(self.project, None, mode="resume")
             resume = popen.call_args.args[0]
             self.assertIn("--resume", resume)
+            self.state._clear_launch_reservation(self.project)
             self.state.launch(self.project, "again", mode="rerun")
             rerun = popen.call_args.args[0]
             self.assertIn("--force-new", rerun)
             self.assertIn("again", rerun)
+
+    def test_launch_reservation_blocks_duplicate_before_runner_marker_exists(self) -> None:
+        process = type("Process", (), {"pid": 24680})()
+        with patch("ui.server.subprocess.Popen", return_value=process) as popen, patch.object(
+            UIState, "_pid_alive", side_effect=lambda pid: pid in {24680, os.getpid()}
+        ):
+            self.state.launch(self.project, "first", mode="run")
+            info = self.state.read_runtime(self.project)
+            self.assertTrue(info["running"])
+            self.assertTrue(info["launching"])
+            with self.assertRaisesRegex(ValueError, "already has an active runtime"):
+                self.state.launch(self.project, "second", mode="run")
+        self.assertEqual(popen.call_count, 1)
+
+    def test_launch_reservation_survives_ui_state_reopen_until_runner_takes_over(self) -> None:
+        process = type("Process", (), {"pid": 24681})()
+        with patch("ui.server.subprocess.Popen", return_value=process), patch.object(
+            UIState, "_pid_alive", side_effect=lambda pid: pid in {24681, 24682, os.getpid()}
+        ):
+            self.state.launch(self.project, "first", mode="run")
+            reopened = UIState(self.root)
+            self.assertTrue(reopened.read_runtime(self.project)["launching"])
+            self.write_json(
+                self.project / ".ai-task-runner" / "runner-process.json",
+                {"supervisor_pid": 24682, "worker_pid": 77},
+            )
+            info = reopened.read_runtime(self.project)
+            self.assertTrue(info["running"])
+            self.assertFalse(info["launching"])
+            self.assertFalse((self.project / ".ai-task-runner" / "ui" / "launching.json").exists())
+
+    def test_dead_launch_reservation_is_cleaned_and_does_not_block_relaunch(self) -> None:
+        launch = self.project / ".ai-task-runner" / "ui" / "launching.json"
+        self.write_json(launch, {"token": "old", "owner_pid": 1, "child_pid": 99999, "created_at": time.time(), "mode": "run"})
+        process = type("Process", (), {"pid": 24683})()
+        with patch.object(UIState, "_pid_alive", side_effect=lambda pid: pid in {24683, os.getpid()}), patch(
+            "ui.server.subprocess.Popen", return_value=process
+        ) as popen:
+            self.assertFalse(self.state.read_runtime(self.project)["running"])
+            self.state.launch(self.project, "again", mode="run")
+        self.assertEqual(popen.call_count, 1)
+
+    def test_launch_marker_update_failure_keeps_prelaunch_reservation_active(self) -> None:
+        process = type("Process", (), {"pid": 24684})()
+        with patch("ui.server.subprocess.Popen", return_value=process), patch.object(
+            self.state, "_update_launch_reservation", side_effect=OSError("disk busy")
+        ), patch.object(UIState, "_pid_alive", side_effect=lambda pid: pid == os.getpid()):
+            self.state.launch(self.project, "first", mode="run")
+            info = self.state.read_runtime(self.project)
+            self.assertTrue(info["running"])
+            self.assertTrue(info["launching"])
+            with self.assertRaisesRegex(ValueError, "already has an active runtime"):
+                self.state.launch(self.project, "second", mode="run")
 
     def test_stop_writes_only_stop_request(self) -> None:
         self.state.stop(self.project)
@@ -871,7 +926,9 @@ flow: [validate]
         result = self.state.studio_prompt_create("my_prompt", "custom", self.project)
         self.assertEqual(result["item"]["group"], "Custom")
         exported = self.state.studio_export(result["item"]["id"], self.project)
-        self.assertEqual(exported["kind"], "prompt"); self.assertIn("{{goal}}", exported["content"])
+        self.assertEqual(exported["kind"], "prompt")
+        self.assertEqual(exported["name"], "my_prompt.md")
+        self.assertEqual(exported["content"], (self.root / "runner" / "prompts" / "custom" / "my_prompt.md").read_text(encoding="utf-8"))
 
     def _write_builder_fixture(self) -> Path:
         builder_dir = self.root / "workflow_builder"
