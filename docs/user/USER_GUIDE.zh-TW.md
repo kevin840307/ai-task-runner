@@ -107,7 +107,7 @@ flow:
   - validate_file
 ```
 
-`continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 system/default Execute/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
+`continuation_prompt` 是可選設定。只有同一個 live Session 已經看過該 Stage 的完整 `prompt` 時才會使用；第一次呼叫與每個 Fresh/Rebuilt Session 仍會收到完整 Prompt。這讓 system/default Task/Review 的重複 handoff 只補新 TODO/evidence，而且不需要在 Pipeline 加 Stage-name branch。
 
 在這份 YAML 中，如果 Plan 產生 TODO A、B、C，每個 TODO 都會依 YAML 固定執行 `execute -> security_review -> review_task`，全部完成後才進 Final Validator。Durable state 只需要 current TODO、`task_step` 與 `workflow_position`，不需要保存 AI 產生的 Stage topology。
 

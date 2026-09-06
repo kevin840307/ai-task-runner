@@ -49,6 +49,34 @@ def _as_text_list(value: Any) -> list[str]:
     return [text] if text else []
 
 
+def _evidence_reference_sets(case: Mapping[str, Any], evidence: list[Mapping[str, Any]]) -> tuple[list[str], list[str], list[str]]:
+    """Return (resolved_evidence_ids, unknown_evidence_ids, unknown_source_locators).
+
+    Canonical traceability uses case.evidence_refs -> evidence[].id.  source_refs are
+    direct locators (material://..., file paths, URLs).  For backward compatibility,
+    a source_ref that exactly matches evidence[].source is resolved to that Evidence ID.
+    """
+    evidence_ids = {str(row.get("id") or "").strip() for row in evidence if str(row.get("id") or "").strip()}
+    source_to_id = {
+        str(row.get("source") or "").strip(): str(row.get("id") or "").strip()
+        for row in evidence
+        if str(row.get("source") or "").strip() and str(row.get("id") or "").strip()
+    }
+    evidence_refs = _as_text_list(case.get("evidence_refs"))
+    source_refs = _as_text_list(case.get("source_refs"))
+    resolved = [ref for ref in evidence_refs if ref in evidence_ids]
+    unknown_ids = [ref for ref in evidence_refs if ref not in evidence_ids]
+    unknown_sources: list[str] = []
+    for locator in source_refs:
+        eid = source_to_id.get(locator)
+        if eid:
+            if eid not in resolved:
+                resolved.append(eid)
+        else:
+            unknown_sources.append(locator)
+    return resolved, unknown_ids, unknown_sources
+
+
 def _rows(value: Any, container_key: str) -> list[Mapping[str, Any]]:
     """Normalize common YAML list and id-keyed mapping forms into row mappings."""
     if isinstance(value, Mapping):
@@ -310,11 +338,17 @@ def _validate_blueprint(stage: str) -> GateResult:
         elif flow_ids and flow_ref not in flow_ids:
             violations.append(_violation("CASE_FLOW_REF_UNKNOWN", f"{cid} references unknown flow {flow_ref}", cid, "CRITICAL"))
 
-        refs = [str(x).strip() for x in (case.get("source_refs") or []) if str(x).strip()] if isinstance(case.get("source_refs"), list) else []
         if evidence_ids:
-            unknown = [x for x in refs if x not in evidence_ids]
-            if unknown:
-                violations.append(_violation("CASE_EVIDENCE_REF_UNKNOWN", f"{cid} references unknown evidence: {unknown}", cid, "CRITICAL"))
+            _resolved, unknown_ids, _unknown_sources = _evidence_reference_sets(case, evidence)
+            if unknown_ids:
+                violations.append(_violation(
+                    "CASE_EVIDENCE_REF_UNKNOWN",
+                    f"{cid} evidence_refs contains unknown Evidence IDs: {unknown_ids}",
+                    cid,
+                    "CRITICAL",
+                ))
+            # source_refs are locators, not Evidence IDs. Unknown locators are not an
+            # incremental traceability failure because a later evidence-index TODO may add them.
 
     metrics = {
         "after_stage": stage,

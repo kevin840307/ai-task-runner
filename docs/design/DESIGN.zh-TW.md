@@ -21,7 +21,7 @@ Version: 1.2.61
 
 ## 主流程
 
-內建預設：`Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
+內建預設：`Plan -> [Task -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
 
 - 沒有獨立 Understand Stage。
 - `PlanStage` 是內建 AI Task Producer，透過通用 `tasks` result effect 安裝 durable TODO。

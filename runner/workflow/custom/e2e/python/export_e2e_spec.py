@@ -77,10 +77,14 @@ def export_workflow1() -> str:
         bullet(lines, values(case.get("when")))
         lines += ["", "**預期結果／Oracle（Then）**", ""]
         bullet(lines, values(case.get("then")))
-        refs = values(case.get("source_refs"))
-        if refs:
-            lines += ["", "**證據引用**", ""]
-            bullet(lines, refs)
+        evidence_refs = values(case.get("evidence_refs"))
+        source_refs = values(case.get("source_refs"))
+        if evidence_refs:
+            lines += ["", "**證據 ID 引用**", ""]
+            bullet(lines, evidence_refs)
+        if source_refs:
+            lines += ["", "**來源定位**", ""]
+            bullet(lines, source_refs)
         lines.append("")
 
     evidence = rows(evidence_doc.get("evidence") if isinstance(evidence_doc, Mapping) else [])

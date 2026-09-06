@@ -1,5 +1,5 @@
 # Advanced example: a command creates Task[] instead of PlanStage.
-# The task-scoped execute/review lifecycle is explicit here.
+# The task-scoped Task/Review lifecycle is explicit here.
 stages:
   discover_tasks:
     type: command

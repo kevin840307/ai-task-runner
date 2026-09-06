@@ -28,8 +28,11 @@ def main() -> int:
         finals = [x for x in calls if x["role"] == "final"]
         assert writers and not writers[0]["resumed"] and all(x["session"] == "writer-session" for x in writers)
         assert all(x["resumed"] for x in writers[1:])
-        assert len(reviews) == 6 and not reviews[0]["resumed"] and all(x["session"] == "review-session" for x in reviews)
-        assert all(x["resumed"] for x in reviews[1:]) and all(not x["full_review_contract"] for x in reviews[1:])
+        # Each explicit Review flow node is an independent semantic gate.
+        # Reusing the same Stage definition must not accidentally continue a prior gate session.
+        assert len(reviews) == 6 and all(not x["resumed"] for x in reviews)
+        assert all(x["session"] == "review-session" for x in reviews)
+        assert all(x["full_review_contract"] for x in reviews)
         assert len(grills) == 3 and not grills[0]["resumed"] and all(x["session"] == "grill-session" for x in grills)
         assert all(x["resumed"] for x in grills[1:]) and all(not x["full_grill_contract"] for x in grills[1:])
         fixes = [x for x in writers if x["kind"] == "fix"]

@@ -97,6 +97,19 @@ class UIStateTests(unittest.TestCase):
         self.assertIn("environment_check.py", " ".join(map(str, command)))
         self.assertIn("--json", command)
 
+
+    def test_process_snapshot_windows_parses_tasklist_once(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout='"python.exe","123","Console","1","10,000 K"\n"qwen.exe","456","Console","1","20,000 K"\n',
+            stderr="",
+        )
+        with patch("ui.server.os.name", "nt"), patch("ui.server.subprocess.run", return_value=completed) as run:
+            pids = self.state._process_snapshot()
+        self.assertEqual(pids, {123, 456})
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][:3], ["tasklist", "/FO", "CSV"])
+
     def test_second_project_can_launch_while_first_project_is_running(self) -> None:
         second = self.root / "project-two"; second.mkdir()
         first_runtime = self.project / ".ai-task-runner"; first_runtime.mkdir()

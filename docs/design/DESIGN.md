@@ -21,7 +21,7 @@ Version: 1.2.61
 
 ## Main flow
 
-Bundled default: `Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
+Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
 
 - No independent Understand Stage.
 - `PlanStage` is the built-in AI Task producer and installs durable TODOs through the generic `tasks` result effect.

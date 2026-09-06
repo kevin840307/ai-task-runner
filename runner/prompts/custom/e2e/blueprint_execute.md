@@ -7,8 +7,8 @@ Additional E2E Blueprint contract:
 - Preserve valid prior Blueprint content and merge only the current TODO contribution.
 - Maintain only the canonical portable pack under `result/blueprint/export/`:
   - `architecture.yaml`: root `flows:` (optional `components:` / `open_questions:`). Each flow: `id`, `title`, `trigger`, meaningful `steps`, observable `terminal_outcomes`, evidence refs when available.
-  - `e2e_cases.yaml`: root `cases:`. Each case: `id`, `title`, `flow_ref`, `intent`, `given`, `when`, `then`, `evidence_level`, evidence refs when available.
-  - `evidence_index.yaml`: root `evidence:`. Each evidence row: `id`, `kind`, `source`, `claim`.
+  - `e2e_cases.yaml`: root `cases:`. Each case: `id`, `title`, `flow_ref`, `intent`, `given`, `when`, `then`, `evidence_level`; use `evidence_refs: [E001, ...]` to reference rows in `evidence_index.yaml`. `source_refs` may contain direct source locators such as `material://...`, but they are NOT Evidence IDs.
+  - `evidence_index.yaml`: root `evidence:`. Each evidence row: `id`, `kind`, `source`, `claim`. The `id` is the stable traceability key; `source` is the underlying locator.
   - `manifest.yaml`: minimal metadata only; Final Python owns final counts/fingerprints.
 - Do not invent unsupported behavior. Use `ASSUMPTION` plus an explicit open question when evidence is insufficient.
 - Prefer materially distinct observable cases; do not enumerate every class/function/SQL merely to inflate coverage.

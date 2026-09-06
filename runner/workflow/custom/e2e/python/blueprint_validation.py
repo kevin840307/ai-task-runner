@@ -64,6 +64,34 @@ def _nonempty_strings(value: Any) -> list[str]:
     return [text] if text else []
 
 
+def _evidence_reference_sets(case: Mapping[str, Any], evidence: list[Mapping[str, Any]]) -> tuple[list[str], list[str], list[str]]:
+    """Resolve canonical Evidence IDs while keeping direct source locators separate.
+
+    `evidence_refs` is the canonical Case -> Evidence ID relation. `source_refs` is a
+    direct locator list. Legacy source_refs are accepted when they exactly match an
+    evidence row's `source`, so existing Blueprints can migrate without a full rerun.
+    """
+    evidence_ids = {str(row.get("id") or "").strip() for row in evidence if str(row.get("id") or "").strip()}
+    source_to_id = {
+        str(row.get("source") or "").strip(): str(row.get("id") or "").strip()
+        for row in evidence
+        if str(row.get("source") or "").strip() and str(row.get("id") or "").strip()
+    }
+    evidence_refs = _nonempty_strings(case.get("evidence_refs"))
+    source_refs = _nonempty_strings(case.get("source_refs"))
+    resolved = [ref for ref in evidence_refs if ref in evidence_ids]
+    unknown_ids = [ref for ref in evidence_refs if ref not in evidence_ids]
+    unknown_sources: list[str] = []
+    for locator in source_refs:
+        eid = source_to_id.get(locator)
+        if eid:
+            if eid not in resolved:
+                resolved.append(eid)
+        else:
+            unknown_sources.append(locator)
+    return resolved, unknown_ids, unknown_sources
+
+
 def _rows(value: Any, container_key: str) -> list[Mapping[str, Any]]:
     if isinstance(value, Mapping):
         value = value.get(container_key, value)
@@ -202,11 +230,18 @@ def _traceability() -> tuple[GateResult, dict[str, Any]]:
         else:
             used_flows.add(flow_ref)
 
-        refs = _nonempty_strings(case.get("source_refs"))
-        referenced_evidence.update(refs)
-        unknown_refs = [ref for ref in refs if ref not in evidence_ids]
-        if unknown_refs:
-            violations.append(_violation(check, "CASE_EVIDENCE_REF_UNKNOWN", f"{cid} references unknown evidence: {unknown_refs}", cid, "CRITICAL"))
+        resolved_ids, unknown_ids, unknown_sources = _evidence_reference_sets(case, evidence)
+        referenced_evidence.update(resolved_ids)
+        if unknown_ids:
+            violations.append(_violation(
+                check,
+                "CASE_EVIDENCE_REF_UNKNOWN",
+                f"{cid} evidence_refs contains unknown Evidence IDs: {unknown_ids}",
+                cid,
+                "CRITICAL",
+            ))
+        # source_refs are direct locators, not Evidence IDs. They are allowed to remain
+        # unindexed; only canonical evidence_refs participate in hard ID traceability.
 
     uncovered = sorted(flow_ids - used_flows)
     if uncovered:
@@ -254,10 +289,19 @@ def _quality() -> tuple[GateResult, dict[str, Any]]:
         level = str(case.get("evidence_level") or "").upper().strip()
         if level not in ALLOWED_EVIDENCE_LEVELS:
             violations.append(_violation(check, "CASE_EVIDENCE_LEVEL_INVALID", f"{cid} evidence_level must be PROVEN|SUPPORTED|ASSUMPTION", cid))
-        refs = _nonempty_strings(case.get("source_refs"))
-        referenced_evidence.update(refs)
-        if level in {"PROVEN", "SUPPORTED"} and not refs:
-            violations.append(_violation(check, "CASE_EVIDENCE_REQUIRED", f"{cid} is {level} but has no source_refs", cid, "CRITICAL"))
+        resolved_ids, unknown_ids, unknown_sources = _evidence_reference_sets(case, evidence)
+        referenced_evidence.update(resolved_ids)
+        if level in {"PROVEN", "SUPPORTED"} and not resolved_ids:
+            violations.append(_violation(
+                check,
+                "CASE_EVIDENCE_REQUIRED",
+                f"{cid} is {level} but has no resolvable evidence_refs (or legacy source_refs indexed by evidence_index)",
+                cid,
+                "CRITICAL",
+            ))
+        if unknown_ids:
+            violations.append(_violation(check, "CASE_EVIDENCE_REF_UNKNOWN", f"{cid} evidence_refs contains unknown Evidence IDs: {unknown_ids}", cid, "CRITICAL"))
+        # Unindexed source_refs are informational locators and do not fail quality.
         if level == "ASSUMPTION":
             assumption_cases += 1
             if not open_questions and not str(case.get("assumption") or "").strip():

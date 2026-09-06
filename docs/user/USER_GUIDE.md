@@ -101,7 +101,7 @@ flow:
   - validate_file
 ```
 
-`continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated system/default Execute/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
+`continuation_prompt` is optional. It is used only when the same live session has already seen the Stage's full `prompt`; the first call and every fresh/rebuilt session still receive the complete prompt. This lets repeated system/default Task/Review handoffs send only new TODO/evidence without adding Stage-name branches to Pipeline.
 
 For this YAML, if Plan creates TODO A, B, and C, every TODO runs `execute -> security_review -> review_task` in that fixed YAML order before final validation. Durable state needs only the current TODO, `task_step`, and `workflow_position`; it does not persist AI-generated Stage topology.
 
