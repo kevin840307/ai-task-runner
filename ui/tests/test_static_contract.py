@@ -124,7 +124,7 @@ class LayoutRegressionTests(unittest.TestCase):
 
     def test_workflow_and_prompt_columns_remain_fixed_with_inner_scroll(self):
         css = "".join(self.studio_css.split())
-        self.assertIn(".studio-workflow-sidebar{display:grid;grid-template-rows:autoautominmax(0,1fr)", css)
+        self.assertIn(".studio-workflow-sidebar{display:grid;grid-template-rows:autoautoautominmax(0,1fr)", css)
         self.assertIn(".studio-file-list,.studio-workflow-sidebar.designer-custom-list{min-height:0;overflow:auto", css)
         self.assertIn("overflow-y:scroll", css)
         self.assertIn("scrollbar-gutter:stable", css)
@@ -225,13 +225,25 @@ class LayoutRegressionTests(unittest.TestCase):
         for token in ('id="importAssetButton"', 'id="exportStudioButton"', 'id="deleteStudioButton"', 'id="importAssetBackdrop"'):
             self.assertIn(token, self.html)
 
-    def test_stage_remove_uses_reusable_confirmation(self):
-        self.assertIn('confirmDialog({ title: "Remove Stage from Flow?"', self.js)
-        self.assertIn("removeSelectedFlow()", self.js)
+    def test_stage_remove_supports_flow_only_or_definition_delete(self):
+        self.assertIn('choiceDialog({ title: "Remove Stage?"', self.js)
+        self.assertIn('value: "flow"', self.js)
+        self.assertIn('value: "definition"', self.js)
+        self.assertIn('Delete Definition Too', self.js)
+        self.assertIn('/api/studio/stage/delete', self.js)
 
     def test_add_stage_key_and_type_controls_share_height(self):
         css = "".join(self.studio_css.split())
         self.assertIn(".add-stage-grid.designer-input,.add-stage-grid.designer-select{box-sizing:border-box;height:40px;min-height:40px", css)
+
+    def test_studio_crud_search_and_modular_dialog_support_exist(self):
+        for token in ('id="studioSearchInput"', 'id="studioSearchClear"', 'id="studioAssetMenuButton"', 'id="renameStudioButton"', 'id="duplicateStudioButton"'):
+            self.assertIn(token, self.html)
+        self.assertIn('/js/ui-dialogs.js', self.html)
+        self.assertIn('/js/studio-support.js', self.html)
+        self.assertIn('window.UiDialogs.confirm', self.js)
+        self.assertIn('window.StudioSupport.filterItems', self.js)
+        self.assertNotIn('window.confirm', self.js)
 
     def test_explicit_workflow_ai_validator_companion_contract(self):
         repo = self.root.parent

@@ -121,6 +121,11 @@
               <button id="yamlWorkflowSource" class="active" type="button">Workflow</button>
               <button id="yamlPromptSource" type="button">Prompt</button>
             </div>
+            <label class="studio-search-wrap" for="studioSearchInput">
+              <span class="studio-search-icon" aria-hidden="true">⌕</span>
+              <input id="studioSearchInput" class="studio-search-input" type="search" placeholder="Search workflows..." autocomplete="off" spellcheck="false" />
+              <button id="studioSearchClear" class="studio-search-clear" type="button" title="Clear search" aria-label="Clear search" hidden>×</button>
+            </label>
             <div id="studioFileList" class="designer-custom-list studio-file-list"></div>
           </aside>
 
@@ -144,6 +149,13 @@
                   </div>
                   <div class="designer-card-actions">
                     <button id="reloadStudioButton" type="button">Reload</button>
+                    <div id="studioAssetMenuWrap" class="studio-asset-menu-wrap">
+                      <button id="studioAssetMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
+                      <div id="studioAssetMenu" class="studio-asset-menu" role="menu" hidden>
+                        <button id="renameStudioButton" type="button" role="menuitem">Rename</button>
+                        <button id="duplicateStudioButton" type="button" role="menuitem">Duplicate</button>
+                      </div>
+                    </div>
                     <button id="exportStudioButton" type="button">Export</button>
                     <button id="deleteStudioButton" class="designer-danger" type="button">Delete</button>
                     <button id="validateStudioButton" type="button">Validate</button>
@@ -367,6 +379,8 @@ flow:
     </div>
   </div>
 
+  <script src="/js/ui-dialogs.js"></script>
+  <script src="/js/studio-support.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -303,3 +303,22 @@ Evidence:
 - `screenshots/37_generator_editable_draft.png` — explicit editable Draft review UI.
 - `screenshots/39_generator_mobile_layout_fixed.png` — narrow layout remains contained and vertically scrollable.
 - `browser_metrics_round21.json` — measured non-overlap and edit-affordance contract.
+
+
+## Round 22 — Studio CRUD completeness / shared dialog architecture
+
+The Studio CRUD follow-up closes the remaining first-version UX gaps without changing Runner Core:
+
+- Workflow/Prompt unsaved navigation now uses the shared styled dialog instead of native `window.confirm`.
+- Workflow and Prompt asset menus expose **Rename** and **Duplicate**. System assets stay immutable but may be duplicated to Custom; referenced Prompt rename remains blocked.
+- Stage removal offers a deliberate choice between **Remove from Flow** and **Delete Stage definition**. Definition deletion is blocked when other Flow/recovery/routing references still use the Stage.
+- Workflow/Prompt catalogs include client-side search/filter and clear action.
+- Shared UI helpers were split into `ui/static/js/ui-dialogs.js` and `ui/static/js/studio-support.js` so confirmation/input-dialog behavior and small catalog helpers do not keep expanding the main `app.js`.
+- `ui/tests/test_browser_crud_e2e.py` covers one end-to-end CRUD journey through the production browser UI.
+- UI regression: 155 tests PASS, including the browser CRUD journey.
+
+Evidence:
+
+- `screenshots/40_studio_search_crud_actions.png` — search plus Rename/Duplicate asset actions.
+- `screenshots/41_stage_delete_definition_choice.png` — Flow-only removal versus guarded definition deletion.
+- `screenshots/42_styled_unsaved_dialog.png` — shared styled unsaved-changes confirmation.

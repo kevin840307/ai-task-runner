@@ -80,7 +80,11 @@ Safety rules:
 5. Every edit uses a SHA-256 expected hash. If another UI tab/editor changed the file, Save is rejected and the user must Reload.
 6. Server-side path containment prevents crafted requests from editing unrelated YAML/Markdown files.
 7. Workflow Validate invokes the existing `tool/workflow_dryrun.py --matrix --json --max-steps 500`; it can validate the current unsaved YAML or Visual-flow draft without writing the Workflow first. Stage Editor also has **Validate Draft** for unsaved Stage/Flow-field changes. Save still runs the same gate again before commit.
-8. Unsaved editor changes trigger confirmation before switching project/view/file or closing the page.
+8. Unsaved editor changes trigger the shared styled confirmation dialog before switching project/view/file or closing the page; Workflow/Prompt no longer fall back to native `window.confirm`.
+9. Workflow/Prompt assets expose a compact asset menu with **Rename** and **Duplicate**. Rename stays in the same editable scope and is blocked for referenced Prompts; System assets remain immutable but can be duplicated into Custom.
+10. Visual Stage removal distinguishes **Remove from Flow** from **Delete Stage definition**. Definition deletion is server-validated and blocked while another Flow/recovery/routing reference still targets that Stage.
+11. The Studio catalog has a client-side search/filter across the active Workflow/Prompt source without adding a server dependency.
+12. `ui/tests/test_browser_crud_e2e.py` exercises the production browser journey across Prompt/Workflow create, edit, validation, Stage manipulation, rename/duplicate/search, reference-safe deletion, reload, and cleanup.
 
 The global edit lock only knows projects tracked by this UI. A CLI run in a completely unknown/untracked project cannot be discovered without adding a Core/global runtime registry, which is intentionally outside the current UI-only boundary.
 

@@ -19,6 +19,7 @@ const state = {
   backends: [], defaultBackend: "", preferences: null, validatorWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
+  studioFilters: { workflow: "", prompt: "" },
   studioOriginal: "", studioHash: "", studioDirty: false,
   studioGuard: { editable: true, active_projects: [] }, studioMode: "visual", studioSourceKind: "workflow",
   visual: null, visualDirty: false, selectedFlowIndex: -1, stepActionMenuExpanded: false,
@@ -60,18 +61,10 @@ function showActionError(message, fallback = "Action failed") {
   const detail = String(message || "").trim(); const firstLine = detail.split(/\r?\n/).find((line) => line.trim())?.trim() || fallback; const summary = firstLine.length > 180 ? `${firstLine.slice(0, 177)}...` : firstLine;
   showToast(summary, "error", 3200);
 }
-function confirmDialog({ title, message, confirmLabel = "Confirm", danger = false }) {
-  return new Promise((resolve) => {
-    const box = document.createElement("div"); box.className = "designer-export-box designer-confirm-box";
-    box.innerHTML = `<div class="designer-export-card" style="width:min(480px,96vw);"><div class="designer-step-card-title"><div><h2 style="margin:0;">${escapeHtml(title)}</h2><p class="designer-form-hint">${escapeHtml(message)}</p></div><button type="button" data-confirm-close aria-label="Close">×</button></div><div class="designer-footer-actions"><button type="button" data-confirm-close>Cancel</button><button type="button" data-confirm-ok class="${danger ? "designer-danger-button" : "primary"}">${escapeHtml(confirmLabel)}</button></div></div>`;
-    document.body.appendChild(box);
-    const finish = (value) => { box.remove(); resolve(value); };
-    box.querySelectorAll("[data-confirm-close]").forEach((b) => b.onclick = () => finish(false));
-    box.querySelector("[data-confirm-ok]").onclick = () => finish(true);
-    box.addEventListener("click", (e) => { if (e.target === box) finish(false); });
-    box.querySelector("[data-confirm-ok]").focus();
-  });
-}
+const confirmDialog = (options) => window.UiDialogs.confirm(options);
+const inputDialog = (options) => window.UiDialogs.input(options);
+const choiceDialog = (options) => window.UiDialogs.choice(options);
+
 function syncComposerReserve() {
   const panel = $("composePanel"); if (!panel || panel.hidden) return;
   const reserve = Math.ceil(panel.getBoundingClientRect().height + 18);
@@ -165,7 +158,7 @@ function renderProjects() {
     };
     remove.onclick = async (event) => {
       event.stopPropagation();
-      if (!confirmDiscardStudio()) return;
+      if (!(await confirmDiscardStudio())) return;
       const ok = await confirmDialog({ title: "Remove Project?", message: `Remove ${project.name} from this UI? Project files are not deleted.`, confirmLabel: "Remove Project", danger: true });
       if (!ok) return;
       closeStageEditor(true); closeAddStageModal(true); closeProjectMenus();
@@ -181,7 +174,7 @@ function showEmpty() {
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
 async function selectProject(project) {
-  if (state.project?.path !== project.path && !confirmDiscardStudio()) return;
+  if (state.project?.path !== project.path && !(await confirmDiscardStudio())) return;
   if (state.project?.path !== project.path) { closeStageEditor(true); closeAddStageModal(true); }
   state.project = project; state.lastStream = ""; state.historyPinnedToBottom = true; state.validatorWorkflowPath = "";
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
@@ -385,19 +378,22 @@ async function switchView(view) {
     state.view = "workflow"; $("chatView").hidden = true; $("workflowView").hidden = false; $("workflowNav").classList.add("active"); $("chatNav").classList.remove("active"); refreshStudioFiles(); return;
   }
   if (state.view === "workflow" && !$("workflowGeneratorPage").hidden) { if (!(await leaveGenerateWorkflowPage())) return; }
-  if (state.view === "workflow" && !confirmDiscardStudio()) return;
+  if (state.view === "workflow" && !(await confirmDiscardStudio())) return;
   closeStageEditor(true); closeAddStageModal(true); closeNewWorkflowModal(true); state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active");
 }
 function visibleStudioFiles() { return state.studioSourceKind === "prompt" ? (state.studioFiles.prompts || []) : (state.studioFiles.workflows || []); }
+function studioSearchQuery() { return state.studioFilters?.[state.studioSourceKind] || ""; }
+function filteredStudioFiles() { return window.StudioSupport.filterItems(visibleStudioFiles(), studioSearchQuery()); }
+function syncStudioSearch() { const input = $("studioSearchInput"), clear = $("studioSearchClear"); if (!input) return; input.value = studioSearchQuery(); input.placeholder = state.studioSourceKind === "prompt" ? "Search prompts..." : "Search workflows..."; if (clear) clear.hidden = !input.value; }
 function renderStudioFiles() {
   const root = $("studioFileList"); root.innerHTML = "";
   $("studioSourceTabs").hidden = false;
   $("studioListTitle").textContent = state.studioSourceKind === "prompt" ? "Prompts" : "Workflows";
   $("yamlWorkflowSource").classList.toggle("active", state.studioSourceKind === "workflow"); $("yamlPromptSource").classList.toggle("active", state.studioSourceKind === "prompt");
-  $("newWorkflowButton").hidden = false; $("newWorkflowButton").title = state.studioSourceKind === "prompt" ? "New custom prompt" : "New custom workflow";
+  $("newWorkflowButton").hidden = false; $("newWorkflowButton").title = state.studioSourceKind === "prompt" ? "New custom prompt" : "New custom workflow"; syncStudioSearch();
   const groups = [["System", []], ["Custom", []], ["Project", []]];
   const groupMap = new Map(groups);
-  for (const item of visibleStudioFiles()) (groupMap.get(item.group || "Project") || groupMap.get("Project")).push(item);
+  for (const item of filteredStudioFiles()) (groupMap.get(item.group || "Project") || groupMap.get("Project")).push(item);
   for (const [group, items] of groups) {
     if (!items.length) continue;
     const heading = document.createElement("div"); heading.className = "studio-file-group"; heading.textContent = group; root.appendChild(heading);
@@ -406,14 +402,16 @@ function renderStudioFiles() {
       const name = document.createElement("strong"); name.textContent = item.name; const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project"); button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
     }
   }
-  if (!root.querySelector(".studio-file-item")) { const empty = document.createElement("div"); empty.className = "studio-list-empty"; empty.textContent = state.studioSourceKind === "prompt" ? "No prompts" : "No workflows"; root.appendChild(empty); }
+  if (!root.querySelector(".studio-file-item")) { const empty = document.createElement("div"); empty.className = "studio-list-empty"; const noun = state.studioSourceKind === "prompt" ? "prompts" : "workflows"; empty.textContent = studioSearchQuery() ? `No matching ${noun}` : `No ${noun}`; root.appendChild(empty); }
 }
 function clearStudioEditor() {
+  closeStudioAssetMenu();
   state.studioFile = null; state.studioOriginal = ""; state.studioHash = ""; state.studioDirty = false; state.visual = null; state.visualDirty = false; state.selectedFlowIndex = -1;
   $("studioEditor").hidden = true; $("studioEmpty").hidden = false; $("validationOutput").hidden = true; $("studioTextarea").value = ""; $("studioPromptTextarea").value = ""; updateLineNumbers(); updateDirtyState(); renderStudioPanels();
 }
 async function openStudioFile(item) {
-  if (state.studioFile?.id !== item.id && !confirmDiscardStudio()) return;
+  closeStudioAssetMenu();
+  if (state.studioFile?.id !== item.id && !(await confirmDiscardStudio())) return;
   try {
     const data = await api(`/api/studio/file?id=${encodeURIComponent(item.id)}${projectQuery()}`);
     let visual = null;
@@ -431,17 +429,17 @@ function renderStudioPanels() {
   $("visualDesignerPanel").hidden = !workflow || state.studioMode !== "visual";
   $("yamlEditorPanel").hidden = !workflow || state.studioMode !== "yaml";
 }
-function setStudioMode(mode) {
+async function setStudioMode(mode) {
   if (mode === state.studioMode) return;
   // Prompt uses the same editor in both modes; mode only matters to Workflow files.
-  if (state.studioFile?.kind === "workflow" && !confirmDiscardStudio()) return;
+  if (state.studioFile?.kind === "workflow" && !(await confirmDiscardStudio())) return;
   state.studioMode = mode;
   $("visualModeButton").classList.toggle("active", mode === "visual"); $("yamlModeButton").classList.toggle("active", mode === "yaml");
   renderStudioPanels(); updateDirtyState(); scheduleSyntaxCheck();
 }
-function setStudioSource(kind) {
+async function setStudioSource(kind) {
   if (kind === state.studioSourceKind) return;
-  if (!confirmDiscardStudio()) return;
+  if (!(await confirmDiscardStudio())) return;
   closeStageEditor(true); state.studioSourceKind = kind; clearStudioEditor(); renderStudioFiles();
 }
 function flowStageName(item) { return typeof item === "string" ? item : String(item?.stage || ""); }
@@ -510,11 +508,16 @@ function moveSelectedFlow(offset) {
   const [item] = flow.splice(index, 1); flow.splice(target, 0, item); state.selectedFlowIndex = target; state.visualDirty = true; renderVisualDesigner(); updateDirtyState();
 }
 async function removeSelectedFlow() {
-  if (!state.studioGuard.editable || state.studioFile?.readonly) return; const flow = state.visual?.flow || []; const index = state.selectedFlowIndex;
+  if (!state.studioGuard.editable || state.studioFile?.readonly) return; const flow = state.visual?.flow || [], index = state.selectedFlowIndex;
   if (index < 0 || index >= flow.length) return; const name = flowStageName(flow[index]) || "Stage";
-  if (!(await confirmDialog({ title: "Remove Stage from Flow?", message: `Remove ${name} from this Workflow flow? The Stage definition is kept in YAML.`, confirmLabel: "Remove Stage", danger: true }))) return;
-  flow.splice(index, 1); state.selectedFlowIndex = flow.length ? Math.min(index, flow.length - 1) : -1; state.visualDirty = true; renderVisualDesigner(); updateDirtyState(); showToast(`${name} removed from flow`);
+  const action = await choiceDialog({ title: "Remove Stage?", message: `Choose whether to remove only this ${name} Flow invocation or also delete its Stage definition. Definition deletion is blocked when other Workflow references still use it.`, choices: [{ value: "flow", label: "Remove from Flow" }, { value: "definition", label: "Delete Definition Too", danger: true }] });
+  if (!action) return;
+  if (action === "flow") { flow.splice(index, 1); state.selectedFlowIndex = flow.length ? Math.min(index, flow.length - 1) : -1; state.visualDirty = true; renderVisualDesigner(); updateDirtyState(); showToast(`${name} removed from flow`); return; }
+  if (state.visualDirty || state.studioDirty) { const ok = await saveVisualFlow(); if (!ok) return; }
+  try { const result = await api("/api/studio/stage/delete", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, flow_index: index, hash: state.studioHash }) }); state.studioFile = result.file; state.studioOriginal = result.file.content; state.studioHash = result.file.hash; state.studioDirty = false; state.visualDirty = false; state.visual = result.visual; state.selectedFlowIndex = state.visual.flow?.length ? Math.min(index, state.visual.flow.length - 1) : -1; $("studioTextarea").value = result.file.content; updateLineNumbers(); renderVisualDesigner(); updateDirtyState(); showToast(`${name} Stage definition deleted`); }
+  catch (error) { setStudioStatus(error.message, true); showActionError(error.message, "Stage deletion failed"); }
 }
+
 async function saveVisualFlow() {
   if (!state.studioFile || state.studioFile.kind !== "workflow" || !state.visualDirty || !state.studioGuard.editable) return true;
   try {
@@ -781,9 +784,9 @@ async function openAddStageModal() {
   if (state.visualDirty && !(await saveVisualFlow())) return;
   state.addStageDirty = false; $("addStageName").value = ""; $("addStageType").value = "task"; $("addStageStatus").value = ""; $("addStageCommand").value = ""; $("addStageToFlow").checked = true; $("addStageHint").textContent = ""; $("addStageHint").classList.remove("error"); fillAddStagePromptOptions(); updateAddStageType(); $("addStageBackdrop").hidden = false; setTimeout(() => $("addStageName").focus(), 0);
 }
-function closeAddStageModal(force = false) {
+async function closeAddStageModal(force = false) {
   if ($("addStageBackdrop").hidden) return true;
-  if (!force && state.addStageDirty && !window.confirm("Discard this new Stage?")) return false;
+  if (!force && state.addStageDirty) { const ok = await confirmDialog({ title: "Discard new Stage?", message: "Discard this unsaved Stage? The Workflow will remain unchanged.", confirmLabel: "Discard Stage", danger: true }); if (!ok) return false; }
   $("addStageBackdrop").hidden = true; state.addStageDirty = false; return true;
 }
 function updateAddStageType() {
@@ -837,6 +840,7 @@ function updateDirtyState() {
   $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = !state.studioFile; $("validateStudioButton").disabled = !state.studioFile; $("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow";
   $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable;
   $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
+  $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile;
 }
 function renderStudioGuard() {
   const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner"); badge.className = "runtime-badge";
@@ -873,7 +877,7 @@ async function saveStudio() {
     state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; state.visualDirty = false; if (data.kind === "workflow") { $("studioTextarea").value = data.content; state.visual = await api(`/api/studio/visual?id=${encodeURIComponent(data.id)}${projectQuery()}`); } else $("studioPromptTextarea").value = data.content; renderVisualDesigner(); updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus("Saved"); showToast(data.kind === "prompt" ? "Prompt saved" : "Workflow saved");
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, state.studioFile?.kind === "prompt" ? "Prompt save failed" : "Workflow save failed"); }
 }
-async function reloadStudio() { if (!state.studioFile || !confirmDiscardStudio()) return; await openStudioFile(state.studioFile); }
+async function reloadStudio() { if (!state.studioFile || !(await confirmDiscardStudio())) return; await openStudioFile(state.studioFile); }
 async function validateStudio() {
   if (!state.studioFile) return;
   const body = { id: state.studioFile.id, project: state.project?.path || "" };
@@ -890,14 +894,17 @@ async function validateStudio() {
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${prompt ? "Prompt" : "Workflow"} validation failed`); }
 }
 function setStudioStatus(text, error = false) { $("studioStatus").textContent = text || ""; $("studioStatus").classList.toggle("error", !!error); }
-function confirmDiscardStudio() { return !(state.studioDirty || state.visualDirty || state.stageEditorDirty) || window.confirm("You have unsaved Workflow / Stage / Prompt changes. Discard them?"); }
+async function confirmDiscardStudio() {
+  if (!(state.studioDirty || state.visualDirty || state.stageEditorDirty)) return true;
+  return confirmDialog({ title: "Discard unsaved changes?", message: "You have unsaved Workflow, Stage, or Prompt changes. Leaving this editor will discard them.", confirmLabel: "Discard Changes", danger: true });
+}
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
 function openNewWorkflowModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Workflow.", true);
   state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
 }
-function closeNewWorkflowModal(force = false) { if ($("newWorkflowBackdrop").hidden) return true; if (!force && state.newWorkflowDirty && !window.confirm("Discard this new Workflow?")) return false; $("newWorkflowBackdrop").hidden = true; state.newWorkflowDirty = false; return true; }
+async function closeNewWorkflowModal(force = false) { if ($("newWorkflowBackdrop").hidden) return true; if (!force && state.newWorkflowDirty) { const ok = await confirmDialog({ title: "Discard new Workflow?", message: "Discard this unsaved Workflow draft?", confirmLabel: "Discard Workflow", danger: true }); if (!ok) return false; } $("newWorkflowBackdrop").hidden = true; state.newWorkflowDirty = false; return true; }
 async function confirmNewWorkflow() {
   const name = $("newWorkflowName").value.trim(); if (!name) { $("newWorkflowHint").textContent = "Workflow name is required."; $("newWorkflowHint").classList.add("error"); return; }
   try { const result = await api("/api/studio/workflow/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newWorkflowDestination").value }) }); closeNewWorkflowModal(true); state.studioSourceKind = "workflow"; await refreshStudioFiles(); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Workflow ${result.file.name} created`); }
@@ -907,7 +914,7 @@ function openNewPromptModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Prompt.", true);
   state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
 }
-function closeNewPromptModal(force = false) { if ($("newPromptBackdrop").hidden) return true; if (!force && state.newPromptDirty && !window.confirm("Discard this new Prompt?")) return false; $("newPromptBackdrop").hidden = true; state.newPromptDirty = false; return true; }
+async function closeNewPromptModal(force = false) { if ($("newPromptBackdrop").hidden) return true; if (!force && state.newPromptDirty) { const ok = await confirmDialog({ title: "Discard new Prompt?", message: "Discard this unsaved Prompt draft?", confirmLabel: "Discard Prompt", danger: true }); if (!ok) return false; } $("newPromptBackdrop").hidden = true; state.newPromptDirty = false; return true; }
 async function confirmNewPrompt() {
   const name = $("newPromptName").value.trim(); if (!name) { $("newPromptHint").textContent = "Prompt name is required."; $("newPromptHint").classList.add("error"); return; }
   try { const result = await api("/api/studio/prompt/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newPromptDestination").value }) }); closeNewPromptModal(true); state.studioSourceKind = "prompt"; await refreshStudioFiles(); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Prompt ${result.file.name} created`); }
@@ -917,7 +924,7 @@ function openImportAssetModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before importing.", true);
   const kind = state.studioSourceKind; state.importAssetDirty = false; $("importAssetTitle").textContent = `Import ${kind === "prompt" ? "Prompt" : "Workflow"}`; $("importAssetName").value = ""; $("importAssetContent").value = ""; $("importAssetFile").value = ""; $("importAssetFileName").textContent = "No file selected"; $("importAssetDestination").value = "custom"; $("importAssetDestination").querySelector('option[value="project"]').disabled = !state.project; $("importAssetHint").textContent = ""; $("importAssetHint").classList.remove("error"); $("importAssetPreview").textContent = "Choose a file or paste content."; $("importAssetBackdrop").hidden = false;
 }
-function closeImportAssetModal(force = false) { if ($("importAssetBackdrop").hidden) return true; if (!force && state.importAssetDirty && !window.confirm("Discard this import?")) return false; $("importAssetBackdrop").hidden = true; state.importAssetDirty = false; return true; }
+async function closeImportAssetModal(force = false) { if ($("importAssetBackdrop").hidden) return true; if (!force && state.importAssetDirty) { const ok = await confirmDialog({ title: "Discard import?", message: "Discard the selected file and pasted import content?", confirmLabel: "Discard Import", danger: true }); if (!ok) return false; } $("importAssetBackdrop").hidden = true; state.importAssetDirty = false; return true; }
 function parseImportedText(text, fallbackName) {
   const trimmed = String(text || "").trim(); if (!trimmed) return { name: fallbackName || "", content: "" };
   try { const parsed = JSON.parse(trimmed); if (parsed && typeof parsed === "object" && ["workflow", "prompt"].includes(parsed.kind) && typeof parsed.content === "string") return { name: parsed.name || fallbackName || "", content: parsed.content, kind: parsed.kind }; } catch (_) {}
@@ -942,6 +949,21 @@ async function deleteStudioAsset() {
   if (!(await confirmDialog({ title: `Delete ${label}?`, message: `Delete ${current.name}?${current.kind === "prompt" ? " Deletion is blocked if any Workflow Stage still uses this Prompt." : ""}`, confirmLabel: `Delete ${label}`, danger: true }))) return;
   try { await api("/api/studio/delete", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "" }) }); clearStudioEditor(); await refreshStudioFiles(); showToast(`${label} deleted`); }
   catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} deletion failed`); }
+}
+
+function closeStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $("studioAssetMenuButton"); if (!menu || !button) return; menu.hidden = true; button.setAttribute("aria-expanded", "false"); }
+function toggleStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $("studioAssetMenuButton"); if (!menu || !button || button.disabled) return; const open = menu.hidden; menu.hidden = !open; button.setAttribute("aria-expanded", String(open)); }
+async function renameStudioAsset() {
+  closeStudioAssetMenu(); const current = state.studioFile; if (!current || current.readonly || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
+  const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = await inputDialog({ title: `Rename ${label}`, message: current.kind === "prompt" ? "Referenced Prompts must be unlinked before rename." : "Rename keeps the file in the same Custom / Project scope.", label: `${label} name`, value: current.name, confirmLabel: "Rename" }); if (!name || name === current.name) return;
+  try { const result = await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles(); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} renamed`); }
+  catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} rename failed`); }
+}
+async function duplicateStudioAsset() {
+  closeStudioAssetMenu(); const current = state.studioFile; if (!current || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
+  const label = current.kind === "prompt" ? "Prompt" : "Workflow", destination = window.StudioSupport.duplicateDestination(current), suggestion = window.StudioSupport.duplicateName(current.name); const name = await inputDialog({ title: `Duplicate ${label}`, message: `Create an independent ${destination} copy. The source file is not modified.`, label: `${label} name`, value: suggestion, confirmLabel: "Duplicate" }); if (!name) return;
+  try { const result = await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles(); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} duplicated to ${result.item.group}`); }
+  catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} duplicate failed`); }
 }
 
 
@@ -1065,7 +1087,7 @@ async function pollGenerateWorkflow() {
 }
 function startGenerateWorkflowPoll() { clearGenerateWorkflowPoll(); pollGenerateWorkflow(); state.generateWorkflowPollTimer = setInterval(pollGenerateWorkflow, 800); }
 async function openGenerateWorkflowPage() {
-  if (!confirmDiscardStudio()) return;
+  if (!(await confirmDiscardStudio())) return;
   fillGenerateWorkflowBackends(); showWorkflowGeneratorPage(); $("generateWorkflowHint").classList.remove("error"); $("generateWorkflowHint").textContent = "Checking Workflow Builder…";
   try {
     const active = await api("/api/studio/generate/active");
@@ -1147,10 +1169,10 @@ $("openProject").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("chat"); $("workflowNav").onclick = () => switchView("workflow");
-$("visualModeButton").onclick = () => setStudioMode("visual"); $("yamlModeButton").onclick = () => setStudioMode("yaml"); $("yamlWorkflowSource").onclick = () => setStudioSource("workflow"); $("yamlPromptSource").onclick = () => setStudioSource("prompt");
+$("visualModeButton").onclick = () => setStudioMode("visual"); $("yamlModeButton").onclick = () => setStudioMode("yaml"); $("yamlWorkflowSource").onclick = () => setStudioSource("workflow"); $("yamlPromptSource").onclick = () => setStudioSource("prompt"); $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceKind] = $("studioSearchInput").value; renderStudioFiles(); }; $("studioSearchClear").onclick = () => { state.studioFilters[state.studioSourceKind] = ""; renderStudioFiles(); $("studioSearchInput").focus(); };
 $("studioTextarea").addEventListener("input", () => { updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); }); $("studioTextarea").addEventListener("keydown", handleEditorKeydown); $("studioTextarea").addEventListener("scroll", () => { $("studioLineNumbers").scrollTop = $("studioTextarea").scrollTop; });
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
-$("saveStudioButton").onclick = saveStudio; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("addFlowStepButton").onclick = openAddStageModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
+$("saveStudioButton").onclick = saveStudio; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("studioAssetMenuButton").onclick = (event) => { event.stopPropagation(); toggleStudioAssetMenu(); }; $("renameStudioButton").onclick = renameStudioAsset; $("duplicateStudioButton").onclick = duplicateStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("addFlowStepButton").onclick = openAddStageModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
 $("newWorkflowClose").onclick = () => closeNewWorkflowModal(); $("newWorkflowCancel").onclick = () => closeNewWorkflowModal(); $("newWorkflowConfirm").onclick = confirmNewWorkflow; $("newWorkflowBackdrop").addEventListener("click", (e) => { if (e.target === $("newWorkflowBackdrop")) closeNewWorkflowModal(); }); $("newWorkflowBackdrop").addEventListener("input", () => { state.newWorkflowDirty = true; }); $("newWorkflowName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmNewWorkflow(); } });
 $("newPromptClose").onclick = () => closeNewPromptModal(); $("newPromptCancel").onclick = () => closeNewPromptModal(); $("newPromptConfirm").onclick = confirmNewPrompt; $("newPromptBackdrop").addEventListener("click", (e) => { if (e.target === $("newPromptBackdrop")) closeNewPromptModal(); }); $("newPromptBackdrop").addEventListener("input", () => { state.newPromptDirty = true; });
 $("importAssetClose").onclick = () => closeImportAssetModal(); $("importAssetCancel").onclick = () => closeImportAssetModal(); $("importAssetConfirm").onclick = confirmImportAsset; $("importAssetChooseButton").onclick = () => $("importAssetFile").click(); $("importAssetFile").onchange = readImportAssetFile; $("importAssetBackdrop").addEventListener("click", (e) => { if (e.target === $("importAssetBackdrop")) closeImportAssetModal(); }); $("importAssetBackdrop").addEventListener("input", () => { state.importAssetDirty = true; });
@@ -1182,6 +1204,7 @@ document.addEventListener("click", (event) => {
   if (!picker?.contains(event.target) && !menu?.contains(event.target)) closeWorkflowDropdown();
   if (!backendPicker?.contains(event.target) && !backendMenu?.contains(event.target)) closeBackendDropdown();
   if (!event.target.closest?.(".project-tree") && !event.target.closest?.(".project-action-menu")) closeProjectMenus();
+  if (!event.target.closest?.(".studio-asset-menu-wrap")) closeStudioAssetMenu();
   if (!$("optionsPanel").hidden && !$("optionsPanel").contains(event.target) && !$("optionsButton").contains(event.target) && !backendMenu?.contains(event.target)) closeOptionsPanel();
 });
 function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }

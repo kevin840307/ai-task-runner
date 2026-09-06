@@ -1503,6 +1503,183 @@ class UIState:
                 raise ValueError(f"Cannot delete {kind}: {exc}") from exc
             return {"ok": True, "kind": kind, "name": path.name}
 
+    @staticmethod
+    def _normalize_studio_asset_name(kind: str, name: str) -> str:
+        raw = str(name or "").strip()
+        if not raw:
+            raise ValueError(f"{kind.title()} name is required")
+        if "/" in raw or "\\" in raw or raw in {".", ".."}:
+            raise ValueError(f"{kind.title()} name must be a file name, not a path")
+        if kind == "workflow":
+            if not raw.lower().endswith((".yaml", ".yml")):
+                raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
+            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
+                raise ValueError("Workflow file name contains unsupported characters")
+        elif kind == "prompt":
+            if not raw.lower().endswith(".md"):
+                raw += ".md"
+            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", raw, re.IGNORECASE):
+                raise ValueError("Prompt file name contains unsupported characters")
+        else:
+            raise ValueError("Unsupported Studio asset kind")
+        return raw
+
+    def _studio_scope_root(self, kind: str, scope: str, project: Path | None) -> Path:
+        if scope == "custom":
+            root = self.repo_root / "runner" / ("workflow" if kind == "workflow" else "prompts") / "custom"
+        elif scope == "project":
+            if project is None:
+                raise ValueError("Select a Project before modifying a Project asset")
+            root = project if kind == "workflow" else project / "prompts"
+        else:
+            raise ValueError("System assets cannot be renamed in place")
+        root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
+        return root
+
+    def studio_rename(self, file_id: str, name: str, project: Path | None = None) -> dict:
+        """Rename one writable Studio asset without changing its scope or content."""
+        with self._edit_lock:
+            self._require_editable()
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            self._require_studio_writable(scope)
+            if kind == "prompt":
+                usages = self._prompt_usages(path, project)
+                if usages:
+                    raise ValueError("Prompt is still referenced; update Workflow references before rename: " + "; ".join(usages[:12]))
+            raw = self._normalize_studio_asset_name(kind, name)
+            root = self._studio_scope_root(kind, scope, project)
+            target = (root / raw).resolve()
+            if not self._is_within(target, root):
+                raise ValueError("Renamed asset path is outside the allowed scope")
+            if target == path:
+                item = self._studio_item(path, scope, kind)
+                return {"item": item, "file": self.studio_read(item["id"], project)}
+            if target.exists():
+                raise ValueError(f"{kind.title()} already exists: {target.name}")
+            content = path.read_text(encoding="utf-8")
+            if kind == "workflow":
+                self._validate_workflow_before_write(target, content)
+            else:
+                self._validate_prompt_before_write(target, content)
+            try:
+                path.rename(target)
+            except OSError as exc:
+                raise ValueError(f"Cannot rename {kind}: {exc}") from exc
+            item = self._studio_item(target, scope, kind)
+            return {"item": item, "file": self.studio_read(item["id"], project)}
+
+    def studio_duplicate(self, file_id: str, name: str, project: Path | None = None) -> dict:
+        """Create an independent copy. System assets duplicate to Custom; others keep scope."""
+        with self._edit_lock:
+            self._require_editable()
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            target_scope = "custom" if scope in SYSTEM_SCOPES else scope
+            raw = self._normalize_studio_asset_name(kind, name)
+            root = self._studio_scope_root(kind, target_scope, project)
+            target = (root / raw).resolve()
+            if not self._is_within(target, root):
+                raise ValueError("Duplicated asset path is outside the allowed scope")
+            if target.exists():
+                raise ValueError(f"{kind.title()} already exists: {target.name}")
+            content = path.read_text(encoding="utf-8")
+            if kind == "workflow":
+                self._validate_workflow_before_write(target, content)
+            else:
+                self._validate_prompt_before_write(target, content)
+            try:
+                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+                with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                    handle.write(content)
+            except FileExistsError as exc:
+                raise ValueError(f"{kind.title()} already exists: {target.name}") from exc
+            item = self._studio_item(target, target_scope, kind)
+            return {"item": item, "file": self.studio_read(item["id"], project)}
+
+    @staticmethod
+    def _stage_reference_paths(value, stage_name: str, path: str = "workflow") -> list[str]:
+        refs: list[str] = []
+        if isinstance(value, dict):
+            for key, child in value.items():
+                current = f"{path}.{key}"
+                if key in {"stage", "restart_at"} and isinstance(child, str) and child == stage_name:
+                    refs.append(current)
+                if key in {"recover", "flow"} and isinstance(child, list):
+                    for index, item in enumerate(child):
+                        item_path = f"{current}[{index}]"
+                        if isinstance(item, str) and item == stage_name:
+                            refs.append(item_path)
+                        elif isinstance(item, (dict, list)):
+                            refs.extend(UIState._stage_reference_paths(item, stage_name, item_path))
+                    continue
+                if isinstance(child, (dict, list)):
+                    refs.extend(UIState._stage_reference_paths(child, stage_name, current))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                if isinstance(child, (dict, list)):
+                    refs.extend(UIState._stage_reference_paths(child, stage_name, f"{path}[{index}]"))
+        return refs
+
+    @staticmethod
+    def _remove_stage_definition_block(content: str, stage_name: str) -> str:
+        try:
+            root = yaml.compose(content)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Workflow YAML is invalid: {exc}") from exc
+        if not isinstance(root, yaml.nodes.MappingNode):
+            raise ValueError("Workflow YAML root must be a mapping")
+        stage_mapping = None
+        for key_node, value_node in root.value:
+            if isinstance(key_node, yaml.nodes.ScalarNode) and key_node.value == "stages":
+                stage_mapping = value_node
+                break
+        if not isinstance(stage_mapping, yaml.nodes.MappingNode):
+            raise ValueError("Workflow stages mapping is missing")
+        start = end = None
+        for key_node, value_node in stage_mapping.value:
+            if isinstance(key_node, yaml.nodes.ScalarNode) and str(key_node.value) == stage_name:
+                start = key_node.start_mark.line
+                end = max(key_node.end_mark.line, value_node.end_mark.line)
+                break
+        if start is None or end is None:
+            raise ValueError(f"Stage not found: {stage_name}")
+        lines = content.splitlines(keepends=True)
+        del lines[start:end]
+        return "".join(lines)
+
+    def studio_stage_delete(self, file_id: str, stage_name: str, expected_hash: str, project: Path | None = None, *, flow_index: int | None = None) -> dict:
+        """Atomically remove one Flow invocation and its Stage definition when no other references remain."""
+        with self._edit_lock:
+            self._require_editable()
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            self._require_studio_writable(scope)
+            if kind != "workflow":
+                raise ValueError("Stage definitions exist only in Workflow YAML")
+            content = path.read_text(encoding="utf-8")
+            self._require_hash(content, expected_hash)
+            data = self._load_workflow_yaml(content)
+            stages = data.get("stages") if isinstance(data, dict) else None
+            flow = data.get("flow") if isinstance(data, dict) else None
+            if not isinstance(stages, dict) or stage_name not in stages:
+                raise ValueError(f"Stage not found: {stage_name}")
+            if not isinstance(flow, list):
+                flow = []
+            if flow_index is None or flow_index < 0 or flow_index >= len(flow):
+                raise ValueError("A valid Flow invocation is required to delete the Stage definition")
+            selected = flow[flow_index]
+            selected_name = selected if isinstance(selected, str) else str(selected.get("stage", "")) if isinstance(selected, dict) else ""
+            if selected_name != stage_name:
+                raise ValueError("Selected Flow invocation no longer matches the Stage")
+            next_flow = list(flow); del next_flow[flow_index]
+            next_data = dict(data); next_stages = dict(stages); next_stages.pop(stage_name, None); next_data["stages"] = next_stages; next_data["flow"] = next_flow
+            refs = self._stage_reference_paths(next_data, stage_name)
+            if refs:
+                raise ValueError("Stage definition is still referenced by: " + ", ".join(refs[:8]))
+            without_stage = self._remove_stage_definition_block(content, stage_name)
+            updated = self._replace_flow_block(without_stage, next_flow)
+            self._validate_workflow_before_write(path, updated)
+            self._atomic_write(path, updated)
+            return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
+
     def studio_export(self, file_id: str, project: Path | None = None) -> dict:
         path, kind, scope = self._resolve_studio_file(file_id, project)
         return {
@@ -2258,6 +2435,12 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/delete":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_delete(str(body.get("id", "")), project))
+            if parsed.path == "/api/studio/rename":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_rename(str(body.get("id", "")), str(body.get("name", "")), project))
+            if parsed.path == "/api/studio/duplicate":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/import":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project))
@@ -2289,6 +2472,11 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/stage/add":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_add(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("type", "base")), str(body.get("hash", "")), project, status=str(body.get("status", "")), prompt=str(body.get("prompt", "")), command=str(body.get("command", "")), add_to_flow=bool(body.get("add_to_flow", True))))
+            if parsed.path == "/api/studio/stage/delete":
+                project = self._optional_project(str(body.get("project", "")))
+                flow_index = body.get("flow_index")
+                flow_index = int(flow_index) if flow_index is not None else None
+                return self._json(self.state.studio_stage_delete(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("hash", "")), project, flow_index=flow_index))
             if parsed.path == "/api/studio/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_check(str(body.get("id", "")), str(body.get("content", "")), project))

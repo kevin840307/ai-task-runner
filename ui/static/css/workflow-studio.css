@@ -328,7 +328,7 @@
 /* Round 3: keep Workflow / Prompt navigation fixed and let only file/content areas scroll. */
 .studio-workflow-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   align-content: stretch;
   overflow: hidden;
 }
@@ -1048,3 +1048,28 @@
   .workflow-generator-prompt-list { max-height: 150px; border-right: 0; border-bottom: 1px solid var(--line); }
 }
 
+
+/* Studio asset discovery/actions: keep CRUD controls local to Studio, not Runner. */
+.studio-search-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 8px 0 10px;
+  padding: 0 9px;
+  border: 1px solid var(--line, #d8dee9);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+}
+.studio-search-wrap:focus-within { border-color: var(--accent, #0f8179); box-shadow: 0 0 0 2px rgba(15,129,121,.10); }
+.studio-search-icon { color: var(--muted, #667085); font-size: 14px; }
+.studio-search-input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.studio-search-input::-webkit-search-cancel-button { display: none; }
+.studio-search-clear { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted, #667085); }
+.studio-search-clear:hover { background: rgba(15,23,42,.06); color: inherit; }
+.studio-asset-menu-wrap { position: relative; }
+.studio-asset-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 80; width: 150px; padding: 6px; border: 1px solid var(--line, #d8dee9); border-radius: 12px; background: var(--surface, #fff); box-shadow: 0 16px 40px rgba(15,23,42,.14); }
+.studio-asset-menu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+.studio-asset-menu button:hover:not(:disabled) { background: rgba(15,129,121,.08); }
+.studio-asset-menu button:disabled { opacity: .45; cursor: not-allowed; }

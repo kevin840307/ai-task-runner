@@ -805,6 +805,53 @@ flow: [validate]
         with self.assertRaisesRegex(ValueError, "still used"):
             self.state.studio_delete(item["id"], self.project)
 
+    def test_workflow_rename_and_duplicate_preserve_validated_content(self) -> None:
+        item = self._workflow_item()
+        renamed = self.state.studio_rename(item["id"], "renamed.workflow.yaml", self.project)
+        renamed_path = self.root / "runner" / "workflow" / "custom" / "renamed.workflow.yaml"
+        self.assertTrue(renamed_path.is_file()); self.assertFalse(self.workflow.exists())
+        copied = self.state.studio_duplicate(renamed["item"]["id"], "renamed copy.workflow.yaml", self.project)
+        copy_path = self.root / "runner" / "workflow" / "custom" / "renamed copy.workflow.yaml"
+        self.assertTrue(copy_path.is_file())
+        self.assertEqual(copy_path.read_text(encoding="utf-8"), renamed_path.read_text(encoding="utf-8"))
+        self.assertEqual(copied["item"]["group"], "Custom")
+
+    def test_prompt_rename_is_blocked_when_referenced_but_duplicate_is_allowed(self) -> None:
+        prompt = self.root / "runner" / "prompts" / "custom" / "used.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
+        self.workflow.write_text("stages:\n  work:\n    type: task\n    prompt: custom/used.md\nflow: [work]\n", encoding="utf-8")
+        item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(prompt.resolve()))
+        with self.assertRaisesRegex(ValueError, "still referenced"):
+            self.state.studio_rename(item["id"], "renamed.md", self.project)
+        copied = self.state.studio_duplicate(item["id"], "used copy.md", self.project)
+        self.assertTrue(Path(copied["item"]["path"]).is_file())
+        self.assertEqual(copied["item"]["group"], "Custom")
+
+    def test_system_workflow_duplicate_goes_to_custom_without_mutating_system(self) -> None:
+        system = next(x for x in self.state.studio_files(self.project)["workflows"] if x["path"] == str(self.system_workflow.resolve()))
+        copied = self.state.studio_duplicate(system["id"], "system copy.workflow.yaml", self.project)
+        self.assertEqual(copied["item"]["group"], "Custom")
+        self.assertTrue(self.system_workflow.is_file())
+        self.assertTrue((self.root / "runner" / "workflow" / "custom" / "system copy.workflow.yaml").is_file())
+
+    def test_stage_definition_delete_removes_selected_flow_and_definition_preserving_other_text(self) -> None:
+        self.workflow.write_text("# keep header\nstages:\n  work:\n    type: task\n    status: Working\n  review:\n    type: review\n\nflow:\n  - work\n  - review\n", encoding="utf-8")
+        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertNotIn("work", data["stages"]); self.assertEqual(data["flow"], ["review"])
+        self.assertIn("# keep header", result["file"]["content"]); self.assertIn("review:", result["file"]["content"])
+
+    def test_stage_definition_delete_is_blocked_by_other_flow_or_recovery_reference(self) -> None:
+        self.workflow.write_text("stages:\n  work:\n    type: task\n  review:\n    type: review\n    recover: [work]\nflow:\n  - work\n  - review\n", encoding="utf-8")
+        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "still referenced"):
+            self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
+        self.assertIn("work", __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))["stages"])
+        self.workflow.write_text("stages:\n  work:\n    type: task\nflow:\n  - work\n  - work\n", encoding="utf-8")
+        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "still referenced"):
+            self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
+
     def test_import_workflow_rejects_missing_prompt_and_accepts_existing_prompt(self) -> None:
         bad = "stages:\n  work:\n    type: task\n    prompt: prompts/missing.md\nflow: [work]\n"
         with self.assertRaisesRegex(ValueError, "missing Prompt"):
