@@ -1,12 +1,32 @@
 const $ = (id) => document.getElementById(id);
+const UI_PREFS_KEY = "ai-task-runner.ui.preferences.v1";
+function loadUiPreferences() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+    return raw && typeof raw === "object" ? { lastProject: String(raw.lastProject || ""), builderBackend: String(raw.builderBackend || ""), projects: raw.projects && typeof raw.projects === "object" ? raw.projects : {} } : { lastProject: "", builderBackend: "", projects: {} };
+  } catch (_) { return { lastProject: "", builderBackend: "", projects: {} }; }
+}
+function saveUiPreferences() { try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(state.preferences || { lastProject: "", builderBackend: "", projects: {} })); } catch (_) {} }
+function currentProjectPreferences() {
+  if (!state.preferences) state.preferences = loadUiPreferences();
+  const path = state.project?.path || ""; if (!path) return {};
+  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", workflow: "", validators: {} });
+}
+function rememberProjectPreference(key, value) { const prefs = currentProjectPreferences(); if (!state.project) return; prefs[key] = value; saveUiPreferences(); }
+function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
 const state = {
-  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "",
+  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", spinnerFrame: 0, historyPinnedToBottom: true,
+  backends: [], defaultBackend: "", preferences: null, validatorWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioOriginal: "", studioHash: "", studioDirty: false,
   studioGuard: { editable: true, active_projects: [] }, studioMode: "visual", studioSourceKind: "workflow",
   visual: null, visualDirty: false, selectedFlowIndex: -1, stepActionMenuExpanded: false,
-  promptTags: [], stageEditorDirty: false, addStageDirty: false, newWorkflowDirty: false, newPromptDirty: false, importAssetDirty: false, generateWorkflowDirty: false, syntaxTimer: 0,
+  promptTags: [], stageEditorDirty: false, addStageDirty: false, newWorkflowDirty: false, newPromptDirty: false, importAssetDirty: false,
+  generateWorkflowDirty: false, generateWorkflowJobId: "", generateWorkflowPhase: "idle", generateWorkflowPollTimer: 0,
+  generateWorkflowDraft: null, generateWorkflowPromptIndex: 0, generateWorkflowReviewTab: "visual", generateWorkflowRequestText: "",
+  generateWorkflowWorkspace: "", generateWorkflowWorkspacePattern: "",
+  syntaxTimer: 0,
 };
 
 async function api(path, options = {}) {
@@ -57,11 +77,37 @@ function syncComposerReserve() {
   const reserve = Math.ceil(panel.getBoundingClientRect().height + 18);
   $("chatView")?.style.setProperty("--composer-reserve", `${reserve}px`);
 }
+function historyNearBottom(root = $("messages"), threshold = 96) {
+  if (!root) return true;
+  return root.scrollHeight - root.scrollTop - root.clientHeight <= threshold;
+}
+function followHistoryToBottom(force = false) {
+  const root = $("messages"); if (!root) return;
+  if (!force && !state.historyPinnedToBottom) return;
+  requestAnimationFrame(() => {
+    root.scrollTop = root.scrollHeight;
+    state.historyPinnedToBottom = true;
+  });
+}
 
 // ------------------------------ Projects / Chat ------------------------------
 async function loadProjects() {
   const data = await api("/api/projects"); state.projects = data.projects || []; renderProjects();
-  if (!state.project && state.projects.length) { const first = state.projects.find((p) => p.exists !== false); if (first) await selectProject(first); }
+  if (!state.project && state.projects.length) {
+    const saved = state.preferences?.lastProject || "";
+    const first = state.projects.find((p) => p.path === saved && p.exists !== false) || state.projects.find((p) => p.exists !== false);
+    if (first) await selectProject(first);
+  }
+}
+function projectRuntimeSignature(projects) { return (projects || []).map((p) => `${p.path}:${p.runtime_status || "idle"}:${p.exists !== false}`).join("|"); }
+async function refreshProjectStatuses() {
+  try {
+    const data = await api("/api/projects"), next = data.projects || [];
+    if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
+    state.projects = next;
+    if (state.project) state.project = next.find((p) => p.path === state.project.path) || state.project;
+    renderProjects();
+  } catch (_) {}
 }
 const projectMenuOwners = new WeakMap();
 function restoreProjectMenu(menu) {
@@ -93,16 +139,21 @@ function openProjectMenu(menu, anchor, row) {
 }
 function renderProjects() {
   const root = $("projectList"); closeProjectMenus(); root.innerHTML = ""; root.onscroll = () => closeProjectMenus();
+  const labels = { running: "RUN", completed: "DONE", interrupted: "INT", stopped: "STOP", idle: "IDLE", missing: "MISS" };
   for (const project of state.projects) {
-    const row = document.createElement("div"); row.className = "project-tree project-row";
+    const runtimeStatus = project.exists === false ? "missing" : (project.runtime_status || "idle");
+    const row = document.createElement("div"); row.className = `project-tree project-row runtime-${runtimeStatus}`;
     if (state.project?.path === project.path) row.classList.add("active");
     if (project.exists === false) row.classList.add("missing");
     const button = document.createElement("button"); button.className = "project-root"; button.type = "button";
-    const mark = document.createElement("span"); mark.className = "project-mark";
+    const mark = document.createElement("span"); mark.className = `project-mark runtime-${runtimeStatus}`; mark.title = runtimeStatus === "running" ? "Running" : runtimeStatus.charAt(0).toUpperCase() + runtimeStatus.slice(1);
     const copy = document.createElement("span"); copy.className = "project-copy";
+    const nameLine = document.createElement("span"); nameLine.className = "project-name-line";
     const name = document.createElement("strong"); name.textContent = project.name;
+    nameLine.appendChild(name);
+    if (labels[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = labels[runtimeStatus]; nameLine.appendChild(status); }
     const path = document.createElement("small"); path.textContent = project.exists === false ? `Missing · ${project.path}` : project.path;
-    copy.append(name, path); button.append(mark, copy); button.onclick = () => project.exists === false ? null : selectProject(project);
+    copy.append(nameLine, path); button.append(mark, copy); button.onclick = () => project.exists === false ? null : selectProject(project);
 
     const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = "Project actions"; menuButton.setAttribute("aria-label", `Project actions for ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>";
     const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
@@ -132,57 +183,138 @@ function showEmpty() {
 async function selectProject(project) {
   if (state.project?.path !== project.path && !confirmDiscardStudio()) return;
   if (state.project?.path !== project.path) { closeStageEditor(true); closeAddStageModal(true); }
-  state.project = project; state.lastStream = ""; renderProjects();
+  state.project = project; state.lastStream = ""; state.historyPinnedToBottom = true; state.validatorWorkflowPath = "";
+  if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
+  if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
   $("projectName").textContent = project.name; $("projectPath").textContent = project.path; $("emptyState").hidden = true;
   $("summary").hidden = false; $("messages").hidden = false; $("composePanel").hidden = false; $("errorText").textContent = ""; requestAnimationFrame(syncComposerReserve);
   await Promise.all([refreshMessages(), refreshRuntime(), refreshStudioFiles()]);
 }
-async function refreshMessages() {
-  if (!state.project) return; const data = await api(`/api/project/messages?project=${encodeURIComponent(state.project.path)}`);
-  const root = $("messages"); const live = root.querySelector(".live-activity"); root.innerHTML = "";
+async function refreshMessages({ forceFollow = false } = {}) {
+  if (!state.project) return;
+  const root = $("messages");
+  const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
+  const data = await api(`/api/project/messages?project=${encodeURIComponent(state.project.path)}`);
+  const live = root.querySelector(".live-activity"); root.innerHTML = "";
   for (const message of data.messages || []) {
     const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant";
     const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.content || ""; item.appendChild(body); root.appendChild(item);
   }
-  if (live) root.appendChild(live); root.scrollTop = root.scrollHeight;
+  if (live) root.appendChild(live);
+  if (shouldFollow) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
 }
-function ensureLiveCard() {
-  let card = $("messages").querySelector(".live-activity"); if (card) return card;
-  card = document.createElement("article"); card.className = "live-activity";
-  card.innerHTML = `<div class="live-activity-head"><span class="live-dot"></span><strong class="live-title">Working</strong><small class="live-progress"></small></div><div class="live-meta"></div><pre class="live-output"></pre>`;
-  $("messages").appendChild(card); return card;
+const CLI_SPINNER_FRAMES = ["|", "/", "-", "\\"];
+function ensureLiveCard({ forceVisibleOnCreate = false } = {}) {
+  const root = $("messages");
+  let card = root.querySelector(".live-activity"); if (card) return card;
+  card = document.createElement("article"); card.className = "live-activity cli-runtime-card";
+  card.innerHTML = `<div class="live-activity-head"><span class="live-dot" aria-hidden="true"></span><strong class="live-title">CLI Runtime</strong><small class="live-progress">same runtime state</small></div><pre class="cli-runtime-output"></pre>`;
+  root.appendChild(card);
+  if (forceVisibleOnCreate) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
+  return card;
 }
 function removeLiveCard() { $("messages")?.querySelector(".live-activity")?.remove(); }
+function cliRuntimeText(runtime) {
+  const spinner = runtime.running ? CLI_SPINNER_FRAMES[state.spinnerFrame % CLI_SPINNER_FRAMES.length] : " ";
+  const lines = Array.isArray(runtime.cli_lines) && runtime.cli_lines.length
+    ? runtime.cli_lines
+    : [`AI Task Runner  Cycle 1  Progress ${runtime.completed_count || 0}/${runtime.total || 0}`, "", `  {spinner} ${runtime.cli_status || runtime.stage || "準備中"}`];
+  return lines.map((line) => String(line).replaceAll("{spinner}", spinner)).join("\n");
+}
+function renderCliRuntimeFrame() {
+  const runtime = state.runtime, output = $("messages")?.querySelector(".cli-runtime-output");
+  if (!runtime || !output) return;
+  output.textContent = cliRuntimeText(runtime);
+}
+function runtimeStatusLabel(runtime) {
+  if (runtime?.running) return "Running";
+  if (runtime?.stale && runtime?.resumable) return "Interrupted";
+  if (runtime?.resumable) return "Stopped";
+  if (runtime?.completed) return "Completed";
+  return "Idle";
+}
+function renderLiveRuntimeHeader(runtime) {
+  const card = $("messages")?.querySelector(".live-activity"); if (!card || !runtime) return;
+  card.querySelector(".live-title").textContent = runtimeStatusLabel(runtime);
+  card.querySelector(".live-progress").textContent = runtime.total ? `${runtime.completed_count || 0}/${runtime.total} TODO` : (runtime.console_snapshot_exists ? "CLI synced" : "State fallback");
+}
+function animateRuntimeFrame() {
+  if (!state.runtime?.running) return;
+  state.spinnerFrame = (state.spinnerFrame + 1) % CLI_SPINNER_FRAMES.length;
+  renderCliRuntimeFrame();
+  renderLiveRuntimeHeader(state.runtime);
+}
 async function refreshRuntime() { if (!state.project) return; try { const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(state.project.path)}`); state.runtime = runtime; renderRuntime(runtime); } catch (error) { $("errorText").textContent = error.message; } }
 function renderRuntime(runtime) {
-  const badge = $("statusBadge"); badge.className = "runtime-badge"; let label = "Idle";
-  if (runtime.running) { label = "Running"; badge.classList.add("running"); }
-  else if (runtime.stale && runtime.resumable) { label = "Interrupted"; badge.classList.add("interrupted"); }
-  else if (runtime.last_error && runtime.resumable) { label = "Stopped"; badge.classList.add("failed"); }
-  else if (runtime.completed) { label = "Completed"; badge.classList.add("completed"); }
-  badge.textContent = label; $("currentStage").textContent = runtime.stage || label; $("progressText").textContent = runtime.total ? `${runtime.current} / ${runtime.total}` : "—"; $("currentTask").textContent = runtime.task || (runtime.last_error || "Waiting");
+  const badge = $("statusBadge"); badge.className = "runtime-badge"; const label = runtimeStatusLabel(runtime);
+  if (runtime.running) badge.classList.add("running");
+  else if (runtime.stale && runtime.resumable) badge.classList.add("interrupted");
+  else if (runtime.resumable) badge.classList.add("failed");
+  else if (runtime.completed) badge.classList.add("completed");
+  badge.textContent = label; $("currentStage").textContent = runtime.cli_status || runtime.stage || label; $("progressText").textContent = runtime.total ? `${runtime.completed_count || 0} / ${runtime.total}` : "—"; $("currentTask").textContent = runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting");
+  $("sendButton").hidden = runtime.running || runtime.resumable;
   $("stopButton").hidden = !runtime.running;
   $("resumeButton").hidden = runtime.running || !runtime.resumable;
+  $("resetButton").hidden = runtime.running || !runtime.resumable;
   $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
-  $("resetButton").hidden = runtime.running || !runtime.resettable;
-  $("resetButton").textContent = runtime.completed ? "New Task" : "Reset";
   const blockNew = runtime.running || runtime.resumable;
   $("sendButton").disabled = blockNew; $("messageInput").disabled = blockNew;
-  if (runtime.resumable) $("messageInput").placeholder = "Stopped task: Continue or Reset before starting another task.";
-  else $("messageInput").placeholder = "描述要完成的功能或修復內容...";
-  if (runtime.running || runtime.stream) {
-    const card = ensureLiveCard(); card.querySelector(".live-title").textContent = runtime.stage ? `Running · ${runtime.stage}` : label; card.querySelector(".live-progress").textContent = runtime.total ? `${runtime.current} / ${runtime.total}` : "";
-    const meta = []; if (runtime.task) meta.push(runtime.task); if (runtime.pid) meta.push(`PID ${runtime.pid}`); card.querySelector(".live-meta").textContent = meta.join(" · ");
-    if (runtime.stream !== state.lastStream) { state.lastStream = runtime.stream || ""; const out = card.querySelector(".live-output"); out.textContent = state.lastStream || "Waiting for output..."; out.scrollTop = out.scrollHeight; $("messages").scrollTop = $("messages").scrollHeight; }
+  $("messageInput").placeholder = "描述要完成的功能或修復內容...";
+  if (runtime.running || runtime.resumable) {
+    const card = ensureLiveCard({ forceVisibleOnCreate: true });
+    card.classList.toggle("running", Boolean(runtime.running));
+    renderLiveRuntimeHeader(runtime);
+    renderCliRuntimeFrame();
+    followHistoryToBottom();
   } else removeLiveCard();
-  if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; refreshMessages(); }
+  const current = state.projects.find((p) => p.path === state.project?.path);
+  if (current) { const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle"; if (current.runtime_status !== nextStatus) { current.runtime_status = nextStatus; renderProjects(); } }
+  if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
-function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; ta.style.height = "72px"; syncComposerReserve(); }
+function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; ta.style.height = "60px"; syncComposerReserve(); }
 async function sendMessage() {
   const text = $("messageInput").value.trim(); if (!text || !state.project) return; $("errorText").textContent = "";
-  try { await api("/api/project/message", { method: "POST", body: JSON.stringify(payload({ message: text })) }); $("messageInput").value = ""; resizeComposerInput(); await refreshMessages(); showToast("Task started"); setTimeout(refreshRuntime, 250); }
+  state.historyPinnedToBottom = true;
+  try { await api("/api/project/message", { method: "POST", body: JSON.stringify(payload({ message: text })) }); $("messageInput").value = ""; resizeComposerInput(); await refreshMessages({ forceFollow: true }); showToast("Task started"); setTimeout(refreshRuntime, 250); }
   catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Task start failed"); }
+}
+
+async function refreshBackends() {
+  try { const data = await api("/api/backends"); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
+  catch (_) { state.backends = ["qwen", "opencode"]; state.defaultBackend = "qwen"; renderBackendPicker(); }
+}
+function closeBackendDropdown() {
+  const menu = $("backendDropdownMenu"), picker = $("backendPicker"), button = $("backendDropdownButton"); if (!menu || !picker || !button) return;
+  menu.hidden = true; menu.classList.remove("backend-dropdown-portal"); menu.removeAttribute("style"); if (menu.parentElement !== picker) picker.appendChild(menu); button.setAttribute("aria-expanded", "false");
+}
+function positionUpwardDropdown(menu, button, rowCount, widthExtra = 80) {
+  if (!menu || !button || menu.hidden) return; const rect = button.getBoundingClientRect(), pad = 10, gap = 8;
+  const width = Math.min(460, Math.max(220, Math.min(window.innerWidth - pad * 2, rect.width + widthExtra)));
+  menu.style.width = `${width}px`; menu.style.left = `${Math.min(window.innerWidth - width - pad, Math.max(pad, rect.right - width))}px`; menu.style.right = "auto"; menu.style.top = "auto"; menu.style.bottom = `${Math.max(pad, window.innerHeight - rect.top + gap)}px`;
+  const available = Math.max(120, rect.top - pad * 2); const rows = [...menu.children].slice(0, Math.min(5, rowCount));
+  const fiveRowHeight = rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0) + Math.max(0, rows.length - 1) * 4 + 12;
+  const cap = rowCount > 5 ? Math.max(140, fiveRowHeight) : Math.max(100, menu.scrollHeight); menu.style.maxHeight = `${Math.min(available, cap)}px`; menu.classList.toggle("dropdown-scrollable", rowCount > 5 || menu.scrollHeight > available);
+}
+function openBackendDropdown() {
+  const menu = $("backendDropdownMenu"), button = $("backendDropdownButton"); if (!menu || !button) return; closeWorkflowDropdown();
+  if (menu.parentElement !== document.body) document.body.appendChild(menu); menu.classList.add("backend-dropdown-portal"); menu.hidden = false; button.setAttribute("aria-expanded", "true"); positionUpwardDropdown(menu, button, menu.children.length, 70);
+}
+function renderBackendPicker() {
+  const select = $("backend"), menu = $("backendDropdownMenu"), label = $("backendSelectedLabel"); if (!select || !menu || !label) return;
+  const prefs = currentProjectPreferences(); const saved = String(prefs.backend || ""); select.innerHTML = ""; menu.innerHTML = "";
+  const rows = [{ value: "", label: state.defaultBackend ? `Default · ${state.defaultBackend}` : "Default backend", meta: "Runner default", badge: "DEFAULT" }, ...state.backends.map((name) => ({ value: name, label: name, meta: "AI backend", badge: "BACKEND" }))];
+  for (const row of rows) {
+    const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option);
+    const button = document.createElement("button"); button.type = "button"; button.className = "workflow-dropdown-option backend-dropdown-option"; button.setAttribute("role", "option");
+    button.innerHTML = `<span class="workflow-option-main"><strong></strong><small></small></span><span class="workflow-option-badge"></span>`; button.querySelector("strong").textContent = row.label; button.querySelector("small").textContent = row.meta; button.querySelector(".workflow-option-badge").textContent = row.badge;
+    button.onclick = () => { select.value = row.value; rememberProjectPreference("backend", row.value); closeBackendDropdown(); renderBackendPickerSelection(); }; menu.appendChild(button);
+  }
+  select.value = [...select.options].some((o) => o.value === saved) ? saved : ""; renderBackendPickerSelection();
+}
+function renderBackendPickerSelection() {
+  const select = $("backend"), label = $("backendSelectedLabel"); if (!select || !label) return; label.textContent = select.options[select.selectedIndex]?.textContent || "Default backend";
+  document.querySelectorAll("#backendDropdownMenu .backend-dropdown-option").forEach((button, index) => { const active = select.options[index]?.value === select.value; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
 }
 
 // ------------------------------ Workflow picker ------------------------------
@@ -198,16 +330,9 @@ function closeWorkflowDropdown() {
   if (menu.parentElement !== picker) picker.appendChild(menu);
   picker.classList.remove("open"); button.setAttribute("aria-expanded", "false");
 }
-function positionWorkflowDropdown() {
-  const menu = $("workflowDropdownMenu"), button = $("workflowDropdownButton"); if (!menu || !button || menu.hidden) return;
-  const rect = button.getBoundingClientRect(); const gap = 10; const viewportPad = 10;
-  const width = Math.min(460, Math.max(280, Math.min(window.innerWidth - viewportPad * 2, rect.width + 120)));
-  menu.style.width = `${width}px`; menu.style.maxHeight = `${Math.max(160, Math.min(360, rect.top - 28))}px`;
-  const left = Math.min(window.innerWidth - width - viewportPad, Math.max(viewportPad, rect.right - width));
-  menu.style.left = `${left}px`; menu.style.right = "auto"; menu.style.bottom = `${Math.max(viewportPad, window.innerHeight - rect.top + gap)}px`; menu.style.top = "auto";
-}
+function positionWorkflowDropdown() { const menu = $("workflowDropdownMenu"), button = $("workflowDropdownButton"); if (!menu || !button || menu.hidden) return; positionUpwardDropdown(menu, button, menu.children.length, 120); }
 function openWorkflowDropdown() {
-  const menu = $("workflowDropdownMenu"), picker = $("workflowPicker"), button = $("workflowDropdownButton"); if (!menu || !picker || !button) return;
+  const menu = $("workflowDropdownMenu"), picker = $("workflowPicker"), button = $("workflowDropdownButton"); if (!menu || !picker || !button) return; closeBackendDropdown();
   if (menu.parentElement !== document.body) document.body.appendChild(menu);
   menu.classList.add("workflow-dropdown-portal"); menu.hidden = false; picker.classList.add("open"); button.setAttribute("aria-expanded", "true");
   positionWorkflowDropdown();
@@ -215,18 +340,20 @@ function openWorkflowDropdown() {
 
 function renderWorkflowPicker() {
   const select = $("workflowSelect"), menu = $("workflowDropdownMenu"), label = $("workflowSelectedLabel"); if (!select || !menu || !label) return;
-  const previous = select.value; select.innerHTML = ""; menu.innerHTML = "";
+  const previous = select.value; const saved = String(currentProjectPreferences().workflow || ""); select.innerHTML = ""; menu.innerHTML = "";
   const rows = (state.studioFiles.workflows || []).map((item) => ({ value: item.path, label: item.name, meta: `${item.group || item.scope}${item.requires_python_validator ? " · Python validation" : ""}${item.has_ai_validator ? " · AI validation" : ""}`, scope: item.scope }));
   for (const row of rows) {
     const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option);
     const button = document.createElement("button"); button.type = "button"; button.className = "workflow-dropdown-option"; button.setAttribute("role", "option");
     button.innerHTML = `<span class="workflow-option-main"><strong></strong><small></small></span><span class="workflow-option-badge"></span>`;
     button.querySelector("strong").textContent = row.label; button.querySelector("small").textContent = row.meta; button.querySelector(".workflow-option-badge").textContent = row.scope === "system" ? "SYSTEM" : row.scope.toUpperCase();
-    button.onclick = () => { select.value = row.value; label.textContent = row.label; closeWorkflowDropdown(); renderWorkflowPickerSelection(); };
+    button.onclick = () => { select.value = row.value; label.textContent = row.label; rememberProjectPreference("workflow", row.value); closeWorkflowDropdown(); renderWorkflowPickerSelection(); };
     menu.appendChild(button);
   }
-  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  if ([...select.options].some((option) => option.value === saved)) select.value = saved;
+  else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
   else if (select.options.length) select.selectedIndex = 0;
+  if (select.value) rememberProjectPreference("workflow", select.value);
   label.textContent = select.options[select.selectedIndex]?.textContent || "No workflow";
   renderWorkflowPickerSelection();
 }
@@ -234,9 +361,10 @@ function renderWorkflowPickerSelection() {
   const value = $("workflowSelect")?.value || "";
   document.querySelectorAll("#workflowDropdownMenu .workflow-dropdown-option").forEach((button, index) => { const active = $("workflowSelect")?.options[index]?.value === value; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
   const workflow = selectedWorkflowItem();
-  const validatorPicker = $("validatorPicker");
+  const validatorPicker = $("validatorPicker"), input = $("validator");
   if (validatorPicker) validatorPicker.hidden = !workflow?.requires_python_validator;
-  if (!workflow?.requires_python_validator && $("validator")) $("validator").value = "";
+  if (input && state.validatorWorkflowPath !== value) { const validators = currentProjectPreferences().validators || {}; input.value = workflow?.requires_python_validator ? String(validators[value] || "") : ""; state.validatorWorkflowPath = value; }
+  if (!workflow?.requires_python_validator && input) { input.value = ""; state.validatorWorkflowPath = ""; }
   updateValidatorPicker();
   syncComposerReserve();
 }
@@ -246,16 +374,17 @@ function updateValidatorPicker() {
 }
 async function browseValidator() {
   const button = $("browseValidatorButton"); if (!button) return; const original = button.textContent; button.disabled = true; button.textContent = "Choosing…";
-  try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "python" }) }); if (!result.cancelled && result.path) { $("validator").value = result.path; updateValidatorPicker(); showToast("Python validator selected"); } }
+  try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "python" }) }); if (!result.cancelled && result.path) { $("validator").value = result.path; rememberValidator($("workflowSelect")?.value || "", result.path); updateValidatorPicker(); showToast("Python validator selected"); } }
   catch (error) { showToast(error.message, "error", 3200); }
   finally { button.disabled = false; button.textContent = original; }
 }
 
 // ------------------------------ Workflow Studio ------------------------------
-function switchView(view) {
+async function switchView(view) {
   if (view === "workflow") {
     state.view = "workflow"; $("chatView").hidden = true; $("workflowView").hidden = false; $("workflowNav").classList.add("active"); $("chatNav").classList.remove("active"); refreshStudioFiles(); return;
   }
+  if (state.view === "workflow" && !$("workflowGeneratorPage").hidden) { if (!(await leaveGenerateWorkflowPage())) return; }
   if (state.view === "workflow" && !confirmDiscardStudio()) return;
   closeStageEditor(true); closeAddStageModal(true); closeNewWorkflowModal(true); state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active");
 }
@@ -291,7 +420,7 @@ async function openStudioFile(item) {
     if (item.kind === "workflow") visual = await api(`/api/studio/visual?id=${encodeURIComponent(item.id)}${projectQuery()}`);
     state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; state.visual = visual; state.visualDirty = false; state.selectedFlowIndex = visual?.flow?.length ? 0 : -1; state.studioGuard = data.guard || state.studioGuard;
     $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = data.name; $("studioFilePath").textContent = `${data.scope} · ${data.path}`; $("studioKindLabel").textContent = data.kind === "prompt" ? "Prompt" : "Workflow"; $("validationOutput").hidden = true;
-    if (data.kind === "prompt") $("studioPromptTextarea").value = data.content; else $("studioTextarea").value = data.content;
+    if (data.kind === "prompt") { $("studioPromptTextarea").value = data.content; await refreshPromptTags(); } else $("studioTextarea").value = data.content;
     renderStudioGuard(); renderStudioFiles(); renderStudioPanels(); renderVisualDesigner(); renderPromptTags(); updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus("");
   } catch (error) { setStudioStatus(error.message, true); }
 }
@@ -396,8 +525,13 @@ async function saveVisualFlow() {
 
 // ------------------------------ Prompt Editor ------------------------------
 async function refreshPromptTags() {
-  try { const data = await api("/api/studio/prompt-tags"); state.promptTags = data.tags || []; renderPromptTags(); }
-  catch (_) { state.promptTags = []; renderPromptTags(); }
+  try {
+    const params = new URLSearchParams();
+    if (state.studioFile?.kind === "prompt") params.set("id", state.studioFile.id);
+    if (state.project?.path) params.set("project", state.project.path);
+    const data = await api(`/api/studio/prompt-tags${params.toString() ? `?${params}` : ""}`);
+    state.promptTags = data.tags || []; renderPromptTags();
+  } catch (_) { state.promptTags = []; renderPromptTags(); }
 }
 function renderPromptTags() {
   const root = $("studioPromptParamList"); if (!root) return; root.innerHTML = "";
@@ -411,7 +545,7 @@ function insertPromptTag(key) {
 function promptDiagnostics(result) {
   const target = $("studioPromptDiagnostics"), badge = $("promptSyntaxBadge"); if (!target || !badge) return;
   if (!result) { target.textContent = ""; target.hidden = true; badge.className = "studio-syntax-badge neutral"; badge.textContent = "Jinja"; return; }
-  badge.className = `studio-syntax-badge ${result.ok ? "valid" : "invalid"}`; badge.textContent = result.ok ? "Prompt valid" : (result.line ? `Jinja line ${result.line}` : "Prompt warning");
+  badge.className = `studio-syntax-badge ${result.ok ? "valid" : "invalid"}`; badge.textContent = result.ok ? "Prompt valid" : (result.line ? `Jinja line ${result.line}` : "Prompt invalid");
   target.hidden = !!result.ok; target.innerHTML = result.ok ? "" : `<span class="designer-template-warning">${escapeHtml(result.summary || "Prompt validation failed")}</span>`;
 }
 async function checkPromptSyntax() {
@@ -453,7 +587,7 @@ function currentStageModal() { return document.querySelector(".designer-step-mod
 function markStageEditorDirty() { state.stageEditorDirty = true; }
 async function openStageEditor(index = state.selectedFlowIndex) {
   if (!state.visual?.flow?.length || index < 0) return;
-  if (currentStageModal() && !closeStageEditor()) return;
+  if (currentStageModal() && !(await closeStageEditor())) return;
   if (state.visualDirty && !(await saveVisualFlow())) return;
   state.selectedFlowIndex = index; state.stageEditorDirty = false;
   const item = state.visual.flow[index], name = flowStageName(item), cfg = stageConfig(name), total = state.visual.flow.length;
@@ -623,8 +757,20 @@ async function saveStageEditor(index, name, cfg, item) {
     setTimeout(async () => { if (currentStageModal()) { closeStageEditor(true); await openStageEditor(index); const reopened = $("stageEditorStatus"); if (reopened) reopened.textContent = "Saved"; } }, 120);
   } catch (error) { status.textContent = error.message; status.classList.add("error"); showActionError(error.message, "Stage save failed"); }
 }
-function closeStageEditor(force = false) {
-  if (!currentStageModal()) return true; if (!force && state.stageEditorDirty && !window.confirm("Discard unsaved Stage changes?")) return false; document.querySelectorAll(".designer-step-modal-box").forEach((node) => node.remove()); state.stageEditorDirty = false; return true;
+async function closeStageEditor(force = false) {
+  if (!currentStageModal()) return true;
+  if (!force && state.stageEditorDirty) {
+    const ok = await confirmDialog({
+      title: "Discard Stage changes?",
+      message: "Discard unsaved changes in this Stage? The saved Workflow will remain unchanged.",
+      confirmLabel: "Discard Changes",
+      danger: true,
+    });
+    if (!ok) return false;
+  }
+  document.querySelectorAll(".designer-step-modal-box").forEach((node) => node.remove());
+  state.stageEditorDirty = false;
+  return true;
 }
 
 // ------------------------------ Add Stage modal ------------------------------
@@ -688,7 +834,7 @@ function updateDirtyState() {
   state.studioDirty = !!state.studioFile && currentEditorContent() !== state.studioOriginal; const dirty = state.studioDirty || state.visualDirty || state.stageEditorDirty; $("dirtyBadge").hidden = !dirty;
   const locked = !state.studioGuard.editable || !!state.studioFile?.readonly; $("studioTextarea").readOnly = locked; $("studioPromptTextarea").readOnly = locked; renderPromptTags();
   const saveNeeded = state.studioFile?.kind === "prompt" ? state.studioDirty : (state.studioMode === "visual" ? state.visualDirty : state.studioDirty);
-  $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = state.studioFile?.kind === "prompt"; $("validateStudioButton").disabled = !state.studioFile || state.studioFile.kind !== "workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow";
+  $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = !state.studioFile; $("validateStudioButton").disabled = !state.studioFile; $("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow";
   $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable;
   $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
 }
@@ -703,7 +849,17 @@ function applyStudioGuardToDialogs() {
   if (box) { box.querySelectorAll('[data-stage-panel] input:not(#stageKey), [data-stage-panel] select, [data-stage-panel] textarea').forEach((node) => { node.disabled = locked; }); if ($("saveStageButton")) $("saveStageButton").disabled = locked; if (locked && $("stageEditorStatus")) $("stageEditorStatus").textContent = "Read only while a Runtime is active."; else if (!locked && $("stageEditorStatus")?.textContent.startsWith("Read only")) $("stageEditorStatus").textContent = ""; }
   if (!$("addStageBackdrop").hidden) { $("addStageBackdrop").querySelectorAll('input, select, textarea').forEach((node) => { node.disabled = locked; }); $("addStageConfirm").disabled = locked; if (locked) $("addStageHint").textContent = "Runtime started; Stage creation is temporarily read only."; else if ($("addStageHint").textContent.startsWith("Runtime started")) $("addStageHint").textContent = ""; }
   if (!$("newWorkflowBackdrop").hidden) { $("newWorkflowBackdrop").querySelectorAll('input, select').forEach((node) => { node.disabled = locked; }); $("newWorkflowConfirm").disabled = locked; }
-  if (!$("generateWorkflowBackdrop").hidden) { $("generateWorkflowBackdrop").querySelectorAll('input, select, textarea').forEach((node) => { node.disabled = locked; }); $("generateWorkflowConfirm").disabled = locked; if (locked) { $("generateWorkflowHint").textContent = "Runtime started; Workflow generation is temporarily read only."; $("generateWorkflowHint").classList.add("error"); } }
+  if (!$("workflowGeneratorPage").hidden) {
+    const building = ["running", "cancelling"].includes(state.generateWorkflowPhase);
+    // Draft generation/validation is UI-workspace work and is independent from any
+    // selected Project runtime. Only publishing a real asset stays edit-guarded.
+    $("generateWorkflowRequest").disabled = building || state.generateWorkflowPhase !== "form";
+    $("generateWorkflowBackend").disabled = building || state.generateWorkflowPhase !== "form";
+    $("generateWorkflowConfirm").disabled = building;
+    $("generateWorkflowSave").disabled = state.generateWorkflowPhase !== "ready" || locked;
+    $("generateWorkflowValidate").disabled = state.generateWorkflowPhase !== "ready";
+    if (state.generateWorkflowPhase === "form" && $("generateWorkflowHint").textContent.startsWith("Runtime started")) { $("generateWorkflowHint").textContent = "Generate uses an isolated temporary workspace. No Project is required."; $("generateWorkflowHint").classList.remove("error"); }
+  }
 }
 async function refreshStudioGuard() { if (state.view !== "workflow") return; try { state.studioGuard = await api("/api/studio/guard"); renderStudioGuard(); } catch (_) {} }
 async function saveStudio() {
@@ -719,15 +875,19 @@ async function saveStudio() {
 }
 async function reloadStudio() { if (!state.studioFile || !confirmDiscardStudio()) return; await openStudioFile(state.studioFile); }
 async function validateStudio() {
-  if (!state.studioFile || state.studioFile.kind !== "workflow") return;
+  if (!state.studioFile) return;
   const body = { id: state.studioFile.id, project: state.project?.path || "" };
-  if (state.studioMode === "visual") body.flow = state.visual?.flow || []; else body.content = $("studioTextarea").value;
+  const prompt = state.studioFile.kind === "prompt";
+  if (prompt) body.content = $("studioPromptTextarea").value;
+  else if (state.studioMode === "visual") body.flow = state.visual?.flow || [];
+  else body.content = $("studioTextarea").value;
   try {
-    setStudioStatus("Validating current draft…");
+    setStudioStatus(`Validating current ${prompt ? "Prompt" : "Workflow"} draft…`);
     const result = await api("/api/studio/validate", { method: "POST", body: JSON.stringify(body) });
-    if (result.ok) { $("validationOutput").hidden = true; setStudioStatus(""); showToast("Workflow validation passed"); }
-    else { $("validationOutput").hidden = false; $("validationOutput").textContent = result.output || result.summary; setStudioStatus(result.summary, true); showToast("Workflow validation failed", "error", 3200); }
-  } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, "Workflow validation failed"); }
+    if (prompt) promptDiagnostics(result);
+    if (result.ok) { $("validationOutput").hidden = true; setStudioStatus(""); showToast(`${prompt ? "Prompt" : "Workflow"} validation passed`); }
+    else { $("validationOutput").hidden = false; $("validationOutput").textContent = result.output || result.summary; setStudioStatus(result.summary, true); showToast(`${prompt ? "Prompt" : "Workflow"} validation failed`, "error", 3200); }
+  } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${prompt ? "Prompt" : "Workflow"} validation failed`); }
 }
 function setStudioStatus(text, error = false) { $("studioStatus").textContent = text || ""; $("studioStatus").classList.toggle("error", !!error); }
 function confirmDiscardStudio() { return !(state.studioDirty || state.visualDirty || state.stageEditorDirty) || window.confirm("You have unsaved Workflow / Stage / Prompt changes. Discard them?"); }
@@ -785,63 +945,169 @@ async function deleteStudioAsset() {
 }
 
 
-// ------------------------------ AI Workflow Builder modal ------------------------------
-async function openGenerateWorkflowModal() {
-  if (!state.project) return setStudioStatus("Open a Project before generating a Workflow.", true);
-  if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before generating a Workflow.", true);
-  state.generateWorkflowDirty = false;
-  $("generateWorkflowName").value = "";
-  $("generateWorkflowDestination").value = "custom";
-  $("generateWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project;
-  $("generateWorkflowRequest").value = "";
-  $("generateWorkflowHint").textContent = "Checking System Workflow Builder…";
-  $("generateWorkflowHint").classList.remove("error");
-  try {
-    const info = await api("/api/studio/draft");
-    if (!info.available) throw new Error(info.message || "AI Workflow Builder is unavailable.");
-    $("generateWorkflowHint").textContent = info.message || "AI Workflow Builder is ready.";
-    $("generateWorkflowBackdrop").hidden = false;
-    setTimeout(() => $("generateWorkflowName").focus(), 0);
-  } catch (error) {
-    $("generateWorkflowHint").textContent = error.message;
-    $("generateWorkflowHint").classList.add("error");
-    showToast(error.message, "error", 3200);
+// ------------------------------ AI Workflow Builder page ------------------------------
+function clearGenerateWorkflowPoll() { if (state.generateWorkflowPollTimer) clearInterval(state.generateWorkflowPollTimer); state.generateWorkflowPollTimer = 0; }
+function fillGenerateWorkflowBackends() {
+  const select = $("generateWorkflowBackend"); if (!select) return; select.innerHTML = "";
+  const rows = [{ value: "", label: state.defaultBackend ? `Default · ${state.defaultBackend}` : "Default backend" }, ...state.backends.map((name) => ({ value: name, label: name }))];
+  for (const row of rows) { const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option); }
+  const preferred = String(state.preferences?.builderBackend || $("backend")?.value || ""); select.value = [...select.options].some((o) => o.value === preferred) ? preferred : "";
+}
+function setGenerateWorkflowWorkspace(path = "", pattern = "") {
+  if (pattern) state.generateWorkflowWorkspacePattern = String(pattern);
+  state.generateWorkflowWorkspace = String(path || "");
+  const preview = state.generateWorkflowWorkspace || state.generateWorkflowWorkspacePattern || "Created after Generate";
+  if ($("generateWorkflowWorkspacePreview")) { $("generateWorkflowWorkspacePreview").textContent = preview; $("generateWorkflowWorkspacePreview").title = preview; }
+  for (const id of ["generateWorkflowRunningWorkspace", "generateWorkflowReadyWorkspace"]) {
+    if (!$(id)) continue; $(id).textContent = state.generateWorkflowWorkspace || "—"; $(id).title = state.generateWorkflowWorkspace || "";
   }
 }
-function closeGenerateWorkflowModal(force = false) {
-  if ($("generateWorkflowBackdrop").hidden) return true;
-  if (!force && state.generateWorkflowDirty && !window.confirm("Discard this AI Workflow request?")) return false;
-  $("generateWorkflowBackdrop").hidden = true;
-  state.generateWorkflowDirty = false;
-  return true;
+function resetGenerateWorkflowState({ keepRequest = false } = {}) {
+  clearGenerateWorkflowPoll(); const request = keepRequest ? (state.generateWorkflowRequestText || $("generateWorkflowRequest")?.value || "") : "";
+  state.generateWorkflowDirty = false; state.generateWorkflowJobId = ""; state.generateWorkflowPhase = "idle"; state.generateWorkflowDraft = null; state.generateWorkflowPromptIndex = 0; state.generateWorkflowReviewTab = "visual"; state.generateWorkflowRequestText = request; state.generateWorkflowWorkspace = "";
+  if ($("generateWorkflowRequest")) $("generateWorkflowRequest").value = request;
+  if ($("generateWorkflowPreview")) $("generateWorkflowPreview").value = "";
+  if ($("generateDraftPromptTextarea")) $("generateDraftPromptTextarea").value = "";
+  if ($("generateWorkflowFailure")) $("generateWorkflowFailure").textContent = "";
+  if ($("generateWorkflowHint")) { $("generateWorkflowHint").textContent = ""; $("generateWorkflowHint").classList.remove("error"); }
+  if ($("generateDraftDirtyHint")) $("generateDraftDirtyHint").hidden = true;
+  setGenerateWorkflowWorkspace("", state.generateWorkflowWorkspacePattern);
+}
+function showWorkflowStudioPage() { $("workflowGeneratorPage").hidden = true; $("workflowStudioPage").hidden = false; }
+function showWorkflowGeneratorPage() {
+  state.view = "workflow"; $("chatView").hidden = true; $("workflowView").hidden = false; $("workflowNav").classList.add("active"); $("chatNav").classList.remove("active");
+  $("workflowStudioPage").hidden = true; $("workflowGeneratorPage").hidden = false;
+}
+function setGenerateWorkflowPhase(phase) {
+  state.generateWorkflowPhase = phase; const building = ["running", "cancelling"].includes(phase);
+  $("generateWorkflowForm").hidden = phase !== "form";
+  $("generateWorkflowRunning").hidden = !building;
+  $("generateWorkflowReady").hidden = phase !== "ready";
+  $("generateWorkflowFailed").hidden = phase !== "failed";
+  $("generateWorkflowPageBadge").hidden = phase !== "ready";
+  const titles = { form: ["Generate Workflow with AI", "Describe the Workflow you want. Generate creates a temporary Draft only."], running: ["Generating Workflow", "AI is building and validating a new temporary Draft."], cancelling: ["Cancelling Workflow", "Stopping the current generation and cleaning temporary runtime state."], ready: ["Review generated Workflow", "Review the Draft. Save is the only action that creates a real Workflow."], failed: ["Workflow generation failed", "Nothing was added to Custom or Project."] };
+  const [title, subtitle] = titles[phase] || titles.form; $("generateWorkflowPageTitle").textContent = title; $("generateWorkflowPageSubtitle").textContent = subtitle;
+  $("generateWorkflowBack").disabled = phase === "cancelling";
+  applyStudioGuardToDialogs();
+}
+function flowNameFromDraft(item) { if (typeof item === "string") return item; if (item && typeof item === "object") return String(item.stage || item.name || ""); return ""; }
+function renderGeneratedDraftFlow() {
+  const root = $("generateDraftFlowList"); if (!root) return; root.innerHTML = ""; const visual = state.generateWorkflowDraft?.visual || {}; const stages = new Map((visual.stages || []).map((row) => [row.name, row])); const flow = visual.flow || [];
+  if (!flow.length) { const empty = document.createElement("div"); empty.className = "designer-empty-state"; empty.textContent = "No flow steps found in the validated Draft."; root.appendChild(empty); return; }
+  flow.forEach((item, index) => { const name = flowNameFromDraft(item), cfg = stages.get(name) || {}; const card = document.createElement("article"); card.className = "visual-flow-card workflow-generator-flow-card"; const number = document.createElement("span"); number.className = "visual-flow-index"; number.textContent = String(index + 1); const copy = document.createElement("div"); copy.className = "visual-flow-copy"; const strong = document.createElement("strong"); strong.textContent = cfg.status || name || "Stage"; strong.title = strong.textContent; const small = document.createElement("small"); small.textContent = `${name || "Stage"} · ${cfg.type || "base"}`; copy.append(strong, small); card.append(number, copy); root.appendChild(card); });
+}
+function renderGeneratedDraftPrompts() {
+  const root = $("generateWorkflowPromptList"), editor = $("generateDraftPromptTextarea"), label = $("generateDraftPromptName"); if (!root || !editor || !label) return; root.innerHTML = ""; const prompts = state.generateWorkflowDraft?.prompts || [];
+  if (!prompts.length) { const empty = document.createElement("div"); empty.className = "designer-empty-state"; empty.textContent = "No generated Prompt files."; root.appendChild(empty); editor.value = ""; editor.disabled = true; label.textContent = "Prompt"; return; }
+  state.generateWorkflowPromptIndex = Math.max(0, Math.min(state.generateWorkflowPromptIndex, prompts.length - 1));
+  prompts.forEach((prompt, index) => { const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (index === state.generateWorkflowPromptIndex) button.classList.add("active"); const name = document.createElement("strong"); name.textContent = prompt.name || `Prompt ${index + 1}`; const meta = document.createElement("small"); meta.textContent = "Temporary Draft"; button.append(name, meta); button.onclick = () => { state.generateWorkflowPromptIndex = index; renderGeneratedDraftPrompts(); }; root.appendChild(button); });
+  const selected = prompts[state.generateWorkflowPromptIndex]; editor.disabled = false; editor.value = selected.content || ""; label.textContent = selected.name || "Prompt";
+}
+function setGeneratedDraftTab(tab) {
+  state.generateWorkflowReviewTab = tab; const names = ["visual", "yaml", "prompt"];
+  for (const name of names) { const key = name[0].toUpperCase() + name.slice(1); $(`generateDraft${key}Tab`).classList.toggle("active", name === tab); $(`generateDraft${key}Panel`).hidden = name !== tab; }
+}
+function markGeneratedDraftDirty() {
+  if (state.generateWorkflowPhase !== "ready") return; state.generateWorkflowDirty = true; $("generateDraftDirtyHint").hidden = false; $("generateWorkflowValidation").textContent = "Draft modified · validation required before Save"; $("generateWorkflowValidation").classList.remove("success");
+}
+function generatedDraftPayload() { return { workflow: $("generateWorkflowPreview").value, prompts: (state.generateWorkflowDraft?.prompts || []).map((row) => ({ name: row.name, content: row.content || "" })) }; }
+function renderGeneratedDraft(data) {
+  const draft = data?.draft || {}; state.generateWorkflowDraft = { workflow: draft.workflow || "", prompts: Array.isArray(draft.prompts) ? draft.prompts.map((row) => ({ name: row.name || "Prompt", content: row.content || "" })) : [], visual: draft.visual || { stages: [], flow: [] }, validation: draft.validation || "" }; state.generateWorkflowPromptIndex = 0; state.generateWorkflowDirty = false;
+  $("generateWorkflowPreview").value = state.generateWorkflowDraft.workflow; $("generateDraftDirtyHint").hidden = true; $("generateWorkflowValidation").textContent = "Validation PASS · Workflow dry-run matrix completed"; $("generateWorkflowValidation").classList.add("success"); renderGeneratedDraftFlow(); renderGeneratedDraftPrompts(); setGeneratedDraftTab("visual");
+}
+function hydrateActiveGenerateWorkflow(data, { openPage = true } = {}) {
+  if (!data?.active || !data.job_id) return false;
+  resetGenerateWorkflowState(); fillGenerateWorkflowBackends();
+  state.generateWorkflowJobId = String(data.job_id); state.generateWorkflowRequestText = String(data.request || "");
+  $("generateWorkflowRequest").value = state.generateWorkflowRequestText;
+  if ([...$("generateWorkflowBackend").options].some((option) => option.value === String(data.backend || ""))) $("generateWorkflowBackend").value = String(data.backend || "");
+  setGenerateWorkflowWorkspace(data.workspace || "", data.workspace_pattern || "");
+  if (openPage) showWorkflowGeneratorPage();
+  const phase = String(data.state || "running");
+  if (phase === "ready") { renderGeneratedDraft(data); setGenerateWorkflowPhase("ready"); return true; }
+  if (phase === "failed") { $("generateWorkflowFailure").textContent = data.message || "Workflow Builder failed."; setGenerateWorkflowPhase("failed"); return true; }
+  $("generateWorkflowRunningStatus").textContent = data.message || "AI is generating Workflow draft…";
+  setGenerateWorkflowPhase(phase === "cancelling" ? "cancelling" : "running"); startGenerateWorkflowPoll(); return true;
+}
+async function restoreActiveWorkflowGenerator({ openPage = true } = {}) {
+  try { const data = await api("/api/studio/generate/active"); return hydrateActiveGenerateWorkflow(data, { openPage }); }
+  catch (_) { return false; }
+}
+async function pollGenerateWorkflow() {
+  if (!state.generateWorkflowJobId) return;
+  try {
+    const data = await api(`/api/studio/generate/status?job_id=${encodeURIComponent(state.generateWorkflowJobId)}`);
+    setGenerateWorkflowWorkspace(data.workspace || state.generateWorkflowWorkspace);
+    if (data.state === "ready") { clearGenerateWorkflowPoll(); renderGeneratedDraft(data); setGenerateWorkflowPhase("ready"); await refreshStudioGuard(); return; }
+    if (data.state === "cancelled") { clearGenerateWorkflowPoll(); try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} resetGenerateWorkflowState(); showWorkflowStudioPage(); showToast("Workflow generation cancelled"); await refreshStudioGuard(); return; }
+    if (data.state === "failed") { clearGenerateWorkflowPoll(); $("generateWorkflowFailure").textContent = data.message || "Workflow Builder failed."; setGenerateWorkflowPhase("failed"); await refreshStudioGuard(); return; }
+    if (data.state === "cancelling") setGenerateWorkflowPhase("cancelling"); else if (state.generateWorkflowPhase !== "running") setGenerateWorkflowPhase("running");
+    $("generateWorkflowRunningStatus").textContent = data.message || "AI is generating Workflow draft…";
+  } catch (error) { clearGenerateWorkflowPoll(); $("generateWorkflowFailure").textContent = error.message; setGenerateWorkflowPhase("failed"); }
+}
+function startGenerateWorkflowPoll() { clearGenerateWorkflowPoll(); pollGenerateWorkflow(); state.generateWorkflowPollTimer = setInterval(pollGenerateWorkflow, 800); }
+async function openGenerateWorkflowPage() {
+  if (!confirmDiscardStudio()) return;
+  fillGenerateWorkflowBackends(); showWorkflowGeneratorPage(); $("generateWorkflowHint").classList.remove("error"); $("generateWorkflowHint").textContent = "Checking Workflow Builder…";
+  try {
+    const active = await api("/api/studio/generate/active");
+    if (hydrateActiveGenerateWorkflow(active)) return;
+    resetGenerateWorkflowState(); fillGenerateWorkflowBackends(); showWorkflowGeneratorPage(); setGenerateWorkflowPhase("form");
+    const info = await api("/api/studio/draft"); if (!info.available) throw new Error(info.message || "AI Workflow Builder is unavailable.");
+    setGenerateWorkflowWorkspace("", info.workspace_pattern || info.workspace_root || "");
+    $("generateWorkflowHint").textContent = "No Project is required; name and destination are chosen only when you Save. Only one Generator job can exist at a time; closing the page does not stop it."; setTimeout(() => $("generateWorkflowRequest").focus(), 0);
+  }
+  catch (error) { $("generateWorkflowHint").textContent = error.message; $("generateWorkflowHint").classList.add("error"); setGenerateWorkflowPhase("form"); showActionError(error.message, "Workflow Builder unavailable"); }
+}
+function closeGenerateWorkflowSaveModal() { $("generateWorkflowSaveBackdrop").hidden = true; }
+async function discardGenerateWorkflowDraft({ confirm = true, returnToStudio = true } = {}) {
+  if (confirm) { const ok = await confirmDialog({ title: "Discard generated Workflow?", message: "This Draft has not been saved. Discard the generated Workflow and Prompt files?", confirmLabel: "Discard Draft", danger: true }); if (!ok) return false; }
+  if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (error) { showActionError(error.message, "Discard draft failed"); return false; } }
+  resetGenerateWorkflowState(); if (returnToStudio) showWorkflowStudioPage(); showToast("Workflow draft discarded"); return true;
+}
+async function cancelGenerateWorkflow() {
+  if (!state.generateWorkflowJobId) return false; const ok = await confirmDialog({ title: "Cancel Workflow generation?", message: "Stop the current AI generation and discard its temporary files?", confirmLabel: "Cancel Generation", danger: true }); if (!ok) return false;
+  try { await api("/api/studio/generate/cancel", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); setGenerateWorkflowPhase("cancelling"); $("generateWorkflowRunningStatus").textContent = "Cancelling Workflow generation…"; startGenerateWorkflowPoll(); return true; }
+  catch (error) { showActionError(error.message, "Cancel generation failed"); return false; }
+}
+async function leaveGenerateWorkflowPage() {
+  if ($("workflowGeneratorPage").hidden) return true;
+  if (["running", "cancelling"].includes(state.generateWorkflowPhase)) { await cancelGenerateWorkflow(); return false; }
+  if (state.generateWorkflowPhase === "ready") return await discardGenerateWorkflowDraft();
+  if (state.generateWorkflowPhase === "failed" && state.generateWorkflowJobId) return await discardGenerateWorkflowDraft({ confirm: false });
+  const request = $("generateWorkflowRequest").value.trim(); if (request) { const ok = await confirmDialog({ title: "Discard Workflow request?", message: "Leave AI Workflow Builder and discard this unsent Prompt?", confirmLabel: "Discard Request", danger: true }); if (!ok) return false; }
+  resetGenerateWorkflowState(); showWorkflowStudioPage(); return true;
 }
 async function confirmGenerateWorkflow() {
-  const name = $("generateWorkflowName").value.trim();
-  const request = $("generateWorkflowRequest").value.trim();
-  if (!name) { $("generateWorkflowHint").textContent = "Workflow name is required."; $("generateWorkflowHint").classList.add("error"); return; }
-  if (!request) { $("generateWorkflowHint").textContent = "Workflow requirements are required."; $("generateWorkflowHint").classList.add("error"); return; }
-  $("generateWorkflowConfirm").disabled = true;
-  $("generateWorkflowHint").classList.remove("error");
-  $("generateWorkflowHint").textContent = "Starting System Workflow Builder…";
+  const request = $("generateWorkflowRequest").value.trim(); if (!request) { $("generateWorkflowHint").textContent = "Describe the Workflow you want before Generate."; $("generateWorkflowHint").classList.add("error"); return; }
+  state.generateWorkflowRequestText = request; state.generateWorkflowDirty = false; $("generateWorkflowHint").classList.remove("error"); $("generateWorkflowRunningStatus").textContent = "Starting Workflow Builder…"; setGenerateWorkflowPhase("running");
   try {
-    const result = await api("/api/studio/generate", { method: "POST", body: JSON.stringify({
-      project: state.project?.path || "",
-      name,
-      destination: $("generateWorkflowDestination").value,
-      request,
-      backend: $("backend").value,
-    }) });
-    closeGenerateWorkflowModal(true);
-    showToast("Workflow Builder started. Publish occurs only after validation passes.", "success", 3200);
-    setStudioStatus(result.message || "Workflow Builder started");
-    setTimeout(refreshStudioFiles, 1500);
-  } catch (error) {
-    $("generateWorkflowHint").textContent = error.message;
-    $("generateWorkflowHint").classList.add("error");
-    showToast(error.message, "error", 3200);
-  } finally {
-    $("generateWorkflowConfirm").disabled = !state.studioGuard.editable;
+    const result = await api("/api/studio/generate", { method: "POST", body: JSON.stringify({ request, backend: $("generateWorkflowBackend").value }) });
+    if (result.existing) { const active = await api("/api/studio/generate/active"); hydrateActiveGenerateWorkflow(active); return; }
+    state.generateWorkflowJobId = result.job_id; setGenerateWorkflowWorkspace(result.workspace || ""); $("generateWorkflowRunningStatus").textContent = result.message || "AI is generating Workflow draft…"; startGenerateWorkflowPoll();
   }
+  catch (error) { $("generateWorkflowFailure").textContent = error.message; setGenerateWorkflowPhase("failed"); showActionError(error.message, "Workflow generation failed"); }
+}
+async function regenerateWorkflowDraft() {
+  const ok = await confirmDialog({ title: "Generate a new Draft?", message: "Discard the current generated Draft and return to the Prompt. The next Generate starts a new AI run.", confirmLabel: "New Draft", danger: true }); if (!ok) return;
+  const request = state.generateWorkflowRequestText || $("generateWorkflowRequest").value; if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (error) { showActionError(error.message, "Discard draft failed"); return; } }
+  resetGenerateWorkflowState({ keepRequest: true }); state.generateWorkflowRequestText = request; $("generateWorkflowRequest").value = request; fillGenerateWorkflowBackends(); setGenerateWorkflowPhase("form"); setTimeout(() => $("generateWorkflowRequest").focus(), 0);
+}
+async function validateGeneratedWorkflowDraft() {
+  if (!state.generateWorkflowJobId || state.generateWorkflowPhase !== "ready") return; $("generateWorkflowValidate").disabled = true; $("generateWorkflowValidation").textContent = "Validating current Draft…";
+  try { const result = await api("/api/studio/generate/validate", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId, ...generatedDraftPayload() }) }); renderGeneratedDraft({ draft: result.draft }); showToast("Workflow draft validation passed"); }
+  catch (error) { $("generateWorkflowValidation").textContent = error.message; $("generateWorkflowValidation").classList.remove("success"); showActionError(error.message, "Draft validation failed"); }
+  finally { $("generateWorkflowValidate").disabled = false; }
+}
+function openGenerateWorkflowSaveModal() {
+  if (!state.generateWorkflowJobId || state.generateWorkflowPhase !== "ready") return; $("generateWorkflowName").value = ""; $("generateWorkflowDestination").value = "custom"; $("generateWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("generateWorkflowSaveHint").textContent = state.generateWorkflowDirty ? "Draft was modified. Validate & Save will revalidate the current YAML and Prompts." : "Save will revalidate this Draft before publishing."; $("generateWorkflowSaveHint").classList.remove("error"); $("generateWorkflowSaveBackdrop").hidden = false; setTimeout(() => $("generateWorkflowName").focus(), 0);
+}
+async function saveGenerateWorkflowDraft() {
+  const name = $("generateWorkflowName").value.trim(); if (!name) { $("generateWorkflowSaveHint").textContent = "Workflow name is required."; $("generateWorkflowSaveHint").classList.add("error"); return; }
+  $("generateWorkflowSaveConfirm").disabled = true; $("generateWorkflowSaveHint").textContent = "Validating current Draft and publishing…"; $("generateWorkflowSaveHint").classList.remove("error");
+  try { const result = await api("/api/studio/generate/save", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", job_id: state.generateWorkflowJobId, name, destination: $("generateWorkflowDestination").value, ...generatedDraftPayload() }) }); closeGenerateWorkflowSaveModal(); resetGenerateWorkflowState(); showWorkflowStudioPage(); state.studioSourceKind = "workflow"; await refreshStudioFiles(); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item?.id || row.path === result.workflow) || result.item; if (item) await openStudioFile(item); showToast(result.message || "Workflow saved"); }
+  catch (error) { $("generateWorkflowSaveHint").textContent = error.message; $("generateWorkflowSaveHint").classList.add("error"); showActionError(error.message, "Workflow save failed"); }
+  finally { $("generateWorkflowSaveConfirm").disabled = false; }
 }
 
 // ------------------------------ Add Project modal ------------------------------
@@ -872,28 +1138,51 @@ $("newPromptClose").onclick = () => closeNewPromptModal(); $("newPromptCancel").
 $("importAssetClose").onclick = () => closeImportAssetModal(); $("importAssetCancel").onclick = () => closeImportAssetModal(); $("importAssetConfirm").onclick = confirmImportAsset; $("importAssetChooseButton").onclick = () => $("importAssetFile").click(); $("importAssetFile").onchange = readImportAssetFile; $("importAssetBackdrop").addEventListener("click", (e) => { if (e.target === $("importAssetBackdrop")) closeImportAssetModal(); }); $("importAssetBackdrop").addEventListener("input", () => { state.importAssetDirty = true; });
 $("addStageClose").onclick = () => closeAddStageModal(); $("addStageCancel").onclick = () => closeAddStageModal(); $("addStageConfirm").onclick = confirmAddStage; $("addStageType").onchange = () => { state.addStageDirty = true; updateAddStageType(); }; $("addStageBackdrop").addEventListener("click", (e) => { if (e.target === $("addStageBackdrop")) closeAddStageModal(); });
 $("addStageBackdrop").addEventListener("input", (e) => { if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) state.addStageDirty = true; });
-$("generateWorkflowButton").onclick = openGenerateWorkflowModal; $("generateWorkflowClose").onclick = () => closeGenerateWorkflowModal(); $("generateWorkflowCancel").onclick = () => closeGenerateWorkflowModal(); $("generateWorkflowConfirm").onclick = confirmGenerateWorkflow; $("generateWorkflowBackdrop").addEventListener("click", (e) => { if (e.target === $("generateWorkflowBackdrop")) closeGenerateWorkflowModal(); }); $("generateWorkflowBackdrop").addEventListener("input", (e) => { if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) state.generateWorkflowDirty = true; });
+$("generateWorkflowButton").onclick = openGenerateWorkflowPage;
+$("generateWorkflowBack").onclick = () => leaveGenerateWorkflowPage();
+$("generateWorkflowCancel").onclick = () => leaveGenerateWorkflowPage();
+$("generateWorkflowConfirm").onclick = confirmGenerateWorkflow;
+$("generateWorkflowStop").onclick = cancelGenerateWorkflow;
+$("generateWorkflowDiscard").onclick = () => discardGenerateWorkflowDraft();
+$("generateWorkflowRegenerate").onclick = regenerateWorkflowDraft;
+$("generateWorkflowValidate").onclick = validateGeneratedWorkflowDraft;
+$("generateWorkflowSave").onclick = openGenerateWorkflowSaveModal;
+$("generateDraftVisualTab").onclick = () => setGeneratedDraftTab("visual"); $("generateDraftYamlTab").onclick = () => setGeneratedDraftTab("yaml"); $("generateDraftPromptTab").onclick = () => setGeneratedDraftTab("prompt");
+$("generateWorkflowPreview").addEventListener("input", markGeneratedDraftDirty);
+$("generateDraftPromptTextarea").addEventListener("input", () => { const prompt = state.generateWorkflowDraft?.prompts?.[state.generateWorkflowPromptIndex]; if (prompt) prompt.content = $("generateDraftPromptTextarea").value; markGeneratedDraftDirty(); });
+$("generateWorkflowRequest").addEventListener("input", () => { if (state.generateWorkflowPhase === "form") state.generateWorkflowDirty = !!$("generateWorkflowRequest").value.trim(); });
+$("generateWorkflowBackend").addEventListener("change", () => { if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.builderBackend = $("generateWorkflowBackend").value; saveUiPreferences(); });
+$("generateWorkflowFailedCancel").onclick = () => leaveGenerateWorkflowPage();
+$("generateWorkflowRetry").onclick = async () => { const request = state.generateWorkflowRequestText || $("generateWorkflowRequest").value; if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} } resetGenerateWorkflowState({ keepRequest: true }); state.generateWorkflowRequestText = request; $("generateWorkflowRequest").value = request; fillGenerateWorkflowBackends(); setGenerateWorkflowPhase("form"); };
+$("generateWorkflowSaveClose").onclick = closeGenerateWorkflowSaveModal; $("generateWorkflowSaveCancel").onclick = closeGenerateWorkflowSaveModal; $("generateWorkflowSaveConfirm").onclick = saveGenerateWorkflowDraft; $("generateWorkflowSaveBackdrop").addEventListener("click", (e) => { if (e.target === $("generateWorkflowSaveBackdrop")) closeGenerateWorkflowSaveModal(); });
 $("workflowDropdownButton").onclick = (event) => { event.stopPropagation(); const menu = $("workflowDropdownMenu"); menu.hidden ? openWorkflowDropdown() : closeWorkflowDropdown(); };
+$("backendDropdownButton").onclick = (event) => { event.stopPropagation(); const menu = $("backendDropdownMenu"); menu.hidden ? openBackendDropdown() : closeBackendDropdown(); };
 document.addEventListener("click", (event) => {
-  const menu = $("workflowDropdownMenu"), picker = $("workflowPicker");
+  const menu = $("workflowDropdownMenu"), picker = $("workflowPicker"), backendMenu = $("backendDropdownMenu"), backendPicker = $("backendPicker");
   if (!picker?.contains(event.target) && !menu?.contains(event.target)) closeWorkflowDropdown();
+  if (!backendPicker?.contains(event.target) && !backendMenu?.contains(event.target)) closeBackendDropdown();
   if (!event.target.closest?.(".project-tree") && !event.target.closest?.(".project-action-menu")) closeProjectMenus();
+  if (!$("optionsPanel").hidden && !$("optionsPanel").contains(event.target) && !$("optionsButton").contains(event.target) && !backendMenu?.contains(event.target)) closeOptionsPanel();
 });
-$("optionsButton").onclick = () => { const open = $("optionsPanel").hidden; $("optionsPanel").hidden = !open; $("optionsButton").classList.toggle("active", open); $("optionsButton").setAttribute("aria-expanded", String(open)); requestAnimationFrame(syncComposerReserve); };
+function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }
+function toggleOptionsPanel() { const open = $("optionsPanel").hidden; if (!open) return closeOptionsPanel(); $("optionsPanel").hidden = false; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
+$("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptionsPanel(); };
+$("optionsCloseButton").onclick = closeOptionsPanel;
 $("sendButton").onclick = sendMessage; $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+$("messages").addEventListener("scroll", () => { state.historyPinnedToBottom = historyNearBottom($("messages")); }, { passive: true });
 $("browseValidatorButton").onclick = browseValidator;
-$("clearValidatorButton").onclick = () => { $("validator").value = ""; updateValidatorPicker(); };
+$("clearValidatorButton").onclick = () => { $("validator").value = ""; rememberValidator($("workflowSelect")?.value || "", ""); updateValidatorPicker(); };
 $("stopButton").onclick = async () => { try { await api("/api/project/stop", { method: "POST", body: JSON.stringify(payload()) }); showToast("Stop requested"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Stop failed"); } };
 $("resumeButton").onclick = async () => { try { await api("/api/project/resume", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task continued"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Continue failed"); } };
 $("resetButton").onclick = async () => {
-  const completed = Boolean(state.runtime?.completed); const ok = await confirmDialog({ title: completed ? "Start New Task?" : "Reset stopped task?", message: completed ? "Clear old Runner runtime state and keep this Project task history?" : "Discard resumable Runner state? UI task history and request snapshots are kept.", confirmLabel: completed ? "New Task" : "Reset", danger: !completed }); if (!ok) return;
-  try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime(); showToast(completed ? "Ready for a new task" : "Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
+  const ok = await confirmDialog({ title: "Reset stopped task?", message: "Discard resumable Runner state? UI task history and request snapshots are kept.", confirmLabel: "Reset", danger: true }); if (!ok) return;
+  try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime(); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
 $("rerunButton").onclick = async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } };
-window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("generateWorkflowBackdrop").hidden) return closeGenerateWorkflowModal(); if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
-window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty) { event.preventDefault(); event.returnValue = ""; } });
-showEmpty(); resizeComposerInput(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
-  syncComposerReserve(); positionWorkflowDropdown();
+window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
+window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
+state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
+  syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70);
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); loadProjects(); refreshPromptTags(); setInterval(refreshRuntime, 750); setInterval(refreshStudioGuard, 1000);
+}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); setInterval(refreshRuntime, 750); setInterval(animateRuntimeFrame, 120); setInterval(refreshProjectStatuses, 1500); setInterval(refreshStudioGuard, 1000);

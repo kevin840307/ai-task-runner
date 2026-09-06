@@ -1,11 +1,14 @@
 """Console UI extension for terminal runner events."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 import threading
+import time
 import unicodedata
+from pathlib import Path
 
 from ..runtime.run_state import RunState, Task
 
@@ -212,6 +215,57 @@ class LiveUI:
             return ">"
         return " "
 
+    def snapshot(self) -> dict | None:
+        """Return the browser/CLI shared semantic console view.
+
+        This deliberately uses the same task markers/status strings as LiveUI.
+        The browser replaces ``{spinner}`` locally so animation does not cause
+        file writes every 120 ms.
+        """
+        state = self.state
+        if state is None:
+            return None
+        status = self._single_line_text(self.status)
+        detail = self._single_line_text(self.detail)
+        tasks = []
+        completed_count = 0
+        for index, task in enumerate(state.tasks):
+            mark = self._task_mark(state, index, task)
+            if task.status == "completed":
+                completed_count += 1
+            tasks.append({
+                "index": index + 1,
+                "id": task.id,
+                "title": task.title,
+                "status": task.status,
+                "attempts": task.attempts,
+                "mark": mark,
+                "line": f"  [{mark}] {index + 1}. {task.title}",
+            })
+        lines = [
+            f"AI Task Runner  Cycle {state.cycle}  Progress {completed_count}/{len(tasks)}",
+            "",
+            *[item["line"] for item in tasks],
+            "",
+            f"  {{spinner}} {status}",
+        ]
+        if detail:
+            lines.append(f"    {detail}")
+        return {
+            "schema_version": 1,
+            "run_id": state.run_id,
+            "cycle": state.cycle,
+            "current": state.current,
+            "completed": state.completed,
+            "completed_count": completed_count,
+            "total": len(tasks),
+            "status": status,
+            "detail": detail,
+            "tasks": tasks,
+            "lines": lines,
+            "updated_at": time.time(),
+        }
+
     def start(self, status: str, detail: str = "") -> None:
         if self._thread and (status, detail) == (self.status, self.detail):
             return
@@ -266,6 +320,23 @@ class ConsoleObserver:
     def __init__(self, runtime) -> None:
         config = runtime.config
         self.ui = LiveUI(human_output=config.human_output)
+        work = getattr(runtime, "work", None)
+        self.snapshot_path = Path(work) / "console-view.json" if work is not None else None
+
+    def _write_snapshot(self) -> None:
+        if self.snapshot_path is None:
+            return
+        payload = self.ui.snapshot()
+        if payload is None:
+            return
+        try:
+            self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.snapshot_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            os.replace(tmp, self.snapshot_path)
+        except (OSError, TypeError, ValueError):
+            # Console/UI observation must never fail the Runner.
+            return
 
     def __call__(self, event: dict) -> None:
         kind = str(event.get("type", ""))
@@ -300,6 +371,7 @@ class ConsoleObserver:
             self.ui.stop(event.get("status", ""), event.get("detail", ""))
         elif kind == "runner.status" and action == "stop":
             self.ui.stop()
+        self._write_snapshot()
 
 
 def register(runtime) -> None:

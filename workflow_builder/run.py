@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a Workflow through the system Workflow Builder and publish only after validation."""
+"""Generate a Workflow draft, validate it, and optionally publish it."""
 from __future__ import annotations
 
 import argparse
@@ -16,20 +16,23 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SYSTEM_WORKFLOW = ROOT / "runner" / "workflow" / "system" / "workflow_builder.yaml"
-VALIDATOR = ROOT / "workflow_builder" / "validation.py"
+BUILDER_ROOT = Path(__file__).resolve().parent
+BUILDER_WORKFLOW = BUILDER_ROOT / "workflow_builder.yaml"
+VALIDATOR = BUILDER_ROOT / "validation.py"
 
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Generate and validate an AI Task Runner Workflow package")
-    p.add_argument("--project-root", required=True, help="Project the model may inspect while designing the Workflow")
+    p.add_argument("--project-root", required=True, help="Runner workspace root; the UI passes an isolated temporary Builder job, not the selected user Project")
     source = p.add_mutually_exclusive_group(required=True)
     source.add_argument("--request", help="Workflow requirements text")
     source.add_argument("--request-file", help="UTF-8 file containing Workflow requirements")
-    p.add_argument("--output-workflow", required=True, help="Final Workflow YAML path")
+    p.add_argument("--output-workflow", help="Final Workflow YAML path; required unless --draft-only")
     p.add_argument("--output-prompt-dir", help="Final Prompt directory; defaults to <workflow-parent>/prompts")
     p.add_argument("--backend", default="", help="Optional Runner backend override")
     p.add_argument("--overwrite", action="store_true", help="Allow replacing existing output files")
+    p.add_argument("--draft-only", action="store_true", help="Stop after validated draft creation; do not publish")
+    p.add_argument("--job-dir", help="Optional job directory inside the Runner workspace root (used by UI draft mode)")
     return p
 
 
@@ -42,6 +45,76 @@ def _request_text(args: argparse.Namespace) -> str:
     if not text:
         raise ValueError("Workflow Builder request is empty")
     return text
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _write_status(run_root: Path, state: str, message: str, **extra: Any) -> None:
+    path = run_root / "status.json"
+    current: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            current = {}
+    current.update({
+        "schema_version": 1,
+        "state": state,
+        "message": message,
+        "pid": os.getpid(),
+        "updated_at": time.time(),
+        **extra,
+    })
+    _atomic_json(path, current)
+
+
+class GenerationCancelled(RuntimeError):
+    pass
+
+
+def _runner_process_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    if os.name == "nt":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        if flags:
+            kwargs["creationflags"] = flags
+    return kwargs
+
+
+def _run_runner(command: list[str], run_root: Path, project: Path) -> int:
+    process = subprocess.Popen(command, cwd=ROOT, **_runner_process_kwargs())
+    cancel_file = run_root / "cancel.request"
+    while process.poll() is None:
+        if cancel_file.exists():
+            _write_status(run_root, "cancelling", "Cancelling Workflow generation…")
+            runtime = project / ".ai-task-runner"
+            runtime.mkdir(parents=True, exist_ok=True)
+            (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
+            try:
+                process.wait(timeout=12)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    process.wait(timeout=4)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=4)
+            raise GenerationCancelled("Workflow generation cancelled")
+        time.sleep(0.25)
+    return int(process.returncode or 0)
 
 
 def _prompt_refs(value: Any) -> list[tuple[dict[str, Any], str]]:
@@ -85,7 +158,7 @@ def _publish(
         try:
             rel = source.relative_to(draft_prompt_dir.resolve())
         except ValueError:
-            # System/absolute references are kept as-is; only generated draft Prompts are published.
+            # Existing external/System Prompt references remain unchanged.
             continue
         target = (output_prompt_dir / rel).resolve()
         prompt_sources[source] = target
@@ -110,10 +183,9 @@ def _publish(
             copied.append(target)
 
         text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
-        tmp_workflow = output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp")
+        tmp_workflow = output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp.yaml")
         tmp_workflow.write_text(text, encoding="utf-8")
 
-        # Validate the rewritten, final-path form before publication.
         result = subprocess.run(
             [sys.executable, str(ROOT / "tool" / "workflow_dryrun.py"), str(tmp_workflow), "--matrix", "--json", "--max-steps", "500"],
             cwd=ROOT,
@@ -123,6 +195,9 @@ def _publish(
         )
         if result.returncode != 0:
             raise ValueError("published-path dry-run failed: " + (result.stdout or result.stderr or "")[-12000:])
+        payload = json.loads(result.stdout)
+        if not payload.get("closed"):
+            raise ValueError("published-path dry-run matrix did not reach closure")
         if output_workflow.exists() and overwrite:
             output_workflow.unlink()
         os.replace(tmp_workflow, output_workflow)
@@ -133,7 +208,7 @@ def _publish(
             except OSError:
                 pass
         try:
-            output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp").unlink()
+            output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp.yaml").unlink()
         except OSError:
             pass
         raise
@@ -148,23 +223,41 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     project = Path(args.project_root).expanduser().resolve()
     if not project.is_dir():
         raise ValueError(f"project root does not exist: {project}")
-    output_workflow = Path(args.output_workflow).expanduser().resolve()
-    output_prompt_dir = (
-        Path(args.output_prompt_dir).expanduser().resolve()
-        if args.output_prompt_dir
-        else (output_workflow.parent / "prompts").resolve()
-    )
-    if output_workflow.exists() and not args.overwrite:
-        raise FileExistsError(f"output Workflow already exists: {output_workflow}")
+    if not BUILDER_WORKFLOW.is_file() or not (BUILDER_ROOT / "prompt.md").is_file() or not VALIDATOR.is_file():
+        raise ValueError("Workflow Builder files are incomplete")
+
+    output_workflow: Path | None = None
+    output_prompt_dir: Path | None = None
+    if not args.draft_only:
+        if not args.output_workflow:
+            raise ValueError("--output-workflow is required unless --draft-only is used")
+        output_workflow = Path(args.output_workflow).expanduser().resolve()
+        output_prompt_dir = (
+            Path(args.output_prompt_dir).expanduser().resolve()
+            if args.output_prompt_dir
+            else (output_workflow.parent / "prompts").resolve()
+        )
+        if output_workflow.exists() and not args.overwrite:
+            raise FileExistsError(f"output Workflow already exists: {output_workflow}")
 
     request_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
-    run_root = project / ".ai-task-runner" / "workflow-builder" / request_id
+    if args.job_dir:
+        run_root = Path(args.job_dir).expanduser().resolve()
+        if not _inside(run_root, project):
+            raise ValueError("Workflow Builder job directory must stay inside project root")
+        run_root.mkdir(parents=True, exist_ok=True)
+        request_id = run_root.name
+    else:
+        run_root = project / ".ai-task-runner" / "workflow-builder" / request_id
+        run_root.mkdir(parents=True, exist_ok=False)
+
     draft_root = run_root / "draft"
     draft_prompt_dir = draft_root / "prompts"
     draft_workflow = draft_root / "workflow.yaml"
-    draft_prompt_dir.mkdir(parents=True, exist_ok=False)
+    draft_prompt_dir.mkdir(parents=True, exist_ok=True)
 
     user_request = _request_text(args)
+    _write_status(run_root, "running", "Preparing Workflow draft")
     goal_file = run_root / "request.md"
     goal_file.write_text(
         "# Workflow Builder Request\n\n"
@@ -187,21 +280,23 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "--goal-file",
         str(goal_file),
         "--workflow",
-        str(SYSTEM_WORKFLOW),
+        str(BUILDER_WORKFLOW),
         "--validator",
         str(VALIDATOR),
-        f"--validator-arg=--draft-workflow",
+        "--validator-arg=--draft-workflow",
         f"--validator-arg={rel_workflow}",
-        f"--validator-arg=--draft-prompt-dir",
+        "--validator-arg=--draft-prompt-dir",
         f"--validator-arg={rel_prompt_dir}",
     ]
     if args.backend:
         command += ["--backend", args.backend]
-    result = subprocess.run(command, cwd=ROOT)
-    if result.returncode != 0:
-        raise RuntimeError(f"Workflow Builder Runner failed with exit code {result.returncode}; draft kept at {draft_root}")
 
-    # Defense in depth: validate once more immediately before publishing.
+    _write_status(run_root, "running", "AI is generating Workflow and Prompt draft")
+    returncode = _run_runner(command, run_root, project)
+    if returncode != 0:
+        raise RuntimeError(f"Workflow Builder Runner failed with exit code {returncode}; draft kept at {draft_root}")
+
+    _write_status(run_root, "running", "Validating generated Workflow draft")
     verify = subprocess.run(
         [
             sys.executable,
@@ -221,6 +316,23 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if verify.returncode != 0:
         raise RuntimeError("Workflow Builder final validation failed: " + (verify.stdout or verify.stderr or "")[-12000:])
 
+    validation_output = (verify.stdout or "").strip()
+    manifest: dict[str, Any] = {
+        "schema_version": 1,
+        "request_id": request_id,
+        "draft_root": str(draft_root),
+        "draft_workflow": str(draft_workflow),
+        "draft_prompt_dir": str(draft_prompt_dir),
+        "validation": validation_output[-12000:],
+    }
+
+    if args.draft_only:
+        _atomic_json(run_root / "result.json", manifest)
+        _write_status(run_root, "ready", "Draft ready. Review it and Save to create the Workflow.", result=manifest)
+        return manifest
+
+    assert output_workflow is not None and output_prompt_dir is not None
+    _write_status(run_root, "running", "Publishing validated Workflow")
     published = _publish(
         draft_workflow,
         draft_prompt_dir,
@@ -228,21 +340,31 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         output_prompt_dir,
         overwrite=args.overwrite,
     )
-    manifest = {
-        "schema_version": 1,
-        "request_id": request_id,
-        "draft_root": str(draft_root),
-        "output": published,
-    }
-    (run_root / "result.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest["output"] = published
+    _atomic_json(run_root / "result.json", manifest)
+    _write_status(run_root, "saved", "Workflow published", result=manifest)
     return manifest
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    run_root: Path | None = Path(args.job_dir).expanduser().resolve() if getattr(args, "job_dir", None) else None
     try:
         result = build(args)
+    except GenerationCancelled as exc:
+        if run_root is not None:
+            try:
+                _write_status(run_root, "cancelled", str(exc))
+            except Exception:
+                pass
+        print(f"CANCELLED: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
+        if run_root is not None:
+            try:
+                _write_status(run_root, "failed", str(exc))
+            except Exception:
+                pass
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, ensure_ascii=False, indent=2))

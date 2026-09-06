@@ -1,0 +1,25 @@
+{
+  "cli_has_all_todos": true,
+  "cli_header_present": true,
+  "project_status_labels": [
+    "RUN",
+    "IDLE",
+    "DONE"
+  ],
+  "running_project_mark_animation": "projectRunningPulse",
+  "project_list_x": 14,
+  "first_project_button_x": 22,
+  "composer_running_class": true,
+  "running_button_frames": [
+    "/ Running",
+    "| Running"
+  ],
+  "running_button_animates": true,
+  "running_placeholder": "Running · Execute implementation",
+  "confirm_z": "7000",
+  "composer_z": "90",
+  "confirm_covers_viewport": true,
+  "confirm_covers_composer_geometry": true,
+  "narrow_horizontal_overflow": false,
+  "page_errors": []
+}

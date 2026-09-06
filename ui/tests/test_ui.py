@@ -22,6 +22,11 @@ class UIStateTests(unittest.TestCase):
         custom.mkdir(parents=True)
         self.workflow = custom / "task.workflow.yaml"
         self.workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
+        backends = self.root / "runner" / "backends"; backends.mkdir(parents=True)
+        (backends / "qwen.py").write_text("class QwenBackend:\n    name = 'qwen'\n", encoding="utf-8")
+        (backends / "opencode.py").write_text("class OpenCodeBackend:\n    name = 'opencode'\n", encoding="utf-8")
+        defaults = self.root / "runner" / "config"; defaults.mkdir(parents=True)
+        (defaults / "defaults.py").write_text("DEFAULT_BACKEND = 'qwen'\n", encoding="utf-8")
         self.state = UIState(self.root)
 
     def tearDown(self) -> None:
@@ -31,6 +36,27 @@ class UIStateTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value), encoding="utf-8")
 
+
+    def test_backend_catalog_is_read_without_importing_runner_core(self) -> None:
+        catalog = self.state.backend_catalog()
+        self.assertEqual(catalog["default"], "qwen")
+        self.assertEqual(catalog["backends"], ["opencode", "qwen"])
+
+    def test_second_project_can_launch_while_first_project_is_running(self) -> None:
+        second = self.root / "project-two"; second.mkdir()
+        first_runtime = self.project / ".ai-task-runner"; first_runtime.mkdir()
+        self.write_json(first_runtime / "state.json", {"run_id": "run-1", "completed": False})
+        self.write_json(first_runtime / "runner-process.json", {"supervisor_pid": 12345})
+        original_read = self.state.read_runtime
+        def read_runtime(project):
+            path = Path(project)
+            if path.resolve() == self.project.resolve():
+                return {"running": True}
+            return original_read(path)
+        with patch.object(self.state, "read_runtime", side_effect=read_runtime), patch("ui.server.subprocess.Popen") as popen:
+            self.state.launch_message(second, "run second", workflow=str(self.workflow))
+        command = popen.call_args.args[0]
+        self.assertEqual(Path(command[command.index("--project-root") + 1]).resolve(), second.resolve())
 
     def test_running_project_cannot_be_removed(self) -> None:
         self.state.add_project(str(self.project))
@@ -83,6 +109,55 @@ class UIStateTests(unittest.TestCase):
         info = self.state.read_runtime(self.project)
         self.assertFalse(info["running"])
         self.assertTrue(info["stale"])
+
+    def test_runtime_fallback_exposes_plan_todos_in_cli_format(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-plan",
+            "cycle": 2,
+            "current": 1,
+            "completed": False,
+            "stage": "execute",
+            "tasks": [
+                {"id": "t1", "title": "First TODO", "status": "completed", "attempts": 1},
+                {"id": "t2", "title": "Second TODO", "status": "pending", "attempts": 2},
+            ],
+        })
+        info = self.state.read_runtime(self.project)
+        self.assertFalse(info["console_snapshot_exists"])
+        self.assertEqual(info["completed_count"], 1)
+        self.assertEqual(info["cli_tasks"][0]["mark"], "x")
+        self.assertEqual(info["cli_tasks"][1]["mark"], ">")
+        self.assertEqual(info["cli_lines"][:4], [
+            "AI Task Runner  Cycle 2  Progress 1/2",
+            "",
+            "  [x] 1. First TODO",
+            "  [>] 2. Second TODO",
+        ])
+
+    def test_runtime_prefers_current_console_snapshot_status(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        tasks = [{"id": "t1", "title": "Plan TODO", "status": "pending", "attempts": 0}]
+        self.write_json(runtime / "state.json", {"run_id": "run-cli", "cycle": 1, "current": 0, "completed": False, "stage": "execute", "tasks": tasks})
+        self.write_json(runtime / "console-view.json", {
+            "run_id": "run-cli", "cycle": 1, "current": 0, "completed": False,
+            "completed_count": 0, "total": 1, "status": "AI running skill", "detail": "Plan TODO",
+            "tasks": [{"index": 1, **tasks[0], "mark": ">", "line": "  [>] 1. Plan TODO"}],
+            "lines": ["AI Task Runner  Cycle 1  Progress 0/1", "", "  [>] 1. Plan TODO", "", "  {spinner} AI running skill", "    Plan TODO"],
+        })
+        info = self.state.read_runtime(self.project)
+        self.assertTrue(info["console_snapshot_exists"])
+        self.assertEqual(info["cli_status"], "AI running skill")
+        self.assertEqual(info["cli_detail"], "Plan TODO")
+
+    def test_project_list_reports_runtime_status(self) -> None:
+        self.state.add_project(str(self.project))
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {"run_id": "run-status", "completed": False})
+        self.assertEqual(self.state.projects()[0]["runtime_status"], "stopped")
+        self.write_json(runtime / "runner-process.json", {"supervisor_pid": 12345})
+        with patch.object(UIState, "_pid_alive", return_value=True):
+            self.assertEqual(self.state.projects()[0]["runtime_status"], "running")
 
     def test_stream_hides_reasoning_fields_but_keeps_normal_analysis_text(self) -> None:
         raw = "\n".join([
@@ -279,6 +354,7 @@ class WorkflowStudioTests(unittest.TestCase):
         (self.root / "ui" / "data").mkdir(parents=True)
         (self.root / "runner" / "workflow" / "system").mkdir(parents=True)
         (self.root / "runner" / "prompts" / "stages").mkdir(parents=True)
+        (self.root / "runner" / "prompts" / "system").mkdir(parents=True)
         (self.root / "runner" / "workflow" / "custom").mkdir(parents=True)
         (self.root / "runner" / "prompts" / "custom").mkdir(parents=True)
         (self.root / "tool").mkdir(exist_ok=True)
@@ -297,6 +373,14 @@ class WorkflowStudioTests(unittest.TestCase):
             "    return {'goal': '', 'stage': stage, 'task': _task_data(None), 'project': {'root': ''}, 'previous': {'output': ''}, 'validation': {'feedback': ''}}\n",
             encoding="utf-8",
         )
+        (self.root / "runner" / "prompts" / "loader.py").write_text(
+            "def render_prompt(name, values=None): return ''\n"
+            "def ai_rules(root): return render_prompt('system/rules.md', {'project': {'root': str(root)}, 'plugin_rules': ''})\n"
+            "def structured_retry_prompt(error): return render_prompt('system/structured_output_retry.md', {'error': error})\n",
+            encoding="utf-8",
+        )
+        (self.root / "runner" / "prompts" / "system" / "rules.md").write_text("{{ project.root }}\n{{ plugin_rules }}\n", encoding="utf-8")
+        (self.root / "runner" / "prompts" / "system" / "structured_output_retry.md").write_text("{{ error }}\n", encoding="utf-8")
         self.project = self.root / "project"
         self.project.mkdir()
         self.state = UIState(self.root)
@@ -356,6 +440,42 @@ class WorkflowStudioTests(unittest.TestCase):
         bad = self.state.studio_prompt_check(item["id"], "{{ made_up_variable }}", self.project)
         self.assertFalse(bad["ok"])
         self.assertEqual(bad["unknown"], ["made_up_variable"])
+
+    def test_system_loader_prompts_use_their_real_variable_contracts(self) -> None:
+        files = self.state.studio_files(self.project)
+        rules = next(row for row in files["prompts"] if row["name"] == "rules.md")
+        retry = next(row for row in files["prompts"] if row["name"] == "structured_output_retry.md")
+        rules_check = self.state.studio_prompt_check(rules["id"], "{{ project.root }} / {{ plugin_rules }}", self.project)
+        retry_check = self.state.studio_prompt_check(retry["id"], "{{ error }}", self.project)
+        self.assertTrue(rules_check["ok"]); self.assertEqual(rules_check["contract"], "loader")
+        self.assertTrue(retry_check["ok"]); self.assertEqual(retry_check["contract"], "loader")
+        rules_tags = {row["key"] for row in self.state.studio_prompt_tags(rules["id"], self.project)["tags"]}
+        retry_tags = {row["key"] for row in self.state.studio_prompt_tags(retry["id"], self.project)["tags"]}
+        self.assertEqual(rules_tags, {"project", "project.root", "plugin_rules"})
+        self.assertEqual(retry_tags, {"error"})
+
+    def test_all_bundled_prompt_contracts_have_no_false_warning(self) -> None:
+        for item in self.state.studio_files(self.project)["prompts"]:
+            path = Path(item["path"])
+            check = self.state.studio_prompt_check(item["id"], path.read_text(encoding="utf-8"), self.project)
+            self.assertTrue(check["ok"], f"{path}: {check}")
+
+    def test_prompt_validate_api_contract_uses_current_unsaved_content(self) -> None:
+        custom_prompt = self.root / "runner" / "prompts" / "custom" / "validate.md"
+        custom_prompt.write_text("{{ goal }}\n", encoding="utf-8")
+        item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(custom_prompt.resolve()))
+        ok = self.state.studio_validate(item["id"], self.project, content="{{ project.root }}\n")
+        bad = self.state.studio_validate(item["id"], self.project, content="{{ unknown_prompt_var }}\n")
+        self.assertTrue(ok["ok"]); self.assertEqual(ok["summary"], "Prompt validation passed")
+        self.assertFalse(bad["ok"]); self.assertIn("unknown_prompt_var", bad["output"])
+
+    def test_prompt_import_must_pass_validation_before_file_is_created(self) -> None:
+        target = self.root / "runner" / "prompts" / "custom" / "bad_import.md"
+        with self.assertRaisesRegex(ValueError, "Invalid Prompt template"):
+            self.state.studio_import("prompt", "bad_import.md", "{{ missing_tag }}\n", "custom", self.project)
+        self.assertFalse(target.exists())
+        result = self.state.studio_import("prompt", "good_import.md", "{{ goal }}\n", "custom", self.project)
+        self.assertTrue(Path(result["item"]["path"]).is_file())
 
     def test_prompt_save_is_server_side_validated(self) -> None:
         custom_prompt = self.root / "runner" / "prompts" / "custom" / "editable.md"
@@ -706,36 +826,153 @@ flow: [validate]
         exported = self.state.studio_export(result["item"]["id"], self.project)
         self.assertEqual(exported["kind"], "prompt"); self.assertIn("{{goal}}", exported["content"])
 
-    def test_ai_workflow_builder_launches_external_wrapper_hidden_and_targets_custom(self) -> None:
+    def _write_builder_fixture(self) -> Path:
         builder_dir = self.root / "workflow_builder"
-        builder_dir.mkdir()
-        (builder_dir / "run.py").write_text("print('builder')\n", encoding="utf-8")
-        (builder_dir / "validation.py").write_text("print('validator')\n", encoding="utf-8")
-        (self.root / "runner" / "workflow" / "system" / "workflow_builder.yaml").write_text(
-            "stages: {}\nflow: []\n", encoding="utf-8"
-        )
-        with patch.object(self.state, "read_runtime", return_value={"running": False}), patch("ui.server.subprocess.Popen") as popen:
+        builder_dir.mkdir(exist_ok=True)
+        for name in ("run.py", "validation.py", "publish.py"):
+            (builder_dir / name).write_text("print('ok')\n", encoding="utf-8")
+        (builder_dir / "workflow_builder.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        (builder_dir / "prompt.md").write_text("{{ goal }}\n", encoding="utf-8")
+        return builder_dir
+
+    def test_ai_workflow_builder_launches_hidden_draft_job_without_project(self) -> None:
+        builder_dir = self._write_builder_fixture()
+        with patch("ui.server.subprocess.Popen") as popen:
             result = self.state.studio_generate_workflow(
-                self.project, "generated", "custom", "Create a review + validation workflow", backend="qwen"
+                "Create a review + validation workflow", backend="qwen"
             )
         command = popen.call_args.args[0]
         self.assertIn(str(builder_dir / "run.py"), command)
-        self.assertIn("--project-root", command); self.assertIn(str(self.project), command)
+        self.assertIn("--project-root", command)
+        workspace = Path(command[command.index("--project-root") + 1]).resolve()
+        expected = (self.root / "ui" / "data" / "workflow-builder" / result["job_id"]).resolve()
+        self.assertEqual(workspace, expected)
+        self.assertNotEqual(workspace, self.project.resolve())
         self.assertIn("--request", command); self.assertIn("Create a review + validation workflow", command)
-        self.assertIn("--output-workflow", command)
-        output = Path(command[command.index("--output-workflow") + 1])
-        self.assertEqual(output, (self.root / "runner" / "workflow" / "custom" / "generated.workflow.yaml").resolve())
+        self.assertIn("--draft-only", command); self.assertIn("--job-dir", command)
+        self.assertEqual(Path(command[command.index("--job-dir") + 1]).resolve(), expected)
+        self.assertNotIn("--output-workflow", command)
         self.assertIn("--backend", command); self.assertIn("qwen", command)
-        self.assertEqual(result["workflow"], str(output))
+        self.assertRegex(result["job_id"], r"^[a-f0-9]{12}$")
+        self.assertEqual(Path(result["workspace"]).resolve(), expected)
+        active = json.loads((self.root / "ui" / "data" / "workflow-builder" / "active.json").read_text(encoding="utf-8"))
+        self.assertEqual(active["job_id"], result["job_id"])
+        self.assertFalse(any((self.root / "runner" / "workflow" / "custom").glob("generated*.yaml")))
+        status = json.loads((expected / "status.json").read_text(encoding="utf-8"))
+        self.assertEqual(status["state"], "queued")
         self.assertEqual(popen.call_args.kwargs["stdout"], subprocess.DEVNULL)
-        if os.name == "nt":
-            self.assertTrue(popen.call_args.kwargs.get("creationflags", 0))
-        else:
-            self.assertTrue(popen.call_args.kwargs.get("start_new_session"))
+        if os.name == "nt": self.assertTrue(popen.call_args.kwargs.get("creationflags", 0))
+        else: self.assertTrue(popen.call_args.kwargs.get("start_new_session"))
 
-    def test_ai_workflow_builder_rejects_incomplete_system_builder(self) -> None:
+    def test_ai_workflow_builder_active_registry_survives_browser_reopen_and_blocks_second_job(self) -> None:
+        self._write_builder_fixture()
+        with patch("ui.server.subprocess.Popen") as popen:
+            first = self.state.studio_generate_workflow("first request", backend="qwen")
+            active_path = self.root / "ui" / "data" / "workflow-builder" / "active.json"
+            self.assertTrue(active_path.is_file())
+            self.assertEqual(json.loads(active_path.read_text(encoding="utf-8"))["job_id"], first["job_id"])
+            active = self.state.studio_generate_active()
+            self.assertTrue(active["active"]); self.assertEqual(active["job_id"], first["job_id"])
+            self.assertEqual(active["request"], "first request"); self.assertEqual(active["backend"], "qwen")
+            self.assertEqual(Path(active["workspace"]).resolve(), (self.root / "ui" / "data" / "workflow-builder" / first["job_id"]).resolve())
+            second = self.state.studio_generate_workflow("second request", backend="opencode")
+        self.assertTrue(second["existing"]); self.assertEqual(second["job_id"], first["job_id"]); self.assertEqual(popen.call_count, 1)
+
+    def test_ai_workflow_builder_ready_active_job_restores_until_discard(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef333333"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        result = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "status.json").write_text(json.dumps({"state": "ready", "message": "Draft ready", "request": "make it", "backend": "qwen", "result": result, "runtime_cleared": True}), encoding="utf-8")
+        self.state._builder_set_active(job_id)
+        restored = self.state.studio_generate_active()
+        self.assertTrue(restored["active"]); self.assertEqual(restored["state"], "ready"); self.assertIn("draft", restored)
+        self.state.studio_generate_discard(job_id)
+        self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
+        self.assertFalse(self.state.studio_generate_active()["active"])
+
+    def test_ai_workflow_builder_ready_status_returns_preview_and_discard_removes_draft(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef123456"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        (prompts / "review.md").write_text("{{ goal }}\n", encoding="utf-8")
+        result = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "result.json").write_text(json.dumps(result), encoding="utf-8")
+        (root / "status.json").write_text(json.dumps({"state": "ready", "message": "Draft ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
+        status = self.state.studio_generate_status(job_id)
+        self.assertEqual(status["state"], "ready"); self.assertIn("stages", status["draft"]["workflow"])
+        self.assertEqual(status["draft"]["prompts"][0]["name"], "review.md")
+        self.state.studio_generate_discard(job_id)
+        self.assertFalse(root.exists())
+
+    def test_ai_workflow_builder_save_custom_without_project(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef654321"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
+        result = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "result.json").write_text(json.dumps(result), encoding="utf-8")
+        (root / "status.json").write_text(json.dumps({"state": "ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
+        self.state._builder_set_active(job_id)
+        target = self.root / "runner" / "workflow" / "custom" / "generated.workflow.yaml"
+        def fake_publish(*args, **kwargs):
+            target.write_text(workflow.read_text(encoding="utf-8"), encoding="utf-8")
+            return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok":true}', stderr="")
+        with patch.object(self.state, "_builder_validate_draft", return_value={"ok": True, "output": "PASS"}), patch("ui.server.subprocess.run", side_effect=fake_publish):
+            saved = self.state.studio_generate_save(None, job_id, "generated", "custom")
+        self.assertTrue(target.is_file()); self.assertEqual(saved["item"]["group"], "Custom"); self.assertFalse(root.exists())
+        self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
+
+    def test_ai_workflow_builder_project_destination_requires_project_only_at_save(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef654322"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
+        manifest = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "status.json").write_text(json.dumps({"state": "ready", "result": manifest}), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Open a Project before saving"):
+            self.state.studio_generate_save(None, job_id, "generated", "project")
+
+    def test_ai_workflow_builder_each_generate_starts_fresh_and_cleans_old_ready_draft(self) -> None:
+        self._write_builder_fixture()
+        old = self.root / "ui" / "data" / "workflow-builder" / "abcdef000001"
+        old.mkdir(parents=True); (old / "status.json").write_text(json.dumps({"state": "ready", "updated_at": 1}), encoding="utf-8")
+        with patch("ui.server.subprocess.Popen"):
+            result = self.state.studio_generate_workflow("new draft", backend="qwen")
+        self.assertFalse(old.exists())
+        self.assertNotEqual(result["job_id"], "abcdef000001")
+
+    def test_ai_workflow_builder_cancel_stops_only_isolated_builder_runtime(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef111111"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        root.mkdir(parents=True); (root / "status.json").write_text(json.dumps({"state": "running", "pid": 123}), encoding="utf-8")
+        result = self.state.studio_generate_cancel(job_id)
+        self.assertEqual(result["state"], "cancelling")
+        self.assertTrue((root / "cancel.request").is_file())
+        self.assertTrue((root / ".ai-task-runner" / "stop.request").is_file())
+        self.assertFalse((self.project / ".ai-task-runner" / "stop.request").exists())
+
+    def test_ai_workflow_builder_validate_accepts_current_draft_edits(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef222222"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        prompt = prompts / "review.md"; prompt.write_text("{{ goal }}\n", encoding="utf-8")
+        manifest = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "result.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (root / "status.json").write_text(json.dumps({"state": "ready", "result": manifest}), encoding="utf-8")
+        with patch.object(self.state, "_builder_validate_draft", return_value={"ok": True, "output": "PASS"}):
+            result = self.state.studio_generate_validate(job_id, "stages: {}\nflow: []\n", [{"name": "review.md", "content": "{{ project.root }}\n"}])
+        self.assertTrue(result["ok"]); self.assertIn("project.root", prompt.read_text(encoding="utf-8"))
+        self.assertIn("visual", result["draft"])
+
+    def test_ai_workflow_builder_rejects_incomplete_external_builder_without_project(self) -> None:
+        builder_dir = self.root / "workflow_builder"; builder_dir.mkdir()
+        (builder_dir / "run.py").write_text("print('builder')\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "incomplete"):
-            self.state.studio_generate_workflow(self.project, "generated", "custom", "Create workflow")
+            self.state.studio_generate_workflow("Create workflow")
 
     def test_studio_check_reports_yaml_location(self) -> None:
         item = self._workflow_item()

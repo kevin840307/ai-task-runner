@@ -1,0 +1,13 @@
+{
+  "project_count": 0,
+  "generate_button_enabled": true,
+  "generator_visible_without_project": true,
+  "hint": "Generate uses an isolated temporary workspace. No Project is required; name and destination are chosen only when you Save.",
+  "ready_visible": true,
+  "project_destination_disabled_without_project": true,
+  "custom_destination_selected": true,
+  "generate_post_has_project": false,
+  "status_url_has_project": false,
+  "builder_backend_persisted": true,
+  "page_errors": []
+}

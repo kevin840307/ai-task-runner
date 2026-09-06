@@ -30,6 +30,7 @@ packages = [
     "runner.runtime",
     "runner.workflow.stages",
     "runner.utils",
+    "workflow_builder",
 ]
 py-modules = [
     "ai_task_runner",
@@ -46,3 +47,4 @@ version = {attr = "runner.version.__version__"}
 "runner.prompts.custom" = ["*.md"]
 "runner.workflow.system" = ["*.yaml"]
 "runner.workflow.custom" = ["*.yaml"]
+"workflow_builder" = ["*.yaml", "*.md"]

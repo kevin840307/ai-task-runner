@@ -28,10 +28,6 @@
         </div>
         <div class="runtime-actions">
           <span id="statusBadge" class="runtime-badge">Idle</span>
-          <button id="resumeButton" class="action-button" type="button" hidden>Continue</button>
-          <button id="rerunButton" class="action-button" type="button" hidden>Rerun</button>
-          <button id="resetButton" class="action-button" type="button" hidden>Reset</button>
-          <button id="stopButton" class="action-button danger" type="button" hidden>Stop</button>
         </div>
       </header>
 
@@ -69,20 +65,35 @@
               </div>
             </label>
           </div>
-          <div id="optionsPanel" class="options-panel" hidden>
-            <select id="backend"><option value="">Default backend</option><option value="qwen">qwen</option><option value="opencode">opencode</option></select>
+          <div id="optionsPanel" class="options-panel" role="dialog" aria-label="Run options" hidden>
+            <div class="options-popover-head"><strong>Run options</strong><button id="optionsCloseButton" type="button" aria-label="Close options">×</button></div>
+            <div class="options-popover-field backend-option-field"><span>Backend</span>
+              <div id="backendPicker" class="backend-picker">
+                <select id="backend" hidden aria-hidden="true"></select>
+                <button id="backendDropdownButton" class="backend-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="backend-picker-label">BACKEND</span><strong id="backendSelectedLabel">Default backend</strong><span class="backend-picker-chevron" aria-hidden="true">⌄</span>
+                </button>
+                <div id="backendDropdownMenu" class="workflow-dropdown-menu backend-dropdown-menu" role="listbox" hidden></div>
+              </div>
+            </div>
+            <button id="rerunButton" class="action-button options-rerun" type="button" hidden>Rerun last task</button>
           </div>
           <textarea id="messageInput" rows="2" placeholder="描述要完成的功能或修復內容..."></textarea>
           <div class="composer-footer">
             <div class="composer-left"><button id="optionsButton" class="options-button" type="button" aria-expanded="false">Options</button><span id="errorText" class="error-text"></span></div>
-            <div class="composer-right"><button id="sendButton" class="primary send-button" type="button">Run</button></div>
+            <div class="composer-right runtime-composer-actions">
+              <button id="sendButton" class="primary send-button" type="button">Run</button>
+              <button id="stopButton" class="action-button danger runtime-control-button" type="button" hidden>Stop</button>
+              <button id="resumeButton" class="action-button primary runtime-control-button" type="button" hidden>Continue</button>
+              <button id="resetButton" class="action-button runtime-control-button" type="button" hidden>Reset</button>
+            </div>
           </div>
         </div>
       </section>
     </section>
 
     <section id="workflowView" class="workflow-page" hidden aria-label="Workflow Studio">
-      <div class="designer-main studio-main">
+      <div id="workflowStudioPage" class="designer-main studio-main">
         <header class="designer-topbar studio-topbar">
           <div>
             <h1>Workflow Studio</h1>
@@ -186,6 +197,59 @@
         </section>
 
       </div>
+
+      <div id="workflowGeneratorPage" class="workflow-generator-page" hidden>
+        <header class="workflow-generator-topbar">
+          <button id="generateWorkflowBack" class="workflow-generator-back" type="button">‹ Workflow Studio</button>
+          <div class="workflow-generator-heading">
+            <span class="designer-eyebrow">AI WORKFLOW BUILDER</span>
+            <h1 id="generateWorkflowPageTitle">Generate Workflow with AI</h1>
+            <p id="generateWorkflowPageSubtitle">Describe the Workflow you want. Generate creates a temporary Draft only.</p>
+          </div>
+          <span id="generateWorkflowPageBadge" class="workflow-builder-draft-badge" hidden>DRAFT · NOT SAVED</span>
+        </header>
+
+        <main class="workflow-generator-main">
+          <section id="generateWorkflowForm" class="workflow-generator-phase workflow-generator-input">
+            <div class="workflow-generator-input-card">
+              <label class="designer-form-row designer-form-wide">
+                <span class="designer-label">What should this Workflow do?</span>
+                <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review twice, then run Python validation. Include retry/recovery rules and required prompts."></textarea>
+                <span class="designer-form-hint">Generate always starts a new AI run and a new temporary Draft.</span>
+              </label>
+              <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
+            </div>
+            <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
+            <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowWorkspacePreview">Created after Generate</code></div>
+            <div class="workflow-generator-actions"><button id="generateWorkflowCancel" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary" type="button">Generate</button></div>
+          </section>
+
+          <section id="generateWorkflowRunning" class="workflow-generator-phase workflow-builder-running" hidden>
+            <div class="workflow-builder-spinner" aria-hidden="true"></div>
+            <strong>Generating Workflow</strong>
+            <span id="generateWorkflowRunningStatus">Preparing Workflow Builder…</span>
+            <small>This may take a few minutes. Only generation status is shown here.</small>
+            <div class="workflow-generator-workspace workflow-generator-workspace-centered"><span>Temporary workspace</span><code id="generateWorkflowRunningWorkspace"></code></div>
+            <button id="generateWorkflowStop" class="workflow-generator-cancel-running" type="button">Cancel Generation</button>
+          </section>
+
+          <section id="generateWorkflowReady" class="workflow-generator-phase workflow-generator-review" hidden>
+            <div class="workflow-generator-review-head">
+              <div><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><h2>Draft ready for review</h2><p>Review or adjust the Draft. Nothing appears in Custom / Project until Save.</p></div>
+              <div id="generateWorkflowValidation" class="workflow-builder-validation success">Validation PASS</div>
+            </div>
+            <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
+            <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">YAML</button><button id="generateDraftPromptTab" type="button">Prompt</button></div>
+            <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
+            <section id="generateDraftYamlPanel" class="workflow-generator-review-panel" hidden><div class="studio-code-toolbar"><span class="studio-code-language">Draft Workflow YAML</span><span class="studio-code-hint">Changes are temporary until Save</span></div><textarea id="generateWorkflowPreview" class="studio-textarea workflow-generator-yaml" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></section>
+            <section id="generateDraftPromptPanel" class="workflow-generator-review-panel" hidden><div class="workflow-generator-prompt-grid"><aside id="generateWorkflowPromptList" class="workflow-generator-prompt-list"></aside><div class="workflow-generator-prompt-editor"><div class="studio-code-toolbar"><span id="generateDraftPromptName" class="studio-code-language">Prompt</span><span class="studio-code-hint">Temporary Draft Prompt</span></div><textarea id="generateDraftPromptTextarea" class="designer-textarea studio-prompt-textarea-main" spellcheck="false"></textarea></div></div></section>
+            <div id="generateDraftDirtyHint" class="workflow-generator-dirty-hint" hidden>DRAFT MODIFIED · validation required before Save</div>
+            <div class="workflow-generator-actions workflow-generator-review-actions"><button id="generateWorkflowDiscard" class="danger-text" type="button">Discard</button><button id="generateWorkflowRegenerate" type="button">Regenerate</button><button id="generateWorkflowValidate" type="button">Validate Draft</button><button id="generateWorkflowSave" class="primary" type="button">Save Workflow</button></div>
+          </section>
+
+          <section id="generateWorkflowFailed" class="workflow-generator-phase workflow-builder-failed" hidden><strong>Workflow generation failed</strong><span id="generateWorkflowFailure"></span><div class="workflow-generator-actions"><button id="generateWorkflowFailedCancel" type="button">Cancel</button><button id="generateWorkflowRetry" class="primary" type="button">Try Again</button></div></section>
+        </main>
+      </div>
     </section>
   </main>
 
@@ -248,21 +312,11 @@ flow:
   </div>
 
   <!-- Static-style Import modal for both Workflow and Prompt assets. -->
-  <!-- AI Workflow Builder modal. -->
-  <div id="generateWorkflowBackdrop" class="modal-backdrop" hidden>
-    <div class="modal-card workflow-generate-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowTitle">
-      <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">AI</span><div><h2 id="generateWorkflowTitle">Generate Workflow with AI</h2><p>使用 System Workflow Builder 產生 Draft；只有 Python validation + dry-run 通過後才會發佈到指定位置。</p></div></div>
-        <button id="generateWorkflowClose" class="modal-close" type="button" aria-label="Close">×</button>
-      </div>
-      <div class="modal-scroll-body">
-        <div class="modal-section-label">Output</div>
-        <label class="designer-form-row"><span class="designer-label">Name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label>
-        <label class="designer-form-row"><span class="designer-label">Destination</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
-        <label class="designer-form-row designer-form-wide"><span class="designer-label">Requirements</span><textarea id="generateWorkflowRequest" class="designer-textarea workflow-generate-request" placeholder="Describe stages, validation gates, retry/recovery rules, expected prompts, and any constraints..."></textarea><span class="designer-form-hint">Builder 只會先寫 Draft；驗證成功才 publish Workflow / Prompt。</span></label>
-        <div id="generateWorkflowHint" class="modal-hint"></div>
-      </div>
-      <div class="modal-actions"><button id="generateWorkflowCancel" class="modal-secondary" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary modal-primary" type="button">Generate</button></div>
+  <div id="generateWorkflowSaveBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card workflow-save-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowSaveTitle">
+      <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p>Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <div class="modal-scroll-body"><label class="designer-form-row"><span class="designer-label">Workflow name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label><label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label><div id="generateWorkflowSaveHint" class="modal-hint">Save is the moment this Draft becomes a real Workflow.</div></div>
+      <div class="modal-actions"><button id="generateWorkflowSaveCancel" type="button">Cancel</button><button id="generateWorkflowSaveConfirm" class="primary" type="button">Validate &amp; Save</button></div>
     </div>
   </div>
 

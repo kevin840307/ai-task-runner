@@ -94,3 +94,56 @@ def test_workflow_builder_publish_never_overwrites_without_flag(tmp_path: Path):
     with pytest.raises(FileExistsError, match="already exists"):
         _publish(workflow, workflow.parent / "prompts", output, output.parent / "prompts", overwrite=False)
     assert output.read_text(encoding="utf-8") == "existing\n"
+
+
+def test_canonical_builder_assets_live_in_external_folder_and_runner_shim_still_works():
+    canonical = ROOT / "workflow_builder" / "workflow_builder.yaml"
+    prompt = ROOT / "workflow_builder" / "prompt.md"
+    shim = ROOT / "runner" / "workflow" / "system" / "workflow_builder.yaml"
+    assert canonical.is_file()
+    assert prompt.is_file()
+    assert shim.is_file()
+    assert not (ROOT / "runner" / "prompts" / "system" / "workflow_builder.md").exists()
+    assert "prompt: prompt.md" in canonical.read_text(encoding="utf-8")
+    assert "workflow_builder/prompt.md" in shim.read_text(encoding="utf-8").replace("\\", "/")
+
+
+def test_canonical_builder_workflow_dryrun_closes():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "tool" / "workflow_dryrun.py"), str(ROOT / "workflow_builder" / "workflow_builder.yaml"), "--matrix", "--json"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+
+
+def test_publish_cli_validates_and_publishes_existing_draft(tmp_path: Path):
+    project, workflow = _draft(tmp_path)
+    output = tmp_path / "published" / "saved.workflow.yaml"
+    prompt_dir = tmp_path / "published" / "prompts"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "workflow_builder" / "publish.py"),
+            "--project-root", str(project),
+            "--draft-workflow", str(workflow),
+            "--draft-prompt-dir", str(workflow.parent / "prompts"),
+            "--output-workflow", str(output),
+            "--output-prompt-dir", str(prompt_dir),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert output.is_file()
+    assert (prompt_dir / "work.md").is_file()

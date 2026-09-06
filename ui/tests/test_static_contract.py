@@ -94,7 +94,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn("#chatView>.compose-panel{position:absolute;left:0;right:0;bottom:0", css)
         self.assertIn("pointer-events:none", css)
         self.assertIn("#chatView>.compose-panel>.composer-box{pointer-events:auto", css)
-        self.assertIn("height:72px!important", css)
+        self.assertIn("height:60px!important", css)
         self.assertIn("syncComposerReserve", self.js)
 
     def test_composer_remains_viewport_bound_under_browser_zoom(self):
@@ -288,29 +288,187 @@ class LayoutRegressionTests(unittest.TestCase):
             self.assertNotIn(token, self.html + self.js)
         self.assertIn('Select a Workflow before Run', (self.root.parent / "server.py").read_text(encoding="utf-8") if (self.root.parent / "server.py").exists() else "Select a Workflow before Run")
 
-    def test_runtime_controls_expose_stop_continue_and_reset_new_task(self):
-        for token in ('id="stopButton"', 'id="resumeButton"', 'id="resetButton"'):
+    def test_runtime_controls_replace_run_in_composer(self):
+        for token in ('id="sendButton"', 'id="stopButton"', 'id="resumeButton"', 'id="resetButton"'):
             self.assertIn(token, self.html)
-        for token in ('/api/project/stop', '/api/project/resume', '/api/project/reset', '$("resetButton").textContent = runtime.completed ? "New Task" : "Reset"'):
+        composer = self.html[self.html.index('class="composer-right runtime-composer-actions"'):self.html.index('</div>', self.html.index('class="composer-right runtime-composer-actions"'))]
+        for token in ('id="sendButton"', 'id="stopButton"', 'id="resumeButton"', 'id="resetButton"'):
+            self.assertIn(token, composer)
+        for token in ('/api/project/stop', '/api/project/resume', '/api/project/reset', '$("sendButton").hidden = runtime.running || runtime.resumable'):
             self.assertIn(token, self.js)
+
+    def test_runtime_card_uses_cli_snapshot_and_animated_spinner(self):
+        css = "".join(self.runner_css.split())
+        for token in ("CLI_SPINNER_FRAMES", "cliRuntimeText(runtime)", "renderCliRuntimeFrame()", "animateRuntimeFrame"):
+            self.assertIn(token, self.js)
+        self.assertIn("setInterval(animateRuntimeFrame, 120)", self.js)
+        self.assertIn("runtime.cli_lines", self.js)
+        self.assertIn(".cli-runtime-output{", css)
+        self.assertIn(".cli-runtime-card.running.live-dot", css)
+
+    def test_project_rows_show_runtime_state_and_running_pulse(self):
+        css = "".join(self.runner_css.split())
+        for token in ("runtime_status", "project-runtime-label", "runtime-${runtimeStatus}", "refreshProjectStatuses"):
+            self.assertIn(token, self.js)
+        self.assertIn(".project-row.runtime-running.project-mark::after", css)
+        self.assertIn("animation:projectRunningPulse", css)
+
+    def test_confirmation_overlay_sits_above_floating_composer_and_portals(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn(".designer-export-box{z-index:6500!important", css)
+        self.assertIn(".designer-confirm-box{z-index:7000!important", css)
+        self.assertIn("backdrop-filter:blur(3px)", css)
+
+    def test_runtime_motion_is_in_white_conversation_card_not_input(self):
+        css = "".join(self.runner_css.split())
+        for token in ("renderLiveRuntimeHeader(runtime)", "renderCliRuntimeFrame()", "setInterval(animateRuntimeFrame, 120)"):
+            self.assertIn(token, self.js)
+        self.assertNotIn("renderComposerRuntimeFrame", self.js)
+        self.assertNotIn("Running · ${runtime.cli_status}", self.js)
+        self.assertIn(".cli-runtime-card{border-color:#d9e2ec;background:#fff", css)
+        self.assertIn(".cli-runtime-output{color:#263244;background:#fff", css)
+
+    def test_conversation_auto_follows_new_runtime_card_without_hijacking_manual_scroll(self):
+        for token in (
+            "historyPinnedToBottom",
+            "function historyNearBottom(",
+            "function followHistoryToBottom(",
+            "forceVisibleOnCreate: true",
+            '$("messages").addEventListener("scroll"',
+            "refreshMessages({ forceFollow: true })",
+        ):
+            self.assertIn(token, self.js)
+        self.assertIn("if (!force && !state.historyPinnedToBottom) return", self.js)
+
+    def test_conversation_cards_never_flex_shrink_when_history_overflows(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn("#messages.history>.message,#messages.history>.live-activity{flex:00auto", css)
+
+    def test_completed_runtime_card_is_replaced_by_assistant_conversation(self):
+        self.assertIn("if (runtime.running || runtime.resumable)", self.js)
+        self.assertNotIn("if (runtime.running || runtime.has_state)", self.js)
+        self.assertIn("removeLiveCard();", self.js)
+        self.assertIn('runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId', self.js)
+        self.assertIn('refreshMessages({ forceFollow: true })', self.js)
+
+    def test_options_is_floating_popover_and_does_not_resize_composer(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn("#composePanel.options-panel{position:absolute", css)
+        self.assertIn("bottom:48px", css)
+        self.assertIn("box-shadow:016px38px", css)
+        self.assertIn("function toggleOptionsPanel()", self.js)
+        self.assertNotIn('requestAnimationFrame(syncComposerReserve); };\n$("sendButton")', self.js)
+
+    def test_project_rows_have_more_vertical_room(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn(".project-root{min-height:42px", css)
+
+    def test_prompt_validate_button_uses_same_validate_action(self):
+        self.assertIn('$("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"', self.js)
+        self.assertIn('if (prompt) body.content = $("studioPromptTextarea").value', self.js)
+        self.assertIn('api("/api/studio/validate"', self.js)
+
+    def test_idle_projects_are_explicitly_labeled(self):
+        self.assertIn('idle: "IDLE"', self.js)
+        css = "".join(self.runner_css.split())
+        self.assertIn(".project-runtime-label.runtime-idle", css)
 
     def test_visual_helper_copy_is_small(self):
         css = "".join(self.studio_css.split())
         self.assertIn(".studio-topbarp{font-size:10px", css)
 
-    def test_ai_workflow_builder_modal_is_wired_to_real_generate_endpoint(self):
-        for token in ('id="generateWorkflowBackdrop"', 'id="generateWorkflowName"', 'id="generateWorkflowRequest"', 'id="generateWorkflowConfirm"'):
+    def test_ai_workflow_builder_is_page_generate_review_then_save_flow(self):
+        for token in ('id="workflowGeneratorPage"', 'id="generateWorkflowRequest"', 'id="generateWorkflowRunning"', 'id="generateWorkflowReady"', 'id="generateWorkflowDiscard"', 'id="generateWorkflowRegenerate"', 'id="generateWorkflowSave"', 'id="generateWorkflowSaveBackdrop"'):
             self.assertIn(token, self.html)
-        for token in ("openGenerateWorkflowModal", "confirmGenerateWorkflow", 'api("/api/studio/generate"', '$("generateWorkflowButton").onclick = openGenerateWorkflowModal'):
+        self.assertNotIn('id="generateWorkflowBackdrop"', self.html)
+        for token in ("openGenerateWorkflowPage", "confirmGenerateWorkflow", "pollGenerateWorkflow", "validateGeneratedWorkflowDraft", "openGenerateWorkflowSaveModal", "saveGenerateWorkflowDraft", "discardGenerateWorkflowDraft", "cancelGenerateWorkflow", 'api("/api/studio/generate"', 'api("/api/studio/generate/validate"', 'api("/api/studio/generate/save"', 'api("/api/studio/generate/cancel"', 'api("/api/studio/generate/discard"'):
             self.assertIn(token, self.js)
-        for stale in ("generatePanel", "generateMessage", "closeGeneratePanel"):
-            self.assertNotIn(stale, self.js)
+        self.assertIn("DRAFT · NOT SAVED", self.html)
+        self.assertIn("No Project is required; name and destination are chosen only when you Save", self.js)
+
+
+    def test_ai_workflow_builder_generation_is_project_independent(self):
+        block = self.js[self.js.index("async function openGenerateWorkflowPage"):self.js.index("function closeGenerateWorkflowSaveModal")]
+        self.assertNotIn("Open a Project before generating", block)
+        self.assertNotIn("state.project", block)
+        poll = self.js[self.js.index("async function pollGenerateWorkflow"):self.js.index("function startGenerateWorkflowPoll")]
+        self.assertNotIn("project=", poll)
+        self.assertIn("job_id=", poll)
+        self.assertIn("No Project is required", self.js)
+
+    def test_ai_workflow_builder_restores_single_active_job_and_shows_workspace(self):
+        for token in ('id="generateWorkflowWorkspacePreview"', 'id="generateWorkflowRunningWorkspace"', 'id="generateWorkflowReadyWorkspace"'):
+            self.assertIn(token, self.html)
+        for token in ('/api/studio/generate/active', 'restoreActiveWorkflowGenerator', 'hydrateActiveGenerateWorkflow', 'setGenerateWorkflowWorkspace', 'Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator())'):
+            self.assertIn(token, self.js)
+        before = self.js[self.js.index('window.addEventListener("beforeunload"'):self.js.index('state.preferences = loadUiPreferences()')]
+        self.assertNotIn('["running", "cancelling", "ready"]', before)
+
+    def test_ai_workflow_builder_status_only_phase_is_stacked_and_centered(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".workflow-builder-running{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
+        self.assertIn(".workflow-builder-failed{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
+
+    def test_ai_workflow_builder_input_does_not_ask_name_or_destination(self):
+        form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
+        self.assertIn('id="generateWorkflowRequest"', form)
+        self.assertIn('id="generateWorkflowBackend"', form)
+        self.assertNotIn('id="generateWorkflowName"', form)
+        self.assertNotIn('id="generateWorkflowDestination"', form)
+        save = self.html[self.html.index('id="generateWorkflowSaveBackdrop"'):self.html.index('id="importAssetBackdrop"')]
+        self.assertIn('id="generateWorkflowName"', save); self.assertIn('id="generateWorkflowDestination"', save)
+
+    def test_stage_discard_uses_reusable_designed_confirm(self):
+        block = self.js[self.js.index('async function closeStageEditor'):self.js.index('// ------------------------------ Add Stage modal')]
+        self.assertIn('confirmDialog({', block)
+        self.assertIn('title: "Discard Stage changes?"', block)
+        self.assertIn('confirmLabel: "Discard Changes"', block)
+        self.assertNotIn('window.confirm', block)
 
     def test_custom_import_file_picker_button_is_wired(self):
         self.assertIn('id="importAssetChooseButton"', self.html)
         self.assertIn('id="importAssetFileName"', self.html)
         self.assertIn('$("importAssetChooseButton").onclick = () => $("importAssetFile").click()', self.js)
         self.assertIn('$("importAssetFileName").textContent = file.name', self.js)
+
+    def test_run_preferences_are_persisted_per_project_in_browser_storage(self):
+        for token in (
+            'UI_PREFS_KEY = "ai-task-runner.ui.preferences.v1"',
+            'localStorage.getItem(UI_PREFS_KEY)',
+            'localStorage.setItem(UI_PREFS_KEY',
+            'rememberProjectPreference("backend"',
+            'rememberProjectPreference("workflow"',
+            'rememberValidator(',
+            'lastProject',
+            'builderBackend',
+        ):
+            self.assertIn(token, self.js)
+
+    def test_backend_uses_upward_custom_dropdown_and_shared_five_row_scroll_cap(self):
+        for token in ('id="backendDropdownButton"', 'id="backendDropdownMenu"', 'id="backendSelectedLabel"'):
+            self.assertIn(token, self.html)
+        for token in ('function openBackendDropdown()', 'function positionUpwardDropdown(', 'rowCount > 5', 'backend-dropdown-portal'):
+            self.assertIn(token, self.js + self.runner_css)
+        self.assertIn('positionUpwardDropdown(menu, button, menu.children.length, 120)', self.js)
+        css = "".join(self.runner_css.split())
+        self.assertIn('#backendDropdownMenu.backend-dropdown-portal{position:fixed!important;z-index:5100!important', css)
+
+    def test_runtime_header_title_is_lifecycle_status_only(self):
+        block = self.js[self.js.index('function runtimeStatusLabel'):self.js.index('function animateRuntimeFrame')]
+        self.assertIn('if (runtime?.running) return "Running"', block)
+        self.assertIn('if (runtime?.resumable) return "Stopped"', block)
+        self.assertIn('card.querySelector(".live-title").textContent = runtimeStatusLabel(runtime)', block)
+        self.assertNotIn('CLI_SPINNER_FRAMES', block)
+
+    def test_many_runtime_todos_use_outer_history_scroll_not_nested_scroll(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn('.cli-runtime-output{max-height:none;overflow:visible', css)
+        self.assertIn('#messages.history{overflow-y:auto;scrollbar-gutter:stable', css)
+
+    def test_project_rows_use_symmetric_horizontal_gutters(self):
+        css = "".join(self.runner_css.split())
+        self.assertIn('.projects.project-list{padding-left:4px!important;padding-right:4px!important', css)
+        self.assertIn('.project-tree,.project-root{width:100%;box-sizing:border-box', css)
 
 
 if __name__ == "__main__":

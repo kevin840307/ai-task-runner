@@ -16,13 +16,18 @@ Verified contracts:
 - Stage single click selects; double click opens Stage Editor.
 - Selected Stage floating actions remain anchored while the action panel opens above them.
 - Stage Status is used as the visible title when present and is constrained to one-line ellipsis. Flow-invocation Status overrides take precedence over shared Stage defaults.
-- AI Workflow Builder modal is wired and visible.
+- Legacy Round evidence included the earlier Workflow Builder modal; Round 17 replaces generation with the dedicated Generator page.
 - Import Workflow/Prompt modal stays inside the viewport and the custom Choose file control is visible.
 - Prompt Editor and the left Studio sidebar end on the same bottom baseline: `prompt_bottom_gap = 0`.
 - `studioFileList` keeps `overflow-y: scroll` and `scrollbar-gutter: stable`.
 - Add Project modal renders inside the viewport.
 - Reused Stage Prompt/Status overrides were opened in Chromium: `custom/design.md` and `Designing solution` matched the actual Flow invocation.
 - Unsaved Stage draft Validate produced a green PASS toast and a red FAIL toast without browser page errors.
+- Runtime card consumes the same semantic CLI snapshot as `LiveUI`: Cycle/Progress, `[x] / [>] / [ ]` Plan TODO rows, status and detail.
+- Plan-produced TODOs are visible in the browser as soon as durable `state.json` contains them; stale/missing console snapshots fall back to the same marker rules.
+- Running feedback is visible both in history and in the floating composer: CLI spinner and Run button frame change locally every 120 ms, the composer pulses, and the active Project dot pulses.
+- Project rows show explicit `RUN / IDLE / DONE / INT / STOP / MISS` status labels; the status list refreshes independently every 1.5 s.
+- Remove Project confirmation is a full-viewport layer at z-index 7000, above the composer (z-index 90) and portal menus; its backdrop covers the composer.
 - Browser page errors: 0 for the recorded QA run.
 
 ## Screenshots
@@ -32,7 +37,7 @@ Verified contracts:
 3. `screenshots/03_workflow_studio_system_custom.png` — System / Custom / Project asset groups.
 4. `screenshots/04_stage_selected_actions.png` — selected Stage and floating actions.
 5. `screenshots/05_stage_editor_modal.png` — Stage Editor modal.
-6. `screenshots/06_ai_workflow_builder.png` — Generate with AI / Workflow Builder modal.
+6. `screenshots/06_ai_workflow_builder.png` — historical pre-Round-17 Builder modal evidence (superseded by screenshots 29–34).
 7. `screenshots/07_import_asset_modal.png` — bounded Import Workflow/Prompt modal.
 8. `screenshots/08_prompt_editor.png` — Prompt workspace/editor.
 9. `screenshots/09_add_project_modal.png` — Add Project dialog.
@@ -40,12 +45,47 @@ Verified contracts:
 11. `screenshots/11_stage_prompt_override.png` — Stage Editor showing the actual Flow-level Prompt/Status override.
 12. `screenshots/12_stage_validation_success_toast.png` — Stage draft validation PASS.
 13. `screenshots/13_stage_validation_error_toast.png` — Stage draft validation FAIL.
+14. `screenshots/14_cli_runtime_todos_running.png` — CLI-synced Runtime view with Plan TODOs, RUN/IDLE/DONE Project state and animated Running composer.
+15. `screenshots/15_remove_project_overlay_fixed.png` — Remove Project backdrop covers the runtime view and floating composer.
+
+`browser_metrics_round10.json` records the latest runtime/TODO/status/overlay measurements.
+
+
+### Latest Chromium runtime / Prompt measurements
+
+```text
+Runtime card background              white
+Runtime output background            white
+Runtime title frame 1                - AI 正在處理目前任務
+Runtime title frame 2                \ AI 正在處理目前任務
+Runtime status animates in card      true
+Input height                         60 px
+Input placeholder while Running      描述要完成的功能或修復內容...
+Run visible while Running            false
+Stop visible while Running           true
+Project row height                   42 px
+Options position                     absolute popover
+Composer height before Options       166 px
+Composer height after Options        166 px
+Stopped Continue visible             true
+Stopped Reset visible                true
+Stopped Run visible                  false
+System rules.md Prompt badge         Prompt valid
+System rules.md tags                 project / project.root / plugin_rules
+Prompt explicit Validate button      Validate Prompt
+Browser page errors                  0
+```
+
+The previous `Prompt warning` on `runner/prompts/system/rules.md` and `structured_output_retry.md` was a false positive in the UI validator, not a broken Runner Prompt. Those two System templates are rendered by `runner/prompts/loader.py` with dedicated variables (`plugin_rules` and `error`) rather than the normal Stage prompt context. Workflow Studio now statically derives those dedicated contracts from literal `render_prompt(...)` calls, so the tags and validation match the actual Runner path without importing Runner Core. A repository scan validates all 24 current Prompt files with 0 warnings.
 
 ## Automated tests executed before packaging
 
 ```text
 python -m pytest ui/tests -q
-107 passed
+140 passed
+
+python -m pytest tests/test_prompt_resources.py tests/test_prompt_contracts.py tests/test_console_snapshot.py tests/test_terminal_ui_single_line.py tests/test_runtime_controls.py -q
+28 passed
 
 python -m pytest \
   tests/test_workflow_yaml.py \
@@ -54,7 +94,7 @@ python -m pytest \
   tests/test_workflow_builder.py \
   tests/test_workflow_dryrun_tool.py \
   tests/test_live_reliability_tool.py -q
-123 passed
+126 passed
 
 python -m pytest \
   tests/test_architecture.py \
@@ -108,6 +148,8 @@ PASS
 - System assets cannot be edited or deleted through UI APIs.
 - Workflow saves/imports/new Stage changes validate Prompt references and run Workflow dry-run closure checks before the write is committed.
 - Prompt deletion is blocked while a known Workflow Stage references it.
+- Prompt Validate is a first-class Studio action. Prompt Save and Prompt Import use the same server-side Jinja/variable contract gate and cannot write until validation passes.
+- Special System Prompt contracts are discovered from `runner/prompts/loader.py`; `system/rules.md` accepts `project.root` + `plugin_rules`, and `system/structured_output_retry.md` accepts `error`, eliminating the prior false warning without widening normal Stage Prompt tags.
 - AI Workflow Builder drafts are validated with `workflow_builder/validation.py` and `tool/workflow_dryrun.py --matrix --json --max-steps 500` before publish.
 
 ## Draft validation + action toast contract
@@ -120,3 +162,121 @@ PASS
 ## Custom skill/prompt status contract
 
 `runner/workflow/custom/skill_prompt_review_chain.yaml` now gives the shared Stage definitions generic status values and each Flow invocation a more specific status (Designing, Reviewing design, Implementing, Reviewing implementation, Updating documentation, Reviewing documentation). Validation recovery steps also have explicit status. This keeps runtime/UI progress meaningful while still reusing only three Stage definitions.
+
+## Round 12 screenshots
+
+- `screenshots/16_white_runtime_stop_in_run_slot.png` — white live Runtime conversation card; Stop replaces Run in the same composer action slot.
+- `screenshots/17_options_popover.png` — Options opens as a floating popover with no composer-height change.
+- `screenshots/18_stopped_continue_reset.png` — stopped incomplete task shows Continue + Reset in the Run action area.
+- `screenshots/19_prompt_loader_contract_valid.png` — System rules Prompt uses its dedicated tags and shows Prompt valid / Validate Prompt.
+
+## Conversation visibility regression (Round 13)
+
+The user-reported missing-conversation case was reproduced with a long previous Assistant result, a new User requirement, a Running Runtime card, and the floating composer. The cause was twofold: the history did not automatically follow a newly appended Runtime card, and flexbox was allowed to shrink the Runtime card to roughly 1–2 px when prior history was tall.
+
+The final contract now verifies:
+
+- `#messages.history > .message` and `.live-activity` use `flex: 0 0 auto`; conversation cards cannot collapse when history overflows.
+- A newly created Running Runtime card is forced into view below the latest User requirement.
+- Runtime updates stay pinned only while the user is following the bottom.
+- Manual upward scrolling is preserved and is not overridden by the 750 ms runtime poll.
+- Completion removes the Runtime card and follows the final Assistant conversation into view.
+- Browser page errors: 0.
+
+Evidence:
+
+- `screenshots/20_runtime_conversation_visible.png` — long prior history + current User + fully visible Running Runtime card.
+- `screenshots/21_completed_assistant_conversation.png` — Runtime card removed after completion and final Assistant conversation visible.
+- `browser_metrics_round13.json` — measured scroll/runtime/completion contract.
+
+## Round 15 — remembered Run options / scalable dropdowns / multi-project status
+
+Chromium QA additionally verifies:
+
+- Browser preferences restore the last Project plus per-Project Backend / Workflow / per-Workflow Python validator path.
+- Backend uses the same custom menu style as Workflow and opens upward through a body-level portal.
+- Backend and Workflow menus become scrollable when the option count exceeds five visible rows.
+- Round 15 verified spinner isolation. Round 16 tightens the header further: Runtime conversation title is the lifecycle status (`Running / Stopped / Interrupted`); Stage `status` stays in the CLI/runtime body and summary instead of becoming the bubble title.
+- A 60-TODO Runtime card has no nested output scrollbar (`max-height: none`, `overflow: visible`); the outer conversation history owns scrolling and TODO 60 remains reachable.
+- Project rows use equal 4 px left/right list gutters when the list does not need a scrollbar.
+- Two tracked projects can both render `RUN` simultaneously.
+
+Measured values are in `browser_metrics_round15.json`; screenshots 22–24 cover the long TODO list, Backend popup, and Workflow five-row scroll behavior.
+
+## Round 16 — external Builder Draft / styled Stage discard / lifecycle bubble title
+
+Chromium QA verifies:
+
+- The Runtime bubble title is `Running` while the detailed Stage status (`AI 正在執行最終驗證` in the fixture) remains visible in the runtime body.
+- Workflow Builder canonical assets are `workflow_builder/workflow_builder.yaml` + `workflow_builder/prompt.md`; no Runner Python source change is required. `runner/workflow/system/workflow_builder.yaml` remains only as the compatibility registry mirror.
+- Generate with AI is now a two-step creation contract: **Generate Draft -> validation -> preview -> explicit Save Workflow**. During generation only status/spinner is shown and the modal cannot be closed.
+- A validated Draft is labeled `DRAFT · NOT SAVED`; it is not present in Custom/Project Studio files until Save. Discard deletes the temporary job directory.
+- Generated Workflow YAML and Prompt files are previewed before Save.
+- Closing a dirty Stage Editor uses the reusable styled `Discard Stage changes?` confirmation instead of browser `window.confirm`.
+- Browser page errors: 0.
+
+Evidence:
+
+- `screenshots/25_runtime_title_running.png`
+- `screenshots/26_builder_running_status_only.png`
+- `screenshots/27_builder_draft_preview_not_saved.png`
+- `screenshots/28_stage_discard_styled_confirm.png`
+- `browser_metrics_round16.json`
+
+## Round 17 — dedicated Workflow Generator page / fresh-job Draft review
+
+The Workflow Builder UI is now page based rather than a large generation modal. Chromium QA verifies the exact requested lifecycle:
+
+1. Clicking **Generate with AI** hides the normal Workflow Studio editor and opens `workflowGeneratorPage`.
+2. The input page asks only for **Prompt + Backend**. Workflow name/destination are not visible at this stage.
+3. **Generate** creates a new job and moves to a status-only waiting screen. The form and Draft review are hidden while generation runs.
+4. A successful result opens **DRAFT · NOT SAVED** review with Visual / YAML / Prompt tabs. The Workflow file list remains unchanged until Save.
+5. YAML and Prompt edits mark the temporary Draft dirty. **Validate Draft** validates the current edited files and clears the dirty marker only on PASS.
+6. **Save Workflow** opens a small modal; only here are Workflow name + Custom/Project destination requested. `Validate & Save` is the publication boundary.
+7. **Regenerate** discards the current Draft, returns to the original Prompt, and the next Generate receives a different job id/new AI run.
+8. **Cancel Generation** uses the reusable confirmation, moves through cancelling, removes the temporary job, and returns to Workflow Studio.
+9. Opening Generate with AI again after cancel/discard starts clean: Prompt blank, no job id, no resumed Draft.
+10. The 390×844 check has no horizontal document overflow. Browser page errors: 0.
+
+Measured values are in `browser_metrics_round17.json`.
+
+Evidence:
+
+- `screenshots/29_generator_input_page.png` — dedicated Prompt + Backend input page; Name/Destination are intentionally absent.
+- `screenshots/30_generator_status_only.png` — centered spinner + generation status + Cancel Generation only.
+- `screenshots/31_generator_review_draft.png` — validated `DRAFT · NOT SAVED` Visual review; no asset has been created yet.
+- `screenshots/32_generator_review_editable.png` — temporary YAML/Prompt review/edit surface.
+- `screenshots/33_generator_save_modal.png` — compact Save dialog where Name/Destination finally appear.
+- `screenshots/34_generator_mobile_input.png` — narrow viewport containment check.
+
+
+## Round 18 — Project-independent Workflow Generator workspace
+
+Workflow generation no longer depends on an open/selected Project. Chromium UI (mocked Builder API) plus unit/static/API regression verifies:
+
+- **Generate with AI** can open and start generation with zero registered Projects.
+- Builder jobs live under `ui/data/workflow-builder/<job-id>/`; the job itself is passed as the isolated Runner `--project-root`. No user Project path is passed to Generate/Status/Validate/Cancel/Discard.
+- Cancel writes stop state only into the isolated Builder runtime and cannot stop a user Project runtime.
+- Draft validation is Project-independent.
+- Saving to **Custom** works with no Project. **Current Project** is disabled in the Save dialog unless a Project is actually open.
+- Draft generation/validation may continue while a tracked Project Runtime is active; final publication still obeys the Studio edit guard.
+
+Evidence:
+
+- `screenshots/35_generator_no_project_required.png` — zero Project entries, generated Draft review, and Save dialog defaulting to Custom with Current Project disabled.
+- `browser_metrics_round18.json` — confirms no `project` field is posted to Generate and no `project=` query is used by status polling.
+
+## Round 19 — resumable singleton Workflow Generator + visible temporary workspace
+
+Automated UI/API regression verifies the Generator lifecycle is now owned by the UI server rather than the browser tab:
+
+- `ui/data/workflow-builder/active.json` points to exactly one active Generator job.
+- Closing/reloading the browser does not cancel a queued/running job. On the next UI load, `/api/studio/generate/active` restores the same job id, request, Backend, status, and workspace.
+- A ready but unsaved Draft is also restored; a failed job remains visible until the user retries/discards it.
+- A second Generate request cannot create another job while `active.json` owns an existing job; the API returns the existing job instead.
+- Cancel -> cancelled -> discard, explicit Discard, and successful Save remove the temporary job and clear the active registry.
+- The input page shows the temporary workspace pattern before Generate. Generating and Review states show the exact `ui/data/workflow-builder/<job-id>` path.
+- Running/ready Generator state alone no longer triggers `beforeunload`; only genuinely unsaved browser-side edits do. This permits close/reopen without silently cancelling the Builder.
+- Generator restoration forces the Workflow view visible even when the UI initially opens on Tasks.
+
+Regression coverage for this round is in `ui/tests/test_ui.py` and `ui/tests/test_static_contract.py`. No new browser screenshot is claimed for this round; the behavior is covered by server-state and static UI contract tests.

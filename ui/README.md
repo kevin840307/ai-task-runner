@@ -30,10 +30,13 @@ Thinking/Reasoning panels, multi-session navigation, Run Center, patch review, a
 
 The UI reads:
 
-- `.ai-task-runner/state.json` — current durable workflow status.
+- `.ai-task-runner/state.json` — current durable workflow status and Plan-produced TODO list.
+- `.ai-task-runner/console-view.json` — Runner-owned semantic CLI snapshot written by `ConsoleObserver`; it uses the same `LiveUI` status/detail, cycle/progress and `[x] / [>] / [ ]` TODO markers as the CLI.
 - `.ai-task-runner/runner-process.json` — current supervisor/worker PID marker.
-- `.ai-task-runner/stream.log` — current bounded subprocess output.
+- `.ai-task-runner/stream.log` — current bounded subprocess output retained for debugging/compatibility.
 - `.ai-task-runner/debug/last-result.txt` — best available completed model result for the first UI version.
+
+The browser does not recreate a separate runtime vocabulary. It renders `console-view.json` directly and falls back to `state.json` with the same CLI marker rules if the snapshot is briefly missing/stale. As soon as Plan persists TODOs, those TODO rows therefore appear in the UI. The spinner token is animated locally in the browser so the Runner does not need to rewrite a file every 120 ms.
 
 The UI writes only UI/control files:
 
@@ -83,12 +86,24 @@ The global edit lock only knows projects tracked by this UI. A CLI run in a comp
 
 ## AI workflow generation
 
-Workflow Studio's **Generate with AI** is wired to the real external `workflow_builder/` integration surface. The UI launches `workflow_builder/run.py`, which runs the System `runner/workflow/system/workflow_builder.yaml` Workflow with `runner/prompts/system/workflow_builder.md` and `workflow_builder/validation.py`. Generated files first live in an isolated draft under the selected Project's `.ai-task-runner/workflow-builder/`; the validator checks required files/Prompt references and runs the real `tool/workflow_dryrun.py --matrix --json --max-steps 500`. Only a passing draft is published to the selected Custom or Project destination. Existing output files are never overwritten by default.
+Workflow Studio's **Generate with AI** is wired to the external `workflow_builder/` integration surface. The canonical Builder Workflow and Skill live together at `workflow_builder/workflow_builder.yaml` and `workflow_builder/prompt.md`; `workflow_builder/validation.py` runs the real `tool/workflow_dryrun.py --matrix --json --max-steps 500`. `runner/workflow/system/workflow_builder.yaml` is retained only as a compatibility mirror for the unchanged Runner named-workflow registry.
+
+The browser flow is intentionally draft-first and page based rather than a large modal:
+
+1. **Generate with AI** opens a dedicated Generator page. If there is no active Generator job, the input page starts blank. If a job already exists, the UI reopens that exact job instead of creating another one.
+2. The input step asks only for **Prompt + Backend**. Workflow name and Custom/Project destination are not requested yet. The page also shows the temporary workspace pattern before generation.
+3. **Generate** creates the single active UI-owned job under `ui/data/workflow-builder/<job-id>/` and writes `ui/data/workflow-builder/active.json`. It uses Builder `--draft-only` mode and does not use or require the selected Project. The job directory itself is the isolated Runner `--project-root`. The waiting page shows only spinner + generation status plus the exact temporary workspace path; YAML, Prompts, TODOs and Agent output are intentionally hidden.
+4. Closing or refreshing the browser does **not** cancel generation. On the next UI load, `GET /api/studio/generate/active` restores the same queued/running/cancelling job, or the same ready/failed result. Exactly one Generator job may be active at a time across tabs/windows.
+5. **Cancel Generation** uses a styled confirmation, requests Runner stop, waits for the Builder to become cancelled, removes the temporary job, clears `active.json`, and returns to Workflow Studio.
+6. A successful run opens the **DRAFT · NOT SAVED** review page. The exact temporary workspace path remains visible. Visual / YAML / Prompt views are available, and YAML/Prompt edits stay temporary. Modified drafts are marked validation-dirty; **Validate Draft** validates the exact current temporary files.
+7. **Regenerate** discards the current draft (thereby releasing the active job), returns to the same Prompt for adjustment, and the next Generate creates a new job/new AI run.
+8. **Save Workflow** is the only point that opens a small modal for **Workflow name + destination**. `Custom` is always available, including when no Project exists. `Current Project` is enabled only if a Project is open at Save time. `Validate & Save` revalidates the current YAML/Prompts, publishes atomically, removes the temporary job, and clears `active.json`. Until that succeeds, the draft never appears in System/Custom/Project asset lists.
+9. **Discard/Back** asks before throwing away a ready draft or unsent request. Draft generation and Draft validation remain usable while another Project Runtime is active because they touch only the isolated UI workspace; publication still obeys the normal Studio edit guard.
 
 The same builder can be invoked outside the UI:
 
 ```bash
-python workflow_builder/run.py --project-root <project> --request-file request.md --output-workflow runner/workflow/custom/generated.workflow.yaml --output-prompt-dir runner/prompts/custom
+python workflow_builder/run.py --project-root <builder-workspace> --request-file request.md --output-workflow runner/workflow/custom/generated.workflow.yaml --output-prompt-dir runner/prompts/custom
 ```
 
 ## Task completion
@@ -97,9 +112,12 @@ When `state.json` reports a completed run, the UI reads `debug/last-result.txt` 
 
 `last-result.txt` is currently the best available result without changing Core. It is not promoted to a new Runner public contract by this UI.
 
-## Live output
+## Live runtime / CLI view
 
-There is no Thinking/Reasoning panel. Structured `reasoning`, `thinking`, `analysis`, and `chain_of_thought` fields/types are filtered from display. Normal work text such as `Running static analysis` remains visible.
+There is no Thinking/Reasoning panel. The main runtime surface mirrors the CLI semantic display: Cycle/Progress, Plan TODO rows, current status and detail. Structured `reasoning`, `thinking`, `analysis`, and `chain_of_thought` fields/types are not promoted to this surface.
+
+While a task is Running, runtime feedback stays in the conversation instead of the input box: the white CLI Runtime card updates its status/TODO lines and spinner from the same file-based CLI state, while the current Project dot pulses and is labeled `RUN`. The composer keeps its normal placeholder. The bottom-right Run action is replaced by Stop while Running, then by Continue + Reset when an incomplete task is stopped. Idle/Completed/Interrupted/Stopped Projects have explicit `IDLE / DONE / INT / STOP` labels.
+Conversation entries are non-shrinking flex items. A long previous Assistant result therefore cannot collapse the newly appended Runtime card into a 1–2px line. The task history uses sticky-to-bottom behavior: new User/Runtime/Assistant entries follow the bottom while the user is already following the latest task, but manual upward scrolling disables auto-follow until the user returns to the bottom or starts a new task. A completed Runtime card is removed and the completed result is rendered as the normal Assistant conversation card.
 
 ## Runtime states
 
@@ -111,7 +129,7 @@ The UI presents:
 - `Completed` when durable state is complete.
 - `Idle` otherwise.
 
-Missing project paths remain visible in the sidebar as `Missing` so they can be removed without silently losing UI history.
+Missing project paths remain visible in the sidebar as `Missing` so they can be removed without silently losing UI history. The Project list also exposes live `RUN / IDLE / DONE / INT / STOP / MISS` badges and colored state dots; runtime status is polled independently from the selected Project.
 
 ## Explicit Workflow AI validator
 
@@ -131,13 +149,13 @@ The tests cover project persistence, missing paths, stale PID handling, completi
 
 The UI follows the supplied `static` interaction model instead of inventing a separate dashboard layout:
 
-- The task history owns the full workspace height. `header / summary / history` are the grid rows; the GPT-style composer floats above the bottom edge. History extends behind it and reserves bottom scroll space equal to the measured composer height, so reaching the bottom leaves usable blank space instead of hiding messages behind the composer. The message textarea stays at a fixed height and scrolls internally.
-- Projects are rendered top-down immediately below the Projects heading; only the project list scrolls.
-- The composer contains a real Workflow picker. Its entries come from the file-based Workflow catalog and the selected path is passed to the existing CLI `--workflow` option.
+- The task history owns the full workspace height. `header / summary / history` are the grid rows; the GPT-style composer floats above the bottom edge. History extends behind it and reserves bottom scroll space equal to the measured composer height, so reaching the bottom leaves usable blank space instead of hiding messages behind the composer. The message textarea is fixed at 60px and scrolls internally.
+- Projects are rendered top-down immediately below the Projects heading, shifted slightly inward for clearer hierarchy; only the project list scrolls. Each row shows a live runtime badge/dot so running vs idle projects are visible without selecting them.
+- The composer contains a real Workflow picker. Its entries come from the file-based Workflow catalog and the selected path is passed to the existing CLI `--workflow` option. Options opens as an absolute floating popover, so selecting backend/Rerun never changes composer or textarea height.
 - Workflow Studio is a normal workspace page, not a modal. It has **Visual** and **YAML** modes plus a persistent **Workflow / Prompt** source switch in both modes.
 - **Workflow + Visual** follows the static Designer interaction: Stage cards are draggable; **single click selects**, **double click edits**, and the selected Stage gets a bottom-right floating action bar for Edit / Move Up / Move Down / Remove.
 - **Prompt** uses one first-class Prompt Editor in both Visual and YAML modes. Prompt Markdown is never edited inside the Stage modal.
-- The Prompt Editor exposes insertable `{{tag}}` chips. The UI derives the available tags from the current Runner prompt-context source with AST parsing, so it does not import `runner.*` or advertise unsupported parameters. Prompt saves also run Jinja syntax/unknown-variable checks.
+- The Prompt Editor exposes insertable `{{tag}}` chips. Normal Stage Prompts derive tags from `runner/prompts/context.py`. Dedicated System templates such as `rules.md` and `structured_output_retry.md` derive their own variables statically from `runner/prompts/loader.py`, so `plugin_rules` / `error` are valid only where Runner really supplies them. Prompt Validate, Save, and Import all use the same Jinja/unknown-variable contract gate.
 - Stage Editor keeps only useful tabs: **Settings / Control**. It exposes one **Prompt** selector for prompt-backed Stages. For a reused Stage, Flow-invocation `prompt` / `status` overrides are shown before Stage defaults, so the editor displays and writes the value that invocation actually uses. `continuation_prompt` remains supported by Core/YAML for same-session optimization but is intentionally not duplicated in the common Visual editor. Plan/Command do not show a misleading Prompt field.
 - Stage settings cover the current semantic Stage contract, including parser, retry (`-1` supported), type-specific command/plan/AI-validator settings, and Flow-invocation routing (`scope`, `label`, `restart_at`, `repeat`, `fresh_after_same_failures`).
 - Workflow YAML editing has line numbers, Tab/Shift+Tab indentation, Enter auto-indent, Ctrl/Cmd+S, and live YAML syntax location feedback.
@@ -146,7 +164,7 @@ The UI follows the supplied `static` interaction model instead of inventing a se
 - Workflow/Prompt file navigation and the right-side Steps/Prompt editor fill the remaining Studio height. `studioFileList` keeps a stable vertical scrollbar gutter, and the right editor surface ends on the same bottom baseline as the left Studio sidebar; only inner lists/editors scroll.
 - Visual flow saves replace only the top-level `flow:` block. Stage-field edits patch only the affected Stage fields so anchors, merge keys, unrelated comments, and formatting outside the edited field remain intact. Stage removal from Flow always uses the reusable confirmation dialog.
 - Add Stage, Workflow Save and Workflow Import validate Prompt references before writing. A base Stage requires an explicit Prompt; explicit Prompt paths must resolve to an existing Prompt. Prompt deletion checks all known Workflow usages first.
-- Workflow/Stage draft Validate uses the reusable top-center auto-dismiss toast: green on PASS and red on FAIL. Validation does not write the draft; Save re-validates before commit. The same short-lived action feedback is reused for Save, Add/Remove Stage, create/import/export/delete, Run/Stop/Continue/Rerun/Reset, and Project add/remove. Persistent decisions such as delete confirmation, unsaved-change confirmation, edit locks, and detailed validation errors remain in their existing modal/banner/output surfaces.
+- Workflow/Stage/Prompt draft Validate uses the reusable top-center auto-dismiss toast: green on PASS and red on FAIL. Validation does not write the draft; Save re-validates before commit. Prompt Import also runs the same server-side Prompt gate before file creation. The same short-lived action feedback is reused for Save, Add/Remove Stage, create/import/export/delete, Run/Stop/Continue/Rerun/Reset, and Project add/remove. Persistent decisions such as delete confirmation, unsaved-change confirmation, edit locks, and detailed validation errors remain in their existing modal/banner/output surfaces.
 - Runtime edit guard, stale-PID handling, hash conflict detection, path containment, and atomic file writes apply to Visual, YAML, Stage, Workflow and Prompt editing.
 
 ## Static-aligned interaction contract
@@ -168,7 +186,7 @@ The delivery includes current Chromium evidence under `ui/qa_evidence/`:
 - `screenshots/03_workflow_studio_system_custom.png` — System / Custom / Project asset groups.
 - `screenshots/04_stage_selected_actions.png` — selected Stage and floating actions.
 - `screenshots/05_stage_editor_modal.png` — Stage Editor modal.
-- `screenshots/06_ai_workflow_builder.png` — AI Workflow Builder modal.
+- `screenshots/06_ai_workflow_builder.png` — historical pre-Round-17 Builder modal evidence (superseded by screenshots 29–34).
 - `screenshots/07_import_asset_modal.png` — bounded Import Workflow/Prompt modal.
 - `screenshots/08_prompt_editor.png` — Prompt workspace/editor.
 - `screenshots/09_add_project_modal.png` — Add Project dialog.
@@ -176,5 +194,39 @@ The delivery includes current Chromium evidence under `ui/qa_evidence/`:
 - `screenshots/11_stage_prompt_override.png` — reused Stage shows the selected Flow invocation's actual Prompt/Status.
 - `screenshots/12_stage_validation_success_toast.png` — unsaved Stage draft validation PASS toast.
 - `screenshots/13_stage_validation_error_toast.png` — unsaved Stage draft validation FAIL toast.
+- `screenshots/14_cli_runtime_todos_running.png` — earlier CLI/TODO mirror evidence.
+- `screenshots/16_white_runtime_stop_in_run_slot.png` — current white Runtime conversation card and Stop replacing Run.
+- `screenshots/17_options_popover.png` — floating Options popover without composer resize.
+- `screenshots/18_stopped_continue_reset.png` — Continue + Reset after an incomplete Stop.
+- `screenshots/19_prompt_loader_contract_valid.png` — dedicated System Prompt tags, Prompt valid, and Validate Prompt.
+- `screenshots/25_runtime_title_running.png` — Runtime conversation title uses lifecycle status (`Running`) while the detailed Stage status remains in the body.
+- `screenshots/26_builder_running_status_only.png` — Workflow Builder generation phase shows only status/spinner and blocks close until completion.
+- `screenshots/27_builder_draft_preview_not_saved.png` — validated Workflow/Prompt Draft preview with explicit **Discard Draft / Save Workflow** actions; still not a Studio asset.
+- `screenshots/28_stage_discard_styled_confirm.png` — reusable styled confirmation for unsaved Stage changes.
+- `screenshots/29_generator_input_page.png` — dedicated Generate Workflow page; only Prompt + Backend are requested.
+- `screenshots/30_generator_status_only.png` — stacked spinner/status-only waiting phase with Cancel Generation.
+- `screenshots/31_generator_review_draft.png` — validated `DRAFT · NOT SAVED` Visual review page.
+- `screenshots/32_generator_review_editable.png` — temporary YAML/Prompt edits before Save.
+- `screenshots/33_generator_save_modal.png` — compact Save dialog where Name/Destination appear for the first time.
+- `screenshots/34_generator_mobile_input.png` — narrow viewport containment check.
+- `screenshots/15_remove_project_overlay_fixed.png` — Remove Project confirmation backdrop covers the floating composer and runtime surface.
+- `browser_metrics_round17.json` — measured Generator page / fresh-job / cancel / review / Save contracts.
 
 These files are evidence only and are never read by Runner or UI runtime.
+
+## Remembered Run preferences
+
+The browser keeps only stable UI selections in `localStorage` (`ai-task-runner.ui.preferences.v1`):
+
+- last selected Project;
+- Backend per Project;
+- Workflow per Project;
+- Python validator path per Project + Workflow.
+
+Runtime lifecycle state, Options-open state and unsent task text are deliberately not persisted. Runtime truth still comes from each Project's `.ai-task-runner` files.
+
+Backend choices are discovered by statically parsing `runner/backends/*.py` and `runner/config/defaults.py`; UI does not import Runner Core. Backend and Workflow use the same upward custom dropdown pattern. Menus cap at roughly five visible rows and scroll when more choices exist.
+
+## Multiple Project runs
+
+The UI/Runner contract permits separate Projects to run at the same time: each Project owns its own `.ai-task-runner` state/process marker and the UI launch lock is held only while spawning a child, not for the lifetime of the run. The Project rail polls every Project independently and can show multiple `RUN` labels. Workflow/Prompt Studio editing remains globally locked while any tracked Project is running. Actual inference concurrency/throughput still depends on the selected backend/server capacity.
