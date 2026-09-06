@@ -1302,3 +1302,20 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
         snapshot.assert_called_once_with()
         process_run.assert_not_called()
         self.assertEqual([row["runtime_status"] for row in rows], ["running", "running", "idle"])
+
+
+def test_process_snapshot_windows_branch_has_csv_import():
+    """Regression: Windows process snapshot must not fail with NameError for csv."""
+    import ast
+    from pathlib import Path
+
+    server_path = Path(__file__).resolve().parents[1] / "server.py"
+    source = server_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+    assert "csv" in imported, "ui/server.py uses csv in Windows process snapshot but does not import csv"
