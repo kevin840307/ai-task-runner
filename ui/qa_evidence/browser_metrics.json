@@ -1,0 +1,37 @@
+{
+  "composer_bottom_gap": 0,
+  "workflow_dropdown_parent": "BODY",
+  "workflow_dropdown_in_viewport": true,
+  "groups": {
+    "System": true,
+    "Custom": true,
+    "Project": true
+  },
+  "single_click_modal_count": 0,
+  "floating_actions_visible": true,
+  "stage_title": {
+    "fontSize": "10px",
+    "textOverflow": "ellipsis",
+    "whiteSpace": "nowrap"
+  },
+  "double_click_modal_count": 1,
+  "builder_modal_visible": true,
+  "builder_hint": "AI Workflow Builder is ready.",
+  "import_choose_button_visible": true,
+  "import_modal_in_viewport": true,
+  "prompt_bottom_gap": 0.0,
+  "project_modal_visible": true,
+  "composer_bottom_gap_390x844": 0,
+  "body_horizontal_overflow_390": false,
+  "page_errors": [],
+  "prompt_sidebar_bottom": 876.0,
+  "prompt_panel_bottom": 876.0,
+  "prompt_textarea_bottom": 863.0,
+  "studio_file_list_overflow_y": "scroll",
+  "studio_file_list_scrollbar_gutter": "stable",
+  "stage_effective_prompt": "custom/design.md",
+  "stage_effective_status": "Designing solution",
+  "stage_draft_validate_pass_toast": "Workflow validation passed",
+  "stage_draft_validate_fail_toast": "Workflow validation failed: missing Prompt reference",
+  "stage_draft_validate_page_errors": []
+}

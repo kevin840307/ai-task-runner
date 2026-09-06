@@ -521,5 +521,11 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('.project-tree,.project-root{width:100%;box-sizing:border-box', css)
 
 
+    def test_generated_prompt_editor_uses_independent_scroll_regions(self):
+        self.assertIn("#generateDraftPromptPanel { overflow: hidden; }", self.studio_css)
+        self.assertIn(".workflow-generator-prompt-list { min-height: 0; overflow-y: auto; overflow-x: hidden;", self.studio_css)
+        self.assertIn(".workflow-generator-prompt-editor { min-width: 0; min-height: 0; overflow: hidden;", self.studio_css)
+        self.assertIn("min-height: 0; overflow: auto; resize: none;", self.studio_css)
+
 if __name__ == "__main__":
     unittest.main()
