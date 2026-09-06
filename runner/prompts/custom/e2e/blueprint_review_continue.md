@@ -1,0 +1,1 @@
+Continue only the current E2E Blueprint review using evidence already gathered in this review session. Do not restart broad discovery or static analysis. Return only the Runner Review JSON contract: {"completed": true, "reason": "...", "missing_items": []}.

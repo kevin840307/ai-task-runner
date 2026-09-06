@@ -763,6 +763,51 @@ class UIState:
                 raise ValueError(f"Cannot reset runtime artifact {child.name}: {exc}") from exc
         return sorted(removed)
 
+    def _custom_asset_root(self, kind: str) -> Path:
+        kind = str(kind or "").strip().lower()
+        if kind == "workflow":
+            return (self.repo_root / "runner" / "workflow" / "custom").resolve()
+        if kind == "prompt":
+            return (self.repo_root / "runner" / "prompts" / "custom").resolve()
+        raise ValueError("Custom asset kind must be workflow or prompt")
+
+    @staticmethod
+    def _normalize_custom_folder(folder: str) -> str:
+        raw = str(folder or "").strip().replace("\\", "/")
+        if not raw or raw in {".", "/"}:
+            return ""
+        if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
+            raise ValueError("Custom folder must be relative to the Custom root")
+        parts = [part.strip() for part in raw.split("/") if part.strip()]
+        if not parts or any(part in {".", ".."} for part in parts):
+            raise ValueError("Custom folder cannot contain . or ..")
+        if any(not re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
+            raise ValueError("Custom folder contains unsupported characters")
+        return "/".join(parts)
+
+    def studio_custom_folders(self, kind: str) -> list[str]:
+        root = self._custom_asset_root(kind)
+        root.mkdir(parents=True, exist_ok=True)
+        folders = [""]
+        for path in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: str(p).lower()):
+            rel = path.relative_to(root).as_posix()
+            if rel and not any(part.startswith(".") for part in Path(rel).parts):
+                folders.append(rel)
+        return folders
+
+    def studio_custom_folder_create(self, kind: str, folder: str) -> dict:
+        with self._edit_lock:
+            self._require_editable()
+            rel = self._normalize_custom_folder(folder)
+            if not rel:
+                raise ValueError("Folder name is required")
+            root = self._custom_asset_root(kind)
+            target = (root / Path(rel)).resolve()
+            if not self._is_within(target, root):
+                raise ValueError("Custom folder is outside the Custom root")
+            target.mkdir(parents=True, exist_ok=True)
+            return {"ok": True, "folder": rel, "folders": self.studio_custom_folders(kind)}
+
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
         workflows: list[dict] = []
@@ -816,8 +861,12 @@ class UIState:
 
         order = {"system": 0, "custom": 1, "project": 2}
         return {
-            "workflows": sorted(workflows, key=lambda x: (order.get(x["scope"], 9), x["name"].lower())),
-            "prompts": sorted(prompts, key=lambda x: (order.get(x["scope"], 9), x["name"].lower())),
+            "workflows": sorted(workflows, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
+            "prompts": sorted(prompts, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
+            "custom_folders": {
+                "workflow": self.studio_custom_folders("workflow"),
+                "prompt": self.studio_custom_folders("prompt"),
+            },
             "guard": self.edit_guard(),
         }
 
@@ -960,7 +1009,7 @@ class UIState:
             raise ValueError("Prompt check is available only for Prompt files")
         return self._check_prompt_content(content, path)
 
-    def studio_workflow_create(self, name: str, destination: str, project: Path | None = None) -> dict:
+    def studio_workflow_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
         """Create one blank workflow without touching Runner/Core code."""
         with self._edit_lock:
             self._require_editable()
@@ -981,9 +1030,14 @@ class UIState:
                 if not self._is_within(target, project.resolve()):
                     raise ValueError("Workflow path is outside the Project")
             elif destination == "custom":
-                root = (self.repo_root / "runner" / "workflow" / "custom").resolve()
+                root = self._custom_asset_root("workflow")
                 root.mkdir(parents=True, exist_ok=True)
-                target = (root / raw).resolve()
+                rel_folder = self._normalize_custom_folder(folder)
+                target_root = (root / Path(rel_folder)).resolve() if rel_folder else root
+                if not self._is_within(target_root, root):
+                    raise ValueError("Workflow folder is outside the Custom Workflow folder")
+                target_root.mkdir(parents=True, exist_ok=True)
+                target = (target_root / raw).resolve()
                 if not self._is_within(target, root):
                     raise ValueError("Workflow path is outside the Custom Workflow folder")
             else:
@@ -1651,7 +1705,7 @@ class UIState:
                     usages.append(f"{workflow.name} · {stage}")
         return sorted(set(usages))
 
-    def studio_prompt_create(self, name: str, destination: str, project: Path | None = None) -> dict:
+    def studio_prompt_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
         with self._edit_lock:
             self._require_editable()
             raw = str(name or "").strip()
@@ -1669,7 +1723,13 @@ class UIState:
                     raise ValueError("Select a Project before creating a Project Prompt")
                 root = (project / "prompts").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "project"
             elif destination == "custom":
-                root = (self.repo_root / "runner" / "prompts" / "custom").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "custom"
+                root = self._custom_asset_root("prompt"); root.mkdir(parents=True, exist_ok=True); scope = "custom"
+                rel_folder = self._normalize_custom_folder(folder)
+                if rel_folder:
+                    root = (root / Path(rel_folder)).resolve()
+                    if not self._is_within(root, self._custom_asset_root("prompt")):
+                        raise ValueError("Prompt folder is outside the Custom Prompt folder")
+                    root.mkdir(parents=True, exist_ok=True)
             else:
                 raise ValueError("Prompt destination must be project or custom")
             target = (root / raw).resolve()
@@ -2322,9 +2382,17 @@ class UIState:
     def _studio_item(self, path: Path, scope: str, kind: str) -> dict:
         resolved = path.resolve()
         readonly = scope in SYSTEM_SCOPES
+        display_name = path.name
+        if scope == "custom":
+            root = self._custom_asset_root(kind)
+            try:
+                display_name = resolved.relative_to(root).as_posix()
+            except ValueError:
+                pass
         item = {
             "id": self._encode_file_id(resolved, kind, scope),
             "name": path.name,
+            "display_name": display_name,
             "path": str(resolved),
             "scope": scope,
             "group": "System" if readonly else ("Custom" if scope == "custom" else "Project"),
@@ -2624,12 +2692,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_generate_cancel(str(body.get("job_id", ""))))
             if parsed.path == "/api/studio/generate/discard":
                 return self._json(self.state.studio_generate_discard(str(body.get("job_id", ""))))
+            if parsed.path == "/api/studio/custom-folder/create":
+                return self._json(self.state.studio_custom_folder_create(str(body.get("kind", "")), str(body.get("folder", ""))))
             if parsed.path == "/api/studio/workflow/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "custom")), project))
+                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
             if parsed.path == "/api/studio/prompt/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "custom")), project))
+                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
             if parsed.path == "/api/studio/delete":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_delete(str(body.get("id", "")), project))

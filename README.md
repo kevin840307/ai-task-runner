@@ -193,3 +193,7 @@ This project is released under the **Zero-Clause BSD (0BSD) License**. You may u
 ### Local environment check
 
 Use **Run options → Check environment** in the UI, or run `python tool/environment_check.py`. The check is side-effect free and reports required Python/Runner prerequisites plus optional Qwen/OpenCode PATH availability.
+
+### UI themes
+
+The local UI defaults to **Teal + System** and also provides Deep Blue, Violet, Amber, and Rose palettes with System/Light/Dark appearance modes. Theme preferences are presentation-only and do not affect Runner, Workflow, recovery, or backend behavior.

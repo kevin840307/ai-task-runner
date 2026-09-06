@@ -108,7 +108,7 @@ body {
   font-size: 11px;
   font-weight: 800;
 }
-.runtime-badge.running { border-color: #f4c56a; background: #fff3d8; color: var(--run); }
+.runtime-badge.running { border-color: #f4c56a; background: var(--warning-soft); color: var(--run); }
 .runtime-badge.completed { border-color: #9fd2b0; background: #eef9f1; color: var(--pass); }
 .runtime-badge.failed,
 .runtime-badge.interrupted { border-color: #f5a99e; background: #fee4df; color: var(--fail); }
@@ -146,12 +146,12 @@ body {
   align-self: flex-start;
   width: min(900px, 100%);
   padding: 12px 14px;
-  border: 1px solid rgba(15, 118, 110, 0.24);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   border-radius: var(--radius-lg);
   background: #f4fbf9;
 }
 .live-activity-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
-.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #14b8a6; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-dark); }
 .live-activity-head small { margin-left: auto; color: var(--muted); font-size: 10px; }
 .live-meta { margin-top: 6px; color: var(--muted); font-size: 10px; }
 .live-output {
@@ -195,7 +195,7 @@ body {
   font-size: 11px;
   font-weight: 800;
 }
-.options-button.active { border-color: rgba(15,118,110,.42); color: var(--accent); background: #effaf7; }
+.options-button.active { border-color: color-mix(in srgb, var(--accent) 42%, transparent); color: var(--accent); background: var(--accent-soft); }
 .send-button { min-width: 72px; min-height: 32px; border-radius: var(--radius-md); font-weight: 800; }
 .error-text { min-height: 16px; padding: 0 4px; color: var(--fail); font-size: 10px; }
 .simple-composer-topbar { min-height: 32px; }
@@ -285,7 +285,7 @@ body {
   min-width: min(360px, 42vw);
   min-height: 32px;
   padding: 0 11px;
-  border: 1px solid rgba(15,118,110,.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: 999px;
   background: linear-gradient(180deg,#fff,#f8fbfb);
   color: var(--muted);
@@ -365,14 +365,14 @@ body {
   letter-spacing: .04em;
 }
 .project-mark { position: relative; background: #cbd5e1 !important; }
-.project-mark.runtime-running { background: #14b8a6 !important; box-shadow: 0 0 0 3px rgba(20,184,166,.14); }
+.project-mark.runtime-running { background: var(--accent-dark) !important; box-shadow: 0 0 0 3px rgba(20,184,166,.14); }
 .project-mark.runtime-completed { background: #16a34a !important; }
 .project-mark.runtime-interrupted { background: #f59e0b !important; }
 .project-mark.runtime-stopped { background: #ef4444 !important; }
 .project-mark.runtime-missing { background: #94a3b8 !important; }
 .project-runtime-label.runtime-running { color: #047857; background: #dff8ee; }
 .project-runtime-label.runtime-completed { color: #15803d; background: #e9f8ed; }
-.project-runtime-label.runtime-interrupted { color: #9a5b00; background: #fff2cc; }
+.project-runtime-label.runtime-interrupted { color: #9a5b00; background: var(--warning-soft); }
 .project-runtime-label.runtime-stopped { color: #b42318; background: #fee4df; }
 .project-runtime-label.runtime-missing { color: #64748b; background: #eef2f6; }
 .project-row.runtime-running .project-mark::after {
@@ -450,24 +450,24 @@ body {
 .message.assistant,
 .live-activity,
 .cli-runtime-card {
-  background: #fff;
+  background: var(--panel);
 }
-.message.user { border-color: rgba(15, 118, 110, .30); }
+.message.user { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
 
 .cli-runtime-card {
   border-color: #d9e2ec;
-  background: #fff;
+  background: var(--panel);
   box-shadow: 0 10px 26px rgba(15, 23, 42, .07);
 }
 .cli-runtime-card .live-activity-head {
   border-bottom-color: #e5eaf0;
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
 }
 .cli-runtime-card .live-activity-head small { color: var(--muted); }
 .cli-runtime-output {
   color: #263244;
-  background: #fff;
+  background: var(--panel);
 }
 
 /* Run lifecycle actions occupy the same bottom-right slot. */
@@ -500,7 +500,7 @@ body {
   padding: 12px;
   border: 1px solid #d7e0e8;
   border-radius: 14px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: 0 16px 38px rgba(15, 23, 42, .16);
 }
 #composePanel .options-panel[hidden] { display: none !important; }
@@ -523,7 +523,7 @@ body {
   background: transparent;
 }
 .options-popover-field { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 800; }
-#composePanel .options-panel select { min-height: 36px; background: #fff; }
+#composePanel .options-panel select { min-height: 36px; background: var(--panel); }
 .options-rerun { justify-self: start; }
 
 /* Slightly more compact task composer. */
@@ -587,14 +587,14 @@ body {
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 11px;
-  background: #fff;
+  background: var(--panel);
   color: var(--text);
   text-align: left;
 }
 .backend-dropdown-button:hover,
 .backend-dropdown-button[aria-expanded="true"] {
-  border-color: rgba(15, 118, 110, .38);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, .08);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .backend-picker-label {
   padding-right: 8px;
@@ -737,7 +737,7 @@ body {
   padding:8px;
   border:1px solid #d7e0e8;
   border-radius:10px;
-  background:#f8fafc;
+  background:var(--panel-2);
   font-size:10px;
   line-height:1.35;
 }

@@ -5,7 +5,7 @@ body[data-page="workflow-designer"] {
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 30vw),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, transparent), transparent 30vw),
     var(--bg);
 }
 
@@ -73,8 +73,8 @@ body[data-page="workflow-designer"] {
 
 .designer-nav-link:hover,
 .designer-nav-link.active {
-  border-color: rgba(15, 118, 110, 0.45);
-  background: #effaf7;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
@@ -128,9 +128,9 @@ body[data-page="workflow-designer"] {
 }
 
 .designer-workflow-pill.active {
-  border-color: rgba(15, 118, 110, 0.55);
-  background: #effaf7;
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.10);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .designer-main {
@@ -194,7 +194,7 @@ body[data-page="workflow-designer"] {
 .designer-mode-switch button.active {
   background: var(--accent);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.18);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .designer-action-group {
@@ -251,9 +251,9 @@ body[data-page="workflow-designer"] {
   align-items: center;
   min-height: 28px;
   padding: 0 8px;
-  border: 1px solid rgba(15, 118, 110, 0.24);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   border-radius: 999px;
-  background: #effaf7;
+  background: var(--accent-soft);
   color: var(--accent-dark);
   font-size: 12px;
   font-weight: 800;
@@ -262,7 +262,7 @@ body[data-page="workflow-designer"] {
 
 .designer-api-status.error {
   border-color: rgba(174, 55, 55, 0.28);
-  background: #fff1f1;
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
@@ -297,7 +297,7 @@ body[data-page="workflow-designer"] {
 }
 
 .designer-overview-card.custom {
-  border-color: rgba(15, 118, 110, 0.25);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .designer-overview-card h2 {
@@ -314,7 +314,7 @@ body[data-page="workflow-designer"] {
   gap: 12px;
   margin: 0 0 14px;
   padding: 0;
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #ffffff, #f8fbfb);
   box-shadow: var(--shadow-sm);
@@ -399,7 +399,7 @@ body[data-page="workflow-designer"] {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .designer-cli-command > span {
@@ -458,7 +458,7 @@ body[data-page="workflow-designer"] {
   min-height: 74px;
   font-size: 13px;
   font-weight: 500;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .designer-active-workflow-description {
@@ -526,7 +526,7 @@ body[data-page="workflow-designer"] {
 }
 
 .designer-api-status.error {
-  background: #fff7f5;
+  background: var(--danger-soft);
   color: var(--fail);
   border-color: #f5a99e;
 }
@@ -538,7 +538,7 @@ body[data-page="workflow-designer"] {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
@@ -557,7 +557,7 @@ body[data-page="workflow-designer"] {
 .designer-title-input {
   font-size: 18px;
   font-weight: 760;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .designer-textarea {
@@ -682,7 +682,7 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
 
 .designer-step-card.active {
   border-color: rgba(29, 78, 216, 0.45);
-  background: #eef6ff;
+  background: var(--info-soft);
   box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.08);
 }
 
@@ -729,8 +729,8 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
 }
 
 .designer-step-type.ai { background: #e8f5f1; color: var(--accent); }
-.designer-step-type.review { background: #eef6ff; color: var(--blue); }
-.designer-step-type.validation { background: #fff3d8; color: var(--run); }
+.designer-step-type.review { background: var(--info-soft); color: var(--blue); }
+.designer-step-type.validation { background: var(--warning-soft); color: var(--run); }
 .designer-step-type.gate { background: #f4ecff; color: #6d28d9; }
 .designer-step-type.command { background: #edf0f4; color: #596579; }
 .designer-step-type.python { background: #e6f0ff; color: var(--blue); }
@@ -861,7 +861,7 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
 }
 .designer-danger-button {
   color: var(--fail);
-  background: #fff7f5;
+  background: var(--danger-soft);
   border-color: #f5a99e;
 }
 
@@ -885,9 +885,9 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
   z-index: 80;
   max-width: 360px;
   padding: 11px 13px;
-  border: 1px solid rgba(15, 118, 110, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   border-radius: var(--radius-md);
-  background: #effaf7;
+  background: var(--accent-soft);
   color: var(--accent-dark);
   box-shadow: var(--shadow-popover);
   font-weight: 700;
@@ -1030,7 +1030,7 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
   padding: 4px 8px;
   border: 1px solid #bdded5;
   border-radius: 999px;
-  background: #effaf7;
+  background: var(--accent-soft);
   color: var(--accent-dark);
   font-family: Consolas, Monaco, "Courier New", monospace;
   font-size: 12px;
@@ -1039,11 +1039,11 @@ body[data-page="workflow-designer"][data-designer-mode="simple"] .designer-step-
 
 button.designer-param-chip:hover:not(:disabled) {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.10);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .designer-param-chip.used {
-  background: #eef6ff;
+  background: var(--info-soft);
   border-color: #9cc7ff;
   color: #1d4ed8;
 }
@@ -1055,7 +1055,7 @@ button.designer-param-chip:hover:not(:disabled) {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .designer-warning-box {
@@ -1065,7 +1065,7 @@ button.designer-param-chip:hover:not(:disabled) {
   padding: 9px 10px;
   border: 1px solid #f5a99e;
   border-radius: var(--radius-md);
-  background: #fff7f5;
+  background: var(--danger-soft);
   color: var(--fail);
   font-size: 12px;
 }
@@ -1122,7 +1122,7 @@ button.designer-param-chip:hover:not(:disabled) {
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1231,7 +1231,7 @@ button.designer-param-chip:hover:not(:disabled) {
   max-height: none;
   resize: none;
   overflow: auto;
-  background: #fbfcfe;
+  background: var(--panel-2);
   font-family: Consolas, Monaco, "Courier New", monospace;
   font-size: 13px;
 }
@@ -1391,7 +1391,7 @@ button.designer-param-chip:hover:not(:disabled) {
   padding: 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
   font-size: 12px;
 }
 
@@ -1430,7 +1430,7 @@ button.designer-param-chip:hover:not(:disabled) {
 }
 
 #designerWorkflowDirtyBadge.running {
-  background: #fff3d8;
+  background: var(--warning-soft);
   color: var(--run);
 }
 
@@ -1846,7 +1846,7 @@ body[data-page="workflow-designer"] .designer-step-card:focus-visible {
 .designer-step-card-actions .designer-danger {
   border-color: rgba(220, 38, 38, 0.22);
   color: var(--fail);
-  background: #fff7f5;
+  background: var(--danger-soft);
 }
 
 .designer-step-card-cue {
@@ -1857,7 +1857,7 @@ body[data-page="workflow-designer"] .designer-step-card:focus-visible {
   padding: 2px 7px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--muted);
   font-size: 10px;
   font-weight: 800;
@@ -1925,7 +1925,7 @@ body[data-page="workflow-designer"] .designer-step-card:focus-visible {
 .designer-step-floating-actions .designer-danger {
   border-color: rgba(220, 38, 38, 0.22);
   color: var(--fail);
-  background: #fff7f5;
+  background: var(--danger-soft);
 }
 
 .designer-step-modal-box {
@@ -2471,13 +2471,13 @@ body[data-page="workflow-designer"] .designer-step-density-detail .designer-step
 }
 
 .designer-step-type.validation {
-  background: #fff1c2;
+  background: var(--warning-soft);
   border-color: #fde68a;
   color: #a16207;
 }
 
 .designer-step-type.review {
-  background: #dbeafe;
+  background: var(--info-soft);
   border-color: #bfdbfe;
   color: #1d4ed8;
 }
@@ -2604,7 +2604,7 @@ body[data-page="workflow-designer"] .designer-step-card-compact.python-card { bo
   padding: 4px 8px;
   border: 1px solid rgba(216, 222, 232, 0.8);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--muted);
   font-size: 11px;
   line-height: 1.2;
@@ -2632,7 +2632,7 @@ body[data-page="workflow-designer"] .designer-step-card-compact.python-card { bo
   place-items: center;
   border-radius: 999px;
   border: 1px solid rgba(216, 222, 232, 0.95);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--text);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
   font-size: 16px;
@@ -2660,7 +2660,7 @@ body[data-page="workflow-designer"] .designer-step-card-compact.python-card { bo
 }
 
 .designer-step-floating-actions.expanded .designer-action-toggle {
-  background: #ffffff;
+  background: var(--panel);
   color: var(--text);
 }
 
@@ -2673,7 +2673,7 @@ body[data-page="workflow-designer"] .designer-step-card-compact.python-card { bo
 .designer-step-floating-actions .designer-danger {
   border-color: rgba(220, 38, 38, 0.24);
   color: var(--fail);
-  background: #fff7f5;
+  background: var(--danger-soft);
 }
 
 .designer-step-floating-actions .designer-action-fab:disabled {
@@ -2748,7 +2748,7 @@ body[data-page="workflow-designer"] .designer-step-card.active .designer-step-ca
 body[data-page="workflow-designer"] .designer-step-card-menu:hover,
 body[data-page="workflow-designer"] .designer-step-card-menu:focus-visible {
   border-color: rgba(29, 78, 216, 0.18);
-  background: #eef4ff;
+  background: var(--info-soft);
   color: var(--blue);
   outline: none;
 }
@@ -2819,7 +2819,7 @@ body[data-page="workflow-designer"] .designer-step-card-menu:focus-visible {
 
 .designer-step-context-menu button:not(:disabled):hover,
 .designer-step-context-menu button:not(:disabled):focus-visible {
-  background: #eef4ff;
+  background: var(--info-soft);
   color: var(--blue);
   outline: none;
 }
@@ -2839,7 +2839,7 @@ body[data-page="workflow-designer"] .designer-step-card-menu:focus-visible {
 
 .designer-step-context-menu button.designer-context-danger:not(:disabled):hover,
 .designer-step-context-menu button.designer-context-danger:not(:disabled):focus-visible {
-  background: #fff1f0;
+  background: var(--danger-soft);
   color: var(--fail);
 }
 
@@ -2985,7 +2985,7 @@ body[data-page="workflow-designer"]:has(.designer-template-modal-box) .designer-
 .designer-workflow-command-panel {
   width: 100%;
   min-width: 0;
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
 }
@@ -3257,7 +3257,7 @@ body[data-page="workflow-designer"]:has(.designer-template-modal-box) .designer-
   overflow: hidden;
   scrollbar-gutter: stable;
   background:
-    radial-gradient(circle at 0% 0%, rgba(15, 118, 110, 0.11), transparent 34%),
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 34%),
     linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
@@ -3349,7 +3349,7 @@ body.projects-collapsed .designer-nav-link span {
   width: 24px;
   height: 24px;
   border-radius: 9px;
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -3387,7 +3387,7 @@ body.projects-collapsed .designer-sidebar-section {
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent);
   font-size: 12px;
   line-height: 1;
@@ -3406,8 +3406,8 @@ body.projects-collapsed .designer-sidebar-section {
 .designer-nav-link:hover,
 .designer-nav-link.active {
   transform: translateY(-1px);
-  border-color: rgba(15, 118, 110, 0.38);
-  background: #ffffff;
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: var(--panel);
   color: var(--accent-dark);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
@@ -3423,7 +3423,7 @@ body.projects-collapsed .designer-sidebar-section {
   padding: 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f8fafc;
+  background: var(--panel-2);
   font-size: 12px;
 }
 
@@ -3449,12 +3449,12 @@ body.projects-collapsed .designer-sidebar-section {
 .designer-lint-panel.issues,
 .designer-lint-panel.error {
   border-color: #fac2ba;
-  background: #fff1ef;
+  background: var(--danger-soft);
 }
 
 .designer-lint-panel.checking {
   border-color: #f4d48a;
-  background: #fff8e7;
+  background: var(--warning-soft);
 }
 
 .designer-lint-panel ul {
@@ -3483,7 +3483,7 @@ body.projects-collapsed .designer-sidebar-section {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: var(--shadow-sm);
 }
 
@@ -3515,7 +3515,7 @@ body.projects-collapsed .designer-sidebar-section {
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f8fafc;
+  background: var(--panel-2);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -3523,8 +3523,8 @@ body.projects-collapsed .designer-sidebar-section {
 
 .designer-asset-item.active,
 .designer-asset-item:hover {
-  border-color: rgba(15, 118, 110, 0.42);
-  background: #eef7f5;
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: var(--accent-soft);
 }
 
 .designer-asset-item strong {
@@ -3556,7 +3556,7 @@ body[data-page="ai-workflow-assets"] {
   height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 30vw),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 10%, transparent), transparent 30vw),
     var(--bg);
 }
 
@@ -3604,7 +3604,7 @@ body[data-page="ai-workflow-assets"] {
   gap: 16px;
   margin: 0 0 18px;
   padding: 15px 16px;
-  border: 1px solid rgba(15, 118, 110, 0.18);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, #ffffff, #effaf7);
   box-shadow: var(--shadow-sm);
@@ -3623,7 +3623,7 @@ body[data-page="ai-workflow-assets"] {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--text);
   text-decoration: none;
   font-size: 13px;
@@ -3632,7 +3632,7 @@ body[data-page="ai-workflow-assets"] {
 
 .designer-button-link:hover,
 .designer-button-link.primary-link {
-  border-color: rgba(15, 118, 110, 0.42);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
   background: var(--accent);
   color: #ffffff;
 }
@@ -3641,7 +3641,7 @@ body[data-page="ai-workflow-assets"] {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #f8fafc;
+  background: var(--panel-2);
   color: var(--muted);
   font-size: 12px;
   font-weight: 750;
@@ -3651,7 +3651,7 @@ body[data-page="ai-workflow-assets"] {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #f8fafc;
+  background: var(--panel-2);
 }
 
 .assets-help-card p {
@@ -3829,7 +3829,7 @@ body[data-page="ai-workflow-assets"] .assets-page-manager .designer-asset-previe
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: #ffffff;
+  background: var(--panel);
   color: var(--text);
   line-height: 1.55;
 }
@@ -3841,7 +3841,7 @@ body[data-page="ai-workflow-assets"] .assets-page-manager .designer-asset-previe
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #f8fafc;
+  background: var(--panel-2);
 }
 
 .designer-asset-editor-tabs button {

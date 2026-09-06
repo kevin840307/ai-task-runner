@@ -186,3 +186,7 @@ Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/da
 ### 本機環境檢測
 
 可從 UI 的 **Run options → Check environment** 執行，或直接執行 `python tool/environment_check.py`。檢測不修改專案，會確認必要的 Python/Runner 條件，以及 Qwen/OpenCode 是否能從 PATH 找到。
+
+### UI Theme
+
+本機 UI 預設為 **Teal + System**，另提供 Deep Blue、Violet、Amber、Rose，以及 System/Light/Dark 外觀模式。Theme 僅屬於顯示層，不影響 Runner、Workflow、Recovery 或 Backend 行為。

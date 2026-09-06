@@ -4,11 +4,55 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Task Runner</title>
+  <script>
+    (() => {
+      const validTheme = new Set(["teal", "blue", "violet", "amber", "rose"]);
+      const validAppearance = new Set(["system", "light", "dark"]);
+      let theme = "teal";
+      let appearance = "system";
+      try {
+        const savedTheme = localStorage.getItem("ai-task-runner.theme");
+        const savedAppearance = localStorage.getItem("ai-task-runner.appearance");
+        if (validTheme.has(savedTheme)) theme = savedTheme;
+        if (validAppearance.has(savedAppearance)) appearance = savedAppearance;
+      } catch (_) {}
+      const resolved = appearance === "system"
+        ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : appearance;
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.appearance = resolved;
+      document.documentElement.dataset.appearancePreference = appearance;
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body class="workflow-mode">
   <aside class="projects">
-    <div class="projects-head"><div class="brand">Agent Workflow</div></div>
+    <div class="projects-head">
+      <div class="brand">Agent Workflow</div>
+      <button id="themeButton" class="theme-toggle-button" type="button" title="Theme and appearance" aria-haspopup="dialog" aria-expanded="false">◐</button>
+      <section id="themePanel" class="theme-panel" role="dialog" aria-label="Theme and appearance" hidden>
+        <div class="theme-panel-head"><strong>Appearance</strong><button id="themeCloseButton" type="button" aria-label="Close theme settings">×</button></div>
+        <div class="theme-setting-group">
+          <span class="theme-setting-label">Appearance</span>
+          <div class="appearance-options" role="group" aria-label="Appearance">
+            <button type="button" data-appearance-option="system">System</button>
+            <button type="button" data-appearance-option="light">Light</button>
+            <button type="button" data-appearance-option="dark">Dark</button>
+          </div>
+        </div>
+        <div class="theme-setting-group">
+          <span class="theme-setting-label">Theme</span>
+          <div class="theme-options">
+            <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small>Recommended</small></button>
+            <button class="theme-option" type="button" data-theme-option="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><strong>Deep Blue</strong><small>Enterprise</small></button>
+            <button class="theme-option" type="button" data-theme-option="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><strong>Violet</strong><small>AI / Creative</small></button>
+            <button class="theme-option" type="button" data-theme-option="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><strong>Amber</strong><small>Warm / Focus</small></button>
+            <button class="theme-option" type="button" data-theme-option="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><strong>Rose</strong><small>Distinct / Modern</small></button>
+          </div>
+        </div>
+      </section>
+    </div>
     <nav class="project-nav" aria-label="Application navigation">
       <button id="chatNav" class="project-nav-link active" type="button"><span>Run</span><strong>Tasks</strong></button>
       <button id="workflowNav" class="project-nav-link" type="button"><span>Cfg</span><strong>Workflows</strong></button>
@@ -302,6 +346,8 @@
         <div class="modal-section-label">Workflow file</div>
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newWorkflowName" class="designer-input" placeholder="regression.workflow.yaml" /><span class="designer-form-hint">未輸入副檔名時會自動建立 .workflow.yaml。</span></label>
         <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select><span class="designer-form-hint">Custom workflow 可被多個 Project 使用；Project workflow 跟著目前專案。</span></label>
+        <div id="newWorkflowFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><select id="newWorkflowFolder" class="designer-select"><option value="">Custom root</option></select></label><button id="newWorkflowFolderToggle" type="button">+ New Folder</button></div>
+        <div id="newWorkflowFolderCreateRow" class="custom-folder-create-row" hidden><input id="newWorkflowFolderName" class="designer-input" placeholder="e2e/regression" /><button id="newWorkflowFolderCreate" type="button">Create Folder</button></div>
         <div class="workflow-create-preview"><span class="designer-eyebrow">Initial YAML</span><code>stages:
   planning:
     type: plan
@@ -325,6 +371,8 @@ flow:
       <div class="modal-scroll-body">
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newPromptName" class="designer-input" placeholder="my_prompt.md" /></label>
         <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newPromptDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
+        <div id="newPromptFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><select id="newPromptFolder" class="designer-select"><option value="">Custom root</option></select></label><button id="newPromptFolderToggle" type="button">+ New Folder</button></div>
+        <div id="newPromptFolderCreateRow" class="custom-folder-create-row" hidden><input id="newPromptFolderName" class="designer-input" placeholder="e2e" /><button id="newPromptFolderCreate" type="button">Create Folder</button></div>
         <div id="newPromptHint" class="modal-hint"></div>
       </div>
       <div class="modal-actions"><button id="newPromptCancel" class="modal-secondary" type="button">Cancel</button><button id="newPromptConfirm" class="primary modal-primary" type="button">Create Prompt</button></div>

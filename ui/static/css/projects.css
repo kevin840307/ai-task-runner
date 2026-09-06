@@ -40,9 +40,9 @@
 .side-toggle.active,
 .header-icon.active {
   color: var(--accent);
-  border-color: rgba(15, 118, 110, 0.45);
-  background: #effaf7;
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .new-project-button {
@@ -85,7 +85,7 @@
 
 .project-row.active .project-item {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .icon-button {
@@ -119,8 +119,8 @@
 
 .project-nav-link:hover,
 .project-nav-link.active {
-  border-color: rgba(15, 118, 110, 0.45);
-  background: #effaf7;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
@@ -142,7 +142,7 @@ body.projects-collapsed .project-nav-link strong {
 /* Left navigation polish */
 .projects {
   background:
-    radial-gradient(circle at 0% 0%, rgba(15, 118, 110, 0.11), transparent 34%),
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 34%),
     linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   padding: 10px;
 }
@@ -171,18 +171,18 @@ body.projects-collapsed .project-nav-link strong {
   width: 30px;
   height: 30px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), #14b8a6);
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   color: #ffffff;
   font-size: 14px;
   font-weight: 950;
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.22);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .new-project-button {
   min-height: 42px;
   border-radius: 14px;
   font-weight: 850;
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.16);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .new-project-button .button-icon {
@@ -217,15 +217,15 @@ body.projects-collapsed .project-nav-link strong {
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .project-nav-link:hover,
 .project-nav-link.active {
   transform: translateY(-1px);
-  border-color: rgba(15, 118, 110, 0.38);
-  background: #ffffff;
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: var(--panel);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
@@ -280,7 +280,7 @@ body.projects-collapsed .project-nav-link strong {
 
 .project-root:hover,
 .project-tree.active .project-root {
-  border-color: rgba(15, 118, 110, 0.16);
+  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
   background: rgba(255, 255, 255, 0.76);
   box-shadow: none;
 }
@@ -302,7 +302,7 @@ body.projects-collapsed .project-nav-link strong {
 
 .project-root:hover .project-caret,
 .project-tree.active .project-caret {
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
@@ -372,7 +372,7 @@ body.projects-collapsed .project-nav-link strong {
 }
 
 .project-menu-button:hover {
-  border-color: rgba(15, 118, 110, 0.18);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
   background: rgba(238, 247, 245, 0.92);
   color: var(--accent-dark);
   transform: translateY(-1px);
@@ -388,7 +388,7 @@ body.projects-collapsed .project-nav-link strong {
   padding: 6px;
   border: 1px solid rgba(203, 213, 225, 0.88);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--panel);
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.14);
 }
 
@@ -450,7 +450,7 @@ body.projects-collapsed .project-nav-link strong {
 
 .project-item:hover {
   transform: none;
-  border-color: rgba(15, 118, 110, 0.18);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
   background: rgba(255, 255, 255, 0.70);
   box-shadow: none;
 }
@@ -462,7 +462,7 @@ body.projects-collapsed .project-nav-link strong {
   margin-left: 2px;
   border: 1px solid #94a3b8;
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .project-item strong {
@@ -476,15 +476,15 @@ body.projects-collapsed .project-nav-link strong {
 }
 
 .project-row.active .project-item {
-  border-color: rgba(15, 118, 110, 0.30);
-  background: #effaf7;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--accent-soft);
   box-shadow: none;
 }
 
 .project-row.active .chat-dot {
   border-color: var(--accent);
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.13);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
 }
 
 .project-row.active .project-item strong {
@@ -513,7 +513,7 @@ body.projects-collapsed .project-nav-link strong {
 
 .project-row .danger:hover {
   border-color: rgba(180, 35, 24, 0.18);
-  background: #fff1f0;
+  background: var(--danger-soft);
   color: var(--fail);
 }
 
@@ -645,7 +645,7 @@ body.projects-collapsed .project-item::before {
   width: 24px;
   height: 24px;
   border-radius: 8px;
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent);
   font-size: 12px;
   line-height: 1;
@@ -667,8 +667,8 @@ body.projects-collapsed .project-item::before {
 .designer-nav-link:hover,
 .designer-nav-link.active {
   transform: translateY(-1px);
-  border-color: rgba(15, 118, 110, 0.38);
-  background: #ffffff;
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: var(--panel);
   color: var(--accent-dark);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
@@ -683,7 +683,7 @@ body.projects-collapsed .project-nav-link span {
   display: inline-grid !important;
   width: 24px;
   height: 24px;
-  background: #eef7f5;
+  background: var(--accent-soft);
   color: var(--accent);
 }
 

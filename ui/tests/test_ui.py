@@ -431,6 +431,29 @@ class UIStateTests(unittest.TestCase):
         assert "workflow_builder.yaml" not in names
         assert "file.yaml" in names
 
+    def test_custom_workflow_and_prompt_can_be_created_in_nested_folders(self):
+        workflow_folder = self.state.studio_custom_folder_create("workflow", "e2e/regression")
+        self.assertIn("e2e/regression", workflow_folder["folders"])
+        original_validate = self.state._validate_workflow_before_write
+        self.state._validate_workflow_before_write = lambda path, content: {"ok": True}
+        try:
+            created_workflow = self.state.studio_workflow_create("nested", "custom", self.project, "e2e/regression")
+        finally:
+            self.state._validate_workflow_before_write = original_validate
+        self.assertTrue(Path(created_workflow["file"]["path"]).is_file())
+        self.assertEqual(created_workflow["item"]["display_name"], "e2e/regression/nested.workflow.yaml")
+
+        prompt_folder = self.state.studio_custom_folder_create("prompt", "e2e")
+        self.assertIn("e2e", prompt_folder["folders"])
+        created_prompt = self.state.studio_prompt_create("review", "custom", self.project, "e2e")
+        self.assertTrue(Path(created_prompt["file"]["path"]).is_file())
+        self.assertEqual(created_prompt["item"]["display_name"], "e2e/review.md")
+
+    def test_custom_folder_rejects_path_escape(self):
+        for bad in ("../escape", "e2e/../escape", "/absolute", "C:/absolute"):
+            with self.assertRaises(ValueError):
+                self.state.studio_custom_folder_create("workflow", bad)
+
 if __name__ == "__main__":
     unittest.main()
 

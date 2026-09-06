@@ -1,0 +1,209 @@
+stages:
+  preflight:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_preflight.py'
+  gate_preflight:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - preflight
+    - --state
+    - '{state_file}'
+  planning:
+    type: plan
+    min_tasks: 1
+    fresh_session_on_start: true
+    status: AI 正在依需求與可用材料規劃 E2E Blueprint TODO
+  gate_planning:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - planning
+    - --state
+    - '{state_file}'
+  execute:
+    type: task
+    prompt: ../../../prompts/custom/e2e/blueprint_execute.md
+    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
+    retry: -1
+    fresh_session_on_start: true
+  gate_execute:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - execute
+    - --state
+    - '{state_file}'
+  repair:
+    type: task
+    prompt: ../../../prompts/custom/e2e/repair.md
+    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
+    retry: -1
+  gate_repair:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - execute
+    - --state
+    - '{state_file}'
+  review:
+    type: review
+    prompt: ../../../prompts/custom/e2e/blueprint_review.md
+    continuation_prompt: ../../../prompts/custom/e2e/blueprint_review_continue.md
+    skip_on_error: false
+    structured_retries: 2
+    runs: 2
+    required_passes: 2
+    fresh_session_each_run: true
+  gate_review:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - review
+    - --state
+    - '{state_file}'
+  grill:
+    type: review
+    prompt: ../../../prompts/custom/e2e/blueprint_grill.md
+    continuation_prompt: ../../../prompts/custom/e2e/blueprint_grill_continue.md
+    skip_on_error: false
+    structured_retries: 2
+    retry: 0
+    fresh_session_on_start: true
+  gate_grill:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - grill
+    - --state
+    - '{state_file}'
+  final_repair:
+    type: base
+    mode: write
+    actor: executor
+    prompt: ../../../prompts/custom/e2e/repair.md
+    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
+    track_changes: true
+    retry: -1
+  gate_final_repair:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_stage_validation.py'
+    - --stage
+    - execute
+    - --state
+    - '{state_file}'
+  final_python:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/blueprint_final_validation.py'
+    - --state
+    - '{state_file}'
+    result_kind: validation
+    timeout: 1200
+  export_e2e_spec:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/export_e2e_spec.py'
+    - --workflow
+    - workflow1
+  final_ai:
+    type: ai_validator
+    validator: ai
+    prompt: ../../../prompts/custom/e2e/final_blueprint_validation.md
+    runs: 3
+    required_passes: 2
+    fresh_session_each_run: true
+    allow_project_read: true
+flow:
+- stage: preflight
+  label: Discover Request + Available Evidence
+- stage: gate_preflight
+  label: Python Gate · Preflight
+- stage: planning
+  label: Plan Business-Flow TODOs
+- stage: gate_planning
+  label: Python Gate · Planning
+  scope: task
+- stage: execute
+  label: Discover / Design Current E2E Flow
+  scope: task
+- stage: gate_execute
+  label: Python Gate · Execute
+  scope: task
+  recover: &id001
+  - stage: repair
+    label: Repair Current TODO
+    scope: task
+  - stage: gate_repair
+    label: Python Gate · Repair
+    scope: task
+- stage: review
+  label: Review Current TODO · 2/2 PASS
+  scope: task
+  recover: *id001
+- stage: gate_review
+  label: Python Gate · Review
+  scope: task
+  recover: *id001
+- stage: grill
+  label: Grill Current TODO · 最多 3 輪
+  scope: task
+  recover: *id001
+  max_attempts: 3
+  on_exhausted: continue
+- stage: gate_grill
+  label: Python Gate · Grill
+  scope: task
+  recover: *id001
+- stage: final_python
+  label: Final Python · Full Contract + Traceability
+  recover:
+  - stage: final_repair
+    label: Repair Final Validation Finding
+    instructions: Repair only the concrete final validation finding against the completed Blueprint. Preserve valid flows/cases/evidence
+      and do not weaken any Gate.
+  - stage: gate_final_repair
+    label: Python Gate · Final Repair
+- stage: export_e2e_spec
+  label: Export YAML → result/E2E_SPEC.md
+- stage: final_ai
+  label: Final Fresh AI Semantic Challenge · 2/3 PASS
+  recover:
+  - stage: final_repair
+    label: Repair Final Semantic Finding
+    instructions: Repair only the concrete semantic finding reported by Final AI. Preserve valid flows/cases/evidence and
+      do not weaken any Gate.
+  - stage: gate_final_repair
+    label: Python Gate · Final Semantic Repair
+  - stage: final_python
+    label: Re-Run Final Python Validation
+  - stage: export_e2e_spec
+    label: Re-Export result/E2E_SPEC.md

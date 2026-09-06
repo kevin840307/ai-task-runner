@@ -30,6 +30,33 @@ const state = {
   syntaxTimer: 0,
 };
 
+const THEME_STORAGE_KEY = "ai-task-runner.theme";
+const APPEARANCE_STORAGE_KEY = "ai-task-runner.appearance";
+const THEME_VALUES = new Set(["teal", "blue", "violet", "amber", "rose"]);
+const APPEARANCE_VALUES = new Set(["system", "light", "dark"]);
+const systemColorScheme = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+function readThemePreference() { try { const value = localStorage.getItem(THEME_STORAGE_KEY); return THEME_VALUES.has(value) ? value : "teal"; } catch (_) { return "teal"; } }
+function readAppearancePreference() { try { const value = localStorage.getItem(APPEARANCE_STORAGE_KEY); return APPEARANCE_VALUES.has(value) ? value : "system"; } catch (_) { return "system"; } }
+function resolvedAppearance(preference) { return preference === "system" ? (systemColorScheme?.matches ? "dark" : "light") : preference; }
+function applyThemePreferences(theme = readThemePreference(), appearance = readAppearancePreference(), { persist = false } = {}) {
+  theme = THEME_VALUES.has(theme) ? theme : "teal"; appearance = APPEARANCE_VALUES.has(appearance) ? appearance : "system";
+  document.documentElement.dataset.theme = theme; document.documentElement.dataset.appearancePreference = appearance; document.documentElement.dataset.appearance = resolvedAppearance(appearance);
+  if (persist) { try { localStorage.setItem(THEME_STORAGE_KEY, theme); localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance); } catch (_) {} }
+  renderThemeControls();
+}
+function renderThemeControls() {
+  const theme = document.documentElement.dataset.theme || "teal", appearance = document.documentElement.dataset.appearancePreference || "system";
+  document.querySelectorAll("[data-theme-option]").forEach((button) => { const active = button.dataset.themeOption === theme; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
+  document.querySelectorAll("[data-appearance-option]").forEach((button) => { const active = button.dataset.appearanceOption === appearance; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
+}
+function positionThemePanel() {
+  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
+  const width = panel.getBoundingClientRect().width || Math.min(320, window.innerWidth - pad * 2); let left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad)); let top = rect.bottom + gap;
+  const height = panel.getBoundingClientRect().height || 320; if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap); panel.style.left = `${Math.round(left)}px`; panel.style.top = `${Math.round(top)}px`;
+}
+function closeThemePanel() { const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false"); }
+function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); requestAnimationFrame(positionThemePanel); }
+
 async function api(path, options = {}) {
   const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   const data = await response.json();
@@ -401,7 +428,7 @@ function renderStudioFiles() {
     const heading = document.createElement("div"); heading.className = "studio-file-group"; heading.textContent = group; root.appendChild(heading);
     for (const item of items) {
       const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (state.studioFile?.id === item.id) button.classList.add("active"); if (item.readonly) button.classList.add("readonly");
-      const name = document.createElement("strong"); name.textContent = item.name; const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project"); button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
+      const name = document.createElement("strong"); name.textContent = item.display_name || item.name; const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project"); button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
     }
   }
   if (!root.querySelector(".studio-file-item")) { const empty = document.createElement("div"); empty.className = "studio-list-empty"; const noun = state.studioSourceKind === "prompt" ? "prompts" : "workflows"; empty.textContent = studioSearchQuery() ? `No matching ${noun}` : `No ${noun}`; root.appendChild(empty); }
@@ -938,24 +965,42 @@ async function confirmDiscardStudio() {
 }
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
+function fillCustomFolderSelect(kind, selectId, selected = "") {
+  const select = $(selectId); if (!select) return;
+  const folders = state.studioFiles?.custom_folders?.[kind] || [""];
+  select.innerHTML = "";
+  folders.forEach((folder) => { const option = document.createElement("option"); option.value = folder; option.textContent = folder || "Custom root"; select.appendChild(option); });
+  if ([...select.options].some((o) => o.value === selected)) select.value = selected;
+}
+function syncCustomFolderVisibility(kind) {
+  const workflow = kind === "workflow"; const destination = $(workflow ? "newWorkflowDestination" : "newPromptDestination")?.value;
+  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow"); const createRow = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow");
+  const custom = destination === "custom"; if (row) row.hidden = !custom; if (!custom && createRow) createRow.hidden = true;
+}
+async function createCustomFolder(kind) {
+  const workflow = kind === "workflow"; const input = $(workflow ? "newWorkflowFolderName" : "newPromptFolderName"); const selectId = workflow ? "newWorkflowFolder" : "newPromptFolder"; const row = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow");
+  const folder = input?.value.trim() || ""; if (!folder) return;
+  try { const result = await api("/api/studio/custom-folder/create", { method: "POST", body: JSON.stringify({ kind, folder }) }); state.studioFiles.custom_folders ||= {}; state.studioFiles.custom_folders[kind] = result.folders || [""]; fillCustomFolderSelect(kind, selectId, result.folder); if (input) input.value = ""; if (row) row.hidden = true; showToast(`Folder ${result.folder} ready`); }
+  catch (error) { showActionError(error.message, "Folder creation failed"); }
+}
 function openNewWorkflowModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Workflow.", true);
-  state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
+  state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; fillCustomFolderSelect("workflow", "newWorkflowFolder"); $("newWorkflowFolderCreateRow").hidden = true; $("newWorkflowFolderName").value = ""; syncCustomFolderVisibility("workflow"); $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
 }
 async function closeNewWorkflowModal(force = false) { if ($("newWorkflowBackdrop").hidden) return true; if (!force && state.newWorkflowDirty) { const ok = await confirmDialog({ title: "Discard new Workflow?", message: "Discard this unsaved Workflow draft?", confirmLabel: "Discard Workflow", danger: true }); if (!ok) return false; } $("newWorkflowBackdrop").hidden = true; state.newWorkflowDirty = false; return true; }
 async function confirmNewWorkflow() {
   const name = $("newWorkflowName").value.trim(); if (!name) { $("newWorkflowHint").textContent = "Workflow name is required."; $("newWorkflowHint").classList.add("error"); return; }
-  try { const result = await api("/api/studio/workflow/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newWorkflowDestination").value }) }); closeNewWorkflowModal(true); state.studioSourceKind = "workflow"; await refreshStudioFiles(); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Workflow ${result.file.name} created`); }
+  try { const result = await api("/api/studio/workflow/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newWorkflowDestination").value, folder: $("newWorkflowFolder").value }) }); closeNewWorkflowModal(true); state.studioSourceKind = "workflow"; await refreshStudioFiles(); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Workflow ${result.file.name} created`); }
   catch (error) { $("newWorkflowHint").textContent = error.message; $("newWorkflowHint").classList.add("error"); showActionError(error.message, "Workflow creation failed"); }
 }
 function openNewPromptModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Prompt.", true);
-  state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
+  state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; fillCustomFolderSelect("prompt", "newPromptFolder"); $("newPromptFolderCreateRow").hidden = true; $("newPromptFolderName").value = ""; syncCustomFolderVisibility("prompt"); $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
 }
 async function closeNewPromptModal(force = false) { if ($("newPromptBackdrop").hidden) return true; if (!force && state.newPromptDirty) { const ok = await confirmDialog({ title: "Discard new Prompt?", message: "Discard this unsaved Prompt draft?", confirmLabel: "Discard Prompt", danger: true }); if (!ok) return false; } $("newPromptBackdrop").hidden = true; state.newPromptDirty = false; return true; }
 async function confirmNewPrompt() {
   const name = $("newPromptName").value.trim(); if (!name) { $("newPromptHint").textContent = "Prompt name is required."; $("newPromptHint").classList.add("error"); return; }
-  try { const result = await api("/api/studio/prompt/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newPromptDestination").value }) }); closeNewPromptModal(true); state.studioSourceKind = "prompt"; await refreshStudioFiles(); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Prompt ${result.file.name} created`); }
+  try { const result = await api("/api/studio/prompt/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newPromptDestination").value, folder: $("newPromptFolder").value }) }); closeNewPromptModal(true); state.studioSourceKind = "prompt"; await refreshStudioFiles(); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Prompt ${result.file.name} created`); }
   catch (error) { $("newPromptHint").textContent = error.message; $("newPromptHint").classList.add("error"); showActionError(error.message, "Prompt creation failed"); }
 }
 function openImportAssetModal() {
@@ -1276,12 +1321,19 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest?.(".project-tree") && !event.target.closest?.(".project-action-menu")) closeProjectMenus();
   if (!event.target.closest?.(".studio-asset-menu-wrap")) closeStudioAssetMenu();
   if (!$("optionsPanel").hidden && !$("optionsPanel").contains(event.target) && !$("optionsButton").contains(event.target) && !backendMenu?.contains(event.target)) closeOptionsPanel();
+  if (!$("themePanel").hidden && !$("themePanel").contains(event.target) && !$("themeButton").contains(event.target)) closeThemePanel();
 });
 function closeOptionsPanel() { closeBackendDropdown(); $("optionsPanel").hidden = true; $("optionsButton").classList.remove("active"); $("optionsButton").setAttribute("aria-expanded", "false"); }
 function toggleOptionsPanel() { const open = $("optionsPanel").hidden; if (!open) return closeOptionsPanel(); $("optionsPanel").hidden = false; $("optionsButton").classList.add("active"); $("optionsButton").setAttribute("aria-expanded", "true"); }
 $("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptionsPanel(); };
 $("optionsCloseButton").onclick = closeOptionsPanel;
 $("environmentCheckButton").onclick = checkEnvironment;
+$("themeButton").onclick = toggleThemePanel;
+$("themeCloseButton").onclick = closeThemePanel;
+document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => applyThemePreferences(button.dataset.themeOption, document.documentElement.dataset.appearancePreference || "system", { persist: true }); });
+document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => applyThemePreferences(document.documentElement.dataset.theme || "teal", button.dataset.appearanceOption, { persist: true }); });
+if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
+applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference());
 $("sendButton").onclick = sendMessage; $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
@@ -1304,10 +1356,17 @@ $("resetButton").onclick = async () => {
   try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime(); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
 $("rerunButton").onclick = async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } };
-window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
+window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
 state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
-  syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70);
+  syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
 }); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); setInterval(refreshRuntime, 750); setInterval(animateRuntimeFrame, 120); setInterval(refreshProjectStatuses, 1500); setInterval(refreshStudioGuard, 1000);
+
+$("newWorkflowDestination").onchange = () => syncCustomFolderVisibility("workflow");
+$("newPromptDestination").onchange = () => syncCustomFolderVisibility("prompt");
+$("newWorkflowFolderToggle").onclick = () => { $("newWorkflowFolderCreateRow").hidden = !$("newWorkflowFolderCreateRow").hidden; if (!$("newWorkflowFolderCreateRow").hidden) $("newWorkflowFolderName").focus(); };
+$("newPromptFolderToggle").onclick = () => { $("newPromptFolderCreateRow").hidden = !$("newPromptFolderCreateRow").hidden; if (!$("newPromptFolderCreateRow").hidden) $("newPromptFolderName").focus(); };
+$("newWorkflowFolderCreate").onclick = () => createCustomFolder("workflow");
+$("newPromptFolderCreate").onclick = () => createCustomFolder("prompt");

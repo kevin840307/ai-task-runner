@@ -85,9 +85,9 @@
 
 .modal-input:focus,
 .modal-textarea:focus {
-  border-color: rgba(15, 118, 110, 0.58);
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.10);
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .modal-textarea {
@@ -140,7 +140,7 @@
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
     radial-gradient(circle at bottom right, rgba(29, 78, 216, 0.14), transparent 32%),
     rgba(15, 23, 42, 0.42);
   backdrop-filter: blur(8px);
@@ -201,7 +201,7 @@
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.20);
 }
 
-.workflow-result-card.success .workflow-result-icon { background: linear-gradient(135deg, #0f766e, #16a34a); }
+.workflow-result-card.success .workflow-result-icon { background: linear-gradient(135deg, var(--accent), #16a34a); }
 .workflow-result-card.failed .workflow-result-icon { background: linear-gradient(135deg, #b42318, #f97316); }
 .workflow-result-card.cancelled .workflow-result-icon { background: linear-gradient(135deg, #9a5b00, #ca8a04); }
 
@@ -224,8 +224,8 @@
 }
 
 .workflow-result-card.success .workflow-result-eyebrow { color: var(--pass); background: #ecfdf3; border-color: #b7e4c7; }
-.workflow-result-card.failed .workflow-result-eyebrow { color: var(--fail); background: #fff1ef; border-color: #fac2ba; }
-.workflow-result-card.cancelled .workflow-result-eyebrow { color: var(--run); background: #fff8e7; border-color: #f4d48a; }
+.workflow-result-card.failed .workflow-result-eyebrow { color: var(--fail); background: var(--danger-soft); border-color: #fac2ba; }
+.workflow-result-card.cancelled .workflow-result-eyebrow { color: var(--run); background: var(--warning-soft); border-color: #f4d48a; }
 
 .workflow-result-copy h2 {
   margin: 0;
@@ -295,7 +295,7 @@
   padding: 12px 13px;
   border: 1px solid #fac2ba;
   border-radius: 16px;
-  background: #fff7f6;
+  background: var(--danger-soft);
   color: var(--fail);
   font-family: Consolas, Monaco, monospace;
   font-size: 12px;
@@ -329,7 +329,7 @@
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.18);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .workflow-result-card.failed .workflow-result-button.primary {

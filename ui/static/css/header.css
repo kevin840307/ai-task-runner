@@ -114,7 +114,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 4px 7px;
-  background: #ffffff;
+  background: var(--panel);
   max-width: 92px;
   min-height: 26px;
 }

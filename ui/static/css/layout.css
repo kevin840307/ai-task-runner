@@ -55,8 +55,8 @@
 .rail-resizer:hover::before,
 .rail-resizer:focus-visible::before,
 body.rail-resizing .rail-resizer::before {
-  background: rgba(15, 118, 110, 0.38);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.10);
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .rail-resizer-left {

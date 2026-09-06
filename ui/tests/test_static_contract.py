@@ -361,8 +361,8 @@ class LayoutRegressionTests(unittest.TestCase):
             self.assertIn(token, self.js)
         self.assertNotIn("renderComposerRuntimeFrame", self.js)
         self.assertNotIn("Running · ${runtime.cli_status}", self.js)
-        self.assertIn(".cli-runtime-card{border-color:#d9e2ec;background:#fff", css)
-        self.assertIn(".cli-runtime-output{color:#263244;background:#fff", css)
+        self.assertIn(".cli-runtime-card{border-color:#d9e2ec;background:var(--panel)", css)
+        self.assertIn(".cli-runtime-output{color:#263244;background:var(--panel)", css)
 
     def test_conversation_auto_follows_new_runtime_card_without_hijacking_manual_scroll(self):
         for token in (
@@ -549,3 +549,70 @@ class LayoutRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ThemeContractTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[1]
+        self.html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
+        self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.styles = (self.root / "static" / "styles.css").read_text(encoding="utf-8")
+        self.theme_css = (self.root / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+
+    def test_theme_ui_exposes_five_palettes_and_three_appearance_modes(self):
+        for token in ('id="themeButton"', 'id="themePanel"', 'data-theme-option="teal"', 'data-theme-option="blue"', 'data-theme-option="violet"', 'data-theme-option="amber"', 'data-theme-option="rose"', 'data-appearance-option="system"', 'data-appearance-option="light"', 'data-appearance-option="dark"'):
+            self.assertIn(token, self.html)
+
+    def test_default_theme_is_teal_system_and_preferences_persist(self):
+        self.assertIn('let theme = "teal"', self.html)
+        self.assertIn('let appearance = "system"', self.html)
+        self.assertIn('ai-task-runner.theme', self.js)
+        self.assertIn('ai-task-runner.appearance', self.js)
+        self.assertIn('localStorage.setItem(THEME_STORAGE_KEY', self.js)
+        self.assertIn('localStorage.setItem(APPEARANCE_STORAGE_KEY', self.js)
+
+    def test_system_appearance_tracks_os_color_scheme(self):
+        self.assertIn('prefers-color-scheme: dark', self.html)
+        self.assertIn('systemColorScheme.addEventListener("change"', self.js)
+        self.assertIn('document.documentElement.dataset.appearance = resolvedAppearance(appearance)', self.js)
+
+    def test_theme_layer_loads_last_and_keeps_semantic_status_colors_stable(self):
+        self.assertTrue(self.styles.rstrip().endswith('@import url("./css/theme.css");'))
+        for token in ('data-theme="teal"', 'data-theme="blue"', 'data-theme="violet"', 'data-theme="amber"', 'data-theme="rose"', 'data-appearance="light"', 'data-appearance="dark"'):
+            self.assertIn(token, self.theme_css)
+        for token in ('--pass: #22a559', '--run: #3b82f6', '--warn: #d99016', '--fail: #d64b4b'):
+            self.assertIn(token, self.theme_css)
+
+
+    def test_theme_brand_icon_uses_palette_accent(self):
+        self.assertIn('html[data-appearance] .brand::before', self.theme_css)
+        self.assertIn('linear-gradient(135deg, var(--accent), var(--accent-dark))', self.theme_css)
+
+    def test_dark_generator_and_search_use_theme_surfaces(self):
+        self.assertIn('--surface: var(--panel)', self.theme_css)
+        self.assertIn('.workflow-generator-input-card', self.theme_css)
+        self.assertIn('.studio-search-wrap', self.theme_css)
+        self.assertNotIn('data-theme="graphite"', self.html)
+
+
+    def test_legacy_ui_css_no_longer_hardcodes_old_teal_or_common_light_surfaces(self):
+        css_root = self.root / "static" / "css"
+        legacy = "\n".join(path.read_text(encoding="utf-8") for path in css_root.glob("*.css") if path.name not in {"tokens.css", "theme.css"})
+        for token in ("#0f766e", "#115e59", "#14b8a6", "rgba(15, 118, 110", "rgba(15,118,110"):
+            self.assertNotIn(token, legacy)
+        for token in ("background: #ffffff;", "background:#ffffff;", "background: #fff;", "background:#fff;", "background: #f8fafc;", "background: #fbfcfe;"):
+            self.assertNotIn(token, legacy)
+
+class TestDarkThemePolish(unittest.TestCase):
+    def test_dark_dialogs_have_distinct_backdrop_and_surface(self):
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+        self.assertIn('html[data-appearance="dark"] .modal-backdrop', css)
+        self.assertIn('background: rgba(2, 8, 6, .72) !important;', css)
+        self.assertIn('html[data-appearance="dark"] .modal-card', css)
+        self.assertIn('border: 1px solid var(--line-strong) !important;', css)
+        self.assertIn('html[data-appearance="dark"] .modal-head h2', css)
+
+    def test_dark_workflow_picker_does_not_use_light_surface(self):
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+        self.assertIn('html[data-appearance="dark"] .workflow-picker', css)
+        self.assertIn('html[data-appearance="dark"] .workflow-dropdown-menu', css)
+        self.assertIn('background: var(--popover-bg) !important;', css)

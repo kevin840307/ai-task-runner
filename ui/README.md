@@ -166,6 +166,7 @@ The UI follows the supplied `static` interaction model instead of inventing a se
 - Stage settings cover the current semantic Stage contract, including parser, retry (`-1` supported), type-specific command/plan/AI-validator settings, and Flow-invocation routing (`scope`, `label`, `restart_at`, `repeat`, `fresh_after_same_failures`).
 - Workflow YAML editing has line numbers, Tab/Shift+Tab indentation, Enter auto-indent, Ctrl/Cmd+S, and live YAML syntax location feedback.
 - **New Workflow / New Prompt** create editable Project or Custom assets, never overwriting an existing file. System assets are never mutated or deleted.
+- **Custom subfolders** are discovered recursively. Create dialogs can choose an existing `runner/workflow/custom/**` or `runner/prompts/custom/**` folder, or create a new nested folder such as `e2e/regression`. Path traversal outside the Custom root is rejected.
 - Add Stage, New Workflow and Open Project use static-style dialogs instead of browser `prompt()` dialogs. Modal headers/footers remain visible while only the body scrolls on short viewports.
 - Workflow/Prompt file navigation and the right-side Steps/Prompt editor fill the remaining Studio height. `studioFileList` keeps a stable vertical scrollbar gutter, and the right editor surface ends on the same bottom baseline as the left Studio sidebar; only inner lists/editors scroll.
 - Visual flow saves replace only the top-level `flow:` block. Stage-field edits patch only the affected Stage fields so anchors, merge keys, unrelated comments, and formatting outside the edited field remain intact. Stage removal from Flow always uses the reusable confirmation dialog.
@@ -247,3 +248,15 @@ The UI/Runner contract permits separate Projects to run at the same time: each P
 Run options includes **Check environment**. The UI invokes the same standalone `tool/environment_check.py` used from the command line. It checks the local Python version/packages, required Runner files, UI data write access, and whether Qwen/OpenCode executables are discoverable. Backend absence is reported as a warning because a user may intentionally use only one backend.
 
 The Stage Editor groups parameters by behavior instead of presenting a flat YAML field list. `max_attempts` / `on_exhausted` are edited under **Recovery gate**, and the editor shows a compact Behavior preview. `runs` / `required_passes` can be added to ordinary AI-backed `base`, `task`, and `review` Stages as well as `ai_validator`. `continuation_prompt` intentionally remains a YAML-only advanced override so Visual mode keeps one Prompt selector.
+
+## Theme and appearance
+
+The UI includes three built-in palettes and independent Light/Dark appearance control.
+
+- Default: `Teal + System`
+- Appearance: `System`, `Light`, `Dark`
+- Theme: `Teal`, `Deep Blue`, `Violet`, `Amber`, `Rose`
+
+Theme changes affect surfaces, selection, borders, text, and the primary accent. Runtime semantic colors stay stable across themes: Running/Info is blue, PASS/Success is green, Warning is amber, and Error/Danger is red.
+
+Preferences are stored in browser local storage and restored before the main stylesheet is painted to avoid a visible theme flash. `System` follows the OS/browser `prefers-color-scheme` setting and updates while the UI is open.

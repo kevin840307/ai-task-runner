@@ -1,0 +1,73 @@
+stages:
+  preflight:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/regression_preflight.py'
+  planning:
+    type: plan
+    min_tasks: 1
+    fresh_session_on_start: true
+  execute:
+    type: task
+    prompt: ../../../prompts/custom/e2e/regression_execute.md
+    continuation_prompt: ../../../prompts/custom/e2e/work_continue.md
+    retry: -1
+    fresh_session_on_start: true
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+    min_tasks: 1
+    status: AI 正在依最終驗證結果建立 Regression 修復 TODO
+  final_python:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/regression_final_validation.py'
+    - --state
+    - '{state_file}'
+    result_kind: validation
+    timeout: 7200
+  final_ai:
+    type: ai_validator
+    validator: ai
+    prompt: ../../../prompts/custom/e2e/final_regression_validation.md
+    runs: 3
+    required_passes: 2
+    fresh_session_each_run: true
+    allow_project_read: false
+  export_e2e_spec:
+    type: command
+    command:
+    - '{python}'
+    - -B
+    - '{runner_root}/runner/workflow/custom/e2e/python/export_e2e_spec.py'
+    - --workflow
+    - workflow2
+flow:
+- stage: preflight
+  label: Regression Material / Optional Blueprint Preflight
+- stage: planning
+  label: Plan Regression Generation TODOs
+- stage: execute
+  label: Execute Regression TODO
+  scope: task
+- stage: final_python
+  label: Final Python Test + Code Coverage Validation
+  recover:
+  - stage: repair_plan
+    label: Plan Regression Repair TODOs
+- stage: export_e2e_spec
+  label: Export YAML → result/E2E_SPEC.md
+- stage: final_ai
+  label: Final Fresh AI Regression Challenge
+  recover:
+  - stage: repair_plan
+    label: Plan Semantic Repair TODOs
+  - stage: final_python
+    label: Re-Run Final Python Validation
+  - stage: export_e2e_spec
+    label: Re-Export result/E2E_SPEC.md
