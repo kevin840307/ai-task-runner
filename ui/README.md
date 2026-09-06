@@ -92,7 +92,7 @@ The global edit lock only knows projects tracked by this UI. A CLI run in a comp
 
 ## AI workflow generation
 
-Workflow Studio's **Generate with AI** is wired to the external `workflow_builder/` integration surface. The canonical Builder Workflow and Skill live together at `workflow_builder/workflow_builder.yaml` and `workflow_builder/prompt.md`; `workflow_builder/validation.py` runs the real `tool/workflow_dryrun.py --matrix --json --max-steps 500`. `runner/workflow/system/workflow_builder.yaml` is retained only as a compatibility mirror for the unchanged Runner named-workflow registry.
+Workflow Studio's **Generate with AI** is wired to the external `workflow_builder/` integration surface. The canonical Builder Workflow and Skill live together at `workflow_builder/workflow_builder.yaml` and `workflow_builder/prompt.md`; `workflow_builder/validation.py` is the fixed trusted validator and runs the real `tool/workflow_dryrun.py --matrix --json --max-steps 500`. `runner/workflow/system/workflow_builder.yaml` is retained only as a compatibility mirror for the Runner named-workflow registry. This internal Builder Workflow is excluded from the normal Studio/Chat Workflow picker.
 
 The browser flow is intentionally draft-first and page based rather than a large modal:
 

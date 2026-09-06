@@ -490,6 +490,36 @@ class UIState:
             with (folder / MESSAGES_FILE).open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+    def clear_chat_history(self, project: Path) -> dict:
+        """Clear persisted UI conversation history without touching Runner state.
+
+        If the current run is already completed, remember that run id so the
+        completion synchronizer does not immediately recreate the cleared
+        Assistant result on the next messages refresh.
+        """
+        with self._chat_lock:
+            folder = project / UI_STATE_DIR
+            messages_path = folder / MESSAGES_FILE
+            try:
+                messages_path.unlink()
+            except FileNotFoundError:
+                pass
+
+            runtime_state = self._read_json(self.runtime_dir(project) / "state.json") or {}
+            run_id = str(runtime_state.get("run_id") or "").strip()
+            if run_id and bool(runtime_state.get("completed")):
+                self._write_chat_state(project, {
+                    "last_assistant_run_id": run_id,
+                    "updated_at": time.time(),
+                    "history_cleared_at": time.time(),
+                })
+            else:
+                try:
+                    (folder / CHAT_STATE_FILE).unlink()
+                except FileNotFoundError:
+                    pass
+            return {"ok": True}
+
     def sync_completion(self, project: Path) -> bool:
         with self._chat_lock:
             runtime_dir = self.runtime_dir(project)
@@ -729,6 +759,8 @@ class UIState:
                 continue
             candidates = root.rglob("*.yaml") if scope != "project" else root.glob("*.yaml")
             for path in candidates:
+                if scope == "system" and path.name.lower() == "workflow_builder.yaml":
+                    continue
                 if scope == "project" and not (path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower()):
                     continue
                 item = self._studio_item(path, scope, "workflow")
@@ -736,6 +768,8 @@ class UIState:
                     seen.add(item["id"])
                     workflows.append(item)
             for path in (root.rglob("*.yml") if scope != "project" else root.glob("*.yml")):
+                if scope == "system" and path.name.lower() == "workflow_builder.yml":
+                    continue
                 if scope == "project" and "workflow" not in path.name.lower():
                     continue
                 item = self._studio_item(path, scope, "workflow")
@@ -2504,6 +2538,8 @@ class Handler(SimpleHTTPRequestHandler):
                     workflow=str(body.get("workflow", "")),
                 )
                 return self._json({"ok": True})
+            if parsed.path == "/api/project/history/clear":
+                return self._json(self.state.clear_chat_history(self._project(body)))
             if parsed.path == "/api/project/stop":
                 self.state.stop(self._project(body))
                 return self._json({"ok": True})

@@ -93,6 +93,34 @@ class UIStateTests(unittest.TestCase):
         self.assertTrue(self.state.sync_completion(self.project))
         self.assertEqual(self.state.messages(self.project)[0]["content"], "Run completed.")
 
+    def test_clear_chat_history_removes_conversation_and_does_not_resync_completed_result(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {"run_id": "run-clear", "completed": True})
+        (runtime / "debug").mkdir(parents=True)
+        (runtime / "debug" / "last-result.txt").write_text("old assistant", encoding="utf-8")
+        self.state.append_message(self.project, "user", "old user")
+        self.assertTrue(self.state.sync_completion(self.project))
+        self.assertEqual(len(self.state.messages(self.project)), 2)
+
+        self.assertEqual(self.state.clear_chat_history(self.project), {"ok": True})
+        self.assertEqual(self.state.messages(self.project), [])
+        marker = json.loads((runtime / "ui" / "chat-state.json").read_text(encoding="utf-8"))
+        self.assertEqual(marker["last_assistant_run_id"], "run-clear")
+
+    def test_clear_chat_history_does_not_touch_runner_or_request_snapshots(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {"run_id": "run-active", "completed": False})
+        request = runtime / "ui" / "requests" / "r1"
+        request.mkdir(parents=True)
+        (request / "prompt.md").write_text("keep request", encoding="utf-8")
+        self.state.append_message(self.project, "user", "remove me")
+
+        self.state.clear_chat_history(self.project)
+
+        self.assertEqual(self.state.messages(self.project), [])
+        self.assertTrue((runtime / "state.json").is_file())
+        self.assertTrue((request / "prompt.md").is_file())
+
     def test_runtime_reports_interrupted_when_marker_is_stale(self) -> None:
         runtime = self.project / ".ai-task-runner"
         self.write_json(runtime / "state.json", {"run_id": "run-3", "completed": False, "stage": "review"})
@@ -323,6 +351,15 @@ class UIStateTests(unittest.TestCase):
         path = self.project / ".ai-task-runner" / "stop.request"
         self.assertEqual(path.read_text(encoding="utf-8"), "stop\n")
 
+
+    def test_workflow_builder_system_workflow_is_hidden_from_studio_files(self) -> None:
+        system_dir = self.root / "runner" / "workflow" / "system"
+        system_dir.mkdir(parents=True, exist_ok=True)
+        (system_dir / "workflow_builder.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        (system_dir / "file.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        names = [item["name"] for item in self.state.studio_files()["workflows"]]
+        assert "workflow_builder.yaml" not in names
+        assert "file.yaml" in names
 
 if __name__ == "__main__":
     unittest.main()

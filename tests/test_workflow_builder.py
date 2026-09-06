@@ -104,8 +104,14 @@ def test_canonical_builder_assets_live_in_external_folder_and_runner_shim_still_
     assert prompt.is_file()
     assert shim.is_file()
     assert not (ROOT / "runner" / "prompts" / "system" / "workflow_builder.md").exists()
-    assert "prompt: prompt.md" in canonical.read_text(encoding="utf-8")
-    assert "workflow_builder/prompt.md" in shim.read_text(encoding="utf-8").replace("\\", "/")
+    canonical_text = canonical.read_text(encoding="utf-8")
+    shim_text = shim.read_text(encoding="utf-8").replace("\\", "/")
+    assert "prompt: prompt.md" in canonical_text
+    assert "{runner_root}/workflow_builder/validation.py" in canonical_text
+    assert "{validator}" not in canonical_text
+    assert "workflow_builder/prompt.md" in shim_text
+    assert "{runner_root}/workflow_builder/validation.py" in shim_text
+    assert "{validator}" not in shim_text
 
 
 def test_canonical_builder_workflow_dryrun_closes():
@@ -147,3 +153,10 @@ def test_publish_cli_validates_and_publishes_existing_draft(tmp_path: Path):
     assert payload["ok"] is True
     assert output.is_file()
     assert (prompt_dir / "work.md").is_file()
+
+
+def test_builder_runner_uses_fixed_validator_without_cli_validator_injection():
+    source = (ROOT / "workflow_builder" / "run.py").read_text(encoding="utf-8")
+    command_block = source[source.index("command = [", source.index("def build")):source.index("if args.backend", source.index("def build"))]
+    assert '"--validator",' not in command_block
+    assert '"--validator-arg=--draft-workflow"' in command_block

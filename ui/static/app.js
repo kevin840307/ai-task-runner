@@ -1217,6 +1217,17 @@ function toggleOptionsPanel() { const open = $("optionsPanel").hidden; if (!open
 $("optionsButton").onclick = (event) => { event.stopPropagation(); toggleOptionsPanel(); };
 $("optionsCloseButton").onclick = closeOptionsPanel;
 $("sendButton").onclick = sendMessage; $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+$("clearHistoryButton").onclick = async () => {
+  if (!state.project) return;
+  const ok = await confirmDialog({ title: "Clear chat history?", message: "Delete this Project's saved chat history, including User and Assistant conversation messages? Runner state, Workflow files, and Project files are not changed.", confirmLabel: "Clear history", danger: true });
+  if (!ok) return;
+  try {
+    await api("/api/project/history/clear", { method: "POST", body: JSON.stringify(payload()) });
+    state.historyPinnedToBottom = true;
+    await refreshMessages({ forceFollow: true });
+    showToast("Chat history cleared");
+  } catch (error) { showActionError(error.message, "Clear history failed"); }
+};
 $("messages").addEventListener("scroll", () => { state.historyPinnedToBottom = historyNearBottom($("messages")); }, { passive: true });
 $("browseValidatorButton").onclick = browseValidator;
 $("clearValidatorButton").onclick = () => { $("validator").value = ""; rememberValidator($("workflowSelect")?.value || "", ""); updateValidatorPicker(); };

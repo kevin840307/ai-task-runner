@@ -629,3 +629,32 @@ body {
   scrollbar-gutter: stable;
 }
 .workflow-dropdown-menu.dropdown-scrollable { overflow-y: auto; }
+
+/* Chat viewport: keep the scrollbar fully above the composer instead of
+   letting its bottom track sit behind the floating composer overlay. */
+#chatView {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+#chatView > .history {
+  grid-row: 3;
+  padding-bottom: 18px;
+  scroll-padding-bottom: 18px;
+}
+#chatView > .compose-panel {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  grid-row: 4;
+  z-index: 90;
+  padding: 10px 14px 14px;
+  background: var(--panel);
+  pointer-events: auto;
+}
+.clear-history-button {
+  white-space: nowrap;
+  color: var(--muted);
+}
+.clear-history-button:hover {
+  color: var(--fail);
+}

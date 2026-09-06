@@ -98,3 +98,10 @@ def test_validation_clean_work_can_be_disabled(monkeypatch, tmp_path):
     stage = create_stage({"type":"command","name":"validate","status":"Validate","command":"fake","result_kind":"validation","clean_work":[]})
     assert stage.run(ctx).status == "pass"
     assert reports.exists()
+
+
+def test_command_stage_expands_runner_root_inside_argument(tmp_path):
+    ctx = context(tmp_path)
+    stage = create_stage({"type":"command", "name":"probe", "command":["{python}", "{runner_root}/workflow_builder/validation.py"]})
+    command = stage._command(ctx)
+    assert command[1] == str((Path(__file__).resolve().parents[1] / "workflow_builder" / "validation.py").resolve())
