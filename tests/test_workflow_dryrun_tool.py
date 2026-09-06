@@ -85,7 +85,7 @@ def test_dryrun_matrix_covers_system_recovery_paths():
     result = run("runner/workflow/system/mixed.yaml", "--matrix")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "WORKFLOW_CLOSED" in result.stdout
-    assert "review FAIL -> recover -> closure" in result.stdout
+    assert "__plan_review__ FAIL -> recover -> closure" in result.stdout
     assert "validate_file FAIL -> recover -> closure" in result.stdout
     assert "validate_ai FAIL -> recover -> closure" in result.stdout
 
@@ -138,7 +138,7 @@ def test_dryrun_json_contract_is_machine_readable():
     assert payload["completed"] is True
     assert payload["workflow_size"] == 4
     assert [item["stage"] for item in payload["transitions"]] == [
-        "planning", "execute", "review", "validate_file"
+        "planning", "__plan_task__", "__plan_review__", "validate_file"
     ]
 
 

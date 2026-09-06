@@ -66,26 +66,24 @@ def validate_restart_targets(result: list[dict[str, Any]], top_level: bool) -> N
 
 
 def validate_topology(workflow: list[dict[str, Any]]) -> None:
-    """Validate only generic flow invariants; Stage capabilities stay optional."""
-    files = _file_validation_indexes(workflow)
-    finals = _indexes(workflow, "validator", "ai")
-    task_nodes = [index for index, item in enumerate(workflow) if item.get("scope") == "task"]
+    """Validate generic flow invariants without imposing validator placement.
 
-    if len(files) > 1 or len(finals) > 1:
-        raise RunnerError("workflow allows at most one file validator and one AI validator")
-    if files and finals and files[0] > finals[0]:
-        raise RunnerError("file validation must run before AI validation")
-    validators = [*files, *finals]
-    if validators and max(validators) != len(workflow) - 1:
-        raise RunnerError("workflow must end with its final validation stage")
+    File and AI validators are ordinary top-level gates: any number may appear
+    anywhere in the static flow.  Only task-scoped stages remain constrained to
+    one contiguous block, because Pipeline persists one task-step cursor for
+    that block.
+    """
+    task_nodes = [index for index, item in enumerate(workflow) if item.get("scope") == "task"]
 
     if task_nodes:
         if task_nodes != list(range(task_nodes[0], task_nodes[-1] + 1)):
             raise RunnerError("task-scoped workflow stages must form one contiguous block")
-        if any(workflow[index].get("validator") for index in task_nodes):
+        if any(
+            workflow[index].get("validator")
+            or (workflow[index].get("type") == "command" and workflow[index].get("result_kind") == "validation")
+            for index in task_nodes
+        ):
             raise RunnerError("validator stages cannot use scope: task")
-        if validators and task_nodes[-1] >= min(validators):
-            raise RunnerError("task-scoped workflow stages must run before validation")
 
 
 def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:

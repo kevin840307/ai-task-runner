@@ -31,7 +31,7 @@ Rules:
 - Python validation is a command Stage with `result_kind: validation` and the standard `{validator}` command contract when requested.
 - AI validation is an `ai_validator` Stage with a Prompt reference when custom instructions are needed.
 - Every Prompt reference must point to a Prompt file that you actually create in the requested draft Prompt directory.
-- The Workflow must end with its final validation Stage when validation is present.
+- Validation Stages are ordinary top-level gates: multiple File/AI validators may appear where the requested SOP needs them, and ordinary Stages may follow validation. Do not put validators inside `scope: task`.
 - Never create fake Prompt references, missing files, unsupported fields, or placeholder TODO content.
 - Before finishing, read the generated Workflow and Prompt files back and self-check paths, Stage order, recover targets, and validation topology.
 

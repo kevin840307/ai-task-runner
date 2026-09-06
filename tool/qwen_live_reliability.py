@@ -613,7 +613,7 @@ def assert_system_topology(project: Path, workflow: str) -> None:
         for event in runner_events(project)
         if event.get("type") == "runner.stage" and event.get("action") == "start"
     ]
-    required = {"planning", "execute", "review"}
+    required = {"planning", "__plan_task__", "__plan_review__"}
     expected_validators = {
         "file": {"validate_file"},
         "ai": {"validate_ai"},
@@ -787,6 +787,63 @@ def _slug(path: Path | None) -> str:
     return "-".join("".join(chars).split("-")) or "case"
 
 
+def api_retry_classification_preflight() -> None:
+    """Prove API retry loops only transient RunnerError failures."""
+    import runner.api as api_module
+    from runner.api import RunRequest
+    from runner.errors import RunnerError
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-api-retry-") as directory:
+        root = Path(directory)
+        request = RunRequest(
+            goal="retry classification probe",
+            project_root=str(root),
+            validator="ai",
+            retry_delay=0,
+        )
+        original_execute = api_module.execute
+        calls: list[bool] = []
+
+        def deterministic(config):
+            calls.append(bool(config.resume))
+            raise RunnerError("saved task_step is outside the task-scoped SOP")
+
+        api_module.execute = deterministic
+        try:
+            try:
+                api_module.run(request)
+            except RunnerError:
+                pass
+            else:
+                raise RuntimeError("deterministic RunnerError was unexpectedly retried/completed")
+        finally:
+            api_module.execute = original_execute
+        if calls != [False]:
+            raise RuntimeError(f"deterministic RunnerError retry contract failed: {calls}")
+
+        state = root / ".ai-task-runner" / "state.json"
+        calls.clear()
+
+        def transient(config):
+            calls.append(bool(config.resume))
+            state.parent.mkdir(parents=True, exist_ok=True)
+            if len(calls) == 1:
+                state.write_text('{"completed":false,"stage":"validating"}', encoding="utf-8")
+                error = RunnerError("temporary backend outage")
+                error.transient = True
+                raise error
+            state.write_text('{"completed":true,"stage":"completed"}', encoding="utf-8")
+            return 0
+
+        api_module.execute = transient
+        try:
+            result = api_module.run(request)
+        finally:
+            api_module.execute = original_execute
+        if not result.completed or calls != [False, True]:
+            raise RuntimeError(f"transient RunnerError resume contract failed: {calls}")
+
+
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
@@ -795,6 +852,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
         ROOT / "examples" / "custom_workflow_latest.yaml",
         ROOT / "tool" / "workflow" / "08_bounded_grill_continue.yaml",
         ROOT / "tool" / "workflow" / "10_bounded_gate_reentry_reset.yaml",
+        ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
     ]
     tool = ROOT / "tool" / "workflow_dryrun.py"
     results: list[dict[str, object]] = []
@@ -853,6 +911,19 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
         twelve = run_one(path)
         twelve["workflow"] = "synthetic://12-stage-composability"
         results.append(twelve)
+
+    multi = next(
+        (item for item in results if str(item.get("workflow", "")).endswith("11_multi_validators_anywhere.yaml")),
+        None,
+    )
+    multi_features = multi.get("features", {}) if isinstance(multi, dict) else {}
+    if (
+        not isinstance(multi_features, dict)
+        or int(multi_features.get("file_validations", 0)) < 2
+        or int(multi_features.get("ai_validations", 0)) < 2
+        or multi_features.get("validation_not_last") is not True
+    ):
+        raise RuntimeError("multi-validator dry-run preflight did not cover arbitrary validator placement")
 
     custom = next(
         (item for item in results if str(item.get("workflow", "")).endswith("custom_workflow_latest.yaml")),
@@ -1835,6 +1906,9 @@ def main() -> int:
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
+    api_retry_classification_preflight()
+    print("PASS API transient/deterministic retry classification preflight", flush=True)
+
     dryrun_results = workflow_dryrun_preflight()
     print(
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
@@ -1909,6 +1983,7 @@ def main() -> int:
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
+        "api_retry_classification_preflight": True,
         "workflow_dryrun_preflight": True,
         "workflow_dryrun_negative_preflight": True,
         "stop_request_resume_probe": True,

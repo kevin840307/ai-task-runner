@@ -123,6 +123,17 @@ async function loadProjects() {
     if (first) await selectProject(first);
   }
 }
+
+function startNonOverlappingPoll(fn, delay) {
+  let stopped = false;
+  const tick = async () => {
+    try { await fn(); } catch (_) {}
+    finally { if (!stopped) window.setTimeout(tick, delay); }
+  };
+  window.setTimeout(tick, delay);
+  return () => { stopped = true; };
+}
+
 function projectRuntimeSignature(projects) { return (projects || []).map((p) => `${p.path}:${p.runtime_status || "idle"}:${p.exists !== false}`).join("|"); }
 async function refreshProjectStatuses() {
   try {
@@ -1090,7 +1101,7 @@ async function duplicateStudioAsset() {
 
 
 // ------------------------------ AI Workflow Builder page ------------------------------
-function clearGenerateWorkflowPoll() { if (state.generateWorkflowPollTimer) clearInterval(state.generateWorkflowPollTimer); state.generateWorkflowPollTimer = 0; }
+function clearGenerateWorkflowPoll() { if (state.generateWorkflowPollStop) state.generateWorkflowPollStop(); state.generateWorkflowPollStop = null; if (state.generateWorkflowPollTimer) clearTimeout(state.generateWorkflowPollTimer); state.generateWorkflowPollTimer = 0; }
 function fillGenerateWorkflowBackends() {
   const select = $("generateWorkflowBackend"); if (!select) return; select.innerHTML = "";
   const rows = [{ value: "", label: state.defaultBackend ? `Default · ${state.defaultBackend}` : "Default backend" }, ...state.backends.map((name) => ({ value: name, label: name }))];
@@ -1227,7 +1238,19 @@ async function pollGenerateWorkflow() {
     $("generateWorkflowRunningStatus").textContent = data.message || "AI is generating Workflow draft…";
   } catch (error) { clearGenerateWorkflowPoll(); $("generateWorkflowFailure").textContent = error.message; setGenerateWorkflowPhase("failed"); }
 }
-function startGenerateWorkflowPoll() { clearGenerateWorkflowPoll(); pollGenerateWorkflow(); state.generateWorkflowPollTimer = setInterval(pollGenerateWorkflow, 800); }
+function startGenerateWorkflowPoll() {
+  clearGenerateWorkflowPoll();
+  let stopped = false;
+  const tick = async () => {
+    if (stopped || !state.generateWorkflowJobId) return;
+    await pollGenerateWorkflow();
+    if (!stopped && state.generateWorkflowJobId && ["running", "cancelling"].includes(state.generateWorkflowPhase)) {
+      state.generateWorkflowPollTimer = window.setTimeout(tick, 800);
+    }
+  };
+  state.generateWorkflowPollStop = () => { stopped = true; };
+  tick();
+}
 async function openGenerateWorkflowPage() {
   if (!(await confirmDiscardStudio())) return;
   fillGenerateWorkflowBackends(); showWorkflowGeneratorPage(); $("generateWorkflowHint").classList.remove("error"); $("generateWorkflowHint").textContent = "Checking Workflow Builder…";
@@ -1403,7 +1426,7 @@ state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); if 
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); setInterval(refreshRuntime, 750); setInterval(animateRuntimeFrame, 120); setInterval(refreshProjectStatuses, 1500); setInterval(refreshStudioGuard, 1000);
+}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 750); setInterval(animateRuntimeFrame, 120); startNonOverlappingPoll(refreshProjectStatuses, 1500); startNonOverlappingPoll(refreshStudioGuard, 1000);
 
 $("newWorkflowDestination").onchange = () => syncCustomFolderVisibility("workflow");
 $("newPromptDestination").onchange = () => syncCustomFolderVisibility("prompt");

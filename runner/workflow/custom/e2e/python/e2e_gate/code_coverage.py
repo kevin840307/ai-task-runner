@@ -11,8 +11,8 @@ import yaml
 
 from .models import GateResult, GateStatus, GateViolation
 
-SUPPORTED_LANGUAGES = {"python", "java", "vbnet"}
-LANGUAGE_ALIASES = {"py":"python", "python":"python", "java":"java", "vb":"vbnet", "vb.net":"vbnet", "vbnet":"vbnet", "visualbasic":"vbnet", "visual_basic":"vbnet"}
+SUPPORTED_LANGUAGES = {"python", "java", "vbnet", "dotnet"}
+LANGUAGE_ALIASES = {"py":"python", "python":"python", "java":"java", "vb":"vbnet", "vb.net":"vbnet", "vbnet":"vbnet", "visualbasic":"vbnet", "visual_basic":"vbnet", "dotnet":"dotnet", ".net":"dotnet", "csharp":"dotnet", "c#":"dotnet", "cs":"dotnet"}
 FORMAT_ALIASES = {"coverage.py":"coverage_json", "coverage":"coverage_json", "jacoco":"jacoco_xml", "cobertura":"cobertura_xml", "coverlet":"cobertura_xml", "opencover":"opencover_xml"}
 SUPPORTED_FORMATS = {"auto", "coverage_json", "jacoco_xml", "cobertura_xml", "opencover_xml"}
 
@@ -391,12 +391,12 @@ def validate_code_coverage(config_path: Path, *, base_dir: Path | None = None) -
                         raise ValueError("jacoco_xml is supported for language=java")
                     value = _jacoco_value(xml_root, target)  # type: ignore[arg-type]
                 elif fmt == "cobertura_xml":
-                    if language not in {"java", "vbnet"}:
-                        raise ValueError("cobertura_xml is supported for language=java or vbnet")
+                    if language not in {"java", "vbnet", "dotnet"}:
+                        raise ValueError("cobertura_xml is supported for language=java, vbnet, or dotnet")
                     value = _cobertura_value(xml_root, target, case_insensitive=(language == "vbnet"))  # type: ignore[arg-type]
                 elif fmt == "opencover_xml":
-                    if language != "vbnet":
-                        raise ValueError("opencover_xml is supported for language=vbnet")
+                    if language not in {"vbnet", "dotnet"}:
+                        raise ValueError("opencover_xml is supported for language=vbnet or dotnet")
                     value = _opencover_value(xml_root, target)  # type: ignore[arg-type]
                 else:
                     raise ValueError(f"unsupported report format: {fmt}")

@@ -277,8 +277,19 @@ class BaseStage:
         values["instructions"] = self.spec.instructions
         return render_prompt(self.spec.prompt, values)
 
+    def _retry_stage_label(self) -> str:
+        """Return a semantic retry label without leaking internal Stage ids."""
+        kind = str(getattr(self, "result_kind", "") or "")
+        return {
+            "tasks": "planning",
+            "task": "task",
+            "review": "review",
+            "validation": "validation",
+        }.get(kind, self.name)
+
     def _same_session_prompt(self, ctx: StageContext) -> str:
         error = ctx.execution.previous_error.strip()
+        stage_label = self._retry_stage_label()
         readonly = (
             " This is read-only: do not modify project files, run shell/write/edit tools, search for tools, or ask for unavailable tools; the previous attempt was restored if it changed files."
             if self.spec.mode == MODE_READONLY
@@ -290,15 +301,16 @@ class BaseStage:
             else ""
         )
         return (
-            f"Continue the same {self.name} stage. Fix only the previous failure and preserve valid existing work."
+            f"Continue the same {stage_label} stage. Fix only the previous failure and preserve valid existing work."
             f"{readonly}{loop_note}\n"
             + (f"Previous failure: {error[-2000:]}\n" if error else "")
             + "Return the result required by the original stage instructions; do not restart unrelated work.\n"
         )
 
     def _fresh_session_prompt(self, original: str) -> str:
+        stage_label = self._retry_stage_label()
         return (
-            f"Continue the same {self.name} stage in a fresh session. "
+            f"Continue the same {stage_label} stage in a fresh session. "
             "Inspect the CURRENT project state first and preserve valid existing work.\n\n"
             f"Stage instructions:\n{original}"
         )

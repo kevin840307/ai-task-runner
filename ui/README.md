@@ -273,3 +273,5 @@ Preferences are stored in browser local storage and restored before the main sty
 The UI defaults to Traditional Chinese descriptions and can switch to English. Common system/technical names such as `Appearance`, `Theme`, `Workflow`, `Stage`, `Settings`, `Control`, and `Backend` stay in English; descriptive copy, help text, tooltips, and Behavior Preview text follow the selected language.
 
 The UI is designed for fully local/offline use. Runtime UI assets must not depend on CDNs, Google Fonts, remote JavaScript/CSS, or translation APIs; required static assets must ship with the project. A regression test rejects remote runtime asset URLs under `ui/static`.
+
+Project/runtime polling is non-overlapping: the next request is scheduled only after the previous one finishes. On Windows, one `tasklist` PID snapshot is shared across all tracked Projects in a Project-list refresh. Workflow Generator status polling follows the same non-overlapping rule, avoiding stacked requests when the browser or machine is slow.

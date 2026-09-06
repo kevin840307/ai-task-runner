@@ -1,20 +1,9 @@
 stages:
   planning:
     type: plan
-    # Generates TODOs and runs each TODO through:
-    # execute -> review -> repair(on fail) -> review.
+    # Plan owns the built-in per-TODO lifecycle:
+    # Task -> Review -> Repair(on fail) -> Review.
     # Completes only after all TODOs pass.
-
-  execute:
-    type: task
-
-  review:
-    type: review
-    recover: [repair]
-
-  repair:
-    type: task
-    status: AI 正在修復目前任務
 
   repair_plan:
     type: plan

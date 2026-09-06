@@ -71,7 +71,7 @@ def _names(workflow):
 def test_default_workflow_plan_uses_static_task_scope():
     workflow = load_workflow()
     assert _names(workflow) == [
-        "planning", "execute", "review", "validate_file", "validate_ai"
+        "planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"
     ]
     assert [item.get("scope") for item in workflow] == [
         None, "task", "task", None, None
@@ -170,9 +170,9 @@ flow: [planning, validate]
         encoding="utf-8",
     )
     workflow = load_workflow(workflow_file)
-    assert _names(workflow) == ["planning", "execute", "review", "validate"]
+    assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "validate"]
     assert [item["name"] for item in workflow if item.get("scope") == "task"] == [
-        "execute", "review"
+        "__plan_task__", "__plan_review__"
     ]
 
 def test_registry_is_only_type_to_class():
@@ -237,7 +237,7 @@ flow:
     assert any(item.get("type") == "plan" for item in workflow)
     assert workflow_validators(workflow) == (True, False)
     assert [item["name"] for item in workflow if item.get("scope") == "task"] == [
-        "execute", "review"
+        "__plan_task__", "__plan_review__"
     ]
 
 def test_custom_base_stage_loads_relative_instructions(tmp_path):
@@ -365,9 +365,9 @@ flow: [repair, validate]
 @pytest.mark.parametrize(
     ("validator", "ai_prompt", "names"),
     [
-        ("validator.py", "AI check", ["planning", "execute", "review", "validate_file", "validate_ai"]),
-        ("validator.py", "", ["planning", "execute", "review", "validate_file"]),
-        ("ai", "", ["planning", "execute", "review", "validate_ai"]),
+        ("validator.py", "AI check", ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"]),
+        ("validator.py", "", ["planning", "__plan_task__", "__plan_review__", "validate_file"]),
+        ("ai", "", ["planning", "__plan_task__", "__plan_review__", "validate_ai"]),
     ],
 )
 def test_validation_options_select_system_workflow(validator, ai_prompt, names):
@@ -452,7 +452,7 @@ def test_resume_runs_only_remaining_task_scoped_work(tmp_path):
     Pipeline(context, workflow).run(executor)
 
     assert executor.calls == [
-        "execute", "review", "execute", "review", "validate_file"
+        "__plan_task__", "__plan_review__", "__plan_task__", "__plan_review__", "validate_file"
     ]
     assert context.state.workflow_position == len(workflow)
     assert context.state.task_step == 0
@@ -486,9 +486,9 @@ def test_plan_todos_run_same_task_scoped_sop_in_order(tmp_path):
 
     assert executor.calls == [
         "planning",
-        "execute", "review",
-        "execute", "review",
-        "execute", "review",
+        "__plan_task__", "__plan_review__",
+        "__plan_task__", "__plan_review__",
+        "__plan_task__", "__plan_review__",
         "validate_file",
     ]
     assert context.state.current == 3
@@ -641,7 +641,7 @@ def test_resume_restarts_current_todo_from_saved_task_step(tmp_path):
 
     executor = Executor()
     Pipeline(context, workflow).run(executor)
-    assert executor.calls == ["review", "validate_file"]
+    assert executor.calls == ["__plan_review__", "validate_file"]
     assert context.state.completed
 
 def test_legacy_generated_workflow_state_is_ignored_safely(tmp_path):
@@ -650,8 +650,8 @@ def test_legacy_generated_workflow_state_is_ignored_safely(tmp_path):
         "goal": "goal",
         "project_root": str(tmp_path),
         "tasks": [
-            {"id": "t1", "title": "one", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "status": "completed", "steps": ["execute", "review"]},
-            {"id": "t2", "title": "two", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "steps": ["execute", "review"]},
+            {"id": "t1", "title": "one", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "status": "completed", "steps": ["__plan_task__", "__plan_review__"]},
+            {"id": "t2", "title": "two", "description": "do", "deliverable": "out", "acceptance_criteria": ["done"], "steps": ["__plan_task__", "__plan_review__"]},
         ],
         "current": 1,
         "workflow_position": 1,
@@ -899,7 +899,7 @@ flow:
 
 def test_system_review_owns_semantic_fresh_default():
     workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
-    review = next(item for item in workflow if item["name"] == "review")
+    review = next(item for item in workflow if item["name"] == "__plan_review__")
     assert "fresh_after_same_failures" not in review
     stage = create_stage(review)
     assert stage.semantic_failure_threshold == 2
@@ -1078,7 +1078,7 @@ flow: [work]
     assert config.workflow_explicit is True
 
 
-def test_simplified_plan_flow_keeps_legacy_normalized_fingerprint(tmp_path):
+def test_plan_builtin_task_lifecycle_is_yaml_name_independent(tmp_path):
     simplified = tmp_path / "simplified.yaml"
     explicit = tmp_path / "explicit.yaml"
     stages = """
@@ -1121,8 +1121,14 @@ flow:
     simplified_flow = load_workflow(simplified)
     explicit_flow = load_workflow(explicit)
 
-    assert simplified_flow == explicit_flow
-    assert workflow_fingerprint(simplified_flow) == workflow_fingerprint(explicit_flow)
+    assert [item["name"] for item in simplified_flow] == [
+        "planning", "__plan_task__", "__plan_review__", "validate"
+    ]
+    assert [item["name"] for item in explicit_flow] == [
+        "planning", "execute", "review", "validate"
+    ]
+    assert simplified_flow[2]["recover"][0]["name"] == "__plan_repair__"
+    assert workflow_fingerprint(simplified_flow) != workflow_fingerprint(explicit_flow)
 
 
 def test_top_level_task_and_review_can_run_without_planned_todo(tmp_path):
@@ -1255,3 +1261,82 @@ flow:
 """, encoding="utf-8")
     with pytest.raises(RunnerError, match="cannot combine max_attempts with restart_at"):
         load_workflow(path)
+
+def test_multiple_file_and_ai_validators_can_appear_anywhere(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  file_1:
+    type: command
+    result_kind: validation
+    command: ["{python}", -c, "print('file1')"]
+  ai_1:
+    type: ai_validator
+    validator: ai
+  middle:
+    type: command
+    command: ["{python}", -c, "print('middle')"]
+  file_2:
+    type: command
+    result_kind: validation
+    command: ["{python}", -c, "print('file2')"]
+  ai_2:
+    type: ai_validator
+    validator: ai
+  after_validation:
+    type: command
+    command: ["{python}", -c, "print('after')"]
+flow:
+  - file_1
+  - ai_1
+  - middle
+  - file_2
+  - ai_2
+  - after_validation
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert _names(workflow) == [
+        "file_1", "ai_1", "middle", "file_2", "ai_2", "after_validation"
+    ]
+    assert workflow_validators(workflow) == (True, True)
+
+
+def test_plan_builtin_lifecycle_does_not_consume_same_named_yaml_stages(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  planning:
+    type: plan
+  execute:
+    type: task
+    status: SHOULD_NOT_BE_IMPLICITLY_USED
+  review:
+    type: review
+    status: SHOULD_NOT_BE_IMPLICITLY_USED
+  repair:
+    type: task
+    status: SHOULD_NOT_BE_IMPLICITLY_USED
+  done:
+    type: command
+    command: ["{python}", -c, "print('done')"]
+flow: [planning, done]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "done"]
+    assert workflow[1]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
+    assert workflow[2]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
+    assert workflow[2]["recover"][0]["name"] == "__plan_repair__"
+
+
+def test_execution_prompts_do_not_hardcode_repair_stage_name():
+    root = Path(__file__).resolve().parents[1] / "runner" / "prompts" / "stages"
+    for name in ("execution.md", "execution_continue.md"):
+        text = (root / name).read_text(encoding="utf-8")
+        assert 'stage == "repair"' not in text
+        assert "task.last_review" in text or "validation.feedback" in text

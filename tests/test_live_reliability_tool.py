@@ -438,7 +438,7 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
     ],
 )
 def test_system_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
-    stages = ["planning", "execute", "review", *validators]
+    stages = ["planning", "__plan_task__", "__plan_review__", *validators]
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
@@ -581,7 +581,7 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
 
 def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 8
+    assert len(results) == 9
     assert all(item["closed"] is True for item in results)
     assert sum(int(item["paths_total"]) for item in results) >= 10
     linear = next(item for item in results if str(item["workflow"]).endswith("skill_prompt_review_chain.yaml"))
@@ -595,6 +595,10 @@ def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     reentry = next(item for item in results if str(item["workflow"]).endswith("10_bounded_gate_reentry_reset.yaml"))
     assert reentry["features"]["max_attempts"] == 1
     assert reentry["features"]["restart_at"] == 1
+    multi = next(item for item in results if str(item["workflow"]).endswith("11_multi_validators_anywhere.yaml"))
+    assert multi["features"]["file_validations"] == 2
+    assert multi["features"]["ai_validations"] == 2
+    assert multi["features"]["validation_not_last"] is True
     twelve = next(item for item in results if item["workflow"] == "synthetic://12-stage-composability")
     assert twelve["features"]["stages"] == 12
     assert twelve["features"]["repeat"] == 1
@@ -711,3 +715,6 @@ def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):
 
     with pytest.raises(RuntimeError, match="stale runtime control files"):
         live.assert_state_completed(tmp_path, 0)
+
+def test_api_retry_classification_preflight():
+    live.api_retry_classification_preflight()

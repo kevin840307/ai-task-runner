@@ -3,16 +3,6 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-
-  review:
-    type: review
-    recover: [repair]
-
-  repair:
-    type: task
-
   repair_plan:
     type: plan
     repair_plan: true

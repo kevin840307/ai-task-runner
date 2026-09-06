@@ -46,6 +46,8 @@ UI 是 Adapter，不是 execution Plugin。Programmatic UI／CLI／Skill 可以�
 
 Runtime visibility 與 editable resource／execution control 分離。`state.json` 仍是 Runner-owned durable persistence；detached UI 只能唯讀自己需要的穩定欄位，不得修改。`stream.log` 是最近 subprocess stdout 的 bounded、可丟棄 snapshot，每個 subprocess 開始時重置，執行中持續更新。`log.txt` 與 `debug/` 維持 diagnostic/history 用途。這些 visibility files 都不是 command channel，也不是 PASS/FAIL/routing 的真相來源。
 
+`runner.api.run()` 只會對 transient `RunnerError` 的 service/backend failure 自動 retry；deterministic workflow/state/invariant `RunnerError` 必須 fail-closed，不得變成無限 resume loop。
+
 `runner-process.json` 是 detached UI 使用的最小 Runtime identity marker，由最上層 Supervisor 管理，保存 `supervisor_pid`、目前 `worker_pid`、`started_at`、`project_root`、`work_dir`；Worker restart 時更新 `worker_pid`，Supervisor 正常結束時移除。在正式 marker 尚未出現前，detached UI 只允許持有短生命週期的 `.ai-task-runner/ui/launching.json` reservation，用來避免同一 Project 在 startup 空窗被重複 launch；它只是 UI metadata，不屬於 Workflow state，live Supervisor marker 接手後立即移除。既有 `active-process` 維持 Runner 內部 child/orphan cleanup 用途。PID/launch metadata 不得影響 PASS/FAIL、Retry、Session、routing 或 Resume。Runtime control 刻意維持最小：detached UI 可在 work directory 建立 `stop.request`；Supervisor 會輪詢並 consume request，終止目前 Worker 與其 owned child process，刪除 request，最後以 130 結束。Resume / Rerun 維持一般 CLI launch，分別使用 `--resume` / `--force-new`；不存在 `resume.request` / `rerun.request`。
 
 Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` 與 `ai_validator_prompt_file` 持久化到該 Run work directory。Workflow Stage Prompt 維持 content-addressed；Run-level Goal／Final-AI Prompt 使用固定語意資源名稱。即使 UI/VS Code 修改或刪除來源檔，active Run 與 worker crash 後的 `--resume` 都沿用原本 Workflow／Goal／Prompt；YAML List 每個 child 在自己的 nested work directory 保存獨立 snapshot。
@@ -56,7 +58,7 @@ Concrete Run 開始時會把 normalized Workflow、Stage Prompt、`goal_file` �
 
 Stage 一次只做一個 attempt。Hook、Project change tracking、retry/session 升級、exception conversion、lifecycle event 統一由 `StageExecutor` 負責。`StageResult` 只包含執行 facts；`recover`、`restart_at` 這類靜態 routing 屬於 YAML `FlowNode`，Pipeline 對兩者都只做通用解讀。
 
-`workflow/system/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance 與 validation capability；`workflow/rules.py` 負責 durable state reducer；Pipeline 擁有 Resume 與 recovery routing。頂層 `PlanStage` 由 `workflow/loader.py` 在內部展開標準 `execute -> review` 逐 TODO SOP，因此一般 YAML 不需要重複寫；顯式 `scope: task` 只保留給非 Plan／自訂 Task Producer 的進階靜態 SOP。`PlanStage` 只保存 TODO 內容，不再有 generated-step queue、`expand`、`foreach` 或額外 subflow DSL。
+`workflow/system/*.yaml` 只包含 `stages` 與頂層 `flow`。`workflow/registry.py` 刻意只保留 Stage behavior 的 `type -> class`。`workflow/loader.py` 正規化 Stage instance 與 validation capability；`workflow/rules.py` 負責 durable state reducer；Pipeline 擁有 Resume 與 recovery routing。頂層 `PlanStage` 由 `workflow/loader.py` 在內部展開內建 `Task -> Review -> Repair（FAIL 時）-> Review` 逐 TODO SOP，因此一般 YAML 不需要重複寫；顯式 `scope: task` 只保留給非 Plan／自訂 Task Producer 的進階靜態 SOP。`PlanStage` 只保存 TODO 內容，不再有 generated-step queue、`expand`、`foreach` 或額外 subflow DSL。
 
 每個 Stage instance 只負責一次 attempt，且可獨立建構／執行；Stage 不選擇或直接執行另一個 Stage。`PlanStage` 只是內建 AI Task Producer。Task 產生是通用 Stage effect（`produces: tasks`），因此 Python/command/extension 可回傳相同 Task JSON contract，Pipeline 不需要判斷 Stage class；組合與 recovery 留在 normalized `FlowNode`；標準 Plan task SOP 是 Loader 預設，不是 AI 產生的 topology。
 

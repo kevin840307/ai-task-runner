@@ -1,19 +1,8 @@
 # Default autonomous AI workflow.
-# Planning creates TODOs and automatically runs execute -> review per TODO.
+# Planning creates TODOs and owns the built-in Task -> Review -> Repair lifecycle.
 stages:
   planning:
     type: plan
-
-  execute:
-    type: task
-
-  review:
-    type: review
-    recover: [repair]
-
-  repair:
-    type: task
-    status: AI 正在修復目前任務
 
   repair_plan:
     type: plan

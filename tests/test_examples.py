@@ -143,9 +143,9 @@ def test_validation_modes_example_maps_to_system_workflows():
     ]
 
     assert workflows == [
-        ["planning", "execute", "review", "validate_file"],
-        ["planning", "execute", "review", "validate_ai"],
-        ["planning", "execute", "review", "validate_file", "validate_ai"],
+        ["planning", "__plan_task__", "__plan_review__", "validate_file"],
+        ["planning", "__plan_task__", "__plan_review__", "validate_ai"],
+        ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"],
     ]
     assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 

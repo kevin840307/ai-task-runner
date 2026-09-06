@@ -71,7 +71,7 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入標準 `execute -> review` 的逐 TODO SOP，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。`task` / `review` profile 也可以在自訂 Prompt 不依賴 TODO 資料時當作一般 top-level linear Stage；此模式不會修改 durable TODO state。
+Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入內建 `Task -> Review -> Repair（FAIL 時）-> Review` 逐 TODO lifecycle，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。`task` / `review` profile 也可以在自訂 Prompt 不依賴 TODO 資料時當作一般 top-level linear Stage；此模式不會修改 durable TODO state。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
@@ -86,7 +86,7 @@ Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 
 - fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；Stage 也可用共用的 1-based YAML `restart_at` 改從目前或更前面的指定頂層 Stage 開始；failure 不同則重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
-- Task Producer 只保存 durable TODO 內容（`title`、`description`、`deliverable`、`acceptance_criteria`）。`PlanStage` 是內建 Producer；`command` 或未來 Stage 也可用 `produces: tasks` 產生相同效果。Plan-driven flow 由 Loader 內部展開標準 `execute -> review` task SOP，`workflow_position` 仍是 durable cursor；顯式 `scope: task` 保留給進階／自訂 Task Producer 或自訂逐 Task SOP。
+- Task Producer 只保存 durable TODO 內容（`title`、`description`、`deliverable`、`acceptance_criteria`）。`PlanStage` 是內建 Producer；`command` 或未來 Stage 也可用 `produces: tasks` 產生相同效果。Plan-driven flow 由 Loader 內部展開內建 `Task -> Review -> Repair（FAIL 時）-> Review` task lifecycle，`workflow_position` 仍是 durable cursor；顯式 `scope: task` 保留給進階／自訂 Task Producer 或自訂逐 Task SOP。
 
 
 Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 等 AI 特殊語意使用專用 Stage；所有 subprocess 工作統一使用 `CommandStage`。

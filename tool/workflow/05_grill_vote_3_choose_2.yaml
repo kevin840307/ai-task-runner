@@ -3,16 +3,6 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-
-  review:
-    type: review
-    recover: [repair]
-
-  repair:
-    type: task
-
   grill:
     type: review
     prompt: ../../runner/prompts/stages/grill.md

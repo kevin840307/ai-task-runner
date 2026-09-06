@@ -446,6 +446,18 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
             stage_result_kind(item) == "validation"
             for item in definitions
         ),
+        "file_validations": sum(
+            item.get("type") == "command" and item.get("result_kind") == "validation"
+            for item in top_level
+        ),
+        "ai_validations": sum(
+            item.get("type") == "ai_validator" and item.get("validator") == "ai"
+            for item in top_level
+        ),
+        "validation_not_last": any(
+            stage_result_kind(item) == "validation" and index < len(top_level) - 1
+            for index, item in enumerate(top_level)
+        ),
     }
 
 

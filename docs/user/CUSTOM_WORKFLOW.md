@@ -74,7 +74,7 @@ flow:
   - validate_file
 ```
 
-A top-level `PlanStage` automatically runs the standard `execute -> review` SOP for every produced TODO. Planning is read-only and defaults to optional filesystem inspection: the AI may read the smallest relevant evidence from any host-readable path, including outside the current Project, but is not required to inspect files before planning. `allow_project_read: false` disables those Planning read tools; the legacy option name is retained for compatibility. Keep `execute` / `review` definitions only when overriding their defaults (for example Review recovery). Explicit `scope: task` is still available for non-Plan producers or a deliberately custom per-TODO SOP.
+A top-level `PlanStage` automatically runs the built-in `Task -> Review -> Repair(on FAIL) -> Review` lifecycle for every produced TODO. Planning is read-only and defaults to optional filesystem inspection: the AI may read the smallest relevant evidence from any host-readable path, including outside the current Project, but is not required to inspect files before planning. `allow_project_read: false` disables those Planning read tools; the legacy option name is retained for compatibility. The built-in Plan lifecycle is YAML-independent and does not look up stages by the names `execute`, `review`, or `repair`. To customize the per-TODO SOP, declare an explicit contiguous `scope: task` block immediately after the Plan (or another task producer).
 
 ## 3. Command Stage as a Task producer
 

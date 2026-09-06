@@ -114,11 +114,16 @@ def _expand_plan_task_flow(
     stages: dict[str, dict[str, Any]],
     source: Path,
 ) -> list[dict[str, Any]]:
-    """Attach the standard per-TODO SOP after top-level Plan stages.
+    """Attach Plan's built-in per-TODO task/review/repair lifecycle.
 
-    PlanStage owns task production, so normal YAML does not need to repeat
-    ``execute/review + scope: task``.  Explicit task-scoped nodes are still
-    accepted for advanced/custom task producers or custom per-task SOPs.
+    A normal PlanStage is intentionally self-contained: it produces TODOs and
+    every TODO runs through built-in Task -> Review -> Repair(on FAIL) -> Review.
+    The lifecycle does not depend on external YAML stage names such as
+    ``execute``, ``review`` or ``repair``.
+
+    Advanced/custom task producers can still declare an explicit contiguous
+    ``scope: task`` SOP immediately after the producer; in that case the
+    explicit YAML SOP wins and no built-in block is injected.
     """
     result: list[dict[str, Any]] = []
     for index, node in enumerate(flow):
@@ -127,17 +132,32 @@ def _expand_plan_task_flow(
             continue
         if index + 1 < len(flow) and flow[index + 1].get("scope") == "task":
             continue
-        defaults = {"execute": {"type": "task"}, "review": {"type": "review"}}
-        for name in ("execute", "review"):
-            if name in stages:
-                task_node = _normalize_invocation(
-                    {"stage": name, "scope": "task"}, stages, (), source
-                )
-            else:
-                task_node = _normalize_stage(name, defaults[name], source)
-                task_node["scope"] = "task"
-            result.append(task_node)
+        result.extend(_builtin_plan_task_flow(source))
     return result
+
+
+def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
+    """Return the reserved, YAML-independent TODO execution lifecycle."""
+    task = _normalize_stage(
+        "__plan_task__",
+        {"type": "task", "status": "AI 正在處理目前任務"},
+        source,
+    )
+    task["scope"] = "task"
+
+    repair = _normalize_stage(
+        "__plan_repair__",
+        {"type": "task", "status": "AI 正在修復目前任務"},
+        source,
+    )
+    review = _normalize_stage(
+        "__plan_review__",
+        {"type": "review", "status": "AI 正在確認任務是否完成"},
+        source,
+    )
+    review["scope"] = "task"
+    review["recover"] = [repair]
+    return [task, review]
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:
     if not isinstance(name, str) or not name.strip():

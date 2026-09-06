@@ -54,7 +54,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## Workflow YAML
 未傳 `--workflow` 時，Runner 會依 validator 設定選擇 `workflow/system/mixed.yaml`、`workflow/system/file.yaml` 或 `workflow/system/ai.yaml`。Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用 node，`flow` 定義執行順序；單次 flow item 可以覆寫 Stage instance。一般 AI-backed node 使用 `BaseStage`，`type` 預設為 `base`，通常省略。
 
-Task 產生是一種 Stage effect，不是 Plan 專屬權限。`PlanStage` 是內建 AI Task Producer，並會自動套用標準 `execute -> review` 逐 TODO SOP；因此一般 Plan-driven YAML 只列 `planning` 與後續頂層 Stage。`command` 或未來 Stage 仍可宣告 `produces: tasks`；顯式 `scope: task` 是非 Plan Producer 或自訂逐 TODO SOP 的進階寫法。`task` / `review` profile 也可以在沒有 pending TODO 時作為 top-level linear Stage；只要自訂 Prompt 不依賴 TODO 欄位，其 semantic result 仍走一般 Recovery routing，但不會寫入逐 TODO durable state。
+Task 產生是一種 Stage effect，不是 Plan 專屬權限。`PlanStage` 是內建 AI Task Producer，並會自動套用內建 `Task -> Review -> Repair（FAIL 時）-> Review` 逐 TODO SOP；因此一般 Plan-driven YAML 只列 `planning` 與後續頂層 Stage。`command` 或未來 Stage 仍可宣告 `produces: tasks`；顯式 `scope: task` 是非 Plan Producer 或自訂逐 TODO SOP 的進階寫法。`task` / `review` profile 也可以在沒有 pending TODO 時作為 top-level linear Stage；只要自訂 Prompt 不依賴 TODO 欄位，其 semantic result 仍走一般 Recovery routing，但不會寫入逐 TODO durable state。
 
 非 Plan 的 Task Producer 也使用同一契約：
 
@@ -148,7 +148,7 @@ flow:
   - validate_file
 ```
 
-`skip` 是 `skip_on_error` 的精簡 alias。Semantic Stage type（`plan`、`task`、`review`、`ai_validator`、`command`）自己擁有合理預設，因此 YAML 只需要描述真正的 Workflow 差異。`result_kind: validation` 表示外部 command validation gate；`validator: ai` 表示 AI validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。頂層 Plan 使用 Loader 提供的標準 task SOP；只有刻意自訂逐 Task 流程時才使用顯式 `scope: task`。Runtime 不再產生 `next_steps`、`expand` 或 `foreach` graph。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。如果 Workflow 有 Validation Stage，最後一個 validation Stage 必須放在 flow 最後；同時有 file 與 AI validator 時，file validation 必須先於 AI validation。
+`skip` 是 `skip_on_error` 的精簡 alias。Semantic Stage type（`plan`、`task`、`review`、`ai_validator`、`command`）自己擁有合理預設，因此 YAML 只需要描述真正的 Workflow 差異。`result_kind: validation` 表示外部 command validation gate；`validator: ai` 表示 AI validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。頂層 Plan 使用 Loader 提供的標準 task SOP；只有刻意自訂逐 Task 流程時才使用顯式 `scope: task`。Runtime 不再產生 `next_steps`、`expand` 或 `foreach` graph。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。Validation Stage 現在就是一般 top-level gate：可在 `flow` 任意位置放置多個 File / AI Validator，後面也可以繼續接一般 Stage；每個 Validator 都可有自己的 `recover`。Validator 不允許放在 `scope: task`。
 
 
 完整自訂 Workflow 範例請看 `docs/user/CUSTOM_WORKFLOW.zh-TW.md` 與 `examples/custom_workflow_latest.yaml`。

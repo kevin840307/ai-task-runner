@@ -11,7 +11,7 @@ run_dryrun.bat
 
 批次會驗證兩種流程：
 
-1. `runner/workflow/system/mixed.yaml`：包含 Plan -> 動態 Execute/Review、Review Recover、File Validator Recover，最後必須 completed。
+1. `runner/workflow/system/mixed.yaml`：包含 Plan -> 內建 Task/Review/Repair lifecycle、File Validator Recover，最後必須 completed。
 2. `dryrunexample/workflow.yaml`：自訂 Workflow，`check` 連續 FAIL 三次，驗證 `recover`、`repeat` 後仍可進入 final 並閉環完成。
 
 Scenario 只是測試資料，不會改變正式 Workflow 行為。未指定 Stage 預設為 `PASS`；結果序列用完後會持續使用最後一個結果。

@@ -639,3 +639,24 @@ def test_opencode_backend_runs_real_runner_flow_with_stdin(tmp_path):
     ))
     assert result.completed is True
     assert (tmp_path / "done.txt").read_text(encoding="utf-8") == "done"
+
+def test_api_deterministic_runner_error_fails_closed_without_resume_loop(tmp_path, monkeypatch):
+    """Non-transient RunnerError must never become an unbounded API retry loop."""
+    import runner.api as api_module
+
+    request = RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    )
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        raise RunnerError("saved task_step is outside the task-scoped SOP")
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    with pytest.raises(RunnerError, match="saved task_step"):
+        run(request)
+    assert calls == [False]

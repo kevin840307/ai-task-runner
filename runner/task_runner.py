@@ -21,7 +21,7 @@ from .workflow.stages import StageContext, StageExecutor
 
 
 class TaskRunner:
-    """Run one task request until final validation completes."""
+    """Run one task request until the configured Workflow completes."""
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config

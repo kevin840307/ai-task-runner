@@ -201,3 +201,10 @@ def test_builder_runner_uses_fixed_validator_without_cli_validator_injection():
     command_block = source[source.index("command = [", source.index("def build")):source.index("if args.backend", source.index("def build"))]
     assert '"--validator",' not in command_block
     assert '"--validator-arg=--draft-workflow"' in command_block
+
+
+def test_builder_prompt_allows_multiple_validators_anywhere():
+    prompt = (Path(__file__).resolve().parents[1] / "workflow_builder" / "prompt.md").read_text(encoding="utf-8")
+    assert "multiple File/AI validators may appear" in prompt
+    assert "ordinary Stages may follow validation" in prompt
+    assert "must end with its final validation Stage" not in prompt

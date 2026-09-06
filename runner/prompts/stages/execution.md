@@ -34,6 +34,6 @@ Task:
 {% if task.last_review and task.last_review.completed is sameas false %}Latest review:
 {{ {"reason": task.last_review.reason, "missing_items": task.last_review.missing_items} | tojson }}
 {% endif %}
-{% if stage == "repair" %}Repair only the concrete Review/Validator gaps; preserve correct existing work.
+{% if (task.last_review and task.last_review.completed is sameas false) or validation.feedback %}Repair only the concrete Review/Validator gaps; preserve correct existing work.
 {% endif %}
 Return a factual summary of changed files and focused checks.

@@ -2,7 +2,7 @@
 
 These files are reference YAMLs, not system workflows. Copy one into your custom workflow area and adjust only what the task needs.
 
-- `01_default_ai.yaml` - general autonomous Plan -> per-TODO Execute/Review -> final AI validation.
+- `01_default_ai.yaml` - general autonomous Plan with the built-in Task/Review/Repair lifecycle -> AI validation.
 - `02_ai_with_grill.yaml` - adds one independent whole-result Grill before final AI validation.
 - `03_file_validation.yaml` - deterministic Python/file validator.
 - `04_mixed_with_grill.yaml` - Grill + Python/file validation + final AI validation.
@@ -12,6 +12,7 @@ These files are reference YAMLs, not system workflows. Copy one into your custom
 - `08_bounded_grill_continue.yaml` - FAIL -> repair -> retry up to three Grill attempts; the third FAIL continues.
 - `09_bounded_grill_fail_closed.yaml` - same bound, but exhaustion stops.
 - `10_bounded_gate_reentry_reset.yaml` - generic bounded gate plus later restart; re-entry starts a new attempt cycle.
+- `11_multi_validators_anywhere.yaml` - multiple File + AI validation gates interleaved with ordinary stages, including a normal Stage after validators.
 
 ## Generic Grill
 
@@ -43,3 +44,11 @@ grill:
 This means `FAIL -> repair -> retry` for attempts 1 and 2. If attempt 3 still FAILs, recovery is not run again; `continue` moves forward and `fail` stops; omitting `on_exhausted` defaults to `fail`. A PASS clears the counter. Once the FlowNode moves forward, a later restart/re-entry is a new gate cycle and starts from attempt 1. Technical `ERROR` does not consume this semantic attempt budget.
 
 This Stage/FlowNode `max_attempts` is different from the CLI/API `max_attempts`, which controls same-session backend recovery.
+
+## Plan built-in TODO lifecycle
+
+A normal `type: plan` owns its Task -> Review -> Repair(on FAIL) -> Review lifecycle internally. It does not depend on YAML stages named `execute`, `review`, or `repair`. If a workflow needs a custom per-TODO SOP, declare explicit contiguous `scope: task` nodes after the task producer.
+
+## Multiple validators
+
+`result_kind: validation` command stages and `type: ai_validator` stages are ordinary top-level gates. Any number can appear anywhere in `flow`; they may be interleaved with ordinary stages and each may define its own `recover`.

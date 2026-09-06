@@ -682,3 +682,12 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
         self.assertIn('.studio-folder-caret::before', self.css)
         self.assertIn('place-items: center;', self.css)
         self.assertIn('.studio-folder-group.collapsed .studio-folder-caret::before', self.css)
+
+def test_runtime_polling_is_non_overlapping():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "startNonOverlappingPoll(refreshRuntime, 750)" in script
+    assert "startNonOverlappingPoll(refreshProjectStatuses, 1500)" in script
+    assert "setInterval(refreshRuntime, 750)" not in script
+    assert "setInterval(refreshProjectStatuses, 1500)" not in script
+    assert "setInterval(pollGenerateWorkflow" not in script
+    assert 'state.generateWorkflowPollTimer = window.setTimeout(tick, 800)' in script

@@ -34,3 +34,5 @@ Workflow / Prompt 的 `custom/**` 會遞迴掃描。新增 Workflow / Prompt 時
 UI 預設使用繁體中文說明，並可切換 English。`Appearance`、`Theme`、`Workflow`、`Stage`、`Settings`、`Control`、`Backend` 等常見系統/技術名稱維持英文；操作說明、help text、tooltip、Behavior Preview 等描述性文字依語言切換。
 
 UI 以完全離線、本機使用為前提。Runtime UI 不依賴 CDN、Google Fonts、遠端 JavaScript/CSS 或翻譯 API；所需靜態資源都必須隨專案一起提供。測試會拒絕 UI static assets 引入遠端 runtime resource URL。
+
+Project / Runtime polling 採 non-overlapping：上一個 request 完成後才排下一輪。Windows 每次 Project list refresh 只取得一次 `tasklist` PID snapshot，再由所有已追蹤 Project 共用。Workflow Generator status polling 也採相同規則，避免瀏覽器或主機較慢時堆疊 request。

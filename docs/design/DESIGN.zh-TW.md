@@ -26,11 +26,11 @@ Version: 1.2.61
 - 沒有獨立 Understand Stage。
 - `PlanStage` 是內建 AI Task Producer，透過通用 `tasks` result effect 安裝 durable TODO。
 - Review 是局部 semantic gate；有設定 retry 時可 fail-soft/skip，但不能取代 Final Validator。
-- File Validator 是 deterministic gate；混合驗證時一定先於 AI Validator。
+- 內建 CLI `mixed` Workflow 會先跑 deterministic File Validator，再跑 Final AI Validator。明確指定的 custom Workflow 可在 top-level `flow` 任意位置放置多個 File / AI Validator，Validator 後也可繼續一般 Stage。
 - Validator FAIL 走該 Stage 設定的 recovery path，通常是 Repair Plan -> task-scoped SOP -> validators again。
 - Stage 可用共用的 1-based YAML `restart_at` 覆蓋 FAIL/replan recovery；未設定時保留上述內建路由。
 - 內建 Regression Workflow 只有 configured final validation path PASS 才完成；明確指定的 generic Workflow 可以沒有 Validator，flow 全部成功結束即可完成。
-- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。`PlanStage` 會自動使用標準 `execute -> review` task SOP，因此一般 Plan-driven flow 只需要列 Planning 與後續頂層 gate。其他 Stage 仍可用 `produces: tasks` 產生公開 Task contract；顯式 `scope: task` 保留給進階／自訂逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不再產生 `next_steps`、`expand` 或 `foreach` topology。
+- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。`PlanStage` 會自動使用內建 `Task -> Review -> Repair（FAIL 時）-> Review` task lifecycle，因此一般 Plan-driven flow 只需要列 Planning 與後續頂層 gate。其他 Stage 仍可用 `produces: tasks` 產生公開 Task contract；顯式 `scope: task` 保留給進階／自訂逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不再產生 `next_steps`、`expand` 或 `foreach` topology。
 
 ## 責任
 
@@ -57,9 +57,10 @@ Version: 1.2.61
 
 ## Validation Modes
 
-- AI-only：AI Validator 是 configured final gate。
-- File-only：File Validator 是 configured final gate。
-- Mixed：File Validator PASS 後才跑 Final AI Validator，兩者都必須 PASS。
+- AI-only CLI 預設：內建 AI Validator 是 configured final gate。
+- File-only CLI 預設：內建 File Validator 是 configured final gate。
+- Mixed CLI 預設：內建 File Validator PASS 後才跑內建 Final AI Validator，兩者都必須 PASS。
+- 明確指定／custom Workflow：Validation Stage 是一般 top-level gate；可交錯放置多個 File / AI Validator，每個 Validator 可擁有自己的 recovery policy。
 - Final AI Validator 每次 run 使用獨立 Fresh Session；`final_ai_required_passes=0` 採嚴格多數決，明確設定時則必須達到指定 PASS 數。Structured Output 格式錯誤先 bounded same-session correction，再依設定 Fresh fallback。
 
 ## Prompt Contract

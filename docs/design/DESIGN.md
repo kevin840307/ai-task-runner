@@ -26,11 +26,11 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Va
 - No independent Understand Stage.
 - `PlanStage` is the built-in AI Task producer and installs durable TODOs through the generic `tasks` result effect.
 - Review is a local semantic gate. With configured review retries it may fail-soft/skip; final validation remains authoritative.
-- Python validation is deterministic and runs before AI validation when both are enabled.
+- The bundled CLI `mixed` workflow runs deterministic File validation before Final AI validation. Explicit/custom workflows may place multiple File/AI validation gates anywhere in top-level `flow`, including ordinary Stages after them.
 - Validator FAIL runs the configured recovery path, typically Repair Plan -> task-scoped SOP -> validators again.
 - A Stage may override FAIL/replan recovery with the shared 1-based `restart_at` YAML option; omitted values preserve the routes above.
 - Built-in Regression workflows complete only after their configured final validation path passes. Explicit generic workflows may omit validators and complete when their flow ends successfully.
-- A custom Workflow YAML contains only named `stages` and top-level `flow`. `PlanStage` automatically uses the standard `execute -> review` task SOP, so normal Plan-driven flow lists only Planning and later top-level gates. Other Stages may produce the public Task contract with `produces: tasks`; explicit `scope: task` remains available for advanced/custom per-TODO SOPs. A custom flow may use Plan, another Task producer, or no tasks at all. There is no generated `next_steps`, `expand`, or `foreach` topology.
+- A custom Workflow YAML contains only named `stages` and top-level `flow`. `PlanStage` automatically uses the built-in `Task -> Review -> Repair(on FAIL) -> Review` task lifecycle, so normal Plan-driven flow lists only Planning and later top-level gates. Other Stages may produce the public Task contract with `produces: tasks`; explicit `scope: task` remains available for advanced/custom per-TODO SOPs. A custom flow may use Plan, another Task producer, or no tasks at all. There is no generated `next_steps`, `expand`, or `foreach` topology.
 
 ## Ownership
 
@@ -57,9 +57,10 @@ Bundled default: `Plan -> [Execute -> Review] x TODO -> File Validator? -> AI Va
 
 ## Validation modes
 
-- AI-only: the AI Validator is the configured final gate.
-- File-only: the File Validator is the configured final gate.
-- Mixed: file validator must PASS before Final AI Validator runs; both gates must pass.
+- AI-only CLI default: the bundled AI Validator is the configured final gate.
+- File-only CLI default: the bundled File Validator is the configured final gate.
+- Mixed CLI default: bundled File validation must PASS before bundled Final AI validation runs; both gates must pass.
+- Explicit/custom workflows: validation Stages are ordinary top-level gates. Multiple File and AI validators may be interleaved with ordinary Stages; each validator owns its own recovery policy.
 - Final AI validation runs use fresh independent sessions. `final_ai_required_passes=0` uses strict majority; an explicit value requires that many PASS results. Structured-output correction uses bounded same-session retries before configured fresh fallback.
 
 ## Prompt contract

@@ -11,7 +11,7 @@ run_dryrun.bat
 
 The batch validates both:
 
-1. `runner/workflow/system/mixed.yaml` with Plan -> generated Execute/Review, Review recovery, File Validator recovery, and final completion.
+1. `runner/workflow/system/mixed.yaml` with Plan -> built-in Task/Review/Repair lifecycle, File Validator recovery, and final completion.
 2. `dryrunexample/workflow.yaml`, a custom workflow where `check` fails three times, exercises `recover` and `repeat`, then still reaches final completion.
 
 Scenario rules are test data only; they do not change production workflow behavior. Unspecified stages default to `PASS`. When a result sequence is exhausted, its last result repeats.

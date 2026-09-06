@@ -272,8 +272,10 @@ def validate() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--project-root")
     parser.add_argument("--state")
-    parser.parse_args()
+    parser.add_argument("--state-file")
+    parser.parse_known_args()
     return validate()
 
 

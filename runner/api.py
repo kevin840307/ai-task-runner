@@ -327,9 +327,14 @@ def run(
         except ConfigurationError:
             raise
         except RunnerError as error:
+            # Only transient service/backend failures are safe to retry here.
+            # Deterministic workflow/state/invariant RunnerErrors will not heal by
+            # sleeping and resuming, and retrying them forever can make a 24H run
+            # look alive while doing no useful work.
+            if not is_transient_error(error):
+                raise
             config = _resume_config(request, config)
-            kind = "service wait window exhausted" if is_transient_error(error) else "runner failure"
-            _report_retry(request, on_event, f"{kind}: {error}")
+            _report_retry(request, on_event, f"service wait window exhausted: {error}")
         except Exception as error:
             _log_unexpected(request, error)
             config = _resume_config(request, config)

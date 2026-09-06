@@ -81,6 +81,9 @@ class UIState:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rows = []
+        # One process snapshot per project-list refresh avoids spawning one
+        # tasklist.exe per Project every polling cycle on Windows.
+        alive_pids = self._process_snapshot()
         result: list[dict] = []
         seen: set[str] = set()
         for item in rows if isinstance(rows, list) else []:
@@ -96,7 +99,7 @@ class UIState:
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
                 "exists": project_path.is_dir(),
-                "runtime_status": self._project_runtime_status(project_path),
+                "runtime_status": self._project_runtime_status(project_path, alive_pids),
             })
         return result
 
@@ -205,7 +208,7 @@ class UIState:
         except (TypeError, ValueError):
             return 0
 
-    def _active_launch_reservation(self, project: Path) -> dict:
+    def _active_launch_reservation(self, project: Path, alive_pids: set[int] | None = None) -> dict:
         """Return a live UI launch reservation, removing stale reservations."""
         path = self._launch_state_path(project)
         marker = self._read_json(path)
@@ -233,11 +236,11 @@ class UIState:
         except (TypeError, ValueError):
             created_at = 0.0
         if child_pid:
-            active = self._pid_alive(child_pid)
+            active = self._pid_alive(child_pid, alive_pids)
         else:
             active = bool(
                 owner_pid
-                and self._pid_alive(owner_pid)
+                and self._pid_alive(owner_pid, alive_pids)
                 and time.time() - created_at <= LAUNCH_RESERVATION_GRACE
             )
         if active:
@@ -306,17 +309,17 @@ class UIState:
             return ">"
         return " "
 
-    def _project_runtime_status(self, project: Path) -> str:
+    def _project_runtime_status(self, project: Path, alive_pids: set[int] | None = None) -> str:
         if not project.is_dir():
             return "missing"
         runtime = self.runtime_dir(project)
         state = self._read_json(runtime / "state.json") or {}
         marker = self._read_json(runtime / "runner-process.json") or {}
         pid_value = self._marker_pid(marker.get("supervisor_pid"))
-        if pid_value and self._pid_alive(pid_value):
+        if pid_value and self._pid_alive(pid_value, alive_pids):
             self._clear_launch_reservation(project)
             return "running"
-        if self._active_launch_reservation(project):
+        if self._active_launch_reservation(project, alive_pids):
             return "running"
         if bool(state.get("completed")):
             return "completed"
@@ -2526,9 +2529,38 @@ class UIState:
         return text[-limit:]
 
     @staticmethod
-    def _pid_alive(pid: int) -> bool:
+    def _process_snapshot() -> set[int] | None:
+        """Return one Windows PID snapshot for a whole UI polling cycle."""
+        if os.name != "nt":
+            return None
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if result.returncode != 0:
+                return None
+            pids: set[int] = set()
+            for row in csv.reader(result.stdout.splitlines()):
+                if len(row) < 2:
+                    continue
+                try:
+                    pids.add(int(row[1]))
+                except (TypeError, ValueError):
+                    continue
+            return pids
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    @staticmethod
+    def _pid_alive(pid: int, alive_pids: set[int] | None = None) -> bool:
         if pid <= 0:
             return False
+        if alive_pids is not None:
+            return pid in alive_pids
         if os.name == "nt":
             try:
                 result = subprocess.run(

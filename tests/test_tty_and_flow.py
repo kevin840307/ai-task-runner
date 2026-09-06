@@ -70,7 +70,7 @@ def test_default_and_replan_flows_do_not_force_understand_stage():
     assert "understand" not in STAGE_REGISTRY
     workflow = load_default_workflow("validator.py", "ai")
     assert [stage["name"] for stage in workflow] == [
-        "planning", "execute", "review", "validate_file", "validate_ai"
+        "planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"
     ]
     assert [stage.get("scope") for stage in workflow[1:3]] == ["task", "task"]
     assert "planner_stages" not in workflow[0]

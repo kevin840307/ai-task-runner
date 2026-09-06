@@ -1,5 +1,5 @@
 Continue normal task execution in this same session. The execution rules and Goal already remain in context; do not restart or re-read unrelated work.
-{% if stage == "repair" %}
+{% if (task.last_review and task.last_review.completed is sameas false) or validation.feedback %}
 Repair the current TODO using only the new Review/Validator evidence below. Preserve correct existing work.
 {% if task.last_review and task.last_review.completed is sameas false %}Latest review:
 {{ {"reason": task.last_review.reason, "missing_items": task.last_review.missing_items} | tojson }}

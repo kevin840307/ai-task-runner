@@ -366,7 +366,7 @@ class UIStateTests(unittest.TestCase):
     def test_launch_reservation_blocks_duplicate_before_runner_marker_exists(self) -> None:
         process = type("Process", (), {"pid": 24680})()
         with patch("ui.server.subprocess.Popen", return_value=process) as popen, patch.object(
-            UIState, "_pid_alive", side_effect=lambda pid: pid in {24680, os.getpid()}
+            UIState, "_pid_alive", side_effect=lambda pid, alive_pids=None: pid in {24680, os.getpid()}
         ):
             self.state.launch(self.project, "first", mode="run")
             info = self.state.read_runtime(self.project)
@@ -379,7 +379,7 @@ class UIStateTests(unittest.TestCase):
     def test_launch_reservation_survives_ui_state_reopen_until_runner_takes_over(self) -> None:
         process = type("Process", (), {"pid": 24681})()
         with patch("ui.server.subprocess.Popen", return_value=process), patch.object(
-            UIState, "_pid_alive", side_effect=lambda pid: pid in {24681, 24682, os.getpid()}
+            UIState, "_pid_alive", side_effect=lambda pid, alive_pids=None: pid in {24681, 24682, os.getpid()}
         ):
             self.state.launch(self.project, "first", mode="run")
             reopened = UIState(self.root)
@@ -397,7 +397,7 @@ class UIStateTests(unittest.TestCase):
         launch = self.project / ".ai-task-runner" / "ui" / "launching.json"
         self.write_json(launch, {"token": "old", "owner_pid": 1, "child_pid": 99999, "created_at": time.time(), "mode": "run"})
         process = type("Process", (), {"pid": 24683})()
-        with patch.object(UIState, "_pid_alive", side_effect=lambda pid: pid in {24683, os.getpid()}), patch(
+        with patch.object(UIState, "_pid_alive", side_effect=lambda pid, alive_pids=None: pid in {24683, os.getpid()}), patch(
             "ui.server.subprocess.Popen", return_value=process
         ) as popen:
             self.assertFalse(self.state.read_runtime(self.project)["running"])
@@ -408,7 +408,7 @@ class UIStateTests(unittest.TestCase):
         process = type("Process", (), {"pid": 24684})()
         with patch("ui.server.subprocess.Popen", return_value=process), patch.object(
             self.state, "_update_launch_reservation", side_effect=OSError("disk busy")
-        ), patch.object(UIState, "_pid_alive", side_effect=lambda pid: pid == os.getpid()):
+        ), patch.object(UIState, "_pid_alive", side_effect=lambda pid, alive_pids=None: pid == os.getpid()):
             self.state.launch(self.project, "first", mode="run")
             info = self.state.read_runtime(self.project)
             self.assertTrue(info["running"])
@@ -1272,3 +1272,33 @@ flow: [validate]
         result = self.state.studio_check(item["id"], "stages:\n  review: [\n", self.project)
         self.assertFalse(result["ok"]); self.assertGreaterEqual(result["line"], 1); self.assertGreaterEqual(result["column"], 1)
 
+
+class ProjectPollingEfficiencyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "ui" / "data").mkdir(parents=True)
+        self.projects = []
+        for index, pid in enumerate((111, 222, 333), 1):
+            project = self.root / f"project-{index}"
+            runtime = project / ".ai-task-runner"
+            runtime.mkdir(parents=True)
+            (runtime / "runner-process.json").write_text(
+                json.dumps({"supervisor_pid": pid}), encoding="utf-8"
+            )
+            self.projects.append(project)
+        self.state = UIState(self.root)
+        self.state._write_projects([
+            {"name": project.name, "path": str(project)} for project in self.projects
+        ])
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_project_list_uses_one_process_snapshot_for_all_projects(self) -> None:
+        with patch.object(self.state, "_process_snapshot", return_value={111, 222}) as snapshot, \
+             patch("ui.server.subprocess.run") as process_run:
+            rows = self.state.projects()
+        snapshot.assert_called_once_with()
+        process_run.assert_not_called()
+        self.assertEqual([row["runtime_status"] for row in rows], ["running", "running", "idle"])
