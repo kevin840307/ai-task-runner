@@ -60,7 +60,6 @@ body {
 }
 .projects .projects-head,
 .projects .project-nav,
-.projects .new-project-button,
 .projects .project-section-label,
 .projects .sidebar-foot { flex: 0 0 auto; }
 .project-section-label {

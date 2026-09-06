@@ -260,3 +260,16 @@ The UI includes three built-in palettes and independent Light/Dark appearance co
 Theme changes affect surfaces, selection, borders, text, and the primary accent. Runtime semantic colors stay stable across themes: Running/Info is blue, PASS/Success is green, Warning is amber, and Error/Danger is red.
 
 Preferences are stored in browser local storage and restored before the main stylesheet is painted to avoid a visible theme flash. `System` follows the OS/browser `prefers-color-scheme` setting and updates while the UI is open.
+
+
+## UI language and compact sidebar
+
+- The UI defaults to Traditional Chinese (`zh-TW`). Product names, page titles, and technical Workflow/Stage names may remain canonical.
+- The Theme / Appearance panel can switch between Traditional Chinese and English; the preference persists in the browser.
+- Tasks / Workflows use compact icon navigation. Add/open a project from the `+` button in the Projects section header.
+
+## Language and offline UI
+
+The UI defaults to Traditional Chinese descriptions and can switch to English. Common system/technical names such as `Appearance`, `Theme`, `Workflow`, `Stage`, `Settings`, `Control`, and `Backend` stay in English; descriptive copy, help text, tooltips, and Behavior Preview text follow the selected language.
+
+The UI is designed for fully local/offline use. Runtime UI assets must not depend on CDNs, Google Fonts, remote JavaScript/CSS, or translation APIs; required static assets must ship with the project. A regression test rejects remote runtime asset URLs under `ui/static`.

@@ -1,0 +1,177 @@
+(() => {
+  const DEFAULT_LANGUAGE = "zh-TW";
+  const STORAGE_KEY = "ai-task-runner.language";
+  const messages = {
+    "zh-TW": {
+      "theme.open": "Theme & Appearance", "theme.settings": "Settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
+      "language.label": "語言", "common.close": "關閉", "common.cancel": "取消", "theme.recommended": "推薦", "theme.enterprise": "企業", "theme.creative": "AI / 創意", "theme.focus": "暖色 / 專注", "theme.modern": "鮮明 / 現代",
+      "nav.tasks": "任務", "nav.workflows": "工作流程",
+      "projects.label": "專案", "projects.add": "新增 / 開啟專案", "projects.open": "開啟專案", "projects.open_desc": "選擇 Runner 要操作的專案資料夾。專案只會加入側邊欄，不會複製或搬動檔案。",
+      "sidebar.history": "每個專案保留一份任務紀錄",
+      "project.select": "選擇專案", "project.open_hint": "開啟本機專案資料夾以開始。",
+      "status.idle": "閒置", "status.waiting": "等待中", "summary.progress": "進度", "summary.task": "任務", "empty.open_project": "開啟專案以開始",
+      "composer.python_validation": "Python 驗證", "composer.select_workflow": "選擇 Workflow",
+      "options.title": "執行選項", "options.button": "選項",
+      "actions.run": "執行", "actions.stop": "停止", "actions.continue": "繼續", "actions.reset": "重設",
+      "project.actions": "專案操作", "project.remove": "移除專案", "project.missing": "遺失",
+      "history.clear": "清除紀錄", "history.clear_blocked": "執行中的專案無法清除聊天紀錄。",
+      "env.check": "檢查環境", "env.checking": "檢查中…", "env.checking_detail": "正在檢查本機環境…", "env.completed": "環境檢查完成", "env.failed": "環境檢查發現必要項目失敗",
+      "history.confirm_title": "清除聊天紀錄？", "history.confirm_message": "刪除此專案保存的聊天紀錄（包含使用者與 Assistant 對話）？Runner 狀態、Workflow 與專案檔案不會變更。", "history.cleared": "聊天紀錄已清除",
+      "project.folder_selected": "已選擇資料夾，按「開啟專案」加入。", "project.folder_cancelled": "已取消選擇資料夾。",
+      "chat.empty_desc": "每個 Project 保留一條 Task history；Runner 狀態與 Live Output 直接讀取專案的 .ai-task-runner。",
+      "studio.yaml_hint": "Tab = 2 spaces · Ctrl+S = Save", "studio.prompt_hint": "點選 tag 即可插入 · Ctrl+S = Save",
+      "builder.page_desc": "描述你想要的 Workflow。Generate 只會建立暫存 Draft。",
+      "builder.generate_hint": "Generate 每次都會啟動新的 AI run 並建立新的暫存 Draft。",
+      "builder.review_desc": "可編輯 Workflow YAML 或產生的 Prompts；Save 前請先 Validate Draft。Save 前不會出現在 Custom / Project。",
+      "builder.yaml_hint": "Save 前的變更都只存在暫存 Draft。", "builder.prompt_hint": "暫存 Draft Prompt",
+      "builder.dirty_hint": "DRAFT MODIFIED · Save 前請先 Validate Draft 重新產生 Visual",
+      "project.path_hint": "可直接貼上路徑，或使用 Browse 選擇資料夾。",
+      "workflow.new_desc": "建立空白 Workflow，再用 Visual Designer 加入 Stage；不會覆寫既有檔案。",
+      "workflow.name_hint": "未輸入副檔名時會自動建立 .workflow.yaml。",
+      "workflow.destination_hint": "Custom Workflow 可被多個 Project 使用；Project Workflow 跟著目前專案。",
+      "prompt.new_desc": "建立 Custom 或 Project Prompt。System Runner Prompts 永遠唯讀。",
+      "builder.save_desc": "再次驗證目前 Draft，通過後才發佈成真正的 Workflow。",
+      "builder.save_hint": "Save 時才會把此 Draft 建立成真正的 Workflow。",
+      "import.desc": "Import 後會成為 Custom 或 Project asset；System assets 永遠不會被覆寫。",
+      "stage.add_desc": "先建立最少必要設定；建立後會直接開啟 Stage Editor 補完整欄位與 Prompt 選擇。",
+      "stage.key_hint": "YAML stages 下的唯一 key。",
+      "stage.add_prompt_hint": "可先不選；建立後在 Stage Editor 只選 Prompt，不直接修改 Prompt 內容。",
+      "studio.description": "以 Visual 編排 Workflow；單擊 Stage 選取、雙擊編輯，右下角浮動工具可調整順序。YAML 模式可直接編輯 Workflow 或 Prompt。",
+      "studio.empty_desc": "Workflow 可使用 Visual / YAML；Prompt 在兩種模式都使用相同的 Prompt Editor。",
+      "studio.flow_desc": "單擊選取、雙擊編輯；可拖曳或用右下浮動按鈕調整順序。",
+      "stage.modal_desc": "Stage {index} / {total} · 支援 Prompt 的 Stage，Prompt 內容請從 Prompt workspace 編輯。",
+      "stage.readonly_desc": "請先停止執行中的 Runtime，再編輯 Workflow 設定。",
+      "stage.section_desc": "優先顯示常用設定；低頻 runtime overrides 收在 Advanced。",
+      "stage.prompt_desc": "Prompt 內容請在 Workflow Studio → Prompt 編輯。Continuation Prompt 屬於進階 YAML override，因此不在此重複顯示。",
+      "stage.advanced_desc": "只有 Stage type 的預設行為不夠時才需要設定。",
+      "stage.flow_desc": "設定這次 Flow invocation 的 routing 行為。",
+      "stage.recovery_desc": "設定 semantic FAIL 後的 routing 與可選的 bounded recovery。",
+      "stage.retry_desc": "Execution-level retry 與 FAIL → Recover 的嘗試次數是不同機制。",
+      "stage.session_desc": "設定 Session 隔離，以及檔案 / change handling。",
+      "stage.command_desc": "Command runtime 設定。",
+      "stage.plan_desc": "Task plan 產生設定。Plan prompt 由 Plan Stage implementation 管理。",
+      "stage.ai_validation_desc": "AI Validator 與 multi-run voting 設定。",
+      "stage.multi_run_desc": "此 Stage 可選擇重複執行 / voting。",
+      "stage.help.restart_at": "Semantic FAIL 時，重新從此 Stage 或更前面的 top-level Stage 開始。",
+      "stage.help.repeat": "舊版 bounded recovery。除非既有 Workflow 已使用 repeat，否則建議留空。",
+      "stage.help.fresh_after": "相同 semantic failure 重複指定次數後，Recovery 改用 Fresh Session。",
+      "stage.help.recover": "此 Stage 回傳 semantic FAIL 時要執行的 Recovery Stages。",
+      "stage.help.max_attempts": "同一 gate cycle 最多允許幾次 FAIL → Recover → Retry。留空即維持原本 unlimited / current recovery 行為。",
+      "stage.help.on_exhausted": "達到 Max attempts 後的處理方式。之後如果重新進入此 Stage，會從第 1 次重新計算。",
+      "stage.help.retry": "Stage technical retry，與 semantic FAIL recovery 分開計算。",
+      "stage.help.structured_retries": "Structured output 格式錯誤時，在目前 Session 內重試。",
+      "stage.help.structured_fresh_retries": "目前 Session 的 structured retries 用完後，改用 Fresh Session 再重試。",
+      "stage.help.skip_on_error": "Stage 本身發生 ERROR 時仍繼續後續流程。",
+      "stage.help.fresh_on_start": "此 Stage 開始時建立新的 AI Session。",
+      "stage.help.fresh_each_run": "Multi-run 的每一次執行都使用新的 Session。",
+      "stage.help.track_changes": "追蹤此 Stage 對 Project 產生的變更。",
+      "stage.help.tolerate_restored": "Readonly change 被還原後仍允許 Stage 繼續，不因此判定失敗。",
+      "stage.help.allow_read": "Plan 可唯讀檢查目前帳號能讀取的任何 filesystem path，包括 Current Project 外的路徑。",
+      "stage.help.clean_work": "Command / Validator 執行前，刪除 Runner work directory 下指定的相對路徑。",
+      "stage.help.validator": "AI validator profile，通常保持 ai。",
+      "stage.help.runs": "一次 Stage entry 內要獨立執行幾次。",
+      "stage.help.required_passes": "Runs 中至少要有幾次 PASS；留空則使用 Stage 預設 / majority。",
+      "stage.help.repair_plan": "產生以修復為目的的 TODO plan。",
+      "stage.retry_hint": "-1 = 持續 retry 直到 PASS；0 = 不 retry。",
+      "stage.behavior.unbounded": "FAIL → {target} → Retry · 未設定 bounded attempt limit",
+      "stage.behavior.bounded": "FAIL → {target} → Retry · 最多 {max} 次 · 耗盡後 {exhausted}。之後重新進入此 Stage 會從 1 開始。"
+    },
+    en: {
+      "theme.open": "Theme and appearance", "theme.settings": "Interface settings", "theme.appearance": "Appearance", "theme.system": "System", "theme.light": "Light", "theme.dark": "Dark", "theme.palette": "Theme",
+      "language.label": "Language", "common.close": "Close", "common.cancel": "Cancel", "theme.recommended": "Recommended", "theme.enterprise": "Enterprise", "theme.creative": "AI / Creative", "theme.focus": "Warm / Focus", "theme.modern": "Distinct / Modern",
+      "nav.tasks": "Tasks", "nav.workflows": "Workflows",
+      "projects.label": "Projects", "projects.add": "Add / open project", "projects.open": "Open Project", "projects.open_desc": "Choose the project folder Runner should use. The project is added to the sidebar only; files are not copied or moved.",
+      "sidebar.history": "One project · one task history",
+      "project.select": "Select a project", "project.open_hint": "Open a local project folder to begin.",
+      "status.idle": "Idle", "status.waiting": "Waiting", "summary.progress": "Progress", "summary.task": "Task", "empty.open_project": "Open a project to start",
+      "composer.python_validation": "Python validation", "composer.select_workflow": "Select workflow",
+      "options.title": "Run options", "options.button": "Options",
+      "actions.run": "Run", "actions.stop": "Stop", "actions.continue": "Continue", "actions.reset": "Reset",
+      "project.actions": "Project actions", "project.remove": "Remove project", "project.missing": "Missing",
+      "history.clear": "Clear history", "history.clear_blocked": "Chat history cannot be cleared while this project is running.",
+      "env.check": "Check environment", "env.checking": "Checking…", "env.checking_detail": "Checking local environment…", "env.completed": "Environment check completed", "env.failed": "Environment check found required failures",
+      "history.confirm_title": "Clear chat history?", "history.confirm_message": "Delete this project\'s saved chat history, including User and Assistant messages? Runner state, Workflow files, and project files are not changed.", "history.cleared": "Chat history cleared",
+      "project.folder_selected": "Folder selected. Click Open Project to add it.", "project.folder_cancelled": "Folder selection cancelled.",
+      "chat.empty_desc": "Each Project keeps one Task history. Runner state and Live Output are read directly from the project's .ai-task-runner directory.",
+      "studio.yaml_hint": "Tab = 2 spaces · Ctrl+S = Save", "studio.prompt_hint": "Click a tag to insert · Ctrl+S = Save",
+      "builder.page_desc": "Describe the Workflow you want. Generate creates a temporary Draft only.",
+      "builder.generate_hint": "Generate always starts a new AI run and a new temporary Draft.",
+      "builder.review_desc": "Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.",
+      "builder.yaml_hint": "Changes remain temporary until Save.", "builder.prompt_hint": "Temporary Draft Prompt",
+      "builder.dirty_hint": "DRAFT MODIFIED · Validate Draft to refresh Visual before Save",
+      "project.path_hint": "Paste a path directly, or use Browse to choose a folder.",
+      "workflow.new_desc": "Create a blank Workflow, then add Stages with Visual Designer. Existing files are never overwritten.",
+      "workflow.name_hint": "If no extension is entered, .workflow.yaml is added automatically.",
+      "workflow.destination_hint": "Custom Workflows can be shared by multiple Projects; Project Workflows stay with the current Project.",
+      "prompt.new_desc": "Create a Custom or Project Prompt. System Runner Prompts are always read-only.",
+      "builder.save_desc": "Validate the current Draft again, then publish it as a real Workflow.",
+      "builder.save_hint": "Save is the moment this Draft becomes a real Workflow.",
+      "import.desc": "Imported assets become Custom or Project assets. System assets are never overwritten.",
+      "stage.add_desc": "Create only the minimum required settings first. Stage Editor opens immediately afterward for the remaining fields and Prompt selection.",
+      "stage.key_hint": "Unique key under YAML stages.",
+      "stage.add_prompt_hint": "You may leave this empty. After creation, Stage Editor selects a Prompt but does not edit Prompt content directly.",
+      "studio.description": "Arrange the Workflow visually. Click a Stage to select it, double-click to edit it, and use the floating controls at the lower right to reorder. YAML mode can edit a Workflow or Prompt directly.",
+      "studio.empty_desc": "Workflows can use Visual / YAML. Prompts use the same Prompt Editor in both modes.",
+      "studio.flow_desc": "Click to select, double-click to edit, then drag or use the floating controls at the lower right to reorder.",
+      "stage.modal_desc": "Stage {index} / {total} · For Stages that support Prompt, edit Prompt content from the Prompt workspace.",
+      "stage.readonly_desc": "Stop the active Runtime before editing Workflow settings.",
+      "stage.section_desc": "Common settings are shown first; less-used runtime overrides are under Advanced.",
+      "stage.prompt_desc": "Edit Prompt content in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here.",
+      "stage.advanced_desc": "Use only when the Stage type default is not enough.",
+      "stage.flow_desc": "Routing for this Flow invocation.",
+      "stage.recovery_desc": "Semantic FAIL routing and optional bounded recovery.",
+      "stage.retry_desc": "Execution-level retry is separate from FAIL → Recover attempts.",
+      "stage.session_desc": "Session isolation and file / change handling.",
+      "stage.command_desc": "Command runtime settings.",
+      "stage.plan_desc": "Task-plan generation settings. Plan prompt is owned by the Plan Stage implementation.",
+      "stage.ai_validation_desc": "AI Validator and multi-run voting settings.",
+      "stage.multi_run_desc": "Optional repeated runs / voting for this Stage.",
+      "stage.help.restart_at": "On semantic FAIL, restart this or an earlier top-level Stage.",
+      "stage.help.repeat": "Legacy bounded recovery. Leave empty unless this Workflow already relies on repeat.",
+      "stage.help.fresh_after": "After the same semantic failure repeats this many times, use a Fresh Session for recovery.",
+      "stage.help.recover": "Stages to run when this Stage returns semantic FAIL.",
+      "stage.help.max_attempts": "Maximum FAIL → Recover → Retry attempts in one gate cycle. Leave empty to keep the original unlimited / current recovery behavior.",
+      "stage.help.on_exhausted": "What happens when Max attempts is reached. Re-entering this Stage later starts again from attempt 1.",
+      "stage.help.retry": "Technical Stage retry. This is separate from semantic FAIL recovery.",
+      "stage.help.structured_retries": "Retry malformed structured output in the current Session.",
+      "stage.help.structured_fresh_retries": "Retry malformed structured output in a Fresh Session after current-Session retries are exhausted.",
+      "stage.help.skip_on_error": "Continue when the Stage itself errors.",
+      "stage.help.fresh_on_start": "Start this Stage in a new AI Session.",
+      "stage.help.fresh_each_run": "Use a new Session for every multi-run validation.",
+      "stage.help.track_changes": "Track project changes produced by this Stage.",
+      "stage.help.tolerate_restored": "Allow restored readonly changes without failing the Stage.",
+      "stage.help.allow_read": "For Plan, allow readonly inspection of any filesystem path readable by the current account, including paths outside the Current Project.",
+      "stage.help.clean_work": "Delete these relative paths under the Runner work directory before a Command / Validator run.",
+      "stage.help.validator": "AI validator profile. Usually leave as ai.",
+      "stage.help.runs": "How many independent Stage runs to perform in one entry.",
+      "stage.help.required_passes": "How many Runs must PASS. Leave empty for the Stage default / majority.",
+      "stage.help.repair_plan": "Generate a repair-oriented TODO plan.",
+      "stage.retry_hint": "-1 = keep retrying until PASS; 0 = no retry.",
+      "stage.behavior.unbounded": "FAIL → {target} → Retry · no bounded attempt limit",
+      "stage.behavior.bounded": "FAIL → {target} → Retry · up to {max} attempts · then {exhausted}. Later re-entry starts again at 1."
+    }
+  };
+  function normalize(value) { return value === "en" ? "en" : "zh-TW"; }
+  function initialLanguage() { try { return normalize(localStorage.getItem(STORAGE_KEY) || DEFAULT_LANGUAGE); } catch (_) { return DEFAULT_LANGUAGE; } }
+  let language = initialLanguage();
+  function t(key, fallback = "") { return messages[language]?.[key] ?? messages[DEFAULT_LANGUAGE]?.[key] ?? fallback ?? key; }
+  function format(key, values = {}, fallback = "") {
+    return String(t(key, fallback)).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? `{${name}}`);
+  }
+  function apply(root = document) {
+    document.documentElement.lang = language === "zh-TW" ? "zh-Hant" : "en";
+    root.querySelectorAll?.("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n, node.textContent); });
+    root.querySelectorAll?.("[data-i18n-title]").forEach((node) => { node.title = t(node.dataset.i18nTitle, node.title); });
+    root.querySelectorAll?.("[data-i18n-placeholder]").forEach((node) => { node.placeholder = t(node.dataset.i18nPlaceholder, node.placeholder); });
+    root.querySelectorAll?.("[data-i18n-aria]").forEach((node) => { node.setAttribute("aria-label", t(node.dataset.i18nAria, node.getAttribute("aria-label") || "")); });
+    window.dispatchEvent(new CustomEvent("app-language-changed", { detail: { language } }));
+  }
+  function setLanguage(next, { persist = true } = {}) {
+    language = normalize(next);
+    if (persist) { try { localStorage.setItem(STORAGE_KEY, language); } catch (_) {} }
+    apply(document);
+    return language;
+  }
+  window.I18n = { t, format, apply, setLanguage, getLanguage: () => language, languages: ["zh-TW", "en"] };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => apply(document), { once: true }); else apply(document);
+})();

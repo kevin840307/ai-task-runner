@@ -577,3 +577,6 @@ html[data-appearance="dark"] .modal-title-icon.stage {
 }
 html[data-appearance="dark"] .app-toast.success { background: var(--success-soft) !important; color: var(--pass) !important; }
 html[data-appearance="dark"] .app-toast.error { background: var(--danger-soft) !important; color: var(--fail) !important; }
+
+.language-setting-group { margin-top: 4px; }
+.language-options { grid-template-columns: 1fr 1fr; }

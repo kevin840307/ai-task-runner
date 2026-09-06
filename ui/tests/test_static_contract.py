@@ -57,7 +57,7 @@ class StaticContractTests(unittest.TestCase):
         self.assertNotIn("stageContinuationPromptSelect", self.js)
         for removed in ("stagePromptPathInput", "stagePromptLibrarySelect", "stagePromptTextarea", "saveStagePrompt"):
             self.assertNotIn(removed, self.js)
-        self.assertIn("Prompt content is edited in Workflow Studio", self.js)
+        self.assertIn('t("stage.prompt_desc"', self.js)
         self.assertIn('stageSupportsPrompt(type) { return ["base", "task", "review", "ai_validator"].includes(type); }', self.js)
 
     def test_prompt_editor_is_first_class_and_has_runtime_param_chips(self):
@@ -192,9 +192,9 @@ class LayoutRegressionTests(unittest.TestCase):
 
     def test_prompt_and_step_surfaces_end_on_sidebar_baseline(self):
         css = "".join(self.studio_css.split())
-        self.assertIn(".studio-workflow-editor{position:relative;grid-template-rows:autominmax(0,1fr)", css)
-        self.assertIn(".studio-workflow-editor>.studio-prompt-panel{grid-row:2;min-height:0;height:100%", css)
-        self.assertIn(".studio-footer{position:absolute", css)
+        self.assertIn(".studio-workflow-editor{position:relative;grid-template-rows:autoautominmax(0,1fr)auto", css)
+        self.assertIn(".studio-workflow-editor>.studio-prompt-panel{grid-row:3;min-height:0;height:100%", css)
+        self.assertIn(".studio-footer{grid-row:4;position:static", css)
 
     def test_retry_editor_matches_core_minus_one_contract(self):
         self.assertIn('id="stageRetry"', self.js)
@@ -310,7 +310,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('Object.prototype.hasOwnProperty.call(item, "status")', self.js)
 
     def test_project_actions_use_static_menu_and_confirmed_remove(self):
-        for token in ("project-action-menu", "project-menu-button", 'remove.textContent = "Remove project"', 'title: "Remove Project?"'):
+        for token in ("project-action-menu", "project-menu-button", 'remove.textContent = t("project.remove", "Remove project")', 'title: "Remove Project?"'):
             self.assertIn(token, self.js)
 
     def test_project_action_menu_portals_out_of_scroll_container(self):
@@ -547,6 +547,25 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".workflow-generator-prompt-editor { min-width: 0; min-height: 0; overflow: hidden;", self.studio_css)
         self.assertIn("min-height: 0; overflow: auto; resize: none;", self.studio_css)
 
+    def test_workflow_validation_details_do_not_overlay_stage_canvas(self) -> None:
+        css = "".join(self.studio_css.split())
+        self.assertIn(".studio-workflow-editor>.validation-output{grid-row:2", css)
+        self.assertIn(".validation-output{position:static", css)
+        self.assertNotIn(".validation-output{position:absolute", css)
+
+    def test_studio_status_compacts_multiline_errors(self) -> None:
+        self.assertIn("const firstLine = detail.split", self.js)
+        self.assertIn("node.title = detail", self.js)
+
+    def test_sidebar_compact_nav_project_add_and_i18n_contract(self):
+        self.assertIn('id="openProject" class="project-add-button"', self.html)
+        self.assertNotIn('id="openProject" class="primary wide new-project-button"', self.html)
+        self.assertIn('class="nav-icon"', self.html)
+        self.assertIn('data-language-option="zh-TW"', self.html)
+        self.assertIn('data-language-option="en"', self.html)
+        self.assertIn('src="/js/i18n.js"', self.html)
+        self.assertIn('DEFAULT_LANGUAGE = "zh-TW"', (self.root / "static" / "js" / "i18n.js").read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -586,6 +605,25 @@ class ThemeContractTests(unittest.TestCase):
     def test_theme_brand_icon_uses_palette_accent(self):
         self.assertIn('html[data-appearance] .brand::before', self.theme_css)
         self.assertIn('linear-gradient(135deg, var(--accent), var(--accent-dark))', self.theme_css)
+
+    def test_descriptive_i18n_keeps_system_labels_english(self):
+        i18n = (self.root / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+        self.assertIn('"theme.appearance": "Appearance"', i18n)
+        self.assertIn('"theme.palette": "Theme"', i18n)
+        for key in ("studio.description", "studio.flow_desc", "stage.section_desc", "stage.recovery_desc", "stage.help.max_attempts", "stage.help.on_exhausted"):
+            self.assertGreaterEqual(i18n.count(f'"{key}"'), 2, key)
+        self.assertIn('data-i18n="studio.description"', self.html)
+        self.assertIn('data-i18n="studio.flow_desc"', self.html)
+        self.assertIn('t("stage.recovery_desc"', self.js)
+        self.assertIn('t("stage.help.max_attempts"', self.js)
+
+    def test_static_ui_has_no_remote_runtime_assets(self):
+        import re
+        static_root = self.root / "static"
+        combined = "\n".join(path.read_text(encoding="utf-8", errors="ignore") for path in static_root.rglob("*") if path.is_file() and path.suffix.lower() in {".html", ".css", ".js"})
+        patterns = [r'<(?:script|link|img)[^>]+(?:src|href)=["\']https?://', r'@import\s+url\(["\']?https?://', r'url\(["\']?https?://']
+        for pattern in patterns:
+            self.assertIsNone(re.search(pattern, combined, flags=re.IGNORECASE), pattern)
 
     def test_dark_generator_and_search_use_theme_surfaces(self):
         self.assertIn('--surface: var(--panel)', self.theme_css)

@@ -718,3 +718,58 @@ body.projects-collapsed .project-list {
 .project-list:has(.project-tree:only-child) .project-tree {
   max-width: 100%;
 }
+
+/* Compact primary navigation with icon glyphs. */
+.project-nav-link {
+  min-height: 36px;
+  padding: 0 10px;
+  gap: 9px;
+}
+.project-nav-link .nav-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+.project-nav-link .nav-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.project-nav-link strong { font-size: 12.5px; }
+.project-nav-link.active .nav-icon { background: var(--accent); color: var(--on-accent, #fff); }
+
+/* Project add belongs to the Projects section header, not a standalone CTA. */
+.project-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+}
+.project-add-button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.project-add-button:hover,
+.project-add-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+body.projects-collapsed .project-section-label > span { display: none; }
+body.projects-collapsed .project-section-label { justify-content: center; margin-inline: 0; }
+body.projects-collapsed .project-add-button { width: 34px; height: 34px; border-radius: 10px; }

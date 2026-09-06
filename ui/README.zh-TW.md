@@ -21,3 +21,16 @@ Theme 只改變背景、Surface、選取狀態、Border、文字與主 Accent。
 ## Custom 子資料夾
 
 Workflow / Prompt 的 `custom/**` 會遞迴掃描。新增 Workflow / Prompt 時可選既有子資料夾，或直接建立如 `e2e/regression` 的新資料夾；`../`、絕對路徑等跳出 Custom root 的路徑會被拒絕。
+
+
+## 介面語言與側邊欄
+
+- UI 預設使用繁體中文（`zh-TW`）；產品名、Page Title、Workflow/Stage 等技術名稱可維持原名。
+- `Theme / Appearance` 面板可切換 `繁體中文 / English`，設定會保存於瀏覽器。
+- 左側 Tasks / Workflows 使用圖示導覽並縮小高度；新增專案改由 `專案` 標題右側的 `+` 開啟原本的 Open Project dialog。
+
+## 語言與離線 UI
+
+UI 預設使用繁體中文說明，並可切換 English。`Appearance`、`Theme`、`Workflow`、`Stage`、`Settings`、`Control`、`Backend` 等常見系統/技術名稱維持英文；操作說明、help text、tooltip、Behavior Preview 等描述性文字依語言切換。
+
+UI 以完全離線、本機使用為前提。Runtime UI 不依賴 CDN、Google Fonts、遠端 JavaScript/CSS 或翻譯 API；所需靜態資源都必須隨專案一起提供。測試會拒絕 UI static assets 引入遠端 runtime resource URL。

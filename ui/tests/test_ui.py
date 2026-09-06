@@ -801,6 +801,25 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual([row["stage"] for row in visual["flow"]], ["review", "planning"])
         self.assertNotEqual(saved["hash"], opened["hash"])
 
+    def test_visual_save_reorder_keeps_flow_mapping_entries_indented_and_parseable(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  preflight:\n    type: command\n  planning:\n    type: plan\nflow:\n  - stage: planning\n    scope: workflow\n  - preflight\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        self.state.studio_visual_save(
+            item["id"],
+            [{"stage": "preflight", "scope": "workflow"}, {"stage": "planning", "scope": "workflow"}],
+            opened["hash"],
+            self.project,
+        )
+        updated = self.workflow.read_text(encoding="utf-8")
+        parsed = __import__("yaml").safe_load(updated)
+        self.assertIn("flow:\n  - stage: preflight", updated)
+        self.assertEqual(parsed["flow"][0]["stage"], "preflight")
+        self.assertEqual(parsed["flow"][1]["stage"], "planning")
+
     def test_visual_save_preserves_stage_yaml_and_anchors(self) -> None:
         original = "stages:\n  planning: &planning\n    type: plan\n  execute:\n    <<: *planning\n    status: Run\n# keep this comment\nflow:\n  - planning\n  - execute\n"
         self.workflow.write_text(original, encoding="utf-8")

@@ -470,28 +470,26 @@
 /* The right editor surface must end on the same baseline as the workflow sidebar. */
 .studio-workflow-editor {
   position: relative;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 .studio-workflow-editor > .studio-overview { grid-row: 1; }
+.studio-workflow-editor > .validation-output { grid-row: 2; }
 .studio-workflow-editor > .studio-visual-panel,
 .studio-workflow-editor > .studio-yaml-panel,
-.studio-workflow-editor > .studio-prompt-panel { grid-row: 2; min-height: 0; height: 100%; }
+.studio-workflow-editor > .studio-prompt-panel { grid-row: 3; min-height: 0; height: 100%; }
 .studio-footer {
-  position: absolute;
-  right: 12px;
-  bottom: 6px;
-  z-index: 5;
-  min-height: 0;
+  grid-row: 4;
+  position: static;
+  min-height: 20px;
+  padding: 0 4px;
   pointer-events: none;
 }
 .validation-output {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 38px;
-  z-index: 8;
-  max-height: min(220px, 38%);
-  box-shadow: var(--shadow-md);
+  position: static;
+  max-height: 112px;
+  overflow: auto;
+  border-left: 4px solid var(--fail);
+  box-shadow: none;
 }
 
 /* Stage selection follows static: click selects, double-click edits, floating FAB controls movement. */

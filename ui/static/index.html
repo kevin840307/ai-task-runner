@@ -30,62 +30,68 @@
   <aside class="projects">
     <div class="projects-head">
       <div class="brand">Agent Workflow</div>
-      <button id="themeButton" class="theme-toggle-button" type="button" title="Theme and appearance" aria-haspopup="dialog" aria-expanded="false">◐</button>
-      <section id="themePanel" class="theme-panel" role="dialog" aria-label="Theme and appearance" hidden>
-        <div class="theme-panel-head"><strong>Appearance</strong><button id="themeCloseButton" type="button" aria-label="Close theme settings">×</button></div>
+      <button id="themeButton" class="theme-toggle-button" type="button" title="主題與外觀" data-i18n-title="theme.open" aria-haspopup="dialog" aria-expanded="false">◐</button>
+      <section id="themePanel" class="theme-panel" role="dialog" aria-label="主題與外觀" data-i18n-aria="theme.open" hidden>
+        <div class="theme-panel-head"><strong data-i18n="theme.settings">介面設定</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" data-i18n-aria="common.close">×</button></div>
         <div class="theme-setting-group">
-          <span class="theme-setting-label">Appearance</span>
+          <span class="theme-setting-label" data-i18n="theme.appearance">外觀</span>
           <div class="appearance-options" role="group" aria-label="Appearance">
-            <button type="button" data-appearance-option="system">System</button>
-            <button type="button" data-appearance-option="light">Light</button>
-            <button type="button" data-appearance-option="dark">Dark</button>
+            <button type="button" data-appearance-option="system" data-i18n="theme.system">跟隨系統</button>
+            <button type="button" data-appearance-option="light" data-i18n="theme.light">淺色</button>
+            <button type="button" data-appearance-option="dark" data-i18n="theme.dark">深色</button>
           </div>
         </div>
         <div class="theme-setting-group">
-          <span class="theme-setting-label">Theme</span>
+          <span class="theme-setting-label" data-i18n="theme.palette">主題</span>
           <div class="theme-options">
-            <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small>Recommended</small></button>
-            <button class="theme-option" type="button" data-theme-option="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><strong>Deep Blue</strong><small>Enterprise</small></button>
-            <button class="theme-option" type="button" data-theme-option="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><strong>Violet</strong><small>AI / Creative</small></button>
-            <button class="theme-option" type="button" data-theme-option="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><strong>Amber</strong><small>Warm / Focus</small></button>
-            <button class="theme-option" type="button" data-theme-option="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><strong>Rose</strong><small>Distinct / Modern</small></button>
+            <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small data-i18n="theme.recommended">推薦</small></button>
+            <button class="theme-option" type="button" data-theme-option="blue"><span class="theme-swatches theme-swatches-blue"><i></i><i></i><i></i></span><strong>Deep Blue</strong><small data-i18n="theme.enterprise">企業</small></button>
+            <button class="theme-option" type="button" data-theme-option="violet"><span class="theme-swatches theme-swatches-violet"><i></i><i></i><i></i></span><strong>Violet</strong><small data-i18n="theme.creative">AI / 創意</small></button>
+            <button class="theme-option" type="button" data-theme-option="amber"><span class="theme-swatches theme-swatches-amber"><i></i><i></i><i></i></span><strong>Amber</strong><small data-i18n="theme.focus">暖色 / 專注</small></button>
+            <button class="theme-option" type="button" data-theme-option="rose"><span class="theme-swatches theme-swatches-rose"><i></i><i></i><i></i></span><strong>Rose</strong><small data-i18n="theme.modern">鮮明 / 現代</small></button>
+          </div>
+        </div>
+        <div class="theme-setting-group language-setting-group">
+          <span class="theme-setting-label" data-i18n="language.label">語言</span>
+          <div class="appearance-options language-options" role="group" aria-label="語言" data-i18n-aria="language.label">
+            <button type="button" data-language-option="zh-TW">繁體中文</button>
+            <button type="button" data-language-option="en">English</button>
           </div>
         </div>
       </section>
     </div>
     <nav class="project-nav" aria-label="Application navigation">
-      <button id="chatNav" class="project-nav-link active" type="button"><span>Run</span><strong>Tasks</strong></button>
-      <button id="workflowNav" class="project-nav-link" type="button"><span>Cfg</span><strong>Workflows</strong></button>
+      <button id="chatNav" class="project-nav-link active" type="button" title="任務" data-i18n-title="nav.tasks"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z"/><path d="M8 10h8M8 13.5h5"/></svg></span><strong>Tasks</strong></button>
+      <button id="workflowNav" class="project-nav-link" type="button" title="工作流程" data-i18n-title="nav.workflows"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.4 8.1l3.3 7.6M16.6 8.1l-3.3 7.6"/></svg></span><strong>Workflows</strong></button>
     </nav>
-    <button id="openProject" class="primary wide new-project-button" type="button"><span class="button-icon">+</span><span class="button-text">Open Project</span></button>
-    <div class="project-section-label">Projects</div>
+    <div class="project-section-label"><span data-i18n="projects.label">專案</span><button id="openProject" class="project-add-button" type="button" title="新增 / 開啟專案" data-i18n-title="projects.add" aria-label="新增 / 開啟專案" data-i18n-aria="projects.add"><span aria-hidden="true">+</span></button></div>
     <div id="projectList" class="project-list"></div>
-    <div class="sidebar-foot">One project · one task history</div>
+    <div class="sidebar-foot" data-i18n="sidebar.history">每個專案保留一份任務紀錄</div>
   </aside>
 
   <main class="workspace">
     <section id="chatView" class="view-shell">
       <header class="header">
         <div class="title-block">
-          <div class="title-line"><h1 id="projectName">Select a project</h1></div>
-          <p id="projectPath">Open a local project folder to begin.</p>
+          <div class="title-line"><h1 id="projectName" data-i18n="project.select">選擇專案</h1></div>
+          <p id="projectPath" data-i18n="project.open_hint">開啟本機專案資料夾以開始。</p>
         </div>
         <div class="runtime-actions">
-          <button id="clearHistoryButton" class="action-button clear-history-button" type="button" title="Clear chat history">Clear history</button>
-          <span id="statusBadge" class="runtime-badge">Idle</span>
+          <button id="clearHistoryButton" class="action-button clear-history-button" type="button" title="清除聊天紀錄" data-i18n-title="history.clear" data-i18n="history.clear">清除紀錄</button>
+          <span id="statusBadge" class="runtime-badge" data-i18n="status.idle">閒置</span>
         </div>
       </header>
 
       <section id="summary" class="summary" hidden>
-        <div><span>Stage</span><strong id="currentStage">Idle</strong></div>
-        <div><span>Progress</span><strong id="progressText">0 / 0</strong></div>
-        <div class="live-summary"><span>Task</span><strong id="currentTask">Waiting</strong></div>
+        <div><span>Stage</span><strong id="currentStage">閒置</strong></div>
+        <div><span data-i18n="summary.progress">進度</span><strong id="progressText">0 / 0</strong></div>
+        <div class="live-summary"><span data-i18n="summary.task">任務</span><strong id="currentTask" data-i18n="status.waiting">等待中</strong></div>
       </section>
 
       <section id="emptyState" class="empty-state">
         <div class="empty-state-mark">A</div>
-        <h2>Open a project to start</h2>
-        <p>每個 Project 保留一條 Task history；Runner 狀態與 Live Output 直接讀取專案的 .ai-task-runner。</p>
+        <h2 data-i18n="empty.open_project">開啟專案以開始</h2>
+        <p data-i18n="chat.empty_desc">每個 Project 保留一條 Task history；Runner 狀態與 Live Output 直接讀取專案的 .ai-task-runner。</p>
       </section>
       <section id="messages" class="history" hidden></section>
 
@@ -93,16 +99,16 @@
         <div class="composer-box">
           <div id="composerTopbar" class="composer-topbar simple-composer-topbar" hidden>
             <label id="validatorPicker" class="validator-picker" hidden>
-              <span class="workflow-picker-label">Python validation</span>
+              <span class="workflow-picker-label" data-i18n="composer.python_validation">Python 驗證</span>
               <div class="compact-file-picker">
                 <input id="validator" placeholder="Choose validation.py" autocomplete="off" readonly title="" />
-                <button id="browseValidatorButton" class="file-choice-button compact" type="button">Choose…</button>
-                <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>Clear</button>
+                <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
+                <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
               </div>
             </label>
           </div>
           <div id="optionsPanel" class="options-panel" role="dialog" aria-label="Run options" hidden>
-            <div class="options-popover-head"><strong>Run options</strong><button id="optionsCloseButton" type="button" aria-label="Close options">×</button></div>
+            <div class="options-popover-head"><strong data-i18n="options.title">執行選項</strong><button id="optionsCloseButton" type="button" aria-label="Close options">×</button></div>
             <div class="options-popover-field backend-option-field"><span>Backend</span>
               <div id="backendPicker" class="backend-picker">
                 <select id="backend" hidden aria-hidden="true"></select>
@@ -112,8 +118,8 @@
                 <div id="backendDropdownMenu" class="workflow-dropdown-menu backend-dropdown-menu" role="listbox" hidden></div>
               </div>
             </div>
-            <button id="rerunButton" class="action-button options-rerun" type="button" hidden>Rerun last task</button>
-            <button id="environmentCheckButton" class="action-button options-environment-check" type="button">Check environment</button>
+            <button id="rerunButton" class="action-button options-rerun" type="button" hidden>重新執行上次任務</button>
+            <button id="environmentCheckButton" class="action-button options-environment-check" type="button" data-i18n="env.check">檢查環境</button>
             <div id="environmentCheckResult" class="environment-check-result" hidden></div>
           </div>
           <textarea id="messageInput" rows="2" placeholder="描述要完成的功能或修復內容..."></textarea>
@@ -123,19 +129,19 @@
                 <span class="workflow-picker-label">Workflow</span>
                 <select id="workflowSelect" class="workflow-native-select" aria-hidden="true" tabindex="-1"></select>
                 <button id="workflowDropdownButton" class="workflow-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                  <span id="workflowSelectedLabel" class="workflow-selected-label">Select workflow</span>
+                  <span id="workflowSelectedLabel" class="workflow-selected-label" data-i18n="composer.select_workflow">選擇 Workflow</span>
                   <span class="workflow-dropdown-caret" aria-hidden="true"></span>
                 </button>
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
-              <button id="optionsButton" class="options-button" type="button" aria-expanded="false">Options</button>
+              <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
               <span id="errorText" class="error-text"></span>
             </div>
             <div class="composer-right runtime-composer-actions">
-              <button id="sendButton" class="primary send-button" type="button">Run</button>
-              <button id="stopButton" class="action-button danger runtime-control-button" type="button" hidden>Stop</button>
-              <button id="resumeButton" class="action-button primary runtime-control-button" type="button" hidden>Continue</button>
-              <button id="resetButton" class="action-button runtime-control-button" type="button" hidden>Reset</button>
+              <button id="sendButton" class="primary send-button" type="button" data-i18n="actions.run">執行</button>
+              <button id="stopButton" class="action-button danger runtime-control-button" type="button" hidden data-i18n="actions.stop">停止</button>
+              <button id="resumeButton" class="action-button primary runtime-control-button" type="button" hidden data-i18n="actions.continue">繼續</button>
+              <button id="resetButton" class="action-button runtime-control-button" type="button" hidden data-i18n="actions.reset">重設</button>
             </div>
           </div>
         </div>
@@ -147,7 +153,7 @@
         <header class="designer-topbar studio-topbar">
           <div>
             <h1>Workflow Studio</h1>
-            <p>Visual 編排 Workflow；單擊 Stage 選取，雙擊編輯，右下角浮動工具可移動順序。YAML 模式可直接切換 Workflow 或 Prompt。</p>
+            <p data-i18n="studio.description">以 Visual 編排 Workflow；單擊 Stage 選取、雙擊編輯，右下角浮動工具可調整順序。YAML 模式可直接編輯 Workflow 或 Prompt。</p>
           </div>
           <div class="designer-topbar-actions">
             <div class="designer-mode-switch" role="group" aria-label="Workflow editor mode">
@@ -182,7 +188,7 @@
           <main class="studio-workflow-main">
             <div id="studioEmpty" class="studio-empty">
               <h2>Select a Workflow or Prompt</h2>
-              <p>Workflow 可用 Visual / YAML；Prompt 在兩種模式都使用相同的 Prompt Editor。</p>
+              <p data-i18n="studio.empty_desc">Workflow 可用 Visual / YAML；Prompt 在兩種模式都使用相同的 Prompt Editor。</p>
             </div>
 
             <div id="studioEditor" class="studio-workflow-editor" hidden>
@@ -217,7 +223,7 @@
               <div id="visualDesignerPanel" class="studio-visual-panel">
                 <section class="designer-step-list-panel studio-step-panel">
                   <div class="designer-panel-head">
-                    <div><span class="designer-eyebrow">Flow</span><h3>Workflow Steps</h3><p>單擊選取、雙擊編輯；可拖曳或用右下浮動按鈕調整順序。</p></div>
+                    <div><span class="designer-eyebrow">Flow</span><h3>Workflow Steps</h3><p data-i18n="studio.flow_desc">單擊選取、雙擊編輯；可拖曳或用右下浮動按鈕調整順序。</p></div>
                     <button id="addFlowStepButton" class="primary" type="button">+ Stage</button>
                   </div>
                   <div id="visualFlowList" class="designer-step-list"></div>
@@ -227,7 +233,7 @@
               <div id="yamlEditorPanel" class="studio-yaml-panel" hidden>
                 <div class="studio-code-toolbar">
                   <span id="editorLanguage" class="studio-code-language">YAML</span>
-                  <span class="studio-code-hint">Tab = 2 spaces · Ctrl+S = Save</span>
+                  <span class="studio-code-hint" data-i18n="studio.yaml_hint">Tab = 2 spaces · Ctrl+S = Save</span>
                 </div>
                 <div class="studio-code-editor">
                   <pre id="studioLineNumbers" class="studio-line-numbers" aria-hidden="true">1</pre>
@@ -238,7 +244,7 @@
               <div id="promptEditorPanel" class="studio-prompt-panel" hidden>
                 <div class="studio-code-toolbar">
                   <div><span class="studio-code-language">Prompt</span><span id="promptSyntaxBadge" class="studio-syntax-badge neutral">Jinja</span></div>
-                  <span class="studio-code-hint">Click a tag to insert · Ctrl+S = Save</span>
+                  <span class="studio-code-hint" data-i18n="studio.prompt_hint">Click a tag to insert · Ctrl+S = Save</span>
                 </div>
                 <div class="designer-template-modal-grid studio-prompt-editor-grid">
                   <label class="designer-form-row designer-template-editor-wrap studio-prompt-editor-wrap">
@@ -266,7 +272,7 @@
           <div class="workflow-generator-heading">
             <span class="designer-eyebrow">AI WORKFLOW BUILDER</span>
             <h1 id="generateWorkflowPageTitle">Generate Workflow with AI</h1>
-            <p id="generateWorkflowPageSubtitle">Describe the Workflow you want. Generate creates a temporary Draft only.</p>
+            <p id="generateWorkflowPageSubtitle" data-i18n="builder.page_desc">Describe the Workflow you want. Generate creates a temporary Draft only.</p>
           </div>
           <span id="generateWorkflowPageBadge" class="workflow-builder-draft-badge" hidden>DRAFT · NOT SAVED</span>
         </header>
@@ -277,7 +283,7 @@
               <label class="designer-form-row designer-form-wide">
                 <span class="designer-label">What should this Workflow do?</span>
                 <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review twice, then run Python validation. Include retry/recovery rules and required prompts."></textarea>
-                <span class="designer-form-hint">Generate always starts a new AI run and a new temporary Draft.</span>
+                <span class="designer-form-hint" data-i18n="builder.generate_hint">Generate always starts a new AI run and a new temporary Draft.</span>
               </label>
               <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
             </div>
@@ -299,15 +305,15 @@
 
           <section id="generateWorkflowReady" class="workflow-generator-phase workflow-generator-review" hidden>
             <div class="workflow-generator-review-head">
-              <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p>Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.</p></div>
+              <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p data-i18n="builder.review_desc">Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.</p></div>
               <div id="generateWorkflowValidation" class="workflow-builder-validation success">Validation PASS</div>
             </div>
             <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
             <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">Edit YAML</button><button id="generateDraftPromptTab" type="button">Edit Prompt</button></div>
             <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div class="workflow-generator-edit-guide"><div><strong>Visual preview</strong><span>Use Edit YAML / Edit Prompt to adjust this temporary Draft. Validate Draft refreshes the Visual preview.</span></div><button id="generateWorkflowEditYaml" type="button">Edit Workflow</button></div><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
-            <section id="generateDraftYamlPanel" class="workflow-generator-review-panel" hidden><div class="studio-code-toolbar"><span class="studio-code-language">Draft Workflow YAML</span><span class="studio-code-hint">Changes are temporary until Save</span></div><textarea id="generateWorkflowPreview" class="studio-textarea workflow-generator-yaml" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></section>
-            <section id="generateDraftPromptPanel" class="workflow-generator-review-panel" hidden><div class="workflow-generator-prompt-grid"><aside id="generateWorkflowPromptList" class="workflow-generator-prompt-list"></aside><div class="workflow-generator-prompt-editor"><div class="studio-code-toolbar"><span id="generateDraftPromptName" class="studio-code-language">Prompt</span><span class="studio-code-hint">Temporary Draft Prompt</span></div><textarea id="generateDraftPromptTextarea" class="designer-textarea studio-prompt-textarea-main" spellcheck="false"></textarea></div></div></section>
-            <div id="generateDraftDirtyHint" class="workflow-generator-dirty-hint" hidden>DRAFT MODIFIED · Validate Draft to refresh Visual before Save</div>
+            <section id="generateDraftYamlPanel" class="workflow-generator-review-panel" hidden><div class="studio-code-toolbar"><span class="studio-code-language">Draft Workflow YAML</span><span class="studio-code-hint" data-i18n="builder.yaml_hint">Changes are temporary until Save</span></div><textarea id="generateWorkflowPreview" class="studio-textarea workflow-generator-yaml" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></section>
+            <section id="generateDraftPromptPanel" class="workflow-generator-review-panel" hidden><div class="workflow-generator-prompt-grid"><aside id="generateWorkflowPromptList" class="workflow-generator-prompt-list"></aside><div class="workflow-generator-prompt-editor"><div class="studio-code-toolbar"><span id="generateDraftPromptName" class="studio-code-language">Prompt</span><span class="studio-code-hint" data-i18n="builder.prompt_hint">Temporary Draft Prompt</span></div><textarea id="generateDraftPromptTextarea" class="designer-textarea studio-prompt-textarea-main" spellcheck="false"></textarea></div></div></section>
+            <div id="generateDraftDirtyHint" class="workflow-generator-dirty-hint" hidden data-i18n="builder.dirty_hint">DRAFT MODIFIED · Validate Draft to refresh Visual before Save</div>
             <div class="workflow-generator-actions workflow-generator-review-actions"><button id="generateWorkflowDiscard" class="danger-text" type="button">Discard</button><button id="generateWorkflowRegenerate" type="button">Regenerate</button><button id="generateWorkflowEditPrompt" type="button">Edit Prompt</button><button id="generateWorkflowValidate" type="button">Validate Draft</button><button id="generateWorkflowSave" class="primary" type="button">Save Workflow</button></div>
           </section>
 
@@ -321,7 +327,7 @@
   <div id="projectModalBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card project-modal-card" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
       <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon" aria-hidden="true">P</span><div><h2 id="projectModalTitle">Open Project</h2><p>選擇 Runner 要操作的專案資料夾。Project 只會加入側邊欄，不會複製或搬動檔案。</p></div></div>
+        <div class="modal-title-with-icon"><span class="modal-title-icon" aria-hidden="true">P</span><div><h2 id="projectModalTitle">Open Project</h2><p data-i18n="projects.open_desc">選擇 Runner 要操作的專案資料夾。專案只會加入側邊欄，不會複製或搬動檔案。</p></div></div>
         <button id="projectModalClose" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
       <div class="modal-section-label">Project folder</div>
@@ -330,8 +336,8 @@
         <input id="projectPathInput" class="modal-input" placeholder="C:\\work\\my-project" />
         <button id="browseProjectButton" class="file-choice-button" type="button">Browse…</button>
       </div>
-      <div id="projectModalHint" class="modal-hint">可直接貼上路徑，或使用 Browse 選擇資料夾。</div>
-      <div class="modal-actions"><button id="projectModalCancel" class="modal-secondary" type="button">Cancel</button><button id="projectModalConfirm" class="primary modal-primary" type="button">Open Project</button></div>
+      <div id="projectModalHint" class="modal-hint" data-i18n="project.path_hint">可直接貼上路徑，或使用 Browse 選擇資料夾。</div>
+      <div class="modal-actions"><button id="projectModalCancel" class="modal-secondary" type="button" data-i18n="common.cancel">取消</button><button id="projectModalConfirm" class="primary modal-primary" type="button" data-i18n="projects.open">開啟專案</button></div>
     </div>
   </div>
 
@@ -339,13 +345,13 @@
   <div id="newWorkflowBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="newWorkflowTitle">
       <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="newWorkflowTitle">New Workflow</h2><p>建立空白 Workflow，再用 Visual Designer 加 Stage；不會覆寫既有檔案。</p></div></div>
+        <div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="newWorkflowTitle">New Workflow</h2><p data-i18n="workflow.new_desc">建立空白 Workflow，再用 Visual Designer 加 Stage；不會覆寫既有檔案。</p></div></div>
         <button id="newWorkflowClose" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
       <div class="modal-scroll-body">
         <div class="modal-section-label">Workflow file</div>
-        <label class="designer-form-row"><span class="designer-label">Name</span><input id="newWorkflowName" class="designer-input" placeholder="regression.workflow.yaml" /><span class="designer-form-hint">未輸入副檔名時會自動建立 .workflow.yaml。</span></label>
-        <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select><span class="designer-form-hint">Custom workflow 可被多個 Project 使用；Project workflow 跟著目前專案。</span></label>
+        <label class="designer-form-row"><span class="designer-label">Name</span><input id="newWorkflowName" class="designer-input" placeholder="regression.workflow.yaml" /><span class="designer-form-hint" data-i18n="workflow.name_hint">未輸入副檔名時會自動建立 .workflow.yaml。</span></label>
+        <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select><span class="designer-form-hint" data-i18n="workflow.destination_hint">Custom workflow 可被多個 Project 使用；Project workflow 跟著目前專案。</span></label>
         <div id="newWorkflowFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><select id="newWorkflowFolder" class="designer-select"><option value="">Custom root</option></select></label><button id="newWorkflowFolderToggle" type="button">+ New Folder</button></div>
         <div id="newWorkflowFolderCreateRow" class="custom-folder-create-row" hidden><input id="newWorkflowFolderName" class="designer-input" placeholder="e2e/regression" /><button id="newWorkflowFolderCreate" type="button">Create Folder</button></div>
         <div class="workflow-create-preview"><span class="designer-eyebrow">Initial YAML</span><code>stages:
@@ -365,7 +371,7 @@ flow:
   <div id="newPromptBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="newPromptTitle">
       <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon prompt" aria-hidden="true">P</span><div><h2 id="newPromptTitle">New Prompt</h2><p>建立 Custom 或 Project Prompt。System Runner Prompts 永遠唯讀。</p></div></div>
+        <div class="modal-title-with-icon"><span class="modal-title-icon prompt" aria-hidden="true">P</span><div><h2 id="newPromptTitle">New Prompt</h2><p data-i18n="prompt.new_desc">建立 Custom 或 Project Prompt。System Runner Prompts 永遠唯讀。</p></div></div>
         <button id="newPromptClose" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
       <div class="modal-scroll-body">
@@ -382,8 +388,8 @@ flow:
   <!-- Static-style Import modal for both Workflow and Prompt assets. -->
   <div id="generateWorkflowSaveBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-save-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowSaveTitle">
-      <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p>Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close">×</button></div>
-      <div class="modal-scroll-body"><label class="designer-form-row"><span class="designer-label">Workflow name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label><label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label><div id="generateWorkflowSaveHint" class="modal-hint">Save is the moment this Draft becomes a real Workflow.</div></div>
+      <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p data-i18n="builder.save_desc">Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <div class="modal-scroll-body"><label class="designer-form-row"><span class="designer-label">Workflow name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label><label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label><div id="generateWorkflowSaveHint" class="modal-hint" data-i18n="builder.save_hint">Save is the moment this Draft becomes a real Workflow.</div></div>
       <div class="modal-actions"><button id="generateWorkflowSaveCancel" type="button">Cancel</button><button id="generateWorkflowSaveConfirm" class="primary" type="button">Validate &amp; Save</button></div>
     </div>
   </div>
@@ -391,7 +397,7 @@ flow:
   <div id="importAssetBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card import-asset-card" role="dialog" aria-modal="true" aria-labelledby="importAssetTitle">
       <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon import" aria-hidden="true">I</span><div><h2 id="importAssetTitle">Import Workflow</h2><p id="importAssetDescription">Import becomes a Custom or Project asset. System assets are never overwritten.</p></div></div>
+        <div class="modal-title-with-icon"><span class="modal-title-icon import" aria-hidden="true">I</span><div><h2 id="importAssetTitle">Import Workflow</h2><p id="importAssetDescription" data-i18n="import.desc">Import becomes a Custom or Project asset. System assets are never overwritten.</p></div></div>
         <button id="importAssetClose" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
       <div class="modal-scroll-body import-asset-body">
@@ -414,16 +420,16 @@ flow:
   <div id="addStageBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card add-stage-card" role="dialog" aria-modal="true" aria-labelledby="addStageTitle">
       <div class="modal-head">
-        <div class="modal-title-with-icon"><span class="modal-title-icon stage" aria-hidden="true">S</span><div><h2 id="addStageTitle">Add Stage</h2><p>先建立最少必要設定；建立後會直接開啟 Stage Editor 補完整欄位與 Prompt 選擇。</p></div></div>
+        <div class="modal-title-with-icon"><span class="modal-title-icon stage" aria-hidden="true">S</span><div><h2 id="addStageTitle">Add Stage</h2><p data-i18n="stage.add_desc">先建立最少必要設定；建立後會直接開啟 Stage Editor 補完整欄位與 Prompt 選擇。</p></div></div>
         <button id="addStageClose" class="modal-close" type="button" aria-label="Close">×</button>
       </div>
       <div class="modal-scroll-body add-stage-body">
         <div class="add-stage-preview"><span id="addStageTypeBadge" class="designer-step-type">task</span><div><strong>New workflow stage</strong><span id="addStageTypeHelp">Execute one task with the configured prompt.</span></div></div>
         <div class="add-stage-grid">
-          <label class="designer-form-row"><span class="designer-label">Stage key</span><input id="addStageName" class="designer-input" placeholder="review_result" /><span class="designer-form-hint">YAML stages 下的唯一 key。</span></label>
+          <label class="designer-form-row"><span class="designer-label">Stage key</span><input id="addStageName" class="designer-input" placeholder="review_result" /><span class="designer-form-hint" data-i18n="stage.key_hint">YAML stages 下的唯一 key。</span></label>
           <label class="designer-form-row"><span class="designer-label">Type</span><select id="addStageType" class="designer-select"><option value="task">task</option><option value="review">review</option><option value="plan">plan</option><option value="ai_validator">ai_validator</option><option value="command">command</option><option value="base">base</option></select></label>
           <label class="designer-form-row add-stage-wide"><span class="designer-label">Status</span><input id="addStageStatus" class="designer-input" placeholder="Optional user-facing status" /></label>
-          <label id="addStagePromptRow" class="designer-form-row add-stage-wide"><span class="designer-label">Prompt</span><select id="addStagePrompt" class="designer-select"></select><span class="designer-form-hint">可先不選；建立後在 Stage Editor 只選 Prompt，不直接修改 Prompt 內容。</span></label>
+          <label id="addStagePromptRow" class="designer-form-row add-stage-wide"><span class="designer-label">Prompt</span><select id="addStagePrompt" class="designer-select"></select><span class="designer-form-hint" data-i18n="stage.add_prompt_hint">可先不選；建立後在 Stage Editor 只選 Prompt，不直接修改 Prompt 內容。</span></label>
           <label id="addStageCommandRow" class="designer-form-row add-stage-wide" hidden><span class="designer-label">Command</span><textarea id="addStageCommand" class="designer-textarea" rows="3" placeholder="{python} script.py"></textarea></label>
         </div>
         <label class="add-stage-flow-toggle"><input id="addStageToFlow" type="checkbox" checked /> <span>建立後加入 Flow 最後</span></label>
@@ -433,6 +439,7 @@ flow:
     </div>
   </div>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/ui-dialogs.js"></script>
   <script src="/js/studio-support.js"></script>
   <script type="module" src="/app.js"></script>

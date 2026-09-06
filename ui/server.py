@@ -1160,20 +1160,10 @@ class UIState:
                     clean = dict(item)
                     clean["stage"] = str(clean["stage"]).strip()
                     normalized.append(clean if len(clean) > 1 else clean["stage"])
-            flow_text = yaml.safe_dump({"flow": normalized}, allow_unicode=True, sort_keys=False, default_flow_style=False).rstrip() + "\n"
-            lines = content.splitlines(keepends=True)
-            start = next((i for i, line in enumerate(lines) if line.startswith("flow:") and not line[:1].isspace()), None)
-            if start is None:
-                separator = "" if not content or content.endswith("\n") else "\n"
-                updated = content + separator + flow_text
-            else:
-                end = len(lines)
-                for i in range(start + 1, len(lines)):
-                    line = lines[i]
-                    if line.strip() and not line[:1].isspace() and not line.lstrip().startswith("#"):
-                        end = i
-                        break
-                updated = "".join(lines[:start]) + flow_text + "".join(lines[end:])
+            # Reuse the canonical Flow block writer instead of emitting an
+            # indentless sequence here.  The Visual editor must never turn a
+            # valid Workflow into malformed YAML merely by reordering Stages.
+            updated = self._replace_flow_block(content, normalized)
             self._validate_workflow_before_write(path, updated)
             self._atomic_write(path, updated)
             return self.studio_read(file_id, project)

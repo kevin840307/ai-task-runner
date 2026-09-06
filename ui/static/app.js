@@ -1,4 +1,6 @@
 const $ = (id) => document.getElementById(id);
+const t = (key, fallback = "") => window.I18n?.t(key, fallback) ?? fallback ?? key;
+const tf = (key, values = {}, fallback = "") => window.I18n?.format?.(key, values, fallback) ?? fallback ?? key;
 const UI_PREFS_KEY = "ai-task-runner.ui.preferences.v1";
 function loadUiPreferences() {
   try {
@@ -48,6 +50,8 @@ function renderThemeControls() {
   const theme = document.documentElement.dataset.theme || "teal", appearance = document.documentElement.dataset.appearancePreference || "system";
   document.querySelectorAll("[data-theme-option]").forEach((button) => { const active = button.dataset.themeOption === theme; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
   document.querySelectorAll("[data-appearance-option]").forEach((button) => { const active = button.dataset.appearanceOption === appearance; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
+  const language = window.I18n?.getLanguage?.() || "zh-TW";
+  document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
 function positionThemePanel() {
   const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
@@ -172,12 +176,12 @@ function renderProjects() {
     const name = document.createElement("strong"); name.textContent = project.name;
     nameLine.appendChild(name);
     if (labels[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = labels[runtimeStatus]; nameLine.appendChild(status); }
-    const path = document.createElement("small"); path.textContent = project.exists === false ? `Missing · ${project.path}` : project.path;
+    const path = document.createElement("small"); path.textContent = project.exists === false ? `${t("project.missing", "Missing")} · ${project.path}` : project.path;
     copy.append(nameLine, path); button.append(mark, copy); button.onclick = () => project.exists === false ? null : selectProject(project);
 
-    const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = "Project actions"; menuButton.setAttribute("aria-label", `Project actions for ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>";
+    const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>";
     const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
-    const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = "Remove project";
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = t("project.remove", "Remove project");
     menu.appendChild(remove);
     menuButton.onclick = (event) => {
       event.stopPropagation(); const open = menu.hidden;
@@ -658,7 +662,7 @@ async function openStageEditor(index = state.selectedFlowIndex) {
       <div class="designer-step-modal-head">
         <div class="designer-step-modal-title-wrap">
           <div class="designer-step-modal-title-line"><h2 id="designerStepModalTitle">${escapeHtml(name || "Stage Settings")}</h2><span class="designer-step-type">${escapeHtml(cfg.type || "base")}</span></div>
-          <p class="designer-form-hint">Stage ${index + 1} / ${total} · Prompt content (when supported) is edited from the Prompt workspace.</p>
+          <p class="designer-form-hint">${escapeHtml(tf("stage.modal_desc", { index: index + 1, total }, `Stage ${index + 1} / ${total} · Prompt content (when supported) is edited from the Prompt workspace.`))}</p>
         </div>
         <div class="designer-step-modal-tools">
           <div class="designer-step-modal-nav"><button type="button" data-stage-prev>← Prev</button><span data-stage-position>${index + 1} / ${total}</span><button type="button" data-stage-next>Next →</button></div>
@@ -696,13 +700,13 @@ function renderStageEditorContent(cfg, item) {
   const box = currentStageModal(); if (!box) return; const disabled = !state.studioGuard.editable ? "disabled" : "";
   const settings = box.querySelector('[data-stage-panel="settings"]');
   settings.innerHTML = `
-    ${!state.studioGuard.editable ? '<div class="designer-warning-box"><strong>Read only</strong><span>Stop active Runtime before editing Workflow settings.</span></div>' : ''}
+    ${!state.studioGuard.editable ? `<div class="designer-warning-box"><strong>Read only</strong><span>${escapeHtml(t("stage.readonly_desc", "Stop active Runtime before editing Workflow settings."))}</span></div>` : ''}
     <div class="stage-identity-strip"><span><strong>${escapeHtml(cfg.name)}</strong><small>Stage key</small></span><span><strong>${escapeHtml(cfg.type || "base")}</strong><small>Current type</small></span></div>
-    <div class="stage-section-head"><div><strong>Stage</strong><span>常用設定優先；低頻 runtime overrides 收在 Advanced。</span></div></div>
+    <div class="stage-section-head"><div><strong>Stage</strong><span>${escapeHtml(t("stage.section_desc", "Common settings are shown first; less-used runtime overrides are under Advanced."))}</span></div></div>
     <div class="stage-form-two-col stage-primary-fields">
       <label class="designer-form-row"><span class="designer-label">Type</span><select id="stageType" class="designer-select" ${disabled}>${stageTypesOptions(cfg.type || "base")}</select></label>
       <label class="designer-form-row"><span class="designer-label">Status</span><input id="stageStatus" class="designer-input" value="${escapeHtml(item?.status ?? cfg.status ?? "")}" placeholder="User-facing runtime status" ${disabled} /></label>
-      <label id="stagePromptSelectRow" class="designer-form-row stage-form-wide"><span class="designer-label">Prompt</span><select id="stagePromptSelect" class="designer-select" ${disabled}>${promptOptionRows(item?.prompt ?? cfg.prompt ?? "")}</select><span class="designer-form-hint">Prompt content is edited in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here.</span></label>
+      <label id="stagePromptSelectRow" class="designer-form-row stage-form-wide"><span class="designer-label">Prompt</span><select id="stagePromptSelect" class="designer-select" ${disabled}>${promptOptionRows(item?.prompt ?? cfg.prompt ?? "")}</select><span class="designer-form-hint">${escapeHtml(t("stage.prompt_desc", "Edit Prompt content in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here."))}</span></label>
       <label class="designer-form-row"><span class="designer-label">Timeout (seconds)</span><input id="stageTimeout" class="designer-input" type="number" min="0" step="0.1" value="${cfg.timeout ?? ""}" placeholder="Stage default" ${disabled} /></label>
       <label class="designer-form-row"><span class="designer-label">Flow scope</span><select id="stageScope" class="designer-select" ${disabled}><option value="" ${!item?.scope ? "selected" : ""}>Workflow</option><option value="task" ${item?.scope === "task" ? "selected" : ""}>Per task</option></select></label>
       <label class="designer-form-row stage-form-wide"><span class="designer-label">Flow label</span><input id="stageFlowLabel" class="designer-input" value="${escapeHtml(item?.label || "")}" placeholder="Optional display / routing label" ${disabled} /></label>
@@ -710,7 +714,7 @@ function renderStageEditorContent(cfg, item) {
     </div>
     <div id="stageTypeSpecific" class="stage-type-specific"></div>
     <details id="stageAdvancedOverrides" class="stage-advanced-overrides" ${hasAdvancedStageOverrides(cfg) ? "open" : ""}>
-      <summary><span><strong>Advanced overrides</strong><small>Only use when the Stage type default is not enough.</small></span><span aria-hidden="true">⌄</span></summary>
+      <summary><span><strong>Advanced overrides</strong><small>${escapeHtml(t("stage.advanced_desc", "Use only when the Stage type default is not enough."))}</small></span><span aria-hidden="true">⌄</span></summary>
       <div class="stage-form-two-col stage-advanced-grid">
         <label class="designer-form-row"><span class="designer-label">Run state</span><input id="stageRunState" class="designer-input" value="${escapeHtml(cfg.run_state || "")}" placeholder="Stage default" ${disabled} /></label>
         <label class="designer-form-row"><span class="designer-label">Actor</span><input id="stageActor" class="designer-input" value="${escapeHtml(cfg.actor || "")}" placeholder="Stage default" ${disabled} /></label>
@@ -724,39 +728,39 @@ function renderStageEditorContent(cfg, item) {
 
   const control = box.querySelector('[data-stage-panel="control"]');
   control.innerHTML = `
-    <div class="stage-section-head"><div><strong>Flow</strong><span>Routing for this Flow invocation.</span></div></div>
+    <div class="stage-section-head"><div><strong>Flow</strong><span>${escapeHtml(t("stage.flow_desc", "Routing for this Flow invocation."))}</span></div></div>
     <div class="stage-form-two-col">
-      <label class="designer-form-row">${fieldLabel("Restart at", "On semantic FAIL, restart this or an earlier top-level Stage.")}<select id="stageRestartAt" class="designer-select" ${disabled}>${flowStageOptions(item?.restart_at || "")}</select></label>
-      <label class="designer-form-row">${fieldLabel("Repeat", "Legacy bounded recovery. Leave empty unless this Workflow already relies on repeat.")}<input id="stageRepeat" class="designer-input" type="number" min="1" value="${item?.repeat ?? ""}" placeholder="No repeat" ${disabled} /></label>
-      <label class="designer-form-row">${fieldLabel("Fresh after same failures", "After the same semantic failure repeats this many times, use a fresh AI session for recovery.")}<input id="stageFreshAfterSameFailures" class="designer-input" type="number" min="1" value="${item?.fresh_after_same_failures ?? ""}" placeholder="Default recovery policy" ${disabled} /></label>
+      <label class="designer-form-row">${fieldLabel("Restart at", t("stage.help.restart_at", "On semantic FAIL, restart this or an earlier top-level Stage."))}<select id="stageRestartAt" class="designer-select" ${disabled}>${flowStageOptions(item?.restart_at || "")}</select></label>
+      <label class="designer-form-row">${fieldLabel("Repeat", t("stage.help.repeat", "Legacy bounded recovery. Leave empty unless this Workflow already relies on repeat."))}<input id="stageRepeat" class="designer-input" type="number" min="1" value="${item?.repeat ?? ""}" placeholder="No repeat" ${disabled} /></label>
+      <label class="designer-form-row">${fieldLabel("Fresh after same failures", t("stage.help.fresh_after", "After the same semantic failure repeats this many times, use a Fresh Session for recovery."))}<input id="stageFreshAfterSameFailures" class="designer-input" type="number" min="1" value="${item?.fresh_after_same_failures ?? ""}" placeholder="Default recovery policy" ${disabled} /></label>
     </div>
 
-    <div class="stage-section-head"><div><strong>Recovery gate</strong><span>FAIL routing and optional bounded recovery.</span></div></div>
+    <div class="stage-section-head"><div><strong>Recovery gate</strong><span>${escapeHtml(t("stage.recovery_desc", "Semantic FAIL routing and optional bounded recovery."))}</span></div></div>
     <div class="stage-form-two-col">
-      <label class="designer-form-row stage-form-wide">${fieldLabel("Recover stages", "Stages to run when this Stage returns semantic FAIL.")}<input id="stageRecover" class="designer-input" value="${escapeHtml((cfg.recover || []).join(", "))}" placeholder="repair, repair_plan" ${disabled} /></label>
-      <label id="stageMaxAttemptsRow" class="designer-form-row">${fieldLabel("Max attempts", "Maximum FAIL → Recover → Retry attempts in one gate cycle. Leave empty to keep the original unlimited/current recovery behavior.")}<input id="stageMaxAttempts" class="designer-input" type="number" min="1" value="${item?.max_attempts ?? ""}" placeholder="Unlimited / current behavior" ${disabled} /></label>
-      <label id="stageOnExhaustedRow" class="designer-form-row">${fieldLabel("On exhausted", "What happens when Max attempts is reached. Re-entering this Stage later starts again from attempt 1.")}<select id="stageOnExhausted" class="designer-select" ${disabled}><option value="" ${!item?.on_exhausted ? "selected" : ""}>Fail (default)</option><option value="fail" ${item?.on_exhausted === "fail" ? "selected" : ""}>Fail</option><option value="continue" ${item?.on_exhausted === "continue" ? "selected" : ""}>Continue</option></select></label>
+      <label class="designer-form-row stage-form-wide">${fieldLabel("Recover stages", t("stage.help.recover", "Stages to run when this Stage returns semantic FAIL."))}<input id="stageRecover" class="designer-input" value="${escapeHtml((cfg.recover || []).join(", "))}" placeholder="repair, repair_plan" ${disabled} /></label>
+      <label id="stageMaxAttemptsRow" class="designer-form-row">${fieldLabel("Max attempts", t("stage.help.max_attempts", "Maximum FAIL → Recover → Retry attempts in one gate cycle. Leave empty to keep the original unlimited / current recovery behavior."))}<input id="stageMaxAttempts" class="designer-input" type="number" min="1" value="${item?.max_attempts ?? ""}" placeholder="Unlimited / current behavior" ${disabled} /></label>
+      <label id="stageOnExhaustedRow" class="designer-form-row">${fieldLabel("On exhausted", t("stage.help.on_exhausted", "What happens when Max attempts is reached. Re-entering this Stage later starts again from attempt 1."))}<select id="stageOnExhausted" class="designer-select" ${disabled}><option value="" ${!item?.on_exhausted ? "selected" : ""}>Fail (default)</option><option value="fail" ${item?.on_exhausted === "fail" ? "selected" : ""}>Fail</option><option value="continue" ${item?.on_exhausted === "continue" ? "selected" : ""}>Continue</option></select></label>
     </div>
     <div id="stageRecoveryBehavior" class="stage-behavior-preview"></div>
 
-    <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>Execution-level retry is separate from FAIL → Recover attempts.</span></div></div>
+    <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Execution-level retry is separate from FAIL → Recover attempts."))}</span></div></div>
     <div class="stage-form-two-col">
-      <label class="designer-form-row">${fieldLabel("Retry", "Technical Stage retry. This is separate from semantic FAIL recovery.")}<input id="stageRetry" class="designer-input" type="number" min="-1" value="${cfg.retry ?? ""}" placeholder="Stage default" ${disabled} /><span class="designer-form-hint">-1 = keep retrying until PASS; 0 = no retry.</span></label>
-      <label id="stageStructuredRetriesRow" class="designer-form-row">${fieldLabel("Structured retries", "Retry malformed structured output in the current session.")}<input id="stageStructuredRetries" class="designer-input" type="number" min="0" value="${cfg.structured_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
-      <label id="stageStructuredFreshRetriesRow" class="designer-form-row">${fieldLabel("Structured fresh retries", "Retry malformed structured output in a fresh session after current-session retries are exhausted.")}<input id="stageStructuredFreshRetries" class="designer-input" type="number" min="0" value="${cfg.structured_fresh_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
+      <label class="designer-form-row">${fieldLabel("Retry", t("stage.help.retry", "Technical Stage retry. This is separate from semantic FAIL recovery."))}<input id="stageRetry" class="designer-input" type="number" min="-1" value="${cfg.retry ?? ""}" placeholder="Stage default" ${disabled} /><span class="designer-form-hint">${escapeHtml(t("stage.retry_hint", "-1 = keep retrying until PASS; 0 = no retry."))}</span></label>
+      <label id="stageStructuredRetriesRow" class="designer-form-row">${fieldLabel("Structured retries", t("stage.help.structured_retries", "Retry malformed structured output in the current Session."))}<input id="stageStructuredRetries" class="designer-input" type="number" min="0" value="${cfg.structured_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
+      <label id="stageStructuredFreshRetriesRow" class="designer-form-row">${fieldLabel("Structured fresh retries", t("stage.help.structured_fresh_retries", "Retry malformed structured output in a Fresh Session after current-Session retries are exhausted."))}<input id="stageStructuredFreshRetries" class="designer-input" type="number" min="0" value="${cfg.structured_fresh_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
     </div>
 
-    <div class="stage-section-head"><div><strong>Session & safety</strong><span>Session isolation and file/change handling.</span></div></div>
+    <div class="stage-section-head"><div><strong>Session & safety</strong><span>${escapeHtml(t("stage.session_desc", "Session isolation and file / change handling."))}</span></div></div>
     <div class="stage-switch-grid">
-      ${switchRow("stageSkipOnError", "Skip on error", "Continue when the Stage itself errors.", cfg.skip_on_error, disabled)}
-      <span id="stageFreshOnStartRow">${switchRow("stageFreshOnStart", "Fresh session on start", "Start this Stage in a new AI session.", cfg.fresh_session_on_start, disabled)}</span>
-      <span id="stageFreshEachRunRow">${switchRow("stageFreshEachRun", "Fresh session each run", "Use a new session for every multi-run validation.", cfg.fresh_session_each_run, disabled)}</span>
-      ${switchRow("stageTrackChanges", "Track changes", "Track project changes produced by this Stage.", cfg.track_changes, disabled)}
-      ${switchRow("stageTolerateRestored", "Tolerate restored changes", "Allow restored readonly changes without failing the Stage.", cfg.tolerate_restored_changes, disabled)}
-      <span id="stageAllowProjectReadRow">${switchRow("stageAllowProjectRead", "Allow readonly file read", "For Plan, permit readonly inspection of any readable filesystem path, including outside the current Project.", cfg.allow_project_read ?? ((cfg.type || "base") === "plan"), disabled)}</span>
+      ${switchRow("stageSkipOnError", "Skip on error", t("stage.help.skip_on_error", "Continue when the Stage itself errors."), cfg.skip_on_error, disabled)}
+      <span id="stageFreshOnStartRow">${switchRow("stageFreshOnStart", "Fresh session on start", t("stage.help.fresh_on_start", "Start this Stage in a new AI Session."), cfg.fresh_session_on_start, disabled)}</span>
+      <span id="stageFreshEachRunRow">${switchRow("stageFreshEachRun", "Fresh session each run", t("stage.help.fresh_each_run", "Use a new Session for every multi-run validation."), cfg.fresh_session_each_run, disabled)}</span>
+      ${switchRow("stageTrackChanges", "Track changes", t("stage.help.track_changes", "Track project changes produced by this Stage."), cfg.track_changes, disabled)}
+      ${switchRow("stageTolerateRestored", "Tolerate restored changes", t("stage.help.tolerate_restored", "Allow restored readonly changes without failing the Stage."), cfg.tolerate_restored_changes, disabled)}
+      <span id="stageAllowProjectReadRow">${switchRow("stageAllowProjectRead", "Allow readonly file read", t("stage.help.allow_read", "For Plan, allow readonly inspection of any filesystem path readable by the current account, including paths outside the Current Project."), cfg.allow_project_read ?? ((cfg.type || "base") === "plan"), disabled)}</span>
     </div>
     <div id="stageCleanWorkRow" class="stage-form-two-col stage-command-safety" hidden>
-      <label class="designer-form-row stage-form-wide">${fieldLabel("Clean work paths", "Delete these paths under the Runner work directory before a command/validator run.")}<input id="stageCleanWork" class="designer-input" value="${escapeHtml((cfg.clean_work || []).join(", "))}" placeholder="validator-reports" ${disabled} /></label>
+      <label class="designer-form-row stage-form-wide">${fieldLabel("Clean work paths", t("stage.help.clean_work", "Delete these relative paths under the Runner work directory before a Command / Validator run."))}<input id="stageCleanWork" class="designer-input" value="${escapeHtml((cfg.clean_work || []).join(", "))}" placeholder="validator-reports" ${disabled} /></label>
     </div>`;
 
   const syncRecoveryControls = () => {
@@ -770,9 +774,9 @@ function renderStageEditorContent(cfg, item) {
     if (!hasRecover) { preview.hidden = true; preview.textContent = ""; return; }
     preview.hidden = false;
     const target = recover.split(",").map((x) => x.trim()).filter(Boolean).join(" → ") || "recovery";
-    if (!hasMax) { preview.textContent = `FAIL → ${target} → Retry · no bounded attempt limit`; return; }
+    if (!hasMax) { preview.textContent = tf("stage.behavior.unbounded", { target }, `FAIL → ${target} → Retry · no bounded attempt limit`); return; }
     const exhausted = fieldValue("stageOnExhausted") === "continue" ? "Continue" : "Fail";
-    preview.textContent = `FAIL → ${target} → Retry · up to ${max} attempts · then ${exhausted}. Later re-entry starts again at 1.`;
+    preview.textContent = tf("stage.behavior.bounded", { target, max, exhausted }, `FAIL → ${target} → Retry · up to ${max} attempts · then ${exhausted}. Later re-entry starts again at 1.`);
   };
   $("stageRecover")?.addEventListener("input", syncRecoveryControls); $("stageMaxAttempts")?.addEventListener("input", syncRecoveryControls); $("stageOnExhausted")?.addEventListener("change", syncRecoveryControls); syncRecoveryControls();
 
@@ -785,11 +789,11 @@ function fieldLabel(title, help = "") { return `<span class="designer-label">${e
 function renderTypeSpecific(cfg, disabled) {
   const root = $("stageTypeSpecific"); if (!root) return; const type = $("stageType")?.value || cfg.type || "base"; const parts = [];
   if (type === "command") {
-    parts.push(`<div class="stage-section-head"><div><strong>Command</strong><span>Command runtime settings.</span></div></div><div class="stage-form-two-col"><label class="designer-form-row stage-form-wide"><span class="designer-label">Command</span><textarea id="stageCommand" class="designer-textarea" rows="4" ${disabled}>${escapeHtml(Array.isArray(cfg.command) ? cfg.command.join(" ") : (cfg.command || ""))}</textarea></label><label class="designer-form-row"><span class="designer-label">Result kind</span><select id="stageResultKind" class="designer-select" ${disabled}><option value="" ${!cfg.result_kind ? "selected" : ""}>Stage default</option><option value="generic" ${cfg.result_kind === "generic" ? "selected" : ""}>generic</option><option value="validation" ${cfg.result_kind === "validation" ? "selected" : ""}>validation</option></select></label><label class="designer-form-row"><span class="designer-label">Working directory</span><input id="stageCwd" class="designer-input" value="${escapeHtml(cfg.cwd || "")}" placeholder="Project root" ${disabled} /></label></div>`);
+    parts.push(`<div class="stage-section-head"><div><strong>Command</strong><span>${escapeHtml(t("stage.command_desc", "Command runtime settings."))}</span></div></div><div class="stage-form-two-col"><label class="designer-form-row stage-form-wide"><span class="designer-label">Command</span><textarea id="stageCommand" class="designer-textarea" rows="4" ${disabled}>${escapeHtml(Array.isArray(cfg.command) ? cfg.command.join(" ") : (cfg.command || ""))}</textarea></label><label class="designer-form-row"><span class="designer-label">Result kind</span><select id="stageResultKind" class="designer-select" ${disabled}><option value="" ${!cfg.result_kind ? "selected" : ""}>Stage default</option><option value="generic" ${cfg.result_kind === "generic" ? "selected" : ""}>generic</option><option value="validation" ${cfg.result_kind === "validation" ? "selected" : ""}>validation</option></select></label><label class="designer-form-row"><span class="designer-label">Working directory</span><input id="stageCwd" class="designer-input" value="${escapeHtml(cfg.cwd || "")}" placeholder="Project root" ${disabled} /></label></div>`);
   } else {
-    if (type === "plan") parts.push(`<div class="stage-section-head"><div><strong>Plan</strong><span>Task-plan generation settings. Plan prompt is owned by the Plan Stage implementation.</span></div></div><div class="stage-form-two-col"><label class="designer-form-row"><span class="designer-label">Minimum tasks</span><input id="stageMinTasks" class="designer-input" type="number" min="1" value="${cfg.min_tasks ?? ""}" placeholder="Default" ${disabled} /></label>${switchRow("stageRepairPlan", "Repair plan", "Generate a repair-oriented TODO plan.", cfg.repair_plan, disabled)}</div>`);
-    if (type === "ai_validator") parts.push(`<div class="stage-section-head"><div><strong>AI validation</strong><span>Validator and multi-run voting.</span></div></div><div class="stage-form-two-col"><label class="designer-form-row">${fieldLabel("Validator", "AI validator profile. Usually leave as ai.")}<input id="stageValidator" class="designer-input" value="${escapeHtml(cfg.validator || "")}" placeholder="ai" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Runs", "How many independent Stage runs to perform in one entry.")}<input id="stageRuns" class="designer-input" type="number" min="1" value="${cfg.runs ?? ""}" placeholder="Configured default" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Required passes", "How many of Runs must PASS. Leave empty for the Stage default/majority.")}<input id="stageRequiredPasses" class="designer-input" type="number" min="1" value="${cfg.required_passes ?? ""}" placeholder="Majority" ${disabled} /></label></div>`);
-    else if (["base", "task", "review"].includes(type)) parts.push(`<div class="stage-section-head"><div><strong>Multi-run</strong><span>Optional repeated runs / voting for this Stage.</span></div></div><div class="stage-form-two-col"><label class="designer-form-row">${fieldLabel("Runs", "How many times this Stage runs in one entry. Leave empty for the Stage default.")}<input id="stageRuns" class="designer-input" type="number" min="1" value="${cfg.runs ?? ""}" placeholder="Stage default" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Required passes", "How many runs must PASS. Leave empty for majority/default.")}<input id="stageRequiredPasses" class="designer-input" type="number" min="1" value="${cfg.required_passes ?? ""}" placeholder="Majority" ${disabled} /></label></div>`);
+    if (type === "plan") parts.push(`<div class="stage-section-head"><div><strong>Plan</strong><span>${escapeHtml(t("stage.plan_desc", "Task-plan generation settings. Plan prompt is owned by the Plan Stage implementation."))}</span></div></div><div class="stage-form-two-col"><label class="designer-form-row"><span class="designer-label">Minimum tasks</span><input id="stageMinTasks" class="designer-input" type="number" min="1" value="${cfg.min_tasks ?? ""}" placeholder="Default" ${disabled} /></label>${switchRow("stageRepairPlan", "Repair plan", t("stage.help.repair_plan", "Generate a repair-oriented TODO plan."), cfg.repair_plan, disabled)}</div>`);
+    if (type === "ai_validator") parts.push(`<div class="stage-section-head"><div><strong>AI validation</strong><span>${escapeHtml(t("stage.ai_validation_desc", "AI Validator and multi-run voting settings."))}</span></div></div><div class="stage-form-two-col"><label class="designer-form-row">${fieldLabel("Validator", t("stage.help.validator", "AI validator profile. Usually leave as ai."))}<input id="stageValidator" class="designer-input" value="${escapeHtml(cfg.validator || "")}" placeholder="ai" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Runs", t("stage.help.runs", "How many independent Stage runs to perform in one entry."))}<input id="stageRuns" class="designer-input" type="number" min="1" value="${cfg.runs ?? ""}" placeholder="Configured default" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Required passes", t("stage.help.required_passes", "How many Runs must PASS. Leave empty for the Stage default / majority."))}<input id="stageRequiredPasses" class="designer-input" type="number" min="1" value="${cfg.required_passes ?? ""}" placeholder="Majority" ${disabled} /></label></div>`);
+    else if (["base", "task", "review"].includes(type)) parts.push(`<div class="stage-section-head"><div><strong>Multi-run</strong><span>${escapeHtml(t("stage.multi_run_desc", "Optional repeated runs / voting for this Stage."))}</span></div></div><div class="stage-form-two-col"><label class="designer-form-row">${fieldLabel("Runs", t("stage.help.runs", "How many independent Stage runs to perform in one entry."))}<input id="stageRuns" class="designer-input" type="number" min="1" value="${cfg.runs ?? ""}" placeholder="Stage default" ${disabled} /></label><label class="designer-form-row">${fieldLabel("Required passes", t("stage.help.required_passes", "How many Runs must PASS. Leave empty for the Stage default / majority."))}<input id="stageRequiredPasses" class="designer-input" type="number" min="1" value="${cfg.required_passes ?? ""}" placeholder="Majority" ${disabled} /></label></div>`);
   }
   root.innerHTML = parts.join("");
 }
@@ -987,7 +991,13 @@ async function validateStudio() {
     else { $("validationOutput").hidden = false; $("validationOutput").textContent = result.output || result.summary; setStudioStatus(result.summary, true); showToast(`${prompt ? "Prompt" : "Workflow"} validation failed`, "error", 3200); }
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${prompt ? "Prompt" : "Workflow"} validation failed`); }
 }
-function setStudioStatus(text, error = false) { $("studioStatus").textContent = text || ""; $("studioStatus").classList.toggle("error", !!error); }
+function setStudioStatus(text, error = false) {
+  const node = $("studioStatus"); if (!node) return;
+  const detail = String(text || "").trim();
+  const firstLine = detail.split(/\r?\n/).find((line) => line.trim())?.trim() || "";
+  const summary = error && firstLine.length > 220 ? `${firstLine.slice(0, 217)}...` : firstLine;
+  node.textContent = summary; node.title = detail; node.classList.toggle("error", !!error);
+}
 async function confirmDiscardStudio() {
   if (!(state.studioDirty || state.visualDirty || state.stageEditorDirty)) return true;
   return confirmDialog({ title: "Discard unsaved changes?", message: "You have unsaved Workflow, Stage, or Prompt changes. Leaving this editor will discard them.", confirmLabel: "Discard Changes", danger: true });
@@ -1283,11 +1293,11 @@ async function saveGenerateWorkflowDraft() {
 }
 
 // ------------------------------ Add Project modal ------------------------------
-function openProjectModal() { $("projectPathInput").value = ""; $("projectModalHint").textContent = "可直接貼上路徑，或使用 Browse 選擇資料夾。"; $("projectModalHint").classList.remove("error"); $("projectModalBackdrop").hidden = false; setTimeout(() => $("projectPathInput").focus(), 0); }
+function openProjectModal() { $("projectPathInput").value = ""; $("projectModalHint").textContent = window.I18n?.getLanguage?.() === "en" ? "Paste a path directly, or use Browse to choose a folder." : "可直接貼上路徑，或使用 Browse 選擇資料夾。"; $("projectModalHint").classList.remove("error"); $("projectModalBackdrop").hidden = false; setTimeout(() => $("projectPathInput").focus(), 0); }
 function closeProjectModal() { $("projectModalBackdrop").hidden = true; }
 async function browseProject() {
   $("projectModalHint").textContent = "Opening folder picker…";
-  try { const result = await api("/api/projects/pick", { method: "POST", body: "{}" }); if (!result.cancelled && result.path) { $("projectPathInput").value = result.path; $("projectModalHint").textContent = "Folder selected. Click Open Project to add it."; } else $("projectModalHint").textContent = "Folder selection cancelled."; }
+  try { const result = await api("/api/projects/pick", { method: "POST", body: "{}" }); if (!result.cancelled && result.path) { $("projectPathInput").value = result.path; $("projectModalHint").textContent = t("project.folder_selected", "Folder selected. Click Open Project to add it."); } else $("projectModalHint").textContent = t("project.folder_cancelled", "Folder selection cancelled."); }
   catch (error) { $("projectModalHint").textContent = `${error.message} · You can still paste the folder path.`; $("projectModalHint").classList.add("error"); }
 }
 async function confirmProjectModal() {
@@ -1337,10 +1347,10 @@ function renderEnvironmentCheck(data) {
   for (const item of data.checks || []) { const row = document.createElement("div"); row.className = `environment-check-row ${item.status || ""}`; const mark = document.createElement("strong"); mark.textContent = String(item.status || "").toUpperCase(); const copy = document.createElement("span"); copy.textContent = `${item.name}: ${item.detail}`; row.append(mark, copy); root.appendChild(row); }
 }
 async function checkEnvironment() {
-  const button = $("environmentCheckButton"), result = $("environmentCheckResult"); if (!button) return; button.disabled = true; button.textContent = "Checking…"; if (result) { result.hidden = false; result.textContent = "Checking local environment…"; }
-  try { const data = await api("/api/environment/check"); renderEnvironmentCheck(data); showToast(data.ok ? "Environment check completed" : "Environment check found required failures"); }
+  const button = $("environmentCheckButton"), result = $("environmentCheckResult"); if (!button) return; button.disabled = true; button.textContent = t("env.checking", "Checking…"); if (result) { result.hidden = false; result.textContent = t("env.checking_detail", "Checking local environment…"); }
+  try { const data = await api("/api/environment/check"); renderEnvironmentCheck(data); showToast(data.ok ? t("env.completed", "Environment check completed") : t("env.failed", "Environment check found required failures")); }
   catch (error) { if (result) { result.hidden = false; result.textContent = error.message; } showActionError(error.message, "Environment check failed"); }
-  finally { button.disabled = false; button.textContent = "Check environment"; }
+  finally { button.disabled = false; button.textContent = t("env.check", "Check environment"); }
 }
 
 document.addEventListener("click", (event) => {
@@ -1361,18 +1371,20 @@ $("themeButton").onclick = toggleThemePanel;
 $("themeCloseButton").onclick = closeThemePanel;
 document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => applyThemePreferences(button.dataset.themeOption, document.documentElement.dataset.appearancePreference || "system", { persist: true }); });
 document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => applyThemePreferences(document.documentElement.dataset.theme || "teal", button.dataset.appearanceOption, { persist: true }); });
+document.querySelectorAll("[data-language-option]").forEach((button) => { button.onclick = () => { window.I18n?.setLanguage?.(button.dataset.languageOption, { persist: true }); renderThemeControls(); renderProjects(); }; });
+window.addEventListener("app-language-changed", () => { renderThemeControls(); if (state?.projects) renderProjects(); });
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference());
 $("sendButton").onclick = sendMessage; $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
-  const ok = await confirmDialog({ title: "Clear chat history?", message: "Delete this Project's saved chat history, including User and Assistant conversation messages? Runner state, Workflow files, and Project files are not changed.", confirmLabel: "Clear history", danger: true });
+  const ok = await confirmDialog({ title: t("history.confirm_title", "Clear chat history?"), message: t("history.confirm_message", "Delete this Project's saved chat history?"), confirmLabel: t("history.clear", "Clear history"), danger: true });
   if (!ok) return;
   try {
     await api("/api/project/history/clear", { method: "POST", body: JSON.stringify(payload()) });
     state.historyPinnedToBottom = true;
     await refreshMessages({ forceFollow: true });
-    showToast("Chat history cleared");
+    showToast(t("history.cleared", "Chat history cleared"));
   } catch (error) { showActionError(error.message, "Clear history failed"); }
 };
 $("messages").addEventListener("scroll", () => { state.historyPinnedToBottom = historyNearBottom($("messages")); }, { passive: true });
