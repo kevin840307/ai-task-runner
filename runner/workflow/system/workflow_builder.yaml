@@ -4,7 +4,7 @@ stages:
     mode: write
     actor: executor
     track_changes: true
-    prompt: ../../prompts/system/workflow_builder.md
+    prompt: ../../../workflow_builder/prompt.md
 
   validate_workflow:
     type: command

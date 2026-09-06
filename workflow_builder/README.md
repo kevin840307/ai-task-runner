@@ -29,13 +29,15 @@ python workflow_builder/run.py \
 The UI does **not** use the currently selected user Project as the Builder root. It creates an isolated UI-owned job workspace and passes that temporary directory to the Runner as its technical `--project-root`:
 
 ```text
-ui/data/workflow-builder/<job-id>/
-├─ .ai-task-runner/       # isolated Builder runtime only
-├─ draft/
-├─ status.json
-└─ result.json
+ui/data/workflow-builder/
+├─ active.json            # points to the one resumable Generator job
+└─ <job-id>/
+   ├─ .ai-task-runner/    # isolated Builder runtime only
+   ├─ draft/
+   ├─ status.json
+   └─ result.json
 ```
 
 This means Workflow generation works even when no Project has been opened or registered in the UI. The Runner still needs a filesystem `--project-root` internally, but for UI generation that root is the temporary Builder job itself, never the current user Project.
 
-Draft-only mode creates and validates files only under the job directory. It does **not** create a Custom or Project Workflow. The UI opens a dedicated Generator page, asks only for Prompt + Backend, shows status-only feedback while this command runs, and then reviews the temporary draft through Visual/YAML/Prompt views. Every Generate uses a new job directory. Cancel requests stop the Builder Runner and discard the temporary job. Regenerate discards the old draft and starts a new job on the next Generate. Only the explicit **Save Workflow** action invokes `publish.py`; the Save dialog supplies the final name/destination and the current edited draft is revalidated immediately before publication. **Custom** can be saved without any open Project. **Current Project** becomes available only when a Project is actually open at Save time.
+Draft-only mode creates and validates files only under the job directory. It does **not** create a Custom or Project Workflow. The UI opens a dedicated Generator page, asks only for Prompt + Backend, shows status-only feedback plus the exact temporary workspace path while this command runs, and then reviews the temporary draft through Visual/YAML/Prompt views. The UI keeps exactly one active Generator job in `active.json`; closing or refreshing the browser leaves that job running, and reopening the UI restores the same generating/ready/failed state. A second Generate cannot start until the current job is cancelled/discarded/saved. Cancel requests stop the Builder Runner and discard the temporary job. Regenerate discards the old draft and starts a new job on the next Generate. Only the explicit **Save Workflow** action invokes `publish.py`; the Save dialog supplies the final name/destination and the current edited draft is revalidated immediately before publication. **Custom** can be saved without any open Project. **Current Project** becomes available only when a Project is actually open at Save time.

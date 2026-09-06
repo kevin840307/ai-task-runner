@@ -418,6 +418,35 @@ class LayoutRegressionTests(unittest.TestCase):
         save = self.html[self.html.index('id="generateWorkflowSaveBackdrop"'):self.html.index('id="importAssetBackdrop"')]
         self.assertIn('id="generateWorkflowName"', save); self.assertIn('id="generateWorkflowDestination"', save)
 
+
+    def test_ai_workflow_builder_input_layout_keeps_meta_below_prompt(self):
+        form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
+        self.assertIn('class="workflow-generator-input-meta"', form)
+        css = "".join(self.studio_css.split())
+        self.assertIn('.workflow-generator-input{display:flex;flex-direction:column;gap:14px', css)
+        self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;place-items:stretch;overflow-x:hidden;overflow-y:auto', css)
+        self.assertIn('height:clamp(240px,38vh,360px)', css)
+        self.assertIn('overflow-wrap:anywhere', css)
+
+    def test_generated_workflow_draft_has_explicit_edit_actions(self):
+        ready = self.html[self.html.index('id="generateWorkflowReady"'):self.html.index('id="generateWorkflowFailed"')]
+        for token in ('EDITABLE', 'id="generateWorkflowEditYaml"', 'id="generateWorkflowEditPrompt"', '>Edit YAML<', '>Edit Prompt<'):
+            self.assertIn(token, ready)
+        self.assertIn('focusGeneratedDraftEditor', self.js)
+        self.assertIn('$("generateWorkflowPreview").addEventListener("input", markGeneratedDraftDirty)', self.js)
+        self.assertIn('$("generateDraftPromptTextarea").addEventListener("input"', self.js)
+
+    def test_generator_exit_restores_workflow_catalog_without_browser_refresh(self):
+        self.assertIn('async function restoreWorkflowStudioAfterGenerator()', self.js)
+        helper = self.js[self.js.index('function showWorkflowStudioPage()'):self.js.index('function showWorkflowGeneratorPage()')]
+        self.assertIn('renderStudioFiles()', helper)
+        self.assertIn('renderWorkflowPicker()', helper)
+        self.assertIn('await refreshStudioFiles()', helper)
+        discard = self.js[self.js.index('async function discardGenerateWorkflowDraft'):self.js.index('async function cancelGenerateWorkflow')]
+        self.assertIn('await restoreWorkflowStudioAfterGenerator()', discard)
+        cancelled = self.js[self.js.index('async function pollGenerateWorkflow'):self.js.index('function startGenerateWorkflowPoll')]
+        self.assertIn('await restoreWorkflowStudioAfterGenerator()', cancelled)
+
     def test_stage_discard_uses_reusable_designed_confirm(self):
         block = self.js[self.js.index('async function closeStageEditor'):self.js.index('// ------------------------------ Add Stage modal')]
         self.assertIn('confirmDialog({', block)

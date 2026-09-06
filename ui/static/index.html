@@ -219,9 +219,11 @@
               </label>
               <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
             </div>
-            <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
-            <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowWorkspacePreview">Created after Generate</code></div>
-            <div class="workflow-generator-actions"><button id="generateWorkflowCancel" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary" type="button">Generate</button></div>
+            <div class="workflow-generator-input-meta">
+              <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
+              <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowWorkspacePreview">Created after Generate</code></div>
+            </div>
+            <div class="workflow-generator-actions workflow-generator-input-actions"><button id="generateWorkflowCancel" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary" type="button">Generate</button></div>
           </section>
 
           <section id="generateWorkflowRunning" class="workflow-generator-phase workflow-builder-running" hidden>
@@ -235,16 +237,16 @@
 
           <section id="generateWorkflowReady" class="workflow-generator-phase workflow-generator-review" hidden>
             <div class="workflow-generator-review-head">
-              <div><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><h2>Draft ready for review</h2><p>Review or adjust the Draft. Nothing appears in Custom / Project until Save.</p></div>
+              <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p>Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.</p></div>
               <div id="generateWorkflowValidation" class="workflow-builder-validation success">Validation PASS</div>
             </div>
             <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
-            <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">YAML</button><button id="generateDraftPromptTab" type="button">Prompt</button></div>
-            <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
+            <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">Edit YAML</button><button id="generateDraftPromptTab" type="button">Edit Prompt</button></div>
+            <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div class="workflow-generator-edit-guide"><div><strong>Visual preview</strong><span>Use Edit YAML / Edit Prompt to adjust this temporary Draft. Validate Draft refreshes the Visual preview.</span></div><button id="generateWorkflowEditYaml" type="button">Edit Workflow</button></div><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
             <section id="generateDraftYamlPanel" class="workflow-generator-review-panel" hidden><div class="studio-code-toolbar"><span class="studio-code-language">Draft Workflow YAML</span><span class="studio-code-hint">Changes are temporary until Save</span></div><textarea id="generateWorkflowPreview" class="studio-textarea workflow-generator-yaml" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></section>
             <section id="generateDraftPromptPanel" class="workflow-generator-review-panel" hidden><div class="workflow-generator-prompt-grid"><aside id="generateWorkflowPromptList" class="workflow-generator-prompt-list"></aside><div class="workflow-generator-prompt-editor"><div class="studio-code-toolbar"><span id="generateDraftPromptName" class="studio-code-language">Prompt</span><span class="studio-code-hint">Temporary Draft Prompt</span></div><textarea id="generateDraftPromptTextarea" class="designer-textarea studio-prompt-textarea-main" spellcheck="false"></textarea></div></div></section>
-            <div id="generateDraftDirtyHint" class="workflow-generator-dirty-hint" hidden>DRAFT MODIFIED · validation required before Save</div>
-            <div class="workflow-generator-actions workflow-generator-review-actions"><button id="generateWorkflowDiscard" class="danger-text" type="button">Discard</button><button id="generateWorkflowRegenerate" type="button">Regenerate</button><button id="generateWorkflowValidate" type="button">Validate Draft</button><button id="generateWorkflowSave" class="primary" type="button">Save Workflow</button></div>
+            <div id="generateDraftDirtyHint" class="workflow-generator-dirty-hint" hidden>DRAFT MODIFIED · Validate Draft to refresh Visual before Save</div>
+            <div class="workflow-generator-actions workflow-generator-review-actions"><button id="generateWorkflowDiscard" class="danger-text" type="button">Discard</button><button id="generateWorkflowRegenerate" type="button">Regenerate</button><button id="generateWorkflowEditPrompt" type="button">Edit Prompt</button><button id="generateWorkflowValidate" type="button">Validate Draft</button><button id="generateWorkflowSave" class="primary" type="button">Save Workflow</button></div>
           </section>
 
           <section id="generateWorkflowFailed" class="workflow-generator-phase workflow-builder-failed" hidden><strong>Workflow generation failed</strong><span id="generateWorkflowFailure"></span><div class="workflow-generator-actions"><button id="generateWorkflowFailedCancel" type="button">Cancel</button><button id="generateWorkflowRetry" class="primary" type="button">Try Again</button></div></section>

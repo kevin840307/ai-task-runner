@@ -973,7 +973,17 @@ function resetGenerateWorkflowState({ keepRequest = false } = {}) {
   if ($("generateDraftDirtyHint")) $("generateDraftDirtyHint").hidden = true;
   setGenerateWorkflowWorkspace("", state.generateWorkflowWorkspacePattern);
 }
-function showWorkflowStudioPage() { $("workflowGeneratorPage").hidden = true; $("workflowStudioPage").hidden = false; }
+function showWorkflowStudioPage() {
+  $("workflowGeneratorPage").hidden = true; $("workflowStudioPage").hidden = false;
+  // Generator is a temporary page layered over Studio. Re-render the cached
+  // catalog immediately so returning from Discard/Cancel never shows an empty
+  // Workflow list while the server refresh is in flight.
+  renderStudioFiles(); renderWorkflowPicker(); renderStudioPanels();
+}
+async function restoreWorkflowStudioAfterGenerator() {
+  showWorkflowStudioPage();
+  await refreshStudioFiles();
+}
 function showWorkflowGeneratorPage() {
   state.view = "workflow"; $("chatView").hidden = true; $("workflowView").hidden = false; $("workflowNav").classList.add("active"); $("chatNav").classList.remove("active");
   $("workflowStudioPage").hidden = true; $("workflowGeneratorPage").hidden = false;
@@ -985,7 +995,7 @@ function setGenerateWorkflowPhase(phase) {
   $("generateWorkflowReady").hidden = phase !== "ready";
   $("generateWorkflowFailed").hidden = phase !== "failed";
   $("generateWorkflowPageBadge").hidden = phase !== "ready";
-  const titles = { form: ["Generate Workflow with AI", "Describe the Workflow you want. Generate creates a temporary Draft only."], running: ["Generating Workflow", "AI is building and validating a new temporary Draft."], cancelling: ["Cancelling Workflow", "Stopping the current generation and cleaning temporary runtime state."], ready: ["Review generated Workflow", "Review the Draft. Save is the only action that creates a real Workflow."], failed: ["Workflow generation failed", "Nothing was added to Custom or Project."] };
+  const titles = { form: ["Generate Workflow with AI", "Describe the Workflow you want. Generate creates a temporary Draft only."], running: ["Generating Workflow", "AI is building and validating a new temporary Draft."], cancelling: ["Cancelling Workflow", "Stopping the current generation and cleaning temporary runtime state."], ready: ["Review generated Workflow", "Review or edit the Draft. Save is the only action that creates a real Workflow."], failed: ["Workflow generation failed", "Nothing was added to Custom or Project."] };
   const [title, subtitle] = titles[phase] || titles.form; $("generateWorkflowPageTitle").textContent = title; $("generateWorkflowPageSubtitle").textContent = subtitle;
   $("generateWorkflowBack").disabled = phase === "cancelling";
   applyStudioGuardToDialogs();
@@ -998,7 +1008,8 @@ function renderGeneratedDraftFlow() {
 }
 function renderGeneratedDraftPrompts() {
   const root = $("generateWorkflowPromptList"), editor = $("generateDraftPromptTextarea"), label = $("generateDraftPromptName"); if (!root || !editor || !label) return; root.innerHTML = ""; const prompts = state.generateWorkflowDraft?.prompts || [];
-  if (!prompts.length) { const empty = document.createElement("div"); empty.className = "designer-empty-state"; empty.textContent = "No generated Prompt files."; root.appendChild(empty); editor.value = ""; editor.disabled = true; label.textContent = "Prompt"; return; }
+  if (!prompts.length) { const empty = document.createElement("div"); empty.className = "designer-empty-state"; empty.textContent = "No generated Prompt files."; root.appendChild(empty); editor.value = ""; editor.disabled = true; label.textContent = "Prompt"; if ($("generateWorkflowEditPrompt")) $("generateWorkflowEditPrompt").disabled = true; if ($("generateDraftPromptTab")) $("generateDraftPromptTab").disabled = true; return; }
+  if ($("generateWorkflowEditPrompt")) $("generateWorkflowEditPrompt").disabled = false; if ($("generateDraftPromptTab")) $("generateDraftPromptTab").disabled = false;
   state.generateWorkflowPromptIndex = Math.max(0, Math.min(state.generateWorkflowPromptIndex, prompts.length - 1));
   prompts.forEach((prompt, index) => { const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (index === state.generateWorkflowPromptIndex) button.classList.add("active"); const name = document.createElement("strong"); name.textContent = prompt.name || `Prompt ${index + 1}`; const meta = document.createElement("small"); meta.textContent = "Temporary Draft"; button.append(name, meta); button.onclick = () => { state.generateWorkflowPromptIndex = index; renderGeneratedDraftPrompts(); }; root.appendChild(button); });
   const selected = prompts[state.generateWorkflowPromptIndex]; editor.disabled = false; editor.value = selected.content || ""; label.textContent = selected.name || "Prompt";
@@ -1007,8 +1018,15 @@ function setGeneratedDraftTab(tab) {
   state.generateWorkflowReviewTab = tab; const names = ["visual", "yaml", "prompt"];
   for (const name of names) { const key = name[0].toUpperCase() + name.slice(1); $(`generateDraft${key}Tab`).classList.toggle("active", name === tab); $(`generateDraft${key}Panel`).hidden = name !== tab; }
 }
+function focusGeneratedDraftEditor(tab) {
+  setGeneratedDraftTab(tab);
+  requestAnimationFrame(() => {
+    const target = tab === "prompt" ? $("generateDraftPromptTextarea") : $("generateWorkflowPreview");
+    if (target && !target.disabled) target.focus();
+  });
+}
 function markGeneratedDraftDirty() {
-  if (state.generateWorkflowPhase !== "ready") return; state.generateWorkflowDirty = true; $("generateDraftDirtyHint").hidden = false; $("generateWorkflowValidation").textContent = "Draft modified · validation required before Save"; $("generateWorkflowValidation").classList.remove("success");
+  if (state.generateWorkflowPhase !== "ready") return; state.generateWorkflowDirty = true; $("generateDraftDirtyHint").hidden = false; $("generateWorkflowValidation").textContent = "Draft modified · validate to refresh Visual before Save"; $("generateWorkflowValidation").classList.remove("success");
 }
 function generatedDraftPayload() { return { workflow: $("generateWorkflowPreview").value, prompts: (state.generateWorkflowDraft?.prompts || []).map((row) => ({ name: row.name, content: row.content || "" })) }; }
 function renderGeneratedDraft(data) {
@@ -1039,7 +1057,7 @@ async function pollGenerateWorkflow() {
     const data = await api(`/api/studio/generate/status?job_id=${encodeURIComponent(state.generateWorkflowJobId)}`);
     setGenerateWorkflowWorkspace(data.workspace || state.generateWorkflowWorkspace);
     if (data.state === "ready") { clearGenerateWorkflowPoll(); renderGeneratedDraft(data); setGenerateWorkflowPhase("ready"); await refreshStudioGuard(); return; }
-    if (data.state === "cancelled") { clearGenerateWorkflowPoll(); try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} resetGenerateWorkflowState(); showWorkflowStudioPage(); showToast("Workflow generation cancelled"); await refreshStudioGuard(); return; }
+    if (data.state === "cancelled") { clearGenerateWorkflowPoll(); try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} resetGenerateWorkflowState(); await restoreWorkflowStudioAfterGenerator(); showToast("Workflow generation cancelled"); await refreshStudioGuard(); return; }
     if (data.state === "failed") { clearGenerateWorkflowPoll(); $("generateWorkflowFailure").textContent = data.message || "Workflow Builder failed."; setGenerateWorkflowPhase("failed"); await refreshStudioGuard(); return; }
     if (data.state === "cancelling") setGenerateWorkflowPhase("cancelling"); else if (state.generateWorkflowPhase !== "running") setGenerateWorkflowPhase("running");
     $("generateWorkflowRunningStatus").textContent = data.message || "AI is generating Workflow draft…";
@@ -1063,7 +1081,7 @@ function closeGenerateWorkflowSaveModal() { $("generateWorkflowSaveBackdrop").hi
 async function discardGenerateWorkflowDraft({ confirm = true, returnToStudio = true } = {}) {
   if (confirm) { const ok = await confirmDialog({ title: "Discard generated Workflow?", message: "This Draft has not been saved. Discard the generated Workflow and Prompt files?", confirmLabel: "Discard Draft", danger: true }); if (!ok) return false; }
   if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (error) { showActionError(error.message, "Discard draft failed"); return false; } }
-  resetGenerateWorkflowState(); if (returnToStudio) showWorkflowStudioPage(); showToast("Workflow draft discarded"); return true;
+  resetGenerateWorkflowState(); if (returnToStudio) await restoreWorkflowStudioAfterGenerator(); showToast("Workflow draft discarded"); return true;
 }
 async function cancelGenerateWorkflow() {
   if (!state.generateWorkflowJobId) return false; const ok = await confirmDialog({ title: "Cancel Workflow generation?", message: "Stop the current AI generation and discard its temporary files?", confirmLabel: "Cancel Generation", danger: true }); if (!ok) return false;
@@ -1076,7 +1094,7 @@ async function leaveGenerateWorkflowPage() {
   if (state.generateWorkflowPhase === "ready") return await discardGenerateWorkflowDraft();
   if (state.generateWorkflowPhase === "failed" && state.generateWorkflowJobId) return await discardGenerateWorkflowDraft({ confirm: false });
   const request = $("generateWorkflowRequest").value.trim(); if (request) { const ok = await confirmDialog({ title: "Discard Workflow request?", message: "Leave AI Workflow Builder and discard this unsent Prompt?", confirmLabel: "Discard Request", danger: true }); if (!ok) return false; }
-  resetGenerateWorkflowState(); showWorkflowStudioPage(); return true;
+  resetGenerateWorkflowState(); await restoreWorkflowStudioAfterGenerator(); return true;
 }
 async function confirmGenerateWorkflow() {
   const request = $("generateWorkflowRequest").value.trim(); if (!request) { $("generateWorkflowHint").textContent = "Describe the Workflow you want before Generate."; $("generateWorkflowHint").classList.add("error"); return; }
@@ -1147,7 +1165,9 @@ $("generateWorkflowDiscard").onclick = () => discardGenerateWorkflowDraft();
 $("generateWorkflowRegenerate").onclick = regenerateWorkflowDraft;
 $("generateWorkflowValidate").onclick = validateGeneratedWorkflowDraft;
 $("generateWorkflowSave").onclick = openGenerateWorkflowSaveModal;
-$("generateDraftVisualTab").onclick = () => setGeneratedDraftTab("visual"); $("generateDraftYamlTab").onclick = () => setGeneratedDraftTab("yaml"); $("generateDraftPromptTab").onclick = () => setGeneratedDraftTab("prompt");
+$("generateWorkflowEditYaml").onclick = () => focusGeneratedDraftEditor("yaml");
+$("generateWorkflowEditPrompt").onclick = () => focusGeneratedDraftEditor("prompt");
+$("generateDraftVisualTab").onclick = () => setGeneratedDraftTab("visual"); $("generateDraftYamlTab").onclick = () => focusGeneratedDraftEditor("yaml"); $("generateDraftPromptTab").onclick = () => focusGeneratedDraftEditor("prompt");
 $("generateWorkflowPreview").addEventListener("input", markGeneratedDraftDirty);
 $("generateDraftPromptTextarea").addEventListener("input", () => { const prompt = state.generateWorkflowDraft?.prompts?.[state.generateWorkflowPromptIndex]; if (prompt) prompt.content = $("generateDraftPromptTextarea").value; markGeneratedDraftDirty(); });
 $("generateWorkflowRequest").addEventListener("input", () => { if (state.generateWorkflowPhase === "form") state.generateWorkflowDirty = !!$("generateWorkflowRequest").value.trim(); });

@@ -95,10 +95,10 @@ The browser flow is intentionally draft-first and page based rather than a large
 3. **Generate** creates the single active UI-owned job under `ui/data/workflow-builder/<job-id>/` and writes `ui/data/workflow-builder/active.json`. It uses Builder `--draft-only` mode and does not use or require the selected Project. The job directory itself is the isolated Runner `--project-root`. The waiting page shows only spinner + generation status plus the exact temporary workspace path; YAML, Prompts, TODOs and Agent output are intentionally hidden.
 4. Closing or refreshing the browser does **not** cancel generation. On the next UI load, `GET /api/studio/generate/active` restores the same queued/running/cancelling job, or the same ready/failed result. Exactly one Generator job may be active at a time across tabs/windows.
 5. **Cancel Generation** uses a styled confirmation, requests Runner stop, waits for the Builder to become cancelled, removes the temporary job, clears `active.json`, and returns to Workflow Studio.
-6. A successful run opens the **DRAFT · NOT SAVED** review page. The exact temporary workspace path remains visible. Visual / YAML / Prompt views are available, and YAML/Prompt edits stay temporary. Modified drafts are marked validation-dirty; **Validate Draft** validates the exact current temporary files.
+6. A successful run opens the **DRAFT · NOT SAVED** review page. The exact temporary workspace path remains visible. The result is explicitly marked **EDITABLE**: Visual remains the validated preview, while **Edit YAML** and **Edit Prompt** are direct temporary editors. Modified drafts are marked validation-dirty; **Validate Draft** validates the exact current temporary files and refreshes the Visual preview.
 7. **Regenerate** discards the current draft (thereby releasing the active job), returns to the same Prompt for adjustment, and the next Generate creates a new job/new AI run.
 8. **Save Workflow** is the only point that opens a small modal for **Workflow name + destination**. `Custom` is always available, including when no Project exists. `Current Project` is enabled only if a Project is open at Save time. `Validate & Save` revalidates the current YAML/Prompts, publishes atomically, removes the temporary job, and clears `active.json`. Until that succeeds, the draft never appears in System/Custom/Project asset lists.
-9. **Discard/Back** asks before throwing away a ready draft or unsent request. Draft generation and Draft validation remain usable while another Project Runtime is active because they touch only the isolated UI workspace; publication still obeys the normal Studio edit guard.
+9. **Discard/Back** asks before throwing away a ready draft or unsent request. Returning from Cancel/Discard immediately re-renders the cached Workflow catalog and refreshes it from the server, so the normal Workflow list/editor is restored without a browser refresh. Draft generation and Draft validation remain usable while another Project Runtime is active because they touch only the isolated UI workspace; publication still obeys the normal Studio edit guard.
 
 The same builder can be invoked outside the UI:
 
@@ -209,6 +209,11 @@ The delivery includes current Chromium evidence under `ui/qa_evidence/`:
 - `screenshots/32_generator_review_editable.png` — temporary YAML/Prompt edits before Save.
 - `screenshots/33_generator_save_modal.png` — compact Save dialog where Name/Destination appear for the first time.
 - `screenshots/34_generator_mobile_input.png` — narrow viewport containment check.
+- `screenshots/36_generator_layout_fixed.png` — Generator Prompt / helper / temporary-path / actions no longer overlap at the reported desktop size.
+- `screenshots/37_generator_editable_draft.png` — generated Draft is explicitly editable through Edit YAML / Edit Prompt before Save.
+- `screenshots/38_generator_return_catalog_restored.png` — Discard returns to Workflow Studio with the Workflow catalog immediately restored.
+- `screenshots/39_generator_mobile_layout_fixed.png` — narrow Generator input uses vertical scrolling instead of clipping/overlap.
+- `browser_metrics_round21.json` — measured layout, edit affordance, and mocked-browser return-to-Studio restoration contract.
 - `screenshots/15_remove_project_overlay_fixed.png` — Remove Project confirmation backdrop covers the floating composer and runtime surface.
 - `browser_metrics_round17.json` — measured Generator page / fresh-job / cancel / review / Save contracts.
 

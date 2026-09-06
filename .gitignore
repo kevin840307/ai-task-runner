@@ -7,3 +7,6 @@ __pycache__/
 .ai-task-runner/
 .ruff_cache/
 .example_runs/
+
+# UI-owned temporary Workflow Generator jobs
+ui/data/workflow-builder/

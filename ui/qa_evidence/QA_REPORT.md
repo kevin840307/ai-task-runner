@@ -280,3 +280,26 @@ Automated UI/API regression verifies the Generator lifecycle is now owned by the
 - Generator restoration forces the Workflow view visible even when the UI initially opens on Tasks.
 
 Regression coverage for this round is in `ui/tests/test_ui.py` and `ui/tests/test_static_contract.py`. No new browser screenshot is claimed for this round; the behavior is covered by server-state and static UI contract tests.
+
+
+## Round 20 — Generator layout / editable Draft / Studio restore
+
+The user-reported Generator input overlap was reproduced from the supplied 1548×812 screenshot. The input page previously constrained the Prompt card inside a fixed grid while helper text, temporary path, and actions occupied implicit rows; the large `height:100%` textarea could overflow into those rows. The final layout uses a normal column flow with a bounded/resizable Prompt area, a dedicated metadata block, wrapping temporary path, and an internally scrollable Generator main surface.
+
+Verified contracts:
+
+- Prompt textarea no longer overlaps the explanatory text or temporary workspace row.
+- Temporary workspace paths wrap instead of colliding with labels/actions.
+- Generator actions stay reachable; narrow viewports scroll the Generator main surface rather than clipping content.
+- Successful results are explicitly **EDITABLE**. **Edit YAML** and **Edit Prompt** expose the existing temporary editors; edits mark the Draft dirty and require validation before Save. Visual remains a validated preview and is refreshed after **Validate Draft**.
+- Returning from a ready Draft via Cancel/Discard re-renders the cached Workflow catalog immediately and calls `refreshStudioFiles()` before the user continues, fixing the empty Workflow list that previously recovered only after a browser refresh. The same restore path is used after generation cancellation and unsent-request exit.
+- Static/API UI regression: 148 UI tests PASS.
+- Browser layout measurement at 1548×812: Prompt bottom 462.55 px; helper top 519.73 px; workspace top 547.73 px; actions bottom 628.58 px; no overlaps.
+- 390×844 containment: document width remains 390 px and Generator main becomes vertically scrollable when required.
+
+Evidence:
+
+- `screenshots/36_generator_layout_fixed.png` — corrected desktop input layout.
+- `screenshots/37_generator_editable_draft.png` — explicit editable Draft review UI.
+- `screenshots/39_generator_mobile_layout_fixed.png` — narrow layout remains contained and vertically scrollable.
+- `browser_metrics_round21.json` — measured non-overlap and edit-affordance contract.

@@ -1,0 +1,80 @@
+{
+  "layout": {
+    "generateWorkflowRequest": {
+      "top": 154,
+      "bottom": 462.546875,
+      "left": 387.3125,
+      "right": 1165.3125,
+      "width": 778,
+      "height": 308.546875
+    },
+    "generateWorkflowHint": {
+      "top": 519.734375,
+      "bottom": 537.734375,
+      "left": 370.3125,
+      "right": 1446.3125,
+      "width": 1076,
+      "height": 18
+    },
+    "generateWorkflowWorkspacePreview": {
+      "top": 547.734375,
+      "bottom": 572.578125,
+      "left": 500.953125,
+      "right": 1446.3125,
+      "width": 945.359375,
+      "height": 24.84375
+    },
+    "generateWorkflowCancel": {
+      "top": 588.578125,
+      "bottom": 628.578125,
+      "left": 1266.375,
+      "right": 1344.84375,
+      "width": 78.46875,
+      "height": 40
+    },
+    "generateWorkflowConfirm": {
+      "top": 588.578125,
+      "bottom": 628.578125,
+      "left": 1352.84375,
+      "right": 1448.3125,
+      "width": 95.46875,
+      "height": 40
+    },
+    "main": {
+      "scrollHeight": 680,
+      "clientHeight": 680,
+      "scrollTop": 0,
+      "overflowY": "auto"
+    }
+  },
+  "no_prompt_hint_overlap": true,
+  "no_hint_workspace_overlap": true,
+  "actions_reachable": true,
+  "editable_badge": true,
+  "edit_yaml_button": true,
+  "edit_prompt_button": true,
+  "page_errors": [],
+  "mobile_390": {
+    "document_scroll_width": 390,
+    "viewport_width": 390,
+    "generator_main_scroll_height": 725,
+    "generator_main_client_height": 652,
+    "generator_main_overflow_y": "auto",
+    "prompt_bottom": 501.390625,
+    "helper_top": 675.953125,
+    "no_horizontal_overflow": true,
+    "prompt_helper_overlap": false
+  },
+  "functional_mock_browser": {
+    "initial_catalog_count": 3,
+    "layout_no_overlap": true,
+    "yaml_editable": true,
+    "dirty_after_yaml_edit": true,
+    "prompt_editable": true,
+    "studio_visible_after_discard": true,
+    "catalog_count_after_discard": 3,
+    "catalog_restored_without_refresh": true,
+    "discard_api_called": true,
+    "page_errors": []
+  }
+}

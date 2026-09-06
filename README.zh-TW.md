@@ -174,3 +174,5 @@ UI 不 import Runner Core；Windows 啟動 Runner 時使用 hidden-console flags
 Runner `ConsoleObserver` 另外會從 CLI 同一份 `LiveUI` semantic state 寫出 `.ai-task-runner/console-view.json`。Web UI 直接呈現相同的 Cycle / Progress / Status / TODO markers，snapshot 短暫缺失時則用 durable `state.json` 套同一套 marker 規則，因此 Plan 產生的 TODO 會同步出現在 CMD 與 Web UI；spinner/pulse 只在瀏覽器本地動畫，不增加 Runner 寫檔頻率。Project 列表也會直接顯示 RUN / IDLE / DONE / INT / STOP 狀態。
 
 Workflow Builder 現在集中在 `workflow_builder/`（`workflow_builder.yaml`、`prompt.md`、`validation.py`、`run.py`、`publish.py`），CLI / UI / 其他整合都可直接呼叫，不需要修改或 import Runner Core。UI 使用獨立的「輸入 Prompt → 只顯示生成 Status → 可編輯 Draft 結果確認 → 明確 Save」流程；每次 Generate 都建立全新的 Draft job，名稱與 Custom/Project 位置只在 Save 時決定，驗證 publish 成功前不會出現正式 Workflow asset。System workflow 檔只保留為既有 named-workflow registry 的相容 mirror。
+
+Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/data/workflow-builder/active.json` 僅保留一個 active generation；重新整理或關閉再開瀏覽器會回到同一個 generating/ready job。Generator 會顯示目前暫存 workspace 路徑；產生後的 YAML / Prompt 在仍為 Draft 時即可編輯，只有 Save 才會正式發布 Workflow。Cancel / Discard 回到 Workflow Studio 時會立即重新呈現並刷新 Workflow 清單，不需要手動重新整理瀏覽器。
