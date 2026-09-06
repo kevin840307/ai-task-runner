@@ -155,7 +155,7 @@ python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix
 python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix --json
 ```
 
-`--matrix` 會依正式 Workflow 的 `recover`、`repeat`、`restart_at`、`fresh_after_same_failures` 產生 deterministic closure cases；對 semantic failure 的 Fresh Session 門檻也會驗證真的有觸發。JSON contract 會回報 task producer/task scope/review/validation 等 feature，可直接供 CI、UI Save/Import gate、Workflow Builder publish 與 reliability preflight 使用。非法 Workflow 參數仍由正式 Workflow Loader/schema 先擋下，Dry Run 不維護第二套 schema。
+`--matrix` 會依正式 Workflow 的 `recover`、`repeat`、`restart_at`、`fresh_after_same_failures` 產生 deterministic happy / semantic FAIL / technical ERROR cases。可恢復的 FAIL 必須收斂；沒有 recover 的 FAIL 與 technical ERROR 必須安全停止，不能誤進 semantic repair；Recovery-only Stage 也會透過「父 Stage FAIL → recovery Stage ERROR」的實際可達路徑驗證。semantic failure 的 Fresh Session 門檻也會確認真的有觸發。JSON contract 會回報每個 case 的 expected/completed outcome，以及 task producer/task scope/review/validation 等 feature，可直接供 CI、UI Save/Import gate、Workflow Builder publish 與 reliability preflight 使用。非法 Workflow 參數仍由正式 Workflow Loader/schema 先擋下，Dry Run 不維護第二套 schema。
 
 
 

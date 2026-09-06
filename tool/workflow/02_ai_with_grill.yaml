@@ -1,0 +1,37 @@
+# Whole-result Grill before final AI validation.
+# Grill reuses ReviewStage + review output contract; no GrillStage exists.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+  grill:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    retry: 0
+    recover: [repair_plan]
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - grill
+  - validate_ai

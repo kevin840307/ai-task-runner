@@ -255,3 +255,50 @@ def test_system_custom_skill_prompt_review_chain_linear_dryrun_closes():
     assert payload["features"]["task_scope"] is False
     assert payload["features"]["task_producer"] is False
     assert any(case["name"] == "validate_file FAIL -> recover -> closure" for case in payload["cases"])
+
+
+def test_dryrun_matrix_verifies_unrecovered_fail_and_error_stop_safely(tmp_path: Path):
+    workflow = tmp_path / "safe_stop.yaml"
+    workflow.write_text(
+        """stages:
+  work:
+    type: command
+    command: [python, -c, "print('WORK')"]
+flow:
+  - work
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+    by_name = {case["name"]: case for case in payload["cases"]}
+    failed = by_name["work FAIL without recovery -> safe stop"]
+    errored = by_name["work ERROR -> safe stop"]
+    assert failed["passed"] is True and failed["completed"] is False
+    assert errored["passed"] is True and errored["completed"] is False
+
+
+def test_dryrun_matrix_verifies_recovery_stage_error_stops_instead_of_repair_loop(tmp_path: Path):
+    workflow = tmp_path / "recover_error.yaml"
+    workflow.write_text(
+        """stages:
+  check:
+    type: command
+    command: [python, -c, "print('CHECK')"]
+    recover: [repair]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+flow:
+  - check
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    case = next(item for item in payload["cases"] if item["name"] == "check FAIL -> repair ERROR -> safe stop")
+    assert case["passed"] is True
+    assert case["completed"] is False

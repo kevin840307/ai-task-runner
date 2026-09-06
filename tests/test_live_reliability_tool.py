@@ -636,3 +636,73 @@ def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_complete
     assert workflow.name == "workflow.yaml"
     assert "produces: tasks" in workflow.read_text(encoding="utf-8")
     assert (workflow.parent / "task_producer.py").is_file()
+
+
+def test_workflow_dryrun_negative_preflight_proves_invalid_and_loop_detection():
+    live.workflow_dryrun_negative_preflight()
+
+
+def test_stop_request_resume_probe_exercises_detached_ui_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    original_runner_command = live.runner_command
+
+    def fake_runner_command(config, project, **kwargs):
+        if kwargs.get("resume"):
+            return ["resume-placeholder", str(project)]
+        code = r'''
+import json, sys, time
+from pathlib import Path
+project = Path(sys.argv[1])
+work = project / ".ai-task-runner"
+work.mkdir(parents=True, exist_ok=True)
+(work / "state.json").write_text(json.dumps({"completed": False, "stage": "execute", "ai_session_id": "session-stop"}), encoding="utf-8")
+(work / "runner-process.json").write_text(json.dumps({"supervisor_pid": 1, "worker_pid": 2}), encoding="utf-8")
+deadline = time.time() + 10
+while time.time() < deadline and not (work / "stop.request").exists():
+    time.sleep(0.02)
+(work / "stop.request").unlink(missing_ok=True)
+(work / "runner-process.json").unlink(missing_ok=True)
+raise SystemExit(130)
+'''
+        return [sys.executable, "-c", code, str(project)]
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[-1])
+        work = project / ".ai-task-runner"
+        history = work / "debug" / "history"
+        history.mkdir(parents=True, exist_ok=True)
+        events = [
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
+            {"type": "model.prompt", "call_id": "resume-1", "session": "session-stop", "session_mode": "resume"},
+            {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+        ]
+        (work / "state.json").write_text(json.dumps({"completed": True, "stage": "completed", "ai_session_id": "session-stop"}), encoding="utf-8")
+        (work / "log.txt").write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        (history / "resume-1-prompt.txt").write_text("Continue normal task execution in this same session.\n", encoding="utf-8")
+        (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        if observe:
+            observe()
+        return 0
+
+    monkeypatch.setattr(live, "runner_command", fake_runner_command)
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    live.stop_request_resume_probe(settings(tmp_path), tmp_path)
+
+
+def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):
+    work = tmp_path / ".ai-task-runner"
+    (work / "debug").mkdir(parents=True)
+    (work / "state.json").write_text('{"completed": true, "stage": "completed"}', encoding="utf-8")
+    (work / "log.txt").write_text("{}\n", encoding="utf-8")
+    (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+    (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+    (work / "runner-process.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="stale runtime control files"):
+        live.assert_state_completed(tmp_path, 0)

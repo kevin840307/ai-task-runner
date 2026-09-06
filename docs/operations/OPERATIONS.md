@@ -43,3 +43,6 @@ Safety snapshot temp directories use `ai-task-runner-readonly-*` / `ai-task-runn
 After an abnormal worker exit, the supervisor cleans active child-process markers from the actual durable work directories returned for that Run. This includes each YAML List child (`.../script/NNN/active-process`), not only the root work directory. `KeyboardInterrupt` and `SystemExit` are control-flow signals: Stage hooks may perform best-effort cleanup, but these signals are never converted into retryable Stage failures.
 
 All subprocess stdout collection is bounded in both normal and watchdog modes, so a noisy external command cannot grow Runner memory without limit.
+
+## Reliability verification
+For release/24H confidence, run the deterministic test suite first, then the opt-in live gate. `tool/workflow_dryrun.py --matrix` verifies happy/recovery paths and fail-closed behavior for unrecovered FAIL / technical ERROR. `tool/qwen_live_reliability.py` adds real Qwen process restart, three-minute API disconnect recovery, timeout/session recovery, YAML List resume, Final AI fresh-session voting, and detached-UI `stop.request -> exit 130 -> --resume` coverage. A 24H claim still requires the full requested wall-clock soak and a passing `summary.json`; preflight probes alone are not a 24H claim.

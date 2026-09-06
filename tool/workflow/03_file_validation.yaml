@@ -1,0 +1,32 @@
+# Deterministic file/Python validation after autonomous task completion.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_file:
+    type: command
+    status: 正在執行 File Validator
+    run_state: validating
+    actor: validator
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - validate_file

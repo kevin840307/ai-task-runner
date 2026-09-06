@@ -1,0 +1,17 @@
+# Smallest autonomous workflow: plan and complete all generated TODOs.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+flow:
+  - planning

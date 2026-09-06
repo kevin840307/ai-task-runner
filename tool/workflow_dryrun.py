@@ -8,7 +8,7 @@ replacing only Stage execution with deterministic mock results.
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import json
 import sys
 import tempfile
@@ -303,31 +303,42 @@ def _walk_definitions(flow: list[dict[str, Any]]):
         seen.add(key)
         yield definition, source
         for nested in definition.get("recover", ()):
-            yield from visit(nested, source)
+            parent = str(definition.get("name", ""))
+            yield from visit(nested, f"recover:{parent}" if parent else "recover")
 
     for definition in flow:
         yield from visit(definition, "flow")
 
 
-def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario, int]]:
-    """Build deterministic closure paths for routing features present in a workflow.
+@dataclass(frozen=True)
+class MatrixCase:
+    name: str
+    scenario: Scenario
+    expected_completed: bool = True
+    min_fresh_sessions: int = 0
 
-    The third tuple item is the minimum number of fresh-session rotations expected
-    from that path. This keeps dry-run focused on orchestration semantics while
-    still proving configured semantic-failure session rotation actually fires.
+
+def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
+    """Build deterministic happy, semantic-failure, and technical-error paths.
+
+    Recoverable semantic FAIL paths must converge. A FAIL with no configured
+    recovery and every technical ERROR must stop safely instead of being routed
+    through semantic repair. This makes matrix mode verify both recovery and
+    fail-closed behavior without executing real commands or AI calls.
     """
-    cases: list[tuple[str, Scenario, int]] = [("happy path", Scenario(), 0)]
+    cases: list[MatrixCase] = [MatrixCase("happy path", Scenario())]
     added: set[tuple[str, str]] = set()
-    for definition, _source in _walk_definitions(flow):
+    for definition, source in _walk_definitions(flow):
         name = str(definition.get("name", ""))
         if not name:
             continue
+        recoverable = bool(definition.get("recover") or definition.get("restart_at"))
+        top_level = source == "flow"
         if definition.get("recover") and ("recover", name) not in added:
             added.add(("recover", name))
-            cases.append((
+            cases.append(MatrixCase(
                 f"{name} FAIL -> recover -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
-                0,
             ))
         repeat = definition.get("repeat")
         if (
@@ -338,17 +349,15 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario, int]]
             and ("repeat", name) not in added
         ):
             added.add(("repeat", name))
-            cases.append((
+            cases.append(MatrixCase(
                 f"{name} FAIL x{repeat} -> bounded recover -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail"] * repeat}}),
-                0,
             ))
         if definition.get("restart_at") and ("restart", name) not in added:
             added.add(("restart", name))
-            cases.append((
+            cases.append(MatrixCase(
                 f"{name} FAIL -> restart_at -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
-                0,
             ))
         fresh_after = definition.get("fresh_after_same_failures")
         if (
@@ -359,11 +368,37 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[tuple[str, Scenario, int]]
             and ("fresh", name) not in added
         ):
             added.add(("fresh", name))
-            cases.append((
+            cases.append(MatrixCase(
                 f"{name} FAIL x{fresh_after} -> fresh session -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail"] * fresh_after + ["pass"]}}),
-                1,
+                min_fresh_sessions=1,
             ))
+        if top_level and not recoverable and ("fail-stop", name) not in added:
+            added.add(("fail-stop", name))
+            cases.append(MatrixCase(
+                f"{name} FAIL without recovery -> safe stop",
+                Scenario({"default": "pass", "stages": {name: "fail"}}),
+                expected_completed=False,
+            ))
+        if top_level and ("error-stop", name) not in added:
+            added.add(("error-stop", name))
+            cases.append(MatrixCase(
+                f"{name} ERROR -> safe stop",
+                Scenario({"default": "pass", "stages": {name: "error"}}),
+                expected_completed=False,
+            ))
+        if source.startswith("recover:"):
+            parent = source.split(":", 1)[1]
+            if parent and ("recover-error", f"{parent}->{name}") not in added:
+                added.add(("recover-error", f"{parent}->{name}"))
+                cases.append(MatrixCase(
+                    f"{parent} FAIL -> {name} ERROR -> safe stop",
+                    Scenario({
+                        "default": "pass",
+                        "stages": {parent: "fail", name: "error"},
+                    }),
+                    expected_completed=False,
+                ))
     return cases
 
 
@@ -395,19 +430,30 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
 def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
     flow = load_workflow(workflow_path)
     cases = []
-    for title, scenario, min_fresh_sessions in _matrix_cases(flow):
-        ctx, executor, error = _execute(flow, scenario, max_steps)
+    for case in _matrix_cases(flow):
+        ctx, executor, error = _execute(flow, case.scenario, max_steps)
         try:
             fresh_sessions = len(executor.fresh_sessions)
             completed = bool(ctx.state.completed) and not error
-            fresh_ok = fresh_sessions >= min_fresh_sessions
+            fresh_ok = fresh_sessions >= case.min_fresh_sessions
+            outcome_ok = completed is case.expected_completed
             cases.append({
-                "name": title,
-                "passed": completed and fresh_ok,
+                "name": case.name,
+                "passed": not error and outcome_ok and fresh_ok,
+                "completed": completed,
+                "expected_completed": case.expected_completed,
                 "executions": executor.calls,
                 "fresh_sessions": fresh_sessions,
-                "expected_fresh_sessions": min_fresh_sessions,
-                "error": error or (None if fresh_ok else f"expected at least {min_fresh_sessions} fresh session(s)"),
+                "expected_fresh_sessions": case.min_fresh_sessions,
+                "error": error or (
+                    None
+                    if outcome_ok and fresh_ok
+                    else (
+                        f"expected completed={str(case.expected_completed).lower()}, got {str(completed).lower()}"
+                        if not outcome_ok
+                        else f"expected at least {case.min_fresh_sessions} fresh session(s)"
+                    )
+                ),
             })
         finally:
             _close_context(ctx)

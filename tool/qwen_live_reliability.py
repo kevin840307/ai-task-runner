@@ -696,6 +696,16 @@ def assert_state_completed(
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError("missing diagnostics: " + ", ".join(missing))
+    stale = [
+        path.name for path in (
+            work / "runner-process.json",
+            work / "stop.request",
+            work / "active-process",
+        )
+        if path.exists()
+    ]
+    if stale:
+        raise RuntimeError("completed run left stale runtime control files: " + ", ".join(stale))
 
 
 def copy_example_project(source: Path, root: Path, name: str = "example-smoke-probe") -> Path:
@@ -852,6 +862,59 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     return results
 
 
+def workflow_dryrun_negative_preflight() -> None:
+    """Prove dry-run rejects invalid schema and detects a non-converging loop."""
+    tool = ROOT / "tool" / "workflow_dryrun.py"
+    with tempfile.TemporaryDirectory(prefix="ai-runner-dryrun-negative-") as directory:
+        root = Path(directory)
+        invalid = root / "invalid.yaml"
+        invalid.write_text(
+            "stages:\n  work:\n    type: task\n    unsupported_option: true\nflow: [work]\n",
+            encoding="utf-8",
+        )
+        invalid_run = subprocess.run(
+            [sys.executable, str(tool), str(invalid), "--matrix", "--json"],
+            cwd=ROOT, text=True, capture_output=True, timeout=30,
+        )
+        if invalid_run.returncode != 2 or "DRYRUN_ERROR" not in invalid_run.stderr:
+            raise RuntimeError("workflow dry-run failed to reject an invalid Stage option")
+
+        looping = root / "loop.yaml"
+        scenario = root / "loop-scenario.yaml"
+        looping.write_text(
+            """stages:
+  check:
+    type: command
+    command: [python, -c, "print('CHECK')"]
+    recover: [repair]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+flow:
+  - check
+""",
+            encoding="utf-8",
+        )
+        scenario.write_text(
+            "default: pass\nstages:\n  check: fail\n", encoding="utf-8"
+        )
+        loop_run = subprocess.run(
+            [
+                sys.executable, str(tool), str(looping), "--scenario", str(scenario),
+                "--max-steps", "8", "--json",
+            ],
+            cwd=ROOT, text=True, capture_output=True, timeout=30,
+        )
+        if loop_run.returncode != 1:
+            raise RuntimeError("workflow dry-run failed to reject a non-converging recovery loop")
+        try:
+            payload = json.loads(loop_run.stdout)
+        except json.JSONDecodeError as error:
+            raise RuntimeError("negative workflow dry-run returned invalid JSON") from error
+        if "did not converge" not in str(payload.get("error", "")):
+            raise RuntimeError("workflow dry-run did not report its convergence limit")
+
+
 def loop_detection_contract_preflight() -> None:
     """Lock the known Qwen loop signal to diagnostics + fresh-session reset semantics."""
     if str(ROOT) not in sys.path:
@@ -927,6 +990,68 @@ def resume_probe(settings: Settings, root: Path) -> None:
     evidence = (project / ".ai-task-runner" / "log.txt").read_text(encoding="utf-8")
     if "No saved session found" in evidence or "verdict=RESET_SESSION" in evidence:
         raise RuntimeError("resume fell back to a new session instead of continuing")
+
+
+def stop_request_resume_probe(settings: Settings, root: Path) -> None:
+    """Exercise the detached-UI stop.request contract and durable resume."""
+    project = create_project(root, "stop-request-resume-probe")
+    first_log = console_log(project, "first-console.jsonl")
+    first_log.parent.mkdir(parents=True, exist_ok=True)
+    stream = first_log.open("w", encoding="utf-8")
+    options: dict[str, object] = {
+        "cwd": ROOT,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stream,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if os.name == "nt":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        options["start_new_session"] = True
+    process = subprocess.Popen(runner_command(settings, project), **options)
+    work = project / ".ai-task-runner"
+    stop_request = work / "stop.request"
+    marker = work / "runner-process.json"
+    session_id = ""
+    deadline = time.monotonic() + settings.run_timeout
+    try:
+        while process.poll() is None and time.monotonic() < deadline:
+            state = read_state(project)
+            current = state.get("ai_session_id")
+            if marker.is_file() and isinstance(current, str) and current:
+                session_id = current
+                stop_request.write_text("stop\n", encoding="utf-8")
+                break
+            time.sleep(0.1)
+        if not session_id:
+            raise RuntimeError("stop.request probe could not capture an active durable session")
+        code = process.wait(timeout=min(settings.run_timeout, 30))
+    finally:
+        if process.poll() is None:
+            terminate(process)
+        stream.close()
+    if code != 130:
+        raise RuntimeError(f"stop.request did not stop Supervisor cleanly: exit={code}")
+    if marker.exists() or stop_request.exists():
+        raise RuntimeError("stop.request cleanup left stale runtime control files")
+    if read_state(project).get("completed") is True:
+        raise RuntimeError("stop.request incorrectly marked the run completed")
+
+    saw_resume = False
+    def observe_resume() -> None:
+        nonlocal saw_resume
+        saw_resume = saw_resume or observed_session(project, session_id, "resume")
+
+    resumed = run_command(
+        runner_command(settings, project, resume=True),
+        console_log(project, "resume-console.jsonl"),
+        settings.run_timeout,
+        observe_resume,
+    )
+    assert_completed(project, resumed)
+    if not saw_resume:
+        raise RuntimeError("stop.request resume completed without same-session evidence")
 
 
 def custom_task_producer_probe(settings: Settings, root: Path) -> None:
@@ -1713,11 +1838,15 @@ def main() -> int:
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
         flush=True,
     )
+    workflow_dryrun_negative_preflight()
+    print("PASS workflow dry-run negative/error preflight", flush=True)
     loop_detection_contract_preflight()
     print("PASS Qwen loop-detection/reset contract preflight", flush=True)
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
+        stop_request_resume_probe(settings, run_root)
+        print("PASS detached-UI stop.request/resume probe", flush=True)
         for workflow in ("file", "ai", "mixed"):
             system_workflow_probe(settings, run_root, workflow)
             print(f"PASS system/{workflow} topology + prompt contract probe", flush=True)
@@ -1779,6 +1908,8 @@ def main() -> int:
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
         "workflow_dryrun_preflight": True,
+        "workflow_dryrun_negative_preflight": True,
+        "stop_request_resume_probe": True,
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,
         "system_workflow_contracts": ["file", "ai", "mixed"],

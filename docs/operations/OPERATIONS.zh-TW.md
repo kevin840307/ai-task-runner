@@ -43,3 +43,6 @@ Safety snapshot 暫存目錄使用 `ai-task-runner-readonly-*` / `ai-task-runner
 Worker 異常退出後，Supervisor 會依該 Run 實際 durable state 對應的 work directory 清理 active child-process marker；YAML List 的每個 child（`.../script/NNN/active-process`）也包含在內，不只檢查 root work directory。`KeyboardInterrupt` 與 `SystemExit` 屬於控制流程訊號：Stage hook 可先做 best-effort cleanup，但不可將它們轉成可 Retry 的 Stage failure。
 
 一般模式與 watchdog 模式的 subprocess stdout 都會 bounded，避免外部命令大量輸出時讓 Runner 記憶體無限制成長。
+
+## Reliability 驗證
+Release / 24H 信心度請先跑 deterministic test suite，再跑 opt-in live gate。`tool/workflow_dryrun.py --matrix` 會驗 happy/recovery 路徑，以及沒有 recover 的 FAIL / technical ERROR 必須 fail-closed；`tool/qwen_live_reliability.py` 再用真實 Qwen 覆蓋 process restart、三分鐘 API disconnect recovery、timeout/session recovery、YAML List resume、Final AI Fresh Session voting，以及 detached UI 的 `stop.request -> exit 130 -> --resume`。要宣稱 24H 仍必須真的跑滿要求的 wall-clock soak 並得到 PASS `summary.json`；只通過 preflight probes 不能等同 24H。

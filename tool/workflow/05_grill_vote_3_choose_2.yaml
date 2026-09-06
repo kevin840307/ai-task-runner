@@ -1,0 +1,39 @@
+# Three independent Grill sessions; at least two must PASS.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+  grill:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    fresh_session_each_run: true
+    retry: 0
+    runs: 3
+    required_passes: 2
+    recover: [repair_plan]
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - grill
+  - validate_ai

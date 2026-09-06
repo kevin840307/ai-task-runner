@@ -1,0 +1,30 @@
+# Default autonomous AI workflow.
+# Planning creates TODOs and automatically runs execute -> review per TODO.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+    status: AI 正在修復目前任務
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - validate_ai
