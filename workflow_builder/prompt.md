@@ -5,6 +5,23 @@ You are generating an AI Task Runner Workflow package.
 Goal:
 {{ goal }}
 
+
+Required Workflow shape:
+```yaml
+stages:
+  planning:
+    type: plan
+
+flow:
+  - planning
+```
+
+Schema rules:
+- `stages` MUST be a YAML mapping/object keyed by Stage id. Never emit `stages` as a list and never use `- name: ...` Stage entries.
+- Every `flow` item must reference a Stage id defined under `stages`.
+- Recovery targets must reference defined Stage ids.
+- Use only fields supported by the Runner Workflow schema.
+
 Rules:
 - Create only the draft Workflow and Prompt files requested by the goal.
 - Do not edit application source code or Runner source code.

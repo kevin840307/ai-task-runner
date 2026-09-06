@@ -658,3 +658,71 @@ body {
 .clear-history-button:hover {
   color: var(--fail);
 }
+
+
+/* Compact composer controls: keep the textarea short and place Workflow beside Options. */
+#chatView > .compose-panel {
+  padding: 7px 14px 10px;
+}
+#composePanel .composer-box {
+  gap: 6px;
+  padding: 7px 9px 7px;
+}
+.composer-box textarea#messageInput {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+  padding-block: 6px;
+}
+#composePanel .composer-footer {
+  min-height: 30px;
+}
+#composePanel .composer-left {
+  gap: 6px;
+  overflow: visible;
+}
+#composePanel .composer-workflow-picker {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(340px, 45vw);
+  height: 29px;
+  min-height: 29px;
+  padding: 0 4px 0 9px;
+  gap: 7px;
+  border-radius: 999px;
+  box-shadow: none;
+}
+#composePanel .composer-workflow-picker .workflow-picker-label {
+  height: 20px;
+  padding-right: 7px;
+  font-size: 10px;
+}
+#composePanel .composer-workflow-picker .workflow-dropdown-button {
+  min-height: 27px;
+  height: 27px;
+  padding: 0 3px 0 0;
+  gap: 4px;
+}
+#composePanel .composer-workflow-picker .workflow-selected-label {
+  font-size: 11px;
+}
+#composePanel .composer-workflow-picker .workflow-dropdown-caret {
+  width: 18px;
+  height: 18px;
+}
+#composePanel .options-button {
+  height: 29px;
+  min-height: 29px;
+}
+#composePanel .simple-composer-topbar[hidden] {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  #composePanel .composer-left {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  #composePanel .composer-workflow-picker {
+    max-width: min(260px, 62vw);
+  }
+}

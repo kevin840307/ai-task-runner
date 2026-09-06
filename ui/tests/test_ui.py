@@ -1066,6 +1066,23 @@ flow: [validate]
         self.assertTrue(target.is_file()); self.assertEqual(saved["item"]["group"], "Custom"); self.assertFalse(root.exists())
         self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
 
+
+    def test_ai_workflow_builder_save_is_blocked_when_dryrun_validation_fails(self) -> None:
+        self._write_builder_fixture(); job_id = "abcdef654323"
+        root = self.root / "ui" / "data" / "workflow-builder" / job_id
+        prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
+        workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
+        result = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
+        (root / "result.json").write_text(json.dumps(result), encoding="utf-8")
+        (root / "status.json").write_text(json.dumps({"state": "ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
+        self.state._builder_set_active(job_id)
+        target = self.root / "runner" / "workflow" / "custom" / "generated-fail.workflow.yaml"
+        with patch.object(self.state, "_builder_validate_draft", side_effect=ValueError("Workflow draft validation failed: workflow dry-run failed")), patch("ui.server.subprocess.run") as publish:
+            with self.assertRaisesRegex(ValueError, "dry-run failed"):
+                self.state.studio_generate_save(None, job_id, "generated-fail", "custom")
+        self.assertFalse(target.exists())
+        publish.assert_not_called()
+
     def test_ai_workflow_builder_project_destination_requires_project_only_at_save(self) -> None:
         self._write_builder_fixture(); job_id = "abcdef654322"
         root = self.root / "ui" / "data" / "workflow-builder" / job_id

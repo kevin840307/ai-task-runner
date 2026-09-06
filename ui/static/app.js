@@ -354,8 +354,9 @@ function renderWorkflowPickerSelection() {
   const value = $("workflowSelect")?.value || "";
   document.querySelectorAll("#workflowDropdownMenu .workflow-dropdown-option").forEach((button, index) => { const active = $("workflowSelect")?.options[index]?.value === value; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
   const workflow = selectedWorkflowItem();
-  const validatorPicker = $("validatorPicker"), input = $("validator");
+  const validatorPicker = $("validatorPicker"), composerTopbar = $("composerTopbar"), input = $("validator");
   if (validatorPicker) validatorPicker.hidden = !workflow?.requires_python_validator;
+  if (composerTopbar) composerTopbar.hidden = !workflow?.requires_python_validator;
   if (input && state.validatorWorkflowPath !== value) { const validators = currentProjectPreferences().validators || {}; input.value = workflow?.requires_python_validator ? String(validators[value] || "") : ""; state.validatorWorkflowPath = value; }
   if (!workflow?.requires_python_validator && input) { input.value = ""; state.validatorWorkflowPath = ""; }
   updateValidatorPicker();

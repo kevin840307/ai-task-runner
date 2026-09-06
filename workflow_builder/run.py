@@ -304,6 +304,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         str(goal_file),
         "--workflow",
         str(runtime_builder_workflow),
+        "--max-cycles",
+        "3",
         "--validator-arg=--draft-workflow",
         f"--validator-arg={rel_workflow}",
         "--validator-arg=--draft-prompt-dir",

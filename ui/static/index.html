@@ -47,16 +47,7 @@
 
       <section id="composePanel" class="compose-panel" hidden>
         <div class="composer-box">
-          <div class="composer-topbar simple-composer-topbar">
-            <div class="workflow-picker" id="workflowPicker">
-              <span class="workflow-picker-label">Workflow</span>
-              <select id="workflowSelect" class="workflow-native-select" aria-hidden="true" tabindex="-1"></select>
-              <button id="workflowDropdownButton" class="workflow-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-                <span id="workflowSelectedLabel" class="workflow-selected-label">Select workflow</span>
-                <span class="workflow-dropdown-caret" aria-hidden="true"></span>
-              </button>
-              <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
-            </div>
+          <div id="composerTopbar" class="composer-topbar simple-composer-topbar" hidden>
             <label id="validatorPicker" class="validator-picker" hidden>
               <span class="workflow-picker-label">Python validation</span>
               <div class="compact-file-picker">
@@ -81,7 +72,19 @@
           </div>
           <textarea id="messageInput" rows="2" placeholder="描述要完成的功能或修復內容..."></textarea>
           <div class="composer-footer">
-            <div class="composer-left"><button id="optionsButton" class="options-button" type="button" aria-expanded="false">Options</button><span id="errorText" class="error-text"></span></div>
+            <div class="composer-left">
+              <div class="workflow-picker composer-workflow-picker" id="workflowPicker">
+                <span class="workflow-picker-label">Workflow</span>
+                <select id="workflowSelect" class="workflow-native-select" aria-hidden="true" tabindex="-1"></select>
+                <button id="workflowDropdownButton" class="workflow-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="workflowSelectedLabel" class="workflow-selected-label">Select workflow</span>
+                  <span class="workflow-dropdown-caret" aria-hidden="true"></span>
+                </button>
+                <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
+              </div>
+              <button id="optionsButton" class="options-button" type="button" aria-expanded="false">Options</button>
+              <span id="errorText" class="error-text"></span>
+            </div>
             <div class="composer-right runtime-composer-actions">
               <button id="sendButton" class="primary send-button" type="button">Run</button>
               <button id="stopButton" class="action-button danger runtime-control-button" type="button" hidden>Stop</button>

@@ -21,6 +21,7 @@ stages:
       - "{state_file}"
       - "{validator_args}"
     recover: [build_workflow]
+    fresh_after_same_failures: 2
 
 flow:
   - build_workflow

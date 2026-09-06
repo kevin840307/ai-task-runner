@@ -51,6 +51,35 @@ def test_workflow_builder_validator_runs_matrix_dryrun(tmp_path: Path):
     assert payload["paths_passed"] == payload["paths_total"]
 
 
+
+
+def test_workflow_builder_validator_rejects_list_stages_with_actionable_error(tmp_path: Path):
+    project, workflow = _draft(tmp_path)
+    workflow.write_text(
+        "stages:\n"
+        "  - name: planning\n"
+        "    type: plan\n"
+        "flow:\n"
+        "  - planning\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="must be a YAML mapping/object keyed by Stage id"):
+        validate_draft(project, workflow, workflow.parent / "prompts")
+
+
+def test_builder_prompt_declares_mapping_stage_contract():
+    text = (ROOT / "workflow_builder" / "prompt.md").read_text(encoding="utf-8")
+    assert "`stages` MUST be a YAML mapping/object keyed by Stage id" in text
+    assert "Never emit `stages` as a list" in text
+    assert "stages:\n  planning:\n    type: plan" in text
+
+
+def test_builder_runner_caps_repair_cycles_for_interactive_generation():
+    source = (ROOT / "workflow_builder" / "run.py").read_text(encoding="utf-8")
+    command_block = source[source.index("command = [", source.index("def build")):source.index("if args.backend", source.index("def build"))]
+    assert '"--max-cycles"' in command_block
+    assert '"3"' in command_block
+
 def test_workflow_builder_validator_rejects_missing_prompt(tmp_path: Path):
     project, workflow = _draft(tmp_path)
     (workflow.parent / "prompts" / "work.md").unlink()

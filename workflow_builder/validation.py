@@ -58,11 +58,24 @@ def validate_draft(project_root: Path, draft_workflow: Path, draft_prompt_dir: P
     except yaml.YAMLError as exc:
         raise ValueError(f"invalid generated Workflow YAML: {exc}") from exc
     if not isinstance(data, dict):
-        raise ValueError("generated Workflow must be a YAML object")
-    if not isinstance(data.get("stages"), dict):
-        raise ValueError("generated Workflow requires stages")
-    if not isinstance(data.get("flow"), list) or not data["flow"]:
-        raise ValueError("generated Workflow requires a non-empty flow")
+        raise ValueError("Workflow root must be a YAML mapping/object")
+    stages = data.get("stages")
+    if stages is None:
+        raise ValueError("Workflow is missing required top-level 'stages' mapping")
+    if not isinstance(stages, dict):
+        raise ValueError(
+            "'stages' must be a YAML mapping/object keyed by Stage id, not a list. "
+            "Example: stages: {planning: {type: plan}}"
+        )
+    if not stages:
+        raise ValueError("'stages' must contain at least one Stage")
+    flow = data.get("flow")
+    if flow is None:
+        raise ValueError("Workflow is missing required top-level 'flow' list")
+    if not isinstance(flow, list):
+        raise ValueError("'flow' must be a YAML list of Stage ids/flow nodes")
+    if not flow:
+        raise ValueError("'flow' must contain at least one top-level Stage")
 
     missing: list[str] = []
     refs: list[str] = []
@@ -80,11 +93,13 @@ def validate_draft(project_root: Path, draft_workflow: Path, draft_prompt_dir: P
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=45)
     output = (result.stdout or result.stderr or "").strip()
     if result.returncode != 0:
-        raise ValueError("workflow dry-run failed: " + output[-12000:])
+        raise ValueError("workflow dry-run failed; fix the reported Workflow contract error: " + output[-12000:])
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ValueError("workflow dry-run did not return JSON") from exc
+    if payload.get("valid") is False:
+        raise ValueError("workflow dry-run reported an invalid Workflow: " + output[-12000:])
     if not payload.get("closed"):
         raise ValueError("workflow dry-run matrix did not reach closure")
     return {
