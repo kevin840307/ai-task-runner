@@ -9,7 +9,46 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from ui.server import UIState
+from ui.server import Handler, UIState
+
+
+class _DisconnectingWriter:
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    def write(self, payload: bytes) -> None:
+        raise self.exc
+
+
+class _JsonHandlerStub:
+    _json = Handler._json
+
+    def __init__(self, exc: BaseException) -> None:
+        self.wfile = _DisconnectingWriter(exc)
+
+    def send_response(self, status) -> None:
+        return
+
+    def send_header(self, name: str, value: str) -> None:
+        return
+
+    def end_headers(self) -> None:
+        return
+
+
+class HandlerDisconnectTests(unittest.TestCase):
+    def test_json_response_ignores_expected_client_disconnects(self) -> None:
+        for exc in (
+            BrokenPipeError("closed"),
+            ConnectionAbortedError("aborted"),
+            ConnectionResetError("reset"),
+        ):
+            with self.subTest(exc=type(exc).__name__):
+                _JsonHandlerStub(exc)._json({"ok": True})
+
+    def test_json_response_does_not_hide_unrelated_write_errors(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "unexpected write failure"):
+            _JsonHandlerStub(RuntimeError("unexpected write failure"))._json({"ok": True})
 
 
 class UIStateTests(unittest.TestCase):
@@ -42,6 +81,21 @@ class UIStateTests(unittest.TestCase):
         catalog = self.state.backend_catalog()
         self.assertEqual(catalog["default"], "qwen")
         self.assertEqual(catalog["backends"], ["opencode", "qwen"])
+
+    def test_environment_check_invokes_standalone_tool(self) -> None:
+        tool = self.root / "tool" / "environment_check.py"
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.write_text("# test tool\n", encoding="utf-8")
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=json.dumps({"ok": True, "status": "pass", "checks": []}), stderr=""
+        )
+        with patch("ui.server.subprocess.run", return_value=completed) as run:
+            result = self.state.environment_check()
+        self.assertTrue(result["ok"])
+        command = run.call_args.args[0]
+        self.assertIn("environment_check.py", " ".join(map(str, command)))
+        self.assertIn("--json", command)
 
     def test_second_project_can_launch_while_first_project_is_running(self) -> None:
         second = self.root / "project-two"; second.mkdir()
@@ -106,6 +160,22 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(self.state.messages(self.project), [])
         marker = json.loads((runtime / "ui" / "chat-state.json").read_text(encoding="utf-8"))
         self.assertEqual(marker["last_assistant_run_id"], "run-clear")
+
+    def test_clear_chat_history_is_blocked_only_for_running_project(self) -> None:
+        self.state.append_message(self.project, "user", "keep while running")
+        with patch.object(self.state, "read_runtime", return_value={"running": True}):
+            with self.assertRaisesRegex(ValueError, "Cannot clear chat history while this Project is running"):
+                self.state.clear_chat_history(self.project)
+        self.assertTrue(self.state.messages(self.project))
+
+    def test_clear_chat_history_remains_available_for_other_idle_project(self) -> None:
+        other = self.root / "other-project"; other.mkdir()
+        self.state.append_message(other, "user", "clear me")
+        def runtime(project):
+            return {"running": Path(project).resolve() == self.project.resolve()}
+        with patch.object(self.state, "read_runtime", side_effect=runtime):
+            self.assertEqual(self.state.clear_chat_history(other), {"ok": True})
+        self.assertEqual(self.state.messages(other), [])
 
     def test_clear_chat_history_does_not_touch_runner_or_request_snapshots(self) -> None:
         runtime = self.project / ".ai-task-runner"
@@ -804,6 +874,29 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(data["flow"][1]["restart_at"], "review")
         self.assertEqual(data["flow"][1]["repeat"], 2)
         self.assertEqual(data["flow"][1]["fresh_after_same_failures"], 1)
+
+    def test_stage_save_supports_bounded_recovery_flow_fields(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  review:\n    type: review\n    recover: [review]\nflow:\n  - review\n", encoding="utf-8"
+        )
+        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_save(
+            item["id"], "review", {}, opened["hash"], self.project, flow_index=0,
+            flow_fields={"max_attempts": 3, "on_exhausted": "continue"},
+        )
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertEqual(data["flow"][0]["max_attempts"], 3)
+        self.assertEqual(data["flow"][0]["on_exhausted"], "continue")
+        self.assertNotIn("max_attempts", data["stages"]["review"])
+
+    def test_stage_save_rejects_bounded_recovery_without_recover(self) -> None:
+        self.workflow.write_text("stages:\n  review:\n    type: review\nflow:\n  - review\n", encoding="utf-8")
+        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "max_attempts requires recover"):
+            self.state.studio_stage_save(
+                item["id"], "review", {}, opened["hash"], self.project, flow_index=0,
+                flow_fields={"max_attempts": 3, "on_exhausted": "continue"},
+            )
 
     def test_flow_routing_validation_rejects_future_restart_and_repeat_without_recover(self) -> None:
         self.workflow.write_text("stages:\n  a:\n    type: task\n  b:\n    type: review\nflow:\n  - a\n  - b\n", encoding="utf-8")

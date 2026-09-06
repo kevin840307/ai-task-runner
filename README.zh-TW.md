@@ -138,6 +138,8 @@ Runner event 仍保留 `status=AI running skill`，並提供 `label=Project Docu
 
 FlowNode 可用 `fresh_after_same_failures: N` 覆寫預設值。只有成功解析出的 semantic `FAIL` 才計數；同一 failure fingerprint 連續達 N 次時，只清掉該 Stage 自己的 AI session，照原本 `recover` 修復後，再以 Fresh Session + 完整 Prompt 重跑該 Stage。Backend/API/parser/timeout 等技術異常不計數，不同 semantic failure 會重置計數。`ReviewStage` 在有 recovery 時直接擁有語意預設 `2`；其他 Stage 仍是 opt-in。這樣 system YAML 不必重複 implementation policy，但需要特殊門檻時仍可由 Workflow 明確 override。
 
+FlowNode 也可以用 `max_attempts: N` + `on_exhausted: continue|fail` 選擇性限制 semantic recovery 次數。只有成功解析的 semantic FAIL 計數；第 N 次之前會跑 `recover` 再重試原 FlowNode，第 N 次仍 FAIL 時不再 repair，直接依 `on_exhausted` 往下或停止。PASS 會清除計數；一旦已往下走，之後若 routing 再回到同 Stage，就從 1 重新計算。沒有設定 `max_attempts` 時完全維持既有 recovery 行為。這個 YAML 欄位和 CLI/API 用來控制 Same Session backend recovery 的 `max_attempts` 是不同 scope。
+
 ## Workflow Dry Run
 
 可使用 `tool/workflow_dryrun.py` 在不呼叫真實 Agent 的情況下驗證 `workflow.yaml` 是否能閉環。工具直接重用正式 Workflow Loader、Pipeline、StageResult 與 Stage finish 與 result reducer，只 Mock 最底層 Stage 執行結果，因此不會建立第二套 Workflow Engine。
@@ -176,3 +178,11 @@ Runner `ConsoleObserver` 另外會從 CLI 同一份 `LiveUI` semantic state 寫�
 Workflow Builder 現在集中在 `workflow_builder/`（`workflow_builder.yaml`、`prompt.md`、`validation.py`、`run.py`、`publish.py`），CLI / UI / 其他整合都可直接呼叫，不需要修改或 import Runner Core。UI 使用獨立的「輸入 Prompt → 只顯示生成 Status → 可編輯 Draft 結果確認 → 明確 Save」流程；每次 Generate 都建立全新的 Draft job，名稱與 Custom/Project 位置只在 Save 時決定，驗證 publish 成功前不會出現正式 Workflow asset。System workflow 檔只保留為既有 named-workflow registry 的相容 mirror。
 
 Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/data/workflow-builder/active.json` 僅保留一個 active generation；重新整理或關閉再開瀏覽器會回到同一個 generating/ready job。Generator 會顯示目前暫存 workspace 路徑；產生後的 YAML / Prompt 在仍為 Draft 時即可編輯，只有 Save 才會正式發布 Workflow。Cancel / Discard 回到 Workflow Studio 時會立即重新呈現並刷新 Workflow 清單，不需要手動重新整理瀏覽器。
+
+## License
+
+本專案採用 **Zero-Clause BSD（0BSD）License**。可免費使用、複製、修改、散布與商業使用，不收取授權費用。完整條款與無擔保聲明請見根目錄 `LICENSE`。
+
+### 本機環境檢測
+
+可從 UI 的 **Run options → Check environment** 執行，或直接執行 `python tool/environment_check.py`。檢測不修改專案，會確認必要的 Python/Runner 條件，以及 Qwen/OpenCode 是否能從 PATH 找到。

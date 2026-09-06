@@ -63,6 +63,9 @@ def context(workflow, tasks=None):
         semantic_failure_key="",
         semantic_failure_fingerprint="",
         semantic_failure_count=0,
+        recovery_attempt_key="",
+        recovery_attempt_count=0,
+        recovery_attempt_previous={},
     )
     return SimpleNamespace(
         state=state,
@@ -505,3 +508,132 @@ def test_recovery_does_not_restart_from_task_producer_declaration_alone():
     assert ctx.state.current == 1
     assert ctx.state.completed is True
 
+
+
+def test_max_attempts_is_opt_in_and_legacy_recovery_is_unchanged():
+    workflow = [item("review", recover=[item("repair")])]
+    ctx = context(workflow)
+    failures = 0
+    def callback(stage, *_):
+        nonlocal failures
+        if stage.name == "review" and failures < 4:
+            failures += 1
+            return StageResult("review", "fail")
+        return StageResult(stage.name, "pass")
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["review", "repair"] * 4 + ["review"]
+
+
+def test_max_attempts_continue_skips_final_recovery_and_moves_forward():
+    workflow = [item("grill", max_attempts=3, on_exhausted="continue", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
+    ctx = context(workflow)
+    def callback(stage, *_):
+        if stage.name == "grill":
+            return StageResult("grill", "fail", data={"missing_items": ["gap"]})
+        return StageResult(stage.name, "pass")
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill", "repair", "grill", "repair", "grill", "next"]
+    assert ctx.state.recovery_attempt_key == ""
+    assert ctx.state.recovery_attempt_count == 0
+
+
+def test_max_attempts_pass_before_exhaustion_moves_forward_and_resets():
+    workflow = [item("grill", max_attempts=3, on_exhausted="continue", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
+    ctx = context(workflow)
+    grills = 0
+    def callback(stage, *_):
+        nonlocal grills
+        if stage.name == "grill":
+            grills += 1
+            return StageResult("grill", "fail" if grills == 1 else "pass")
+        return StageResult(stage.name, "pass")
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill", "repair", "grill", "next"]
+    assert ctx.state.recovery_attempt_count == 0
+
+
+def test_max_attempts_fail_policy_stops_without_final_recovery():
+    workflow = [item("gate", max_attempts=2, on_exhausted="fail", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "fail" if stage.name == "gate" else "pass"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["gate", "repair", "gate"]
+    assert ctx.state.workflow_position == 0
+
+
+def test_max_attempts_resets_after_forward_progress_then_later_restart():
+    workflow = [item("grill", max_attempts=2, on_exhausted="continue", recover=[item("repair")], _workflow_index=0), item("later", restart_at="grill", _workflow_index=1)]
+    ctx = context(workflow)
+    later_calls = 0
+    def callback(stage, *_):
+        nonlocal later_calls
+        if stage.name == "grill":
+            return StageResult("grill", "fail")
+        if stage.name == "later":
+            later_calls += 1
+            return StageResult("later", "fail" if later_calls == 1 else "pass")
+        return StageResult(stage.name, "pass")
+    executor = Executor(callback)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill", "repair", "grill", "later", "grill", "repair", "grill", "later"]
+    assert ctx.state.recovery_attempt_count == 0
+
+
+def test_max_attempts_pending_recovery_survives_crash_and_resume():
+    workflow = [item("grill", max_attempts=3, on_exhausted="continue", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
+    ctx = context(workflow)
+    crashed = False
+    def first(stage, _ctx, previous=None):
+        nonlocal crashed
+        if stage.name == "grill":
+            return StageResult("grill", "fail", output="blocking gap", data={"missing_items": ["A"]})
+        if stage.name == "repair" and not crashed:
+            assert previous.data == {"missing_items": ["A"]}
+            crashed = True
+            raise KeyboardInterrupt
+        return StageResult(stage.name, "pass")
+    with pytest.raises(KeyboardInterrupt):
+        Pipeline(ctx, workflow).run(Executor(first))
+    assert ctx.state.recovery_attempt_key == "workflow:0"
+    assert ctx.state.recovery_attempt_count == 1
+    assert ctx.state.recovery_attempt_previous["data"] == {"missing_items": ["A"]}
+    grill_calls = 0
+    def resumed(stage, _ctx, previous=None):
+        nonlocal grill_calls
+        if stage.name == "repair":
+            assert previous.data == {"missing_items": ["A"]}
+            return StageResult("repair", "pass")
+        if stage.name == "grill":
+            grill_calls += 1
+            return StageResult("grill", "pass")
+        return StageResult(stage.name, "pass")
+    executor = Executor(resumed)
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["repair", "grill", "next"]
+    assert grill_calls == 1
+    assert ctx.state.recovery_attempt_count == 0
+    assert ctx.state.recovery_attempt_previous == {}
+
+
+def test_max_attempts_does_not_count_technical_error():
+    workflow = [item("grill", max_attempts=3, on_exhausted="continue", recover=[item("repair")], _workflow_index=0)]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "error"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["grill"]
+    assert ctx.state.recovery_attempt_count == 0
+
+
+def test_max_attempts_defaults_to_fail_when_on_exhausted_is_omitted():
+    workflow = [
+        item("gate", max_attempts=1, recover=[item("repair")], _workflow_index=0),
+        item("next", _workflow_index=1),
+    ]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "fail" if stage.name == "gate" else "pass"))
+    Pipeline(ctx, workflow).run(executor)
+    assert executor.seen == ["gate"]
+    assert ctx.state.workflow_position == 0

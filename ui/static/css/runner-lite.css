@@ -726,3 +726,27 @@ body {
     max-width: min(260px, 62vw);
   }
 }
+
+/* Local environment diagnostics live inside Run options and do not affect composer height. */
+.options-environment-check { justify-self:start; }
+.environment-check-result {
+  display:grid;
+  gap:5px;
+  max-height:220px;
+  overflow:auto;
+  padding:8px;
+  border:1px solid #d7e0e8;
+  border-radius:10px;
+  background:#f8fafc;
+  font-size:10px;
+  line-height:1.35;
+}
+.environment-check-summary { font-weight:900; color:var(--text); }
+.environment-check-summary.warn { color:#9a5b00; }
+.environment-check-summary.fail { color:var(--fail); }
+.environment-check-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:6px; align-items:start; color:var(--muted); }
+.environment-check-row strong { font-size:9px; }
+.environment-check-row.pass strong { color:var(--accent); }
+.environment-check-row.warn strong { color:#9a5b00; }
+.environment-check-row.fail strong { color:var(--fail); }
+.clear-history-button:disabled { opacity:.45; cursor:not-allowed; }

@@ -302,3 +302,85 @@ flow:
     case = next(item for item in payload["cases"] if item["name"] == "check FAIL -> repair ERROR -> safe stop")
     assert case["passed"] is True
     assert case["completed"] is False
+
+
+def test_dryrun_matrix_reports_bounded_attempt_policy(tmp_path: Path):
+    workflow = tmp_path / "bounded.yaml"
+    workflow.write_text(
+        """stages:
+  gate:
+    type: command
+    command: [python, -c, "print('GATE')"]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+  next:
+    type: command
+    command: [python, -c, "print('NEXT')"]
+flow:
+  - stage: gate
+    recover: [repair]
+    max_attempts: 3
+    on_exhausted: continue
+  - next
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["features"]["max_attempts"] == 1
+    case = next(item for item in payload["cases"] if "exhausted -> continue" in item["name"])
+    assert case["passed"] is True
+    assert case["expected_stage_calls"] == {"gate": 3, "repair": 2}
+    assert case["stage_calls"]["gate"] == 3
+    assert case["stage_calls"]["repair"] == 2
+
+
+def test_dryrun_matrix_reports_bounded_fail_closed_policy(tmp_path: Path):
+    workflow = tmp_path / "bounded_fail.yaml"
+    workflow.write_text(
+        """stages:
+  gate:
+    type: command
+    command: [python, -c, "print('GATE')"]
+  repair:
+    type: command
+    command: [python, -c, "print('REPAIR')"]
+flow:
+  - stage: gate
+    recover: [repair]
+    max_attempts: 2
+    on_exhausted: fail
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    case = next(item for item in payload["cases"] if "exhausted -> fail" in item["name"])
+    assert case["passed"] is True
+    assert case["completed"] is False
+    assert case["stage_calls"]["gate"] == 2
+    assert case["stage_calls"]["repair"] == 1
+
+
+def test_dryrun_bounded_counter_resets_after_forward_progress_and_reentry(tmp_path: Path):
+    scenario = tmp_path / "reentry.yaml"
+    scenario.write_text(
+        """default: pass
+stages:
+  gate: [fail, fail, fail, fail]
+  checkpoint: [fail, pass]
+""",
+        encoding="utf-8",
+    )
+    workflow = ROOT / "tool" / "workflow" / "10_bounded_gate_reentry_reset.yaml"
+    result = run(str(workflow), "--scenario", str(scenario), "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["completed"] is True
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "gate", "repair", "gate", "checkpoint",
+        "gate", "repair", "gate", "checkpoint",
+    ]

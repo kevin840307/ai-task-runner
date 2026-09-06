@@ -100,6 +100,31 @@ class UIState:
             })
         return result
 
+    def environment_check(self) -> dict:
+        """Run the standalone local environment checker used by both CLI and UI."""
+        tool = self.repo_root / "tool" / "environment_check.py"
+        if not tool.is_file():
+            raise ValueError(f"Environment check tool not found: {tool}")
+        try:
+            result = subprocess.run(
+                [sys.executable, str(tool), "--repo-root", str(self.repo_root), "--json"],
+                cwd=self.repo_root,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Environment check failed: {exc}") from exc
+        output = (result.stdout or "").strip()
+        try:
+            data = json.loads(output)
+        except json.JSONDecodeError as exc:
+            detail = (result.stderr or output or "No output")[-4000:]
+            raise ValueError(f"Environment check returned invalid output: {detail}") from exc
+        if not isinstance(data, dict):
+            raise ValueError("Environment check returned invalid result")
+        return data
+
     def backend_catalog(self) -> dict:
         """Return backend names without importing Runner Core into the UI."""
         names: set[str] = set()
@@ -493,10 +518,12 @@ class UIState:
     def clear_chat_history(self, project: Path) -> dict:
         """Clear persisted UI conversation history without touching Runner state.
 
-        If the current run is already completed, remember that run id so the
-        completion synchronizer does not immediately recreate the cleared
-        Assistant result on the next messages refresh.
+        Running chat history is intentionally immutable from the UI so the active
+        task and its visible conversation cannot disappear while execution is in
+        progress. Other Projects remain independently clearable.
         """
+        if self.read_runtime(project).get("running"):
+            raise ValueError("Cannot clear chat history while this Project is running")
         with self._chat_lock:
             folder = project / UI_STATE_DIR
             messages_path = folder / MESSAGES_FILE
@@ -1161,7 +1188,7 @@ class UIState:
                 row["stage"] = stage_name
                 updates = dict(flow_fields or {})
                 updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "restart_at", "repeat", "fresh_after_same_failures", "status", "prompt"}
+                allowed_flow = {"scope", "label", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
                 unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
                 if unknown_flow:
                     raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
@@ -1301,17 +1328,28 @@ class UIState:
                     allowed.add(name)
             if restart_at not in allowed:
                 raise ValueError("restart_at must reference this or an earlier Flow stage")
-        for key in ("repeat", "fresh_after_same_failures"):
+        for key in ("repeat", "max_attempts", "fresh_after_same_failures"):
             value = updates.get(key)
             if value is None:
                 continue
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"Flow {key} must be a positive integer")
+        on_exhausted = updates.get("on_exhausted")
+        if on_exhausted not in (None, "continue", "fail"):
+            raise ValueError("Flow on_exhausted must be continue or fail")
         recover = stage.get("recover") if isinstance(stage, dict) else None
         if updates.get("fresh_after_same_failures") is not None and not recover:
             raise ValueError("fresh_after_same_failures requires recover stages")
         if isinstance(updates.get("repeat"), int) and updates["repeat"] > 1 and not recover:
             raise ValueError("repeat > 1 requires recover stages")
+        if updates.get("max_attempts") is not None and not recover:
+            raise ValueError("max_attempts requires recover stages")
+        if on_exhausted is not None and updates.get("max_attempts") is None:
+            raise ValueError("on_exhausted requires max_attempts")
+        if updates.get("max_attempts") is not None and updates.get("repeat") is not None:
+            raise ValueError("max_attempts cannot be combined with repeat")
+        if updates.get("max_attempts") is not None and updates.get("restart_at") is not None:
+            raise ValueError("max_attempts cannot be combined with restart_at")
 
     def _require_editable(self) -> None:
         guard = self.edit_guard()
@@ -2475,6 +2513,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"projects": self.state.projects()})
             if parsed.path == "/api/backends":
                 return self._json(self.state.backend_catalog())
+            if parsed.path == "/api/environment/check":
+                return self._json(self.state.environment_check())
             if parsed.path == "/api/studio/files":
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])
@@ -2704,12 +2744,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _json(self, data: object, status: HTTPStatus = HTTPStatus.OK) -> None:
         payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            # Browsers routinely cancel polling/fetch requests during refresh,
+            # navigation, or page close. The client is already gone, so there
+            # is no error response left to send and no server fault to report.
+            return
 
     def log_message(self, fmt: str, *args: object) -> None:
         return

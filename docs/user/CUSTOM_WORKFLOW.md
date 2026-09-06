@@ -166,6 +166,40 @@ flow:
 
 `restart_at` may jump to the same or an earlier top-level Stage. `fresh_after_same_failures` is normally unnecessary for `type: review` because Review already owns the default semantic-failure threshold; specify it only when intentionally overriding that policy.
 
+### Bounded FAIL -> recover -> retry
+
+Every FlowNode may optionally bound semantic recovery:
+
+```yaml
+flow:
+  - stage: grill
+    recover: [repair_plan]
+    max_attempts: 3
+    on_exhausted: continue
+```
+
+`max_attempts` counts executions of that FlowNode that return a parsed semantic `FAIL`. Attempts 1..N-1 run `recover` and then retry the same FlowNode. If attempt N still FAILs, recovery is not run again. `on_exhausted: continue` advances to the next FlowNode; `on_exhausted: fail` stops. If `on_exhausted` is omitted while `max_attempts` is set, the safe default is `fail`. A PASS clears the counter. After the FlowNode has moved forward, any later restart/re-entry starts a new gate cycle at attempt 1. Technical `ERROR` results do not consume this semantic attempt budget.
+
+Both fields are optional. If `max_attempts` is omitted, recovery behavior is exactly the legacy/current behavior with no new limit. `on_exhausted` is valid only with `max_attempts`; `max_attempts` requires `recover`, and it cannot be combined with `repeat` or `restart_at` on the same FlowNode.
+
+> YAML FlowNode `max_attempts` is not the CLI/API `max_attempts`. The CLI/API option controls same-session backend recovery; this YAML option bounds semantic `FAIL -> recover -> retry` cycles for one FlowNode.
+
+### Recovery / retry YAML parameter reference
+
+| Parameter | Scope | Meaning |
+| --- | --- | --- |
+| `retry` | Stage execution | Technical/error retry budget inside one Stage execution. It is not semantic FAIL recovery. |
+| `runs` | Stage execution | Run the same Stage multiple times in one entry, typically for independent voting. |
+| `required_passes` | Stage execution | PASS votes required when `runs > 1`. |
+| `recover` | FlowNode routing | Stages to execute after a semantic FAIL before re-entering the failed FlowNode. |
+| `repeat` | FlowNode routing | Existing bounded-recovery behavior; kept for compatibility. Do not combine with `max_attempts`. |
+| `max_attempts` | FlowNode routing | Optional number of semantic FAIL attempts in one gate cycle. Omitted = existing behavior with no new limit. |
+| `on_exhausted` | FlowNode routing | `continue` or `fail` after `max_attempts` is exhausted. Default: `fail`. |
+| `fresh_after_same_failures` | FlowNode/session policy | Rotate that Stage to a Fresh Session after the same semantic failure repeats N times. |
+| `restart_at` | FlowNode routing | On FAIL, jump to the named same/earlier top-level Stage. |
+
+`max_attempts` counts gate entries, not repairs. With `max_attempts: 3`, at most two recovery runs occur before the third FAIL is exhausted.
+
 ## 7. YAML task-list mode
 
 Each script item may still use a different project, validator, validator arguments, and Workflow:
@@ -209,3 +243,7 @@ Prompt files remain Markdown and user Python Stages remain ordinary `.py` files,
 ### Command syntax
 
 `command` accepts either a simple command string or an argument list. Prefer the string form for ordinary commands, for example `command: "{python} D:/validation.py --asd sss"`. Use the list form when argument boundaries or nested quoting are complex. `result_kind: validation` turns a command into an external validation gate; validation commands default to cleaning `validator-reports`, while `clean_work: []` explicitly disables that cleanup.
+
+### Visual Editor coverage
+
+Workflow Studio Visual mode exposes the common Stage and Flow routing controls, including `max_attempts`, `on_exhausted`, `runs`, and `required_passes`. Recovery fields are grouped and summarized as an execution Behavior instead of duplicating long help text under every field. `continuation_prompt` remains an intentional YAML-only advanced override.

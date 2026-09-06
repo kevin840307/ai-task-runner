@@ -48,6 +48,7 @@ class StaticContractTests(unittest.TestCase):
             "stageAllowProjectRead", "stageCleanWork", "stageCommand", "stageResultKind", "stageCwd",
             "stageMinTasks", "stageRepairPlan", "stageValidator", "stageRuns", "stageRequiredPasses",
             "stageParser", "stageFlowLabel", "stageRestartAt", "stageRepeat", "stageFreshAfterSameFailures",
+            "stageMaxAttempts", "stageOnExhausted",
         ):
             self.assertIn(token, self.js)
 
@@ -76,6 +77,24 @@ class StaticContractTests(unittest.TestCase):
         for token in ('id="newWorkflowButton"', 'id="newWorkflowBackdrop" class="modal-backdrop"', 'class="modal-card workflow-create-card"', 'id="newWorkflowDestination"'):
             self.assertIn(token, self.html)
         self.assertIn("/api/studio/workflow/create", self.js)
+
+    def test_stage_editor_groups_recovery_and_explains_behavior_without_inline_noise(self):
+        for token in ("Recovery gate", "Retry & structured output", "Session & safety", "stageRecoveryBehavior", "stage-help"):
+            self.assertIn(token, self.js)
+        self.assertIn("Later re-entry starts again at 1", self.js)
+
+    def test_visual_editor_can_add_multi_run_to_review_not_only_edit_existing_values(self):
+        self.assertIn('else if (["base", "task", "review"].includes(type))', self.js)
+        self.assertNotIn('&& (cfg.runs !== undefined || cfg.required_passes !== undefined)', self.js)
+
+    def test_environment_check_is_available_from_run_options(self):
+        for token in ('id="environmentCheckButton"', 'id="environmentCheckResult"'):
+            self.assertIn(token, self.html)
+        self.assertIn('/api/environment/check', self.js)
+
+    def test_clear_history_is_disabled_for_running_selected_project(self):
+        self.assertIn('$("clearHistoryButton").disabled = Boolean(runtime.running)', self.js)
+        self.assertIn('if (!state.project || state.runtime?.running) return;', self.js)
 
 
 class LayoutRegressionTests(unittest.TestCase):
@@ -443,7 +462,8 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('class="workflow-generator-input-meta"', form)
         css = "".join(self.studio_css.split())
         self.assertIn('.workflow-generator-input{height:100%;display:flex;flex-direction:column;gap:10px', css)
-        self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;grid-template-rows:minmax(0,1fr);place-items:stretch;overflow:hidden', css)
+        self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;height:100%;grid-template-rows:minmax(0,1fr);place-items:stretch;overflow:hidden', css)
+        self.assertIn('@media(max-height:480px)and(min-width:761px)', css)
         self.assertIn('.workflow-generator-phase{min-width:0;min-height:0;width:min(1080px,100%);height:100%', css)
         self.assertIn('grid-template-rows:autominmax(150px,1fr)auto', css)
         self.assertIn('.workflow-generator-request{box-sizing:border-box;width:100%;height:100%;min-height:150px', css)

@@ -16,6 +16,8 @@ class RecoveryNode(Protocol):
     recover: tuple[dict, ...]
     restart_at: str | None
     repeat: int | None
+    max_attempts: int | None
+    on_exhausted: str | None
     fresh_after_same_failures: int | None
     scope: str
     workflow_index: int | None
@@ -52,6 +54,33 @@ class RecoveryPolicy:
             data=saved.get("data"),
         )
 
+    def pending_bounded_recovery(self, node: RecoveryNode) -> StageResult | None:
+        if node.max_attempts is None:
+            return None
+        state = self.context.state
+        if (
+            state.recovery_attempt_key != self._key(node)
+            or state.recovery_attempt_count <= 0
+            or state.recovery_attempt_count >= node.max_attempts
+            or not state.recovery_attempt_previous
+        ):
+            return None
+        saved = state.recovery_attempt_previous
+        return StageResult(
+            str(saved.get("stage", getattr(node.stage, "name", "stage"))),
+            "fail",
+            output=str(saved.get("output", "")),
+            data=saved.get("data"),
+        )
+
+    def complete_bounded_recovery(self, node: RecoveryNode) -> None:
+        if node.max_attempts is None:
+            return
+        state = self.context.state
+        if state.recovery_attempt_key == self._key(node):
+            state.recovery_attempt_previous = {}
+            self.context.save_state()
+
     def decide(
         self,
         node: RecoveryNode,
@@ -59,6 +88,16 @@ class RecoveryPolicy:
         executor: StageExecutor,
     ) -> RecoveryAction:
         limit_reached = self._record_repeat(node, result)
+        exhausted = self._record_bounded_attempt(node, result)
+        if exhausted:
+            self.clear_bounded_attempt(node)
+            self.clear_semantic_failure(node)
+            self.clear_repeat(node)
+            return RecoveryAction(
+                "next" if node.on_exhausted == "continue" else "stop",
+                True,
+            )
+
         self._observe_semantic_failure(node, result, executor)
 
         if result.status == "replan":
@@ -72,6 +111,7 @@ class RecoveryPolicy:
 
         if result.status == "pass":
             self.clear_repeat(node)
+            self.clear_bounded_attempt(node)
             self.clear_semantic_failure(node)
         return RecoveryAction("next", limit_reached)
 
@@ -83,6 +123,40 @@ class RecoveryPolicy:
             state.flow_result_key = ""
             state.flow_result_count = 0
             state.flow_result_previous = {}
+
+
+    def clear_bounded_attempt(self, node: RecoveryNode) -> None:
+        if node.max_attempts is None:
+            return
+        state = self.context.state
+        if state.recovery_attempt_key == self._key(node):
+            state.recovery_attempt_key = ""
+            state.recovery_attempt_count = 0
+            state.recovery_attempt_previous = {}
+            self.context.save_state()
+
+    def _record_bounded_attempt(
+        self, node: RecoveryNode, result: StageResult
+    ) -> bool:
+        max_attempts = node.max_attempts
+        if max_attempts is None or result.status != "fail":
+            return False
+        state = self.context.state
+        key = self._key(node)
+        if state.recovery_attempt_key != key:
+            state.recovery_attempt_key = key
+            state.recovery_attempt_count = 0
+        state.recovery_attempt_count += 1
+        state.recovery_attempt_previous = {
+            "stage": result.stage,
+            "status": result.status,
+            "output": result.output,
+            "data": json.loads(
+                json.dumps(result.data, ensure_ascii=False, default=str)
+            ),
+        }
+        self.context.save_state()
+        return state.recovery_attempt_count >= max_attempts
 
     def clear_semantic_failure(self, node: RecoveryNode) -> None:
         if self._semantic_threshold(node) is None:

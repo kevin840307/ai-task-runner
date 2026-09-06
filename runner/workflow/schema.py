@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at", "repeat", "fresh_after_same_failures", "label", "scope"})
+ROUTING_FIELDS = frozenset({"recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "label", "scope"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 VALIDATORS = frozenset({"ai"})
 
@@ -141,6 +141,34 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(f"workflow stage {name} repeat must be a positive integer")
     if repeat is not None and repeat > 1 and not values.get("recover"):
         raise RunnerError(f"workflow stage {name} repeat requires recover")
+    max_attempts = values.get("max_attempts")
+    if max_attempts is not None and (
+        not isinstance(max_attempts, int)
+        or isinstance(max_attempts, bool)
+        or max_attempts <= 0
+    ):
+        raise RunnerError(
+            f"workflow stage {name} max_attempts must be a positive integer"
+        )
+    if max_attempts is not None and not values.get("recover"):
+        raise RunnerError(f"workflow stage {name} max_attempts requires recover")
+    if max_attempts is not None and repeat is not None:
+        raise RunnerError(
+            f"workflow stage {name} cannot combine max_attempts with repeat"
+        )
+    if max_attempts is not None and values.get("restart_at") is not None:
+        raise RunnerError(
+            f"workflow stage {name} cannot combine max_attempts with restart_at"
+        )
+    on_exhausted = values.get("on_exhausted")
+    if on_exhausted not in {None, "continue", "fail"}:
+        raise RunnerError(
+            f"workflow stage {name} on_exhausted must be continue or fail"
+        )
+    if on_exhausted is not None and max_attempts is None:
+        raise RunnerError(
+            f"workflow stage {name} on_exhausted requires max_attempts"
+        )
     runs, required = values.get("runs"), values.get("required_passes")
     if runs is not None and (
         not isinstance(runs, int) or isinstance(runs, bool) or runs <= 0

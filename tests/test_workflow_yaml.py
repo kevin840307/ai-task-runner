@@ -1186,3 +1186,72 @@ def test_top_level_linear_review_fail_does_not_require_todo(tmp_path):
     )
     assert result.status == "fail"
     assert context.state.tasks == []
+
+
+def test_flow_node_max_attempts_is_normalized(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text("""\nstages:\n  grill:\n    type: review\n  repair:\n    type: task\nflow:\n  - stage: grill\n    max_attempts: 3\n    on_exhausted: continue\n    recover: [repair]\n""", encoding="utf-8")
+    workflow = load_workflow(path)
+    assert workflow[0]["max_attempts"] == 3
+    assert workflow[0]["on_exhausted"] == "continue"
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "3"])
+def test_flow_node_max_attempts_must_be_positive_integer(tmp_path, value):
+    path = tmp_path / "workflow.yaml"
+    encoded = str(value).lower() if isinstance(value, bool) else repr(value) if isinstance(value, str) else value
+    path.write_text(f"""\nstages:\n  grill:\n    type: review\n  repair:\n    type: task\nflow:\n  - stage: grill\n    max_attempts: {encoded}\n    on_exhausted: continue\n    recover: [repair]\n""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="max_attempts must be a positive integer"):
+        load_workflow(path)
+
+
+def test_flow_node_max_attempts_requires_recover(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text("""\nstages:\n  grill:\n    type: review\nflow:\n  - stage: grill\n    max_attempts: 3\n    on_exhausted: continue\n""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="max_attempts requires recover"):
+        load_workflow(path)
+
+
+def test_flow_node_on_exhausted_requires_max_attempts(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text("""\nstages:\n  grill:\n    type: review\n  repair:\n    type: task\nflow:\n  - stage: grill\n    on_exhausted: continue\n    recover: [repair]\n""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="on_exhausted requires max_attempts"):
+        load_workflow(path)
+
+
+@pytest.mark.parametrize("value", ["skip", "stop", 1, True])
+def test_flow_node_on_exhausted_has_small_enum(tmp_path, value):
+    path = tmp_path / "workflow.yaml"
+    encoded = repr(value) if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else value
+    path.write_text(f"""\nstages:\n  grill:\n    type: review\n  repair:\n    type: task\nflow:\n  - stage: grill\n    max_attempts: 3\n    on_exhausted: {encoded}\n    recover: [repair]\n""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="on_exhausted must be continue or fail"):
+        load_workflow(path)
+
+
+def test_flow_node_max_attempts_cannot_combine_with_repeat(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text("""\nstages:\n  grill:\n    type: review\n  repair:\n    type: task\nflow:\n  - stage: grill\n    repeat: 3\n    max_attempts: 3\n    on_exhausted: continue\n    recover: [repair]\n""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="cannot combine max_attempts with repeat"):
+        load_workflow(path)
+
+
+def test_flow_node_max_attempts_cannot_combine_with_restart_at(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text("""
+stages:
+  gate:
+    type: review
+  repair:
+    type: task
+  later:
+    type: review
+flow:
+  - gate
+  - stage: later
+    recover: [repair]
+    max_attempts: 3
+    on_exhausted: continue
+    restart_at: gate
+""", encoding="utf-8")
+    with pytest.raises(RunnerError, match="cannot combine max_attempts with restart_at"):
+        load_workflow(path)

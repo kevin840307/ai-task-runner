@@ -85,7 +85,7 @@ Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，
 
 Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 由 `StageResult.kind` 選擇少量 reducer（`tasks`、`task`、`review`、`validation`、`generic`），串接留在通用 Pipeline/routing data。
 
-共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。User-facing Stage spec 只 expose 直接 override，例如 `retry`、`timeout`、`skip_on_error`、`track_changes`、`session_key`、`prompt`、`parser`；`retry_attr`、`timeout_attr`、`client_cache_key` 這類 implementation lookup name 只由舊版 YAML Loader 相容層接受；Stage 執行本身只使用直接的 `retry` / `timeout` 或 Stage-owned default。Routing-only 欄位（`recover`、`repeat`、`fresh_after_same_failures`、`restart_at`、`label`、`scope`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
+共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。User-facing Stage spec 只 expose 直接 override，例如 `retry`、`timeout`、`skip_on_error`、`track_changes`、`session_key`、`prompt`、`parser`；`retry_attr`、`timeout_attr`、`client_cache_key` 這類 implementation lookup name 只由舊版 YAML Loader 相容層接受；Stage 執行本身只使用直接的 `retry` / `timeout` 或 Stage-owned default。Routing-only 欄位（`recover`、`repeat`、`max_attempts`、`on_exhausted`、`fresh_after_same_failures`、`restart_at`、`label`、`scope`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
 
 如果只是字串條件/format，優先用 Jinja；只有真正需要計算的 planning-specific context 才放在 `PlanStage`。
 

@@ -166,6 +166,40 @@ flow:
 
 `restart_at` 可以跳回自己或更早的 top-level Stage。`type: review` 已經有 semantic-failure 預設門檻，所以一般不需要再寫 `fresh_after_same_failures`；只有真的要 override policy 時才設定。
 
+### 限制 FAIL -> recover -> retry 次數
+
+任何 FlowNode 都可以選擇性加入 bounded semantic recovery：
+
+```yaml
+flow:
+  - stage: grill
+    recover: [repair_plan]
+    max_attempts: 3
+    on_exhausted: continue
+```
+
+`max_attempts` 計算的是該 FlowNode 回傳已成功解析之 semantic `FAIL` 的執行次數。第 1 到 N-1 次 FAIL 會先跑 `recover`，再重跑原 Stage；第 N 次仍 FAIL 時不再執行 recovery。`on_exhausted: continue` 直接往下一個 FlowNode；`on_exhausted: fail` 則停止。若有設定 `max_attempts` 但省略 `on_exhausted`，安全預設值是 `fail`。只要 PASS 就清除計數。Stage 已成功往下後，若後續 routing 又 restart/re-entry 回來，視為新的 gate cycle，從 attempt 1 重新計算。Technical `ERROR` 不會消耗這個 semantic attempt budget。
+
+這兩個欄位都是 optional。沒有設定 `max_attempts` 時，**完全維持原本 recovery 行為，不會偷偷增加上限**。`on_exhausted` 只能搭配 `max_attempts`；`max_attempts` 必須有 `recover`，且不能在同一個 FlowNode 和 `repeat` 或 `restart_at` 同時使用。
+
+> YAML FlowNode 的 `max_attempts` 和 CLI/API 的 `max_attempts` 是不同 scope。CLI/API 參數控制 Same Session backend recovery；這裡的 YAML 參數只限制單一 FlowNode 的 semantic `FAIL -> recover -> retry` gate cycle。
+
+### Recovery / retry YAML 參數對照
+
+| 參數 | Scope | 用途 |
+| --- | --- | --- |
+| `retry` | Stage execution | 單次 Stage execution 內的 technical/error retry budget；不是 semantic FAIL recovery。 |
+| `runs` | Stage execution | 同一次進入 Stage 時執行多次，常用於獨立 voting。 |
+| `required_passes` | Stage execution | `runs > 1` 時至少需要幾次 PASS。 |
+| `recover` | FlowNode routing | semantic FAIL 後先執行哪些 recovery Stage，再回原 FlowNode。 |
+| `repeat` | FlowNode routing | 既有 bounded-recovery 行為，為相容保留；不要和 `max_attempts` 同時使用。 |
+| `max_attempts` | FlowNode routing | 單一 gate cycle 最多允許幾次 semantic FAIL attempt；省略時完全維持既有行為。 |
+| `on_exhausted` | FlowNode routing | `max_attempts` 耗盡後用 `continue` 放行或 `fail` 停止；預設 `fail`。 |
+| `fresh_after_same_failures` | FlowNode/session policy | 同一 semantic failure 重複 N 次後，把該 Stage 切到 Fresh Session。 |
+| `restart_at` | FlowNode routing | FAIL 時跳回指定的同一個或更早 top-level Stage。 |
+
+`max_attempts` 算的是 Gate 執行次數，不是 Repair 次數。`max_attempts: 3` 代表最多只會跑兩次 recovery；第 3 次 FAIL 就視為 exhausted。
+
 ## 7. YAML Task List Mode
 
 每一筆 Task 仍可有不同 Project、Validator、Validator 參數與 Workflow：
@@ -209,3 +243,7 @@ Prompt 繼續是 Markdown，User Python Stage 仍是普通 `.py` 檔，因此 UI
 ### Command 語法
 
 `command` 可使用單行字串或 argument list。一般命令優先使用字串，例如 `command: "{python} D:/validation.py --asd sss"`；只有 argument boundary 或巢狀 quoting 較複雜時才使用 list。`result_kind: validation` 會把 command 定義成外部 validation gate；validation command 預設清除 `validator-reports`，若明確設定 `clean_work: []` 則關閉此清理。
+
+### Visual Editor 支援
+
+Workflow Studio Visual mode 已提供常用 Stage 與 Flow routing 控制，包括 `max_attempts`、`on_exhausted`、`runs`、`required_passes`。Recovery 參數以分組與 Behavior 摘要呈現，不在每個欄位下重複長說明。`continuation_prompt` 仍刻意保留為 YAML-only advanced override。

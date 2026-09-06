@@ -1,0 +1,28 @@
+# Generic FlowNode example: bounded recovery is not Grill-specific.
+# If checkpoint FAILs it restarts at gate. Because gate previously moved forward,
+# that re-entry is a new gate cycle and max_attempts starts from 1 again.
+stages:
+  gate:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    retry: 0
+    recover: [repair]
+    max_attempts: 2
+    on_exhausted: continue
+
+  repair:
+    type: base
+    mode: write
+    status: AI 正在修復 Gate 問題
+
+  checkpoint:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    retry: 0
+
+flow:
+  - gate
+  - stage: checkpoint
+    restart_at: gate

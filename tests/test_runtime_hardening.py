@@ -149,3 +149,15 @@ def test_observability_model_snapshot_uses_shared_atomic_writer(tmp_path):
     assert (debug_dir / "current-prompt.txt").read_text(encoding="utf-8") == "prompt"
     assert (debug_dir / "last-prompt.txt").read_text(encoding="utf-8") == "prompt"
     assert (debug_dir / "last-result.txt").read_text(encoding="utf-8") == "result"
+
+
+def test_run_state_roundtrip_preserves_bounded_recovery_attempt():
+    from runner.runtime.run_state import RunState
+    state = RunState(run_id="r", goal="g", project_root=".")
+    state.recovery_attempt_key = "workflow:2"
+    state.recovery_attempt_count = 2
+    state.recovery_attempt_previous = {"stage": "grill", "data": {"missing_items": ["A"]}}
+    loaded = RunState.load(state.dump())
+    assert loaded.recovery_attempt_key == "workflow:2"
+    assert loaded.recovery_attempt_count == 2
+    assert loaded.recovery_attempt_previous == state.recovery_attempt_previous

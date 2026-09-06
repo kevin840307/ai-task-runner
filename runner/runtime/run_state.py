@@ -90,6 +90,9 @@ class RunState:
     semantic_failure_key: str = ""
     semantic_failure_fingerprint: str = ""
     semantic_failure_count: int = 0
+    recovery_attempt_key: str = ""
+    recovery_attempt_count: int = 0
+    recovery_attempt_previous: dict[str, Any] = field(default_factory=dict)
     task_step: int = 0
 
     def dump(self) -> dict[str, Any]:
@@ -117,6 +120,7 @@ class RunState:
             "flow_result_key",
             "semantic_failure_key",
             "semantic_failure_fingerprint",
+            "recovery_attempt_key",
         ):
             value = getattr(self, name)
             if not isinstance(value, str):
@@ -125,7 +129,7 @@ class RunState:
             value = getattr(self, name)
             if not is_number(value) or value < 0:
                 raise ValueError(f"state.{name} must be a non-negative number")
-        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count", "semantic_failure_count"):
+        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count", "semantic_failure_count", "recovery_attempt_count"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"state.{name} must be non-negative")
@@ -133,6 +137,8 @@ class RunState:
             raise ValueError("state.workflow_position must be non-negative")
         if not isinstance(self.flow_result_previous, dict):
             raise ValueError("state.flow_result_previous must be an object")
+        if not isinstance(self.recovery_attempt_previous, dict):
+            raise ValueError("state.recovery_attempt_previous must be an object")
         if not is_integer(self.task_step) or self.task_step < 0:
             raise ValueError("state.task_step must be non-negative")
         for index, task in enumerate(self.tasks, 1):

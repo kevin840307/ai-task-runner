@@ -197,6 +197,19 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.click("#addStageConfirm")
             page.wait_for_timeout(180)
             assert page.locator("#stagePromptSelect").input_value() == "custom/e2e_prompt.md"
+
+            # Visual UI can opt into bounded FAIL -> recover -> retry behavior.
+            page.click('[data-stage-tab="control"]')
+            page.fill("#stageRecover", "work")
+            assert page.locator("#stageMaxAttemptsRow").is_visible()
+            page.fill("#stageMaxAttempts", "3")
+            assert page.locator("#stageOnExhaustedRow").is_visible()
+            page.select_option("#stageOnExhausted", "continue")
+            assert "up to 3 attempts" in page.locator("#stageRecoveryBehavior").inner_text()
+            page.click("#saveStageButton")
+            page.wait_for_timeout(220)
+            assert page.locator("#stageMaxAttempts").input_value() == "3"
+            assert page.locator("#stageOnExhausted").input_value() == "continue"
             page.locator(".designer-step-modal-box [data-stage-close]").first.click()
 
             # Prompt deletion must be protected while referenced.

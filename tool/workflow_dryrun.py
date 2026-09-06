@@ -316,6 +316,7 @@ class MatrixCase:
     scenario: Scenario
     expected_completed: bool = True
     min_fresh_sessions: int = 0
+    expected_stage_calls: dict[str, int] | None = None
 
 
 def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
@@ -339,6 +340,26 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
             cases.append(MatrixCase(
                 f"{name} FAIL -> recover -> closure",
                 Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+            ))
+        max_attempts = definition.get("max_attempts")
+        if (
+            isinstance(max_attempts, int)
+            and not isinstance(max_attempts, bool)
+            and max_attempts > 0
+            and definition.get("recover")
+            and ("max_attempts", name) not in added
+        ):
+            added.add(("max_attempts", name))
+            first_recovery = str(definition["recover"][0].get("name", ""))
+            expected = {name: max_attempts}
+            if first_recovery:
+                expected[first_recovery] = max_attempts - 1
+            continue_after = definition.get("on_exhausted") == "continue"
+            cases.append(MatrixCase(
+                f"{name} FAIL x{max_attempts} -> exhausted -> {definition.get('on_exhausted', 'fail')}",
+                Scenario({"default": "pass", "stages": {name: ["fail"] * max_attempts}}),
+                expected_completed=continue_after,
+                expected_stage_calls=expected,
             ))
         repeat = definition.get("repeat")
         if (
@@ -417,6 +438,7 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
             for nested in item.get("recover", ())
         ),
         "repeat": sum(item.get("repeat") is not None for item in definitions),
+        "max_attempts": sum(item.get("max_attempts") is not None for item in definitions),
         "restart_at": sum(bool(item.get("restart_at")) for item in definitions),
         "fresh_after_same_failures": sum(item.get("fresh_after_same_failures") is not None for item in definitions),
         "review": sum(str(item.get("type", "")) == "review" for item in definitions),
@@ -437,21 +459,34 @@ def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
             completed = bool(ctx.state.completed) and not error
             fresh_ok = fresh_sessions >= case.min_fresh_sessions
             outcome_ok = completed is case.expected_completed
+            actual_counts: dict[str, int] = defaultdict(int)
+            for _, stage, _, _ in executor.trace:
+                actual_counts[stage] += 1
+            counts_ok = all(
+                actual_counts.get(stage, 0) == expected
+                for stage, expected in (case.expected_stage_calls or {}).items()
+            )
             cases.append({
                 "name": case.name,
-                "passed": not error and outcome_ok and fresh_ok,
+                "passed": not error and outcome_ok and fresh_ok and counts_ok,
                 "completed": completed,
                 "expected_completed": case.expected_completed,
                 "executions": executor.calls,
                 "fresh_sessions": fresh_sessions,
                 "expected_fresh_sessions": case.min_fresh_sessions,
+                "expected_stage_calls": case.expected_stage_calls or {},
+                "stage_calls": dict(actual_counts),
                 "error": error or (
                     None
-                    if outcome_ok and fresh_ok
+                    if outcome_ok and fresh_ok and counts_ok
                     else (
                         f"expected completed={str(case.expected_completed).lower()}, got {str(completed).lower()}"
                         if not outcome_ok
-                        else f"expected at least {case.min_fresh_sessions} fresh session(s)"
+                        else (
+                            f"expected at least {case.min_fresh_sessions} fresh session(s)"
+                            if not fresh_ok
+                            else f"expected stage calls {case.expected_stage_calls}, got {dict(actual_counts)}"
+                        )
                     )
                 ),
             })

@@ -284,3 +284,5 @@ def test_workflow_catalog_tool_is_json_process_boundary():
     assert "command" in payload["stage_types"]
     assert payload["flow_options"]["scope"]["values"] == ["task"]
     assert payload["flow_options"]["repeat"]["minimum"] == 1
+    assert payload["flow_options"]["max_attempts"]["minimum"] == 1
+    assert payload["flow_options"]["on_exhausted"]["values"] == ["continue", "fail"]

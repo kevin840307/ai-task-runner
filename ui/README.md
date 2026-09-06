@@ -241,3 +241,9 @@ Backend choices are discovered by statically parsing `runner/backends/*.py` and 
 ## Multiple Project runs
 
 The UI/Runner contract permits separate Projects to run at the same time: each Project owns its own `.ai-task-runner` state/process marker and the UI launch lock is held only while spawning a child, not for the lifetime of the run. The Project rail polls every Project independently and can show multiple `RUN` labels. Workflow/Prompt Studio editing remains globally locked while any tracked Project is running. Actual inference concurrency/throughput still depends on the selected backend/server capacity.
+
+## Environment check
+
+Run options includes **Check environment**. The UI invokes the same standalone `tool/environment_check.py` used from the command line. It checks the local Python version/packages, required Runner files, UI data write access, and whether Qwen/OpenCode executables are discoverable. Backend absence is reported as a warning because a user may intentionally use only one backend.
+
+The Stage Editor groups parameters by behavior instead of presenting a flat YAML field list. `max_attempts` / `on_exhausted` are edited under **Recovery gate**, and the editor shows a compact Behavior preview. `runs` / `required_passes` can be added to ordinary AI-backed `base`, `task`, and `review` Stages as well as `ai_validator`. `continuation_prompt` intentionally remains a YAML-only advanced override so Visual mode keeps one Prompt selector.

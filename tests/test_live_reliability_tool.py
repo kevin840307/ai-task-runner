@@ -581,7 +581,7 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
 
 def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 6
+    assert len(results) == 8
     assert all(item["closed"] is True for item in results)
     assert sum(int(item["paths_total"]) for item in results) >= 10
     linear = next(item for item in results if str(item["workflow"]).endswith("skill_prompt_review_chain.yaml"))
@@ -590,6 +590,11 @@ def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))
     assert custom["features"]["task_producer"] is True
     assert custom["features"]["task_scope"] is True
+    bounded = next(item for item in results if str(item["workflow"]).endswith("08_bounded_grill_continue.yaml"))
+    assert bounded["features"]["max_attempts"] == 1
+    reentry = next(item for item in results if str(item["workflow"]).endswith("10_bounded_gate_reentry_reset.yaml"))
+    assert reentry["features"]["max_attempts"] == 1
+    assert reentry["features"]["restart_at"] == 1
     twelve = next(item for item in results if item["workflow"] == "synthetic://12-stage-composability")
     assert twelve["features"]["stages"] == 12
     assert twelve["features"]["repeat"] == 1

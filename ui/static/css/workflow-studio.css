@@ -640,7 +640,7 @@
 .app-toast.success { border-color: #9fd2b0; background: #f3fbf5; color: var(--pass); }
 .app-toast.error { border-color: #f5a99e; background: #fff5f3; color: var(--fail); }
 
-@media (max-height: 640px) and (min-width: 761px) {
+@media (max-height: 480px) and (min-width: 761px) {
   .workflow-generator-page { overflow-y: auto; }
   .workflow-generator-main { overflow: visible; }
   .workflow-generator-input { height: auto; }
@@ -795,6 +795,8 @@
   inset: 0;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0,1fr);
   padding: 12px 18px 14px;
@@ -828,6 +830,7 @@
   min-width: 0;
   min-height: 0;
   display: grid;
+  height: 100%;
   grid-template-rows: minmax(0, 1fr);
   place-items: stretch;
   overflow: hidden;
@@ -1055,7 +1058,7 @@
 .workflow-builder-failed span { max-width: 700px; color: var(--muted); white-space: pre-wrap; }
 .workflow-save-card { width: min(520px, calc(100vw - 30px)); }
 @media (prefers-reduced-motion: reduce) { .workflow-builder-spinner { animation: none; } }
-@media (max-height: 640px) and (min-width: 761px) {
+@media (max-height: 480px) and (min-width: 761px) {
   .workflow-generator-page { overflow-y: auto; }
   .workflow-generator-main { overflow: visible; }
   .workflow-generator-input { height: auto; }
@@ -1105,3 +1108,34 @@
 .studio-asset-menu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
 .studio-asset-menu button:hover:not(:disabled) { background: rgba(15,129,121,.08); }
 .studio-asset-menu button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Stage Editor guidance: keep field rows compact and put detail behind help marks. */
+.designer-label { display:inline-flex; align-items:center; gap:5px; }
+.stage-help {
+  display:inline-grid;
+  place-items:center;
+  width:16px;
+  height:16px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  color:var(--muted);
+  background:var(--panel-2);
+  font-size:10px;
+  font-weight:900;
+  line-height:1;
+  cursor:help;
+}
+.stage-help:hover,.stage-help:focus { color:var(--accent); border-color:var(--accent); outline:none; }
+.stage-behavior-preview {
+  grid-column:1 / -1;
+  margin-top:-2px;
+  padding:9px 11px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel-2);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.45;
+}
+.stage-behavior-preview::before { content:"Behavior · "; color:var(--text); font-weight:800; }
+.stage-command-safety { grid-column:1 / -1; }

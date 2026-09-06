@@ -143,6 +143,8 @@ Runner events keep `status=AI running skill` and expose `label=Project Documenta
 
 A FlowNode may override `fresh_after_same_failures: N`. Only repeated, successfully parsed semantic `FAIL` results count. When the same failure fingerprint reaches N, Runner drops only that Stage's AI session, runs the existing `recover`, then re-runs the Stage with its full prompt in a fresh session. Backend/API/parser/timeout errors do not count and different semantic failures reset the count. `ReviewStage` owns the semantic default `2` whenever it has recovery; other Stage types remain opt-in. This keeps system YAML small while preserving an explicit override when a Workflow needs a different threshold.
 
+A FlowNode may also opt into bounded semantic recovery with `max_attempts: N` plus `on_exhausted: continue|fail`. Only parsed semantic FAILs count. Attempts before N run `recover` and retry the same FlowNode; the Nth FAIL does not run recovery again and follows `on_exhausted`. PASS clears the counter, and after forward progress any later re-entry starts again at 1. Omitting `max_attempts` preserves the existing unbounded/current recovery behavior. This YAML field is separate from the CLI/API `max_attempts` used for same-session backend recovery.
+
 ## Workflow Dry Run
 
 Use `tool/workflow_dryrun.py` to validate whether a `workflow.yaml` can reach closure without calling a real agent. The tool reuses the production Workflow Loader, Pipeline, StageResult, and Stage finish and result reducers, and mocks only the bottom-level Stage execution result, so it does not create a second workflow engine.
@@ -183,3 +185,11 @@ Runner `ConsoleObserver` also writes `.ai-task-runner/console-view.json` from th
 The Workflow Builder is self-contained under `workflow_builder/` (`workflow_builder.yaml`, `prompt.md`, `validation.py`, `run.py`, `publish.py`) and can be called from CLI/other integrations without importing or changing Runner Core. UI uses a dedicated Prompt → status-only generation → editable Draft review → explicit Save flow. Every Generate starts a fresh draft job; name/destination are chosen only at Save, and no Workflow asset exists before validated publication. The System workflow file is only a compatibility mirror for the unchanged named-workflow registry.
 
 Workflow Generator jobs are UI-owned and Project-independent. The UI keeps exactly one active generation under `ui/data/workflow-builder/active.json`; refreshing or reopening the browser restores that same generating/ready job. The Generator shows its temporary workspace path. Generated YAML and Prompts are editable while still a Draft, and only Save publishes a real Workflow. Cancel/Discard returns to a freshly rendered Workflow catalog without requiring a browser refresh.
+
+## License
+
+This project is released under the **Zero-Clause BSD (0BSD) License**. You may use, copy, modify, distribute, and use it commercially without fee. See `LICENSE` for the full terms and warranty disclaimer.
+
+### Local environment check
+
+Use **Run options → Check environment** in the UI, or run `python tool/environment_check.py`. The check is side-effect free and reports required Python/Runner prerequisites plus optional Qwen/OpenCode PATH availability.

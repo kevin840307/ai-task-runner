@@ -26,6 +26,8 @@ ROUTING_FIELDS = frozenset(
         "recover",
         "restart_at",
         "repeat",
+        "max_attempts",
+        "on_exhausted",
         "fresh_after_same_failures",
         "label",
         "scope",
@@ -115,6 +117,8 @@ def workflow_catalog() -> dict[str, Any]:
             "recover": {"type": "stage[]"},
             "restart_at": {"type": "stage"},
             "repeat": {"type": "integer", "minimum": 1},
+            "max_attempts": {"type": "integer", "minimum": 1},
+            "on_exhausted": {"type": "enum", "values": ["continue", "fail"]},
             "fresh_after_same_failures": {"type": "integer", "minimum": 1},
         },
     }

@@ -1,0 +1,32 @@
+# Same bounded Grill policy, but exhaustion stops instead of allowing progress.
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    recover: [repair]
+
+  repair:
+    type: task
+
+  grill:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    retry: 0
+    recover: [repair_plan]
+    max_attempts: 3
+    on_exhausted: fail
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+flow:
+  - planning
+  - grill

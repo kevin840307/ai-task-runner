@@ -21,6 +21,8 @@ class FlowNode:
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
     repeat: int | None = None
+    max_attempts: int | None = None
+    on_exhausted: str | None = None
     fresh_after_same_failures: int | None = None
     label: str = ""
     scope: str = ""
@@ -33,6 +35,8 @@ class FlowNode:
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
             definition.get("repeat"),
+            definition.get("max_attempts"),
+            definition.get("on_exhausted"),
             definition.get("fresh_after_same_failures"),
             str(definition.get("label", "") or ""),
             str(definition.get("scope", "") or ""),
@@ -163,6 +167,24 @@ class Pipeline:
         for definition in flow:
             node = FlowNode.from_definition(definition)
             while True:
+                bounded_pending = self.recovery.pending_bounded_recovery(node)
+                if bounded_pending is not None:
+                    generation = self._task_generation
+                    replacement, recovered, stop = self._run_steps(
+                        node.recover,
+                        executor,
+                        plan_only,
+                        bounded_pending,
+                        advance_top_level=False,
+                    )
+                    if replacement is not None or stop:
+                        return replacement, recovered or bounded_pending, stop
+                    self.recovery.complete_bounded_recovery(node)
+                    previous = recovered or bounded_pending
+                    if self._task_generation != generation and self._has_pending_task():
+                        return self._restart_task_sop(bounded_pending), previous, False
+                    continue
+
                 pending = self.recovery.pending_recovery(node)
                 if pending is not None:
                     replacement, recovered, stop = self._run_steps(
@@ -197,6 +219,7 @@ class Pipeline:
                     )
                     if replacement is not None or stop:
                         return replacement, recovered or result, stop
+                    self.recovery.complete_bounded_recovery(node)
                     previous = recovered or result
                     if self._task_generation != generation and self._has_pending_task():
                         return self._restart_task_sop(result), previous, False
