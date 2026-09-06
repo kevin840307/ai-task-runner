@@ -108,6 +108,8 @@ class StageExecutor:
                 break
 
             error = result.error or RunnerError(result.output or "stage error")
+            if isinstance(error, ConfigurationError):
+                raise error
             error_retry_limit = max(
                 0,
                 int(getattr(error, "same_session_retry_limit", same_retry_limit)),

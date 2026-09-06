@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from runner.ai.errors import AIError
-from runner.errors import RunnerError
+from runner.errors import ConfigurationError, RunnerError
 from runner.runtime import events
 from runner.runtime.events import EventBus
 from runner.workflow.stages import StageExecutor, StageResult
@@ -130,6 +130,24 @@ def test_executor_converts_stage_exception_to_result():
     result = StageExecutor(Hooks())._attempt(Broken(), context(), None)
     assert result.status == "error"
     assert "boom" in str(result.error)
+
+
+
+def test_executor_does_not_retry_deterministic_configuration_error():
+    class BrokenConfig(Stage):
+        retry = 5
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            raise ConfigurationError("fixed validator is missing")
+
+    stage = BrokenConfig()
+    with pytest.raises(ConfigurationError, match="fixed validator is missing"):
+        StageExecutor(Hooks()).run(stage, context())
+    assert stage.calls == 1
 
 
 def test_executor_preserves_stage_lifecycle_events():

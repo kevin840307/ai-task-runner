@@ -1,6 +1,9 @@
 stages:
   planning:
     type: plan
+    # Generates TODOs and runs each TODO through:
+    # execute -> review -> repair(on fail) -> review.
+    # Completes only after all TODOs pass.
 
   execute:
     type: task

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from workflow_builder.run import _publish, parser
+from workflow_builder.run import _materialize_builder_workflow, _publish, parser
 from workflow_builder.validation import validate_draft
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,11 +107,23 @@ def test_canonical_builder_assets_live_in_external_folder_and_runner_shim_still_
     canonical_text = canonical.read_text(encoding="utf-8")
     shim_text = shim.read_text(encoding="utf-8").replace("\\", "/")
     assert "prompt: prompt.md" in canonical_text
-    assert "{runner_root}/workflow_builder/validation.py" in canonical_text
+    assert '"workflow_builder/validation.py"' in canonical_text
+    assert "{runner_root}" not in canonical_text
     assert "{validator}" not in canonical_text
     assert "workflow_builder/prompt.md" in shim_text
-    assert "{runner_root}/workflow_builder/validation.py" in shim_text
+    assert '"workflow_builder/validation.py"' in shim_text
+    assert "{runner_root}" not in shim_text
     assert "{validator}" not in shim_text
+
+
+
+def test_builder_materializes_fixed_validator_as_absolute_path(tmp_path: Path):
+    runtime_workflow = _materialize_builder_workflow(tmp_path)
+    data = yaml.safe_load(runtime_workflow.read_text(encoding="utf-8"))
+    command = data["stages"]["validate_workflow"]["command"]
+    assert Path(command[1]).resolve() == (ROOT / "workflow_builder" / "validation.py").resolve()
+    assert command[1] != "workflow_builder/validation.py"
+    assert Path(data["stages"]["build_workflow"]["prompt"]).resolve() == (ROOT / "workflow_builder" / "prompt.md").resolve()
 
 
 def test_canonical_builder_workflow_dryrun_closes():

@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ...errors import RunnerError
+from ...errors import ConfigurationError, RunnerError
 from .contracts import StageContext, StageResult
 from .process_stage import ProcessStage, ProcessStageSpec, resolve_project_file, run_stage_process
 
@@ -63,10 +63,15 @@ class CommandStage(ProcessStage):
         if clean_work is None and self.result_kind == "validation":
             clean_work = ["validator-reports"]
         _clean_work_paths(ctx.work, clean_work or [])
+        command = self._command(ctx)
+        if self.result_kind == "validation" and len(command) >= 2 and Path(command[0]).resolve() == Path(sys.executable).resolve():
+            script = Path(command[1]).expanduser()
+            if script.is_absolute() and not script.is_file():
+                raise ConfigurationError(f"validation script not found: {script}")
         return run_stage_process(
             ctx,
             self.name,
-            self._command(ctx),
+            command,
             self.timeout(ctx),
             "command Stage",
             cwd=cwd,
@@ -78,6 +83,7 @@ class CommandStage(ProcessStage):
             "{project_root}": str(ctx.root),
             "{work_dir}": str(ctx.work),
             "{state_file}": str(ctx.state_file),
+            "{runner_root}": str(Path(__file__).resolve().parents[3]),
         }
         values = (
             _split_command(self.spec.command)
@@ -94,7 +100,10 @@ class CommandStage(ProcessStage):
                     raise RunnerError("command validator requires a validator path")
                 result.append(str(resolve_project_file(ctx, ctx.validator_path, "validator")))
                 continue
-            result.append(mapping.get(value, value))
+            expanded = value
+            for placeholder, replacement in mapping.items():
+                expanded = expanded.replace(placeholder, replacement)
+            result.append(expanded)
         return result
 
 

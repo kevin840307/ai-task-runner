@@ -980,13 +980,33 @@ function fillGenerateWorkflowBackends() {
   for (const row of rows) { const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option); }
   const preferred = String(state.preferences?.builderBackend || $("backend")?.value || ""); select.value = [...select.options].some((o) => o.value === preferred) ? preferred : "";
 }
+async function copyWorkflowWorkspace(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "—" || text === "Created after Generate") return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else throw new Error("Clipboard API unavailable");
+  } catch (_) {
+    const helper = document.createElement("textarea"); helper.value = text; helper.setAttribute("readonly", ""); helper.style.position = "fixed"; helper.style.opacity = "0"; document.body.appendChild(helper); helper.select();
+    const copied = document.execCommand("copy"); helper.remove(); if (!copied) { showToast("Unable to copy temporary workspace", "error", 3200); return; }
+  }
+  showToast("Temporary workspace copied");
+}
+function bindWorkflowWorkspaceCopy(node, value) {
+  if (!node) return;
+  const text = String(value || "").trim(); const copyable = !!text && text !== "—" && text !== "Created after Generate";
+  node.classList.toggle("workspace-copy-ready", copyable); node.tabIndex = copyable ? 0 : -1; node.setAttribute("role", copyable ? "button" : "presentation");
+  node.title = copyable ? `${text} · Click to copy` : text;
+  node.onclick = copyable ? () => copyWorkflowWorkspace(text) : null;
+  node.onkeydown = copyable ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyWorkflowWorkspace(text); } } : null;
+}
 function setGenerateWorkflowWorkspace(path = "", pattern = "") {
   if (pattern) state.generateWorkflowWorkspacePattern = String(pattern);
   state.generateWorkflowWorkspace = String(path || "");
   const preview = state.generateWorkflowWorkspace || state.generateWorkflowWorkspacePattern || "Created after Generate";
-  if ($("generateWorkflowWorkspacePreview")) { $("generateWorkflowWorkspacePreview").textContent = preview; $("generateWorkflowWorkspacePreview").title = preview; }
+  if ($("generateWorkflowWorkspacePreview")) { $("generateWorkflowWorkspacePreview").textContent = preview; bindWorkflowWorkspaceCopy($("generateWorkflowWorkspacePreview"), preview); }
   for (const id of ["generateWorkflowRunningWorkspace", "generateWorkflowReadyWorkspace"]) {
-    if (!$(id)) continue; $(id).textContent = state.generateWorkflowWorkspace || "—"; $(id).title = state.generateWorkflowWorkspace || "";
+    if (!$(id)) continue; const value = state.generateWorkflowWorkspace || "—"; $(id).textContent = value; bindWorkflowWorkspaceCopy($(id), value);
   }
 }
 function resetGenerateWorkflowState({ keepRequest = false } = {}) {

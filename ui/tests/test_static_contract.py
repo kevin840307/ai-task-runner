@@ -412,6 +412,8 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertNotIn("project=", poll)
         self.assertIn("job_id=", poll)
         self.assertIn("No Project is required", self.js)
+        self.assertIn("copyWorkflowWorkspace", self.js)
+        self.assertIn("Temporary workspace copied", self.js)
 
     def test_ai_workflow_builder_restores_single_active_job_and_shows_workspace(self):
         for token in ('id="generateWorkflowWorkspacePreview"', 'id="generateWorkflowRunningWorkspace"', 'id="generateWorkflowReadyWorkspace"'):
@@ -440,9 +442,10 @@ class LayoutRegressionTests(unittest.TestCase):
         form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
         self.assertIn('class="workflow-generator-input-meta"', form)
         css = "".join(self.studio_css.split())
-        self.assertIn('.workflow-generator-input{display:flex;flex-direction:column;gap:14px', css)
-        self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;place-items:stretch;overflow-x:hidden;overflow-y:auto', css)
-        self.assertIn('height:clamp(240px,38vh,360px)', css)
+        self.assertIn('.workflow-generator-input{height:100%;display:flex;flex-direction:column;gap:10px', css)
+        self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;place-items:stretch;overflow:hidden', css)
+        self.assertIn('grid-template-rows:autominmax(150px,1fr)auto', css)
+        self.assertIn('.workflow-generator-request{box-sizing:border-box;width:100%;height:100%;min-height:150px', css)
         self.assertIn('overflow-wrap:anywhere', css)
 
     def test_generated_workflow_draft_has_explicit_edit_actions(self):

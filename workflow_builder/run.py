@@ -36,6 +36,28 @@ def parser() -> argparse.ArgumentParser:
     return p
 
 
+def _materialize_builder_workflow(run_root: Path) -> Path:
+    """Write the internal Builder Workflow with its trusted validator resolved absolutely."""
+    data = yaml.safe_load(BUILDER_WORKFLOW.read_text(encoding="utf-8"))
+    try:
+        command = data["stages"]["validate_workflow"]["command"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("Workflow Builder validator Stage is missing") from error
+    if not isinstance(command, list) or len(command) < 2 or command[1] != "workflow_builder/validation.py":
+        raise ValueError("Workflow Builder must use fixed workflow_builder/validation.py")
+    command[1] = str(VALIDATOR.resolve())
+    build_stage = data.get("stages", {}).get("build_workflow", {})
+    if build_stage.get("prompt") != "prompt.md":
+        raise ValueError("Workflow Builder must use fixed workflow_builder/prompt.md")
+    build_stage["prompt"] = str((BUILDER_ROOT / "prompt.md").resolve())
+    runtime_workflow = run_root / "workflow_builder.runtime.yaml"
+    runtime_workflow.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
+    )
+    return runtime_workflow
+
+
 def _request_text(args: argparse.Namespace) -> str:
     if args.request is not None:
         text = args.request
@@ -272,6 +294,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
 
     rel_workflow = draft_workflow.relative_to(project).as_posix()
     rel_prompt_dir = draft_prompt_dir.relative_to(project).as_posix()
+    runtime_builder_workflow = _materialize_builder_workflow(run_root)
     command = [
         sys.executable,
         str(ROOT / "ai_task_runner.py"),
@@ -280,7 +303,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "--goal-file",
         str(goal_file),
         "--workflow",
-        str(BUILDER_WORKFLOW),
+        str(runtime_builder_workflow),
         "--validator-arg=--draft-workflow",
         f"--validator-arg={rel_workflow}",
         "--validator-arg=--draft-prompt-dir",

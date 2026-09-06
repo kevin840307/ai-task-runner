@@ -12,7 +12,14 @@ stages:
     run_state: validating
     actor: validator
     result_kind: validation
-    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    command:
+      - "{python}"
+      - "workflow_builder/validation.py"
+      - "--project-root"
+      - "{project_root}"
+      - "--state-file"
+      - "{state_file}"
+      - "{validator_args}"
     recover: [build_workflow]
 
 flow:

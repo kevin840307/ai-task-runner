@@ -14,7 +14,7 @@ stages:
     result_kind: validation
     command:
       - "{python}"
-      - "{runner_root}/workflow_builder/validation.py"
+      - "workflow_builder/validation.py"
       - "--project-root"
       - "{project_root}"
       - "--state-file"
