@@ -414,22 +414,51 @@ function visibleStudioFiles() { return state.studioSourceKind === "prompt" ? (st
 function studioSearchQuery() { return state.studioFilters?.[state.studioSourceKind] || ""; }
 function filteredStudioFiles() { return window.StudioSupport.filterItems(visibleStudioFiles(), studioSearchQuery()); }
 function syncStudioSearch() { const input = $("studioSearchInput"), clear = $("studioSearchClear"); if (!input) return; input.value = studioSearchQuery(); input.placeholder = state.studioSourceKind === "prompt" ? "Search prompts..." : "Search workflows..."; if (clear) clear.hidden = !input.value; }
+const STUDIO_FOLDER_STATE_KEY = "ai-task-runner.studio.folder-collapse.v1";
+function studioFolderState() { try { const raw = JSON.parse(localStorage.getItem(STUDIO_FOLDER_STATE_KEY) || "{}"); return raw && typeof raw === "object" ? raw : {}; } catch (_) { return {}; } }
+function studioFolderKey(folder) { return `${state.studioSourceKind}:${folder || "(root)"}`; }
+function studioFolderCollapsed(folder, defaultCollapsed = false) {
+  if (studioSearchQuery()) return false;
+  const value = studioFolderState(), key = studioFolderKey(folder);
+  return Object.prototype.hasOwnProperty.call(value, key) ? !!value[key] : !!defaultCollapsed;
+}
+function setStudioFolderCollapsed(folder, collapsed) { try { const value = studioFolderState(); value[studioFolderKey(folder)] = !!collapsed; localStorage.setItem(STUDIO_FOLDER_STATE_KEY, JSON.stringify(value)); } catch (_) {} }
+function customFolderForItem(item) { const display = String(item?.display_name || item?.name || "").replace(/\\/g, "/"); const index = display.lastIndexOf("/"); return index >= 0 ? display.slice(0, index) : ""; }
+function appendStudioItem(root, item) {
+  const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (state.studioFile?.id === item.id) button.classList.add("active"); if (item.readonly) button.classList.add("readonly");
+  const name = document.createElement("strong"); name.textContent = item.name; const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project"); button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
+}
+function appendStudioFolderGroup(root, folder, items, options = {}) {
+  const stateKey = options.stateKey || folder;
+  const collapsed = studioFolderCollapsed(stateKey, !!options.defaultCollapsed);
+  const section = document.createElement("section"); section.className = "studio-folder-group"; section.classList.toggle("collapsed", collapsed);
+  if (options.system) section.classList.add("system-group");
+  const header = document.createElement("button"); header.type = "button"; header.className = "studio-folder-header"; header.setAttribute("aria-expanded", String(!collapsed));
+  const caret = document.createElement("span"); caret.className = "studio-folder-caret"; caret.setAttribute("aria-hidden", "true");
+  const label = document.createElement("span"); label.className = "studio-folder-label"; label.textContent = options.label || folder || "Root";
+  const count = document.createElement("span"); count.className = "studio-folder-count"; count.textContent = String(items.length); header.append(caret, label, count);
+  const body = document.createElement("div"); body.className = "studio-folder-items"; body.hidden = collapsed; items.forEach((item) => appendStudioItem(body, item));
+  header.onclick = () => { const next = !body.hidden; body.hidden = next; section.classList.toggle("collapsed", next); header.setAttribute("aria-expanded", String(!next)); setStudioFolderCollapsed(stateKey, next); };
+  section.append(header, body); root.appendChild(section);
+}
 function renderStudioFiles() {
   const root = $("studioFileList"); root.innerHTML = "";
   $("studioSourceTabs").hidden = false;
   $("studioListTitle").textContent = state.studioSourceKind === "prompt" ? "Prompts" : "Workflows";
   $("yamlWorkflowSource").classList.toggle("active", state.studioSourceKind === "workflow"); $("yamlPromptSource").classList.toggle("active", state.studioSourceKind === "prompt");
   $("newWorkflowButton").hidden = false; $("newWorkflowButton").title = state.studioSourceKind === "prompt" ? "New custom prompt" : "New custom workflow"; syncStudioSearch();
-  const groups = [["System", []], ["Custom", []], ["Project", []]];
-  const groupMap = new Map(groups);
-  for (const item of filteredStudioFiles()) (groupMap.get(item.group || "Project") || groupMap.get("Project")).push(item);
-  for (const [group, items] of groups) {
-    if (!items.length) continue;
-    const heading = document.createElement("div"); heading.className = "studio-file-group"; heading.textContent = group; root.appendChild(heading);
-    for (const item of items) {
-      const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (state.studioFile?.id === item.id) button.classList.add("active"); if (item.readonly) button.classList.add("readonly");
-      const name = document.createElement("strong"); name.textContent = item.display_name || item.name; const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project"); button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
-    }
+  const grouped = { System: [], Custom: [], Project: [] };
+  for (const item of filteredStudioFiles()) (grouped[item.group] || grouped.Project).push(item);
+  if (grouped.System.length) {
+    appendStudioFolderGroup(root, "@system", grouped.System, { stateKey: "@system", label: "SYSTEM", defaultCollapsed: true, system: true });
+  }
+  if (grouped.Custom.length) {
+    const heading = document.createElement("div"); heading.className = "studio-file-group"; heading.textContent = "Custom"; root.appendChild(heading);
+    const folders = new Map(); for (const item of grouped.Custom) { const folder = customFolderForItem(item); if (!folders.has(folder)) folders.set(folder, []); folders.get(folder).push(item); }
+    for (const folder of [...folders.keys()].sort((a, b) => a.localeCompare(b))) appendStudioFolderGroup(root, folder, folders.get(folder));
+  }
+  if (grouped.Project.length) {
+    const heading = document.createElement("div"); heading.className = "studio-file-group"; heading.textContent = "Project"; root.appendChild(heading); grouped.Project.forEach((item) => appendStudioItem(root, item));
   }
   if (!root.querySelector(".studio-file-item")) { const empty = document.createElement("div"); empty.className = "studio-list-empty"; const noun = state.studioSourceKind === "prompt" ? "prompts" : "workflows"; empty.textContent = studioSearchQuery() ? `No matching ${noun}` : `No ${noun}`; root.appendChild(empty); }
 }

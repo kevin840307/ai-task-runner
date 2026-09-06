@@ -12,7 +12,6 @@ stages:
   execute:
     type: task
     prompt: ../../../prompts/custom/e2e/regression_execute.md
-    continuation_prompt: ../../../prompts/custom/e2e/work_continue.md
     retry: -1
     fresh_session_on_start: true
   repair_plan:
@@ -34,11 +33,16 @@ stages:
   final_ai:
     type: ai_validator
     validator: ai
-    prompt: ../../../prompts/custom/e2e/final_regression_validation.md
     runs: 3
     required_passes: 2
     fresh_session_each_run: true
     allow_project_read: false
+    instructions: Start from result/system/workflow2/final_ai_context.yaml. Final
+      Python already owns real test execution and coverage arithmetic. Reject only
+      concrete MAJOR/CRITICAL semantic defects such as meaningless assertions, invented
+      outcomes, coverage cheating/bypassed paths, inappropriate SUT mocking, or an
+      evidence-proven major business omission. Do not require theoretical 100% business
+      coverage or speculative cases.
   export_e2e_spec:
     type: command
     command:

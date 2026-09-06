@@ -248,7 +248,7 @@ def test_dryrun_handles_twelve_stage_composable_sop(tmp_path: Path):
 
 
 def test_system_custom_skill_prompt_review_chain_linear_dryrun_closes():
-    result = run("runner/workflow/custom/skill_prompt_review_chain.yaml", "--matrix", "--json")
+    result = run("runner/workflow/custom/common/skill_prompt_review_chain.yaml", "--matrix", "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     payload = json.loads(result.stdout)
     assert payload["closed"] is True

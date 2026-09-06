@@ -1,1 +1,0 @@
-Continue only the current adversarial E2E Blueprint challenge using evidence already gathered in this Grill session. Do not restart broad discovery or scan the repository for theoretical completeness. Return only the Runner Review JSON contract: {"completed": true, "reason": "...", "missing_items": []}.

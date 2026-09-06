@@ -4,6 +4,26 @@ Version: 1.2.61
 
 This guide shows the current Workflow contract. Prefer semantic Stage types and keep YAML limited to behavior that truly changes the SOP. Do not copy implementation-only fields from older examples.
 
+## Custom asset folders
+
+Keep ownership and purpose separate: `system/` is Runner-owned and read-only; user-managed assets live under `custom/` and can be categorized further. The bundled reusable example now lives under `custom/common`. Domain-specific packages can use folders such as `custom/e2e`, `custom/regression`, or deeper nested folders.
+
+```text
+runner/workflow/
+├─ system/
+└─ custom/
+   ├─ common/
+   └─ e2e/
+
+runner/prompts/
+├─ system/ + stages/
+└─ custom/
+   ├─ common/
+   └─ e2e/
+```
+
+Workflow Studio discovers Custom Workflow/Prompt assets recursively. Its left catalog groups Custom assets by folder with independent collapse controls; Search still searches across every folder and automatically exposes matching groups. New Workflow/Prompt dialogs can select or create a Custom subfolder.
+
 ## 1. Generic linear Workflow
 
 A Workflow does not require Plan or a Validator. If the flow is linear, declare only the Stages you need:

@@ -791,7 +791,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
         *SYSTEM_WORKFLOWS.values(),
-        ROOT / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml",
+        ROOT / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml",
         ROOT / "examples" / "custom_workflow_latest.yaml",
         ROOT / "tool" / "workflow" / "08_bounded_grill_continue.yaml",
         ROOT / "tool" / "workflow" / "10_bounded_gate_reentry_reset.yaml",

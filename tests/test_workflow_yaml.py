@@ -718,7 +718,7 @@ def test_multi_prompt_example_reuses_same_task_stage():
 
 def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
     root = Path(__file__).resolve().parents[1]
-    example = root / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
+    example = root / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml"
     workflow = load_workflow(example)
     pairs = [
         (item["name"], item["prompt"])
@@ -726,17 +726,17 @@ def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_pref
         if item["name"] != "validate_file"
     ]
     assert pairs == [
-        ("run_prompt", "custom/design.md"),
-        ("review", "custom/review_design.md"),
-        ("run_prompt", "custom/implementation.md"),
-        ("review", "custom/review_implementation.md"),
-        ("run_prompt", "custom/documentation.md"),
-        ("review", "custom/review_documentation.md"),
+        ("run_prompt", "custom/common/design.md"),
+        ("review", "custom/common/review_design.md"),
+        ("run_prompt", "custom/common/implementation.md"),
+        ("review", "custom/common/review_implementation.md"),
+        ("run_prompt", "custom/common/documentation.md"),
+        ("review", "custom/common/review_documentation.md"),
     ]
     assert {item["name"] for item in workflow} == {"run_prompt", "review", "validate_file"}
     assert all("result_handler" not in item for item in workflow if item["name"] == "review")
     assert [item["name"] for item in workflow[-1]["recover"]] == ["run_prompt", "review"]
-    assert workflow[-1]["recover"][0]["prompt"] == "custom/fix_validation.md"
+    assert workflow[-1]["recover"][0]["prompt"] == "custom/common/fix_validation.md"
     assert [item["status"] for item in workflow[:-1]] == [
         "Designing solution",
         "Reviewing design",
@@ -749,7 +749,7 @@ def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_pref
     assert workflow[-1]["recover"][0]["status"] == "Fixing validation failure"
     assert workflow[-1]["recover"][1]["status"] == "Reviewing validation fix"
     for prompt in ("design.md", "implementation.md", "documentation.md"):
-        text = (root / "runner" / "prompts" / "custom" / prompt).read_text(encoding="utf-8")
+        text = (root / "runner" / "prompts" / "custom" / "common" / prompt).read_text(encoding="utf-8")
         assert text.startswith("/skill-")
 
 
@@ -1132,7 +1132,7 @@ def test_top_level_task_and_review_can_run_without_planned_todo(tmp_path):
 
     workflow = load_workflow(
         Path(__file__).resolve().parents[1]
-        / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
+        / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml"
     )
     context = _context(tmp_path, workflow)
 

@@ -224,9 +224,31 @@ def _validate_blueprint(stage: str) -> GateResult:
     cases_doc = docs.get("e2e_cases", {})
     evidence_doc = docs.get("evidence_index", {})
 
-    flows = _rows(architecture, "flows") if isinstance(architecture, Mapping) else []
-    cases = _rows(cases_doc, "cases") if isinstance(cases_doc, Mapping) else []
-    evidence = _rows(evidence_doc, "evidence") if isinstance(evidence_doc, Mapping) else []
+    if isinstance(architecture, Mapping) and architecture and "flows" not in architecture:
+        violations.append(_violation(
+            "ARCHITECTURE_FLOWS_REQUIRED",
+            "architecture.yaml must contain canonical root key flows",
+            "architecture",
+            "CRITICAL",
+        ))
+    if isinstance(cases_doc, Mapping) and cases_doc and "cases" not in cases_doc:
+        violations.append(_violation(
+            "E2E_CASES_ROOT_REQUIRED",
+            "e2e_cases.yaml must contain canonical root key cases",
+            "e2e_cases",
+            "CRITICAL",
+        ))
+    if isinstance(evidence_doc, Mapping) and evidence_doc and "evidence" not in evidence_doc:
+        violations.append(_violation(
+            "EVIDENCE_ROOT_REQUIRED",
+            "evidence_index.yaml must contain canonical root key evidence",
+            "evidence_index",
+            "CRITICAL",
+        ))
+
+    flows = _rows({"flows": architecture.get("flows", [])}, "flows") if isinstance(architecture, Mapping) else []
+    cases = _rows({"cases": cases_doc.get("cases", [])}, "cases") if isinstance(cases_doc, Mapping) else []
+    evidence = _rows({"evidence": evidence_doc.get("evidence", [])}, "evidence") if isinstance(evidence_doc, Mapping) else []
 
     flow_ids: set[str] = set()
     for i, flow in enumerate(flows):

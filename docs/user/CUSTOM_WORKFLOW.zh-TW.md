@@ -4,6 +4,26 @@
 
 這份文件示範目前最新的 Workflow 寫法。優先使用語意化 Stage type，YAML 只保留真正會改變 SOP 的設定，不要再複製舊版 implementation detail。
 
+## Custom asset 資料夾
+
+建議把「Ownership」與「用途分類」分開：`system/` 由 Runner 管理且唯讀；使用者資產都放在 `custom/`，再依用途細分。內建可重用範例目前放在 `custom/common`；領域專用資產可放 `custom/e2e`、`custom/regression`，也支援更深層子資料夾。
+
+```text
+runner/workflow/
+├─ system/
+└─ custom/
+   ├─ common/
+   └─ e2e/
+
+runner/prompts/
+├─ system/ + stages/
+└─ custom/
+   ├─ common/
+   └─ e2e/
+```
+
+Workflow Studio 會遞迴發現所有 Custom Workflow/Prompt，左側清單會依資料夾形成可獨立收合的 Folder Group；Search 仍會跨所有資料夾搜尋，搜尋時會直接顯示符合結果的群組。新增 Workflow/Prompt 時也可以選擇或建立 Custom 子資料夾。
+
 ## 1. 一般線性 Workflow
 
 Workflow 不一定需要 Plan，也不一定需要 Validator。單純線性流程只寫真正需要的 Stage：

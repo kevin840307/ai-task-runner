@@ -33,7 +33,6 @@ stages:
   execute:
     type: task
     prompt: ../../../prompts/custom/e2e/blueprint_execute.md
-    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
     retry: -1
     fresh_session_on_start: true
   gate_execute:
@@ -48,8 +47,6 @@ stages:
     - '{state_file}'
   repair:
     type: task
-    prompt: ../../../prompts/custom/e2e/repair.md
-    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
     retry: -1
   gate_repair:
     type: command
@@ -64,7 +61,6 @@ stages:
   review:
     type: review
     prompt: ../../../prompts/custom/e2e/blueprint_review.md
-    continuation_prompt: ../../../prompts/custom/e2e/blueprint_review_continue.md
     skip_on_error: false
     structured_retries: 2
     runs: 2
@@ -83,7 +79,6 @@ stages:
   grill:
     type: review
     prompt: ../../../prompts/custom/e2e/blueprint_grill.md
-    continuation_prompt: ../../../prompts/custom/e2e/blueprint_grill_continue.md
     skip_on_error: false
     structured_retries: 2
     retry: 0
@@ -102,10 +97,12 @@ stages:
     type: base
     mode: write
     actor: executor
-    prompt: ../../../prompts/custom/e2e/repair.md
-    continuation_prompt: ../../../prompts/custom/e2e/blueprint_continue.md
+    prompt: stages/workflow_prompt.md
     track_changes: true
     retry: -1
+    instructions: Repair only the concrete final E2E Blueprint validation finding.
+      Preserve valid flows/cases/evidence, keep the canonical portable schema, and
+      never weaken a Python Gate or protected input.
   gate_final_repair:
     type: command
     command:
@@ -137,11 +134,16 @@ stages:
   final_ai:
     type: ai_validator
     validator: ai
-    prompt: ../../../prompts/custom/e2e/final_blueprint_validation.md
     runs: 3
     required_passes: 2
     fresh_session_each_run: true
     allow_project_read: true
+    instructions: Start from result/system/workflow1/final_ai_context.yaml. Reject
+      only concrete MAJOR/CRITICAL semantic defects in business-flow coverage, Flow/Case
+      consistency, observable oracles, evidence support, or materially wrong boundaries/branches.
+      Do not require static-analysis inventories, code coverage, fixed case counts,
+      or speculative completeness. ASSUMPTION items are acceptable when clearly labeled
+      with an open question.
 flow:
 - stage: preflight
   label: Discover Request + Available Evidence
@@ -188,8 +190,8 @@ flow:
   recover:
   - stage: final_repair
     label: Repair Final Validation Finding
-    instructions: Repair only the concrete final validation finding against the completed Blueprint. Preserve valid flows/cases/evidence
-      and do not weaken any Gate.
+    instructions: Repair only the concrete final validation finding against the completed
+      Blueprint. Preserve valid flows/cases/evidence and do not weaken any Gate.
   - stage: gate_final_repair
     label: Python Gate · Final Repair
 - stage: export_e2e_spec
@@ -199,8 +201,8 @@ flow:
   recover:
   - stage: final_repair
     label: Repair Final Semantic Finding
-    instructions: Repair only the concrete semantic finding reported by Final AI. Preserve valid flows/cases/evidence and
-      do not weaken any Gate.
+    instructions: Repair only the concrete semantic finding reported by Final AI.
+      Preserve valid flows/cases/evidence and do not weaken any Gate.
   - stage: gate_final_repair
     label: Python Gate · Final Semantic Repair
   - stage: final_python

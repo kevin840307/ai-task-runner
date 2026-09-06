@@ -86,10 +86,12 @@ def _bridge_for(state: UIState):
                 else:
                     raise ValueError(f"Unhandled browser E2E GET {path}")
             else:
-                if path == "/api/studio/prompt/create":
-                    data = state.studio_prompt_create(body.get("name", ""), body.get("destination", "custom"), None)
+                if path == "/api/studio/custom-folder/create":
+                    data = state.studio_custom_folder_create(body.get("kind", ""), body.get("folder", ""))
+                elif path == "/api/studio/prompt/create":
+                    data = state.studio_prompt_create(body.get("name", ""), body.get("destination", "custom"), None, body.get("folder", ""))
                 elif path == "/api/studio/workflow/create":
-                    data = state.studio_workflow_create(body.get("name", ""), body.get("destination", "custom"), None)
+                    data = state.studio_workflow_create(body.get("name", ""), body.get("destination", "custom"), None, body.get("folder", ""))
                 elif path == "/api/studio/prompt/check":
                     data = state.studio_prompt_check(body.get("id", ""), body.get("content", ""), None)
                 elif path == "/api/studio/check":
@@ -175,6 +177,11 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.click("#yamlPromptSource")
             page.click("#newWorkflowButton")
             page.fill("#newPromptName", "e2e_prompt")
+            page.click("#newPromptFolderToggle")
+            page.fill("#newPromptFolderName", "e2e")
+            page.click("#newPromptFolderCreate")
+            page.wait_for_timeout(80)
+            assert page.locator("#newPromptFolder").input_value() == "e2e"
             page.click("#newPromptConfirm")
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
@@ -187,16 +194,32 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.click("#yamlWorkflowSource")
             page.click("#newWorkflowButton")
             page.fill("#newWorkflowName", "e2e_crud")
+            page.click("#newWorkflowFolderToggle")
+            page.fill("#newWorkflowFolderName", "e2e")
+            page.click("#newWorkflowFolderCreate")
+            page.wait_for_timeout(80)
+            assert page.locator("#newWorkflowFolder").input_value() == "e2e"
             page.click("#newWorkflowConfirm")
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_crud.workflow.yaml"
+            folder_header = page.locator("#studioFileList .studio-folder-header").filter(has_text="e2e").first
+            assert folder_header.count() == 1
+            folder_header.click()
+            assert not page.locator("#studioFileList .studio-file-item").filter(has_text="e2e_crud.workflow.yaml").is_visible()
+            page.fill("#studioSearchInput", "e2e_crud")
+            page.wait_for_timeout(80)
+            assert page.locator("#studioFileList .studio-file-item").filter(has_text="e2e_crud.workflow.yaml").is_visible()
+            page.fill("#studioSearchInput", "")
+            page.wait_for_timeout(80)
+            folder_header = page.locator("#studioFileList .studio-folder-header").filter(has_text="e2e").first
+            folder_header.click()
             page.click("#addFlowStepButton")
             page.fill("#addStageName", "work")
             page.select_option("#addStageType", "task")
-            page.select_option("#addStagePrompt", "custom/e2e_prompt.md")
+            page.select_option("#addStagePrompt", "custom/e2e/e2e_prompt.md")
             page.click("#addStageConfirm")
             page.wait_for_timeout(180)
-            assert page.locator("#stagePromptSelect").input_value() == "custom/e2e_prompt.md"
+            assert page.locator("#stagePromptSelect").input_value() == "custom/e2e/e2e_prompt.md"
 
             # Visual UI can opt into bounded FAIL -> recover -> retry behavior.
             page.click('[data-stage-tab="control"]')

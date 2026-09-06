@@ -29,7 +29,7 @@
   "prompt_textarea_bottom": 863.0,
   "studio_file_list_overflow_y": "scroll",
   "studio_file_list_scrollbar_gutter": "stable",
-  "stage_effective_prompt": "custom/design.md",
+  "stage_effective_prompt": "custom/common/design.md",
   "stage_effective_status": "Designing solution",
   "stage_draft_validate_pass_toast": "Workflow validation passed",
   "stage_draft_validate_fail_toast": "Workflow validation failed: missing Prompt reference",

@@ -21,7 +21,7 @@ Verified contracts:
 - Prompt Editor and the left Studio sidebar end on the same bottom baseline: `prompt_bottom_gap = 0`.
 - `studioFileList` keeps `overflow-y: scroll` and `scrollbar-gutter: stable`.
 - Add Project modal renders inside the viewport.
-- Reused Stage Prompt/Status overrides were opened in Chromium: `custom/design.md` and `Designing solution` matched the actual Flow invocation.
+- Reused Stage Prompt/Status overrides were opened in Chromium: `custom/common/design.md` and `Designing solution` matched the actual Flow invocation.
 - Unsaved Stage draft Validate produced a green PASS toast and a red FAIL toast without browser page errors.
 - Runtime card consumes the same semantic CLI snapshot as `LiveUI`: Cycle/Progress, `[x] / [>] / [ ]` Plan TODO rows, status and detail.
 - Plan-produced TODOs are visible in the browser as soon as durable `state.json` contains them; stale/missing console snapshots fall back to the same marker rules.
@@ -138,7 +138,7 @@ PASS
 
 ## Workflow safety checked by automated tests
 
-- Top-level linear `task` / `review` profiles are supported without pending TODO state when custom Prompts drive a global SOP. This preserves the Plan/TODO reducer when tasks exist while allowing `runner/workflow/custom/skill_prompt_review_chain.yaml` and `examples/workflow_multi_prompt.yaml` to close without a synthetic Plan Stage.
+- Top-level linear `task` / `review` profiles are supported without pending TODO state when custom Prompts drive a global SOP. This preserves the Plan/TODO reducer when tasks exist while allowing `runner/workflow/custom/common/skill_prompt_review_chain.yaml` and `examples/workflow_multi_prompt.yaml` to close without a synthetic Plan Stage.
 - `workflow_dryrun_preflight()` now includes the Custom linear skill/prompt chain before live-Qwen probes.
 - Formal Workflow matrix dry-run results for this delivery: system file 3/3, system ai 3/3, system mixed 4/4, system workflow_builder 2/2, custom skill_prompt_review_chain 2/2, custom_workflow_latest 2/2, workflow_multi_prompt 1/1, regression workflow demo 5/5.
 
@@ -161,7 +161,7 @@ PASS
 
 ## Custom skill/prompt status contract
 
-`runner/workflow/custom/skill_prompt_review_chain.yaml` now gives the shared Stage definitions generic status values and each Flow invocation a more specific status (Designing, Reviewing design, Implementing, Reviewing implementation, Updating documentation, Reviewing documentation). Validation recovery steps also have explicit status. This keeps runtime/UI progress meaningful while still reusing only three Stage definitions.
+`runner/workflow/custom/common/skill_prompt_review_chain.yaml` now gives the shared Stage definitions generic status values and each Flow invocation a more specific status (Designing, Reviewing design, Implementing, Reviewing implementation, Updating documentation, Reviewing documentation). Validation recovery steps also have explicit status. This keeps runtime/UI progress meaningful while still reusing only three Stage definitions.
 
 ## Round 12 screenshots
 

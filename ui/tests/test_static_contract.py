@@ -616,3 +616,31 @@ class TestDarkThemePolish(unittest.TestCase):
         self.assertIn('html[data-appearance="dark"] .workflow-picker', css)
         self.assertIn('html[data-appearance="dark"] .workflow-dropdown-menu', css)
         self.assertIn('background: var(--popover-bg) !important;', css)
+
+class StudioFolderGroupingContractTests(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[1]
+        self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+        self.support = (self.root / "static" / "js" / "studio-support.js").read_text(encoding="utf-8")
+
+    def test_custom_assets_render_as_collapsible_folder_groups(self):
+        for token in ("appendStudioFolderGroup", "studio-folder-header", "studio-folder-items", "aria-expanded", "STUDIO_FOLDER_STATE_KEY"):
+            self.assertIn(token, self.js)
+        self.assertIn(".studio-folder-header", self.css)
+        self.assertIn(".studio-folder-items", self.css)
+
+    def test_search_uses_relative_display_name_and_expands_matches(self):
+        self.assertIn("item.display_name", self.support)
+        self.assertIn("if (studioSearchQuery()) return false", self.js)
+
+    def test_system_group_is_collapsible_and_defaults_closed(self):
+        self.assertIn('label: "SYSTEM"', self.js)
+        self.assertIn('stateKey: "@system"', self.js)
+        self.assertIn('defaultCollapsed: true', self.js)
+        self.assertIn('system-group', self.js)
+
+    def test_folder_caret_uses_centered_css_chevron(self):
+        self.assertIn('.studio-folder-caret::before', self.css)
+        self.assertIn('place-items: center;', self.css)
+        self.assertIn('.studio-folder-group.collapsed .studio-folder-caret::before', self.css)

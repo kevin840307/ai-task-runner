@@ -15,34 +15,34 @@ stages:
     recover:
       - stage: run_prompt
         status: Fixing validation failure
-        prompt: custom/fix_validation.md
+        prompt: custom/common/fix_validation.md
       - stage: review
         status: Reviewing validation fix
-        prompt: custom/review_validation_fix.md
+        prompt: custom/common/review_validation_fix.md
 
 flow:
   - stage: run_prompt
     status: Designing solution
-    prompt: custom/design.md
+    prompt: custom/common/design.md
 
   - stage: review
     status: Reviewing design
-    prompt: custom/review_design.md
+    prompt: custom/common/review_design.md
 
   - stage: run_prompt
     status: Implementing changes
-    prompt: custom/implementation.md
+    prompt: custom/common/implementation.md
 
   - stage: review
     status: Reviewing implementation
-    prompt: custom/review_implementation.md
+    prompt: custom/common/review_implementation.md
 
   - stage: run_prompt
     status: Updating documentation
-    prompt: custom/documentation.md
+    prompt: custom/common/documentation.md
 
   - stage: review
     status: Reviewing documentation
-    prompt: custom/review_documentation.md
+    prompt: custom/common/review_documentation.md
 
   - validate_file
