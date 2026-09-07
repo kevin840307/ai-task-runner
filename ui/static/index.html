@@ -198,26 +198,28 @@
                   <div class="designer-card-content">
                     <div class="designer-card-title-row">
                       <span id="studioKindLabel" class="designer-eyebrow">Workflow</span>
+                      <span id="studioScopeBadge" class="studio-scope-badge" hidden></span>
                       <span id="dirtyBadge" class="badge warning" hidden>UNSAVED</span>
                       <span id="syntaxBadge" class="studio-syntax-badge" hidden></span>
                     </div>
-                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2><span id="studioVisibilityBadge" class="badge studio-visibility-badge" hidden>Hidden from Chat</span></div>
+                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2><span id="studioVisibilityBadge" class="badge studio-visibility-badge" hidden>Hidden from Tasks</span></div>
                     <p id="studioFilePath"></p>
+                    <div id="studioVisibilityNotice" class="studio-visibility-notice" hidden><span aria-hidden="true">◉</span><span>This workflow is hidden from the Tasks workflow selector.</span></div>
                   </div>
                   <div class="designer-card-actions">
-                    <button id="reloadStudioButton" type="button">Reload</button>
+                    <button id="reloadStudioButton" class="studio-secondary-action" type="button">Reload</button>
                     <div id="studioAssetMenuWrap" class="studio-asset-menu-wrap">
-                      <button id="studioAssetMenuButton" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
+                      <button id="studioAssetMenuButton" class="studio-secondary-action" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
                       <div id="studioAssetMenu" class="studio-asset-menu" role="menu" hidden>
                         <button id="renameStudioButton" type="button" role="menuitem">Rename</button>
                         <button id="duplicateStudioButton" type="button" role="menuitem">Duplicate</button>
-                        <button id="toggleWorkflowVisibilityButton" type="button" role="menuitem">Hide from Chat</button>
+                        <button id="toggleWorkflowVisibilityButton" type="button" role="menuitem">Hide from Tasks</button>
+                        <button id="exportStudioButton" type="button" role="menuitem">Export</button>
+                        <button id="deleteStudioButton" class="designer-danger studio-menu-danger" type="button" role="menuitem">Delete</button>
                       </div>
                     </div>
-                    <button id="exportStudioButton" type="button">Export</button>
-                    <button id="deleteStudioButton" class="designer-danger" type="button">Delete</button>
-                    <button id="validateStudioButton" type="button">Validate</button>
-                    <button id="saveStudioButton" class="primary" type="button">Save</button>
+                    <button id="validateStudioButton" class="studio-validate-action" type="button">Validate</button>
+                    <button id="saveStudioButton" class="primary studio-save-action" type="button">Save</button>
                   </div>
                 </article>
               </section>

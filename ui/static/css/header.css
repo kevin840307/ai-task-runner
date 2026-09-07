@@ -119,3 +119,12 @@
   min-height: 26px;
 }
 
+
+/* Unified top-level page header rhythm. */
+.header {
+  min-height: var(--page-header-height);
+  height: var(--page-header-height);
+  padding-left: var(--page-header-padding-x);
+  padding-right: var(--page-header-padding-x);
+}
+.runtime-actions { align-self: center; }

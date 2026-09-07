@@ -1219,3 +1219,136 @@
 /* Hidden Workflow state stays visible while editing, not only in the asset list. */
 .designer-card-main-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .studio-visibility-badge { font-size:11px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
+
+/* UI polish: consistent header rhythm, clearer state semantics and calmer action hierarchy. */
+.studio-main {
+  padding-top: 0;
+}
+.studio-topbar {
+  min-height: var(--page-header-height);
+  height: var(--page-header-height);
+  margin: 0 calc(-1 * var(--page-header-padding-x)) 12px;
+  padding: 0 var(--page-header-padding-x);
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.studio-topbar > div:first-child { min-width: 0; }
+.studio-topbar h1 { margin: 0; }
+.studio-topbar p {
+  margin-top: 2px;
+  max-width: min(720px, 56vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-topbar .designer-topbar-actions { flex-wrap: nowrap; }
+
+.designer-workflow-summary-card { align-items: center; }
+.designer-workflow-summary-card .designer-card-content { min-width: 0; flex: 1 1 auto; }
+.designer-card-title-row { align-items: center; flex-wrap: wrap; }
+.designer-card-main-row { align-items: center; gap: 8px; }
+.designer-workflow-summary-card .designer-card-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  padding-left: 6px;
+}
+.studio-secondary-action { color: var(--muted); background: var(--panel-2); }
+.studio-validate-action {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  font-weight: 800;
+}
+.studio-save-action { min-width: 64px; font-weight: 850; }
+.studio-menu-danger { color: var(--fail) !important; }
+
+.studio-scope-badge,
+.studio-list-scope {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .055em;
+  white-space: nowrap;
+}
+.studio-scope-badge.custom,
+.studio-list-scope.custom {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+.studio-scope-badge.project,
+.studio-list-scope.project {
+  border-color: color-mix(in srgb, var(--blue) 20%, var(--line));
+  background: color-mix(in srgb, #eaf1ff 74%, var(--panel));
+  color: var(--blue);
+}
+.studio-scope-badge.system,
+.studio-scope-badge.readonly,
+.studio-list-scope.system {
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.studio-visibility-badge {
+  border: 1px solid color-mix(in srgb, #b7791f 28%, var(--line));
+  background: color-mix(in srgb, #fef3c7 58%, var(--panel));
+  color: #8a5a00;
+}
+.studio-visibility-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-top: 7px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, #b7791f 22%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, #fef3c7 38%, var(--panel));
+  color: #7a5200;
+  font-size: 11px;
+}
+.studio-visibility-notice[hidden] { display: none !important; }
+.studio-file-item-top {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.studio-file-item-top > strong { flex: 1 1 auto; }
+.studio-file-item small.hidden-state { color: #8a5a00; font-weight: 750; }
+
+/* Selected = accent. Success remains green, avoiding ambiguous green selection states. */
+.visual-flow-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--panel));
+}
+.visual-flow-card.active {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.visual-flow-index {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+.visual-flow-card.active .visual-flow-index {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Runtime state stays compact but exposes stage/progress directly in the header badge. */
+.runtime-badge.running { max-width: min(420px, 46vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 980px) {
+  .studio-topbar p { display: none; }
+  .studio-topbar .designer-topbar-actions { gap: 6px; }
+}

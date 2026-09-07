@@ -123,3 +123,9 @@ h1 {
   background: rgba(71, 85, 105, 0.58);
   background-clip: content-box;
 }
+
+/* Shared page geometry: keep page headers visually aligned without changing typography. */
+:root {
+  --page-header-height: 68px;
+  --page-header-padding-x: 18px;
+}

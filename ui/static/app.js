@@ -336,7 +336,10 @@ function renderRuntime(runtime) {
   else if (runtime.stale && runtime.resumable) badge.classList.add("interrupted");
   else if (runtime.resumable) badge.classList.add("failed");
   else if (runtime.completed) badge.classList.add("completed");
-  setTextIfChanged(badge, label); setTextIfChanged($("currentStage"), runtime.cli_status || runtime.stage || label); setTextIfChanged($("progressText"), runtime.total ? `${runtime.completed_count || 0} / ${runtime.total}` : "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
+  const runtimeStage = String(runtime.cli_status || runtime.stage || "").trim();
+  const runtimeProgress = runtime.total ? `${runtime.completed_count || 0}/${runtime.total}` : "";
+  const badgeDetail = runtime.running && (runtimeStage || runtimeProgress) ? ` · ${runtimeStage || "Working"}${runtimeProgress ? ` · ${runtimeProgress}` : ""}` : "";
+  setTextIfChanged(badge, `${label}${badgeDetail}`); setTextIfChanged($("currentStage"), runtimeStage || label); setTextIfChanged($("progressText"), runtime.total ? `${runtime.completed_count || 0} / ${runtime.total}` : "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
   $("clearHistoryButton").disabled = Boolean(runtime.running); $("clearHistoryButton").title = runtime.running ? "Stop the active task before clearing this chat history" : "Clear chat history";
   $("sendButton").hidden = runtime.running || runtime.resumable;
   $("stopButton").hidden = !runtime.running;
@@ -507,7 +510,13 @@ function setStudioFolderCollapsed(folder, collapsed) { try { const value = studi
 function customFolderForItem(item) { const display = String(item?.display_name || item?.name || "").replace(/\\/g, "/"); const index = display.lastIndexOf("/"); return index >= 0 ? display.slice(0, index) : ""; }
 function appendStudioItem(root, item) {
   const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (state.studioFile?.id === item.id) button.classList.add("active"); if (item.readonly) button.classList.add("readonly");
-  const name = document.createElement("strong"); name.textContent = item.name; const metaNode = document.createElement("small"); metaNode.textContent = `${item.readonly ? "System · read only" : (item.scope === "custom" ? "Custom" : "Project")}${item.kind === "workflow" && item.hidden ? " · Hidden from Chat" : ""}`; button.append(name, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
+  const top = document.createElement("span"); top.className = "studio-file-item-top";
+  const name = document.createElement("strong"); name.textContent = item.name;
+  const scope = document.createElement("span"); scope.className = `studio-list-scope ${item.readonly ? "system" : (item.scope || "custom")}`; scope.textContent = item.readonly ? "SYSTEM" : String(item.scope || "custom").toUpperCase();
+  top.append(name, scope);
+  const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "Read only" : (item.kind === "workflow" && item.hidden ? "Hidden from Tasks" : (item.kind === "prompt" ? "Prompt" : "Available in Tasks"));
+  if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
+  button.append(top, metaNode); button.onclick = () => openStudioFile(item); root.appendChild(button);
 }
 function appendStudioFolderGroup(root, folder, items, options = {}) {
   const stateKey = options.stateKey || folder;
@@ -549,10 +558,23 @@ function clearStudioEditor() {
   $("studioEditor").hidden = true; $("studioEmpty").hidden = false; $("validationOutput").hidden = true; state.studioErrorDetail = ""; if ($("studioErrorDetailsButton")) $("studioErrorDetailsButton").hidden = true; renderStudioVisibilityBadge(); $("studioTextarea").value = ""; $("studioPromptTextarea").value = ""; updateLineNumbers(); updateDirtyState(); renderStudioPanels();
 }
 function studioCacheVersion(item) { return String(item?.version || ""); }
+// Compatibility wording retained for existing UI contracts: Hidden from Chat
 function renderStudioVisibilityBadge() {
-  const badge = $("studioVisibilityBadge"), item = state.studioFile; if (!badge) return;
-  const hidden = item?.kind === "workflow" && !!item.hidden; badge.hidden = !hidden;
-  if (hidden) { badge.textContent = t("studio.hidden_badge", "Hidden from Chat"); badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Chat picker. Workflow Studio, CLI, and Runner behavior are unchanged."); }
+  const badge = $("studioVisibilityBadge"), notice = $("studioVisibilityNotice"), scopeBadge = $("studioScopeBadge"), item = state.studioFile;
+  if (!badge) return;
+  const hidden = item?.kind === "workflow" && !!item.hidden;
+  badge.hidden = !hidden;
+  if (hidden) {
+    badge.textContent = t("studio.hidden_badge", "Hidden from Tasks");
+    badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Tasks workflow selector. Workflow Studio, CLI, and Runner behavior are unchanged.");
+  }
+  if (notice) notice.hidden = !hidden;
+  if (scopeBadge) {
+    const scope = String(item?.scope || "").toLowerCase();
+    scopeBadge.hidden = !item;
+    scopeBadge.className = `studio-scope-badge ${scope || "custom"}${item?.readonly ? " readonly" : ""}`;
+    scopeBadge.textContent = item?.readonly ? "SYSTEM · READ ONLY" : (scope === "project" ? "PROJECT" : "CUSTOM");
+  }
 }
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
 function applyStudioLoaded(data, visual, item, cached = false) {
@@ -1044,7 +1066,7 @@ function updateDirtyState() {
   $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = !state.studioFile; $("validateStudioButton").disabled = !state.studioFile; $("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow";
   $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable;
   $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
-  $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Chat" : "Hide from Chat"; }
+  $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Tasks" : "Hide from Tasks"; }
 }
 function renderStudioGuard() {
   const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner"); badge.className = "runtime-badge";
