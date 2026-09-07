@@ -1,6 +1,7 @@
 @echo off
 setlocal
 pushd "%~dp0\.."
+set "PYTHONPATH=%~dp0..;%PYTHONPATH%"
 
 echo Target confidence: 95%% after PASS summary and full 0.5h wall-clock run.
 python "tool\qwen_live_reliability.py" --hours 0.5 --high-density --require-transient ^

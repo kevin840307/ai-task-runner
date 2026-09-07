@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from workflow_builder.runner_control import GenerationCancelled, run_with_recovery
+
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER_ROOT = Path(__file__).resolve().parent
 BUILDER_WORKFLOW = BUILDER_ROOT / "workflow_builder.yaml"
@@ -103,9 +105,6 @@ def _write_status(run_root: Path, state: str, message: str, **extra: Any) -> Non
     _atomic_json(path, current)
 
 
-class GenerationCancelled(RuntimeError):
-    pass
-
 
 def _runner_process_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
@@ -114,29 +113,6 @@ def _runner_process_kwargs() -> dict[str, Any]:
         if flags:
             kwargs["creationflags"] = flags
     return kwargs
-
-
-def _run_runner(command: list[str], run_root: Path, project: Path) -> int:
-    process = subprocess.Popen(command, cwd=ROOT, **_runner_process_kwargs())
-    cancel_file = run_root / "cancel.request"
-    while process.poll() is None:
-        if cancel_file.exists():
-            _write_status(run_root, "cancelling", "Cancelling Workflow generation…")
-            runtime = project / ".ai-task-runner"
-            runtime.mkdir(parents=True, exist_ok=True)
-            (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
-            try:
-                process.wait(timeout=12)
-            except subprocess.TimeoutExpired:
-                process.terminate()
-                try:
-                    process.wait(timeout=4)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=4)
-            raise GenerationCancelled("Workflow generation cancelled")
-        time.sleep(0.25)
-    return int(process.returncode or 0)
 
 
 def _prompt_refs(value: Any) -> list[tuple[dict[str, Any], str]]:
@@ -305,7 +281,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "--workflow",
         str(runtime_builder_workflow),
         "--max-cycles",
-        "3",
+        "6",
         "--validator-arg=--draft-workflow",
         f"--validator-arg={rel_workflow}",
         "--validator-arg=--draft-prompt-dir",
@@ -314,10 +290,21 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if args.backend:
         command += ["--backend", args.backend]
 
-    _write_status(run_root, "running", "AI is generating Workflow and Prompt draft")
-    returncode = _run_runner(command, run_root, project)
+    returncode, runner_log = run_with_recovery(
+        command,
+        run_root=run_root,
+        project=project,
+        write_status=_write_status,
+        process_kwargs=_runner_process_kwargs,
+        max_attempts=2,
+    )
     if returncode != 0:
-        raise RuntimeError(f"Workflow Builder Runner failed with exit code {returncode}; draft kept at {draft_root}")
+        diagnostic = runner_log.strip()
+        message = "Workflow generation could not complete after automatic recovery"
+        if diagnostic:
+            message += ": " + diagnostic[-4000:]
+        message += f"\nDraft kept at {draft_root}"
+        raise RuntimeError(message)
 
     _write_status(run_root, "running", "Validating generated Workflow draft")
     verify = subprocess.run(

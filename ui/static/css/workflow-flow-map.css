@@ -1,0 +1,99 @@
+/* Workflow Flow Map is intentionally isolated from the main Studio layout. */
+.flow-map-card{
+  width:min(980px,calc(100vw - 40px));
+  max-height:calc(100vh - 40px);
+  padding:0;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+}
+.flow-map-card>.modal-head{
+  margin:0;
+  min-height:64px;
+  padding:16px 18px 14px;
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+}
+.flow-map-card>.modal-actions{
+  margin:0;
+  min-height:60px;
+  padding:12px 18px;
+  border-top:1px solid var(--line);
+  background:var(--panel);
+}
+.flow-map-card>.flow-map-body{
+  min-height:0;
+  overflow:auto;
+  padding:14px 16px 16px;
+  display:block;
+}
+#flowMapCanvas{display:grid;gap:12px;min-width:0}
+
+.flow-map-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.flow-map-legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+.flow-map-legend span{display:inline-flex;gap:7px;align-items:center}
+.flow-map-legend i{width:26px;border-top:2px solid currentColor}
+.flow-map-legend i.normal{color:var(--text)}
+.flow-map-legend i.recover{color:var(--run);border-top-style:dashed}
+.flow-map-legend i.restart{color:var(--accent);border-top-style:dotted}
+.flow-map-count{color:var(--muted);font-size:11px;font-weight:750}
+
+.flow-map-scroll{
+  max-height:min(56vh,560px);
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--panel-2);
+  background-image:radial-gradient(circle,var(--line) 1px,transparent 1px);
+  background-size:20px 20px;
+  scrollbar-gutter:stable;
+}
+.flow-map-scroll:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:2px}
+.flow-map-scroll svg{display:block;width:100%;min-width:720px;height:auto;min-height:300px}
+
+.flow-map-edge path{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.88}
+.flow-map-edge.normal path{stroke:color-mix(in srgb,var(--text) 55%,var(--line));color:color-mix(in srgb,var(--text) 55%,var(--line))}
+.flow-map-edge.recover path{stroke:var(--run);color:var(--run);stroke-dasharray:8 6}
+.flow-map-edge.restart path{stroke:var(--accent);color:var(--accent);stroke-dasharray:2 7}
+.flow-map-edge marker path{fill:currentColor;stroke:none}
+
+.flow-map-node{cursor:pointer;outline:none}
+.flow-map-node rect{fill:var(--panel);stroke:var(--line);stroke-width:1.5;filter:drop-shadow(0 3px 5px rgba(15,23,42,.05));transition:stroke 120ms ease,stroke-width 120ms ease,fill 120ms ease}
+.flow-map-node .node-dot{fill:var(--muted);opacity:.72}
+.flow-map-node:hover rect,.flow-map-node:focus-visible rect{stroke:color-mix(in srgb,var(--accent) 45%,var(--line));fill:var(--panel)}
+.flow-map-node.selected rect{stroke:var(--accent);stroke-width:2.5;fill:var(--accent-soft)}
+.flow-map-node.selected .node-dot{fill:var(--accent);opacity:1}
+.flow-map-node .name{fill:var(--text);font-size:13px;font-weight:800}
+.flow-map-node .type{fill:var(--muted);font-size:11px;font-weight:650}
+
+.flow-map-details{min-height:64px;padding:11px 13px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:12px}
+.flow-map-detail-empty{display:flex;align-items:center;min-height:40px;color:var(--muted)}
+.flow-map-detail-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.flow-map-detail-head strong{color:var(--text);font-size:13px}
+.flow-map-detail-head span{padding:2px 7px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);font-size:10px;font-weight:800}
+.flow-map-detail-grid{display:grid;grid-template-columns:minmax(160px,.8fr) minmax(0,1fr) minmax(0,1fr);gap:10px 16px;color:var(--muted)}
+.flow-map-detail-grid span{min-width:0;overflow-wrap:anywhere}
+.flow-map-detail-grid b{display:block;margin-bottom:2px;color:var(--text);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.flow-map-empty{padding:30px;text-align:center;color:var(--muted)}
+
+/* Give the Flow Map and + Stage actions breathing room without changing global buttons. */
+.designer-panel-actions{gap:10px!important;flex-wrap:wrap}
+#flowMapButton{margin-right:2px}
+
+@media (max-width:760px){
+  .flow-map-card{width:min(100%,calc(100vw - 24px));max-height:calc(100vh - 24px)}
+  .flow-map-card>.modal-head{min-height:58px;padding:13px 14px 12px}
+  .flow-map-card>.flow-map-body{padding:12px}
+  .flow-map-card>.modal-actions{min-height:56px;padding:10px 14px}
+  .flow-map-scroll{max-height:50vh}
+  .flow-map-detail-grid{grid-template-columns:1fr}
+}
+
+.flow-map-legend i.recovery_return{color:var(--run);border-top-style:dotted}
+.flow-map-legend i.retry{color:var(--muted);border-top-style:dashed}
+.flow-map-legend i.exhausted{color:var(--fail);border-top-style:dashed}
+.flow-map-edge.recovery_step path{stroke:var(--run);color:var(--run);stroke-dasharray:7 5}
+.flow-map-edge.recovery_return path{stroke:var(--run);color:var(--run);stroke-dasharray:2 6}
+.flow-map-edge.retry path{stroke:var(--muted);color:var(--muted);stroke-dasharray:5 5}
+.flow-map-edge.exhausted path{stroke:var(--fail);color:var(--fail);stroke-dasharray:10 5}
+.flow-map-node rect.virtual{fill:color-mix(in srgb,var(--fail) 6%,var(--panel));stroke:color-mix(in srgb,var(--fail) 42%,var(--line));stroke-dasharray:5 4}

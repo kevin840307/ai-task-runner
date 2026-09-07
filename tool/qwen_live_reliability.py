@@ -21,6 +21,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"

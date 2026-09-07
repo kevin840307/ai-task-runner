@@ -438,7 +438,7 @@ html[data-appearance="dark"] .workflow-option-badge {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--line)) !important;
 }
 
-/* Chat workflow picker: never fall back to white/light gradients in dark mode. */
+/* Tasks workflow selector: never fall back to white/light gradients in dark mode. */
 html[data-appearance="dark"] .workflow-picker {
   background: linear-gradient(180deg, var(--panel-2), var(--panel)) !important;
   border-color: var(--line) !important;

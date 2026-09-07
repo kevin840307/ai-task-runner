@@ -422,7 +422,7 @@ class LayoutRegressionTests(unittest.TestCase):
         for token in ("openGenerateWorkflowPage", "confirmGenerateWorkflow", "pollGenerateWorkflow", "validateGeneratedWorkflowDraft", "openGenerateWorkflowSaveModal", "saveGenerateWorkflowDraft", "discardGenerateWorkflowDraft", "cancelGenerateWorkflow", 'api("/api/studio/generate"', 'api("/api/studio/generate/validate"', 'api("/api/studio/generate/save"', 'api("/api/studio/generate/cancel"', 'api("/api/studio/generate/discard"'):
             self.assertIn(token, self.js)
         self.assertIn("DRAFT · NOT SAVED", self.html)
-        self.assertIn("No Project is required; name and destination are chosen only when you Save", self.js)
+        self.assertIn("Choose the owned Folder + Filename up front", self.js)
 
 
     def test_ai_workflow_builder_generation_is_project_independent(self):
@@ -432,7 +432,7 @@ class LayoutRegressionTests(unittest.TestCase):
         poll = self.js[self.js.index("async function pollGenerateWorkflow"):self.js.index("function startGenerateWorkflowPoll")]
         self.assertNotIn("project=", poll)
         self.assertIn("job_id=", poll)
-        self.assertIn("No Project is required", self.js)
+        self.assertIn("Choose the owned Folder + Filename up front", self.js)
         self.assertIn("copyWorkflowWorkspace", self.js)
         self.assertIn("Temporary workspace copied", self.js)
 
@@ -449,14 +449,18 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".workflow-builder-running{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
         self.assertIn(".workflow-builder-failed{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
 
-    def test_ai_workflow_builder_input_does_not_ask_name_or_destination(self):
+    def test_ai_workflow_builder_input_uses_folder_and_filename(self):
         form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
         self.assertIn('id="generateWorkflowRequest"', form)
+        self.assertIn('id="generateWorkflowFolder"', form)
+        self.assertIn('id="generateWorkflowFilename"', form)
         self.assertIn('id="generateWorkflowBackend"', form)
-        self.assertNotIn('id="generateWorkflowName"', form)
         self.assertNotIn('id="generateWorkflowDestination"', form)
         save = self.html[self.html.index('id="generateWorkflowSaveBackdrop"'):self.html.index('id="importAssetBackdrop"')]
-        self.assertIn('id="generateWorkflowName"', save); self.assertIn('id="generateWorkflowDestination"', save)
+        self.assertIn('id="generateWorkflowSaveFolder"', save)
+        self.assertIn('id="generateWorkflowSaveFilename"', save)
+        self.assertIn('id="generateWorkflowDestination"', save)
+        self.assertIn('id="generateWorkflowSavePathPreview"', save)
 
 
     def test_ai_workflow_builder_input_layout_keeps_meta_below_prompt(self):
@@ -555,9 +559,12 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".validation-output{position:static", css)
         self.assertNotIn(".validation-output{position:absolute", css)
 
-    def test_studio_status_compacts_multiline_errors(self) -> None:
+    def test_studio_validation_is_one_line_with_details_dialog(self) -> None:
         self.assertIn("const firstLine = detail.split", self.js)
-        self.assertIn("node.title = detail", self.js)
+        self.assertIn('$("validationOutputText").textContent = summary', self.js)
+        self.assertIn('id="validationDetailsButton"', self.html)
+        self.assertIn('id="validationDetailsBackdrop"', self.html)
+        self.assertNotIn('id="studioFooter"', self.html)
 
     def test_sidebar_compact_nav_project_add_and_i18n_contract(self):
         self.assertIn('id="openProject" class="project-add-button"', self.html)
@@ -727,7 +734,7 @@ def test_ui_polish_unsaved_error_details_and_last_update_contracts():
     assert 'window.addEventListener("beforeunload"' in script
     assert 'await confirmDiscardStudio()' in script
     assert 'id="errorDetailsBackdrop"' in html
-    assert 'id="studioErrorDetailsButton"' in html
+    assert 'id="validationDetailsButton"' in html
     assert 'function showErrorDetails()' in script
     assert 'runtimeLastChangedAt' in script and 'updateRuntimeFreshness()' in script
     assert 'id="lastUpdateText"' in html
@@ -741,14 +748,14 @@ def test_project_click_opens_tasks_without_discarding_global_workflow_draft():
     assert 'if (state.view === "workflow" && !(await confirmDiscardStudio())) return;' not in script
 
 
-def test_hidden_workflows_stay_in_studio_but_are_filtered_from_chat_picker():
+def test_hidden_workflows_stay_in_studio_but_are_filtered_from_tasks_picker():
     base = Path(__file__).resolve().parents[1].joinpath("static")
     script = base.joinpath("app.js").read_text(encoding="utf-8")
     html = base.joinpath("index.html").read_text(encoding="utf-8")
     assert 'id="toggleWorkflowVisibilityButton"' in html
     assert '.filter((item) => !item.hidden)' in script
     assert '/api/studio/visibility' in script
-    assert 'Hidden from Chat' in script
+    assert 'Hidden from Tasks' in script
 
 
 def test_workflow_switch_uses_parallel_hydration_and_cache():
@@ -765,15 +772,16 @@ def test_workflow_catalog_refresh_is_cached_and_non_overlapping():
     assert "Date.now() - state.studioCatalogLoadedAt" in app
     assert "if (state.studioFilesRefreshPromise) return state.studioFilesRefreshPromise" in app
 
-def test_studio_error_details_uses_studio_specific_detail_state():
+def test_studio_validation_details_use_dedicated_compact_state():
     base = Path(__file__).resolve().parents[1] / "static"
     app = base.joinpath("app.js").read_text(encoding="utf-8")
     html = base.joinpath("index.html").read_text(encoding="utf-8")
-    assert 'studioErrorDetail: ""' in app
-    assert 'function showStudioErrorDetails()' in app
-    assert '$("studioErrorDetailsButton").onclick = showStudioErrorDetails;' in app
-    assert 'state.studioErrorDetail = error ? detail : ""' in app
-    assert 'id="studioErrorDetailsButton"' in html
+    assert 'validationDetail: ""' in app
+    assert 'function openValidationDetails()' in app
+    assert '$("validationDetailsButton").onclick = openValidationDetails;' in app
+    assert '$("validationOutputText").textContent = summary' in app
+    assert 'id="validationDetailsButton"' in html
+    assert 'id="studioFooter"' not in html
 
 
 def test_hidden_workflow_is_visible_in_editor_header():
@@ -786,3 +794,26 @@ def test_hidden_workflow_is_visible_in_editor_header():
     assert 'item?.kind === "workflow" && !!item.hidden' in app
     assert 'renderStudioVisibilityBadge(); updateDirtyState()' in app
     assert '.studio-visibility-badge' in css
+
+
+def test_runtime_elapsed_footer_and_started_at_contract():
+    base = Path(__file__).resolve().parents[1]
+    script = base.joinpath("static", "app.js").read_text(encoding="utf-8")
+    html = base.joinpath("static", "index.html").read_text(encoding="utf-8")
+    server = base.joinpath("server.py").read_text(encoding="utf-8")
+    assert 'id="elapsedTimeText"' in html
+    assert 'cli-runtime-elapsed' in script
+    assert 'runtime-live-indicator' in script
+    assert 'function updateRuntimeElapsed()' in script
+    assert 'setInterval(animateRuntimeFrame, 1000)' in script
+    assert '"started_at": marker.get("started_at") or launch.get("created_at") or 0' in server
+
+def test_running_project_sidebar_shows_stage_and_progress_contract():
+    script = Path(__file__).resolve().parents[1].joinpath("static", "app.js").read_text(encoding="utf-8")
+    server = Path(__file__).resolve().parents[1].joinpath("server.py").read_text(encoding="utf-8")
+    assert 'project.runtime_stage' in script
+    assert 'project.runtime_completed_count' in script
+    assert 'project.runtime_total' in script
+    assert '"runtime_stage"' in server
+    assert '"runtime_completed_count"' in server
+    assert '"runtime_total"' in server

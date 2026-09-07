@@ -1,0 +1,230 @@
+/* AI Workflow Builder layout polish.
+   Generator-only layout lives here so Workflow Studio remains independent. */
+
+.workflow-generator-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workflow-generator-input {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.workflow-generator-input-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 2px 4px 14px 2px;
+  scrollbar-gutter: stable;
+}
+
+.workflow-generator-input-card {
+  min-width: 0;
+  min-height: 430px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 16px;
+}
+
+.workflow-generator-request-field {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(300px, 1fr) auto !important;
+  gap: 8px;
+}
+
+.workflow-generator-request {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 300px;
+  height: 100%;
+  max-height: none;
+  resize: vertical;
+}
+
+.workflow-generator-target-card {
+  min-width: 0;
+  align-self: start;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
+}
+
+.workflow-generator-target-title {
+  padding-bottom: 2px;
+  color: var(--text);
+}
+
+.workflow-generator-target-card .designer-form-row {
+  min-width: 0;
+  gap: 7px;
+}
+
+.workflow-generator-target-card .designer-input,
+.workflow-generator-target-card .designer-select {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.workflow-generator-target-preview {
+  margin-top: 2px;
+  padding: 11px 12px;
+}
+
+.workflow-generator-input-meta {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 0 4px 2px;
+}
+
+.workflow-generator-hint {
+  min-height: 0;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.workflow-generator-hint:empty {
+  display: none;
+}
+
+.workflow-generator-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.workflow-generator-workspace code {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.workflow-generator-input-actions {
+  position: relative;
+  z-index: 2;
+  min-height: 64px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.workflow-generator-input-actions button {
+  min-width: 88px;
+}
+
+@media (max-height: 720px) and (min-width: 761px) {
+  .workflow-generator-input-card {
+    min-height: 360px;
+  }
+  .workflow-generator-request-field {
+    grid-template-rows: auto minmax(220px, 1fr) auto !important;
+  }
+  .workflow-generator-request {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 920px) {
+  .workflow-generator-input-card {
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 290px);
+  }
+}
+
+@media (max-width: 760px) {
+  .workflow-generator-page {
+    overflow: hidden;
+  }
+  .workflow-generator-main {
+    overflow: hidden;
+  }
+  .workflow-generator-input {
+    height: 100%;
+    overflow: hidden;
+  }
+  .workflow-generator-input-scroll {
+    padding-right: 2px;
+  }
+  .workflow-generator-input-card {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .workflow-generator-request-field {
+    grid-template-rows: auto minmax(220px, 320px) auto !important;
+  }
+  .workflow-generator-request {
+    min-height: 220px;
+    height: 280px;
+    max-height: 360px;
+  }
+  .workflow-generator-target-card {
+    align-self: stretch;
+  }
+  .workflow-generator-workspace {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .workflow-generator-input-actions {
+    min-height: 62px;
+    padding-top: 10px;
+  }
+}
+
+
+/* Generator compact containment fix. The white surface owns request, target and metadata. */
+.workflow-generator-page{padding:10px 14px 12px}
+.workflow-generator-topbar{min-height:58px;margin-bottom:6px;gap:12px}
+.workflow-generator-main{overflow:hidden;padding:0}
+.workflow-generator-input{height:100%;min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:8px;overflow:hidden}
+.workflow-generator-input-scroll{min-height:0;overflow:auto;display:block;padding:0 2px 8px;scrollbar-gutter:stable}
+.workflow-generator-input-card{
+  min-height:0;height:auto;display:grid;grid-template-columns:minmax(0,1fr) 286px;grid-template-areas:"request target" "meta meta";
+  gap:12px 14px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow-sm)
+}
+.workflow-generator-request-field{grid-area:request;min-height:0;display:grid;grid-template-rows:auto minmax(230px,1fr) auto!important;gap:7px}
+.workflow-generator-request{min-height:230px;height:clamp(230px,38vh,390px);max-height:390px;resize:vertical}
+.workflow-generator-target-card{grid-area:target;align-self:start;gap:10px;padding:12px;border-radius:11px}
+.workflow-generator-input-meta{grid-area:meta;display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.8fr);align-items:center;gap:10px;padding:10px 0 0;border-top:1px solid var(--line)}
+.workflow-generator-input-scroll>.workflow-generator-input-meta{display:none!important}
+.workflow-generator-input-card + .workflow-generator-input-meta{display:none!important}
+.workflow-generator-hint{min-width:0;line-height:1.4}
+.workflow-generator-workspace{min-width:0;grid-template-columns:auto minmax(0,1fr);gap:8px}
+.workflow-generator-input-actions{min-height:54px;padding:9px 2px 0;margin:0;border-top:1px solid var(--line);background:var(--bg)}
+@media(max-height:720px) and (min-width:761px){
+ .workflow-generator-request-field{grid-template-rows:auto minmax(180px,1fr) auto!important}
+ .workflow-generator-request{min-height:180px;height:clamp(180px,30vh,260px);max-height:300px}
+ .workflow-generator-input-card{padding:12px}
+}
+@media(max-width:920px){
+ .workflow-generator-input-card{grid-template-columns:1fr;grid-template-areas:"request" "target" "meta"}
+ .workflow-generator-request{height:260px;max-height:340px}
+ .workflow-generator-input-meta{grid-template-columns:1fr}
+}

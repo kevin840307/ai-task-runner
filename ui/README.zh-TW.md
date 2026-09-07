@@ -44,3 +44,23 @@ Project / Runtime polling 採 non-overlapping：上一個 request 完成後才�
 - 錯誤預設顯示摘要；Details 才開啟完整錯誤 Modal，避免 Background Runner 錯誤中斷操作。
 - Runtime / Project / YAML status 使用一致狀態 icon 語意。
 - Header、字級、圓角與 shadow 已收斂為較緊湊的 engineering-tool density；聊天與輸入字級同步縮小。
+
+- **Live Runtime 回饋** — 任務 Running 時，Runtime footer 會以瀏覽器本地 timer 每秒更新 `Elapsed HH:MM:SS`，不增加後端 polling；正在執行的 Project 列也會直接顯示目前 Stage 與 Progress，點擊即可回到該 Runtime。
+
+### 可攜式 Workflow Folder
+
+放在專屬 Custom 子資料夾的 Workflow，可以匯出成 `.workflow-folder.zip`。Folder package 有明確 ownership 邊界：
+
+- Workflow 的 Prompt 只允許引用「自己的 Custom folder」、`custom/common`、或 System/Stage Prompt。
+- Export 只把自己的 Prompt 打包；`custom/common` 與 System Prompt 只記錄成 dependency，不複製進 package。
+- Export 會把相同 ownership 的 **Workflow folder + Prompt folder 整個遞迴打包**，不再只挑 YAML / Markdown。`.py` validator、`.json` / schema、`.j2`、example、asset、binary support file、巢狀子資料夾都會原樣保留；只排除明確的 cache/runtime/temp 產物，並拒絕 symlink。
+- `custom/common` 與 System 只記為 dependency，不會被打包。Import 會先驗證 dependency，再只替換相同 logical folder 的 Custom Workflow folder 與 Custom Prompt folder，完整還原所有 owned files；`custom/common` 與 System 永遠不刪除、不覆蓋。舊版 v1 folder package 仍可匯入。
+- Import 或驗證途中失敗，兩個自己的 folder 都會完整 rollback。
+
+### Flow Map
+
+Workflow Studio 的 **+ Stage** 旁新增 **Flow Map**。這是唯讀流程圖，會顯示正常 Flow、FAIL/Recover 路徑與 `restart_at` 回跳；只存在於 recover 的 Stage 也會顯示。點 Stage 節點可看 Type、Prompt、Incoming 與 Outgoing routing。
+
+### AI Workflow Builder target
+
+Generate with AI 現在在 Generate 前直接指定 **Folder + Filename**；Ready 編輯頁會持續顯示 target path，Save 視窗也使用同一組 Folder/Filename 並提供目的路徑預覽。Custom 會發布到 `runner/workflow/custom/<folder>/<filename>`，owned generated files 放在 `runner/prompts/custom/<folder>`。

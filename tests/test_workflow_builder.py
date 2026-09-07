@@ -74,11 +74,11 @@ def test_builder_prompt_declares_mapping_stage_contract():
     assert "stages:\n  planning:\n    type: plan" in text
 
 
-def test_builder_runner_caps_repair_cycles_for_interactive_generation():
+def test_builder_runner_has_bounded_internal_repair_budget_for_interactive_generation():
     source = (ROOT / "workflow_builder" / "run.py").read_text(encoding="utf-8")
     command_block = source[source.index("command = [", source.index("def build")):source.index("if args.backend", source.index("def build"))]
     assert '"--max-cycles"' in command_block
-    assert '"3"' in command_block
+    assert '"6"' in command_block
 
 def test_workflow_builder_validator_rejects_missing_prompt(tmp_path: Path):
     project, workflow = _draft(tmp_path)
@@ -208,3 +208,13 @@ def test_builder_prompt_allows_multiple_validators_anywhere():
     assert "multiple File/AI validators may appear" in prompt
     assert "ordinary Stages may follow validation" in prompt
     assert "must end with its final validation Stage" not in prompt
+
+
+def test_builder_runner_recovery_is_separate_module_and_bounded():
+    source = (ROOT / "workflow_builder" / "runner_control.py").read_text(encoding="utf-8")
+    run_source = (ROOT / "workflow_builder" / "run.py").read_text(encoding="utf-8")
+    assert "def run_with_recovery" in source
+    assert "max_attempts=2" in run_source
+    assert "runner-attempt-{attempt}.log" in source
+    assert "--force-new" in source
+    assert "Workflow generation could not complete after automatic recovery" in run_source

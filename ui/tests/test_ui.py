@@ -1140,8 +1140,11 @@ flow: [validate]
         builder_dir = self._write_builder_fixture()
         with patch("ui.server.subprocess.Popen") as popen:
             result = self.state.studio_generate_workflow(
-                "Create a review + validation workflow", backend="qwen"
+                "Create a review + validation workflow", backend="qwen",
+                folder="generated", filename="generated.workflow.yaml"
             )
+        self.assertEqual(result["folder"], "generated")
+        self.assertEqual(result["filename"], "generated.workflow.yaml")
         command = popen.call_args.args[0]
         self.assertIn(str(builder_dir / "run.py"), command)
         self.assertIn("--project-root", command)
@@ -1168,7 +1171,7 @@ flow: [validate]
     def test_ai_workflow_builder_active_registry_survives_browser_reopen_and_blocks_second_job(self) -> None:
         self._write_builder_fixture()
         with patch("ui.server.subprocess.Popen") as popen:
-            first = self.state.studio_generate_workflow("first request", backend="qwen")
+            first = self.state.studio_generate_workflow("first request", backend="qwen", folder="generated", filename="first.workflow.yaml")
             active_path = self.root / "ui" / "data" / "workflow-builder" / "active.json"
             self.assertTrue(active_path.is_file())
             self.assertEqual(json.loads(active_path.read_text(encoding="utf-8"))["job_id"], first["job_id"])
@@ -1176,7 +1179,7 @@ flow: [validate]
             self.assertTrue(active["active"]); self.assertEqual(active["job_id"], first["job_id"])
             self.assertEqual(active["request"], "first request"); self.assertEqual(active["backend"], "qwen")
             self.assertEqual(Path(active["workspace"]).resolve(), (self.root / "ui" / "data" / "workflow-builder" / first["job_id"]).resolve())
-            second = self.state.studio_generate_workflow("second request", backend="opencode")
+            second = self.state.studio_generate_workflow("second request", backend="opencode", folder="generated", filename="second.workflow.yaml")
         self.assertTrue(second["existing"]); self.assertEqual(second["job_id"], first["job_id"]); self.assertEqual(popen.call_count, 1)
 
     def test_ai_workflow_builder_ready_active_job_restores_until_discard(self) -> None:
@@ -1185,10 +1188,11 @@ flow: [validate]
         prompts = root / "draft" / "prompts"; prompts.mkdir(parents=True)
         workflow = root / "draft" / "workflow.yaml"; workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
         result = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
-        (root / "status.json").write_text(json.dumps({"state": "ready", "message": "Draft ready", "request": "make it", "backend": "qwen", "result": result, "runtime_cleared": True}), encoding="utf-8")
+        (root / "status.json").write_text(json.dumps({"state": "ready", "message": "Draft ready", "request": "make it", "backend": "qwen", "folder": "e2e", "filename": "review.workflow.yaml", "result": result, "runtime_cleared": True}), encoding="utf-8")
         self.state._builder_set_active(job_id)
         restored = self.state.studio_generate_active()
         self.assertTrue(restored["active"]); self.assertEqual(restored["state"], "ready"); self.assertIn("draft", restored)
+        self.assertEqual(restored["folder"], "e2e"); self.assertEqual(restored["filename"], "review.workflow.yaml")
         self.state.studio_generate_discard(job_id)
         self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
         self.assertFalse(self.state.studio_generate_active()["active"])
@@ -1217,12 +1221,13 @@ flow: [validate]
         (root / "result.json").write_text(json.dumps(result), encoding="utf-8")
         (root / "status.json").write_text(json.dumps({"state": "ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
         self.state._builder_set_active(job_id)
-        target = self.root / "runner" / "workflow" / "custom" / "generated.workflow.yaml"
+        target = self.root / "runner" / "workflow" / "custom" / "generated" / "generated.workflow.yaml"
         def fake_publish(*args, **kwargs):
+            target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(workflow.read_text(encoding="utf-8"), encoding="utf-8")
             return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok":true}', stderr="")
         with patch.object(self.state, "_builder_validate_draft", return_value={"ok": True, "output": "PASS"}), patch("ui.server.subprocess.run", side_effect=fake_publish):
-            saved = self.state.studio_generate_save(None, job_id, "generated", "custom")
+            saved = self.state.studio_generate_save(None, job_id, "generated", "generated", "custom")
         self.assertTrue(target.is_file()); self.assertEqual(saved["item"]["group"], "Custom"); self.assertFalse(root.exists())
         self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
 
@@ -1236,10 +1241,10 @@ flow: [validate]
         (root / "result.json").write_text(json.dumps(result), encoding="utf-8")
         (root / "status.json").write_text(json.dumps({"state": "ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
         self.state._builder_set_active(job_id)
-        target = self.root / "runner" / "workflow" / "custom" / "generated-fail.workflow.yaml"
+        target = self.root / "runner" / "workflow" / "custom" / "generated-fail" / "generated-fail.workflow.yaml"
         with patch.object(self.state, "_builder_validate_draft", side_effect=ValueError("Workflow draft validation failed: workflow dry-run failed")), patch("ui.server.subprocess.run") as publish:
             with self.assertRaisesRegex(ValueError, "dry-run failed"):
-                self.state.studio_generate_save(None, job_id, "generated-fail", "custom")
+                self.state.studio_generate_save(None, job_id, "generated-fail", "generated-fail", "custom")
         self.assertFalse(target.exists())
         publish.assert_not_called()
 
@@ -1251,14 +1256,14 @@ flow: [validate]
         manifest = {"draft_workflow": str(workflow), "draft_prompt_dir": str(prompts), "validation": "PASS"}
         (root / "status.json").write_text(json.dumps({"state": "ready", "result": manifest}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "Open a Project before saving"):
-            self.state.studio_generate_save(None, job_id, "generated", "project")
+            self.state.studio_generate_save(None, job_id, "generated", "generated", "project")
 
     def test_ai_workflow_builder_each_generate_starts_fresh_and_cleans_old_ready_draft(self) -> None:
         self._write_builder_fixture()
         old = self.root / "ui" / "data" / "workflow-builder" / "abcdef000001"
         old.mkdir(parents=True); (old / "status.json").write_text(json.dumps({"state": "ready", "updated_at": 1}), encoding="utf-8")
         with patch("ui.server.subprocess.Popen"):
-            result = self.state.studio_generate_workflow("new draft", backend="qwen")
+            result = self.state.studio_generate_workflow("new draft", backend="qwen", folder="generated", filename="new.workflow.yaml")
         self.assertFalse(old.exists())
         self.assertNotEqual(result["job_id"], "abcdef000001")
 
@@ -1290,7 +1295,7 @@ flow: [validate]
         builder_dir = self.root / "workflow_builder"; builder_dir.mkdir()
         (builder_dir / "run.py").write_text("print('builder')\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "incomplete"):
-            self.state.studio_generate_workflow("Create workflow")
+            self.state.studio_generate_workflow("Create workflow", folder="generated", filename="generated.workflow.yaml")
 
     def test_studio_check_reports_yaml_location(self) -> None:
         item = self._workflow_item()

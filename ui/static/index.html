@@ -87,6 +87,7 @@
         <div><span data-i18n="summary.progress">進度</span><strong id="progressText">0 / 0</strong></div>
         <div class="live-summary"><span data-i18n="summary.task">任務</span><strong id="currentTask" data-i18n="status.waiting">等待中</strong></div>
         <div class="runtime-freshness"><span>Last update</span><strong id="lastUpdateText">—</strong></div>
+        <div class="runtime-elapsed"><span>Elapsed</span><strong id="elapsedTimeText">—</strong></div>
       </section>
 
       <section id="emptyState" class="empty-state">
@@ -162,7 +163,7 @@
               <button id="yamlModeButton" type="button">YAML</button>
             </div>
             <span id="studioLockBadge" class="designer-api-status">Checking</span>
-            <button id="importAssetButton" type="button">Import</button>
+            <button id="importAssetButton" type="button">Import Folder</button>
             <button id="generateWorkflowButton" class="primary" type="button">Generate with AI</button>
           </div>
         </header>
@@ -214,7 +215,7 @@
                         <button id="renameStudioButton" type="button" role="menuitem">Rename</button>
                         <button id="duplicateStudioButton" type="button" role="menuitem">Duplicate</button>
                         <button id="toggleWorkflowVisibilityButton" type="button" role="menuitem">Hide from Tasks</button>
-                        <button id="exportStudioButton" type="button" role="menuitem">Export</button>
+                        <button id="exportStudioButton" type="button" role="menuitem">Export Folder</button>
                         <button id="deleteStudioButton" class="designer-danger studio-menu-danger" type="button" role="menuitem">Delete</button>
                       </div>
                     </div>
@@ -228,7 +229,7 @@
                 <section class="designer-step-list-panel studio-step-panel">
                   <div class="designer-panel-head">
                     <div><span class="designer-eyebrow">Flow</span><h3>Workflow Steps</h3><p data-i18n="studio.flow_desc">單擊選取、雙擊編輯；可拖曳或用右下浮動按鈕調整順序。</p></div>
-                    <button id="addFlowStepButton" class="primary" type="button">+ Stage</button>
+                    <div class="designer-panel-actions"><button id="flowMapButton" class="studio-secondary-action" type="button">Flow Map</button><button id="addFlowStepButton" class="primary" type="button">+ Stage</button></div>
                   </div>
                   <div id="visualFlowList" class="designer-step-list"></div>
                 </section>
@@ -262,8 +263,10 @@
                   </aside>
                 </div>
               </div>
-              <div class="studio-footer"><span id="studioStatus" class="studio-status"></span><button id="studioErrorDetailsButton" class="error-details-button" type="button" hidden>Details</button></div>
-              <pre id="validationOutput" class="validation-output" hidden></pre>
+              <div id="validationOutput" class="validation-output" hidden role="status">
+                <span id="validationOutputText" class="validation-output-text"></span>
+                <button id="validationDetailsButton" class="validation-details-button" type="button" aria-label="Open validation details" title="Validation details">⋯</button>
+              </div>
             </div>
           </main>
         </section>
@@ -283,19 +286,27 @@
 
         <main class="workflow-generator-main">
           <section id="generateWorkflowForm" class="workflow-generator-phase workflow-generator-input">
-            <div class="workflow-generator-input-card">
-              <label class="designer-form-row designer-form-wide">
-                <span class="designer-label">What should this Workflow do?</span>
-                <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review twice, then run Python validation. Include retry/recovery rules and required prompts."></textarea>
-                <span class="designer-form-hint" data-i18n="builder.generate_hint">Generate always starts a new AI run and a new temporary Draft.</span>
-              </label>
-              <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
+            <div class="workflow-generator-input-scroll">
+              <div class="workflow-generator-input-card">
+                <label class="designer-form-row designer-form-wide workflow-generator-request-field">
+                  <span class="designer-label">What should this Workflow do?</span>
+                  <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review twice, then run Python validation. Include retry/recovery rules and required prompts."></textarea>
+                  <span class="designer-form-hint" data-i18n="builder.generate_hint">Generate always starts a new AI run and a new temporary Draft.</span>
+                </label>
+                <aside class="workflow-generator-target-card" aria-label="Target Workflow settings">
+                  <span class="designer-label workflow-generator-target-title">Target Workflow</span>
+                  <label class="designer-form-row"><span class="designer-label">Folder</span><input id="generateWorkflowFolder" class="designer-input" placeholder="e2e_regression" /></label>
+                  <label class="designer-form-row"><span class="designer-label">Filename</span><input id="generateWorkflowFilename" class="designer-input" placeholder="regression.workflow.yaml" /></label>
+                  <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
+                  <div class="workflow-generator-target-preview"><span>Will save under</span><code id="generateWorkflowTargetPreview">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code></div>
+                </aside>
+                <div class="workflow-generator-input-meta">
+                  <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
+                  <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowWorkspacePreview">Created after Generate</code></div>
+                </div>
+              </div>
             </div>
-            <div class="workflow-generator-input-meta">
-              <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
-              <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowWorkspacePreview">Created after Generate</code></div>
-            </div>
-            <div class="workflow-generator-actions workflow-generator-input-actions"><button id="generateWorkflowCancel" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary" type="button">Generate</button></div>
+            <footer class="workflow-generator-actions workflow-generator-input-actions"><button id="generateWorkflowCancel" type="button">Cancel</button><button id="generateWorkflowConfirm" class="primary" type="button">Generate</button></footer>
           </section>
 
           <section id="generateWorkflowRunning" class="workflow-generator-phase workflow-builder-running" hidden>
@@ -312,7 +323,10 @@
               <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p data-i18n="builder.review_desc">Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.</p></div>
               <div id="generateWorkflowValidation" class="workflow-builder-validation success">Validation PASS</div>
             </div>
-            <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
+            <div class="workflow-generator-review-meta">
+              <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
+              <div class="workflow-generator-ready-target"><span>Target</span><code id="generateWorkflowReadyTarget">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code></div>
+            </div>
             <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">Edit YAML</button><button id="generateDraftPromptTab" type="button">Edit Prompt</button></div>
             <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div class="workflow-generator-edit-guide"><div><strong>Visual preview</strong><span>Use Edit YAML / Edit Prompt to adjust this temporary Draft. Validate Draft refreshes the Visual preview.</span></div><button id="generateWorkflowEditYaml" type="button">Edit Workflow</button></div><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
             <section id="generateDraftYamlPanel" class="workflow-generator-review-panel" hidden><div class="studio-code-toolbar"><span class="studio-code-language">Draft Workflow YAML</span><span class="studio-code-hint" data-i18n="builder.yaml_hint">Changes are temporary until Save</span></div><textarea id="generateWorkflowPreview" class="studio-textarea workflow-generator-yaml" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea></section>
@@ -327,6 +341,20 @@
     </section>
   </main>
 
+
+  <div id="validationDetailsBackdrop" class="modal-backdrop validation-details-backdrop" hidden>
+    <div class="modal-card validation-details-card" role="dialog" aria-modal="true" aria-labelledby="validationDetailsTitle">
+      <div class="modal-head validation-details-head">
+        <div class="validation-details-title-wrap"><span id="validationDetailsIcon" class="validation-details-icon">!</span><div><h2 id="validationDetailsTitle">Validation details</h2><p id="validationDetailsSubtitle">Complete validator output</p></div></div>
+        <button id="validationDetailsClose" class="modal-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="validation-details-body">
+        <div id="validationDetailsSummary" class="validation-details-summary"></div>
+        <pre id="validationDetailsContent" class="validation-details-content"></pre>
+      </div>
+      <div class="modal-actions"><button id="validationDetailsCopy" type="button">Copy</button><button id="validationDetailsOk" class="primary" type="button">OK</button></div>
+    </div>
+  </div>
 
   <div id="errorDetailsBackdrop" class="modal-backdrop error-details-backdrop" hidden>
     <div class="modal-card error-details-card" role="dialog" aria-modal="true" aria-labelledby="errorDetailsTitle">
@@ -402,7 +430,15 @@ flow:
   <div id="generateWorkflowSaveBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-save-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowSaveTitle">
       <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p data-i18n="builder.save_desc">Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close">×</button></div>
-      <div class="modal-scroll-body"><label class="designer-form-row"><span class="designer-label">Workflow name</span><input id="generateWorkflowName" class="designer-input" placeholder="generated.workflow.yaml" /></label><label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label><div id="generateWorkflowSaveHint" class="modal-hint" data-i18n="builder.save_hint">Save is the moment this Draft becomes a real Workflow.</div></div>
+      <div class="modal-scroll-body workflow-save-body">
+        <div class="workflow-save-target-grid">
+          <label class="designer-form-row"><span class="designer-label">Folder</span><input id="generateWorkflowSaveFolder" class="designer-input" placeholder="e2e_regression" /></label>
+          <label class="designer-form-row"><span class="designer-label">Filename</span><input id="generateWorkflowSaveFilename" class="designer-input" placeholder="regression.workflow.yaml" /></label>
+        </div>
+        <label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
+        <div class="workflow-save-path-preview"><span>Destination</span><code id="generateWorkflowSavePathPreview">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code><small id="generateWorkflowSavePromptPreview">Owned files: runner/prompts/custom/&lt;folder&gt;</small></div>
+        <div id="generateWorkflowSaveHint" class="modal-hint" data-i18n="builder.save_hint">Save is the moment this Draft becomes a real Workflow.</div>
+      </div>
       <div class="modal-actions"><button id="generateWorkflowSaveCancel" type="button">Cancel</button><button id="generateWorkflowSaveConfirm" class="primary" type="button">Validate &amp; Save</button></div>
     </div>
   </div>
@@ -416,10 +452,10 @@ flow:
       <div class="modal-scroll-body import-asset-body">
         <div class="designer-import-grid">
           <section class="designer-form-grid import-asset-form">
-            <div class="designer-form-row"><span class="designer-label">Choose File</span><div class="asset-file-picker"><input id="importAssetFile" class="visually-hidden-file" type="file" accept=".json,.yaml,.yml,.md,application/json,text/yaml,text/markdown,text/plain" /><button id="importAssetChooseButton" class="file-choice-button" type="button">Choose file</button><span id="importAssetFileName" class="selected-file-name">No file selected</span></div></div>
-            <label class="designer-form-row"><span class="designer-label">Name</span><input id="importAssetName" class="designer-input" placeholder="workflow.yaml" /></label>
-            <label class="designer-form-row"><span class="designer-label">Destination</span><select id="importAssetDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
-            <label class="designer-form-row designer-import-json-wrap"><span class="designer-label">Content</span><textarea id="importAssetContent" class="designer-textarea designer-import-json" placeholder="Paste YAML / Markdown or exported JSON here"></textarea></label>
+            <div class="designer-form-row"><span class="designer-label">Choose File</span><div class="asset-file-picker"><input id="importAssetFile" class="visually-hidden-file" type="file" accept=".zip,.json,.yaml,.yml,.md,application/zip,application/json,text/yaml,text/markdown,text/plain" /><button id="importAssetChooseButton" class="file-choice-button" type="button">Choose file</button><span id="importAssetFileName" class="selected-file-name">No file selected</span></div></div>
+            <label id="importAssetNameRow" class="designer-form-row"><span class="designer-label">Name</span><input id="importAssetName" class="designer-input" placeholder="workflow.yaml" /></label>
+            <label id="importAssetDestinationRow" class="designer-form-row"><span class="designer-label">Destination</span><select id="importAssetDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
+            <label id="importAssetContentRow" class="designer-form-row designer-import-json-wrap"><span class="designer-label">Content</span><textarea id="importAssetContent" class="designer-textarea designer-import-json" placeholder="Paste YAML / Markdown or exported JSON here"></textarea></label>
           </section>
           <aside class="designer-import-preview"><span class="designer-label">Validation</span><div id="importAssetPreview" class="designer-empty-state">Choose a file or paste content.</div></aside>
         </div>
@@ -452,9 +488,18 @@ flow:
     </div>
   </div>
 
+  <div id="flowMapBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card flow-map-card" role="dialog" aria-modal="true" aria-labelledby="flowMapTitle">
+      <div class="modal-head"><div><h2 id="flowMapTitle">Workflow Flow Map</h2><p>Normal flow plus retry, recovery loops, restart, and exhausted routing.</p></div><button id="flowMapClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <div class="modal-scroll-body flow-map-body"><div id="flowMapCanvas"></div></div>
+      <div class="modal-actions"><button id="flowMapDone" class="primary modal-primary" type="button">Done</button></div>
+    </div>
+  </div>
+
   <script src="/js/i18n.js"></script>
   <script src="/js/ui-dialogs.js"></script>
   <script src="/js/studio-support.js"></script>
+  <script src="/js/workflow-flow-map.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

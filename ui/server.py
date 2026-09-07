@@ -19,6 +19,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+try:
+    from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
+    from .workflow_graph import build_workflow_graph
+except ImportError:  # direct ui/main.py execution
+    from workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
+    from workflow_graph import build_workflow_graph
+
 UI_STATE_DIR = ".ai-task-runner/ui"
 MESSAGES_FILE = "messages.jsonl"
 CHAT_STATE_FILE = "chat-state.json"
@@ -100,11 +107,18 @@ class UIState:
                 continue
             seen.add(key)
             project_path = Path(path)
+            runtime_status = self._project_runtime_status(project_path, alive_pids)
+            runtime_state = self._read_json(self.runtime_dir(project_path) / "state.json") or {} if project_path.is_dir() else {}
+            runtime_tasks = runtime_state.get("tasks") if isinstance(runtime_state.get("tasks"), list) else []
+            completed_count = sum(1 for task in runtime_tasks if isinstance(task, dict) and task.get("status") == "completed")
             result.append({
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
                 "exists": project_path.is_dir(),
-                "runtime_status": self._project_runtime_status(project_path, alive_pids),
+                "runtime_status": runtime_status,
+                "runtime_stage": str(runtime_state.get("stage") or ""),
+                "runtime_completed_count": completed_count,
+                "runtime_total": len(runtime_tasks),
             })
         return result
 
@@ -469,6 +483,7 @@ class UIState:
             "cli_detail": str(console.get("detail") or ""),
             "completed_count": int(console.get("completed_count") or 0),
             "console_snapshot_exists": console_snapshot_exists,
+            "started_at": marker.get("started_at") or launch.get("created_at") or 0,
             "updated_at": state.get("last_activity_at") or marker.get("started_at") or launch.get("created_at") or 0,
         }
 
@@ -1968,6 +1983,12 @@ class UIState:
 
     def studio_export(self, file_id: str, project: Path | None = None) -> dict:
         path, kind, scope = self._resolve_studio_file(file_id, project)
+        if kind == "workflow":
+            if scope != "custom":
+                raise ValueError("Workflow folder export is available only for Custom Workflows")
+            package = export_folder_package(path, self.repo_root)
+            package["scope"] = scope
+            return package
         return {
             "schema_version": 1,
             "kind": kind,
@@ -1975,6 +1996,25 @@ class UIState:
             "scope": scope,
             "content": path.read_text(encoding="utf-8"),
         }
+
+    def studio_graph(self, file_id: str, project: Path | None = None) -> dict:
+        path, kind, _scope = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Flow Map is available only for Workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        return build_workflow_graph(data)
+
+    def studio_folder_inspect(self, content: str) -> dict:
+        return inspect_folder_package(content)
+
+    def studio_folder_import(self, content: str) -> dict:
+        with self._edit_lock:
+            self._require_editable()
+            folder, workflows = import_folder_package(content, self.repo_root, self._validate_workflow_before_write, self._validate_prompt_before_write)
+            if not workflows:
+                raise ValueError("Imported Workflow folder contains no Workflow YAML")
+            item = self._studio_item(workflows[0], "custom", "workflow")
+            return {"folder": folder, "item": item, "file": self.studio_read(item["id"], None)}
 
     def studio_import(self, kind: str, name: str, content: str, destination: str, project: Path | None = None) -> dict:
         with self._edit_lock:
@@ -2113,28 +2153,46 @@ class UIState:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def _workflow_output_paths(self, project: Path | None, name: str, destination: str) -> tuple[str, str, Path, Path]:
-        raw = str(name or "").strip()
+    @staticmethod
+    def _normalize_workflow_folder(folder: str) -> str:
+        raw = str(folder or "").strip().replace("\\", "/").strip("/")
         if not raw:
-            raise ValueError("Workflow name is required")
+            raise ValueError("Workflow folder is required")
+        parts = Path(raw).parts
+        if ".." in parts or "." in parts or any(not part for part in parts):
+            raise ValueError("Workflow folder contains an invalid path segment")
+        if raw == "common" or raw.startswith("common/"):
+            raise ValueError("The common folder is reserved and cannot own a Workflow")
+        if not all(re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
+            raise ValueError("Workflow folder contains unsupported characters")
+        return "/".join(parts)
+
+    def _workflow_output_paths(self, project: Path | None, folder: str, filename: str, destination: str) -> tuple[str, str, str, Path, Path]:
+        folder = self._normalize_workflow_folder(folder)
+        raw = str(filename or "").strip()
+        if not raw:
+            raise ValueError("Workflow filename is required")
         if "/" in raw or "\\" in raw or raw in {".", ".."}:
-            raise ValueError("Workflow name must be a file name, not a path")
+            raise ValueError("Workflow filename must be a file name, not a path")
         if not raw.lower().endswith((".yaml", ".yml")):
             raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
         if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
-            raise ValueError("Workflow file name contains unsupported characters")
+            raise ValueError("Workflow filename contains unsupported characters")
         destination = str(destination or "custom").strip().lower()
         if destination == "custom":
-            output_workflow = (self.repo_root / "runner" / "workflow" / "custom" / raw).resolve()
-            output_prompt_dir = (self.repo_root / "runner" / "prompts" / "custom").resolve()
+            output_workflow = (self.repo_root / "runner" / "workflow" / "custom" / folder / raw).resolve()
+            output_prompt_dir = (self.repo_root / "runner" / "prompts" / "custom" / folder).resolve()
         elif destination == "project":
             if project is None:
                 raise ValueError("Open a Project before saving to Current Project")
+            # Project Workflow discovery intentionally stays top-level to avoid
+            # recursively treating arbitrary source YAML as Runner Workflows.
+            # The owned folder still scopes generated Prompt/support assets.
             output_workflow = (project / raw).resolve()
-            output_prompt_dir = (project / "prompts").resolve()
+            output_prompt_dir = (project / "prompts" / folder).resolve()
         else:
             raise ValueError("Workflow destination must be project or custom")
-        return raw, destination, output_workflow, output_prompt_dir
+        return raw, folder, destination, output_workflow, output_prompt_dir
 
     def studio_draft_info(self) -> dict:
         builder_root = self.repo_root / "workflow_builder"
@@ -2161,6 +2219,8 @@ class UIState:
         self,
         request: str,
         backend: str = "",
+        folder: str = "",
+        filename: str = "",
     ) -> dict:
         """Start a brand-new validated draft job in the UI-owned workspace.
 
@@ -2176,6 +2236,16 @@ class UIState:
             request = str(request or "").strip()
             if not request:
                 raise ValueError("Workflow requirements are required")
+            folder = self._normalize_workflow_folder(folder)
+            filename = str(filename or "").strip()
+            if not filename:
+                raise ValueError("Workflow filename is required")
+            if "/" in filename or "\\" in filename or filename in {".", ".."}:
+                raise ValueError("Workflow filename must be a file name, not a path")
+            if not filename.lower().endswith((".yaml", ".yml")):
+                filename += ".workflow.yaml" if "workflow" not in filename.lower() else ".yaml"
+            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", filename, re.IGNORECASE):
+                raise ValueError("Workflow filename contains unsupported characters")
 
             base = self._builder_root()
             base.mkdir(parents=True, exist_ok=True)
@@ -2208,6 +2278,8 @@ class UIState:
                 "message": "Preparing Workflow Builder",
                 "request": request,
                 "backend": str(backend or ""),
+                "folder": folder,
+                "filename": filename,
                 "created_at": time.time(),
                 "updated_at": time.time(),
             }
@@ -2233,7 +2305,7 @@ class UIState:
                 status.update({"state": "failed", "message": str(exc), "updated_at": time.time()})
                 self._atomic_json(job_root / "status.json", status)
                 raise
-            return {"ok": True, "job_id": job_id, "state": "queued", "message": "Workflow Builder started. No Workflow has been created yet.", "workspace": str(job_root)}
+            return {"ok": True, "job_id": job_id, "state": "queued", "message": "Workflow Builder started. No Workflow has been created yet.", "workspace": str(job_root), "folder": folder, "filename": filename}
 
     def studio_generate_active(self) -> dict:
         """Return the single active Generator job so a reopened UI can resume it."""
@@ -2252,6 +2324,8 @@ class UIState:
                 "active": True,
                 "request": str(status.get("request") or ""),
                 "backend": str(status.get("backend") or ""),
+                "folder": str(status.get("folder") or ""),
+                "filename": str(status.get("filename") or ""),
                 "workspace": str(self._builder_job_root(job_id)),
             }
 
@@ -2361,7 +2435,7 @@ class UIState:
             result["draft"] = self._builder_preview(job_root, status)
             return result
 
-    def studio_generate_save(self, project: Path | None, job_id: str, name: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
+    def studio_generate_save(self, project: Path | None, job_id: str, folder: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
         with self._lifecycle_lock:
             # Publishing mutates a real Workflow/Prompt asset, so keep the existing
             # global edit guard here even though draft generation itself is independent.
@@ -2370,7 +2444,7 @@ class UIState:
             status = self._read_json(job_root / "status.json") or {}
             if status.get("state") != "ready":
                 raise ValueError("Workflow Builder draft is not ready to Save")
-            raw, destination, output_workflow, output_prompt_dir = self._workflow_output_paths(project, name, destination)
+            raw, folder, destination, output_workflow, output_prompt_dir = self._workflow_output_paths(project, folder, filename, destination)
             if output_workflow.exists():
                 raise ValueError(f"Workflow already exists: {output_workflow.name}")
             draft_workflow, draft_prompt_dir = self._builder_apply_edits(job_root, status, workflow_content, prompt_rows)
@@ -2384,7 +2458,7 @@ class UIState:
             file_data = self.studio_read(item["id"], project)
             shutil.rmtree(job_root, ignore_errors=True)
             self._builder_clear_active(job_id)
-            return {"ok": True, "workflow": str(output_workflow), "prompt_dir": str(output_prompt_dir), "item": item, "file": file_data, "message": f"Workflow {raw} saved"}
+            return {"ok": True, "workflow": str(output_workflow), "prompt_dir": str(output_prompt_dir), "folder": folder, "item": item, "file": file_data, "message": f"Workflow {folder}/{raw} saved"}
 
     def studio_generate_cancel(self, job_id: str) -> dict:
         with self._lifecycle_lock:
@@ -2673,6 +2747,10 @@ class Handler(SimpleHTTPRequestHandler):
                 query = parse_qs(parsed.query)
                 project = self._optional_project(query.get("project", [""])[0])
                 return self._json(self.state.studio_export(query.get("id", [""])[0], project))
+            if parsed.path == "/api/studio/graph":
+                query = parse_qs(parsed.query)
+                project = self._optional_project(query.get("project", [""])[0])
+                return self._json(self.state.studio_graph(query.get("id", [""])[0], project))
             if parsed.path == "/api/studio/draft":
                 return self._json(self.state.studio_draft_info())
             if parsed.path == "/api/studio/generate/active":
@@ -2750,12 +2828,12 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/studio/generate":
-                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", ""))))
+                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", "")), str(body.get("folder", "")), str(body.get("filename", ""))))
             if parsed.path == "/api/studio/generate/validate":
                 return self._json(self.state.studio_generate_validate(str(body.get("job_id", "")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/save":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("name", "")), str(body.get("destination", "custom")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
+                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("folder", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "custom")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/cancel":
                 return self._json(self.state.studio_generate_cancel(str(body.get("job_id", ""))))
             if parsed.path == "/api/studio/generate/discard":
@@ -2777,7 +2855,11 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/duplicate":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
+            if parsed.path == "/api/studio/import/inspect":
+                return self._json(self.state.studio_folder_inspect(str(body.get("content", ""))))
             if parsed.path == "/api/studio/import":
+                if str(body.get("kind", "")).strip().lower() == "workflow_folder":
+                    return self._json(self.state.studio_folder_import(str(body.get("content", ""))))
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project))
             if parsed.path == "/api/studio/prompt/check":

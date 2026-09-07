@@ -175,7 +175,7 @@ python ui/main.py
 UI 不 import Runner Core；Windows 啟動 Runner 時使用 hidden-console flags，不會跳出 CMD 視窗，並只讀寫 Project `.ai-task-runner` 的 runtime/UI contract。現在 UI 以 Workflow Task 為主，不提供一般聊天模式；Run / Stop / Continue / Reset / Rerun 共用一條 Project task history。Workflow Studio 將 `runner/workflow/system` 與 `runner/prompts/system|stages` 顯示為不可修改的 **System**，將 `runner/workflow/custom/**` 與 `runner/prompts/custom/**` 顯示為可編輯 **Custom**，並支援 Project-local asset 與 AI Workflow Builder。Custom asset 可依用途放在 `custom/common`、`custom/e2e` 等子資料夾，Studio 會用可收合 Folder Group 顯示，同時保留全域 Search。所有 Workflow Save / Import / Generate 都必須先通過驗證才能寫入正式位置。
 Runner `ConsoleObserver` 另外會從 CLI 同一份 `LiveUI` semantic state 寫出 `.ai-task-runner/console-view.json`。Web UI 直接呈現相同的 Cycle / Progress / Status / TODO markers，snapshot 短暫缺失時則用 durable `state.json` 套同一套 marker 規則，因此 Plan 產生的 TODO 會同步出現在 CMD 與 Web UI；spinner/pulse 只在瀏覽器本地動畫，不增加 Runner 寫檔頻率。Project 列表也會直接顯示 RUN / IDLE / DONE / INT / STOP 狀態。
 
-Workflow Builder 現在集中在 `workflow_builder/`（`workflow_builder.yaml`、`prompt.md`、`validation.py`、`run.py`、`publish.py`），CLI / UI / 其他整合都可直接呼叫，不需要修改或 import Runner Core。UI 使用獨立的「輸入 Prompt → 只顯示生成 Status → 可編輯 Draft 結果確認 → 明確 Save」流程；每次 Generate 都建立全新的 Draft job，名稱與 Custom/Project 位置只在 Save 時決定，驗證 publish 成功前不會出現正式 Workflow asset。System workflow 檔只保留為既有 named-workflow registry 的相容 mirror。
+Workflow Builder 現在集中在 `workflow_builder/`（`workflow_builder.yaml`、`prompt.md`、`validation.py`、`run.py`、`publish.py`），CLI / UI / 其他整合都可直接呼叫，不需要修改或 import Runner Core。UI 使用獨立的「輸入 Prompt + 指定 owned **Folder + Filename** → 只顯示生成 Status → 可編輯 Draft 結果確認 → 明確 Save」流程；Folder/Filename 在 Generate 前就決定，且會跟著單一 active job 一起恢復。驗證 publish 成功前不會出現正式 Workflow asset。System workflow 檔只保留為既有 named-workflow registry 的相容 mirror。
 
 Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/data/workflow-builder/active.json` 僅保留一個 active generation；重新整理或關閉再開瀏覽器會回到同一個 generating/ready job。Generator 會顯示目前暫存 workspace 路徑；產生後的 YAML / Prompt 在仍為 Draft 時即可編輯，只有 Save 才會正式發布 Workflow。Cancel / Discard 回到 Workflow Studio 時會立即重新呈現並刷新 Workflow 清單，不需要手動重新整理瀏覽器。
 
@@ -195,5 +195,4 @@ Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/da
 
 - **Workflows** 是 Global Page。點擊側邊欄 Project 會同時選取 Project 並直接開啟該 Project 的 **Tasks**。
 - 從 Global Workflow Studio 切到 Tasks 時，Global Workflow 的目前草稿會保留在記憶體；真正會覆蓋或丟失內容的操作仍保留未儲存保護。
-- Workflow Studio 的 **More → Hide from Chat / Show in Chat** 可控制 Workflow 是否出現在聊天視窗的 Workflow 選單。設定只存在本機 `ui/data/workflow_visibility.json`，不會修改 Runner Workflow YAML，也不影響 CLI 或 Dry Run。
-- Workflow Studio 切換採用即時選取：點擊後先立即切換選取狀態，再平行載入檔案與 Visual 資料；近期開過且檔案版本未變時使用短效記憶體快取。Catalog refresh 不重疊並有短效快取；Create / Import / Rename / Delete / Generator Save 會強制刷新。Server 端 Workflow requirements 依檔案 `mtime + size` 快取。
+- Workflow Studio 的 **More → Hide from Tasks / Show in Tasks** 可控制 Workflow 是否出現在 Tasks 的 Workflow 選單。設定只存在本機 `ui/data/workflow_visibility.json`，不會修改 Runner Workflow YAML，也不影響 CLI 或 Dry Run。
