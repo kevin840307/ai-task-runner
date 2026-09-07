@@ -749,3 +749,80 @@ body {
 .environment-check-row.warn strong { color:#9a5b00; }
 .environment-check-row.fail strong { color:var(--fail); }
 .clear-history-button:disabled { opacity:.45; cursor:not-allowed; }
+
+
+/* UI polish: smooth runtime feedback + compact engineering-tool density. */
+.header,
+.designer-topbar,
+.workflow-generator-topbar { min-height: var(--header-height); padding-top: 9px; padding-bottom: 9px; }
+.header h1,
+.designer-topbar h1,
+.workflow-generator-topbar h1 { font-size: var(--font-title); }
+.header p,
+.designer-topbar p,
+.workflow-generator-topbar p,
+.modal-hint,
+.designer-help,
+.designer-field-help { font-size: var(--font-helper); line-height: 1.45; }
+.message .message-body,
+.composer-box textarea#messageInput,
+.cli-runtime-output { font-size: var(--font-body); }
+.message .message-body { line-height: 1.55; }
+.composer-box textarea#messageInput { line-height: 1.45; }
+
+.message,
+.live-activity,
+.cli-runtime-card,
+.composer-box,
+.summary,
+.designer-overview-card,
+.studio-editor-card { border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.cli-runtime-card { position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
+.cli-runtime-card.running::before {
+  content: ""; position: absolute; z-index: 2; left: 0; top: 0; width: 34%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--run), transparent);
+  animation: runtimeActivitySweep 1.05s linear infinite; will-change: transform;
+}
+@keyframes runtimeActivitySweep { from { transform: translateX(-115%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; } }
+.cli-runtime-card.running .live-dot { animation: liveRuntimePulse 1.15s ease-out infinite; }
+.live-activity-head .live-progress { margin-left: auto; }
+.live-activity-head .live-updated { margin-left: 6px; color: var(--muted); font-weight: 600; }
+.runtime-freshness strong { font-variant-numeric: tabular-nums; }
+.runtime-freshness strong.stale { color: var(--warn); }
+
+/* Consistent state icon language. */
+.runtime-badge::before,
+.project-runtime-label::before,
+.studio-syntax-badge::before { display: inline-block; width: 1em; margin-right: 5px; text-align: center; font-weight: 900; }
+.runtime-badge::before { content: "○"; }
+.runtime-badge.running::before,
+.project-runtime-label.runtime-running::before { content: "◐"; }
+.runtime-badge.completed::before,
+.project-runtime-label.runtime-completed::before,
+.studio-syntax-badge.valid::before { content: "✓"; }
+.runtime-badge.failed::before,
+.runtime-badge.interrupted::before,
+.project-runtime-label.runtime-stopped::before,
+.studio-syntax-badge.invalid::before { content: "×"; }
+.project-runtime-label.runtime-interrupted::before { content: "!"; }
+.project-runtime-label.runtime-idle::before,
+.project-runtime-label.runtime-missing::before { content: "○"; }
+
+.error-text { max-width: min(420px, 40vw); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.error-details-button { min-height: 24px; padding: 2px 7px; font-size: var(--font-helper); border-radius: var(--radius-sm); }
+.error-details-card { width: min(760px, calc(100vw - 32px)); }
+.error-details-content { max-height: min(58vh, 520px); overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-2); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* Keep ordinary cards flat; reserve stronger elevation for dialogs/popovers. */
+.summary,
+.composer-box,
+.message,
+.live-activity,
+.designer-overview-card,
+.studio-editor-card { box-shadow: var(--shadow-sm) !important; }
+.modal-card,
+.workflow-dropdown-menu,
+.backend-dropdown-menu,
+.theme-panel,
+.project-action-menu { box-shadow: var(--shadow-popover); }

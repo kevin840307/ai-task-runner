@@ -77,6 +77,18 @@ class UIStateTests(unittest.TestCase):
         path.write_text(json.dumps(value), encoding="utf-8")
 
 
+    def test_workflow_visibility_is_persisted_and_reported(self) -> None:
+        listing = self.state.studio_files(self.project)
+        item = next(row for row in listing["workflows"] if row["path"] == str(self.workflow.resolve()))
+        self.assertFalse(item["hidden"])
+        updated = self.state.studio_set_workflow_hidden(item["id"], True, self.project)
+        self.assertTrue(updated["hidden"])
+        listing = self.state.studio_files(self.project)
+        item = next(row for row in listing["workflows"] if row["path"] == str(self.workflow.resolve()))
+        self.assertTrue(item["hidden"])
+        self.state.studio_set_workflow_hidden(item["id"], False, self.project)
+        self.assertFalse(self.state.studio_files(self.project)["workflows"][0]["hidden"])
+
     def test_backend_catalog_is_read_without_importing_runner_core(self) -> None:
         catalog = self.state.backend_catalog()
         self.assertEqual(catalog["default"], "qwen")
@@ -615,8 +627,8 @@ class WorkflowStudioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "read only"):
             self.state.studio_delete(prompt["id"], self.project)
 
-    def test_custom_skill_workflow_and_prompt_are_classified_custom(self) -> None:
-        skill = self.root / "runner" / "workflow" / "custom" / "skill_prompt_review_chain.yaml"
+    def test_custom_workflow_and_prompt_are_classified_custom(self) -> None:
+        skill = self.root / "runner" / "workflow" / "custom" / "fixture_custom_workflow.yaml"
         skill.write_text("stages: {}\nflow: []\n", encoding="utf-8")
         custom_prompt = self.root / "runner" / "prompts" / "custom" / "review.md"
         custom_prompt.write_text("{{goal}}\n", encoding="utf-8")
@@ -1332,3 +1344,12 @@ def test_process_snapshot_windows_branch_has_csv_import():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
     assert "csv" in imported, "ui/server.py uses csv in Windows process snapshot but does not import csv"
+
+
+class WorkflowRequirementCacheContractTests(unittest.TestCase):
+    def test_workflow_requirements_cache_tracks_file_version(self):
+        source = Path(__file__).resolve().parents[1] / "server.py"
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("_workflow_requirement_cache", text)
+        self.assertIn("stat.st_mtime_ns", text)
+        self.assertIn('item["version"]', text)

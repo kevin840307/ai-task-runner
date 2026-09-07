@@ -36,3 +36,11 @@ UI 預設使用繁體中文說明，並可切換 English。`Appearance`、`Theme
 UI 以完全離線、本機使用為前提。Runtime UI 不依賴 CDN、Google Fonts、遠端 JavaScript/CSS 或翻譯 API；所需靜態資源都必須隨專案一起提供。測試會拒絕 UI static assets 引入遠端 runtime resource URL。
 
 Project / Runtime polling 採 non-overlapping：上一個 request 完成後才排下一輪。Windows 每次 Project list refresh 只取得一次 `tasklist` PID snapshot，再由所有已追蹤 Project 共用。Workflow Generator status polling 也採相同規則，避免瀏覽器或主機較慢時堆疊 request。
+
+## UI/UX polish
+- Running indicator 使用純 CSS activity line/pulse，與 Runtime polling 解耦，低頻 polling 仍保持視覺流暢。
+- Runtime 顯示 Last update；超過約 30 秒未有新狀態時以 Warning 呈現。
+- Workflow Studio 保留 dirty-state 離開保護：切檔、切專案、切模式、Reload、離頁都不會靜默丟失修改。
+- 錯誤預設顯示摘要；Details 才開啟完整錯誤 Modal，避免 Background Runner 錯誤中斷操作。
+- Runtime / Project / YAML status 使用一致狀態 icon 語意。
+- Header、字級、圓角與 shadow 已收斂為較緊湊的 engineering-tool density；聊天與輸入字級同步縮小。

@@ -1,0 +1,29 @@
+{
+  "runtime_card_background": "rgb(255, 255, 255)",
+  "runtime_output_background": "rgb(255, 255, 255)",
+  "runtime_title_1": "- AI 正在處理目前任務",
+  "runtime_title_2": "\\ AI 正在處理目前任務",
+  "input_height": 60,
+  "input_placeholder": "描述要完成的功能或修復內容...",
+  "send_visible_running": false,
+  "stop_visible_running": true,
+  "project_root_height": 42,
+  "options_composer_height_before": 166,
+  "options_composer_height_after": 166,
+  "options_floating": "absolute",
+  "options_box": {
+    "x": 320.59375,
+    "y": 721,
+    "width": 300,
+    "height": 116
+  },
+  "continue_visible_stopped": true,
+  "reset_visible_stopped": true,
+  "run_visible_stopped": false,
+  "stop_visible_stopped": false,
+  "prompt_badge": "Prompt valid",
+  "validate_prompt_text": "Validate Prompt",
+  "validate_prompt_visible": true,
+  "prompt_tags": "{{project}}\n{{project.root}}\n{{plugin_rules}}",
+  "page_errors": []
+}

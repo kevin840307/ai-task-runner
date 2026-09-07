@@ -68,7 +68,7 @@ Workflow Studio remains file based and does not import Runner workflow code.
 It presents assets in three groups:
 
 - **System** — `runner/workflow/system/*.yaml|yml`, `runner/prompts/system/**/*.md`, and built-in `runner/prompts/stages/**/*.md`; visible/validatable/exportable but immutable and undeletable.
-- **Custom** — `runner/workflow/custom/*.yaml|yml` and `runner/prompts/custom/**/*.md`; user-editable shared assets. `skill_prompt_review_chain.yaml` and its related Prompts live here.
+- **Custom** — `runner/workflow/custom/*.yaml|yml` and `runner/prompts/custom/**/*.md`; user-editable shared assets. `ralphy_ai_validate.yaml` and its related Prompts live here.
 - **Project** — selected-project top-level `.ai-task-runner.yaml` / `*workflow*.yaml|yml` and `prompts/**/*.md`; user-editable project-local assets.
 
 Custom is a real repository location rather than a UI-only label. New/imported assets can target Custom or Project. Workflow/Prompt export downloads the original asset content using its original `.yaml` / `.yml` / `.md` filename so the file can be copied directly back into a repository. Import validates syntax and Workflow Prompt references before creating a new file and never overwrites an existing asset. Prompt deletion is rejected while any known Workflow Stage still resolves to that Prompt.
@@ -177,6 +177,7 @@ The UI follows the supplied `static` interaction model instead of inventing a se
 ## Static-aligned interaction contract
 
 - Workflow Studio itself is a page/workspace; **only Stage editing is a modal**.
+- Workflow selection gives immediate visual feedback, hydrates file + Visual data in parallel, and reuses a short-lived versioned client cache for fast A → B → A switching. The catalog refresh is guarded against overlap, while mutating CRUD operations force refresh so cached lists never hide newly created/renamed/deleted assets.
 - Stage Editor selects Prompt references; Prompt content belongs to the shared Prompt workspace/editor.
 - Visual and YAML modes both expose the same Workflow / Prompt source navigation. Prompt uses the same editor regardless of the selected mode.
 - UI runtime code does not import `runner.*`; it uses the existing filesystem/subprocess adapter only.
@@ -275,3 +276,11 @@ The UI defaults to Traditional Chinese descriptions and can switch to English. C
 The UI is designed for fully local/offline use. Runtime UI assets must not depend on CDNs, Google Fonts, remote JavaScript/CSS, or translation APIs; required static assets must ship with the project. A regression test rejects remote runtime asset URLs under `ui/static`.
 
 Project/runtime polling is non-overlapping: the next request is scheduled only after the previous one finishes. On Windows, one `tasklist` PID snapshot is shared across all tracked Projects in a Project-list refresh. Workflow Generator status polling follows the same non-overlapping rule, avoiding stacked requests when the browser or machine is slow.
+
+## UI/UX polish
+- Running feedback uses a CSS activity line/pulse independent of Runtime polling, so reduced polling does not make the UI feel stalled.
+- Runtime surfaces show Last update and warn when a running state has not changed for roughly 30 seconds.
+- Workflow Studio preserves dirty-state leave protection across file/project/mode switching, reload, and page unload.
+- Errors default to a compact summary; Details opens the complete error in a modal without interrupting background runs.
+- Runtime, project, and YAML state surfaces use a consistent status-icon language.
+- Headers, typography, radii, shadows, chat text, and composer text are tightened for an engineering-tool density.

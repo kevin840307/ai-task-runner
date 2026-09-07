@@ -1,54 +1,44 @@
 - goal_file: 01_basic_command_validator/project/prompt.md
   project_root: 01_basic_command_validator/project
   validator: 01_basic_command_validator/project/validation.py
-
 - goal_file: 02_repair_cycle/project/prompt.md
   project_root: 02_repair_cycle/project
   validator: 02_repair_cycle/project/validation.py
-
 - goal_file: 03_ai_validator_voting/project/prompt.md
   project_root: 03_ai_validator_voting/project
   validator: ai
   ai_validator_prompt_file: 03_ai_validator_voting/project/ai_validation.md
   ai_validator_count: 3
-
 - goal_file: 04_mixed_validation/project/prompt.md
   project_root: 04_mixed_validation/project
   validator: 04_mixed_validation/project/validation.py
   ai_validator_prompt_file: 04_mixed_validation/project/ai_validation.md
   ai_validator_count: 3
-
 - goal_file: 05_ai_quality_repair/project/prompt.md
   project_root: 05_ai_quality_repair/project
   validator: 05_ai_quality_repair/project/validation.py
   ai_validator_prompt_file: 05_ai_quality_repair/project/ai_validation.md
   ai_validator_count: 3
-
 - goal_file: 06_yaml_driven_tool/project/prompt.md
   project_root: 06_yaml_driven_tool/project
   validator: 06_yaml_driven_tool/project/validation.py
-
 - goal_file: 07_blackbox_medium/project/prompt.md
   project_root: 07_blackbox_medium/project
   validator: 07_blackbox_medium/project/validation.py
-
 - goal_file: 08_config_driven_data_pipeline/project/prompt.md
   project_root: 08_config_driven_data_pipeline/project
   validator: 08_config_driven_data_pipeline/project/validation.py
   ai_validator_prompt_file: 08_config_driven_data_pipeline/project/ai_validation.md
   ai_validator_count: 3
-
 - goal_file: 09_config_environment_auditor/project/prompt.md
   project_root: 09_config_environment_auditor/project
   validator: 09_config_environment_auditor/project/validation.py
   ai_validator_prompt_file: 09_config_environment_auditor/project/ai_validation.md
   ai_validator_count: 3
-
 - goal_file: 10_skill_prompt_review_workflow/project/prompt.md
   project_root: 10_skill_prompt_review_workflow/project
-  validator: 10_skill_prompt_review_workflow/project/validation.py
-  workflow_file: ../runner/workflow/custom/common/skill_prompt_review_chain.yaml
-
+  validator: ai
+  workflow_file: ../runner/workflow/custom/common/ralphy_ai_validate.yaml
 - goal_file: 11_regression_workflow_demo/project/prompt.md
   project_root: 11_regression_workflow_demo/project
   validator: ai

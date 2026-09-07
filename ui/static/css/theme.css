@@ -228,13 +228,17 @@ html[data-appearance] .runtime-badge.stopped { color: var(--fail); background: v
 html[data-appearance] .environment-check-summary.warn,
 html[data-appearance] .environment-check-row.warn strong { color: var(--warn); }
 
-/* Keep terminal/code areas intentionally dark in both appearances. */
-html[data-appearance] .cli-runtime-card,
-html[data-appearance] .cli-runtime-card pre,
+/* Keep real code/editor areas intentionally dark in both appearances.
+   Runtime activity is conversation UI, so it follows the normal panel surface. */
 html[data-appearance] .designer-code,
 html[data-appearance] .studio-code-editor {
   background: var(--code-bg);
   color: var(--code-text);
+}
+html[data-appearance] .cli-runtime-card,
+html[data-appearance] .cli-runtime-card pre {
+  background: var(--panel);
+  color: var(--text);
 }
 
 /* Theme-aware aliases and legacy hard-code normalization. */
@@ -580,3 +584,10 @@ html[data-appearance="dark"] .app-toast.error { background: var(--danger-soft) !
 
 .language-setting-group { margin-top: 4px; }
 .language-options { grid-template-columns: 1fr 1fr; }
+
+/* Compact elevation: ordinary surfaces stay flat; dialogs/popovers own depth. */
+html[data-appearance] {
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.045);
+  --shadow-md: 0 5px 16px rgba(0,0,0,.09);
+  --shadow-popover: 0 12px 32px rgba(0,0,0,.20);
+}

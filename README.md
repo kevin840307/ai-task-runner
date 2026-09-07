@@ -197,3 +197,10 @@ Use **Run options → Check environment** in the UI, or run `python tool/environ
 ### UI themes
 
 The local UI defaults to **Teal + System** and also provides Deep Blue, Violet, Amber, and Rose palettes with System/Light/Dark appearance modes. Theme preferences are presentation-only and do not affect Runner, Workflow, recovery, or backend behavior.
+
+### UI navigation and Workflow visibility
+
+- **Workflows** is a global page. Clicking a Project in the sidebar selects that Project and opens its **Tasks** view directly.
+- Leaving the global Workflow Studio for Tasks keeps the current global Workflow draft in memory; destructive operations still keep the existing unsaved-change guards.
+- Workflow Studio **More → Hide from Chat / Show in Chat** controls whether a Workflow appears in the Chat Workflow picker. This is UI metadata stored locally in `ui/data/workflow_visibility.json`; it does not change Runner Workflow YAML, CLI behavior, or dry-run semantics.
+- Workflow Studio selection is optimistic: the clicked asset is selected immediately, file + Visual data hydrate in parallel, and recently opened unchanged assets reuse a short-lived versioned memory cache. Catalog refreshes are non-overlapping and short-lived cached; create/import/rename/delete/generator-save force a fresh catalog. Server-side Workflow requirement parsing is cached by file `mtime + size`.

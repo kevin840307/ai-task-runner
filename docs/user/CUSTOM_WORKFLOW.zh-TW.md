@@ -267,3 +267,41 @@ Prompt 繼續是 Markdown，User Python Stage 仍是普通 `.py` 檔，因此 UI
 ### Visual Editor 支援
 
 Workflow Studio Visual mode 已提供常用 Stage 與 Flow routing 控制，包括 `max_attempts`、`on_exhausted`、`runs`、`required_passes`。Recovery 參數以分組與 Behavior 摘要呈現，不在每個欄位下重複長說明。`continuation_prompt` 仍刻意保留為 YAML-only advanced override。
+
+## Ralphy-style：Fresh Task + 必過 AI Validation
+
+內建 Custom 範例 `runner/workflow/custom/common/ralphy_ai_validate.yaml` 是最小兩 Stage 模式：
+
+```text
+Ralphy Task (Fresh Session, write)
+        ↓
+AI Validator (Fresh Session, read-only)
+        ├─ PASS → 完成
+        └─ FAIL → Fresh Ralphy Task → 再驗證
+```
+
+Workflow：
+
+```yaml
+stages:
+  ralphy:
+    type: task
+    prompt: custom/common/ralphy.md
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    fresh_session_on_start: true
+    runs: 1
+    required_passes: 1
+    recover: [ralphy]
+
+flow:
+  - ralphy
+  - validate_ai
+```
+
+這個 Workflow 不使用 Plan、Review 或 bounded semantic recovery。`validate_ai` 只要回傳 semantic FAIL，就先重新進入 Fresh `ralphy` session 修正，再以 Fresh AI Validator session 重新驗證；**沒有 PASS 就不會正常完成 Workflow**。Technical/API error 仍由 Runner 既有 retry / fail-closed policy 處理。
+
+`ralphy.md` 採單一任務、最小改動、必要測試、避免無關 refactor 的 coding-loop 風格；Recovery 時會直接讀取前一次 AI Validation 的 blocking evidence。

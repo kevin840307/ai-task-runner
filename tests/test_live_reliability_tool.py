@@ -360,7 +360,7 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str):
     assert "--example-smoke-matrix-project" in text
     assert "runner\\workflow\\system\\file.yaml" in text
     assert "runner\\workflow\\system\\mixed.yaml" in text
-    assert "runner\\workflow\\custom\\skill_prompt_review_chain.yaml" in text
+    assert "runner\\workflow\\custom\\common\\ralphy_ai_validate.yaml" in text
 
 
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
@@ -584,7 +584,7 @@ def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
     assert len(results) == 9
     assert all(item["closed"] is True for item in results)
     assert sum(int(item["paths_total"]) for item in results) >= 10
-    linear = next(item for item in results if str(item["workflow"]).endswith("skill_prompt_review_chain.yaml"))
+    linear = next(item for item in results if str(item["workflow"]).endswith("ralphy_ai_validate.yaml"))
     assert linear["features"]["task_producer"] is False
     assert linear["features"]["task_scope"] is False
     custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))

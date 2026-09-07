@@ -86,6 +86,7 @@
         <div><span>Stage</span><strong id="currentStage">閒置</strong></div>
         <div><span data-i18n="summary.progress">進度</span><strong id="progressText">0 / 0</strong></div>
         <div class="live-summary"><span data-i18n="summary.task">任務</span><strong id="currentTask" data-i18n="status.waiting">等待中</strong></div>
+        <div class="runtime-freshness"><span>Last update</span><strong id="lastUpdateText">—</strong></div>
       </section>
 
       <section id="emptyState" class="empty-state">
@@ -135,7 +136,7 @@
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
-              <span id="errorText" class="error-text"></span>
+              <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">
               <button id="sendButton" class="primary send-button" type="button" data-i18n="actions.run">執行</button>
@@ -200,7 +201,7 @@
                       <span id="dirtyBadge" class="badge warning" hidden>UNSAVED</span>
                       <span id="syntaxBadge" class="studio-syntax-badge" hidden></span>
                     </div>
-                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2></div>
+                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2><span id="studioVisibilityBadge" class="badge studio-visibility-badge" hidden>Hidden from Chat</span></div>
                     <p id="studioFilePath"></p>
                   </div>
                   <div class="designer-card-actions">
@@ -210,6 +211,7 @@
                       <div id="studioAssetMenu" class="studio-asset-menu" role="menu" hidden>
                         <button id="renameStudioButton" type="button" role="menuitem">Rename</button>
                         <button id="duplicateStudioButton" type="button" role="menuitem">Duplicate</button>
+                        <button id="toggleWorkflowVisibilityButton" type="button" role="menuitem">Hide from Chat</button>
                       </div>
                     </div>
                     <button id="exportStudioButton" type="button">Export</button>
@@ -258,7 +260,7 @@
                   </aside>
                 </div>
               </div>
-              <div class="studio-footer"><span id="studioStatus" class="studio-status"></span></div>
+              <div class="studio-footer"><span id="studioStatus" class="studio-status"></span><button id="studioErrorDetailsButton" class="error-details-button" type="button" hidden>Details</button></div>
               <pre id="validationOutput" class="validation-output" hidden></pre>
             </div>
           </main>
@@ -322,6 +324,15 @@
       </div>
     </section>
   </main>
+
+
+  <div id="errorDetailsBackdrop" class="modal-backdrop error-details-backdrop" hidden>
+    <div class="modal-card error-details-card" role="dialog" aria-modal="true" aria-labelledby="errorDetailsTitle">
+      <div class="modal-head"><div><h2 id="errorDetailsTitle">Error details</h2><p>完整錯誤資訊，方便複製與除錯。</p></div><button id="errorDetailsClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <pre id="errorDetailsContent" class="error-details-content"></pre>
+      <div class="modal-actions"><button id="errorDetailsCopy" type="button">Copy</button><button id="errorDetailsOk" class="primary" type="button">OK</button></div>
+    </div>
+  </div>
 
   <!-- Static-style Add Project modal. -->
   <div id="projectModalBackdrop" class="modal-backdrop" hidden>

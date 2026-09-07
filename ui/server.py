@@ -67,14 +67,18 @@ class UIState:
         self.ui_root = self.repo_root / "ui"
         self.static_root = self.ui_root / "static"
         self.projects_file = self.ui_root / "data" / "projects.json"
+        self.workflow_visibility_file = self.ui_root / "data" / "workflow_visibility.json"
         self.projects_file.parent.mkdir(parents=True, exist_ok=True)
         self._chat_lock = threading.RLock()
         self._projects_lock = threading.RLock()
         self._lifecycle_lock = threading.RLock()
         self._edit_lock = self._lifecycle_lock
         self._launch_lock = self._lifecycle_lock
+        self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
         if not self.projects_file.exists():
             self._write_projects([])
+        if not self.workflow_visibility_file.exists():
+            self._atomic_json(self.workflow_visibility_file, {})
 
     # ------------------------------ projects/runtime/chat ------------------------------
     def projects(self) -> list[dict]:
@@ -812,6 +816,33 @@ class UIState:
             target.mkdir(parents=True, exist_ok=True)
             return {"ok": True, "folder": rel, "folders": self.studio_custom_folders(kind)}
 
+
+    def _workflow_visibility(self) -> dict[str, bool]:
+        try:
+            raw = json.loads(self.workflow_visibility_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {os.path.normcase(os.path.abspath(str(path))): bool(hidden) for path, hidden in raw.items() if str(path).strip()}
+
+    def workflow_hidden(self, path: Path) -> bool:
+        return bool(self._workflow_visibility().get(os.path.normcase(os.path.abspath(str(path.resolve()))), False))
+
+    def studio_set_workflow_hidden(self, file_id: str, hidden: bool, project: Path | None = None) -> dict:
+        with self._edit_lock:
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            if kind != "workflow":
+                raise ValueError("Visibility can only be changed for Workflow files")
+            values = self._workflow_visibility()
+            key = os.path.normcase(os.path.abspath(str(path.resolve())))
+            if hidden:
+                values[key] = True
+            else:
+                values.pop(key, None)
+            self._atomic_json(self.workflow_visibility_file, values)
+            return self._studio_item(path, scope, kind)
+
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
         workflows: list[dict] = []
@@ -829,6 +860,7 @@ class UIState:
             roots.append(("project", project))
             prompt_roots.append(("project", project / "prompts"))
 
+        workflow_visibility = self._workflow_visibility()
         seen: set[str] = set()
         for scope, root in roots:
             if not root.is_dir():
@@ -839,7 +871,7 @@ class UIState:
                     continue
                 if scope == "project" and not (path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower()):
                     continue
-                item = self._studio_item(path, scope, "workflow")
+                item = self._studio_item(path, scope, "workflow", workflow_visibility)
                 if item["id"] not in seen:
                     seen.add(item["id"])
                     workflows.append(item)
@@ -848,7 +880,7 @@ class UIState:
                     continue
                 if scope == "project" and "workflow" not in path.name.lower():
                     continue
-                item = self._studio_item(path, scope, "workflow")
+                item = self._studio_item(path, scope, "workflow", workflow_visibility)
                 if item["id"] not in seen:
                     seen.add(item["id"])
                     workflows.append(item)
@@ -1558,6 +1590,11 @@ class UIState:
         if path is None or not path.is_file():
             return result
         try:
+            stat = path.stat()
+            key = os.path.normcase(str(path.resolve()))
+            cached = self._workflow_requirement_cache.get(key)
+            if cached and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
+                return dict(cached[2])
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):
             return result
@@ -1594,6 +1631,7 @@ class UIState:
 
         for row in flow:
             visit(row)
+        self._workflow_requirement_cache[key] = (stat.st_mtime_ns, stat.st_size, dict(result))
         return result
 
     def _resolve_prompt_reference(self, workflow_path: Path, reference: str) -> Path | None:
@@ -2373,7 +2411,7 @@ class UIState:
             self._builder_clear_active(job_id)
             return {"ok": True, "message": "Workflow draft discarded"}
 
-    def _studio_item(self, path: Path, scope: str, kind: str) -> dict:
+    def _studio_item(self, path: Path, scope: str, kind: str, workflow_visibility: dict[str, bool] | None = None) -> dict:
         resolved = path.resolve()
         readonly = scope in SYSTEM_SCOPES
         display_name = path.name
@@ -2394,8 +2432,15 @@ class UIState:
             "readonly": readonly,
             "deletable": not readonly,
         }
+        try:
+            stat = resolved.stat()
+            item["version"] = f"{stat.st_mtime_ns}:{stat.st_size}"
+        except OSError:
+            item["version"] = ""
         if kind == "workflow":
             item.update(self._workflow_requirements(resolved))
+            key = os.path.normcase(os.path.abspath(str(resolved)))
+            item["hidden"] = bool(workflow_visibility.get(key, False)) if workflow_visibility is not None else self.workflow_hidden(resolved)
         return item
 
     @staticmethod
@@ -2738,6 +2783,9 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/prompt/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_prompt_check(str(body.get("id", "")), str(body.get("content", "")), project))
+            if parsed.path == "/api/studio/visibility":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_set_workflow_hidden(str(body.get("id", "")), bool(body.get("hidden", False)), project))
             if parsed.path == "/api/studio/save":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_save(str(body.get("id", "")), str(body.get("content", "")), str(body.get("hash", "")), project))

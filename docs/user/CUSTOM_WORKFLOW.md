@@ -267,3 +267,37 @@ Prompt files remain Markdown and user Python Stages remain ordinary `.py` files,
 ### Visual Editor coverage
 
 Workflow Studio Visual mode exposes the common Stage and Flow routing controls, including `max_attempts`, `on_exhausted`, `runs`, and `required_passes`. Recovery fields are grouped and summarized as an execution Behavior instead of duplicating long help text under every field. `continuation_prompt` remains an intentional YAML-only advanced override.
+
+## Ralphy-style: Fresh Task + required AI validation
+
+The bundled custom workflow `runner/workflow/custom/common/ralphy_ai_validate.yaml` is a minimal two-stage loop:
+
+```text
+Ralphy Task (fresh session, write)
+        ↓
+AI Validator (fresh session, read-only)
+        ├─ PASS → complete
+        └─ FAIL → Fresh Ralphy Task → validate again
+```
+
+```yaml
+stages:
+  ralphy:
+    type: task
+    prompt: custom/common/ralphy.md
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    fresh_session_on_start: true
+    runs: 1
+    required_passes: 1
+    recover: [ralphy]
+
+flow:
+  - ralphy
+  - validate_ai
+```
+
+There is no Plan, Review, or bounded semantic recovery. A semantic FAIL from `validate_ai` routes through a fresh `ralphy` execution session and then re-enters a fresh validator session. The workflow does not complete normally until AI validation passes. Technical/API failures still use the Runner's normal retry and fail-closed policies.

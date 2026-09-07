@@ -190,3 +190,10 @@ Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/da
 ### UI Theme
 
 本機 UI 預設為 **Teal + System**，另提供 Deep Blue、Violet、Amber、Rose，以及 System/Light/Dark 外觀模式。Theme 僅屬於顯示層，不影響 Runner、Workflow、Recovery 或 Backend 行為。
+
+### UI 導覽與 Workflow 顯示設定
+
+- **Workflows** 是 Global Page。點擊側邊欄 Project 會同時選取 Project 並直接開啟該 Project 的 **Tasks**。
+- 從 Global Workflow Studio 切到 Tasks 時，Global Workflow 的目前草稿會保留在記憶體；真正會覆蓋或丟失內容的操作仍保留未儲存保護。
+- Workflow Studio 的 **More → Hide from Chat / Show in Chat** 可控制 Workflow 是否出現在聊天視窗的 Workflow 選單。設定只存在本機 `ui/data/workflow_visibility.json`，不會修改 Runner Workflow YAML，也不影響 CLI 或 Dry Run。
+- Workflow Studio 切換採用即時選取：點擊後先立即切換選取狀態，再平行載入檔案與 Visual 資料；近期開過且檔案版本未變時使用短效記憶體快取。Catalog refresh 不重疊並有短效快取；Create / Import / Rename / Delete / Generator Save 會強制刷新。Server 端 Workflow requirements 依檔案 `mtime + size` 快取。

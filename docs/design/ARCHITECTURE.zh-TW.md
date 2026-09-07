@@ -79,3 +79,4 @@ Durable state 會保存已完成的頂層 Workflow 位置與語意 fingerprint�
 ## OpenCode backend parity
 
 Qwen 與 OpenCode 共用 `BaseBackend` 的 stdin、timeout、idle-timeout、process-tree cleanup 與 stable recovery identity。Backend adapter 只擁有 transport/capability 差異：Qwen 使用 `--resume` + native `-s` sandbox；OpenCode 使用 `--session` + JSON event stream + `--auto`，並透過 `OPENCODE_CONFIG_CONTENT.permission` 套用 planning/no-tool/review 與 `--sandbox` 的 permission policy。Workflow、StageExecutor 與 Pipeline 不得依 backend 名稱分支。
+Local UI 採用自適應、非重疊輪詢：Runtime / Project status / Studio guard request 會序列化執行，瀏覽器分頁在背景時自動降頻，回到前景時立即 refresh。Runtime rendering 以 state signature 判斷，資料未變就不重畫 DOM。這只降低長時間 24H 執行時的 UI 負載，不改變 Runner state 或排程語意。

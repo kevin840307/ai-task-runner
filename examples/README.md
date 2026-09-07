@@ -29,13 +29,13 @@ The suite is intentionally small and diagnostic:
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 8. `08_config_driven_data_pipeline` — mixed-validation data pipeline with black-box behavioral checks.
 9. `09_config_environment_auditor` — mixed-validation config auditor covering multiple file formats and clean reruns.
-10. `10_skill_prompt_review_workflow` — runnable custom workflow example that reuses one prompt Stage for `/skill...` prompts, review gates, and a final file validator.
+10. `10_skill_prompt_review_workflow` — runnable custom Workflow project retained at the legacy example path, now exercised with the two-stage Ralphy + mandatory AI validation Workflow.
 11. `11_regression_workflow_demo` — six-action Regression workflow with shared Review/Grill/Fix skills, bounded recovery feedback, continuation prompts, and 5-agent fresh-session final validation.
 
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
 
-Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../runner/workflow/custom/common/skill_prompt_review_chain.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project and validator.
+Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../runner/workflow/custom/common/ralphy_ai_validate.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project; the legacy example folder name is kept for compatibility.
 
 Validation-mode workflow example: `validation_modes.yaml` shows the automatic built-in mapping:
 
@@ -50,6 +50,6 @@ Use the current semantic Stage types instead of older low-level fields such as `
 - `workflow_multi_prompt.yaml`: reuses `type: task` and `type: review` with different prompts.
 - `custom_workflow_latest.yaml`: latest generic custom Workflow. A a `command` Stage produces `Task[]`, the task-scoped SOP executes/reviews them, and a final `command` Stage runs without requiring Plan or a Validator.
 - `custom_task_producer.py`: Task JSON producer used by the custom Workflow.
-- `../runner/workflow/custom/common/skill_prompt_review_chain.yaml`: real multi-prompt + Review + File Validator workflow.
+- `../runner/workflow/custom/common/ralphy_ai_validate.yaml`: two-stage Fresh Ralphy Task + mandatory AI Validator workflow.
 
 For the full contract and more examples, see `docs/user/CUSTOM_WORKFLOW.md`.

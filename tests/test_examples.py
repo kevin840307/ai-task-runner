@@ -75,21 +75,16 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
-    assert data[9]["workflow_file"] == "../runner/workflow/custom/common/skill_prompt_review_chain.yaml"
+    assert data[9]["workflow_file"] == "../runner/workflow/custom/common/ralphy_ai_validate.yaml"
     assert (EXAMPLES / data[9]["workflow_file"]).is_file()
 
     items = load_yaml_script(script)
     config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
     workflow = build_script_item_config(config, items[9], 10).workflow
-    assert [stage["name"] for stage in workflow] == [
-        "run_prompt",
-        "review",
-        "run_prompt",
-        "review",
-        "run_prompt",
-        "review",
-        "validate_file",
-    ]
+    assert [stage["name"] for stage in workflow] == ["ralphy", "validate_ai"]
+    assert workflow[0]["fresh_session_on_start"] is True
+    assert workflow[1]["fresh_session_on_start"] is True
+    assert workflow[1]["recover"][0]["name"] == "ralphy"
     assert data[10]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
     assert data[10]["validator"] == "ai"
     assert (EXAMPLES / data[10]["workflow_file"]).is_file()
@@ -323,7 +318,7 @@ def test_example_temp_runner_external_workflow_stays_on_source_repo(tmp_path, mo
     data = yaml.safe_load(script.read_text(encoding="utf-8"))
     workflow = Path(data[0]["workflow_file"])
     assert workflow.is_absolute()
-    assert workflow == (ROOT / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml").resolve()
+    assert workflow == (ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml").resolve()
     assert not (workspace / "tool").exists()
 
 

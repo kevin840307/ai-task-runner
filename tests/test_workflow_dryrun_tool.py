@@ -247,14 +247,14 @@ def test_dryrun_handles_twelve_stage_composable_sop(tmp_path: Path):
     assert payload["features"]["restart_at"] == 1
 
 
-def test_system_custom_skill_prompt_review_chain_linear_dryrun_closes():
-    result = run("runner/workflow/custom/common/skill_prompt_review_chain.yaml", "--matrix", "--json")
+def test_system_custom_ralphy_ai_validate_linear_dryrun_closes():
+    result = run("runner/workflow/custom/common/ralphy_ai_validate.yaml", "--matrix", "--json")
     assert result.returncode == 0, result.stderr or result.stdout
     payload = json.loads(result.stdout)
     assert payload["closed"] is True
     assert payload["features"]["task_scope"] is False
     assert payload["features"]["task_producer"] is False
-    assert any(case["name"] == "validate_file FAIL -> recover -> closure" for case in payload["cases"])
+    assert any("validate_ai FAIL -> recover -> closure" in case["name"] for case in payload["cases"])
 
 
 def test_dryrun_matrix_verifies_unrecovered_fail_and_error_stop_safely(tmp_path: Path):
@@ -384,3 +384,13 @@ stages:
         "gate", "repair", "gate", "checkpoint",
         "gate", "repair", "gate", "checkpoint",
     ]
+
+
+def test_custom_ralphy_ai_validate_dryrun_closes():
+    result = run("runner/workflow/custom/common/ralphy_ai_validate.yaml", "--matrix", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    data = json.loads(result.stdout)
+    assert data["closed"] is True
+    recovery = next(case for case in data["cases"] if case["name"] == "validate_ai FAIL -> recover -> closure")
+    assert recovery["stage_calls"] == {"ralphy": 2, "validate_ai": 2}
+    assert recovery["completed"] is True

@@ -333,14 +333,16 @@ class LayoutRegressionTests(unittest.TestCase):
         for token in ('/api/project/stop', '/api/project/resume', '/api/project/reset', '$("sendButton").hidden = runtime.running || runtime.resumable'):
             self.assertIn(token, self.js)
 
-    def test_runtime_card_uses_cli_snapshot_and_animated_spinner(self):
+    def test_runtime_card_uses_cli_snapshot_and_poll_independent_activity_indicator(self):
         css = "".join(self.runner_css.split())
         for token in ("CLI_SPINNER_FRAMES", "cliRuntimeText(runtime)", "renderCliRuntimeFrame()", "animateRuntimeFrame"):
             self.assertIn(token, self.js)
-        self.assertIn("setInterval(animateRuntimeFrame, 120)", self.js)
+        self.assertIn('const CLI_SPINNER_FRAMES = ["•"]', self.js)
+        self.assertIn("setInterval(animateRuntimeFrame, 1000)", self.js)
         self.assertIn("runtime.cli_lines", self.js)
         self.assertIn(".cli-runtime-output{", css)
-        self.assertIn(".cli-runtime-card.running.live-dot", css)
+        self.assertIn(".cli-runtime-card.running::before{", css)
+        self.assertIn("animation:runtimeActivitySweep1.05slinearinfinite", css)
 
     def test_project_rows_show_runtime_state_and_running_pulse(self):
         css = "".join(self.runner_css.split())
@@ -357,7 +359,7 @@ class LayoutRegressionTests(unittest.TestCase):
 
     def test_runtime_motion_is_in_white_conversation_card_not_input(self):
         css = "".join(self.runner_css.split())
-        for token in ("renderLiveRuntimeHeader(runtime)", "renderCliRuntimeFrame()", "setInterval(animateRuntimeFrame, 120)"):
+        for token in ("renderLiveRuntimeHeader(runtime)", "renderCliRuntimeFrame()", "setInterval(animateRuntimeFrame, 1000)"):
             self.assertIn(token, self.js)
         self.assertNotIn("renderComposerRuntimeFrame", self.js)
         self.assertNotIn("Running · ${runtime.cli_status}", self.js)
@@ -482,7 +484,7 @@ class LayoutRegressionTests(unittest.TestCase):
         helper = self.js[self.js.index('function showWorkflowStudioPage()'):self.js.index('function showWorkflowGeneratorPage()')]
         self.assertIn('renderStudioFiles()', helper)
         self.assertIn('renderWorkflowPicker()', helper)
-        self.assertIn('await refreshStudioFiles()', helper)
+        self.assertIn('await refreshStudioFiles({ force: true })', helper)
         discard = self.js[self.js.index('async function discardGenerateWorkflowDraft'):self.js.index('async function cancelGenerateWorkflow')]
         self.assertIn('await restoreWorkflowStudioAfterGenerator()', discard)
         cancelled = self.js[self.js.index('async function pollGenerateWorkflow'):self.js.index('function startGenerateWorkflowPoll')]
@@ -527,7 +529,7 @@ class LayoutRegressionTests(unittest.TestCase):
         block = self.js[self.js.index('function runtimeStatusLabel'):self.js.index('function animateRuntimeFrame')]
         self.assertIn('if (runtime?.running) return "Running"', block)
         self.assertIn('if (runtime?.resumable) return "Stopped"', block)
-        self.assertIn('card.querySelector(".live-title").textContent = runtimeStatusLabel(runtime)', block)
+        self.assertIn('setTextIfChanged(card.querySelector(".live-title"), runtimeStatusLabel(runtime))', block)
         self.assertNotIn('CLI_SPINNER_FRAMES', block)
 
     def test_many_runtime_todos_use_outer_history_scroll_not_nested_scroll(self):
@@ -685,9 +687,102 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
 
 def test_runtime_polling_is_non_overlapping():
     script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
-    assert "startNonOverlappingPoll(refreshRuntime, 750)" in script
-    assert "startNonOverlappingPoll(refreshProjectStatuses, 1500)" in script
-    assert "setInterval(refreshRuntime, 750)" not in script
-    assert "setInterval(refreshProjectStatuses, 1500)" not in script
+    assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
+    assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
+    assert "setInterval(refreshRuntime, 1200)" not in script
+    assert "setInterval(refreshProjectStatuses, 4000)" not in script
     assert "setInterval(pollGenerateWorkflow" not in script
     assert 'state.generateWorkflowPollTimer = window.setTimeout(tick, 800)' in script
+
+
+def test_cli_runtime_card_uses_conversation_surface_not_code_surface():
+    theme = (Path(__file__).resolve().parents[1] / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    assert "html[data-appearance] .cli-runtime-card," in theme
+    runtime_block = theme.split("html[data-appearance] .cli-runtime-card,", 1)[1].split("}", 1)[0]
+    assert "background: var(--panel)" in runtime_block
+    assert "color: var(--text)" in runtime_block
+    assert "--code-bg" not in runtime_block
+
+
+def test_runtime_polling_throttles_hidden_tabs_and_avoids_repaint():
+    script = Path(__file__).resolve().parents[1].joinpath("static", "app.js").read_text(encoding="utf-8")
+    assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
+    assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
+    assert "startNonOverlappingPoll(refreshStudioGuard, 2500, 10000)" in script
+    assert 'document.addEventListener("visibilitychange"' in script
+    assert "function animateRuntimeFrame() { if (!document.hidden) updateRuntimeFreshness(); }" in script
+    assert "runtimeRenderSignature(runtime)" in script
+    assert "signature !== state.lastRuntimeSignature" in script
+    assert "if (state.runtimeRefreshPromise) return state.runtimeRefreshPromise;" in script
+    assert "if (state.projectRefreshPromise) return state.projectRefreshPromise;" in script
+    assert "if (state.studioGuardRefreshPromise) return state.studioGuardRefreshPromise;" in script
+    assert "setTextIfChanged(output, cliRuntimeText(runtime))" in script
+
+
+def test_ui_polish_unsaved_error_details_and_last_update_contracts():
+    base = Path(__file__).resolve().parents[1].joinpath("static")
+    script = base.joinpath("app.js").read_text(encoding="utf-8")
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    css = base.joinpath("css", "runner-lite.css").read_text(encoding="utf-8")
+    assert 'window.addEventListener("beforeunload"' in script
+    assert 'await confirmDiscardStudio()' in script
+    assert 'id="errorDetailsBackdrop"' in html
+    assert 'id="studioErrorDetailsButton"' in html
+    assert 'function showErrorDetails()' in script
+    assert 'runtimeLastChangedAt' in script and 'updateRuntimeFreshness()' in script
+    assert 'id="lastUpdateText"' in html
+    assert '--font-title:' in base.joinpath("css", "tokens.css").read_text(encoding="utf-8")
+    assert '.runtime-badge::before' in css and '.studio-syntax-badge::before' in css
+
+def test_project_click_opens_tasks_without_discarding_global_workflow_draft():
+    script = Path(__file__).resolve().parents[1].joinpath("static", "app.js").read_text(encoding="utf-8")
+    assert 'if (state.view === "workflow" && !(await switchView("chat"))) return;' in script
+    assert 'Global Workflow Studio keeps its main draft' in script
+    assert 'if (state.view === "workflow" && !(await confirmDiscardStudio())) return;' not in script
+
+
+def test_hidden_workflows_stay_in_studio_but_are_filtered_from_chat_picker():
+    base = Path(__file__).resolve().parents[1].joinpath("static")
+    script = base.joinpath("app.js").read_text(encoding="utf-8")
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    assert 'id="toggleWorkflowVisibilityButton"' in html
+    assert '.filter((item) => !item.hidden)' in script
+    assert '/api/studio/visibility' in script
+    assert 'Hidden from Chat' in script
+
+
+def test_workflow_switch_uses_parallel_hydration_and_cache():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "studioFileCache: new Map()" in app
+    assert "await Promise.all([filePromise, visualPromise])" in app
+    assert "Give immediate selection feedback" in app
+    assert "cached && cached.version === studioCacheVersion(item)" in app
+    assert "cached.loadedAt" in app
+
+def test_workflow_catalog_refresh_is_cached_and_non_overlapping():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "studioFilesRefreshPromise" in app
+    assert "Date.now() - state.studioCatalogLoadedAt" in app
+    assert "if (state.studioFilesRefreshPromise) return state.studioFilesRefreshPromise" in app
+
+def test_studio_error_details_uses_studio_specific_detail_state():
+    base = Path(__file__).resolve().parents[1] / "static"
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    assert 'studioErrorDetail: ""' in app
+    assert 'function showStudioErrorDetails()' in app
+    assert '$("studioErrorDetailsButton").onclick = showStudioErrorDetails;' in app
+    assert 'state.studioErrorDetail = error ? detail : ""' in app
+    assert 'id="studioErrorDetailsButton"' in html
+
+
+def test_hidden_workflow_is_visible_in_editor_header():
+    base = Path(__file__).resolve().parents[1] / "static"
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    css = base.joinpath("css", "workflow-studio.css").read_text(encoding="utf-8")
+    assert 'id="studioVisibilityBadge"' in html
+    assert 'function renderStudioVisibilityBadge()' in app
+    assert 'item?.kind === "workflow" && !!item.hidden' in app
+    assert 'renderStudioVisibilityBadge(); updateDirtyState()' in app
+    assert '.studio-visibility-badge' in css

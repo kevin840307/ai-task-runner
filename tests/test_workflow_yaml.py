@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from runner.api import RunRequest
 from runner.config.runtime import RuntimeConfig
@@ -716,42 +717,16 @@ def test_multi_prompt_example_reuses_same_task_stage():
     assert all(item["type"] == "task" for item in workflow if item["name"] == "run_prompt")
 
 
-def test_skill_prompt_review_chain_example_uses_one_prompt_stage_with_skill_prefixes():
+def test_ralphy_ai_validate_custom_workflow_is_fresh_and_mandatory():
     root = Path(__file__).resolve().parents[1]
-    example = root / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml"
+    example = root / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml"
     workflow = load_workflow(example)
-    pairs = [
-        (item["name"], item["prompt"])
-        for item in workflow
-        if item["name"] != "validate_file"
-    ]
-    assert pairs == [
-        ("run_prompt", "custom/common/design.md"),
-        ("review", "custom/common/review_design.md"),
-        ("run_prompt", "custom/common/implementation.md"),
-        ("review", "custom/common/review_implementation.md"),
-        ("run_prompt", "custom/common/documentation.md"),
-        ("review", "custom/common/review_documentation.md"),
-    ]
-    assert {item["name"] for item in workflow} == {"run_prompt", "review", "validate_file"}
-    assert all("result_handler" not in item for item in workflow if item["name"] == "review")
-    assert [item["name"] for item in workflow[-1]["recover"]] == ["run_prompt", "review"]
-    assert workflow[-1]["recover"][0]["prompt"] == "custom/common/fix_validation.md"
-    assert [item["status"] for item in workflow[:-1]] == [
-        "Designing solution",
-        "Reviewing design",
-        "Implementing changes",
-        "Reviewing implementation",
-        "Updating documentation",
-        "Reviewing documentation",
-    ]
-    assert workflow[-1]["status"] == "Running Python validation"
-    assert workflow[-1]["recover"][0]["status"] == "Fixing validation failure"
-    assert workflow[-1]["recover"][1]["status"] == "Reviewing validation fix"
-    for prompt in ("design.md", "implementation.md", "documentation.md"):
-        text = (root / "runner" / "prompts" / "custom" / "common" / prompt).read_text(encoding="utf-8")
-        assert text.startswith("/skill-")
-
+    assert [item["name"] for item in workflow] == ["ralphy", "validate_ai"]
+    assert all(item["fresh_session_on_start"] is True for item in workflow)
+    assert workflow[1]["type"] == "ai_validator"
+    assert workflow[1]["required_passes"] == 1
+    assert workflow[1]["recover"][0]["name"] == "ralphy"
+    assert workflow[0]["prompt"] == "custom/common/ralphy.md"
 
 def test_workflow_yaml_examples_reference_existing_prompt_assets():
     def collect_refs(data):
@@ -1137,8 +1112,7 @@ def test_top_level_task_and_review_can_run_without_planned_todo(tmp_path):
     from runner.workflow.rules import reduce_result
 
     workflow = load_workflow(
-        Path(__file__).resolve().parents[1]
-        / "runner" / "workflow" / "custom" / "common" / "skill_prompt_review_chain.yaml"
+        Path(__file__).resolve().parents[1] / "examples" / "workflow_multi_prompt.yaml"
     )
     context = _context(tmp_path, workflow)
 
@@ -1168,8 +1142,7 @@ def test_top_level_task_and_review_can_run_without_planned_todo(tmp_path):
     assert executor.calls == [
         "run_prompt", "review",
         "run_prompt", "review",
-        "run_prompt", "review",
-        "validate_file",
+        "run_prompt", "validate_file",
     ]
     assert context.state.tasks == []
     assert context.state.current == 0
@@ -1340,3 +1313,27 @@ def test_execution_prompts_do_not_hardcode_repair_stage_name():
         text = (root / name).read_text(encoding="utf-8")
         assert 'stage == "repair"' not in text
         assert "task.last_review" in text or "validation.feedback" in text
+
+
+def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
+    root = Path(__file__).resolve().parents[1]
+    workflow = root / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml"
+    prompt = root / "runner" / "prompts" / "custom" / "common" / "ralphy.md"
+    data = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+    assert data["flow"] == ["ralphy", "validate_ai"]
+    assert set(data["stages"]) == {"ralphy", "validate_ai"}
+    assert data["stages"]["ralphy"]["type"] == "task"
+    assert data["stages"]["ralphy"]["fresh_session_on_start"] is True
+    assert data["stages"]["ralphy"]["prompt"] == "custom/common/ralphy.md"
+    validator = data["stages"]["validate_ai"]
+    assert validator["type"] == "ai_validator"
+    assert validator["validator"] == "ai"
+    assert validator["fresh_session_on_start"] is True
+    assert validator["runs"] == 1
+    assert validator["required_passes"] == 1
+    assert validator["recover"] == ["ralphy"]
+    assert "max_attempts" not in validator
+    assert "on_exhausted" not in validator
+    text = prompt.read_text(encoding="utf-8")
+    assert "Keep changes small, targeted" in text
+    assert "previous.data" in text
