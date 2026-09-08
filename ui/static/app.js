@@ -13,7 +13,7 @@ function saveUiPreferences() { try { localStorage.setItem(UI_PREFS_KEY, JSON.str
 function currentProjectPreferences() {
   if (!state.preferences) state.preferences = loadUiPreferences();
   const path = state.project?.path || ""; if (!path) return {};
-  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", model: "", workflow: "", validators: {} });
+  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", workflow: "", validators: {} });
 }
 function rememberProjectPreference(key, value) { const prefs = currentProjectPreferences(); if (!state.project) return; prefs[key] = value; saveUiPreferences(); }
 function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
@@ -89,7 +89,6 @@ function payload(extra = {}) {
   return {
     project: state.project?.path || "",
     backend: $("backend").value,
-    model: $("modelInput")?.value.trim() || "",
     validator: workflow?.requires_python_validator ? $("validator").value.trim() : "",
     workflow: workflow?.path || "",
     ...extra,
@@ -413,26 +412,15 @@ function updateRuntimeFreshness() {
   updateRuntimeElapsed();
 }
 function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable); }
-function selectedModelLabel() {
-  const runtimeModel = state.runtime && (state.runtime.running || state.runtime.resumable) ? String(state.runtime.model || "").trim() : "";
-  const selected = String($("modelInput")?.value || "").trim();
-  return runtimeModel || selected || "Default";
-}
-function renderModelStatus() {
-  const label = selectedModelLabel();
-  setTextIfChanged($("currentModelText"), `Current · ${label === "Default" ? "Backend default" : label}`);
-  setTextIfChanged($("modelStatusButton"), `Model · ${label}`);
-}
 function renderRunConfigurationLock() {
   const locked = runConfigurationLocked();
   const reason = locked ? "Current task configuration is locked until Reset or completion." : "";
-  for (const id of ["workflowDropdownButton", "backendDropdownButton", "modelInput", "browseValidatorButton", "clearValidatorButton"]) setControlLocked($(id), locked, reason);
+  for (const id of ["workflowDropdownButton", "backendDropdownButton", "browseValidatorButton", "clearValidatorButton"]) setControlLocked($(id), locked, reason);
   const select = $("workflowSelect"); if (select) select.disabled = locked;
   $("workflowPicker")?.classList.toggle("configuration-locked", locked);
   $("validatorPicker")?.classList.toggle("configuration-locked", locked);
   if ($("runConfigLockNote")) $("runConfigLockNote").hidden = !locked;
   if (locked) { closeWorkflowDropdown(); closeBackendDropdown(); }
-  renderModelStatus();
 }
 
 function renderRuntime(runtime) {
@@ -524,8 +512,7 @@ function renderBackendPicker() {
     button.onclick = () => { if (runConfigurationLocked()) return; select.value = row.value; rememberProjectPreference("backend", row.value); closeBackendDropdown(); renderBackendPickerSelection(); }; menu.appendChild(button);
   }
   select.value = [...select.options].some((o) => o.value === saved) ? saved : "";
-  if ($("modelInput")) $("modelInput").value = String(prefs.model || "");
-  renderBackendPickerSelection(); renderModelStatus(); renderRunConfigurationLock();
+  renderBackendPickerSelection(); renderRunConfigurationLock();
 }
 function renderBackendPickerSelection() {
   const select = $("backend"), label = $("backendSelectedLabel"); if (!select || !label) return; label.textContent = select.options[select.selectedIndex]?.textContent || "Default backend";
@@ -1805,9 +1792,6 @@ window.addEventListener("app-language-changed", () => { renderThemeControls(); i
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
-$("modelInput").addEventListener("input", () => { if (runConfigurationLocked()) return; rememberProjectPreference("model", $("modelInput").value.trim()); renderModelStatus(); });
-$("modelInput").addEventListener("change", () => { if (!runConfigurationLocked()) rememberProjectPreference("model", $("modelInput").value.trim()); renderModelStatus(); });
-$("modelStatusButton").onclick = () => { if ($("optionsPanel").hidden) toggleOptionsPanel(); setTimeout(() => $("modelInput")?.focus(), 0); };
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
@@ -1843,7 +1827,7 @@ $("resetButton").onclick = async () => {
 $("rerunButton").onclick = async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } };
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
-state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); renderModelStatus(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
+state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);

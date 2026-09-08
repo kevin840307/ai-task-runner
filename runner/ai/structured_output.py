@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import Any, TypedDict, TypeVar
 
 from ..errors import RunnerError, StructuredOutputError
-from ..prompts.loader import structured_retry_prompt
+from ..prompts.protocols import structured_retry_prompt
 
 T = TypeVar("T")
 

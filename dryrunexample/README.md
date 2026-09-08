@@ -23,3 +23,8 @@ python ..\tool\workflow_dryrun.py ..\runner\workflow\system\mixed.yaml --matrix
 ```
 
 The matrix automatically runs the happy path and one `FAIL -> recover -> closure` path for each recoverable Stage. Workflow syntax/options are always validated by the production loader/schema first. Invalid options fail with exit code `2` and `DRYRUN_ERROR`.
+
+### Current reliability coverage
+
+`workflow_dryrun.py --matrix` validates deterministic workflow topology, task lifecycle closure, recover/restart/repeat/max-attempt routing, fresh-session semantic thresholds, and fail-closed ERROR paths without calling a model. Backend/tool-loop retry policy is intentionally not mocked here; it is covered by Runner unit tests and by the `qwen_live_reliability.py` loop-policy preflight, so dry-run stays deterministic and low-coupling.
+

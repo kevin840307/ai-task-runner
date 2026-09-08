@@ -41,9 +41,7 @@ class ReviewStage(BaseStage):
     timeout_config_attr = "planning_timeout"
     retry_config_attr = "review_retries"
     client_cache_key = "review_client"
-
-    def result_status(self, data) -> str:
-        return "pass" if bool(data["completed"]) else "fail"
+    result_flag = "completed"
 
 
 @dataclass(frozen=True)
@@ -66,6 +64,7 @@ class AIValidatorStage(BaseStage):
     client_cache_key = "ai_validation_client"
     runs_config_attr = "final_ai_validations"
     required_passes_config_attr = "final_ai_required_passes"
+    result_flag = "passed"
 
     def enabled(self, ctx: StageContext) -> bool:
         # An explicit Workflow owns its validation topology: if ai_validator is
@@ -73,8 +72,6 @@ class AIValidatorStage(BaseStage):
         # Legacy/default workflow selection still uses validator/AI-prompt gates.
         return bool(ctx.config.workflow_explicit or ctx.validator_is_ai or ctx.config.ai_validator_prompt.strip())
 
-    def result_status(self, data) -> str:
-        return "pass" if bool(data["passed"]) else "fail"
 
 
 TaskStage.spec_class = TaskStageSpec

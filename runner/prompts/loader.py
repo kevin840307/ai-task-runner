@@ -72,29 +72,20 @@ def save_prompt(
 
     return write_text(target, text, expected_hash=expected_hash, validate=validate)
 
-def always_instructions(root: Path) -> str:
+def prompt_instructions(root: Path) -> tuple[str, str]:
+    """Build shared Runner rules and user always-on instructions with one policy read."""
     text = instruction_text(root, "always")
-    return f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
-
-
-def ai_rules(root: Path) -> str:
-    return render_prompt("system/rules.md", {
+    always = f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
+    rules = render_prompt("system/rules.md", {
         "project": {"root": str(root)},
         "plugin_rules": collect_plugin_instructions(root),
-    }) + always_instructions(root)
-
-
-def structured_retry_prompt(error: str) -> str:
-    return render_prompt("system/structured_output_retry.md", {
-        "error": error.strip()[-500:] or "invalid structured output",
-    })
+    }) + always
+    return rules, always
 
 
 __all__ = [
-    "ai_rules",
-    "always_instructions",
+    "prompt_instructions",
     "prompt_variables",
     "render_prompt",
     "save_prompt",
-    "structured_retry_prompt",
 ]

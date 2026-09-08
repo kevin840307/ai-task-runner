@@ -867,18 +867,19 @@ def test_motion_defaults_full_and_system_reduction_is_scoped():
     assert 'html[data-motion="system"] .workflow-builder-spinner' in generator_css
 
 
-def test_task_composer_exposes_model_and_locks_active_run_configuration():
+def test_task_composer_uses_backend_default_model_and_locks_active_run_configuration():
     base = Path(__file__).resolve().parents[1] / "static"
     html = base.joinpath("index.html").read_text(encoding="utf-8")
     app = base.joinpath("app.js").read_text(encoding="utf-8")
-    for token in ('id="modelInput"', 'id="currentModelText"', 'id="modelStatusButton"', 'id="runConfigLockNote"'):
-        assert token in html
-    assert 'model: $("modelInput")?.value.trim() || ""' in app
+    for token in ('id="modelInput"', 'id="currentModelText"', 'id="modelStatusButton"'):
+        assert token not in html
+    assert 'model: $("modelInput")' not in app
+    assert 'rememberProjectPreference("model"' not in app
+    assert 'id="runConfigLockNote"' in html
     assert 'function runConfigurationLocked()' in app
     assert 'state.runLaunching || state.runtime?.running || state.runtime?.resumable' in app
-    for control in ('workflowDropdownButton', 'backendDropdownButton', 'modelInput', 'browseValidatorButton', 'clearValidatorButton'):
+    for control in ('workflowDropdownButton', 'backendDropdownButton', 'browseValidatorButton', 'clearValidatorButton'):
         assert control in app
-    assert 'rememberProjectPreference("model"' in app
 
 
 def test_validator_sits_next_to_options_and_composer_auto_grows_to_max_height():
@@ -893,3 +894,19 @@ def test_validator_sits_next_to_options_and_composer_auto_grows_to_max_height():
     assert 'autosizeTextarea(ta, { minHeight: 46, maxHeight: 210 })' in app
     assert 'textarea.scrollHeight' in lifecycle
     assert 'overflow-y' in lifecycle
+
+
+def test_workflow_generator_yaml_editor_has_single_scroll_owner():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "workflow-generator.css").read_text(encoding="utf-8")
+    assert "#generateDraftYamlPanel { overflow: hidden;" in css
+    assert "grid-template-rows: auto minmax(0,1fr)" in css
+    assert ".workflow-generator-yaml { box-sizing: border-box; width: 100%; height: 100%; min-height: 0; overflow: auto; resize: none;" in css
+    assert "min-height: 440px" not in css
+
+
+def test_studio_custom_scope_badge_is_compact():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+    assert ".studio-list-scope.custom {" in css
+    assert "min-height: 18px;" in css
+    assert "padding-inline: 6px;" in css
+    assert "font-size: 8px;" in css

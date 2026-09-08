@@ -248,3 +248,11 @@ stages/*.py        使用者 Python Stage CRUD
 ```
 
 `python tool/workflow_catalog.py` 會輸出目前 Stage／Flow editor schema JSON；AI 或 UI 產生／修改 Workflow 後，可先執行 `python tool/workflow_dryrun.py workflow.yaml --json` 再 publish。也就是「用 Workflow 產生 Workflow」仍走相同資料契約：產 YAML → production loader 驗證 → Dry Run → PASS 後保存／發布。
+
+## Planning 有界探索與 Loop Recovery
+
+Planning 現在把 discovery 視為「有界行為」，不再要求每個任務都先探索 Repository。Self-contained / greenfield 任務如果 Goal 已足夠，可以直接產生 Plan；既有程式碼任務則從最小的 goal-relevant entry point 開始，只在具體 evidence 指向其他檔案、module 或 project 時才擴張。某個檔案或 symbol 已確認不存在後，除非出現新 evidence，不能重複做等價搜尋。
+
+如果 backend 回報 `consecutive_identical_tool_calls`、`turn_tool_call_cap` 等 loop signal，Planning 最多只做一次 same-session retry；同一類 loop 再發生時，Runner 會把該 Planning Stage 切到 Fresh Session，同時保留 durable workflow state。動態 turn/context stderr 會被正規化，避免因錯誤文字每次不同而重置 escalation counter。這個策略刻意只套在 Planning，不改一般 Task / Review retry 行為。
+
+測試涵蓋：unit test 固定 `initial -> same -> fresh` retry sequence、Prompt contract test 固定 bounded discovery、`workflow_dryrun.py --matrix` 持續驗證 deterministic workflow routing/recovery，而 `qwen_live_reliability.py` 在 live probes 前會先執行 loop classification/recovery policy preflight。

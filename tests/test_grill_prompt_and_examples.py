@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from runner.prompts.loader import prompt_variables, render_prompt
+from runner.prompts.protocols import append_stage_protocol
 from runner.workflow.loader import load_workflow
 from runner.workflow.registry import STAGE_REGISTRY
 
@@ -25,8 +26,9 @@ def test_grill_reuses_review_stage_and_contract() -> None:
     )
     assert "Keep API retry durable." in text
     assert "current implementation" in text
-    assert '"completed":false' in text
-    assert '"completed":true' in text
+    wire_prompt = append_stage_protocol(text, "review")
+    assert '"completed":false' in wire_prompt
+    assert '"completed":true' in wire_prompt
 
 
 def test_all_tool_workflow_examples_load() -> None:

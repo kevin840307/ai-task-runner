@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from ..utils.text import bounded_text
-from .loader import ai_rules, always_instructions
+from .loader import prompt_instructions
 
 PREVIOUS_OUTPUT_CHARS = 8_000
 PREVIOUS_DATA_CHARS = 6_000
@@ -101,6 +101,7 @@ def build_stage_prompt_context(
     """Return the only supported top-level variables for Stage templates."""
     state = ctx.state
     tasks = [_task_data(task) for task in state.tasks]
+    rules, always_instructions = prompt_instructions(ctx.root)
     validator_prompt = getattr(ctx.config, "validator_prompt", "") or ""
     ai_validator_prompt = getattr(ctx.config, "ai_validator_prompt", "") or ""
     return {
@@ -141,8 +142,8 @@ def build_stage_prompt_context(
             "output": bounded_text(str(getattr(previous, "output", "")), PREVIOUS_OUTPUT_CHARS),
             "data": _previous_data(getattr(previous, "data", None)),
         },
-        "rules": ai_rules(ctx.root),
-        "always_instructions": always_instructions(ctx.root),
+        "rules": rules,
+        "always_instructions": always_instructions,
     }
 
 

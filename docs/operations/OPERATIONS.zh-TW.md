@@ -46,3 +46,11 @@ Worker 異常退出後，Supervisor 會依該 Run 實際 durable state 對應的
 
 ## Reliability 驗證
 Release / 24H 信心度請先跑 deterministic test suite，再跑 opt-in live gate。`tool/workflow_dryrun.py --matrix` 會驗 happy/recovery 路徑，以及沒有 recover 的 FAIL / technical ERROR 必須 fail-closed；`tool/qwen_live_reliability.py` 再用真實 Qwen 覆蓋 process restart、三分鐘 API disconnect recovery、timeout/session recovery、YAML List resume、Final AI Fresh Session voting，以及 detached UI 的 `stop.request -> exit 130 -> --resume`。要宣稱 24H 仍必須真的跑滿要求的 wall-clock soak 並得到 PASS `summary.json`；只通過 preflight probes 不能等同 24H。
+
+## Planning 有界探索與 Loop Recovery
+
+Planning 現在把 discovery 視為「有界行為」，不再要求每個任務都先探索 Repository。Self-contained / greenfield 任務如果 Goal 已足夠，可以直接產生 Plan；既有程式碼任務則從最小的 goal-relevant entry point 開始，只在具體 evidence 指向其他檔案、module 或 project 時才擴張。某個檔案或 symbol 已確認不存在後，除非出現新 evidence，不能重複做等價搜尋。
+
+如果 backend 回報 `consecutive_identical_tool_calls`、`turn_tool_call_cap` 等 loop signal，Planning 最多只做一次 same-session retry；同一類 loop 再發生時，Runner 會把該 Planning Stage 切到 Fresh Session，同時保留 durable workflow state。動態 turn/context stderr 會被正規化，避免因錯誤文字每次不同而重置 escalation counter。這個策略刻意只套在 Planning，不改一般 Task / Review retry 行為。
+
+測試涵蓋：unit test 固定 `initial -> same -> fresh` retry sequence、Prompt contract test 固定 bounded discovery、`workflow_dryrun.py --matrix` 持續驗證 deterministic workflow routing/recovery，而 `qwen_live_reliability.py` 在 live probes 前會先執行 loop classification/recovery policy preflight。

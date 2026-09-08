@@ -11,6 +11,15 @@ PROJECT_INSTRUCTIONS_START = "<!-- AI-TASK-RUNNER:PROJECT-INSTRUCTIONS -->"
 PROJECT_INSTRUCTIONS_END = "<!-- /AI-TASK-RUNNER:PROJECT-INSTRUCTIONS -->"
 
 
+def _without_managed_block(text: str, start_marker: str, end_marker: str) -> str:
+    """Remove one Runner-owned block while preserving user-authored content."""
+    start = text.find(start_marker)
+    if start < 0:
+        return text.rstrip()
+    end = text.find(end_marker, start)
+    return (text[:start] + text[end + len(end_marker):]).rstrip() if end >= 0 else text.rstrip()
+
+
 def ensure_instruction_file(root: Path, filename: str) -> Path:
     path = root / filename
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -28,11 +37,9 @@ def ensure_instruction_file(root: Path, filename: str) -> Path:
 - Never ask the user questions. Inspect the project, make the safest reasonable assumption, and continue.
 """
 
-    start = existing.find(PROJECT_INSTRUCTIONS_START)
-    if start >= 0:
-        end = existing.find(PROJECT_INSTRUCTIONS_END, start)
-        if end >= 0:
-            existing = (existing[:start] + existing[end + len(PROJECT_INSTRUCTIONS_END):]).rstrip()
+    existing = _without_managed_block(
+        existing, PROJECT_INSTRUCTIONS_START, PROJECT_INSTRUCTIONS_END
+    )
 
     project = instruction_text(root, "project")
     if project:
@@ -54,11 +61,7 @@ def update_goal_reference(root: Path, filename: str, goal_file: str | None) -> P
     """Maintain one replaceable goal-file reference in a backend rule file."""
     path = ensure_instruction_file(root, filename)
     text = path.read_text(encoding="utf-8")
-    start = text.find(GOAL_REFERENCE_START)
-    if start >= 0:
-        end = text.find(GOAL_REFERENCE_END, start)
-        if end >= 0:
-            text = (text[:start] + text[end + len(GOAL_REFERENCE_END):]).rstrip()
+    text = _without_managed_block(text, GOAL_REFERENCE_START, GOAL_REFERENCE_END)
     if goal_file:
         reference = Path(goal_file).expanduser().resolve().as_posix()
         text += f"""

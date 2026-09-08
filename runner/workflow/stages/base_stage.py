@@ -10,7 +10,8 @@ from ...ai.client import configure_ai_client, create_ai_client
 from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
-from ...prompts.loader import render_prompt, structured_retry_prompt
+from ...prompts.loader import render_prompt
+from ...prompts.protocols import append_stage_protocol
 from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
@@ -54,6 +55,7 @@ class BaseStage:
     runs_config_attr = ""
     required_passes_config_attr = ""
     client_cache_key = ""
+    result_flag = ""
 
     def __init__(self, spec: BaseStageSpec) -> None:
         self.spec = spec
@@ -129,7 +131,7 @@ class BaseStage:
         return True
 
     def result_status(self, data: Any) -> Literal["pass", "fail"]:
-        return "pass"
+        return "pass" if not self.result_flag or data[self.result_flag] else "fail"
 
     def retry_limit(self, ctx: StageContext) -> int | None:
         if self.spec.retry is not None:
@@ -163,7 +165,6 @@ class BaseStage:
                     lambda text: spec.parser(text, ctx),
                     lambda text: self._ask(ctx, client, text),
                     retries=spec.structured_retries,
-                    retry_prompt=structured_retry_prompt,
                     fresh_ask=lambda: self._structured_fresh_ask(ctx, client, previous),
                     fresh_retries=spec.structured_fresh_retries,
                 )
@@ -251,7 +252,7 @@ class BaseStage:
         ):
             values = build_stage_prompt_context(ctx, self.spec.name, previous)
             values["instructions"] = self.spec.instructions
-            return render_prompt(self.spec.continuation_prompt, values)
+            return self._with_immutable_protocol(render_prompt(self.spec.continuation_prompt, values))
         original = self._original_prompt(ctx, previous)
         if mode == "initial":
             return original
@@ -275,7 +276,11 @@ class BaseStage:
             raise ConfigurationError(f"Base stage {self.spec.name} requires prompt")
         values = build_stage_prompt_context(ctx, self.spec.name, previous)
         values["instructions"] = self.spec.instructions
-        return render_prompt(self.spec.prompt, values)
+        return self._with_immutable_protocol(render_prompt(self.spec.prompt, values))
+
+    def _with_immutable_protocol(self, prompt: str) -> str:
+        """Append Runner-owned wire contract after editable Stage instructions."""
+        return append_stage_protocol(prompt, self.result_kind)
 
     def _retry_stage_label(self) -> str:
         """Return a semantic retry label without leaking internal Stage ids."""

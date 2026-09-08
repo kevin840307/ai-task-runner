@@ -957,6 +957,12 @@
   background: var(--accent-soft);
   color: var(--accent-dark);
 }
+
+.studio-list-scope.custom {
+  min-height: 18px;
+  padding-inline: 6px;
+  font-size: 8px;
+}
 .studio-scope-badge.project,
 .studio-list-scope.project {
   border-color: color-mix(in srgb, var(--blue) 20%, var(--line));

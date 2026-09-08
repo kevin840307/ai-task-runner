@@ -12,6 +12,5 @@ Progress: {{ planning.progress | tojson }}
 {{ planning.inspection_summary }}
 {% endif %}
 
-{% include "stages/plan_task_rules.md" %}
+Runner appends the immutable plan/TODO contract automatically.
 
-{% include "stages/plan_output_contract.md" %}

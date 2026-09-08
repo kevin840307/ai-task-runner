@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ...bootstrap import current_runtime
 from ...config.defaults import DEFAULT_MAX_ATTEMPTS
-from ...errors import ConfigurationError, RunnerError, is_transient_error
+from ...errors import ConfigurationError, RunnerError, diagnostic_error, is_transient_error
 from ...project.files import changed_project_files, project_manifest
 from ...runtime import progress
 from .contracts import (
@@ -110,9 +110,8 @@ class StageExecutor:
             error = result.error or RunnerError(result.output or "stage error")
             if isinstance(error, ConfigurationError):
                 raise error
-            error_retry_limit = max(
-                0,
-                int(getattr(error, "same_session_retry_limit", same_retry_limit)),
+            error_retry_limit = self._same_session_retry_limit(
+                stage, error, same_retry_limit
             )
             if is_transient_error(error):
                 progress.service_wait_exhausted(stage.name, str(error)[-1000:])
@@ -243,9 +242,9 @@ class StageExecutor:
                 )
         return result
 
-    @staticmethod
+    @classmethod
     def _failure_key(
-        stage: Stage, ctx: StageContext, error: BaseException
+        cls, stage: Stage, ctx: StageContext, error: BaseException
     ) -> tuple[str, str]:
         task_id = ctx.task.id if ctx.task is not None else "-"
         scope = f"{stage.name}:{task_id}"
@@ -253,8 +252,38 @@ class StageExecutor:
             line.strip() for line in str(error).splitlines() if line.strip()
         )
         recovery_key = getattr(error, "recovery_key", "")
-        normalized = recovery_key or text[-2000:] or type(error).__name__
+        loop_type = cls._planning_loop_type(stage, error)
+        # Loop stderr contains dynamic turn/context details. Treat the same Planning
+        # loop class as one durable failure so escalation cannot be reset by noise.
+        normalized = (
+            f"planning-loop:{loop_type}"
+            if loop_type
+            else recovery_key or text[-2000:] or type(error).__name__
+        )
         return scope, hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _same_session_retry_limit(
+        cls, stage: Stage, error: BaseException, default: int
+    ) -> int:
+        configured = max(
+            0, int(getattr(error, "same_session_retry_limit", default))
+        )
+        # A detected Planning tool loop gets at most one same-session wake-up.
+        # Repeating the same loop then rotates to a Fresh Session instead of
+        # spending the entire generic retry budget inside a poisoned context.
+        if cls._planning_loop_type(stage, error):
+            return min(configured, 1)
+        return configured
+
+    @staticmethod
+    def _planning_loop_type(stage: Stage, error: BaseException) -> str:
+        if str(getattr(stage, "result_kind", "") or "") != "tasks":
+            return ""
+        cause = diagnostic_error(error)
+        diagnostics = getattr(cause, "diagnostics", {}) if cause is not None else {}
+        value = diagnostics.get("loop_type") if isinstance(diagnostics, dict) else ""
+        return str(value or "")
 
     def _record_failure(
         self, stage: Stage, ctx: StageContext, error: BaseException

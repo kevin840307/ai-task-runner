@@ -23,3 +23,8 @@ python ..\tool\workflow_dryrun.py ..\runner\workflow\system\mixed.yaml --matrix
 ```
 
 Matrix 會自動測 Happy Path，並對每個具有 recover 的 Stage 各測一次 `FAIL -> recover -> closure`。Workflow 語法與參數一律先由正式 Loader/schema 驗證；非法參數會以 exit code `2` 與 `DRYRUN_ERROR` 結束。
+
+### 目前可靠性涵蓋
+
+`workflow_dryrun.py --matrix` 不呼叫模型，專注驗證 deterministic workflow topology、task lifecycle closure、recover/restart/repeat/max-attempt routing、fresh-session semantic threshold，以及 ERROR fail-closed 路徑。Backend/tool-loop retry policy 刻意不在 dry-run 內 mock；它由 Runner unit test 與 `qwen_live_reliability.py` 的 loop-policy preflight 驗證，讓 dry-run 維持 deterministic 與低耦合。
+

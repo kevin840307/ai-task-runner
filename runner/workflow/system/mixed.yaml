@@ -1,19 +1,17 @@
 stages:
   planning:
     type: plan
-    # Plan owns the built-in per-TODO lifecycle:
-    # Task -> Review -> Repair(on fail) -> Review.
-    # Completes only after all TODOs pass.
+    status: AI 正在依任務複雜度建立可驗證 TODO
 
   repair_plan:
     type: plan
-    status: AI 正在建立修復規劃
+    status: AI 正在針對驗證缺口建立最小修復規劃
     repair_plan: true
     fresh_session_on_start: true
 
   validate_file:
     type: command
-    status: 正在執行 File Validator
+    status: 正在執行 Python Validator
     run_state: validating
     actor: validator
     result_kind: validation
@@ -22,7 +20,9 @@ stages:
 
   validate_ai:
     type: ai_validator
+    status: AI 正在執行最終語意驗證
     validator: ai
+    fresh_session_each_run: true
     recover: [repair_plan]
 
 flow:

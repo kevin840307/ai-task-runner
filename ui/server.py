@@ -999,8 +999,9 @@ class UIState:
     def _loader_prompt_contracts(self) -> dict[str, list[str]]:
         """Discover dedicated System Prompt variables from literal render_prompt calls.
 
-        `system/rules.md` and `system/structured_output_retry.md` are not Stage
-        prompts. They are rendered by prompt loader helpers with their own values.
+        `system/rules.md` is not a Stage prompt. It is rendered by the prompt
+        loader with its own values. Immutable output/retry protocols live in
+        runner/prompts/protocols.py and are intentionally not Studio resources.
         Parse that contract statically so Workflow Studio does not import Runner Core
         and does not show false Prompt warnings when those files are inspected.
         """
@@ -1056,7 +1057,6 @@ class UIState:
             "rules": "Runner AI rules for the project.",
             "always_instructions": "User-enforced always instructions.",
             "plugin_rules": "Plugin-provided Runner rules used by system/rules.md.",
-            "error": "Structured-output parser feedback used by the retry Prompt.",
         }
         for key in paths:
             if not key or key in seen:

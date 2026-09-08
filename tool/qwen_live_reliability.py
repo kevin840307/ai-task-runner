@@ -991,11 +991,13 @@ flow:
 
 
 def loop_detection_contract_preflight() -> None:
-    """Lock the known Qwen loop signal to diagnostics + fresh-session reset semantics."""
+    """Lock Qwen loop classification plus bounded Planning retry semantics."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    from runner.ai.errors import AIError, BackendError
     from runner.ai.session import should_reset_session
     from runner.backends.base import BaseBackend
+    from runner.workflow.stages.executor import StageExecutor
 
     message = (
         "Loop detection halted the run "
@@ -1006,6 +1008,30 @@ def loop_detection_contract_preflight() -> None:
         raise RuntimeError("Qwen loop diagnostic classification contract changed")
     if not should_reset_session(message):
         raise RuntimeError("Qwen loop signal no longer forces session reset")
+
+    backend = BackendError(
+        message,
+        return_code=1,
+        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
+    )
+    error = AIError(message)
+    error.__cause__ = backend
+    planning = type("PlanningStageProbe", (), {"name": "planning", "result_kind": "tasks"})()
+    if StageExecutor._same_session_retry_limit(planning, error, 5) != 1:
+        raise RuntimeError("Planning loop same-session retry cap contract changed")
+
+    backend2 = BackendError(
+        message + " dynamic-turn=99",
+        return_code=1,
+        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
+    )
+    error2 = AIError(message + " dynamic-turn=99")
+    error2.__cause__ = backend2
+    ctx = type("PlanningCtxProbe", (), {"task": None})()
+    if StageExecutor._failure_key(planning, ctx, error) != StageExecutor._failure_key(
+        planning, ctx, error2
+    ):
+        raise RuntimeError("Planning loop recovery key is no longer stable")
 
 
 def resume_probe(settings: Settings, root: Path) -> None:
@@ -1919,7 +1945,7 @@ def main() -> int:
     workflow_dryrun_negative_preflight()
     print("PASS workflow dry-run negative/error preflight", flush=True)
     loop_detection_contract_preflight()
-    print("PASS Qwen loop-detection/reset contract preflight", flush=True)
+    print("PASS Qwen loop-detection + bounded Planning retry preflight", flush=True)
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)

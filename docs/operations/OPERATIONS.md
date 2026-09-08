@@ -46,3 +46,11 @@ All subprocess stdout collection is bounded in both normal and watchdog modes, s
 
 ## Reliability verification
 For release/24H confidence, run the deterministic test suite first, then the opt-in live gate. `tool/workflow_dryrun.py --matrix` verifies happy/recovery paths and fail-closed behavior for unrecovered FAIL / technical ERROR. `tool/qwen_live_reliability.py` adds real Qwen process restart, three-minute API disconnect recovery, timeout/session recovery, YAML List resume, Final AI fresh-session voting, and detached-UI `stop.request -> exit 130 -> --resume` coverage. A 24H claim still requires the full requested wall-clock soak and a passing `summary.json`; preflight probes alone are not a 24H claim.
+
+## Planning bounded discovery and loop recovery
+
+Planning now treats discovery as a bounded activity rather than a prerequisite for every task. Self-contained/greenfield work may plan immediately; existing-code work starts from the smallest goal-relevant entry point and expands only from concrete evidence. A confirmed missing file/symbol is not searched repeatedly without new evidence.
+
+For backend loop signals such as `consecutive_identical_tool_calls` or `turn_tool_call_cap`, Planning gets at most one same-session retry. If the same loop class repeats, Runner rotates that Planning Stage to a fresh session while preserving durable workflow state. Dynamic backend turn/context text is normalized so the escalation counter cannot be reset by noisy stderr. This policy is intentionally Planning-specific; normal task/review retry semantics are unchanged.
+
+Validation coverage: unit tests lock the retry sequence (`initial -> same -> fresh`), prompt-contract tests lock bounded discovery, `workflow_dryrun.py --matrix` continues to validate deterministic workflow routing/recovery, and `qwen_live_reliability.py` includes the loop classification/recovery policy preflight before live probes.

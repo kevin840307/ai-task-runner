@@ -585,12 +585,10 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         (self.root / "runner" / "prompts" / "loader.py").write_text(
             "def render_prompt(name, values=None): return ''\n"
-            "def ai_rules(root): return render_prompt('system/rules.md', {'project': {'root': str(root)}, 'plugin_rules': ''})\n"
-            "def structured_retry_prompt(error): return render_prompt('system/structured_output_retry.md', {'error': error})\n",
+            "def ai_rules(root): return render_prompt('system/rules.md', {'project': {'root': str(root)}, 'plugin_rules': ''})\n",
             encoding="utf-8",
         )
         (self.root / "runner" / "prompts" / "system" / "rules.md").write_text("{{ project.root }}\n{{ plugin_rules }}\n", encoding="utf-8")
-        (self.root / "runner" / "prompts" / "system" / "structured_output_retry.md").write_text("{{ error }}\n", encoding="utf-8")
         self.project = self.root / "project"
         self.project.mkdir()
         self.state = UIState(self.root)
@@ -654,15 +652,11 @@ class WorkflowStudioTests(unittest.TestCase):
     def test_system_loader_prompts_use_their_real_variable_contracts(self) -> None:
         files = self.state.studio_files(self.project)
         rules = next(row for row in files["prompts"] if row["name"] == "rules.md")
-        retry = next(row for row in files["prompts"] if row["name"] == "structured_output_retry.md")
+        self.assertFalse(any(row["name"] == "structured_output_retry.md" for row in files["prompts"]))
         rules_check = self.state.studio_prompt_check(rules["id"], "{{ project.root }} / {{ plugin_rules }}", self.project)
-        retry_check = self.state.studio_prompt_check(retry["id"], "{{ error }}", self.project)
         self.assertTrue(rules_check["ok"]); self.assertEqual(rules_check["contract"], "loader")
-        self.assertTrue(retry_check["ok"]); self.assertEqual(retry_check["contract"], "loader")
         rules_tags = {row["key"] for row in self.state.studio_prompt_tags(rules["id"], self.project)["tags"]}
-        retry_tags = {row["key"] for row in self.state.studio_prompt_tags(retry["id"], self.project)["tags"]}
         self.assertEqual(rules_tags, {"project", "project.root", "plugin_rules"})
-        self.assertEqual(retry_tags, {"error"})
 
     def test_all_bundled_prompt_contracts_have_no_false_warning(self) -> None:
         for item in self.state.studio_files(self.project)["prompts"]:

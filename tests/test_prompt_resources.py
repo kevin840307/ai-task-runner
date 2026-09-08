@@ -7,7 +7,9 @@ def test_all_prompt_templates_live_under_one_package():
     stage_files = {p.name for p in files("runner.prompts.stages").iterdir() if p.name.endswith(".md")}
     system_files = {p.name for p in files("runner.prompts.system").iterdir() if p.name.endswith(".md")}
     assert {"planning_rules.md", "execution.md", "ai_validator.md"} <= stage_files
-    assert {"rules.md", "structured_output_retry.md"} <= system_files
+    assert {"rules.md"} <= system_files
+    assert "structured_output_retry.md" not in system_files
+    assert (ROOT / "runner/prompts/protocols.py").is_file()
     assert not (ROOT / "runner/workflow/prompts").exists()
     assert not (ROOT / "runner/ai/prompts").exists()
     assert (ROOT / "runner/prompts/context.py").is_file()

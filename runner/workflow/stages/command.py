@@ -7,24 +7,39 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Sequence
 
 from ...errors import ConfigurationError, RunnerError
-from .contracts import StageContext, StageResult
-from .process_stage import ProcessStage, ProcessStageSpec, resolve_project_file, run_stage_process
+from ...runtime.process_runner import run_process
+from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
 
 
 @dataclass(frozen=True)
-class CommandStageSpec(ProcessStageSpec):
+class CommandStageSpec:
+    name: str
     status: str = "Run command"
+    detail: str = ""
+    run_state: str = ""
+    mode: StageMode = MODE_WRITE
     actor: str = "command"
+    timeout: float | None = None
+    retry: int | None = None
+    skip_on_error: bool = False
+    track_changes: bool = False
+    tolerate_restored_changes: bool = False
+    produces: str = ""
     command: str | list[str] = field(default_factory=list)
     cwd: str = ""
     result_kind: str = "generic"
     clean_work: list[str] | None = None
 
 
-class CommandStage(ProcessStage):
+class CommandStage:
+    """Run one configured child process and map its exit code to a Stage result."""
+
     spec_class = CommandStageSpec
+    timeout_config_attr = "agent_timeout"
+    retry_config_attr = ""
 
     def __init__(self, spec: CommandStageSpec) -> None:
         if isinstance(spec.command, str):
@@ -41,15 +56,32 @@ class CommandStage(ProcessStage):
             or any(not isinstance(value, str) or not value for value in spec.clean_work)
         ):
             raise TypeError("clean_work must be a list of non-empty strings")
-        super().__init__(spec)
+        self.spec = spec
+        self.name = spec.name
+        self.status = spec.status
+        self.detail = spec.detail
+        self.run_state = spec.run_state
+        self.mode = spec.mode
+        self.actor = spec.actor
+        self.retry = spec.retry
+        self.skip_on_error = spec.skip_on_error
+        self.track_changes = spec.track_changes
+        self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.result_kind = spec.result_kind
+
+    def retry_limit(self, ctx: StageContext) -> int | None:
+        if self.spec.retry is not None:
+            return self.spec.retry
+        return int(getattr(ctx.config, self.retry_config_attr)) if self.retry_config_attr else None
 
     def timeout(self, ctx: StageContext) -> float:
         if self.spec.timeout is not None:
             return float(self.spec.timeout)
-        if self.result_kind == "validation":
-            return float(ctx.config.validator_timeout)
-        return super().timeout(ctx)
+        field = "validator_timeout" if self.result_kind == "validation" else self.timeout_config_attr
+        return float(getattr(ctx.config, field))
+
+    def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
+        return result
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         cwd = ctx.root
@@ -68,14 +100,7 @@ class CommandStage(ProcessStage):
             script = Path(command[1]).expanduser()
             if script.is_absolute() and not script.is_file():
                 raise ConfigurationError(f"validation script not found: {script}")
-        return run_stage_process(
-            ctx,
-            self.name,
-            command,
-            self.timeout(ctx),
-            "command Stage",
-            cwd=cwd,
-        )
+        return run_stage_process(ctx, self.name, command, self.timeout(ctx), "command Stage", cwd=cwd)
 
     def _command(self, ctx: StageContext) -> list[str]:
         mapping = {
@@ -85,11 +110,7 @@ class CommandStage(ProcessStage):
             "{state_file}": str(ctx.state_file),
             "{runner_root}": str(Path(__file__).resolve().parents[3]),
         }
-        values = (
-            _split_command(self.spec.command)
-            if isinstance(self.spec.command, str)
-            else self.spec.command
-        )
+        values = _split_command(self.spec.command) if isinstance(self.spec.command, str) else self.spec.command
         result: list[str] = []
         for value in values:
             if value == "{validator_args}":
@@ -98,7 +119,7 @@ class CommandStage(ProcessStage):
             if value == "{validator}":
                 if ctx.validator_path is None:
                     raise RunnerError("command validator requires a validator path")
-                result.append(str(resolve_project_file(ctx, ctx.validator_path, "validator")))
+                result.append(str(_project_file(ctx, ctx.validator_path, "validator")))
                 continue
             expanded = value
             for placeholder, replacement in mapping.items():
@@ -107,13 +128,37 @@ class CommandStage(ProcessStage):
         return result
 
 
+def _project_file(ctx: StageContext, value: str | Path, label: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = (ctx.root / path).resolve()
+    if not path.is_file():
+        raise RunnerError(f"{label} not found: {path}")
+    return path
+
+
+def run_stage_process(
+    ctx: StageContext, stage: str, command: Sequence[str], timeout: int | float, label: str, *, cwd: Path | None = None
+) -> StageResult:
+    if not command or any(not isinstance(value, str) or not value for value in command):
+        raise RunnerError(f"{label} command must contain non-empty strings")
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout < 0:
+        raise RunnerError(f"{label} has invalid timeout: {timeout}")
+    try:
+        result = run_process(list(command), cwd or ctx.root, timeout)
+    except OSError as error:
+        raise RunnerError(f"{label} failed: {error}") from error
+    if result.timed_out:
+        detail = "\n".join(item for item in (f"{label} timeout after {timeout} seconds", result.output[-4000:].strip()) if item)
+        raise RunnerError(detail)
+    return StageResult(stage, "pass" if result.return_code == 0 else "fail", output=result.output)
+
+
 def _split_command(command: str) -> list[str]:
     parts = shlex.split(command, posix=os.name != "nt")
     if os.name == "nt":
         parts = [
-            value[1:-1]
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'"
-            else value
+            value[1:-1] if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'" else value
             for value in parts
         ]
     return parts

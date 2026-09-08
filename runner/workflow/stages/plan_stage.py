@@ -44,8 +44,10 @@ class PlanStage(BaseStage):
         )
         values["planning"] = planning
         if not repair and ctx.ai_client.session_id and previous and previous.output:
-            return render_prompt("stages/plan_finalize_same_session.md", values)
-        return render_prompt("stages/plan_finalize.md", values)
+            prompt = render_prompt("stages/plan_finalize_same_session.md", values)
+        else:
+            prompt = render_prompt("stages/plan_finalize.md", values)
+        return self._with_immutable_protocol(prompt)
 
 
 def parse_plan_tasks(

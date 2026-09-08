@@ -220,3 +220,11 @@ project scripts     referenced by `command` Stage
 ```
 
 Use `python tool/workflow_catalog.py` to obtain the current Stage/flow editor schema as JSON, and use `python tool/workflow_dryrun.py workflow.yaml --json` before publishing a generated or edited Workflow. The same path works for an AI-generated Workflow: generate YAML, validate/load it, dry-run it, then save/publish only after success.
+
+## Planning bounded discovery and loop recovery
+
+Planning now treats discovery as a bounded activity rather than a prerequisite for every task. Self-contained/greenfield work may plan immediately; existing-code work starts from the smallest goal-relevant entry point and expands only from concrete evidence. A confirmed missing file/symbol is not searched repeatedly without new evidence.
+
+For backend loop signals such as `consecutive_identical_tool_calls` or `turn_tool_call_cap`, Planning gets at most one same-session retry. If the same loop class repeats, Runner rotates that Planning Stage to a fresh session while preserving durable workflow state. Dynamic backend turn/context text is normalized so the escalation counter cannot be reset by noisy stderr. This policy is intentionally Planning-specific; normal task/review retry semantics are unchanged.
+
+Validation coverage: unit tests lock the retry sequence (`initial -> same -> fresh`), prompt-contract tests lock bounded discovery, `workflow_dryrun.py --matrix` continues to validate deterministic workflow routing/recovery, and `qwen_live_reliability.py` includes the loop classification/recovery policy preflight before live probes.

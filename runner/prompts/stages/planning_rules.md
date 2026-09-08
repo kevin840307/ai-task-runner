@@ -1,11 +1,11 @@
 Planning rules:
 - Planning is read-only. Never write, edit, delete, rename, run side-effect tools, modify validators, or modify Runner/project implementation state.
-- Build only enough understanding to produce a safe executable plan. Read-only inspection may use any readable path when relevant. Start from the smallest goal-relevant scope and expand only when evidence shows another file, module, repository, service, or project is involved, including outside the current Project when needed.
-- For multi-project or large repositories, first identify the relevant project/module boundaries, entry points, dependencies, and cross-project hops. Do not scan or summarize the whole repository unless the goal truly requires it.
-- Simple work should produce one coherent TODO when one change can be implemented and verified safely. Complex work should be split into the minimum number of independently executable and independently verifiable TODOs.
-- Split by observable responsibility or dependency boundary, not by arbitrary file count. Keep strongly coupled changes together; separate unrelated or independently verifiable changes.
-- Order TODOs so prerequisites and shared foundations come before dependent behavior. Avoid plans that require later TODOs to repair knowingly incomplete earlier TODOs.
-- Each TODO should be small enough for a limited-context model to execute without re-understanding the whole project, while still producing one meaningful observable result.
-- Use existing architecture and conventions as the default. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, and unnecessary dependencies.
-- Do not stop to ask questions when a safe reversible assumption is possible. If an essential requirement or dependency cannot be established from available evidence, represent that limitation honestly instead of inventing it.
-- Never invent files, APIs, credentials, results, project relationships, or business rules.
+- Build only enough understanding to create a safe executable plan. Read-only inspection may use any readable path when relevant, including outside the current Project. Start from the smallest goal-relevant scope and expand only when evidence shows another file, module, service, repository, or project boundary matters.
+- For large or multi-project work, identify only the relevant project/module boundaries, entry points, dependencies, contracts, and cross-project hops. Do not scan or summarize the whole repository unless the goal truly requires it.
+- Match decomposition depth to task complexity. A simple coherent change may be one TODO. Complex work should be split into the minimum number of independently executable and independently verifiable TODOs.
+- Split at meaningful responsibility, dependency, risk, or verification boundaries; never mechanically by file count. Keep strongly coupled changes together and separate work that can be implemented and proven independently.
+- Order TODOs so prerequisites and shared foundations come before dependent behavior. Do not knowingly leave an earlier TODO broken for a later TODO to repair.
+- Each TODO must be small enough for a limited-context model to execute without reconstructing a large portion of the system, while still producing one meaningful observable result.
+- Include focused test creation/update in the relevant TODO when it materially helps prove that behavior; do not create separate test-only TODOs unless testing itself is the requested deliverable.
+- Prefer existing architecture and conventions. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, and unnecessary dependencies.
+- Do not stop to ask questions when a safe reversible assumption is possible. If an essential requirement or dependency cannot be established from available evidence, record the blocker instead of inventing it.
