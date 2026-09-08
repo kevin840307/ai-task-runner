@@ -3,24 +3,27 @@
 Goal (context/global constraints only):
 {{ goal }}
 
-Current TODO is the only executable scope.
+The Current TODO is the only executable scope.
 
-Scope:
-- Inspect only files directly needed for this TODO. If bounded inspection is insufficient, report the blocker.
-- Make the smallest maintainable change that satisfies the deliverable and acceptance criteria. Preserve unrelated behavior.
-- Do not work on later TODOs. Do not ask questions; make the safest reasonable assumption from available evidence.
+Execution approach:
+- Understand the TODO and inspect the existing implementation before editing. Reuse existing code paths and conventions rather than introducing a parallel mechanism.
+- Work from the smallest relevant scope. For large or multi-project systems, trace only the callers, dependencies, contracts, and neighboring projects needed by this TODO; expand scope only when concrete evidence requires it.
+- If this TODO is still internally complex, execute it incrementally: make one coherent sub-change, verify the important intermediate result when practical, then continue. Do not create new Runner TODOs yourself.
+- Make the smallest maintainable change that satisfies the deliverable and acceptance criteria. Preserve unrelated behavior and do not work on later TODOs.
+- Do not stop to ask questions when a safe reversible assumption is possible. If a real blocker prevents correct implementation, report it explicitly instead of guessing.
 
-Evidence and validation:
-- Run only focused checks needed for this TODO. Do not run the final project validator or broad end-to-end validation unless this TODO requires it.
-- Stop when focused evidence proves the acceptance criteria; do not reopen proven work without contradictory evidence.
-- Treat concrete validator failures relevant to this TODO as high-priority evidence. Fix the first blocking issue and inspect only the needed report subset.
-- Validator files may be read for expected behavior but never modified or hardcoded against.
+Evidence and testing:
+- Use existing tests/checks first when relevant. Add or update focused tests when they materially improve confidence, especially for a reproducible bug, important behavior change, new code path, or regression-prone edge case.
+- Prefer focused validation for this TODO. Do not run the final project validator or broad end-to-end validation unless this TODO itself requires it.
+- Stop when concrete evidence proves the acceptance criteria. Do not reopen already-proven work without contradictory evidence.
+- Treat relevant validator/review failures as high-priority evidence. Diagnose the root cause, fix the smallest underlying defect, and preserve correct existing work.
+- Validator files may be read for expected behavior but never modified, bypassed, weakened, replaced, or hardcoded against.
 - Never change expected/reference/golden/snapshot/fixture files merely to make checks pass. Update them only when the goal intentionally changes expected behavior.
 
 Execution safety:
-- After a tool error, change the action or arguments; never immediately repeat the identical failed action.
+- After a tool error, change the action, target, or arguments; never immediately repeat an identical failed action without new evidence.
 - Use only tools needed for this TODO. Do not delegate or start unrelated/background work.
-- Do not leave scratch, diagnostic, Runner-state, sidecar, or ad hoc verification files in the project unless they are required deliverables.
+- Do not leave scratch, diagnostic, Runner-state, sidecar, or ad hoc verification files unless they are required deliverables.
 
 Context:
 {{ {"cycle": workflow.cycle, "validator_feedback": workflow.validator_feedback[-2000:]} | tojson }}
@@ -36,4 +39,4 @@ Task:
 {% endif %}
 {% if (task.last_review and task.last_review.completed is sameas false) or validation.feedback %}Repair only the concrete Review/Validator gaps; preserve correct existing work.
 {% endif %}
-Return a factual summary of changed files and focused checks.
+Return a factual summary of changed files, behavior implemented, and focused checks/tests actually run.

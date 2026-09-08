@@ -10,6 +10,7 @@ Review instructions:
 Previous Workflow Stage:
 {{ previous }}
 
-Inspect only the smallest relevant project subset. PASS only when the review instructions are satisfied. FAIL only for concrete, actionable blocking defects, and never return FAIL with an empty `missing_items`.
+Judge the requested review instructions from current evidence, not from the previous stage summary alone. Inspect only the smallest relevant project subset; when behavior crosses project/module boundaries, verify the relevant contract on both sides.
+PASS only when the review instructions are supported by evidence. FAIL only for concrete actionable blocking defects, and never return FAIL with an empty `missing_items`.
 
 {% include "stages/review_output_contract.md" %}

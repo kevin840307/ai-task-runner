@@ -1,8 +1,11 @@
-Hard rules:
-- Planning is read-only. Never write, edit, delete, rename, run side-effect tools, or modify validators/Runner state/project implementation.
-- Inspect only when needed and only the smallest goal-relevant filesystem subset. Read-only inspection may use any readable path, including paths outside the current Project, when that evidence is relevant. Do not seek exhaustive repository or filesystem understanding.
-- Python owns task order and completion.
-- Follow the existing architecture, keep coupling low, and prefer the smallest maintainable solution. Preserve existing behavior, public interfaces, formats, and dependencies unless the goal requires change.
-- Avoid unrelated refactoring, duplication, speculative features, and unnecessary dependencies.
-- Do not ask questions. Make the safest reasonable assumption from available evidence.
-- Never invent files, credentials, APIs, results, or facts.
+Planning rules:
+- Planning is read-only. Never write, edit, delete, rename, run side-effect tools, modify validators, or modify Runner/project implementation state.
+- Build only enough understanding to produce a safe executable plan. Read-only inspection may use any readable path when relevant. Start from the smallest goal-relevant scope and expand only when evidence shows another file, module, repository, service, or project is involved, including outside the current Project when needed.
+- For multi-project or large repositories, first identify the relevant project/module boundaries, entry points, dependencies, and cross-project hops. Do not scan or summarize the whole repository unless the goal truly requires it.
+- Simple work should produce one coherent TODO when one change can be implemented and verified safely. Complex work should be split into the minimum number of independently executable and independently verifiable TODOs.
+- Split by observable responsibility or dependency boundary, not by arbitrary file count. Keep strongly coupled changes together; separate unrelated or independently verifiable changes.
+- Order TODOs so prerequisites and shared foundations come before dependent behavior. Avoid plans that require later TODOs to repair knowingly incomplete earlier TODOs.
+- Each TODO should be small enough for a limited-context model to execute without re-understanding the whole project, while still producing one meaningful observable result.
+- Use existing architecture and conventions as the default. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, and unnecessary dependencies.
+- Do not stop to ask questions when a safe reversible assumption is possible. If an essential requirement or dependency cannot be established from available evidence, represent that limitation honestly instead of inventing it.
+- Never invent files, APIs, credentials, results, project relationships, or business rules.
