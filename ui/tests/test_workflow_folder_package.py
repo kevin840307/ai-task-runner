@@ -7,6 +7,8 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from ui.workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
 
 
@@ -115,3 +117,59 @@ class WorkflowFolderPackageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_manifest_rejects_windows_drive_folder(tmp_path: Path) -> None:
+    import base64, io, json, zipfile
+    from ui.workflow_folder_package import inspect_folder_package
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps({"schema_version": 2, "kind": "workflow_folder", "folder": "C:/escape"}))
+        zf.writestr("workflow/main.workflow.yaml", "stages: {}\nflow: []\n")
+    with pytest.raises(ValueError, match="folder name is invalid"):
+        inspect_folder_package(base64.b64encode(out.getvalue()).decode("ascii"))
+
+
+def test_export_rejects_prompt_reference_with_parent_traversal(tmp_path: Path) -> None:
+    root = tmp_path
+    wf_root = root / "runner/workflow/custom/demo"
+    pr_root = root / "runner/prompts/custom/demo"
+    wf_root.mkdir(parents=True)
+    pr_root.mkdir(parents=True)
+    (pr_root / "review.md").write_text("review\n", encoding="utf-8")
+    wf = wf_root / "main.workflow.yaml"
+    wf.write_text("stages:\n  review:\n    type: review\n    prompt: ../custom/demo/review.md\nflow: [review]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="outside the portable folder scope"):
+        export_folder_package(wf, root)
+
+
+def test_manifest_rejects_posix_absolute_folder() -> None:
+    import base64, io, json, zipfile
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps({"schema_version": 2, "kind": "workflow_folder", "folder": "/escape"}))
+        zf.writestr("workflow/main.workflow.yaml", "stages: {}\nflow: []\n")
+    with pytest.raises(ValueError, match="folder name is invalid"):
+        inspect_folder_package(base64.b64encode(out.getvalue()).decode("ascii"))
+
+
+
+def test_export_accepts_builder_relative_owned_prompt(tmp_path: Path) -> None:
+    import os
+    from ui.workflow_folder_package import export_folder_package
+
+    workflow_dir = tmp_path / "runner" / "workflow" / "custom" / "generated"
+    prompt_dir = tmp_path / "runner" / "prompts" / "custom" / "generated"
+    workflow_dir.mkdir(parents=True)
+    prompt_dir.mkdir(parents=True)
+    prompt = prompt_dir / "run.md"
+    prompt.write_text("Run", encoding="utf-8")
+    reference = os.path.relpath(prompt, workflow_dir).replace(os.sep, "/")
+    workflow = workflow_dir / "generated.workflow.yaml"
+    workflow.write_text(
+        f"stages:\n  run:\n    type: task\n    prompt: {reference}\nflow: [run]\n",
+        encoding="utf-8",
+    )
+
+    package = export_folder_package(workflow, tmp_path)
+    assert package["prompt_file_count"] == 1

@@ -10,6 +10,8 @@ Project root 是 task workspace boundary。Project policy 只從 `<project-root>
 
 Protected-path snapshot 可偵測修改、刪除，以及 protected directory 底下的新檔，並還原違規變更。CLI `--protect-file` 可臨時增加保護；長期規則建議放 project policy。
 
+Windows 上 Safety 的檔案 I/O 會在內部使用 extended-length path，因此 protected / readonly tree 的絕對路徑超過傳統 `MAX_PATH` 時，不會因為路徑過長就靜默跳過保護；Project 邏輯路徑與 policy 寫法都不需要改。
+
 ## 應保護什麼
 Immutable input、answer/reference fixture、位於 project root 內的 validator helper，以及「Agent 可以讀但絕對不能改」的檔案。Task 本來就要改的 source/output 不可 protected。
 

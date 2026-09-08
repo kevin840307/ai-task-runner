@@ -83,9 +83,17 @@
     return `M ${sx + dir * nodeW * 0.42} ${a.y} C ${routeX} ${a.y}, ${routeX} ${b.y}, ${tx - dir * nodeW * 0.42} ${b.y}`;
   }
 
-  function render(root, graph) {
-    const nodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
-    const edges = Array.isArray(graph?.edges) ? graph.edges : [];
+  function renderGraph(root, graph, mode = "auto") {
+    const allNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+    const allEdges = Array.isArray(graph?.edges) ? graph.edges : [];
+    const dense = allNodes.length > 20 || allEdges.length > 28;
+    const effectiveMode = mode === "auto" ? (dense ? "core" : "all") : mode;
+    const coreKinds = new Set(["normal", "recover", "recovery_step", "restart"]);
+    const nodes = effectiveMode === "core" ? allNodes.filter((n) => !n.virtual) : allNodes;
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges = effectiveMode === "core"
+      ? allEdges.filter((e) => coreKinds.has(e.kind || "normal") && nodeIds.has(e.from) && nodeIds.has(e.to))
+      : allEdges;
     if (!nodes.length) {
       root.innerHTML = '<div class="flow-map-empty">No stages found.</div>';
       return;
@@ -135,7 +143,10 @@
           <span><i class="restart"></i>Restart</span>
           <span><i class="exhausted"></i>Exhausted</span>
         </div>
-        <span class="flow-map-count">${nodes.length} stages · ${edges.length} routes</span>
+        <div class="flow-map-toolbar-actions">
+          <span class="flow-map-count">${effectiveMode === "core" ? "Core view · " : ""}${nodes.length} stages · ${edges.length}${effectiveMode === "core" ? ` / ${allEdges.length}` : ""} routes</span>
+          ${dense ? `<button class="flow-map-density-toggle" type="button">${effectiveMode === "core" ? "Show all routes" : "Simplify routes"}</button>` : ""}
+        </div>
       </div>
       <div class="flow-map-scroll" tabindex="0">
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Workflow stage flow map">${defs}${lines}${boxes}</svg>
@@ -159,6 +170,11 @@
         </div>`;
     }
 
+    const densityToggle = root.querySelector('.flow-map-density-toggle');
+    if (densityToggle) densityToggle.addEventListener('click', () => {
+      renderGraph(root, graph, effectiveMode === "core" ? "all" : "core");
+    });
+
     root.querySelectorAll('.flow-map-node').forEach((el) => {
       el.addEventListener('click', () => selectNode(el));
       el.addEventListener('keydown', (e) => {
@@ -166,6 +182,8 @@
       });
     });
   }
+
+  function render(root, graph) { renderGraph(root, graph, "auto"); }
 
   window.WorkflowFlowMap = Object.freeze({ render });
 })();

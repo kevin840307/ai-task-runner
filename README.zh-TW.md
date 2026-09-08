@@ -196,3 +196,7 @@ Workflow Generator 為 UI 自己管理、且不依賴 Project。UI 透過 `ui/da
 - **Workflows** 是 Global Page。點擊側邊欄 Project 會同時選取 Project 並直接開啟該 Project 的 **Tasks**。
 - 從 Global Workflow Studio 切到 Tasks 時，Global Workflow 的目前草稿會保留在記憶體；真正會覆蓋或丟失內容的操作仍保留未儲存保護。
 - Workflow Studio 的 **More → Hide from Tasks / Show in Tasks** 可控制 Workflow 是否出現在 Tasks 的 Workflow 選單。設定只存在本機 `ui/data/workflow_visibility.json`，不會修改 Runner Workflow YAML，也不影響 CLI 或 Dry Run。
+
+### Project Workflow 儲存結構
+
+Project 專屬 Workflow 只會從 `<project>/.ai-task-runner/workflows/` 掃描。每一套 Workflow 使用自己的 owned folder，folder 內分成 `workflow/` 與 `prompts/`，例如 `<project>/.ai-task-runner/workflows/regression/workflow/regression.workflow.yaml` 與 `<project>/.ai-task-runner/workflows/regression/prompts/review.md`。`.ai-task-runner.yaml` 只保留為 Runner/Project 設定檔，不再作為 Workflow 偵測條件。

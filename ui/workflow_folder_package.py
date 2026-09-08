@@ -41,7 +41,12 @@ def workflow_folder(workflow_path: Path, workflow_custom_root: Path) -> str:
 
 
 def classify_prompt_ref(ref: str, folder: str) -> tuple[str, str]:
-    value = ref.replace("\\", "/").lstrip("./")
+    value = str(ref or "").strip().replace("\\", "/")
+    if value.startswith("./"):
+        value = value[2:]
+    if (not value or value.startswith("/") or __import__("re").match(r"^[A-Za-z]:", value)
+            or any(part in {"", ".", ".."} for part in value.split("/"))):
+        raise ValueError(f"Prompt is outside the portable folder scope: {ref}")
     if value.startswith("stages/") or value.startswith("system/"):
         return "system", value
     if value.startswith("custom/common/"):
@@ -54,6 +59,46 @@ def classify_prompt_ref(ref: str, folder: str) -> tuple[str, str]:
         f"Use custom/{folder}/..., custom/common/..., or system/stages prompts only."
     )
 
+
+
+def _classify_export_prompt_ref(
+    ref: str, folder: str, workflow_path: Path, prompt_global_root: Path, own_prompt_root: Path
+) -> tuple[str, str]:
+    """Classify one stored Prompt reference by its resolved ownership.
+
+    Studio-authored Workflows normally use canonical ``custom/...`` references,
+    while Workflow Builder publishes owned Prompts as paths relative to the
+    Workflow file. Both are portable as long as the resolved target stays in
+    the owned/common/system Prompt roots. Absolute references remain rejected.
+    """
+    value = str(ref or "").strip().replace("\\", "/")
+    try:
+        return classify_prompt_ref(value, folder)
+    except ValueError:
+        pass
+    raw = Path(value)
+    if not value or raw.is_absolute() or __import__("re").match(r"^[A-Za-z]:", value):
+        raise ValueError(f"Prompt is outside the portable folder scope: {ref}")
+    target = (workflow_path.parent / raw).resolve()
+    roots = (
+        ("own", own_prompt_root.resolve(), f"custom/{folder}"),
+        ("common", (prompt_global_root / "custom" / "common").resolve(), "custom/common"),
+        ("system", (prompt_global_root / "stages").resolve(), "stages"),
+        ("system", (prompt_global_root / "system").resolve(), "system"),
+    )
+    for kind, root, canonical_prefix in roots:
+        try:
+            relative = target.relative_to(root)
+        except ValueError:
+            continue
+        if not relative.parts:
+            break
+        canonical = f"{canonical_prefix}/{relative.as_posix()}"
+        return kind, canonical
+    raise ValueError(
+        f"Prompt is outside the portable folder scope: {ref}. "
+        f"Use this Workflow's owned Prompt folder, custom/common, or system/stages prompts only."
+    )
 
 def _safe_rel(path: Path, root: Path) -> str:
     rel = path.resolve().relative_to(root.resolve()).as_posix()
@@ -120,8 +165,13 @@ def export_folder_package(workflow_path: Path, repo_root: Path) -> dict:
         if not isinstance(data, dict):
             raise ValueError(f"Workflow YAML root must be an object: {wf.name}")
         for ref in _iter_prompt_refs(data):
-            kind, normalized = classify_prompt_ref(ref, folder)
-            target = (prompt_global_root / normalized).resolve()
+            kind, normalized = _classify_export_prompt_ref(
+                ref, folder, wf, prompt_global_root, prompt_root
+            )
+            if kind == "own":
+                target = (prompt_root / Path(normalized).relative_to(f"custom/{folder}")).resolve()
+            else:
+                target = (prompt_global_root / normalized).resolve()
             if not target.is_file():
                 raise ValueError(f"Referenced Prompt does not exist: {normalized}")
             if kind != "own":
@@ -166,11 +216,14 @@ def export_folder_package(workflow_path: Path, repo_root: Path) -> dict:
 
 
 def _validate_rel(rel: str, name: str) -> str:
-    rel = rel.replace("\\", "/").strip("/")
-    parts = Path(rel).parts
-    if not rel or Path(rel).is_absolute() or ".." in parts:
+    raw = str(rel or "").replace("\\", "/").strip()
+    if raw.startswith("/") or __import__("re").match(r"^[A-Za-z]:", raw):
         raise ValueError(f"Unsafe package path: {name}")
-    return rel
+    raw = raw.strip("/")
+    parts = Path(raw).parts
+    if not raw or Path(raw).is_absolute() or any(part in {".", "..", ""} for part in parts):
+        raise ValueError(f"Unsafe package path: {name}")
+    return raw
 
 
 def _read_package(content_b64: str) -> tuple[dict, dict[str, bytes], dict[str, bytes], list[str], list[str]]:
@@ -209,11 +262,20 @@ def _read_package(content_b64: str) -> tuple[dict, dict[str, bytes], dict[str, b
     return manifest, workflow_files, prompt_files, workflow_dirs, prompt_dirs
 
 
+def _manifest_folder(value: Any) -> str:
+    raw = str(value or "").strip().replace("\\", "/")
+    if not raw or raw.startswith("/") or __import__("re").match(r"^[A-Za-z]:", raw):
+        raise ValueError("Workflow folder name is invalid")
+    raw = raw.rstrip("/")
+    if (not raw or raw == "common" or raw.startswith("common/")
+            or any(part in {"", ".", ".."} for part in raw.split("/"))):
+        raise ValueError("Workflow folder name is invalid")
+    return raw
+
+
 def inspect_folder_package(content_b64: str) -> dict:
     manifest, workflow_files, prompt_files, _workflow_dirs, _prompt_dirs = _read_package(content_b64)
-    folder = str(manifest.get("folder") or "").replace("\\", "/").strip("/")
-    if not folder or folder == "common" or folder.startswith("common/") or ".." in Path(folder).parts:
-        raise ValueError("Workflow folder name is invalid")
+    folder = _manifest_folder(manifest.get("folder"))
     workflow_count = sum(1 for rel in workflow_files if Path(rel).suffix.lower() in {".yaml", ".yml"})
     return {
         "folder": folder,
@@ -230,9 +292,7 @@ def inspect_folder_package(content_b64: str) -> dict:
 
 def import_folder_package(content_b64: str, repo_root: Path, validate_workflow, validate_prompt) -> tuple[str, list[Path]]:
     manifest, workflow_files, prompt_files, workflow_dirs, prompt_dirs = _read_package(content_b64)
-    folder = str(manifest.get("folder") or "").replace("\\", "/").strip("/")
-    if not folder or folder == "common" or folder.startswith("common/") or ".." in Path(folder).parts:
-        raise ValueError("Workflow folder name is invalid")
+    folder = _manifest_folder(manifest.get("folder"))
     workflow_yaml_rels = [rel for rel in workflow_files if Path(rel).suffix.lower() in {".yaml", ".yml"}]
     if not workflow_yaml_rels:
         raise ValueError("Workflow folder package contains no Workflow YAML")
@@ -264,9 +324,14 @@ def import_folder_package(content_b64: str, repo_root: Path, validate_workflow, 
     prompt_root.parent.mkdir(parents=True, exist_ok=True)
     backup_wf = workflow_root.with_name(workflow_root.name + ".import-backup")
     backup_pr = prompt_root.with_name(prompt_root.name + ".import-backup")
-    for backup in (backup_wf, backup_pr):
+
+    # Recover a previous interrupted import before starting a new transaction.
+    # The backup is the last known-good folder; never silently discard it.
+    for current, backup in ((workflow_root, backup_wf), (prompt_root, backup_pr)):
         if backup.exists():
-            shutil.rmtree(backup)
+            if current.exists():
+                shutil.rmtree(current, ignore_errors=True)
+            backup.rename(current)
 
     try:
         if workflow_root.exists():

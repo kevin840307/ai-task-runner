@@ -15,7 +15,7 @@ from typing import Any
 
 from ..project.policy import protected_paths as policy_protected_paths
 from ..errors import RunnerError
-from ..utils.files import copy_ignore, digest
+from ..utils.files import copy_ignore, copy_path, digest, io_path, remove_path
 from ..bootstrap import current_runtime
 from .contracts import HookViolation
 
@@ -125,14 +125,15 @@ def normalize_paths(paths: Sequence[Path]) -> list[Path]:
 
 
 def _snapshot_data(path: Path) -> ProtectedData:
-    if not path.exists() and not path.is_symlink():
+    source = io_path(path)
+    if not source.exists() and not source.is_symlink():
         return None
-    if path.is_dir() and not path.is_symlink():
+    if source.is_dir() and not source.is_symlink():
         backup_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-protect-"))
         backup = backup_root / "snapshot"
-        shutil.copytree(path, backup, symlinks=True)
+        copy_path(path, backup)
         return backup
-    return path.read_bytes()
+    return source.read_bytes()
 
 
 def snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, ProtectedData]]:
@@ -151,15 +152,16 @@ def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list
             if digest(path) == old_hash:
                 continue
             changed.append(str(path))
-            if path.exists() or path.is_symlink():
-                shutil.rmtree(path) if path.is_dir() and not path.is_symlink() else path.unlink()
+            path_io = io_path(path)
+            if path_io.exists() or path_io.is_symlink():
+                remove_path(path)
             if old_data is None:
                 continue
-            path.parent.mkdir(parents=True, exist_ok=True)
+            io_path(path.parent).mkdir(parents=True, exist_ok=True)
             if isinstance(old_data, Path):
-                shutil.copytree(old_data, path, symlinks=True)
+                copy_path(old_data, path)
             else:
-                path.write_bytes(old_data)
+                io_path(path).write_bytes(old_data)
         return changed
     finally:
         for backup_root in backup_roots:
@@ -197,7 +199,7 @@ class SafetyHook:
         before = tree_manifest(context.root, excluded)
         backup_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-readonly-"))
         backup = backup_root / "project"
-        shutil.copytree(context.root, backup, symlinks=True, ignore=copy_ignore(excluded))
+        shutil.copytree(io_path(context.root), io_path(backup), symlinks=True, ignore=copy_ignore(excluded))
         return _Token(protected_snapshot, before, backup_root, backup)
 
     def wrap_change_detector(self, context, token: _Token, base):

@@ -104,6 +104,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+        self.generator_css = (self.root / "static" / "css" / "workflow-generator.css").read_text(encoding="utf-8")
 
     def test_chat_history_owns_full_middle_and_composer_floats_over_reserved_scroll_space(self):
         css = "".join(self.runner_css.split())
@@ -156,6 +157,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".studio-main>.studio-lock-banner{grid-row:2", css)
         self.assertIn(".studio-main>.studio-designer-body{grid-row:3;min-height:0;height:100%", css)
 
+
     def test_add_stage_modal_stays_inside_viewport_and_scrolls_body(self):
         css = "".join(self.studio_css.split())
         self.assertIn("max-height:calc(100dvh-32px)", css)
@@ -192,9 +194,16 @@ class LayoutRegressionTests(unittest.TestCase):
 
     def test_prompt_and_step_surfaces_end_on_sidebar_baseline(self):
         css = "".join(self.studio_css.split())
-        self.assertIn(".studio-workflow-editor{position:relative;grid-template-rows:autoautominmax(0,1fr)auto", css)
+        self.assertIn(".studio-workflow-editor{position:relative;grid-template-rows:autoautominmax(0,1fr)", css)
         self.assertIn(".studio-workflow-editor>.studio-prompt-panel{grid-row:3;min-height:0;height:100%", css)
-        self.assertIn(".studio-footer{grid-row:4;position:static", css)
+        self.assertNotIn(".studio-footer{", css)
+        self.assertNotIn('id="studioFooter"', self.html)
+
+
+    def test_compact_studio_keeps_validation_auto_and_editor_flexible(self):
+        css = "".join(self.studio_css.split())
+        self.assertIn(".studio-workflow-editor{grid-template-rows:autoautominmax(0,1fr);gap:8px}", css)
+        self.assertNotIn(".studio-workflow-editor{grid-template-rows:autominmax(0,1fr)auto;gap:8px}", css)
 
     def test_retry_editor_matches_core_minus_one_contract(self):
         self.assertIn('id="stageRetry"', self.js)
@@ -337,7 +346,8 @@ class LayoutRegressionTests(unittest.TestCase):
         css = "".join(self.runner_css.split())
         for token in ("CLI_SPINNER_FRAMES", "cliRuntimeText(runtime)", "renderCliRuntimeFrame()", "animateRuntimeFrame"):
             self.assertIn(token, self.js)
-        self.assertIn('const CLI_SPINNER_FRAMES = ["•"]', self.js)
+        self.assertIn('const CLI_SPINNER_FRAMES = ["|", "/", "-", "\\\\"]', self.js)
+        self.assertIn("state.spinnerFrame = (state.spinnerFrame + 1)", self.js)
         self.assertIn("setInterval(animateRuntimeFrame, 1000)", self.js)
         self.assertIn("runtime.cli_lines", self.js)
         self.assertIn(".cli-runtime-output{", css)
@@ -445,7 +455,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertNotIn('["running", "cancelling", "ready"]', before)
 
     def test_ai_workflow_builder_status_only_phase_is_stacked_and_centered(self):
-        css = "".join(self.studio_css.split())
+        css = "".join(self.generator_css.split())
         self.assertIn(".workflow-builder-running{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
         self.assertIn(".workflow-builder-failed{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
 
@@ -466,7 +476,7 @@ class LayoutRegressionTests(unittest.TestCase):
     def test_ai_workflow_builder_input_layout_keeps_meta_below_prompt(self):
         form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
         self.assertIn('class="workflow-generator-input-meta"', form)
-        css = "".join(self.studio_css.split())
+        css = "".join(self.generator_css.split())
         self.assertIn('.workflow-generator-input{height:100%;display:flex;flex-direction:column;gap:10px', css)
         self.assertIn('.workflow-generator-main{min-width:0;min-height:0;display:grid;height:100%;grid-template-rows:minmax(0,1fr);place-items:stretch;overflow:hidden', css)
         self.assertIn('@media(max-height:480px)and(min-width:761px)', css)
@@ -474,6 +484,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('grid-template-rows:autominmax(150px,1fr)auto', css)
         self.assertIn('.workflow-generator-request{box-sizing:border-box;width:100%;height:100%;min-height:150px', css)
         self.assertIn('overflow-wrap:anywhere', css)
+        self.assertNotIn('.workflow-generator-', self.studio_css)
 
     def test_generated_workflow_draft_has_explicit_edit_actions(self):
         ready = self.html[self.html.index('id="generateWorkflowReady"'):self.html.index('id="generateWorkflowFailed"')]
@@ -548,15 +559,15 @@ class LayoutRegressionTests(unittest.TestCase):
 
 
     def test_generated_prompt_editor_uses_independent_scroll_regions(self):
-        self.assertIn("#generateDraftPromptPanel { overflow: hidden; }", self.studio_css)
-        self.assertIn(".workflow-generator-prompt-list { min-height: 0; overflow-y: auto; overflow-x: hidden;", self.studio_css)
-        self.assertIn(".workflow-generator-prompt-editor { min-width: 0; min-height: 0; overflow: hidden;", self.studio_css)
-        self.assertIn("min-height: 0; overflow: auto; resize: none;", self.studio_css)
+        self.assertIn("#generateDraftPromptPanel { overflow: hidden; }", self.generator_css)
+        self.assertIn(".workflow-generator-prompt-list { min-height: 0; overflow-y: auto; overflow-x: hidden;", self.generator_css)
+        self.assertIn(".workflow-generator-prompt-editor { min-width: 0; min-height: 0; overflow: hidden;", self.generator_css)
+        self.assertIn("min-height: 0; overflow: auto; resize: none;", self.generator_css)
 
     def test_workflow_validation_details_do_not_overlay_stage_canvas(self) -> None:
         css = "".join(self.studio_css.split())
         self.assertIn(".studio-workflow-editor>.validation-output{grid-row:2", css)
-        self.assertIn(".validation-output{position:static", css)
+        self.assertIn(".validation-output{min-width:0;min-height:34px", css)
         self.assertNotIn(".validation-output{position:absolute", css)
 
     def test_studio_validation_is_one_line_with_details_dialog(self) -> None:
@@ -717,10 +728,13 @@ def test_runtime_polling_throttles_hidden_tabs_and_avoids_repaint():
     assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
     assert "startNonOverlappingPoll(refreshStudioGuard, 2500, 10000)" in script
     assert 'document.addEventListener("visibilitychange"' in script
-    assert "function animateRuntimeFrame() { if (!document.hidden) updateRuntimeFreshness(); }" in script
+    assert "function animateRuntimeFrame()" in script
+    assert "state.spinnerFrame = (state.spinnerFrame + 1)" in script
+    assert "if (document.hidden) return;" in script
     assert "runtimeRenderSignature(runtime)" in script
     assert "signature !== state.lastRuntimeSignature" in script
-    assert "if (state.runtimeRefreshPromise) return state.runtimeRefreshPromise;" in script
+    assert "state.runtimeRefreshProject === projectPath" in script
+    assert "state.project?.path !== projectPath" in script
     assert "if (state.projectRefreshPromise) return state.projectRefreshPromise;" in script
     assert "if (state.studioGuardRefreshPromise) return state.studioGuardRefreshPromise;" in script
     assert "setTextIfChanged(output, cliRuntimeText(runtime))" in script
@@ -770,7 +784,23 @@ def test_workflow_catalog_refresh_is_cached_and_non_overlapping():
     app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
     assert "studioFilesRefreshPromise" in app
     assert "Date.now() - state.studioCatalogLoadedAt" in app
-    assert "if (state.studioFilesRefreshPromise) return state.studioFilesRefreshPromise" in app
+    assert "state.studioFilesRefreshKey === key" in app
+    assert '(state.project?.path || "") !== projectPath' in app
+
+
+
+def test_project_async_actions_show_busy_feedback_and_prevent_duplicate_requests():
+    base = Path(__file__).resolve().parents[1] / "static"
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    css = base.joinpath("css", "projects.css").read_text(encoding="utf-8")
+    assert 'projectSwitching: false' in app
+    assert 'removingProjectPath: ""' in app
+    assert 'status.textContent = removing ? "REMOVING" : "OPENING"' in app
+    assert 'path.textContent = removing ? "Removing from UI…" : "Loading project…"' in app
+    assert 'withButtonBusy($("browseProjectButton"), "Opening…"' in app
+    assert 'withButtonBusy($("projectModalConfirm"), "Opening…"' in app
+    assert 'withButtonBusy($("flowMapButton"), "Loading…"' in app
+    assert '.project-tree.project-busy .project-root' in css
 
 def test_studio_validation_details_use_dedicated_compact_state():
     base = Path(__file__).resolve().parents[1] / "static"
@@ -817,3 +847,49 @@ def test_running_project_sidebar_shows_stage_and_progress_contract():
     assert '"runtime_stage"' in server
     assert '"runtime_completed_count"' in server
     assert '"runtime_total"' in server
+
+
+def test_motion_defaults_full_and_system_reduction_is_scoped():
+    base = Path(__file__).resolve().parents[1] / "static"
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    runner_css = base.joinpath("css", "runner-lite.css").read_text(encoding="utf-8")
+    generator_css = base.joinpath("css", "workflow-generator.css").read_text(encoding="utf-8")
+    assert 'let motion = "full"' in html
+    assert 'localStorage.getItem("ai-task-runner.motion")' in html
+    assert 'document.documentElement.dataset.motion = motion' in html
+    assert 'data-motion-option="full"' in html
+    assert 'data-motion-option="system"' in html
+    assert 'data-motion-option="reduced"' in html
+    assert 'MOTION_STORAGE_KEY = "ai-task-runner.motion"' in app
+    assert 'html[data-motion="system"] .cli-runtime-card.running::before' in runner_css
+    assert 'html[data-motion="reduced"] .cli-runtime-card.running::before' in runner_css
+    assert 'html[data-motion="system"] .workflow-builder-spinner' in generator_css
+
+
+def test_task_composer_exposes_model_and_locks_active_run_configuration():
+    base = Path(__file__).resolve().parents[1] / "static"
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    for token in ('id="modelInput"', 'id="currentModelText"', 'id="modelStatusButton"', 'id="runConfigLockNote"'):
+        assert token in html
+    assert 'model: $("modelInput")?.value.trim() || ""' in app
+    assert 'function runConfigurationLocked()' in app
+    assert 'state.runLaunching || state.runtime?.running || state.runtime?.resumable' in app
+    for control in ('workflowDropdownButton', 'backendDropdownButton', 'modelInput', 'browseValidatorButton', 'clearValidatorButton'):
+        assert control in app
+    assert 'rememberProjectPreference("model"' in app
+
+
+def test_validator_sits_next_to_options_and_composer_auto_grows_to_max_height():
+    base = Path(__file__).resolve().parents[1] / "static"
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    lifecycle = base.joinpath("js", "ui-lifecycle.js").read_text(encoding="utf-8")
+    options_at = html.index('id="optionsButton"')
+    validator_at = html.index('id="validatorPicker"')
+    error_at = html.index('id="errorText"')
+    assert options_at < validator_at < error_at
+    assert 'autosizeTextarea(ta, { minHeight: 46, maxHeight: 210 })' in app
+    assert 'textarea.scrollHeight' in lifecycle
+    assert 'overflow-y' in lifecycle

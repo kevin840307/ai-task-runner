@@ -15,9 +15,16 @@ from typing import Any
 
 import yaml
 
+# ``run.py`` is intentionally executable both as ``python workflow_builder/run.py``
+# and as an imported module.  When Python executes a file inside a subdirectory,
+# that subdirectory becomes sys.path[0] and the repository root is not guaranteed
+# to be importable.  Bootstrap the repo root before importing sibling package code.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from workflow_builder.runner_control import GenerationCancelled, run_with_recovery
 
-ROOT = Path(__file__).resolve().parents[1]
 BUILDER_ROOT = Path(__file__).resolve().parent
 BUILDER_WORKFLOW = BUILDER_ROOT / "workflow_builder.yaml"
 VALIDATOR = BUILDER_ROOT / "validation.py"
@@ -170,18 +177,28 @@ def _publish(
     output_prompt_dir.mkdir(parents=True, exist_ok=True)
 
     copied: list[Path] = []
+    backups: dict[Path, Path] = {}
+    tmp_workflow = output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp.yaml")
+
+    def backup_existing(target: Path) -> None:
+        if not (overwrite and target.exists()):
+            return
+        backup = target.with_name(target.name + ".workflow-builder.rollback")
+        if backup.exists():
+            backup.unlink()
+        os.replace(target, backup)
+        backups[target] = backup
+
     try:
         for source, target in prompt_sources.items():
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_name(target.name + ".workflow-builder.tmp")
             shutil.copy2(source, tmp)
-            if target.exists() and overwrite:
-                target.unlink()
+            backup_existing(target)
             os.replace(tmp, target)
             copied.append(target)
 
         text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
-        tmp_workflow = output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp.yaml")
         tmp_workflow.write_text(text, encoding="utf-8")
 
         result = subprocess.run(
@@ -196,8 +213,7 @@ def _publish(
         payload = json.loads(result.stdout)
         if not payload.get("closed"):
             raise ValueError("published-path dry-run matrix did not reach closure")
-        if output_workflow.exists() and overwrite:
-            output_workflow.unlink()
+        backup_existing(output_workflow)
         os.replace(tmp_workflow, output_workflow)
     except Exception:
         for path in copied:
@@ -206,10 +222,23 @@ def _publish(
             except OSError:
                 pass
         try:
-            output_workflow.with_name(output_workflow.name + ".workflow-builder.tmp.yaml").unlink()
+            tmp_workflow.unlink()
         except OSError:
             pass
+        for target, backup in reversed(list(backups.items())):
+            try:
+                if target.exists():
+                    target.unlink()
+                os.replace(backup, target)
+            except OSError:
+                pass
         raise
+    else:
+        for backup in backups.values():
+            try:
+                backup.unlink()
+            except OSError:
+                pass
 
     return {
         "workflow": str(output_workflow),

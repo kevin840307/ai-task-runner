@@ -13,3 +13,15 @@ def test_qwen_live_reliability_imports_from_tool_cwd():
 def test_workflow_dryrun_help_from_tool_cwd():
     p = subprocess.run([sys.executable, "workflow_dryrun.py", "--help"], cwd=ROOT / "tool", capture_output=True, text=True, timeout=30)
     assert p.returncode == 0, p.stderr
+
+
+def test_workflow_builder_help_from_builder_cwd():
+    p = subprocess.run(
+        [sys.executable, "run.py", "--help"],
+        cwd=ROOT / "workflow_builder",
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert p.returncode == 0, p.stderr
+    assert "Generate and validate an AI Task Runner Workflow package" in p.stdout

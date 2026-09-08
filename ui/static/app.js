@@ -1,3 +1,4 @@
+import { autosizeTextarea, setControlLocked, createLatestActionGate } from "./js/ui-lifecycle.js";
 const $ = (id) => document.getElementById(id);
 const t = (key, fallback = "") => window.I18n?.t(key, fallback) ?? fallback ?? key;
 const tf = (key, values = {}, fallback = "") => window.I18n?.format?.(key, values, fallback) ?? fallback ?? key;
@@ -12,7 +13,7 @@ function saveUiPreferences() { try { localStorage.setItem(UI_PREFS_KEY, JSON.str
 function currentProjectPreferences() {
   if (!state.preferences) state.preferences = loadUiPreferences();
   const path = state.project?.path || ""; if (!path) return {};
-  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", workflow: "", validators: {} });
+  return state.preferences.projects[path] || (state.preferences.projects[path] = { backend: "", model: "", workflow: "", validators: {} });
 }
 function rememberProjectPreference(key, value) { const prefs = currentProjectPreferences(); if (!state.project) return; prefs[key] = value; saveUiPreferences(); }
 function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
@@ -30,17 +31,28 @@ const state = {
   generateWorkflowDraft: null, generateWorkflowPromptIndex: 0, generateWorkflowReviewTab: "visual", generateWorkflowRequestText: "",
   generateWorkflowWorkspace: "", generateWorkflowWorkspacePattern: "",
   syntaxTimer: 0,
-  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, projectRefreshPromise: null, studioGuardRefreshPromise: null,
-  studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null,
+  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", projectRefreshPromise: null, studioGuardRefreshPromise: null,
+  studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", projectSwitching: false, removingProjectPath: "", studioSaving: false, studioValidating: false,
+  runLaunching: false,
 };
+const runActionGate = createLatestActionGate();
 
 const THEME_STORAGE_KEY = "ai-task-runner.theme";
 const APPEARANCE_STORAGE_KEY = "ai-task-runner.appearance";
+const MOTION_STORAGE_KEY = "ai-task-runner.motion";
 const THEME_VALUES = new Set(["teal", "blue", "violet", "amber", "rose"]);
 const APPEARANCE_VALUES = new Set(["system", "light", "dark"]);
+const MOTION_VALUES = new Set(["full", "system", "reduced"]);
 const systemColorScheme = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 function readThemePreference() { try { const value = localStorage.getItem(THEME_STORAGE_KEY); return THEME_VALUES.has(value) ? value : "teal"; } catch (_) { return "teal"; } }
 function readAppearancePreference() { try { const value = localStorage.getItem(APPEARANCE_STORAGE_KEY); return APPEARANCE_VALUES.has(value) ? value : "system"; } catch (_) { return "system"; } }
+function readMotionPreference() { try { const value = localStorage.getItem(MOTION_STORAGE_KEY); return MOTION_VALUES.has(value) ? value : "full"; } catch (_) { return "full"; } }
+function applyMotionPreference(value = readMotionPreference(), { persist = false } = {}) {
+  const motion = MOTION_VALUES.has(value) ? value : "full";
+  document.documentElement.dataset.motion = motion;
+  if (persist) { try { localStorage.setItem(MOTION_STORAGE_KEY, motion); } catch (_) {} }
+  renderThemeControls();
+}
 function resolvedAppearance(preference) { return preference === "system" ? (systemColorScheme?.matches ? "dark" : "light") : preference; }
 function applyThemePreferences(theme = readThemePreference(), appearance = readAppearancePreference(), { persist = false } = {}) {
   theme = THEME_VALUES.has(theme) ? theme : "teal"; appearance = APPEARANCE_VALUES.has(appearance) ? appearance : "system";
@@ -52,6 +64,8 @@ function renderThemeControls() {
   const theme = document.documentElement.dataset.theme || "teal", appearance = document.documentElement.dataset.appearancePreference || "system";
   document.querySelectorAll("[data-theme-option]").forEach((button) => { const active = button.dataset.themeOption === theme; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
   document.querySelectorAll("[data-appearance-option]").forEach((button) => { const active = button.dataset.appearanceOption === appearance; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
+  const motion = document.documentElement.dataset.motion || "full";
+  document.querySelectorAll("[data-motion-option]").forEach((button) => { const active = button.dataset.motionOption === motion; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
   const language = window.I18n?.getLanguage?.() || "zh-TW";
   document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
@@ -75,6 +89,7 @@ function payload(extra = {}) {
   return {
     project: state.project?.path || "",
     backend: $("backend").value,
+    model: $("modelInput")?.value.trim() || "",
     validator: workflow?.requires_python_validator ? $("validator").value.trim() : "",
     workflow: workflow?.path || "",
     ...extra,
@@ -115,6 +130,13 @@ function openValidationDetails() {
 function closeValidationDetails() { $("validationDetailsBackdrop").hidden = true; }
 function showActionError(message, fallback = "Action failed") {
   const summary = errorSummary(message, fallback); rememberErrorDetail(message, fallback); showToast(summary, "error", 3200);
+}
+async function withButtonBusy(button, busyLabel, action) {
+  if (!button || button.disabled) return undefined;
+  const original = button.textContent; button.disabled = true; button.setAttribute("aria-busy", "true");
+  if (busyLabel) button.textContent = busyLabel;
+  try { return await action(); }
+  finally { button.disabled = false; button.removeAttribute("aria-busy"); if (busyLabel) button.textContent = original; }
 }
 const confirmDialog = (options) => window.UiDialogs.confirm(options);
 const inputDialog = (options) => window.UiDialogs.input(options);
@@ -208,7 +230,10 @@ function renderProjects() {
   const labels = { running: "RUN", completed: "DONE", interrupted: "INT", stopped: "STOP", idle: "IDLE", missing: "MISS" };
   for (const project of state.projects) {
     const runtimeStatus = project.exists === false ? "missing" : (project.runtime_status || "idle");
+    const removing = state.removingProjectPath === project.path;
+    const opening = state.projectSwitching && state.project?.path === project.path;
     const row = document.createElement("div"); row.className = `project-tree project-row runtime-${runtimeStatus}`;
+    if (removing || opening) row.classList.add("project-busy");
     if (state.project?.path === project.path) row.classList.add("active");
     if (project.exists === false) row.classList.add("missing");
     const button = document.createElement("button"); button.className = "project-root"; button.type = "button";
@@ -217,9 +242,11 @@ function renderProjects() {
     const nameLine = document.createElement("span"); nameLine.className = "project-name-line";
     const name = document.createElement("strong"); name.textContent = project.name;
     nameLine.appendChild(name);
-    if (labels[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = labels[runtimeStatus]; nameLine.appendChild(status); }
+    if (removing || opening) { const status = document.createElement("span"); status.className = "project-runtime-label runtime-busy"; status.textContent = removing ? "REMOVING" : "OPENING"; nameLine.appendChild(status); }
+    else if (labels[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = labels[runtimeStatus]; nameLine.appendChild(status); }
     const path = document.createElement("small");
-    if (runtimeStatus === "running") {
+    if (removing || opening) { path.textContent = removing ? "Removing from UI…" : "Loading project…"; path.className = "project-runtime-detail"; path.title = project.path; }
+    else if (runtimeStatus === "running") {
       const stage = String(project.runtime_stage || "").trim() || "Working";
       const progress = project.runtime_total ? `${project.runtime_completed_count || 0}/${project.runtime_total}` : "";
       path.textContent = `${stage}${progress ? ` · ${progress}` : ""}`;
@@ -228,9 +255,9 @@ function renderProjects() {
     } else {
       path.textContent = project.exists === false ? `${t("project.missing", "Missing")} · ${project.path}` : project.path;
     }
-    copy.append(nameLine, path); button.append(mark, copy); button.onclick = () => project.exists === false ? null : selectProject(project);
+    copy.append(nameLine, path); button.append(mark, copy); button.disabled = removing || state.projectSwitching; button.onclick = () => project.exists === false ? null : selectProject(project);
 
-    const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>";
+    const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>"; menuButton.disabled = removing || state.projectSwitching;
     const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
     const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = t("project.remove", "Remove project");
     menu.appendChild(remove);
@@ -243,9 +270,10 @@ function renderProjects() {
       if (!(await confirmDiscardStudio())) return;
       const ok = await confirmDialog({ title: "Remove Project?", message: `Remove ${project.name} from this UI? Project files are not deleted.`, confirmLabel: "Remove Project", danger: true });
       if (!ok) return;
-      closeStageEditor(true); closeAddStageModal(true); closeProjectMenus();
+      closeStageEditor(true); closeAddStageModal(true); closeProjectMenus(); state.removingProjectPath = project.path; renderProjects();
       try { await api("/api/projects/remove", { method: "POST", body: JSON.stringify({ path: project.path }) }); if (state.project?.path === project.path) { state.project = null; showEmpty(); } await loadProjects(); showToast("Project removed"); }
       catch (error) { showAppError(error.message); showActionError(error.message, "Remove Project failed"); }
+      finally { if (state.removingProjectPath === project.path) state.removingProjectPath = ""; renderProjects(); }
     };
     row.append(button, menuButton, menu); root.appendChild(row);
   }
@@ -256,6 +284,7 @@ function showEmpty() {
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
 async function selectProject(project) {
+  if (!project || state.projectSwitching) return;
   state.lastRuntimeSignature = "";
   const changingProject = state.project?.path !== project.path;
   if (changingProject && state.studioFile?.scope === "project") {
@@ -263,18 +292,24 @@ async function selectProject(project) {
     clearStudioEditor();
   }
   if (state.view === "workflow" && !(await switchView("chat"))) return;
+  state.projectSwitching = true;
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
   if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
   $("projectName").textContent = project.name; $("projectPath").textContent = project.path; $("emptyState").hidden = true;
   $("summary").hidden = false; $("messages").hidden = false; $("composePanel").hidden = false; $("errorText").textContent = ""; requestAnimationFrame(syncComposerReserve);
-  await Promise.all([refreshMessages(), refreshRuntime(), refreshStudioFiles()]);
+  try {
+    await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path }), refreshStudioFiles({ force: true, projectPath: project.path })]);
+  } catch (error) { showActionError(error.message, "Project loading failed"); }
+  finally { state.projectSwitching = false; renderProjects(); }
 }
-async function refreshMessages({ forceFollow = false } = {}) {
-  if (!state.project) return;
+
+async function refreshMessages({ forceFollow = false, projectPath = state.project?.path || "" } = {}) {
+  if (!projectPath) return;
   const root = $("messages");
   const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
-  const data = await api(`/api/project/messages?project=${encodeURIComponent(state.project.path)}`);
+  const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`);
+  if (state.project?.path !== projectPath) return;
   const live = root.querySelector(".live-activity"); root.innerHTML = "";
   for (const message of data.messages || []) {
     const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant";
@@ -283,7 +318,7 @@ async function refreshMessages({ forceFollow = false } = {}) {
   if (live) root.appendChild(live);
   if (shouldFollow) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
 }
-const CLI_SPINNER_FRAMES = ["•"];
+const CLI_SPINNER_FRAMES = ["|", "/", "-", "\\"];
 function ensureLiveCard({ forceVisibleOnCreate = false } = {}) {
   const root = $("messages");
   let card = root.querySelector(".live-activity"); if (card) return card;
@@ -319,25 +354,35 @@ function renderLiveRuntimeHeader(runtime) {
   setTextIfChanged(card.querySelector(".live-title"), runtimeStatusLabel(runtime));
   setTextIfChanged(card.querySelector(".live-progress"), runtime.total ? `${runtime.completed_count || 0}/${runtime.total} TODO` : (runtime.console_snapshot_exists ? "CLI synced" : "State fallback")); updateRuntimeFreshness();
 }
-function animateRuntimeFrame() { if (!document.hidden) updateRuntimeFreshness(); }
+function animateRuntimeFrame() {
+  if (document.hidden) return;
+  state.spinnerFrame = (state.spinnerFrame + 1) % CLI_SPINNER_FRAMES.length;
+  renderCliRuntimeFrame();
+  updateRuntimeFreshness();
+  const indicator = $("messages")?.querySelector(".runtime-live-indicator");
+  if (indicator && state.runtime?.running) indicator.textContent = state.spinnerFrame % 2 ? "Live •" : "Live ·";
+}
 function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
   return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || []]);
 }
-async function refreshRuntime() {
-  if (!state.project) return;
-  if (state.runtimeRefreshPromise) return state.runtimeRefreshPromise;
-  state.runtimeRefreshPromise = (async () => {
+async function refreshRuntime({ projectPath = state.project?.path || "" } = {}) {
+  if (!projectPath) return;
+  if (state.runtimeRefreshPromise && state.runtimeRefreshProject === projectPath) return state.runtimeRefreshPromise;
+  const request = (async () => {
     try {
-      const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(state.project.path)}`);
+      const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`);
+      if (state.project?.path !== projectPath) return;
       state.runtime = runtime;
       const signature = runtimeRenderSignature(runtime);
       if (signature !== state.lastRuntimeSignature) { state.lastRuntimeSignature = signature; state.runtimeLastChangedAt = Date.now(); renderRuntime(runtime); }
-    } catch (error) { setTextIfChanged($("errorText"), error.message); }
-    finally { state.runtimeRefreshPromise = null; }
+    } catch (error) { if (state.project?.path === projectPath) setTextIfChanged($("errorText"), error.message); }
   })();
-  return state.runtimeRefreshPromise;
+  state.runtimeRefreshPromise = request; state.runtimeRefreshProject = projectPath;
+  try { return await request; }
+  finally { if (state.runtimeRefreshPromise === request) { state.runtimeRefreshPromise = null; state.runtimeRefreshProject = ""; } }
 }
+
 function formatFreshness(ts) {
   if (!ts) return "—"; const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (seconds < 5) return "just now"; if (seconds < 60) return `${seconds}s ago`; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes}m ago`; return `${Math.floor(minutes / 60)}h ago`;
@@ -367,6 +412,29 @@ function updateRuntimeFreshness() {
   const stale = Boolean(state.runtime?.running && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000); $("lastUpdateText")?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
+function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable); }
+function selectedModelLabel() {
+  const runtimeModel = state.runtime && (state.runtime.running || state.runtime.resumable) ? String(state.runtime.model || "").trim() : "";
+  const selected = String($("modelInput")?.value || "").trim();
+  return runtimeModel || selected || "Default";
+}
+function renderModelStatus() {
+  const label = selectedModelLabel();
+  setTextIfChanged($("currentModelText"), `Current · ${label === "Default" ? "Backend default" : label}`);
+  setTextIfChanged($("modelStatusButton"), `Model · ${label}`);
+}
+function renderRunConfigurationLock() {
+  const locked = runConfigurationLocked();
+  const reason = locked ? "Current task configuration is locked until Reset or completion." : "";
+  for (const id of ["workflowDropdownButton", "backendDropdownButton", "modelInput", "browseValidatorButton", "clearValidatorButton"]) setControlLocked($(id), locked, reason);
+  const select = $("workflowSelect"); if (select) select.disabled = locked;
+  $("workflowPicker")?.classList.toggle("configuration-locked", locked);
+  $("validatorPicker")?.classList.toggle("configuration-locked", locked);
+  if ($("runConfigLockNote")) $("runConfigLockNote").hidden = !locked;
+  if (locked) { closeWorkflowDropdown(); closeBackendDropdown(); }
+  renderModelStatus();
+}
+
 function renderRuntime(runtime) {
   const startedAt = Number(runtime.started_at || 0);
   if (runtime.running && startedAt) {
@@ -390,8 +458,9 @@ function renderRuntime(runtime) {
   $("resumeButton").hidden = runtime.running || !runtime.resumable;
   $("resetButton").hidden = runtime.running || !runtime.resumable;
   $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
-  const blockNew = runtime.running || runtime.resumable;
+  const blockNew = runtime.running || runtime.resumable || state.runLaunching;
   $("sendButton").disabled = blockNew; $("messageInput").disabled = blockNew;
+  renderRunConfigurationLock();
   $("messageInput").placeholder = "描述要完成的功能或修復內容...";
   if (runtime.running || runtime.resumable) {
     const card = ensureLiveCard({ forceVisibleOnCreate: true });
@@ -405,12 +474,23 @@ function renderRuntime(runtime) {
   if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
-function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; ta.style.height = "60px"; syncComposerReserve(); }
+function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; autosizeTextarea(ta, { minHeight: 46, maxHeight: 210 }); syncComposerReserve(); }
 async function sendMessage() {
-  const text = $("messageInput").value.trim(); if (!text || !state.project) return; $("errorText").textContent = "";
-  state.historyPinnedToBottom = true;
-  try { await api("/api/project/message", { method: "POST", body: JSON.stringify(payload({ message: text })) }); $("messageInput").value = ""; resizeComposerInput(); await refreshMessages({ forceFollow: true }); showToast("Task started"); setTimeout(refreshRuntime, 250); }
-  catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Task start failed"); }
+  const text = $("messageInput").value.trim(); if (!text || !state.project || runConfigurationLocked()) return; $("errorText").textContent = "";
+  const actionToken = runActionGate.begin();
+  state.runLaunching = true; state.historyPinnedToBottom = true; renderRunConfigurationLock(); renderRuntime(state.runtime || {});
+  try {
+    await api("/api/project/message", { method: "POST", body: JSON.stringify(payload({ message: text })) });
+    if (!runActionGate.isCurrent(actionToken)) return;
+    $("messageInput").value = ""; resizeComposerInput(); await refreshMessages({ forceFollow: true });
+    if (state.runtimeRefreshPromise) { try { await state.runtimeRefreshPromise; } catch (_) {} }
+    await refreshRuntime(); showToast("Task started");
+  } catch (error) {
+    if (!runActionGate.isCurrent(actionToken)) return;
+    $("errorText").textContent = error.message; showActionError(error.message, "Task start failed");
+  } finally {
+    if (runActionGate.isCurrent(actionToken)) { state.runLaunching = false; renderRunConfigurationLock(); if (state.runtime) renderRuntime(state.runtime); }
+  }
 }
 
 async function refreshBackends() {
@@ -441,9 +521,11 @@ function renderBackendPicker() {
     const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option);
     const button = document.createElement("button"); button.type = "button"; button.className = "workflow-dropdown-option backend-dropdown-option"; button.setAttribute("role", "option");
     button.innerHTML = `<span class="workflow-option-main"><strong></strong><small></small></span><span class="workflow-option-badge"></span>`; button.querySelector("strong").textContent = row.label; button.querySelector("small").textContent = row.meta; button.querySelector(".workflow-option-badge").textContent = row.badge;
-    button.onclick = () => { select.value = row.value; rememberProjectPreference("backend", row.value); closeBackendDropdown(); renderBackendPickerSelection(); }; menu.appendChild(button);
+    button.onclick = () => { if (runConfigurationLocked()) return; select.value = row.value; rememberProjectPreference("backend", row.value); closeBackendDropdown(); renderBackendPickerSelection(); }; menu.appendChild(button);
   }
-  select.value = [...select.options].some((o) => o.value === saved) ? saved : ""; renderBackendPickerSelection();
+  select.value = [...select.options].some((o) => o.value === saved) ? saved : "";
+  if ($("modelInput")) $("modelInput").value = String(prefs.model || "");
+  renderBackendPickerSelection(); renderModelStatus(); renderRunConfigurationLock();
 }
 function renderBackendPickerSelection() {
   const select = $("backend"), label = $("backendSelectedLabel"); if (!select || !label) return; label.textContent = select.options[select.selectedIndex]?.textContent || "Default backend";
@@ -451,23 +533,27 @@ function renderBackendPickerSelection() {
 }
 
 // ------------------------------ Workflow picker ------------------------------
-async function refreshStudioFiles({ force = false } = {}) {
-  const key = state.project?.path || "@global";
+async function refreshStudioFiles({ force = false, projectPath = state.project?.path || "" } = {}) {
+  const key = projectPath || "@global";
   const fresh = state.studioCatalogKey === key && state.studioCatalogLoadedAt && (Date.now() - state.studioCatalogLoadedAt) < 8000;
   if (!force && fresh) { renderStudioFiles(); renderWorkflowPicker(); return state.studioFiles; }
-  if (state.studioFilesRefreshPromise) return state.studioFilesRefreshPromise;
-  state.studioFilesRefreshPromise = (async () => {
+  if (state.studioFilesRefreshPromise && state.studioFilesRefreshKey === key) return state.studioFilesRefreshPromise;
+  const query = projectPath ? `&project=${encodeURIComponent(projectPath)}` : "";
+  const request = (async () => {
     try {
-      const data = await api(`/api/studio/files?x=1${projectQuery()}`);
+      const data = await api(`/api/studio/files?x=1${query}`);
+      if ((state.project?.path || "") !== projectPath) return state.studioFiles;
       state.studioFiles = data; state.studioGuard = data.guard || { editable: true, active_projects: [] };
       state.studioCatalogKey = key; state.studioCatalogLoadedAt = Date.now();
       renderStudioGuard(); renderStudioFiles(); renderWorkflowPicker(); fillAddStagePromptOptions(); refreshPromptTags();
       return data;
-    } catch (error) { setStudioStatus(error.message, true); return state.studioFiles; }
-    finally { state.studioFilesRefreshPromise = null; }
+    } catch (error) { if ((state.project?.path || "") === projectPath) setStudioStatus(error.message, true); return state.studioFiles; }
   })();
-  return state.studioFilesRefreshPromise;
+  state.studioFilesRefreshPromise = request; state.studioFilesRefreshKey = key;
+  try { return await request; }
+  finally { if (state.studioFilesRefreshPromise === request) { state.studioFilesRefreshPromise = null; state.studioFilesRefreshKey = ""; } }
 }
+
 function closeWorkflowDropdown() {
   const menu = $("workflowDropdownMenu"), picker = $("workflowPicker"), button = $("workflowDropdownButton"); if (!menu || !picker || !button) return;
   menu.hidden = true; menu.classList.remove("workflow-dropdown-portal"); menu.removeAttribute("style");
@@ -505,12 +591,12 @@ function renderWorkflowPickerSelection() {
   const value = $("workflowSelect")?.value || "";
   document.querySelectorAll("#workflowDropdownMenu .workflow-dropdown-option").forEach((button, index) => { const active = $("workflowSelect")?.options[index]?.value === value; button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active)); });
   const workflow = selectedWorkflowItem();
-  const validatorPicker = $("validatorPicker"), composerTopbar = $("composerTopbar"), input = $("validator");
+  const validatorPicker = $("validatorPicker"), input = $("validator");
   if (validatorPicker) validatorPicker.hidden = !workflow?.requires_python_validator;
-  if (composerTopbar) composerTopbar.hidden = !workflow?.requires_python_validator;
   if (input && state.validatorWorkflowPath !== value) { const validators = currentProjectPreferences().validators || {}; input.value = workflow?.requires_python_validator ? String(validators[value] || "") : ""; state.validatorWorkflowPath = value; }
   if (!workflow?.requires_python_validator && input) { input.value = ""; state.validatorWorkflowPath = ""; }
   updateValidatorPicker();
+  renderRunConfigurationLock();
   syncComposerReserve();
 }
 function updateValidatorPicker() {
@@ -518,10 +604,10 @@ function updateValidatorPicker() {
   const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value;
 }
 async function browseValidator() {
-  const button = $("browseValidatorButton"); if (!button) return; const original = button.textContent; button.disabled = true; button.textContent = "Choosing…";
+  const button = $("browseValidatorButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "Choosing…";
   try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "python" }) }); if (!result.cancelled && result.path) { $("validator").value = result.path; rememberValidator($("workflowSelect")?.value || "", result.path); updateValidatorPicker(); showToast("Python validator selected"); } }
   catch (error) { showToast(error.message, "error", 3200); }
-  finally { button.disabled = false; button.textContent = original; }
+  finally { button.textContent = original; renderRunConfigurationLock(); }
 }
 
 // ------------------------------ Workflow Studio ------------------------------
@@ -1147,7 +1233,9 @@ async function refreshStudioGuard() {
   return state.studioGuardRefreshPromise;
 }
 async function saveStudio() {
-  if (!state.studioFile || !state.studioGuard.editable) return;
+  if (!state.studioFile || !state.studioGuard.editable || state.studioSaving) return;
+  const button = $("saveStudioButton"), originalLabel = button?.textContent || "Save"; state.studioSaving = true;
+  if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = "Saving…"; }
   try {
     if (state.studioFile.kind === "workflow" && state.studioMode === "visual") return await saveVisualFlow(); if (!state.studioDirty) return;
     const content = currentEditorContent();
@@ -1156,15 +1244,19 @@ async function saveStudio() {
     const data = await api("/api/studio/save", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", content, hash: state.studioHash }) });
     state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; state.visualDirty = false; if (data.kind === "workflow") { $("studioTextarea").value = data.content; state.visual = await api(`/api/studio/visual?id=${encodeURIComponent(data.id)}${projectQuery()}`); } else $("studioPromptTextarea").value = data.content; renderVisualDesigner(); updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus("Saved"); showToast(data.kind === "prompt" ? "Prompt saved" : "Workflow saved");
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, state.studioFile?.kind === "prompt" ? "Prompt save failed" : "Workflow save failed"); }
+  finally { state.studioSaving = false; if (button) { button.removeAttribute("aria-busy"); button.textContent = originalLabel; } updateDirtyState(); }
 }
+
 async function reloadStudio() { if (!state.studioFile || !(await confirmDiscardStudio())) return; await openStudioFile(state.studioFile); }
 async function validateStudio() {
-  if (!state.studioFile) return;
+  if (!state.studioFile || state.studioValidating) return;
   const body = { id: state.studioFile.id, project: state.project?.path || "" };
   const prompt = state.studioFile.kind === "prompt";
   if (prompt) body.content = $("studioPromptTextarea").value;
   else if (state.studioMode === "visual") body.flow = state.visual?.flow || [];
   else body.content = $("studioTextarea").value;
+  const button = $("validateStudioButton"), originalLabel = button?.textContent || "Validate"; state.studioValidating = true;
+  if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = "Validating…"; }
   try {
     setStudioStatus(`Validating current ${prompt ? "Prompt" : "Workflow"} draft…`);
     const result = await api("/api/studio/validate", { method: "POST", body: JSON.stringify(body) });
@@ -1179,7 +1271,9 @@ async function validateStudio() {
       setStudioStatus(detail, true); showToast(`${prompt ? "Prompt" : "Workflow"} validation failed`, "error", 3200);
     }
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${prompt ? "Prompt" : "Workflow"} validation failed`); }
+  finally { state.studioValidating = false; if (button) { button.removeAttribute("aria-busy"); button.textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; button.disabled = !state.studioFile; } }
 }
+
 function setStudioStatus(text, error = false) {
   const detail = String(text || "").trim();
   state.studioErrorDetail = error ? detail : "";
@@ -1192,17 +1286,25 @@ async function confirmDiscardStudio() {
 }
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
-function fillCustomFolderSelect(kind, selectId, selected = "") {
+function fillCustomFolderSelect(kind, selectId, selected = "", destination = "custom") {
   const select = $(selectId); if (!select) return;
-  const folders = state.studioFiles?.custom_folders?.[kind] || [""];
+  const folders = destination === "project" ? (state.studioFiles?.project_folders || []) : (state.studioFiles?.custom_folders?.[kind] || [""]);
   select.innerHTML = "";
+  if (destination === "project" && !folders.length) { const option = document.createElement("option"); option.value = ""; option.textContent = "No Project Workflow folders"; select.appendChild(option); return; }
   folders.forEach((folder) => { const option = document.createElement("option"); option.value = folder; option.textContent = folder || "Custom root"; select.appendChild(option); });
   if ([...select.options].some((o) => o.value === selected)) select.value = selected;
 }
 function syncCustomFolderVisibility(kind) {
   const workflow = kind === "workflow"; const destination = $(workflow ? "newWorkflowDestination" : "newPromptDestination")?.value;
-  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow"); const createRow = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow");
-  const custom = destination === "custom"; if (row) row.hidden = !custom; if (!custom && createRow) createRow.hidden = true;
+  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow"); const createRow = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow"); const toggle = $(workflow ? "newWorkflowFolderToggle" : "newPromptFolderToggle");
+  const custom = destination === "custom";
+  // Project Workflows get an owned folder automatically from the filename. Project Prompts must attach to an existing owned Workflow folder.
+  if (row) row.hidden = workflow ? !custom : !(custom || destination === "project");
+  if (toggle) toggle.hidden = !custom;
+  if (!custom && createRow) createRow.hidden = true;
+  if (!workflow && destination === "project") fillCustomFolderSelect("prompt", "newPromptFolder", "", "project");
+  else if (custom) fillCustomFolderSelect(kind, workflow ? "newWorkflowFolder" : "newPromptFolder", "", "custom");
+  const label = row?.querySelector(".designer-label"); if (label) label.textContent = destination === "project" ? "Workflow folder" : "Custom folder";
 }
 async function createCustomFolder(kind) {
   const workflow = kind === "workflow"; const input = $(workflow ? "newWorkflowFolderName" : "newPromptFolderName"); const selectId = workflow ? "newWorkflowFolder" : "newPromptFolder"; const row = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow");
@@ -1258,6 +1360,7 @@ async function readImportAssetFile() {
   const file = $("importAssetFile").files?.[0]; if (!file) return;
   $("importAssetFileName").textContent = file.name; state.importAssetDirty = true;
   if (state.studioSourceKind === "workflow") {
+    $("importAssetHint").classList.remove("error"); $("importAssetHint").textContent = "Reading and inspecting Workflow folder…"; $("importAssetPreview").textContent = "Inspecting package…";
     if (!file.name.toLowerCase().endsWith(".zip")) { $("importAssetHint").textContent = "Workflow import supports folder ZIP packages only."; $("importAssetHint").classList.add("error"); return; }
     try {
       const content = bytesToBase64(new Uint8Array(await file.arrayBuffer())); $("importAssetContent").value = content;
@@ -1270,6 +1373,8 @@ async function readImportAssetFile() {
   const text = await file.text(); const parsed = parseImportedText(text, file.name); $("importAssetName").value = parsed.name || file.name; $("importAssetContent").value = parsed.content; $("importAssetHint").textContent = "File loaded. Import will validate the Prompt before writing."; $("importAssetPreview").textContent = `${(parsed.content || "").split("\n").length} lines ready to validate.`;
 }
 async function confirmImportAsset() {
+  const importButton = $("importAssetConfirm"); if (importButton?.disabled) return; importButton.disabled = true; importButton.setAttribute("aria-busy", "true"); const importLabel = importButton.textContent; importButton.textContent = "Importing…";
+  try {
   if (state.studioSourceKind === "workflow") {
     if (!state.importFolderInfo || !$("importAssetContent").value) { $("importAssetHint").textContent = "Choose a valid Workflow folder ZIP first."; $("importAssetHint").classList.add("error"); return; }
     const info = state.importFolderInfo;
@@ -1279,25 +1384,43 @@ async function confirmImportAsset() {
     return;
   }
   const parsed = parseImportedText($("importAssetContent").value, $("importAssetName").value.trim());
-  try { const result = await api("/api/studio/import", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", kind: "prompt", name: parsed.name || $("importAssetName").value.trim(), content: parsed.content, destination: $("importAssetDestination").value }) }); closeImportAssetModal(true); await refreshStudioFiles({ force: true }); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast("Prompt imported"); }
+  const importDestination = $("importAssetDestination").value;
+  let projectFolder = "";
+  if (importDestination === "project") {
+    const selectedPath = String(state.studioFile?.path || "").replaceAll("\\", "/");
+    const marker = "/.ai-task-runner/workflows/"; const at = selectedPath.indexOf(marker);
+    if (at >= 0) { const rest = selectedPath.slice(at + marker.length); projectFolder = rest.split("/workflow/")[0].split("/prompts/")[0]; }
+    if (!projectFolder) projectFolder = state.studioFiles?.project_folders?.[0] || "";
+    if (!projectFolder) { $("importAssetHint").textContent = "Create or select a Project Workflow folder before importing a Project Prompt."; $("importAssetHint").classList.add("error"); return; }
+  }
+  try { const result = await api("/api/studio/import", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", kind: "prompt", name: parsed.name || $("importAssetName").value.trim(), content: parsed.content, destination: importDestination, folder: projectFolder }) }); closeImportAssetModal(true); await refreshStudioFiles({ force: true }); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast("Prompt imported"); }
   catch (error) { $("importAssetHint").textContent = error.message; $("importAssetHint").classList.add("error"); showActionError(error.message, "Import failed"); }
+  } finally { if (importButton) { importButton.disabled = false; importButton.removeAttribute("aria-busy"); importButton.textContent = importLabel; } }
 }
 async function exportStudioAsset() {
   if (!state.studioFile) return;
-  try {
-    const data = await api(`/api/studio/export?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`); const name = String(data.name || "export.dat"); let blob;
-    if (data.kind === "workflow_folder" && data.encoding === "base64") { const binary = atob(String(data.content || "")); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i); blob = new Blob([bytes], { type: data.mime || "application/zip" }); }
-    else { const ext = name.toLowerCase().split(".").pop(); const mime = ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8"; blob = new Blob([String(data.content ?? "")], { type: mime }); }
-    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    if (data.kind === "workflow_folder") showToast(`Folder exported · ${data.workflow_path}`); else showToast("Prompt exported");
-  } catch (error) { showActionError(error.message, "Export failed"); }
+  const button = $("exportStudioButton");
+  await withButtonBusy(button, "Exporting…", async () => {
+    try {
+      const data = await api(`/api/studio/export?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`); const name = String(data.name || "export.dat"); let blob;
+      if (data.kind === "workflow_folder" && data.encoding === "base64") { const binary = atob(String(data.content || "")); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i); blob = new Blob([bytes], { type: data.mime || "application/zip" }); }
+      else { const ext = name.toLowerCase().split(".").pop(); const mime = ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8"; blob = new Blob([String(data.content ?? "")], { type: mime }); }
+      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      if (data.kind === "workflow_folder") showToast(`Folder exported · ${data.workflow_path}`); else showToast("Prompt exported");
+    } catch (error) { showActionError(error.message, "Export failed"); }
+  });
 }
+
 async function deleteStudioAsset() {
   if (!state.studioFile || state.studioFile.readonly) return; const current = state.studioFile; const label = current.kind === "prompt" ? "Prompt" : "Workflow";
   if (!(await confirmDialog({ title: `Delete ${label}?`, message: `Delete ${current.name}?${current.kind === "prompt" ? " Deletion is blocked if any Workflow Stage still uses this Prompt." : ""}`, confirmLabel: `Delete ${label}`, danger: true }))) return;
-  try { await api("/api/studio/delete", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "" }) }); clearStudioEditor(); await refreshStudioFiles({ force: true }); showToast(`${label} deleted`); }
-  catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} deletion failed`); }
+  const button = $("deleteStudioButton");
+  await withButtonBusy(button, "Deleting…", async () => {
+    try { closeStudioAssetMenu(); await api("/api/studio/delete", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "" }) }); clearStudioEditor(); await refreshStudioFiles({ force: true }); showToast(`${label} deleted`); }
+    catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} deletion failed`); }
+  });
 }
+
 
 async function toggleWorkflowVisibility() {
   const item = state.studioFile; if (!item || item.kind !== "workflow") return;
@@ -1327,11 +1450,13 @@ async function duplicateStudioAsset() {
 
 async function openWorkflowFlowMap() {
   if (!state.studioFile || state.studioFile.kind !== "workflow") return;
-  try {
-    const graph = await api(`/api/studio/graph?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`);
-    $("flowMapBackdrop").hidden = false;
-    window.WorkflowFlowMap.render($("flowMapCanvas"), graph);
-  } catch (error) { showActionError(error.message, "Flow Map failed"); }
+  await withButtonBusy($("flowMapButton"), "Loading…", async () => {
+    try {
+      const graph = await api(`/api/studio/graph?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`);
+      $("flowMapBackdrop").hidden = false;
+      window.WorkflowFlowMap.render($("flowMapCanvas"), graph);
+    } catch (error) { showActionError(error.message, "Flow Map failed"); }
+  });
 }
 function closeWorkflowFlowMap() { $("flowMapBackdrop").hidden = true; }
 
@@ -1592,13 +1717,17 @@ function openProjectModal() { $("projectPathInput").value = ""; $("projectModalH
 function closeProjectModal() { $("projectModalBackdrop").hidden = true; }
 async function browseProject() {
   $("projectModalHint").textContent = "Opening folder picker…";
-  try { const result = await api("/api/projects/pick", { method: "POST", body: "{}" }); if (!result.cancelled && result.path) { $("projectPathInput").value = result.path; $("projectModalHint").textContent = t("project.folder_selected", "Folder selected. Click Open Project to add it."); } else $("projectModalHint").textContent = t("project.folder_cancelled", "Folder selection cancelled."); }
-  catch (error) { $("projectModalHint").textContent = `${error.message} · You can still paste the folder path.`; $("projectModalHint").classList.add("error"); }
+  await withButtonBusy($("browseProjectButton"), "Opening…", async () => {
+    try { const result = await api("/api/projects/pick", { method: "POST", body: "{}" }); if (!result.cancelled && result.path) { $("projectPathInput").value = result.path; $("projectModalHint").textContent = t("project.folder_selected", "Folder selected. Click Open Project to add it."); } else $("projectModalHint").textContent = t("project.folder_cancelled", "Folder selection cancelled."); }
+    catch (error) { $("projectModalHint").textContent = `${error.message} · You can still paste the folder path.`; $("projectModalHint").classList.add("error"); }
+  });
 }
 async function confirmProjectModal() {
   const path = $("projectPathInput").value.trim(); if (!path) { $("projectModalHint").textContent = "Project path is required."; $("projectModalHint").classList.add("error"); return; }
-  try { const added = await api("/api/projects/add", { method: "POST", body: JSON.stringify({ path }) }); closeProjectModal(); await loadProjects(); const picked = state.projects.find((p) => p.path === added.path); if (picked) await selectProject(picked); showToast("Project added"); }
-  catch (error) { $("projectModalHint").textContent = error.message; $("projectModalHint").classList.add("error"); showActionError(error.message, "Add Project failed"); }
+  await withButtonBusy($("projectModalConfirm"), "Opening…", async () => {
+    try { const added = await api("/api/projects/add", { method: "POST", body: JSON.stringify({ path }) }); closeProjectModal(); await loadProjects(); const picked = state.projects.find((p) => p.path === added.path); if (picked && state.project?.path !== picked.path) await selectProject(picked); showToast("Project added"); }
+    catch (error) { $("projectModalHint").textContent = error.message; $("projectModalHint").classList.add("error"); showActionError(error.message, "Add Project failed"); }
+  });
 }
 
 // ------------------------------ handlers ------------------------------
@@ -1638,8 +1767,8 @@ $("generateWorkflowDestination")?.addEventListener("change", updateGenerateWorkf
 $("generateWorkflowFailedCancel").onclick = () => leaveGenerateWorkflowPage();
 $("generateWorkflowRetry").onclick = async () => { const request = state.generateWorkflowRequestText || $("generateWorkflowRequest").value; if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} } resetGenerateWorkflowState({ keepRequest: true }); state.generateWorkflowRequestText = request; $("generateWorkflowRequest").value = request; fillGenerateWorkflowBackends(); setGenerateWorkflowPhase("form"); };
 $("generateWorkflowSaveClose").onclick = closeGenerateWorkflowSaveModal; $("generateWorkflowSaveCancel").onclick = closeGenerateWorkflowSaveModal; $("generateWorkflowSaveConfirm").onclick = saveGenerateWorkflowDraft; $("generateWorkflowSaveBackdrop").addEventListener("click", (e) => { if (e.target === $("generateWorkflowSaveBackdrop")) closeGenerateWorkflowSaveModal(); });
-$("workflowDropdownButton").onclick = (event) => { event.stopPropagation(); const menu = $("workflowDropdownMenu"); menu.hidden ? openWorkflowDropdown() : closeWorkflowDropdown(); };
-$("backendDropdownButton").onclick = (event) => { event.stopPropagation(); const menu = $("backendDropdownMenu"); menu.hidden ? openBackendDropdown() : closeBackendDropdown(); };
+$("workflowDropdownButton").onclick = (event) => { event.stopPropagation(); if (runConfigurationLocked()) return; const menu = $("workflowDropdownMenu"); menu.hidden ? openWorkflowDropdown() : closeWorkflowDropdown(); };
+$("backendDropdownButton").onclick = (event) => { event.stopPropagation(); if (runConfigurationLocked()) return; const menu = $("backendDropdownMenu"); menu.hidden ? openBackendDropdown() : closeBackendDropdown(); };
 function renderEnvironmentCheck(data) {
   const root = $("environmentCheckResult"); if (!root) return; root.hidden = false; root.innerHTML = "";
   const head = document.createElement("div"); head.className = `environment-check-summary ${data.status || ""}`; head.textContent = data.status === "pass" ? "Environment ready" : data.status === "warn" ? "Environment ready with warnings" : "Environment check failed"; root.appendChild(head);
@@ -1670,11 +1799,16 @@ $("themeButton").onclick = toggleThemePanel;
 $("themeCloseButton").onclick = closeThemePanel;
 document.querySelectorAll("[data-theme-option]").forEach((button) => { button.onclick = () => applyThemePreferences(button.dataset.themeOption, document.documentElement.dataset.appearancePreference || "system", { persist: true }); });
 document.querySelectorAll("[data-appearance-option]").forEach((button) => { button.onclick = () => applyThemePreferences(document.documentElement.dataset.theme || "teal", button.dataset.appearanceOption, { persist: true }); });
+document.querySelectorAll("[data-motion-option]").forEach((button) => { button.onclick = () => applyMotionPreference(button.dataset.motionOption, { persist: true }); });
 document.querySelectorAll("[data-language-option]").forEach((button) => { button.onclick = () => { window.I18n?.setLanguage?.(button.dataset.languageOption, { persist: true }); renderThemeControls(); renderProjects(); }; });
 window.addEventListener("app-language-changed", () => { renderThemeControls(); if (state?.projects) renderProjects(); });
 if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document.documentElement.dataset.appearancePreference || "system") === "system") applyThemePreferences(document.documentElement.dataset.theme || "teal", "system"); }; if (systemColorScheme.addEventListener) systemColorScheme.addEventListener("change", onSystemAppearanceChanged); else if (systemColorScheme.addListener) systemColorScheme.addListener(onSystemAppearanceChanged); }
-applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference());
-$("sendButton").onclick = sendMessage; $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
+$("sendButton").onclick = sendMessage;
+$("modelInput").addEventListener("input", () => { if (runConfigurationLocked()) return; rememberProjectPreference("model", $("modelInput").value.trim()); renderModelStatus(); });
+$("modelInput").addEventListener("change", () => { if (!runConfigurationLocked()) rememberProjectPreference("model", $("modelInput").value.trim()); renderModelStatus(); });
+$("modelStatusButton").onclick = () => { if ($("optionsPanel").hidden) toggleOptionsPanel(); setTimeout(() => $("modelInput")?.focus(), 0); };
+$("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
   const ok = await confirmDialog({ title: t("history.confirm_title", "Clear chat history?"), message: t("history.confirm_message", "Delete this Project's saved chat history?"), confirmLabel: t("history.clear", "Clear history"), danger: true });
@@ -1688,7 +1822,7 @@ $("clearHistoryButton").onclick = async () => {
 };
 $("messages").addEventListener("scroll", () => { state.historyPinnedToBottom = historyNearBottom($("messages")); }, { passive: true });
 $("browseValidatorButton").onclick = browseValidator;
-$("clearValidatorButton").onclick = () => { $("validator").value = ""; rememberValidator($("workflowSelect")?.value || "", ""); updateValidatorPicker(); };
+$("clearValidatorButton").onclick = () => { if (runConfigurationLocked()) return; $("validator").value = ""; rememberValidator($("workflowSelect")?.value || "", ""); updateValidatorPicker(); };
 $("errorDetailsButton").onclick = showErrorDetails;
 $("validationDetailsButton").onclick = openValidationDetails;
 $("validationDetailsClose").onclick = closeValidationDetails;
@@ -1709,7 +1843,7 @@ $("resetButton").onclick = async () => {
 $("rerunButton").onclick = async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } };
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
-state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
+state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); renderModelStatus(); if (window.ResizeObserver) new ResizeObserver(syncComposerReserve).observe($("composePanel")); window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);

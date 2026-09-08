@@ -7,7 +7,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..utils.files import copy_path, digest, remove_path
+from ..utils.files import copy_path, digest, io_path, remove_path
 
 READONLY_EXCLUDE_DIRS = frozenset({
     ".git", ".ai-task-runner", ".idea", ".venv", ".vs", "__pycache__",
@@ -26,12 +26,13 @@ def excluded_dirs(root: Path, work: Path) -> set[str]:
 
 def tree_manifest(root: Path, excluded: set[str]) -> dict[str, tuple[str, str | None]]:
     result: dict[str, tuple[str, str | None]] = {}
-    for current, directories, files in os.walk(root, followlinks=False):
+    walk_root = io_path(root)
+    for current, directories, files in os.walk(walk_root, followlinks=False):
         base = Path(current)
         directories[:] = [name for name in directories if name not in excluded]
         for name in list(directories):
             path = base / name
-            relative = path.relative_to(root).as_posix()
+            relative = path.relative_to(walk_root).as_posix()
             if path.is_symlink():
                 result[relative] = ("link", os.readlink(path))
                 directories.remove(name)
@@ -39,7 +40,7 @@ def tree_manifest(root: Path, excluded: set[str]) -> dict[str, tuple[str, str | 
                 result[relative] = ("dir", "")
         for name in files:
             path = base / name
-            relative = path.relative_to(root).as_posix()
+            relative = path.relative_to(walk_root).as_posix()
             result[relative] = (
                 "link" if path.is_symlink() else "file",
                 os.readlink(path) if path.is_symlink() else digest(path),
@@ -69,7 +70,8 @@ def restore_project_changes(root: Path, backup: Path, changed: Sequence[str]) ->
         remove_path(root / relative)
     for relative in sorted(paths, key=lambda value: len(value.parts)):
         source, target = backup / relative, root / relative
-        if not (target.exists() or target.is_symlink()) and (source.exists() or source.is_symlink()):
+        target_io, source_io = io_path(target), io_path(source)
+        if not (target_io.exists() or target_io.is_symlink()) and (source_io.exists() or source_io.is_symlink()):
             copy_path(source, target)
 
 

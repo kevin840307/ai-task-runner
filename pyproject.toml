@@ -48,3 +48,6 @@ version = {attr = "runner.version.__version__"}
 "runner.workflow.system" = ["*.yaml"]
 "runner.workflow.custom" = ["*.yaml"]
 "workflow_builder" = ["*.yaml", "*.md"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

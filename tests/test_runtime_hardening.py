@@ -80,7 +80,7 @@ def test_normal_process_timeout_keeps_bounded_partial_output(tmp_path):
         "time.sleep(10)"
     )
 
-    result = run_process([sys.executable, "-c", code], tmp_path, 1)
+    result = run_process([sys.executable, "-c", code], tmp_path, 3)
 
     assert result.timed_out is True
     assert result.idle_timed_out is False

@@ -439,9 +439,11 @@ body {
 .project-list { padding-left: 8px; }
 .project-root { padding-left: 15px; }
 .project-runtime-label.runtime-idle { color: #64748b; background: #eef2f6; }
+html[data-motion="reduced"] .project-row.runtime-running .project-mark::after,
+html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .project-row.runtime-running .project-mark::after,
-  .cli-runtime-card.running .live-dot { animation: none !important; }
+  html[data-motion="system"] .project-row.runtime-running .project-mark::after,
+  html[data-motion="system"] .cli-runtime-card.running .live-dot { animation: none !important; }
 }
 
 /* Round 11: runtime feedback belongs in the conversation, not the input box. */
@@ -784,7 +786,8 @@ body {
   animation: runtimeActivitySweep 1.05s linear infinite; will-change: transform;
 }
 @keyframes runtimeActivitySweep { from { transform: translateX(-115%); } to { transform: translateX(340%); } }
-@media (prefers-reduced-motion: reduce) { .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; } }
+html[data-motion="reduced"] .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; }
+@media (prefers-reduced-motion: reduce) { html[data-motion="system"] .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; } }
 .cli-runtime-card.running .live-dot { animation: liveRuntimePulse 1.15s ease-out infinite; }
 .live-activity-head .live-progress { margin-left: auto; }
 .live-activity-head .live-updated { margin-left: 6px; color: var(--muted); font-weight: 600; }
@@ -859,4 +862,50 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(94,234,212,0); }
 }
 .runtime-elapsed strong { font-variant-numeric: tabular-nums; }
-@media (prefers-reduced-motion: reduce) { .cli-runtime-card.running .runtime-live-indicator::before { animation: none; } }
+html[data-motion="reduced"] .cli-runtime-card.running .runtime-live-indicator::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { html[data-motion="system"] .cli-runtime-card.running .runtime-live-indicator::before { animation: none; } }
+
+
+/* Motion, model selection, immutable active-run settings, and ChatGPT-style composer growth. */
+html[data-motion="full"] { --motion-fast: 140ms; --motion-normal: 220ms; --motion-slow: 360ms; }
+html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion-slow: 0ms; }
+
+.composer-box textarea#messageInput {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 210px !important;
+  overflow-y: hidden !important;
+  resize: none;
+  transition: height var(--motion-fast, 140ms) ease, border-color var(--motion-fast, 140ms) ease, box-shadow var(--motion-fast, 140ms) ease;
+}
+.composer-validator-picker {
+  min-width: 0;
+  max-width: min(330px, 36vw);
+  height: 29px;
+  min-height: 29px;
+  padding: 0 8px;
+  flex: 0 1 auto;
+}
+.composer-validator-picker .compact-file-picker { min-width: 0; display: flex; align-items: center; gap: 4px; }
+.composer-validator-picker input { min-width: 72px; max-width: 150px; text-overflow: ellipsis; }
+.composer-validator-picker .file-choice-button.compact { min-height: 24px; padding: 0 7px; font-size: 10px; }
+.model-status-chip {
+  min-height: 29px;
+  max-width: 190px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.model-status-chip:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 36%, var(--line)); }
+.model-option-field input#modelInput { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.current-model-text { color: var(--muted); font-size: 10px; font-weight: 650; overflow-wrap: anywhere; }
+.run-config-lock-note { padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 1.4; }
+.configuration-locked { opacity: .72; }
+#composePanel button:disabled, #composePanel input:disabled { cursor: not-allowed; }
+@media (max-width: 900px) { .composer-validator-picker { max-width: 260px; } .model-status-chip { max-width: 145px; } }
+@media (max-width: 720px) { .composer-validator-picker { width: auto; min-width: 210px; max-width: 250px; } .model-status-chip { display: none; } }

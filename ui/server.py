@@ -22,9 +22,11 @@ from urllib.parse import parse_qs, urlparse
 try:
     from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from .workflow_graph import build_workflow_graph
+    from .workflow_storage import (iter_project_packages, project_package_for_asset, project_package_folders, project_package_prompt_dir, project_package_workflow_dir, project_workflow_root)
 except ImportError:  # direct ui/main.py execution
     from workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from workflow_graph import build_workflow_graph
+    from workflow_storage import (iter_project_packages, project_package_for_asset, project_package_folders, project_package_prompt_dir, project_package_workflow_dir, project_workflow_root)
 
 UI_STATE_DIR = ".ai-task-runner/ui"
 MESSAGES_FILE = "messages.jsonl"
@@ -429,10 +431,39 @@ class UIState:
             str(console.get("detail") or "") if isinstance(console, dict) else "",
         ), False
 
+    @staticmethod
+    def _normalize_model(value: str) -> str:
+        model = str(value or "").strip()
+        if len(model) > 200 or any(ord(ch) < 32 for ch in model):
+            raise ValueError("Model name is invalid")
+        return model
+
+    @classmethod
+    def _model_cli_args(cls, value: str) -> list[str]:
+        model = cls._normalize_model(value)
+        return [] if not model else ["--agent-arg=--model", f"--agent-arg={model}"]
+
+    def _latest_run_request(self, project: Path) -> dict:
+        requests = project / UI_STATE_DIR / "requests"
+        if not requests.is_dir():
+            return {}
+        candidates: list[tuple[int, Path]] = []
+        for path in requests.glob("*/request.json"):
+            try:
+                candidates.append((path.stat().st_mtime_ns, path))
+            except OSError:
+                continue
+        for _, path in sorted(candidates, reverse=True):
+            data = self._read_json(path) or {}
+            if isinstance(data, dict):
+                return data
+        return {}
+
     def read_runtime(self, project: Path) -> dict:
         runtime = self.runtime_dir(project)
         state = self._read_json(runtime / "state.json") or {}
         marker = self._read_json(runtime / "runner-process.json") or {}
+        request = self._latest_run_request(project)
         stream = self._display_stream(self._read_text(runtime / "stream.log", limit=12000))
         supervisor_pid = self._marker_pid(marker.get("supervisor_pid"))
         supervisor_running = bool(supervisor_pid and self._pid_alive(supervisor_pid))
@@ -485,6 +516,10 @@ class UIState:
             "console_snapshot_exists": console_snapshot_exists,
             "started_at": marker.get("started_at") or launch.get("created_at") or 0,
             "updated_at": state.get("last_activity_at") or marker.get("started_at") or launch.get("created_at") or 0,
+            "backend": str(request.get("backend") or ""),
+            "model": str(request.get("model") or ""),
+            "workflow": str(request.get("workflow") or ""),
+            "validator": str(request.get("validator") or ""),
         }
 
     def active_projects(self) -> list[dict]:
@@ -595,7 +630,7 @@ class UIState:
         tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def launch_message(self, project: Path, message: str, *, backend: str = "", validator: str = "", workflow: str = "") -> None:
+    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "") -> None:
         """Start one Workflow task from an immutable UI request snapshot.
 
         A completed prior run is reset automatically. An interrupted/stopped run
@@ -616,6 +651,7 @@ class UIState:
                 project,
                 message,
                 backend=backend,
+                model=model,
                 validator=validator,
                 workflow=workflow,
                 request_mode="workflow",
@@ -626,6 +662,7 @@ class UIState:
                     None,
                     mode="run",
                     backend=backend,
+                    model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
                     goal_file=request["prompt_file"],
@@ -652,6 +689,7 @@ class UIState:
         *,
         mode: str,
         backend: str = "",
+        model: str = "",
         validator: str = "",
         workflow: str = "",
         goal_file: str = "",
@@ -674,6 +712,7 @@ class UIState:
                     command.append("--force-new")
             if backend:
                 command += ["--backend", backend]
+            command += self._model_cli_args(model)
             if validator:
                 command += ["--validator", validator]
             if workflow:
@@ -701,6 +740,7 @@ class UIState:
         message: str,
         *,
         backend: str = "",
+        model: str = "",
         validator: str = "",
         workflow: str = "",
         request_mode: str = "workflow",
@@ -716,6 +756,7 @@ class UIState:
             if not workflow_path.is_file():
                 raise ValueError(f"Workflow not found: {workflow_path}")
         requirements = self._workflow_requirements(workflow_path) if workflow_path else {"requires_python_validator": False, "has_ai_validator": False}
+        model_value = self._normalize_model(model)
         validator_value = str(validator or "").strip()
         if requirements["requires_python_validator"]:
             if not validator_value:
@@ -743,6 +784,7 @@ class UIState:
             "created_at": time.time(),
             "project": str(project),
             "backend": backend or "",
+            "model": model_value,
             "mode": request_mode,
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
@@ -872,28 +914,26 @@ class UIState:
             ("custom", self.repo_root / "runner" / "prompts" / "custom"),
         ]
         if project is not None:
-            roots.append(("project", project))
-            prompt_roots.append(("project", project / "prompts"))
+            for _folder, _package_root, workflow_dir, prompt_dir in (iter_project_packages(project) or ()):
+                roots.append(("project", workflow_dir))
+                if prompt_dir.is_dir():
+                    prompt_roots.append(("project", prompt_dir))
 
         workflow_visibility = self._workflow_visibility()
         seen: set[str] = set()
         for scope, root in roots:
             if not root.is_dir():
                 continue
-            candidates = root.rglob("*.yaml") if scope != "project" else root.glob("*.yaml")
+            candidates = root.rglob("*.yaml")
             for path in candidates:
                 if scope == "system" and path.name.lower() == "workflow_builder.yaml":
-                    continue
-                if scope == "project" and not (path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower()):
                     continue
                 item = self._studio_item(path, scope, "workflow", workflow_visibility)
                 if item["id"] not in seen:
                     seen.add(item["id"])
                     workflows.append(item)
-            for path in (root.rglob("*.yml") if scope != "project" else root.glob("*.yml")):
+            for path in root.rglob("*.yml"):
                 if scope == "system" and path.name.lower() == "workflow_builder.yml":
-                    continue
-                if scope == "project" and "workflow" not in path.name.lower():
                     continue
                 item = self._studio_item(path, scope, "workflow", workflow_visibility)
                 if item["id"] not in seen:
@@ -918,6 +958,7 @@ class UIState:
                 "workflow": self.studio_custom_folders("workflow"),
                 "prompt": self.studio_custom_folders("prompt"),
             },
+            "project_folders": project_package_folders(project) if project is not None else [],
             "guard": self.edit_guard(),
         }
 
@@ -1077,9 +1118,15 @@ class UIState:
             if destination == "project":
                 if project is None:
                     raise ValueError("Select a Project before creating a Project workflow")
-                target = (project / raw).resolve()
-                if not self._is_within(target, project.resolve()):
-                    raise ValueError("Workflow path is outside the Project")
+                default_folder = re.sub(r"(?i)\.workflow$", "", Path(raw).stem).strip() or "workflow"
+                rel_folder = self._normalize_workflow_folder(folder or default_folder)
+                if "/" in rel_folder:
+                    raise ValueError("Project Workflow folder must be one folder name")
+                target_root = project_package_workflow_dir(project, rel_folder)
+                target_root.mkdir(parents=True, exist_ok=True)
+                target = (target_root / raw).resolve()
+                if not self._is_within(target, target_root):
+                    raise ValueError("Workflow path is outside the Project Workflow package")
             elif destination == "custom":
                 root = self._custom_asset_root("workflow")
                 root.mkdir(parents=True, exist_ok=True)
@@ -1726,10 +1773,9 @@ class UIState:
         if project is not None and project.resolve() not in known_projects:
             known_projects.append(project.resolve())
         for root in known_projects:
-            for suffix in ("*.yaml", "*.yml"):
-                for path in root.glob(suffix):
-                    if path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower():
-                        paths.append(path.resolve())
+            for _folder, _package_root, workflow_dir, _prompt_dir in (iter_project_packages(root) or ()):
+                for suffix in ("*.yaml", "*.yml"):
+                    paths.extend(path.resolve() for path in workflow_dir.rglob(suffix))
         result: list[Path] = []
         seen: set[str] = set()
         for path in paths:
@@ -1768,7 +1814,10 @@ class UIState:
             if destination == "project":
                 if project is None:
                     raise ValueError("Select a Project before creating a Project Prompt")
-                root = (project / "prompts").resolve(); root.mkdir(parents=True, exist_ok=True); scope = "project"
+                rel_folder = self._normalize_workflow_folder(folder)
+                if rel_folder not in project_package_folders(project):
+                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
+                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True); scope = "project"
             elif destination == "custom":
                 root = self._custom_asset_root("prompt"); root.mkdir(parents=True, exist_ok=True); scope = "custom"
                 rel_folder = self._normalize_custom_folder(folder)
@@ -1829,9 +1878,7 @@ class UIState:
         if scope == "custom":
             root = self.repo_root / "runner" / ("workflow" if kind == "workflow" else "prompts") / "custom"
         elif scope == "project":
-            if project is None:
-                raise ValueError("Select a Project before modifying a Project asset")
-            root = project if kind == "workflow" else project / "prompts"
+            raise ValueError("Project asset root must be resolved from its Workflow-owned package")
         else:
             raise ValueError("System assets cannot be renamed in place")
         root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
@@ -1848,7 +1895,16 @@ class UIState:
                 if usages:
                     raise ValueError("Prompt is still referenced; update Workflow references before rename: " + "; ".join(usages[:12]))
             raw = self._normalize_studio_asset_name(kind, name)
-            root = self._studio_scope_root(kind, scope, project)
+            if scope == "project":
+                if project is None:
+                    raise ValueError("Select a Project before modifying a Project asset")
+                package = project_package_for_asset(project, path)
+                if package is None:
+                    raise ValueError("Project asset is outside a Workflow-owned package")
+                _folder, _package_root, workflow_dir, prompt_dir = package
+                root = workflow_dir if kind == "workflow" else prompt_dir
+            else:
+                root = self._studio_scope_root(kind, scope, project)
             target = (root / raw).resolve()
             if not self._is_within(target, root):
                 raise ValueError("Renamed asset path is outside the allowed scope")
@@ -1876,7 +1932,16 @@ class UIState:
             path, kind, scope = self._resolve_studio_file(file_id, project)
             target_scope = "custom" if scope in SYSTEM_SCOPES else scope
             raw = self._normalize_studio_asset_name(kind, name)
-            root = self._studio_scope_root(kind, target_scope, project)
+            if target_scope == "project":
+                if project is None:
+                    raise ValueError("Select a Project before duplicating a Project asset")
+                package = project_package_for_asset(project, path)
+                if package is None:
+                    raise ValueError("Project asset is outside a Workflow-owned package")
+                _folder, _package_root, workflow_dir, prompt_dir = package
+                root = workflow_dir if kind == "workflow" else prompt_dir
+            else:
+                root = self._studio_scope_root(kind, target_scope, project)
             target = (root / raw).resolve()
             if not self._is_within(target, root):
                 raise ValueError("Duplicated asset path is outside the allowed scope")
@@ -2016,7 +2081,7 @@ class UIState:
             item = self._studio_item(workflows[0], "custom", "workflow")
             return {"folder": folder, "item": item, "file": self.studio_read(item["id"], None)}
 
-    def studio_import(self, kind: str, name: str, content: str, destination: str, project: Path | None = None) -> dict:
+    def studio_import(self, kind: str, name: str, content: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
         with self._edit_lock:
             self._require_editable()
             kind = str(kind or "").strip().lower()
@@ -2026,8 +2091,12 @@ class UIState:
             if destination == "project":
                 if project is None:
                     raise ValueError("Select a Project before importing to Project")
-                root = project.resolve() if kind == "workflow" else (project / "prompts").resolve()
-                if kind == "prompt": root.mkdir(parents=True, exist_ok=True)
+                if kind == "workflow":
+                    raise ValueError("Project Workflow import uses Workflow-owned folder packages")
+                rel_folder = self._normalize_workflow_folder(folder)
+                if rel_folder not in project_package_folders(project):
+                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
+                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True)
                 scope = "project"
             elif destination == "custom":
                 root = (self.repo_root / "runner" / "workflow" / "custom").resolve() if kind == "workflow" else (self.repo_root / "runner" / "prompts" / "custom").resolve()
@@ -2155,9 +2224,12 @@ class UIState:
 
     @staticmethod
     def _normalize_workflow_folder(folder: str) -> str:
-        raw = str(folder or "").strip().replace("\\", "/").strip("/")
+        raw = str(folder or "").strip().replace("\\", "/")
         if not raw:
             raise ValueError("Workflow folder is required")
+        if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
+            raise ValueError("Workflow folder must be a relative path")
+        raw = raw.rstrip("/")
         parts = Path(raw).parts
         if ".." in parts or "." in parts or any(not part for part in parts):
             raise ValueError("Workflow folder contains an invalid path segment")
@@ -2185,14 +2257,21 @@ class UIState:
         elif destination == "project":
             if project is None:
                 raise ValueError("Open a Project before saving to Current Project")
-            # Project Workflow discovery intentionally stays top-level to avoid
-            # recursively treating arbitrary source YAML as Runner Workflows.
-            # The owned folder still scopes generated Prompt/support assets.
-            output_workflow = (project / raw).resolve()
-            output_prompt_dir = (project / "prompts" / folder).resolve()
+            if "/" in folder:
+                raise ValueError("Project Workflow folder must be one folder name")
+            output_workflow = (project_package_workflow_dir(project, folder) / raw).resolve()
+            output_prompt_dir = project_package_prompt_dir(project, folder)
         else:
             raise ValueError("Workflow destination must be project or custom")
         return raw, folder, destination, output_workflow, output_prompt_dir
+
+    @staticmethod
+    def _tail_text(path: Path, limit: int = 12000) -> str:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        return text[-max(1, int(limit)):].strip()
 
     def studio_draft_info(self) -> dict:
         builder_root = self.repo_root / "workflow_builder"
@@ -2297,12 +2376,27 @@ class UIState:
             ]
             if backend:
                 command += ["--backend", backend]
+            process_log = job_root / "builder-process.log"
             kwargs = _background_process_kwargs()
             kwargs["cwd"] = str(self.repo_root)
+            # Keep startup diagnostics.  A child can fail before workflow_builder/run.py
+            # gets far enough to update status.json (for example an import error).
+            # In that case the UI can report the real traceback instead of the vague
+            # "process stopped unexpectedly" message.
+            kwargs.pop("stdout", None)
+            kwargs.pop("stderr", None)
             try:
-                subprocess.Popen(command, **kwargs)
+                with process_log.open("w", encoding="utf-8", errors="replace") as stream:
+                    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=stream, **kwargs)
+                status.update({
+                    "pid": int(process.pid),
+                    "process_log": str(process_log),
+                    "message": "Workflow Builder started",
+                    "updated_at": time.time(),
+                })
+                self._atomic_json(job_root / "status.json", status)
             except Exception as exc:
-                status.update({"state": "failed", "message": str(exc), "updated_at": time.time()})
+                status.update({"state": "failed", "message": str(exc), "process_log": str(process_log), "updated_at": time.time()})
                 self._atomic_json(job_root / "status.json", status)
                 raise
             return {"ok": True, "job_id": job_id, "state": "queued", "message": "Workflow Builder started. No Workflow has been created yet.", "workspace": str(job_root), "folder": folder, "filename": filename}
@@ -2405,7 +2499,14 @@ class UIState:
             stale = (pid and not self._pid_alive(pid)) or (not pid and age >= 30)
             if stale:
                 terminal = "cancelled" if state == "cancelling" else "failed"
-                message = "Workflow generation cancelled" if terminal == "cancelled" else "Workflow Builder process stopped unexpectedly"
+                if terminal == "cancelled":
+                    message = "Workflow generation cancelled"
+                else:
+                    process_log = Path(str(status.get("process_log") or job_root / "builder-process.log"))
+                    diagnostic = self._tail_text(process_log, 6000)
+                    message = "Workflow Builder process stopped unexpectedly"
+                    if diagnostic:
+                        message += ": " + diagnostic
                 status.update({"state": terminal, "message": message, "updated_at": time.time()})
                 self._atomic_json(job_root / "status.json", status)
                 state = terminal
@@ -2548,11 +2649,11 @@ class UIState:
             valid = any(self._is_within(path, root) for root in system_prompt_roots)
         elif scope == "custom" and kind == "prompt":
             valid = self._is_within(path, (self.repo_root / "runner" / "prompts" / "custom").resolve())
-        elif scope == "project" and project is not None and kind == "workflow":
-            valid = path.parent == project.resolve() and (path.name == ".ai-task-runner.yaml" or "workflow" in path.name.lower())
-        elif scope == "project" and project is not None and kind == "prompt":
-            prompt_root = (project / "prompts").resolve()
-            valid = prompt_root.exists() and self._is_within(path, prompt_root)
+        elif scope == "project" and project is not None:
+            package = project_package_for_asset(project, path)
+            if package is not None:
+                _folder, _package_root, workflow_dir, prompt_dir = package
+                valid = self._is_within(path, workflow_dir if kind == "workflow" else prompt_dir)
 
         if not valid:
             raise ValueError("File is outside allowed workflow/prompt roots")
@@ -2788,6 +2889,7 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     text,
                     backend=str(body.get("backend", "")),
+                    model=str(body.get("model", "")),
                     validator=str(body.get("validator", "")),
                     workflow=str(body.get("workflow", "")),
                 )
@@ -2799,7 +2901,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True})
             if parsed.path == "/api/project/resume":
                 project = self._project(body)
-                self.state.launch(project, None, mode="resume", backend=str(body.get("backend", "")), validator=str(body.get("validator", "")), workflow=str(body.get("workflow", "")))
+                request = self.state._latest_run_request(project)
+                self.state.launch(
+                    project,
+                    None,
+                    mode="resume",
+                    backend=str(request.get("backend") or ""),
+                    model=str(request.get("model") or ""),
+                    validator=str(request.get("validator") or ""),
+                    workflow=str(request.get("workflow") or ""),
+                )
                 return self._json({"ok": True})
             if parsed.path == "/api/project/reset":
                 return self._json(self.state.reset_runtime(self._project(body)))
@@ -2813,6 +2924,7 @@ class Handler(SimpleHTTPRequestHandler):
                     project,
                     last,
                     backend=str(body.get("backend", "")),
+                    model=str(body.get("model", "")),
                     validator=str(body.get("validator", "")),
                     workflow=str(body.get("workflow", "")),
                     request_mode="workflow",
@@ -2822,6 +2934,7 @@ class Handler(SimpleHTTPRequestHandler):
                     None,
                     mode="run",
                     backend=str(body.get("backend", "")),
+                    model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
                     goal_file=request["prompt_file"],
@@ -2861,7 +2974,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if str(body.get("kind", "")).strip().lower() == "workflow_folder":
                     return self._json(self.state.studio_folder_import(str(body.get("content", ""))))
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project))
+                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
             if parsed.path == "/api/studio/prompt/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_prompt_check(str(body.get("id", "")), str(body.get("content", "")), project))

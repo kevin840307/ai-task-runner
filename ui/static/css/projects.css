@@ -773,3 +773,20 @@ body.projects-collapsed .project-list {
 body.projects-collapsed .project-section-label > span { display: none; }
 body.projects-collapsed .project-section-label { justify-content: center; margin-inline: 0; }
 body.projects-collapsed .project-add-button { width: 34px; height: 34px; border-radius: 10px; }
+
+/* Async project actions: keep the sidebar responsive without a full-page blocker. */
+.project-tree.project-busy .project-root {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.project-tree.project-busy .project-menu-button {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.project-runtime-label.runtime-busy {
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}

@@ -1,6 +1,7 @@
 """Cross-platform subprocess timeout and process-tree cleanup helpers."""
 from __future__ import annotations
 
+import codecs
 import os
 import queue
 import signal
@@ -267,10 +268,29 @@ def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
         process.stdin = None
 
 def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
+    """Stream pipe bytes without waiting for TextIOWrapper EOF/full-buffer reads.
+
+    ``TextIOWrapper.read(size)`` can wait for more text on long-running children,
+    which means a timeout may kill the process before any already-written output
+    reaches the bounded queue. Reading the pipe fd directly returns available
+    chunks and an incremental decoder preserves UTF-8 boundaries.
+    """
+    encoding = str(getattr(pipe, "encoding", None) or "utf-8")
+    errors = str(getattr(pipe, "errors", None) or "replace")
+    decoder = codecs.getincrementaldecoder(encoding)(errors=errors)
     try:
-        while chunk := pipe.read(OUTPUT_READ_CHARS):
-            output_queue.put(chunk)
-    except OSError:
+        fd = pipe.fileno()
+        while True:
+            raw = os.read(fd, OUTPUT_READ_CHARS)
+            if not raw:
+                break
+            chunk = decoder.decode(raw)
+            if chunk:
+                output_queue.put(chunk)
+        tail = decoder.decode(b"", final=True)
+        if tail:
+            output_queue.put(tail)
+    except (OSError, ValueError):
         pass
 
 

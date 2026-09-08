@@ -699,7 +699,7 @@ class WorkflowStudioTests(unittest.TestCase):
 
     def test_manual_workflow_create_is_exclusive_and_immediately_listed(self) -> None:
         created = self.state.studio_workflow_create("regression", "project", self.project)
-        path = self.project / "regression.workflow.yaml"
+        path = self.project / ".ai-task-runner" / "workflows" / "regression" / "workflow" / "regression.workflow.yaml"
         self.assertTrue(path.is_file())
         self.assertEqual(path.read_text(encoding="utf-8"), "stages:\n  planning:\n    type: plan\n\nflow:\n  - planning\n")
         self.assertEqual(created["file"]["name"], "regression.workflow.yaml")
@@ -1358,3 +1358,34 @@ class WorkflowRequirementCacheContractTests(unittest.TestCase):
         self.assertIn("_workflow_requirement_cache", text)
         self.assertIn("stat.st_mtime_ns", text)
         self.assertIn('item["version"]', text)
+
+
+class ModelSelectionContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.state = UIState(self.root)
+        self.project = self.root / "project"
+        self.project.mkdir()
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_model_is_passed_as_backend_agent_argument(self) -> None:
+        with patch.object(self.state, "read_runtime", return_value={"running": False}), patch("ui.server.subprocess.Popen") as popen:
+            self.state.launch(self.project, "fix it", mode="run", backend="qwen", model="qwen3-coder")
+        command = popen.call_args.args[0]
+        self.assertIn("--agent-arg=--model", command)
+        self.assertIn("--agent-arg=qwen3-coder", command)
+
+    def test_runtime_reports_latest_ui_request_model(self) -> None:
+        request_dir = self.project / ".ai-task-runner" / "ui" / "requests" / "req-1"
+        request_dir.mkdir(parents=True)
+        (request_dir / "request.json").write_text(json.dumps({"backend": "qwen", "model": "qwen3-coder", "workflow": "w.yaml", "validator": ""}), encoding="utf-8")
+        runtime = self.state.read_runtime(self.project)
+        self.assertEqual(runtime["backend"], "qwen")
+        self.assertEqual(runtime["model"], "qwen3-coder")
+
+    def test_model_validation_rejects_control_characters(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Model name is invalid"):
+            self.state._normalize_model("bad\nmodel")

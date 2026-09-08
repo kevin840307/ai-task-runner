@@ -8,13 +8,17 @@
     (() => {
       const validTheme = new Set(["teal", "blue", "violet", "amber", "rose"]);
       const validAppearance = new Set(["system", "light", "dark"]);
+      const validMotion = new Set(["full", "system", "reduced"]);
       let theme = "teal";
       let appearance = "system";
+      let motion = "full";
       try {
         const savedTheme = localStorage.getItem("ai-task-runner.theme");
         const savedAppearance = localStorage.getItem("ai-task-runner.appearance");
+        const savedMotion = localStorage.getItem("ai-task-runner.motion");
         if (validTheme.has(savedTheme)) theme = savedTheme;
         if (validAppearance.has(savedAppearance)) appearance = savedAppearance;
+        if (validMotion.has(savedMotion)) motion = savedMotion;
       } catch (_) {}
       const resolved = appearance === "system"
         ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
@@ -22,6 +26,7 @@
       document.documentElement.dataset.theme = theme;
       document.documentElement.dataset.appearance = resolved;
       document.documentElement.dataset.appearancePreference = appearance;
+      document.documentElement.dataset.motion = motion;
     })();
   </script>
   <link rel="stylesheet" href="/styles.css" />
@@ -39,6 +44,14 @@
             <button type="button" data-appearance-option="system" data-i18n="theme.system">跟隨系統</button>
             <button type="button" data-appearance-option="light" data-i18n="theme.light">淺色</button>
             <button type="button" data-appearance-option="dark" data-i18n="theme.dark">深色</button>
+          </div>
+        </div>
+        <div class="theme-setting-group">
+          <span class="theme-setting-label">動畫</span>
+          <div class="appearance-options motion-options" role="group" aria-label="Motion">
+            <button type="button" data-motion-option="full">完整動畫</button>
+            <button type="button" data-motion-option="system">跟隨系統</button>
+            <button type="button" data-motion-option="reduced">減少動畫</button>
           </div>
         </div>
         <div class="theme-setting-group">
@@ -99,16 +112,6 @@
 
       <section id="composePanel" class="compose-panel" hidden>
         <div class="composer-box">
-          <div id="composerTopbar" class="composer-topbar simple-composer-topbar" hidden>
-            <label id="validatorPicker" class="validator-picker" hidden>
-              <span class="workflow-picker-label" data-i18n="composer.python_validation">Python 驗證</span>
-              <div class="compact-file-picker">
-                <input id="validator" placeholder="Choose validation.py" autocomplete="off" readonly title="" />
-                <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
-                <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
-              </div>
-            </label>
-          </div>
           <div id="optionsPanel" class="options-panel" role="dialog" aria-label="Run options" hidden>
             <div class="options-popover-head"><strong data-i18n="options.title">執行選項</strong><button id="optionsCloseButton" type="button" aria-label="Close options">×</button></div>
             <div class="options-popover-field backend-option-field"><span>Backend</span>
@@ -120,6 +123,11 @@
                 <div id="backendDropdownMenu" class="workflow-dropdown-menu backend-dropdown-menu" role="listbox" hidden></div>
               </div>
             </div>
+            <label class="options-popover-field model-option-field"><span>Model</span>
+              <input id="modelInput" type="text" placeholder="Backend default" autocomplete="off" spellcheck="false" />
+              <small id="currentModelText" class="current-model-text">Current · Backend default</small>
+            </label>
+            <div id="runConfigLockNote" class="run-config-lock-note" hidden>Current task configuration is locked until Reset or completion.</div>
             <button id="rerunButton" class="action-button options-rerun" type="button" hidden>重新執行上次任務</button>
             <button id="environmentCheckButton" class="action-button options-environment-check" type="button" data-i18n="env.check">檢查環境</button>
             <div id="environmentCheckResult" class="environment-check-result" hidden></div>
@@ -137,6 +145,15 @@
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
+              <label id="validatorPicker" class="validator-picker composer-validator-picker" hidden>
+                <span class="workflow-picker-label" data-i18n="composer.python_validation">Python 驗證</span>
+                <div class="compact-file-picker">
+                  <input id="validator" placeholder="Choose validation.py" autocomplete="off" readonly title="" />
+                  <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
+                  <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
+                </div>
+              </label>
+              <button id="modelStatusButton" class="model-status-chip" type="button" title="Change model in Options">Model · Default</button>
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">

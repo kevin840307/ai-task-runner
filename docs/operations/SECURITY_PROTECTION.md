@@ -10,6 +10,8 @@ The project root is the task workspace boundary. Project policy is read only fro
 
 Protected-path snapshots detect modification, deletion, creation under protected directory roots, and restore violations. CLI `--protect-file` can add ad-hoc protection; project policy is preferred for stable rules.
 
+On Windows, Safety filesystem I/O uses extended-length paths internally, so deep protected/readonly trees are not silently skipped when their absolute paths exceed the traditional `MAX_PATH` limit. Logical Project paths and policy syntax stay unchanged.
+
 ## What to protect
 Protect immutable inputs, answer/reference fixtures, validator helpers located inside project root, and any files the agent may read but must not change. Do not protect source/output files the task is expected to modify.
 

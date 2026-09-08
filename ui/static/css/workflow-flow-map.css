@@ -37,6 +37,8 @@
 .flow-map-legend i.recover{color:var(--run);border-top-style:dashed}
 .flow-map-legend i.restart{color:var(--accent);border-top-style:dotted}
 .flow-map-count{color:var(--muted);font-size:11px;font-weight:750}
+.flow-map-toolbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap}
+.flow-map-density-toggle{min-height:30px;padding:5px 9px;border-radius:9px;background:var(--panel);color:var(--text);font-size:11px;font-weight:750;white-space:nowrap}
 
 .flow-map-scroll{
   max-height:min(56vh,560px);
@@ -76,9 +78,39 @@
 .flow-map-detail-grid b{display:block;margin-bottom:2px;color:var(--text);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 .flow-map-empty{padding:30px;text-align:center;color:var(--muted)}
 
-/* Give the Flow Map and + Stage actions breathing room without changing global buttons. */
-.designer-panel-actions{gap:10px!important;flex-wrap:wrap}
-#flowMapButton{margin-right:2px}
+/* Keep Flow Map and + Stage as one atomic action row at every width.
+   The whole group may move below the title on a narrow panel, but the buttons
+   themselves never stack vertically. This also works on older enterprise Chromium. */
+.workflow-page .studio-step-panel{container-type:inline-size;container-name:workflow-steps}
+.workflow-page .studio-step-panel>.designer-panel-head{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start}
+.workflow-page .designer-panel-head>div:first-child{min-width:0}
+.workflow-page .designer-panel-head>div:first-child h3,
+.workflow-page .designer-panel-head>div:first-child p{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.workflow-page .designer-panel-head>div:first-child p{white-space:nowrap}
+.workflow-page .designer-panel-actions{display:flex!important;flex-flow:row nowrap!important;align-items:center;justify-content:flex-end;gap:8px!important;min-width:max-content;white-space:nowrap}
+.workflow-page .designer-panel-actions button{flex:0 0 auto;min-width:max-content!important;width:auto!important;white-space:nowrap}
+#flowMapButton{margin-right:0}
+
+/* Visual/YAML/Prompt surfaces should begin immediately below the summary card.
+   Avoid percentage-height grid-item expansion in Chromium and collapse the hidden
+   validation track instead of leaving a large blank band above Visual Designer. */
+.workflow-page .studio-workflow-editor>.studio-visual-panel,
+.workflow-page .studio-workflow-editor>.studio-yaml-panel,
+.workflow-page .studio-workflow-editor>.studio-prompt-panel{height:auto!important;align-self:stretch}
+.workflow-page .studio-workflow-editor:has(>.validation-output[hidden]){grid-template-rows:auto minmax(0,1fr)!important}
+.workflow-page .studio-workflow-editor:has(>.validation-output[hidden])>.studio-visual-panel,
+.workflow-page .studio-workflow-editor:has(>.validation-output[hidden])>.studio-yaml-panel,
+.workflow-page .studio-workflow-editor:has(>.validation-output[hidden])>.studio-prompt-panel{grid-row:2!important}
+@container workflow-steps (max-width:520px){
+  .workflow-page .studio-step-panel>.designer-panel-head{grid-template-columns:minmax(0,1fr);row-gap:8px}
+  .workflow-page .designer-panel-actions{justify-self:end}
+}
+@supports not (container-type:inline-size){
+  @media (max-width:700px){
+    .workflow-page .studio-step-panel>.designer-panel-head{grid-template-columns:minmax(0,1fr);row-gap:8px}
+    .workflow-page .designer-panel-actions{justify-self:end}
+  }
+}
 
 @media (max-width:760px){
   .flow-map-card{width:min(100%,calc(100vw - 24px));max-height:calc(100vh - 24px)}
@@ -97,3 +129,24 @@
 .flow-map-edge.retry path{stroke:var(--muted);color:var(--muted);stroke-dasharray:5 5}
 .flow-map-edge.exhausted path{stroke:var(--fail);color:var(--fail);stroke-dasharray:10 5}
 .flow-map-node rect.virtual{fill:color-mix(in srgb,var(--fail) 6%,var(--panel));stroke:color-mix(in srgb,var(--fail) 42%,var(--line));stroke-dasharray:5 4}
+
+.flow-map-backdrop.loading .flow-map-canvas {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  color: var(--muted);
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+.flow-map-backdrop.loading .flow-map-canvas::after {
+  content: "";
+  width: 44px;
+  height: 3px;
+  margin-left: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: flow-map-loading 760ms ease-in-out infinite;
+}
+@keyframes flow-map-loading { 0%,100% { transform: scaleX(.35); opacity:.45; } 50% { transform: scaleX(1); opacity:1; } }
+@media (prefers-reduced-motion: reduce) { html[data-motion="system"] .flow-map-backdrop.loading .flow-map-canvas::after { animation:none; } }
+html[data-motion="reduced"] .flow-map-backdrop.loading .flow-map-canvas::after { animation:none; }

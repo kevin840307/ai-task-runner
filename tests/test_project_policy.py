@@ -180,3 +180,20 @@ def test_restore_changed_cleans_snapshot_if_restore_fails(tmp_path: Path, monkey
         restore_changed(saved)
 
     assert not backup_root.exists()
+
+
+def test_safety_snapshot_and_restore_supports_deep_paths(tmp_path: Path) -> None:
+    """Safety must not drop protection merely because a Windows-style path is long."""
+    parent = tmp_path
+    for index in range(14):
+        parent = parent / f"layer_{index:02d}_abcdefghij"
+    parent.mkdir(parents=True)
+    protected = parent / "protected_file_with_long_name.txt"
+    protected.write_text("before", encoding="utf-8")
+    assert len(str(protected)) > 260
+
+    saved = snapshot([protected])
+    protected.write_text("after", encoding="utf-8")
+
+    assert restore_changed(saved) == [str(protected)]
+    assert protected.read_text(encoding="utf-8") == "before"

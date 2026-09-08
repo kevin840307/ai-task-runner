@@ -203,3 +203,7 @@ The local UI defaults to **Teal + System** and also provides Deep Blue, Violet, 
 - **Workflows** is a global page. Clicking a Project in the sidebar selects that Project and opens its **Tasks** view directly.
 - Leaving the global Workflow Studio for Tasks keeps the current global Workflow draft in memory; destructive operations still keep the existing unsaved-change guards.
 - Workflow Studio **More → Hide from Tasks / Show in Tasks** controls whether a Workflow appears in the Tasks Workflow selector. This is UI metadata stored locally in `ui/data/workflow_visibility.json`; it does not change Runner Workflow YAML, CLI behavior, or dry-run semantics.
+
+### Project Workflow storage
+
+Project-owned Workflows are discovered only below `<project>/.ai-task-runner/workflows/`. Each Workflow package owns one folder with separate `workflow/` and `prompts/` subfolders, for example `<project>/.ai-task-runner/workflows/regression/workflow/regression.workflow.yaml` and `<project>/.ai-task-runner/workflows/regression/prompts/review.md`. The project policy file `.ai-task-runner.yaml` remains Runner configuration only and is never treated as a Workflow discovery marker.

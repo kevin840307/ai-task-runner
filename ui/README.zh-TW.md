@@ -64,3 +64,7 @@ Workflow Studio 的 **+ Stage** 旁新增 **Flow Map**。這是唯讀流程圖�
 ### AI Workflow Builder target
 
 Generate with AI 現在在 Generate 前直接指定 **Folder + Filename**；Ready 編輯頁會持續顯示 target path，Save 視窗也使用同一組 Folder/Filename 並提供目的路徑預覽。Custom 會發布到 `runner/workflow/custom/<folder>/<filename>`，owned generated files 放在 `runner/prompts/custom/<folder>`。
+
+### Project Workflow packages
+
+Workflow Studio 只從 `<project>/.ai-task-runner/workflows/<folder>/workflow/` 偵測 Project Workflow；同一套 Workflow 自己的 Prompt 放在 `<folder>/prompts/`。`.ai-task-runner.yaml` 只是設定檔，不會再被當成 Workflow。Flow header 的 `Flow Map` / `+ Stage` 在窄解析度仍保持同一組排列；Runtime 活動指示另外有 JavaScript frame fallback，即使公司瀏覽器停用 CSS animation 仍可看到執行中的變化。

@@ -71,7 +71,7 @@ It presents assets in three groups:
 
 - **System** — `runner/workflow/system/*.yaml|yml`, `runner/prompts/system/**/*.md`, and built-in `runner/prompts/stages/**/*.md`; visible/validatable/exportable but immutable and undeletable.
 - **Custom** — `runner/workflow/custom/*.yaml|yml` and `runner/prompts/custom/**/*.md`; user-editable shared assets. `ralphy_ai_validate.yaml` and its related Prompts live here.
-- **Project** — selected-project top-level `.ai-task-runner.yaml` / `*workflow*.yaml|yml` and `prompts/**/*.md`; user-editable project-local assets.
+- **Project** — only `<project>/.ai-task-runner/workflows/<folder>/workflow/*.yaml|yml` plus the matching `<folder>/prompts/`; `.ai-task-runner.yaml` is Runner policy/config and is never Workflow discovery input.
 
 Custom is a real repository location rather than a UI-only label. New assets can target Custom or Project. **Workflow Import/Export is folder-only**: selecting any Custom Workflow inside an owned subfolder exports that complete owned folder package; Prompt assets still support ordinary single-file editing/import/export. Prompt deletion is rejected while any known Workflow Stage still resolves to that Prompt.
 
@@ -99,13 +99,13 @@ Workflow Studio's **Generate with AI** is wired to the external `workflow_builde
 The browser flow is intentionally draft-first and page based rather than a large modal:
 
 1. **Generate with AI** opens a dedicated Generator page. If there is no active Generator job, the input page starts blank. If a job already exists, the UI reopens that exact job instead of creating another one.
-2. The input step asks only for **Prompt + Backend**. Workflow name and Custom/Project destination are not requested yet. The page also shows the temporary workspace pattern before generation.
-3. Before **Generate**, enter the owned **Folder** and **Filename** plus the request/backend. Generate creates the single active UI-owned job under `ui/data/workflow-builder/<job-id>/` and writes `ui/data/workflow-builder/active.json`. Folder/Filename are stored with that job, so browser refresh/reopen restores the same target. The Builder uses `--draft-only` mode and does not require the selected Project. The waiting page shows only spinner + generation status plus the exact temporary workspace path.
+2. The input step asks for the request plus the owned **Folder**, **Filename**, and **Backend**. The page previews the final Custom target and the temporary workspace pattern before generation.
+3. **Generate** creates the single active UI-owned job under `ui/data/workflow-builder/<job-id>/` and persists Folder/Filename with the job, so browser refresh/reopen restores the same target. Generate creates the single active UI-owned job under `ui/data/workflow-builder/<job-id>/` and writes `ui/data/workflow-builder/active.json`. Folder/Filename are stored with that job, so browser refresh/reopen restores the same target. The Builder uses `--draft-only` mode and does not require the selected Project. The waiting page shows only spinner + generation status plus the exact temporary workspace path.
 4. Closing or refreshing the browser does **not** cancel generation. On the next UI load, `GET /api/studio/generate/active` restores the same queued/running/cancelling job, or the same ready/failed result. Exactly one Generator job may be active at a time across tabs/windows.
 5. **Cancel Generation** uses a styled confirmation, requests Runner stop, waits for the Builder to become cancelled, removes the temporary job, clears `active.json`, and returns to Workflow Studio.
 6. A successful run opens the **DRAFT · NOT SAVED** review page. The exact temporary workspace path remains visible. The result is explicitly marked **EDITABLE**: Visual remains the validated preview, while **Edit YAML** and **Edit Prompt** are direct temporary editors. Modified drafts are marked validation-dirty; **Validate Draft** validates the exact current temporary files and refreshes the Visual preview.
 7. **Regenerate** discards the current draft (thereby releasing the active job), returns to the same Prompt for adjustment, and the next Generate creates a new job/new AI run.
-8. **Save Workflow** opens a compact target editor with **Folder + Filename + destination** and a live destination-path preview. `Custom` publishes to `runner/workflow/custom/<folder>/<filename>` with owned generated files under `runner/prompts/custom/<folder>`. `Current Project` keeps the Workflow file at the Project root (to avoid recursively treating source YAML as Workflows) while placing generated owned files under `prompts/<folder>`. `Validate & Save` revalidates, publishes atomically, removes the temporary job, and clears `active.json`.
+8. **Save Workflow** opens a compact target editor with **Folder + Filename + destination** and a live destination-path preview. `Custom` publishes to `runner/workflow/custom/<folder>/<filename>` with owned generated files under `runner/prompts/custom/<folder>`. `Current Project` publishes to `<project>/.ai-task-runner/workflows/<folder>/workflow/<filename>` with owned generated files under the matching `<folder>/prompts/`. `Validate & Save` revalidates, publishes atomically, removes the temporary job, and clears `active.json`.
 9. **Discard/Back** asks before throwing away a ready draft or unsent request. Returning from Cancel/Discard immediately re-renders the cached Workflow catalog and refreshes it from the server, so the normal Workflow list/editor is restored without a browser refresh. Draft generation and Draft validation remain usable while another Project Runtime is active because they touch only the isolated UI workspace; publication still obeys the normal Studio edit guard.
 
 The same builder can be invoked outside the UI:
@@ -185,49 +185,9 @@ The UI follows the supplied `static` interaction model instead of inventing a se
 - UI runtime code does not import `runner.*`; it uses the existing filesystem/subprocess adapter only.
 - If any tracked Project has a live Runtime, all Workflow/Prompt mutation controls become read-only and the server repeats the same guard on write.
 
-## QA evidence shipped with the UI
+## QA / screenshots
 
-The delivery includes current Chromium evidence under `ui/qa_evidence/`:
-
-- `QA_REPORT.md` — measured contracts, automated test commands, and lifecycle/workflow safety checks.
-- `browser_metrics.json` — numeric layout/interaction measurements.
-- `screenshots/01_task_layout.png` — task composer / Project layout.
-- `screenshots/02_workflow_dropdown.png` — unclipped body-level Workflow picker.
-- `screenshots/03_workflow_studio_system_custom.png` — System / Custom / Project asset groups.
-- `screenshots/04_stage_selected_actions.png` — selected Stage and floating actions.
-- `screenshots/05_stage_editor_modal.png` — Stage Editor modal.
-- `screenshots/06_ai_workflow_builder.png` — historical pre-Round-17 Builder modal evidence (superseded by screenshots 29–34).
-- `screenshots/07_import_asset_modal.png` — bounded Import Workflow/Prompt modal.
-- `screenshots/08_prompt_editor.png` — Prompt workspace/editor.
-- `screenshots/09_add_project_modal.png` — Add Project dialog.
-- `screenshots/10_prompt_alignment.png` — Prompt Editor/sidebar bottom alignment.
-- `screenshots/11_stage_prompt_override.png` — reused Stage shows the selected Flow invocation's actual Prompt/Status.
-- `screenshots/12_stage_validation_success_toast.png` — unsaved Stage draft validation PASS toast.
-- `screenshots/13_stage_validation_error_toast.png` — unsaved Stage draft validation FAIL toast.
-- `screenshots/14_cli_runtime_todos_running.png` — earlier CLI/TODO mirror evidence.
-- `screenshots/16_white_runtime_stop_in_run_slot.png` — current white Runtime conversation card and Stop replacing Run.
-- `screenshots/17_options_popover.png` — floating Options popover without composer resize.
-- `screenshots/18_stopped_continue_reset.png` — Continue + Reset after an incomplete Stop.
-- `screenshots/19_prompt_loader_contract_valid.png` — dedicated System Prompt tags, Prompt valid, and Validate Prompt.
-- `screenshots/25_runtime_title_running.png` — Runtime conversation title uses lifecycle status (`Running`) while the detailed Stage status remains in the body.
-- `screenshots/26_builder_running_status_only.png` — Workflow Builder generation phase shows only status/spinner and blocks close until completion.
-- `screenshots/27_builder_draft_preview_not_saved.png` — validated Workflow/Prompt Draft preview with explicit **Discard Draft / Save Workflow** actions; still not a Studio asset.
-- `screenshots/28_stage_discard_styled_confirm.png` — reusable styled confirmation for unsaved Stage changes.
-- `screenshots/29_generator_input_page.png` — dedicated Generate Workflow page; only Prompt + Backend are requested.
-- `screenshots/30_generator_status_only.png` — stacked spinner/status-only waiting phase with Cancel Generation.
-- `screenshots/31_generator_review_draft.png` — validated `DRAFT · NOT SAVED` Visual review page.
-- `screenshots/32_generator_review_editable.png` — temporary YAML/Prompt edits before Save.
-- `screenshots/33_generator_save_modal.png` — compact Save target editor with Folder / Filename / destination path preview.
-- `screenshots/34_generator_mobile_input.png` — narrow viewport containment check.
-- `screenshots/36_generator_layout_fixed.png` — Generator Prompt / helper / temporary-path / actions no longer overlap at the reported desktop size.
-- `screenshots/37_generator_editable_draft.png` — generated Draft is explicitly editable through Edit YAML / Edit Prompt before Save.
-- `screenshots/38_generator_return_catalog_restored.png` — Discard returns to Workflow Studio with the Workflow catalog immediately restored.
-- `screenshots/39_generator_mobile_layout_fixed.png` — narrow Generator input uses vertical scrolling instead of clipping/overlap.
-- `browser_metrics_round21.json` — measured layout, edit affordance, and mocked-browser return-to-Studio restoration contract.
-- `screenshots/15_remove_project_overlay_fixed.png` — Remove Project confirmation backdrop covers the floating composer and runtime surface.
-- `browser_metrics_round17.json` — measured Generator page / fresh-job / cancel / review / Save contracts.
-
-These files are evidence only and are never read by Runner or UI runtime.
+QA evidence, screenshots, browser metrics, caches, and run artifacts are intentionally not part of the clean project distribution. Automated test source remains in the repository.
 
 ## Remembered Run preferences
 
@@ -300,3 +260,7 @@ Custom Workflows stored in a dedicated subfolder can be exported as a portable `
 ### Flow Map
 
 Workflow Studio has a **Flow Map** action beside **+ Stage**. It is a read-only visualization generated from the current saved YAML and shows normal Flow routing, FAIL/Recover routing, and `restart_at` back-jumps. Recover-only Stages are included even when they are not direct top-level Flow items. Select a node to inspect its Stage type, Prompt, incoming routes, and outgoing routes.
+
+### Project Workflow packages
+
+Workflow Studio discovers Project Workflows only from `<project>/.ai-task-runner/workflows/<folder>/workflow/`; matching owned Prompts live in `<folder>/prompts/`. `.ai-task-runner.yaml` is configuration, not a Workflow. The Flow header keeps `Flow Map` and `+ Stage` together across narrow layouts, and Runtime activity uses a JavaScript frame fallback so enterprise browsers that suppress CSS animation still show visible progress.
