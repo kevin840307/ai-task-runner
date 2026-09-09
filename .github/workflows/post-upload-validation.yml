@@ -1,0 +1,57 @@
+name: Post-upload validation
+
+on:
+  push:
+    branches: [chatgpt-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Compile Python and JavaScript
+        run: |
+          python -m compileall -q runner ui tool workflow_builder ai_task_runner.py ai_task_runner_validator.py
+          node --check ui/static/app.js
+          find ui/static/js -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: System workflow dry-run matrices
+        run: |
+          python tool/workflow_dryrun.py runner/workflow/system/ai.yaml --matrix
+          python tool/workflow_dryrun.py runner/workflow/system/file.yaml --matrix
+          python tool/workflow_dryrun.py runner/workflow/system/mixed.yaml --matrix
+      - name: Critical runner regression suite
+        run: |
+          python -m pytest -q \
+            tests/test_planning_loop_policy.py \
+            tests/test_project_policy.py \
+            tests/test_live_reliability_tool.py \
+            tests/test_stage_specialization.py \
+            tests/test_runtime_hardening.py \
+            tests/test_recovery_policy.py \
+            tests/test_runtime_controls.py \
+            tests/test_prompt_contracts.py \
+            tests/test_immutable_prompt_protocols.py
+      - name: UI regression suite
+        run: |
+          python -m pytest -q \
+            ui/tests/test_static_contract.py \
+            ui/tests/test_ui.py \
+            ui/tests/test_project_workflow_storage.py \
+            ui/tests/test_workflow_folder_package.py \
+            ui/tests/test_workflow_graph.py \
+            ui/tests/test_flow_map_layout_contract.py
+      - name: Bundle verification
+        run: |
+          python tool/bundle.py verify project.bundle.txt
