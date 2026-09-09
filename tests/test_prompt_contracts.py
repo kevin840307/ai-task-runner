@@ -95,3 +95,17 @@ def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
     assert "acceptance criteria" in PLAN_PROTOCOL
     assert "Runner owns orchestration" in PLAN_PROTOCOL
     assert not (PROMPT_ROOT / "stages" / "plan_task_rules.md").exists()
+
+
+def test_ai_validator_stage_always_injects_run_level_validation_resource():
+    from types import SimpleNamespace
+    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+
+    stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
+    ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="CHECK_MAGIC_BUSINESS_RULE"))
+    custom_template_output = "Custom validator template that forgot validation.instructions."
+    rendered = stage._augment_rendered_prompt(ctx, custom_template_output)
+
+    assert "CHECK_MAGIC_BUSINESS_RULE" in rendered
+    assert "Runner-provided AI validation resource (required):" in rendered
+    assert stage._augment_rendered_prompt(ctx, rendered) == rendered

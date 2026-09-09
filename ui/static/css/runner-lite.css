@@ -1123,3 +1123,57 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   html[data-motion="system"] #workflowView.view-loading::before,
   html[data-motion="system"] #chatView.view-loading::before { animation: none !important; }
 }
+
+/* Compact validation resources: show intent + file name, not full local paths. */
+.composer-resource-picker {
+  min-width: 0;
+  width: auto;
+  max-width: 300px;
+  min-height: 30px;
+  padding: 3px 5px 3px 9px;
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--border) 82%, var(--accent));
+  background: color-mix(in srgb, var(--panel) 94%, var(--accent) 6%);
+  box-shadow: none;
+  font-weight: 700;
+}
+.composer-resource-picker > input { display: none !important; }
+.composer-resource-picker .resource-kind {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.composer-resource-picker .resource-name {
+  min-width: 0;
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+}
+.composer-resource-picker:not(.has-resource) .resource-name { color: var(--muted); font-weight: 650; }
+.composer-resource-picker .resource-action,
+.composer-resource-picker .resource-clear {
+  flex: 0 0 auto;
+  min-height: 22px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.composer-resource-picker .resource-action { padding: 0 6px; }
+.composer-resource-picker .resource-action:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.composer-resource-picker .resource-clear { width: 22px; padding: 0; color: var(--muted); font-size: 14px; }
+.composer-resource-picker .resource-clear:hover { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.composer-resource-picker button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 720px) {
+  .composer-resource-picker { max-width: min(100%, 270px); }
+  .composer-resource-picker .resource-name { max-width: 96px; }
+}

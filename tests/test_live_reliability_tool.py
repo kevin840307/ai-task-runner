@@ -734,3 +734,14 @@ def test_runtime_long_path_preflight_covers_state_resources_and_copy():
 
 def test_readonly_long_path_preflight_covers_snapshot_reuse_and_restore():
     live.readonly_long_path_preflight()
+
+
+def test_deep_preflight_root_uses_extended_length_io_helper(monkeypatch, tmp_path):
+    calls = []
+    class ProbePath:
+        def mkdir(self, *, parents, exist_ok):
+            calls.append((parents, exist_ok))
+    monkeypatch.setattr("runner.utils.files.io_path", lambda path: ProbePath())
+    root = live._deep_preflight_root(tmp_path, len(str(tmp_path)) + 80)
+    assert len(str(root)) > len(str(tmp_path)) + 80
+    assert calls == [(True, True)]

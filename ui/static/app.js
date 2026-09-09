@@ -625,16 +625,20 @@ function renderWorkflowPickerSelection() {
   renderRunConfigurationLock();
   syncComposerReserve();
 }
+function resourceFileName(value, fallback) {
+  const text = String(value || "").trim(); if (!text) return fallback;
+  return text.replaceAll("\\", "/").split("/").filter(Boolean).pop() || fallback;
+}
 function updateValidatorPicker() {
-  const input = $("validator"), clear = $("clearValidatorButton"); if (!input) return;
-  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value;
+  const input = $("validator"), clear = $("clearValidatorButton"), name = $("validatorResourceName"), picker = $("validatorPicker"); if (!input) return;
+  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "未選擇"); if (picker) picker.classList.toggle("has-resource", !!value);
 }
 function updateAiValidatorPromptPicker() {
-  const input = $("aiValidatorPrompt"), clear = $("clearAiValidatorPromptButton"); if (!input) return;
-  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value;
+  const input = $("aiValidatorPrompt"), clear = $("clearAiValidatorPromptButton"), name = $("aiValidatorPromptResourceName"), picker = $("aiValidatorPromptPicker"); if (!input) return;
+  const value = input.value.trim(); input.title = value; if (clear) clear.hidden = !value; if (name) name.textContent = resourceFileName(value, "預設 Prompt"); if (picker) picker.classList.toggle("has-resource", !!value);
 }
 async function browseValidator() {
-  const button = $("browseValidatorButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "Choosing…";
+  const button = $("browseValidatorButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "…";
   try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "python" }) }); if (!result.cancelled && result.path) { $("validator").value = result.path; rememberValidator($("workflowSelect")?.value || "", result.path); updateValidatorPicker(); showToast("Python validator selected"); } }
   catch (error) { showToast(error.message, "error", 3200); }
   finally { button.textContent = original; renderRunConfigurationLock(); }
@@ -642,7 +646,7 @@ async function browseValidator() {
 
 // ------------------------------ Workflow Studio ------------------------------
 async function browseAiValidatorPrompt() {
-  const button = $("browseAiValidatorPromptButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "Choosing…";
+  const button = $("browseAiValidatorPromptButton"); if (!button || runConfigurationLocked()) return; const original = button.textContent; button.disabled = true; button.textContent = "…";
   try { const result = await api("/api/files/pick", { method: "POST", body: JSON.stringify({ kind: "markdown" }) }); if (!result.cancelled && result.path) { $("aiValidatorPrompt").value = result.path; rememberAiValidatorPrompt($("workflowSelect")?.value || "", result.path); updateAiValidatorPromptPicker(); showToast("AI validation prompt selected"); } }
   catch (error) { showActionError(error.message, "AI prompt selection failed"); }
   finally { button.disabled = false; button.textContent = original; }

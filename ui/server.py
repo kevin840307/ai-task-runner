@@ -782,7 +782,9 @@ class UIState(WorkflowBuilderMixin):
         prompt_file.write_text(text.rstrip() + "\n", encoding="utf-8")
         ai_prompt_snapshot = ""
         if ai_prompt_path is not None:
-            ai_prompt_snapshot_path = request_dir / "ai_validation.md"
+            resources_dir = request_dir / "resources"
+            resources_dir.mkdir(parents=True, exist_ok=True)
+            ai_prompt_snapshot_path = resources_dir / "ai_validation.md"
             ai_prompt_snapshot_path.write_text(ai_prompt_path.read_text(encoding="utf-8-sig"), encoding="utf-8")
             ai_prompt_snapshot = str(ai_prompt_snapshot_path)
         manifest = {

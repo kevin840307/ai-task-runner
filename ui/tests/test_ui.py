@@ -1053,7 +1053,8 @@ flow: [validate]
         snapshot = Path(command[command.index("--ai-validator-prompt-file") + 1])
         self.assertEqual(snapshot.name, "ai_validation.md")
         self.assertEqual(snapshot.read_text(encoding="utf-8"), "Check business rules.\n")
-        manifest = json.loads((snapshot.parent / "request.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot.parent.name, "resources")
+        manifest = json.loads((snapshot.parent.parent / "request.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["ai_validator_prompt_file"], str(snapshot))
 
     def test_ai_prompt_is_ignored_when_workflow_has_no_ai_validator(self) -> None:
@@ -1062,7 +1063,7 @@ flow: [validate]
         custom.write_text("ignored\n", encoding="utf-8")
         request = self.state._create_run_request(self.project, "x", workflow=str(self.workflow), ai_validator_prompt_file=str(custom))
         self.assertEqual(request["ai_validator_prompt_file"], "")
-        self.assertFalse((Path(request["request_dir"]) / "ai_validation.md").exists())
+        self.assertFalse((Path(request["request_dir"]) / "resources" / "ai_validation.md").exists())
 
     def test_run_request_rejects_workflow_outside_allowed_roots(self) -> None:
         outside = self.root / "outside.yaml"; outside.write_text("stages: {}\nflow: []\n", encoding="utf-8")

@@ -47,9 +47,9 @@ The UI writes only UI/control files:
 - `.ai-task-runner/ui/chat-state.json` — UI-owned run-id completion deduplication.
 - `.ai-task-runner/ui/launching.json` — short-lived UI-owned launch reservation that closes the gap between `Popen()` and the Supervisor publishing `runner-process.json`; it is not Workflow state and is removed when Runner runtime identity takes over.
 - `.ai-task-runner/ui/requests/<request-id>/prompt.md` — immutable user goal snapshot for a new Run/Rerun.
-- `.ai-task-runner/ui/requests/<request-id>/request.json` — UI-owned input manifest (workflow/backend and optional Python validator path).
+- `.ai-task-runner/ui/requests/<request-id>/request.json` — UI-owned input manifest (workflow/backend and optional Python validator path). Optional uploaded AI-validator instructions are snapshotted under `resources/ai_validation.md`.
 
-A normal Send launches the existing CLI with `--goal-file <.../prompt.md>` instead of putting a long goal on the command line. If the selected Workflow contains a file-validation Command that uses `{validator}`, the composer shows a **Python validation** path and the CLI receives `--validator <path>`. If the selected Workflow does not use Python validation, that field is hidden and no validator argument is sent. AI validation does **not** create a separate request prompt file: `ai_validator` is a normal Workflow Stage whose Prompt lives in Workflow/Prompt configuration.
+A normal Send launches the existing CLI with `--goal-file <.../prompt.md>` instead of putting a long goal on the command line. If the selected Workflow contains a file-validation Command that uses `{validator}`, the composer shows a **Python validation** path and the CLI receives `--validator <path>`. If the selected Workflow does not use Python validation, that field is hidden and no validator argument is sent. AI validation remains a normal Workflow Stage. When the user selects an extra AI validation prompt, the UI snapshots it as a request resource and Runner guarantees that resource is injected into every `ai_validator` Stage prompt even when a custom Stage template forgets `validation.instructions`.
 
 Runtime lifecycle stays explicit:
 

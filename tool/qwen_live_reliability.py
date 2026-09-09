@@ -1018,7 +1018,9 @@ def _deep_preflight_root(base: Path, minimum: int = 300) -> Path:
     while len(str(root)) <= minimum:
         root = root / (f"segment-{index}-" + "x" * 38)
         index += 1
-    root.mkdir(parents=True, exist_ok=True)
+    from runner.utils.files import io_path
+
+    io_path(root).mkdir(parents=True, exist_ok=True)
     return root
 
 

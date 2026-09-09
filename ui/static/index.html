@@ -134,22 +134,20 @@
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
               <div id="validationPickers" class="composer-validation-row" hidden>
-                <label id="validatorPicker" class="validator-picker composer-validator-picker" hidden>
-                  <span class="workflow-picker-label" data-i18n="composer.python_validation_short">Python</span>
-                  <div class="compact-file-picker">
-                    <input id="validator" placeholder="validation.py" autocomplete="off" readonly title="" />
-                    <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
-                    <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
-                  </div>
-                </label>
-                <label id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker" hidden>
-                  <span class="workflow-picker-label" data-i18n="composer.ai_prompt">AI Prompt</span>
-                  <div class="compact-file-picker">
-                    <input id="aiValidatorPrompt" placeholder="ai_validation.md (optional)" autocomplete="off" readonly title="" />
-                    <button id="browseAiValidatorPromptButton" class="file-choice-button compact" type="button">選擇…</button>
-                    <button id="clearAiValidatorPromptButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
-                  </div>
-                </label>
+                <div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>
+                  <span class="resource-kind">Python 驗證</span>
+                  <input id="validator" autocomplete="off" readonly title="" aria-label="Python validator path" />
+                  <span id="validatorResourceName" class="resource-name">未選擇</span>
+                  <button id="browseValidatorButton" class="resource-action" type="button">選擇</button>
+                  <button id="clearValidatorButton" class="resource-clear" type="button" aria-label="清除 Python validator" title="清除" hidden>×</button>
+                </div>
+                <div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>
+                  <span class="resource-kind">AI 驗證</span>
+                  <input id="aiValidatorPrompt" autocomplete="off" readonly title="" aria-label="AI validator prompt path" />
+                  <span id="aiValidatorPromptResourceName" class="resource-name">預設 Prompt</span>
+                  <button id="browseAiValidatorPromptButton" class="resource-action" type="button">+ Prompt</button>
+                  <button id="clearAiValidatorPromptButton" class="resource-clear" type="button" aria-label="清除 AI validator prompt" title="清除" hidden>×</button>
+                </div>
               </div>
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
