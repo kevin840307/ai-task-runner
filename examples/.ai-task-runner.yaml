@@ -1,0 +1,10 @@
+protected_paths:
+  - examples.yaml
+  - run_examples.bat
+  - README.md
+  - README.zh-TW.md
+
+instructions:
+  always: |
+    Keep example control files read-only.
+    Work only inside the selected example project_root.

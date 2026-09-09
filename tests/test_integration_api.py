@@ -1,0 +1,662 @@
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from runner.api import RunRequest, __version__, run
+from runner.errors import RunnerError
+
+
+def _validator(path: Path) -> Path:
+    path.write_text(
+        "import argparse\n"
+        "p=argparse.ArgumentParser();p.add_argument('--project-root');"
+        "p.add_argument('--state-file');p.parse_args();raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _fake_command() -> str:
+    return f'"{sys.executable}" "{ROOT / "tests/fake_agent.py"}"'
+
+
+@pytest.mark.parametrize("script_mode", [False, True])
+def test_api_transient_failure_resumes_saved_direct_or_yaml_state(
+    tmp_path,
+    monkeypatch,
+    script_mode,
+):
+    import runner.api as api_module
+
+    script = tmp_path / "tasks.yaml"
+    if script_mode:
+        script.write_text("- prompt: x\n  validator: ai\n", encoding="utf-8")
+    request = RunRequest(
+        goal=None if script_mode else "x",
+        script=str(script) if script_mode else None,
+        project_root=str(tmp_path),
+        validator=None if script_mode else "ai",
+        retry_delay=0,
+    )
+    state_file = (
+        tmp_path / ".ai-task-runner" / "script" / "001" / "state.json"
+        if script_mode
+        else tmp_path / ".ai-task-runner" / "state.json"
+    )
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if len(calls) == 1:
+            state_file.write_text(
+                '{"completed":false,"stage":"validating"}',
+                encoding="utf-8",
+            )
+            error = RunnerError("service unavailable")
+            error.transient = True
+            raise error
+        state_file.write_text(
+            '{"completed":true,"stage":"completed"}',
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(request)
+
+    assert result.completed
+    assert calls == [False, True]
+
+
+def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypatch):
+    import runner.api as api_module
+
+    child = tmp_path / "child"
+    child.mkdir()
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: x\n  project_root: child\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    state_file = child / ".ai-task-runner" / "script" / "001" / "state.json"
+
+    def fake_execute(config):
+        state_file.parent.mkdir(parents=True)
+        state_file.write_text(
+            '{"completed":true,"stage":"completed"}',
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(project_root=str(tmp_path), script=str(script)))
+
+    assert result.completed
+    assert result.state_files == (str(state_file),)
+
+
+def test_programmatic_api_runs_without_terminal_and_emits_events(tmp_path):
+    events = []
+    result = run(
+        RunRequest(
+            goal="x",
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        ),
+        on_event=events.append,
+    )
+
+    assert result.exit_code == 0
+    assert result.completed is True
+    assert result.states[0]["completed"] is True
+    assert any(event["type"] == "runner.progress" for event in events)
+    assert any(event["type"] == "runner.status" for event in events)
+    assert all(event["schema_version"] == 1 for event in events)
+    assert all(event["runner_version"] == __version__ for event in events)
+
+
+def test_runner_writes_debug_log_file(tmp_path):
+    result = run(
+        RunRequest(
+            goal="x",
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        )
+    )
+
+    assert result.completed is True
+    log_path = tmp_path / ".ai-task-runner" / "log.txt"
+    events = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert events
+    assert any(event["type"] == "runner.progress" for event in events)
+    assert events[-1]["completed"] is True
+
+
+def test_cli_json_events_are_machine_readable_json_lines(tmp_path):
+    validator = _validator(tmp_path / "validator.py")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "ai_task_runner.py"),
+            "--backend",
+            "qwen",
+            "--goal",
+            "x",
+            "--project-root",
+            str(tmp_path),
+            "--validator",
+            str(validator),
+            "--command",
+            _fake_command(),
+            "--retry-delay",
+            "0",
+            "--json-events",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert events
+    assert all(event["schema_version"] == 1 for event in events)
+    assert all(event["runner_version"] == __version__ for event in events)
+    assert any(event["type"] == "runner.status" for event in events)
+    assert events[-1]["status"] == "全部完成"
+
+
+def test_yaml_api_events_include_script_item_context(tmp_path):
+    child = tmp_path / "child"
+    child.mkdir()
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  project_root: child\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    events = []
+
+    result = run(
+        RunRequest(
+            project_root=str(tmp_path),
+            script=str(script),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        ),
+        on_event=events.append,
+    )
+
+    assert result.completed is True
+    assert any(event["type"] == "script.item_started" for event in events)
+    task_events = [event for event in events if event["type"].startswith("runner.")]
+    assert task_events
+    assert all(event["script_index"] == 1 for event in task_events)
+    assert all(event["script_total"] == 1 for event in task_events)
+    assert (child / ".ai-task-runner" / "script" / "001" / "state.json").is_file()
+    assert not (tmp_path / ".ai-task-runner").exists()
+
+
+def test_event_callback_failure_does_not_stop_runner(tmp_path):
+    def broken_callback(event):
+        raise RuntimeError("UI disconnected")
+
+    result = run(
+        RunRequest(
+            goal="x",
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        ),
+        on_event=broken_callback,
+    )
+    assert result.completed is True
+
+
+def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text("- prompt: first\n  validator: ai\n", encoding="utf-8")
+
+    def broken_callback(event):
+        raise RuntimeError("UI disconnected")
+
+    result = run(
+        RunRequest(
+            project_root=str(tmp_path),
+            script=str(script),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+        ),
+        on_event=broken_callback,
+    )
+    assert result.completed is True
+
+
+def test_json_event_output_disconnect_does_not_stop_observer(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from runner.plugins.observability import ObservabilityObserver
+
+    def broken_print(*args, **kwargs):
+        raise BrokenPipeError("consumer disconnected")
+
+    monkeypatch.setattr("builtins.print", broken_print)
+    observer = ObservabilityObserver(SimpleNamespace(
+        config=SimpleNamespace(event_callback=None, json_events=True),
+        work=tmp_path,
+    ))
+    observer({"type": "runner.status", "status": "running", "detail": "test"})
+    assert observer.json_events is False
+
+
+def test_human_ui_uses_single_line_spinner_without_ansi(monkeypatch):
+    from runner.runtime.run_state import RunState, Task
+    from runner.plugins.console import LiveUI
+
+    class FakeStdout:
+        def __init__(self):
+            self.output = ""
+
+        def isatty(self):
+            return True
+
+        def write(self, text):
+            self.output += text
+
+        def flush(self):
+            pass
+
+    stdout = FakeStdout()
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)
+
+    ui = LiveUI()
+    ui.bind(RunState("run", "goal", "/project", tasks=[
+        Task("t1", "Task one", "Do it", ["Done"]),
+    ]))
+    ui.start("AI 正在規劃並拆分任務")
+    ui.stop()
+
+    assert "\r" in stdout.output
+    assert "\x1b[2J" not in stdout.output
+    assert "AI Task Runner  Cycle 1  Progress 0/1" in stdout.output
+    assert "[>] 1. Task one" in stdout.output
+    assert "AI 正在規劃並拆分任務" in stdout.output
+
+
+def test_human_ui_fullscreen_keeps_status_at_bottom(monkeypatch):
+    import os
+
+    from runner.runtime.run_state import RunState, Task
+    from runner.plugins.console import LiveUI
+
+    monkeypatch.setattr(
+        "runner.plugins.console.shutil.get_terminal_size",
+        lambda fallback: os.terminal_size((50, 10)),
+    )
+    state = RunState("run", "goal", "/project", tasks=[
+        Task(f"t{index}", f"Task {index}", "Do it", ["Done"])
+        for index in range(1, 21)
+    ])
+    state.current = 10
+
+    lines = LiveUI(human_output=False)._draw_fullscreen_lines(
+        state,
+        "working",
+        "detail",
+        "|",
+    )
+
+    assert len(lines) == 10
+    assert lines[-2] == "  | working"
+    assert lines[-1] == "    detail"
+    assert any("Tasks " in line and "/20" in line for line in lines)
+    assert any("[>] 11. Task 11" in line for line in lines)
+    assert not any(line.endswith("] 1. Task 1") for line in lines)
+
+
+def test_human_ui_plain_task_list_is_not_reprinted_for_spinner(monkeypatch):
+    from runner.runtime.run_state import RunState, Task
+    from runner.plugins.console import LiveUI
+
+    class FakeStdout:
+        def __init__(self):
+            self.output = ""
+
+        def isatty(self):
+            return True
+
+        def write(self, text):
+            self.output += text
+
+        def flush(self):
+            pass
+
+    stdout = FakeStdout()
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)
+
+    ui = LiveUI()
+    ui.bind(RunState("run", "goal", "/project", tasks=[
+        Task("t1", "Task one", "Do it", ["Done"]),
+    ]))
+    ui._thread = object()
+    ui.draw()
+    ui.draw()
+
+    assert stdout.output.count("AI Task Runner") == 1
+    assert stdout.output.count("[>] 1. Task one") == 1
+    assert stdout.output.count("\r") >= 2
+
+
+def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.api import RunResult
+
+    captured = []
+
+    def fake_run(request, on_event=None):
+        captured.append(request)
+        return RunResult(exit_code=0, state_files=(str(tmp_path / "state.json"),), states=({"completed": True, "stage": "completed"},))
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--backend", "opencode",
+    ])
+
+    assert code == 0
+    assert len(captured) == 1
+    assert captured[0].goal == "x"
+    assert captured[0].backend == "opencode"
+    assert captured[0].human_output is True
+
+
+def test_shared_run_entry_accepts_json_like_request(tmp_path):
+    events = []
+    result = run(
+        {
+            "goal": "x",
+            "project_root": str(tmp_path),
+            "validator": str(_validator(tmp_path / "validator.py")),
+            "backend": "qwen",
+            "command": _fake_command(),
+            "retry_delay": 0,
+        },
+        on_event=events.append,
+    )
+
+    assert result.completed is True
+    assert any(event["type"] == "runner.status" for event in events)
+
+
+def test_goal_file_is_loaded_by_public_request(tmp_path):
+    goal_file = tmp_path / "goal.md"
+    goal_file.write_bytes(
+        b"\xef\xbb\xbfBuild from a long goal file.\n\nCreate the marker."
+    )
+    result = run(
+        RunRequest(
+            goal_file=str(goal_file),
+            project_root=str(tmp_path),
+            validator=str(_validator(tmp_path / "validator.py")),
+            backend="qwen",
+            command=_fake_command(),
+            retry_delay=0,
+            retry_wait=0,
+            retry_max_wait=0,
+        )
+    )
+
+    assert result.completed is True
+    assert "Build from a long goal file" in result.states[0]["goal"]
+    assert not result.states[0]["goal"].startswith("\ufeff")
+
+
+def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
+    prompt_file = tmp_path / "ai_validation.md"
+    prompt_file.write_bytes(b"\xef\xbb\xbfCheck architecture and genericity.\n")
+    request = RunRequest(
+        goal="build", validator="ai", ai_validator_prompt_file=str(prompt_file)
+    )
+    config = request.normalized_config()
+    assert config.ai_validator_prompt == "Check architecture and genericity.\n"
+    assert config.ai_validator_prompt_file == str(prompt_file)
+
+
+def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
+    prompt_file = tmp_path / "ai_validation.md"
+    prompt_file.write_text("check", encoding="utf-8")
+    with pytest.raises(ValueError, match="either ai_validator_prompt or ai_validator_prompt_file"):
+        RunRequest(
+            goal="build",
+            validator="ai",
+            ai_validator_prompt="inline",
+            ai_validator_prompt_file=str(prompt_file),
+        ).validate()
+
+
+@pytest.mark.parametrize(
+    ("run_request", "message"),
+    [
+        (RunRequest(), "goal or goal_file is required"),
+        (
+            RunRequest(goal="x", goal_file="goal.md", validator="ai"),
+            "either goal or goal_file",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", resume=True, force_new=True),
+            "cannot both be true",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", work_dir="../outside"),
+            "inside project_root",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", agent_args="--model"),
+            "agent_args must be a list",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", retry_wait=10, retry_max_wait=5),
+            "greater than or equal",
+        ),
+    ],
+)
+def test_shared_entry_rejects_invalid_requests_early(run_request, message):
+    with pytest.raises(ValueError, match=message):
+        run(run_request)
+
+
+def test_shared_api_logs_unexpected_exception_and_retries_original_without_state(
+    monkeypatch,
+    tmp_path,
+):
+    import runner.api as api_module
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            '{"completed":true,"stage":"completed"}', encoding="utf-8"
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    ))
+
+    assert result.completed
+    assert calls == [False, False]
+    log = tmp_path / ".ai-task-runner" / "exception.log"
+    assert "RuntimeError: boom" in log.read_text(encoding="utf-8")
+
+
+def test_shared_api_continues_when_execute_returns_before_completion(monkeypatch, tmp_path):
+    import runner.api as api_module
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if len(calls) == 1:
+            state_file.write_text(
+                '{"completed":false,"stage":"validating"}', encoding="utf-8"
+            )
+        else:
+            state_file.write_text(
+                '{"completed":true,"stage":"completed"}', encoding="utf-8"
+            )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    ))
+
+    assert result.completed
+    assert calls == [False, True]
+
+
+def test_cli_does_not_retry_configuration_error(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.errors import ConfigurationError
+
+    calls = 0
+
+    def fake_run(request, on_event=None):
+        nonlocal calls
+        calls += 1
+        raise ConfigurationError("invalid fixed input")
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--backend", "opencode",
+    ])
+
+    assert code == 1
+    assert calls == 1
+
+
+def test_human_ui_truncates_by_terminal_cell_width(monkeypatch):
+    import os
+
+    from runner.runtime.run_state import RunState, Task
+    from runner.plugins.console import LiveUI
+
+    class FakeStdout:
+        def __init__(self):
+            self.output = ""
+
+        def isatty(self):
+            return True
+
+        def write(self, text):
+            self.output += text
+
+        def flush(self):
+            pass
+
+    stdout = FakeStdout()
+    monkeypatch.setattr("runner.plugins.console.sys.stdout", stdout)
+    monkeypatch.setattr("runner.plugins.console.supports_ansi_screen", lambda: False)
+    monkeypatch.setattr(
+        "runner.plugins.console.shutil.get_terminal_size",
+        lambda fallback: os.terminal_size((80, 20)),
+    )
+
+    ui = LiveUI()
+    ui.bind(RunState("run", "goal", "/project", tasks=[
+        Task("t1", "Task one", "Do it", ["Done"]),
+    ]))
+    ui.set(
+        "AI 正在處理目前任務",
+        "c01-t001 · Create rander.py entry point with CLI, YAML loading, deep merge, Jinja2 rendering, and file writing",
+    )
+
+    line = stdout.output.rsplit("\r", 1)[-1]
+    assert LiveUI._display_width(line.rstrip()) < 80
+    assert "..." in line
+
+
+def test_terminal_fit_keeps_short_cjk_line():
+    from runner.plugins.console import LiveUI
+
+    line = "AI 正在處理目前任務"
+    assert LiveUI._fit_terminal_line(line, 80) == line
+    assert LiveUI._display_width(line) > len(line)
+
+
+def test_opencode_backend_runs_real_runner_flow_with_stdin(tmp_path):
+    result = run(RunRequest(
+        goal="Create done.txt and complete the current task.",
+        project_root=str(tmp_path),
+        validator=str(_validator(tmp_path / "validator.py")),
+        backend="opencode",
+        command=_fake_command(),
+        retry_delay=0,
+        retry_wait=0,
+        retry_max_wait=0,
+        max_cycles=3,
+    ))
+    assert result.completed is True
+    assert (tmp_path / "done.txt").read_text(encoding="utf-8") == "done"
+
+def test_api_deterministic_runner_error_fails_closed_without_resume_loop(tmp_path, monkeypatch):
+    """Non-transient RunnerError must never become an unbounded API retry loop."""
+    import runner.api as api_module
+
+    request = RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    )
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        raise RunnerError("saved task_step is outside the task-scoped SOP")
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    with pytest.raises(RunnerError, match="saved task_step"):
+        run(request)
+    assert calls == [False]

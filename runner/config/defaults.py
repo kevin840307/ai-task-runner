@@ -1,0 +1,32 @@
+"""Shared default values for the 24h runner contract."""
+from __future__ import annotations
+
+import os
+
+DEFAULT_BACKEND = "qwen"
+DEFAULT_QWEN_COMMAND = "qwen.cmd"
+DEFAULT_OPENCODE_COMMAND = "opencode.cmd" if os.name == "nt" else "opencode"
+DEFAULT_AGENT_TIMEOUT = 7200
+DEFAULT_PLANNING_TIMEOUT = 600
+DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT = 900
+DEFAULT_API_WAIT_TIMEOUT = 3600
+DEFAULT_WATCHDOG_INTERVAL = 15.0
+DEFAULT_VALIDATOR_TIMEOUT = 1200
+# Recovery defaults: bounded per session, unlimited across validation cycles.
+DEFAULT_MAX_ATTEMPTS = 2
+DEFAULT_REVIEW_RETRIES = 1
+DEFAULT_MAX_CYCLES = -1
+DEFAULT_FINAL_AI_VALIDATIONS = 1
+# 0 means strict majority of configured independent AI validations.
+DEFAULT_FINAL_AI_REQUIRED_PASSES = 0
+MIN_PLANNED_TASKS = 1
+
+MAX_TASK_OUTPUT_CHARS = 10_000
+MAX_VALIDATOR_OUTPUT_CHARS = 20_000
+# Raw child-process output retained by watchdog execution. Keep this well above
+# normal structured responses while preventing long-running noisy tools from
+# growing runner memory without bound.
+MAX_PROCESS_OUTPUT_CHARS = 200_000
+
+DEFAULT_LOOP_CONTEXT_COMPRESS = False
+DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD = 50.0

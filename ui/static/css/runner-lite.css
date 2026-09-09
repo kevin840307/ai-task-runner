@@ -1,0 +1,873 @@
+/* Lite-only overrides. static(1) remains the visual source of truth. */
+html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0 !important;
+  grid-template-columns: var(--rail-left) minmax(0, 1fr);
+  overflow: hidden !important;
+}
+[hidden] { display: none !important; }
+
+/* One app view owns the full viewport-height workspace. This deliberately
+   overrides static's <=760px `height:auto`, so browser zoom/font scaling can
+   never leave the composer floating above the viewport bottom. */
+.workspace {
+  position: relative;
+  display: block !important;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+#chatView {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--bg);
+}
+#chatView[hidden] { display: none !important; }
+#chatView > .header { grid-row: 1; }
+#chatView > .summary { grid-row: 2; }
+#chatView > .empty-state,
+#chatView > .history { grid-row: 3; min-height: 0; }
+#chatView > .history { overflow: auto; }
+#chatView > .compose-panel {
+  grid-row: 4;
+  width: 100%;
+  margin: 0;
+  align-self: end;
+  box-sizing: border-box;
+}
+
+/* Projects are always natural top-down flow. Only the list scrolls. */
+.projects {
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.projects .projects-head,
+.projects .project-nav,
+.projects .project-section-label,
+.projects .sidebar-foot { flex: 0 0 auto; }
+.project-section-label {
+  margin: 14px 8px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.projects .project-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  grid-auto-rows: max-content;
+  margin-top: 2px;
+}
+.sidebar-foot {
+  margin-top: 0;
+  padding: 12px 8px 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.project-copy { min-width: 0; display: grid; gap: 2px; }
+.project-copy strong,
+.project-copy small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-copy small { color: var(--muted); font-size: 10px; }
+.project-mark { width: 8px; height: 8px; border-radius: 999px; background: #cbd5e1; }
+.project-row.active .project-mark { background: var(--accent); }
+.project-row.missing { opacity: 0.55; }
+.project-nav button.project-nav-link { width: 100%; text-align: left; }
+
+.runtime-actions,
+.studio-header-actions { display: inline-flex; align-items: center; gap: 8px; }
+.runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.runtime-badge.running { border-color: #f4c56a; background: var(--warning-soft); color: var(--run); }
+.runtime-badge.completed { border-color: #9fd2b0; background: #eef9f1; color: var(--pass); }
+.runtime-badge.failed,
+.runtime-badge.interrupted { border-color: #f5a99e; background: #fee4df; color: var(--fail); }
+.action-button { min-height: 32px; padding: 0 10px; }
+.action-button.danger { color: var(--fail); }
+
+.empty-state {
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  min-height: 0;
+  padding: 30px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--bg);
+}
+.empty-state-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--accent);
+  font-weight: 900;
+  box-shadow: var(--shadow-sm);
+}
+.empty-state h2 { margin: 0; color: var(--text); font-size: 18px; }
+.empty-state p { max-width: 430px; font-size: 12px; line-height: 1.5; }
+
+/* Live output is display-only and lives inside chat history. */
+.live-activity {
+  align-self: flex-start;
+  width: min(900px, 100%);
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: var(--radius-lg);
+  background: #f4fbf9;
+}
+.live-activity-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 800; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-dark); }
+.live-activity-head small { margin-left: auto; color: var(--muted); font-size: 10px; }
+.live-meta { margin-top: 6px; color: var(--muted); font-size: 10px; }
+.live-output {
+  max-height: 145px;
+  margin: 9px 0 0;
+  padding-top: 9px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  color: #4b5563;
+  white-space: pre-wrap;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* static composer geometry stays intact; only Lite controls are added. */
+.options-panel {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+}
+.options-panel select,
+.options-panel input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+}
+.options-button {
+  min-height: 29px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.options-button.active { border-color: color-mix(in srgb, var(--accent) 42%, transparent); color: var(--accent); background: var(--accent-soft); }
+.send-button { min-width: 72px; min-height: 32px; border-radius: var(--radius-md); font-weight: 800; }
+.error-text { min-height: 16px; padding: 0 4px; color: var(--fail); font-size: 10px; }
+.simple-composer-topbar { min-height: 32px; }
+#workflowSelect.workflow-native-select {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+#workflowPicker { width: auto; max-width: min(520px, 60vw); }
+
+@media (max-width: 720px) {
+  body { grid-template-columns: 190px minmax(0, 1fr); height: 100dvh !important; min-height: 0 !important; }
+  .projects { display: flex !important; max-height: none !important; }
+  .options-panel { grid-template-columns: 1fr; }
+  .header { align-items: flex-start; }
+  .runtime-actions { flex-wrap: wrap; justify-content: flex-end; }
+  #workflowPicker { max-width: 100%; }
+}
+@media (max-width: 520px) {
+  body { grid-template-columns: 150px minmax(0, 1fr); }
+  .projects { padding: 10px 8px; }
+  .brand { font-size: 12px; }
+  .new-project-button { min-height: 38px; }
+  .project-nav-link strong { font-size: 11px; }
+  .compose-panel { padding-inline: 8px; }
+}
+
+/* Round 6: GPT/static-style floating composer. The history owns the full
+   remaining viewport and reserves bottom scroll-space for the floating box. */
+#chatView {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  --composer-reserve: 170px;
+}
+#chatView > .empty-state,
+#chatView > .history {
+  grid-row: 3;
+}
+#chatView > .history {
+  overflow-y: auto;
+  padding-bottom: calc(var(--composer-reserve) + 18px);
+  scroll-padding-bottom: calc(var(--composer-reserve) + 18px);
+}
+#chatView > .compose-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  width: 100%;
+  margin: 0;
+  padding: 24px 14px 14px;
+  border-top: 0;
+  overflow: visible;
+  background: linear-gradient(to bottom, rgba(247,249,252,0), var(--bg) 24px, var(--bg) 100%);
+  pointer-events: none;
+}
+#chatView > .compose-panel > .composer-box {
+  pointer-events: auto;
+}
+.composer-box textarea#messageInput {
+  height: 72px !important;
+  min-height: 72px !important;
+  max-height: 72px !important;
+  overflow-y: auto !important;
+}
+.simple-composer-topbar {
+  position: relative;
+  z-index: 5;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+#workflowPicker {
+  position: relative;
+  z-index: 20;
+  overflow: visible !important;
+}
+#workflowPicker.open { z-index: 220; }
+#workflowDropdownMenu {
+  z-index: 500;
+}
+.validator-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(360px, 42vw);
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(180deg,#fff,#f8fbfb);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.validator-picker[hidden] { display: none !important; }
+.validator-picker input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.options-panel { grid-template-columns: minmax(160px, 320px); }
+
+@media (max-width: 720px) {
+  #chatView > .compose-panel { padding: 18px 8px 8px; }
+  .validator-picker { min-width: 0; width: 100%; }
+}
+
+#workflowDropdownMenu.workflow-dropdown-portal {
+  position: fixed !important;
+  z-index: 5000 !important;
+  margin: 0 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  pointer-events: auto;
+}
+#workflowDropdownMenu.workflow-dropdown-portal::after {
+  display: none;
+}
+.message .message-body {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Project action menus portal to body so the scrollable Project list can never clip them. */
+.project-action-menu.project-action-menu-portal {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 4900 !important;
+  margin: 0 !important;
+}
+
+/* Round 8: Browser runtime mirrors the CLI semantic console view. */
+.project-list {
+  padding-left: 5px;
+  padding-right: 1px;
+}
+.project-root {
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 8px;
+  padding-left: 13px;
+}
+.project-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.project-name-line > strong { flex: 1 1 auto; min-width: 0; }
+.project-runtime-label {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: .04em;
+}
+.project-mark { position: relative; background: #cbd5e1 !important; }
+.project-mark.runtime-running { background: var(--accent-dark) !important; box-shadow: 0 0 0 3px rgba(20,184,166,.14); }
+.project-mark.runtime-completed { background: #16a34a !important; }
+.project-mark.runtime-interrupted { background: #f59e0b !important; }
+.project-mark.runtime-stopped { background: #ef4444 !important; }
+.project-mark.runtime-missing { background: #94a3b8 !important; }
+.project-runtime-label.runtime-running { color: #047857; background: #dff8ee; }
+.project-runtime-label.runtime-completed { color: #15803d; background: #e9f8ed; }
+.project-runtime-label.runtime-interrupted { color: #9a5b00; background: var(--warning-soft); }
+.project-runtime-label.runtime-stopped { color: #b42318; background: #fee4df; }
+.project-runtime-label.runtime-missing { color: #64748b; background: #eef2f6; }
+.project-row.runtime-running .project-mark::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(20,184,166,.48);
+  border-radius: 999px;
+  animation: projectRunningPulse 1.25s ease-out infinite;
+}
+@keyframes projectRunningPulse {
+  0% { opacity: .9; transform: scale(.7); }
+  80%,100% { opacity: 0; transform: scale(1.65); }
+}
+
+.cli-runtime-card {
+  width: min(980px, 100%);
+  padding: 0;
+  overflow: hidden;
+  border-color: #29364a;
+  border-radius: 14px;
+  background: #111827;
+  box-shadow: 0 12px 28px rgba(15,23,42,.10);
+}
+.cli-runtime-card .live-activity-head {
+  min-height: 38px;
+  padding: 0 13px;
+  border-bottom: 1px solid #29364a;
+  background: #172033;
+  color: #e5e7eb;
+}
+.cli-runtime-card .live-activity-head small { color: #98a2b3; }
+.cli-runtime-output {
+  min-height: 116px;
+  max-height: 310px;
+  margin: 0;
+  padding: 15px 18px 17px;
+  overflow: auto;
+  color: #e5e7eb;
+  background: #111827;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.cli-runtime-card.running .live-dot {
+  background: #2dd4bf;
+  box-shadow: 0 0 0 0 rgba(45,212,191,.48);
+  animation: liveRuntimePulse 1.25s ease-out infinite;
+}
+@keyframes liveRuntimePulse {
+  0% { box-shadow: 0 0 0 0 rgba(45,212,191,.50); }
+  70% { box-shadow: 0 0 0 7px rgba(45,212,191,0); }
+  100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); }
+}
+
+/* Confirmation overlays must cover the floating composer and portal menus. */
+.designer-export-box { z-index: 6500 !important; }
+.designer-confirm-box {
+  z-index: 7000 !important;
+  background: rgba(14, 23, 38, 0.58) !important;
+  backdrop-filter: blur(3px);
+}
+
+/* Project/Runtime motion is kept outside the composer input. */
+.project-list { padding-left: 8px; }
+.project-root { padding-left: 15px; }
+.project-runtime-label.runtime-idle { color: #64748b; background: #eef2f6; }
+html[data-motion="reduced"] .project-row.runtime-running .project-mark::after,
+html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="system"] .project-row.runtime-running .project-mark::after,
+  html[data-motion="system"] .cli-runtime-card.running .live-dot { animation: none !important; }
+}
+
+/* Round 11: runtime feedback belongs in the conversation, not the input box. */
+.message.user,
+.message.assistant,
+.live-activity,
+.cli-runtime-card {
+  background: var(--panel);
+}
+.message.user { border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.cli-runtime-card {
+  border-color: #d9e2ec;
+  background: var(--panel);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .07);
+}
+.cli-runtime-card .live-activity-head {
+  border-bottom-color: #e5eaf0;
+  background: var(--panel);
+  color: var(--text);
+}
+.cli-runtime-card .live-activity-head small { color: var(--muted); }
+.cli-runtime-output {
+  color: #263244;
+  background: var(--panel);
+}
+
+/* Run lifecycle actions occupy the same bottom-right slot. */
+.runtime-composer-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-height: 34px;
+}
+.runtime-control-button {
+  min-height: 32px;
+  padding: 0 13px;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+}
+.runtime-control-button.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+/* Options is a true popover; opening it never changes composer/input height. */
+#composePanel .composer-box { position: relative; overflow: visible; }
+#composePanel .options-panel {
+  position: absolute;
+  left: 10px;
+  bottom: 48px;
+  z-index: 420;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: min(300px, calc(100% - 20px));
+  padding: 12px;
+  border: 1px solid #d7e0e8;
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, .16);
+}
+#composePanel .options-panel[hidden] { display: none !important; }
+.options-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+.options-popover-head button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+}
+.options-popover-field { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 800; }
+#composePanel .options-panel select { min-height: 36px; background: var(--panel); }
+.options-rerun { justify-self: start; }
+
+/* Slightly more compact task composer. */
+.composer-box textarea#messageInput {
+  height: 60px !important;
+  min-height: 60px !important;
+  max-height: 60px !important;
+}
+
+/* Give each Project row a little more vertical breathing room. */
+.project-root { min-height: 42px; }
+.project-menu-button { top: 9px; }
+
+#composePanel textarea#messageInput:disabled {
+  opacity: 1;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Round 13: conversation entries must never shrink when history overflows.
+   Without this, a newly appended Runtime card can collapse to a 1-2px line
+   after a long previous Assistant message, making the current conversation
+   look missing even though the DOM node exists. */
+#messages.history > .message,
+#messages.history > .live-activity {
+  flex: 0 0 auto;
+}
+
+
+/* Round 15: remembered run preferences + symmetric project rail + scalable TODO history. */
+.projects .project-list {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  scrollbar-gutter: auto;
+}
+.project-tree,
+.project-root {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Runtime TODOs use the conversation scrollbar instead of a nested terminal scrollbar. */
+.cli-runtime-output {
+  max-height: none;
+  overflow: visible;
+}
+#messages.history {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.backend-option-field { min-width: 0; }
+.backend-picker { position: relative; min-width: 0; }
+.backend-dropdown-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+}
+.backend-dropdown-button:hover,
+.backend-dropdown-button[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.backend-picker-label {
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+#backendSelectedLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 850;
+}
+.backend-picker-chevron { color: var(--accent-dark); font-size: 16px; line-height: 1; }
+#backendDropdownMenu.backend-dropdown-portal {
+  position: fixed !important;
+  z-index: 5100 !important;
+  margin: 0 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  pointer-events: auto;
+}
+#workflowDropdownMenu.workflow-dropdown-portal,
+#backendDropdownMenu.backend-dropdown-portal {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.workflow-dropdown-menu.dropdown-scrollable { overflow-y: auto; }
+
+/* Chat viewport: keep the scrollbar fully above the composer instead of
+   letting its bottom track sit behind the floating composer overlay. */
+#chatView {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+#chatView > .history {
+  grid-row: 3;
+  padding-bottom: 18px;
+  scroll-padding-bottom: 18px;
+}
+#chatView > .compose-panel {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  grid-row: 4;
+  z-index: 90;
+  padding: 10px 14px 14px;
+  background: var(--panel);
+  pointer-events: auto;
+}
+.clear-history-button {
+  white-space: nowrap;
+  color: var(--muted);
+}
+.clear-history-button:hover {
+  color: var(--fail);
+}
+
+
+/* Compact composer controls: keep the textarea short and place Workflow beside Options. */
+#chatView > .compose-panel {
+  padding: 7px 14px 10px;
+}
+#composePanel .composer-box {
+  gap: 6px;
+  padding: 7px 9px 7px;
+}
+.composer-box textarea#messageInput {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+  padding-block: 6px;
+}
+#composePanel .composer-footer {
+  min-height: 30px;
+}
+#composePanel .composer-left {
+  gap: 6px;
+  overflow: visible;
+}
+#composePanel .composer-workflow-picker {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: min(340px, 45vw);
+  height: 29px;
+  min-height: 29px;
+  padding: 0 4px 0 9px;
+  gap: 7px;
+  border-radius: 999px;
+  box-shadow: none;
+}
+#composePanel .composer-workflow-picker .workflow-picker-label {
+  height: 20px;
+  padding-right: 7px;
+  font-size: 10px;
+}
+#composePanel .composer-workflow-picker .workflow-dropdown-button {
+  min-height: 27px;
+  height: 27px;
+  padding: 0 3px 0 0;
+  gap: 4px;
+}
+#composePanel .composer-workflow-picker .workflow-selected-label {
+  font-size: 11px;
+}
+#composePanel .composer-workflow-picker .workflow-dropdown-caret {
+  width: 18px;
+  height: 18px;
+}
+#composePanel .options-button {
+  height: 29px;
+  min-height: 29px;
+}
+#composePanel .simple-composer-topbar[hidden] {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  #composePanel .composer-left {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  #composePanel .composer-workflow-picker {
+    max-width: min(260px, 62vw);
+  }
+}
+
+/* Local environment diagnostics live inside Run options and do not affect composer height. */
+.options-environment-check { justify-self:start; }
+.environment-check-result {
+  display:grid;
+  gap:5px;
+  max-height:220px;
+  overflow:auto;
+  padding:8px;
+  border:1px solid #d7e0e8;
+  border-radius:10px;
+  background:var(--panel-2);
+  font-size:10px;
+  line-height:1.35;
+}
+.environment-check-summary { font-weight:900; color:var(--text); }
+.environment-check-summary.warn { color:#9a5b00; }
+.environment-check-summary.fail { color:var(--fail); }
+.environment-check-row { display:grid; grid-template-columns:34px minmax(0,1fr); gap:6px; align-items:start; color:var(--muted); }
+.environment-check-row strong { font-size:9px; }
+.environment-check-row.pass strong { color:var(--accent); }
+.environment-check-row.warn strong { color:#9a5b00; }
+.environment-check-row.fail strong { color:var(--fail); }
+.clear-history-button:disabled { opacity:.45; cursor:not-allowed; }
+
+
+/* UI polish: smooth runtime feedback + compact engineering-tool density. */
+.header,
+.designer-topbar { min-height: var(--header-height); padding-top: 9px; padding-bottom: 9px; }
+.header h1,
+.designer-topbar h1 { font-size: var(--font-title); }
+.header p,
+.designer-topbar p,
+.modal-hint,
+.designer-help,
+.designer-field-help { font-size: var(--font-helper); line-height: 1.45; }
+.message .message-body,
+.composer-box textarea#messageInput,
+.cli-runtime-output { font-size: var(--font-body); }
+.message .message-body { line-height: 1.55; }
+.composer-box textarea#messageInput { line-height: 1.45; }
+
+.message,
+.live-activity,
+.cli-runtime-card,
+.composer-box,
+.summary,
+.designer-overview-card,
+.studio-editor-card { border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.cli-runtime-card { position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
+.cli-runtime-card.running .live-dot { animation: none; }
+.live-activity-head .live-progress { margin-left: auto; }
+.live-activity-head .live-updated { margin-left: 6px; color: var(--muted); font-weight: 600; }
+.runtime-freshness strong { font-variant-numeric: tabular-nums; }
+.runtime-freshness strong.stale { color: var(--warn); }
+
+/* Consistent state icon language. */
+.runtime-badge::before,
+.project-runtime-label::before,
+.studio-syntax-badge::before { display: inline-block; width: 1em; margin-right: 5px; text-align: center; font-weight: 900; }
+.runtime-badge::before { content: "○"; }
+.runtime-badge.running::before,
+.project-runtime-label.runtime-running::before { content: "◐"; }
+.runtime-badge.completed::before,
+.project-runtime-label.runtime-completed::before,
+.studio-syntax-badge.valid::before { content: "✓"; }
+.runtime-badge.failed::before,
+.runtime-badge.interrupted::before,
+.project-runtime-label.runtime-stopped::before,
+.studio-syntax-badge.invalid::before { content: "×"; }
+.project-runtime-label.runtime-interrupted::before { content: "!"; }
+.project-runtime-label.runtime-idle::before,
+.project-runtime-label.runtime-missing::before { content: "○"; }
+
+.error-text { max-width: min(420px, 40vw); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.error-details-button { min-height: 24px; padding: 2px 7px; font-size: var(--font-helper); border-radius: var(--radius-sm); }
+.error-details-card { width: min(760px, calc(100vw - 32px)); }
+.error-details-content { max-height: min(58vh, 520px); overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-2); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* Keep ordinary cards flat; reserve stronger elevation for dialogs/popovers. */
+.summary,
+.composer-box,
+.message,
+.live-activity,
+.designer-overview-card,
+.studio-editor-card { box-shadow: var(--shadow-sm) !important; }
+.modal-card,
+.workflow-dropdown-menu,
+.backend-dropdown-menu,
+.theme-panel,
+.project-action-menu { box-shadow: var(--shadow-popover); }
+
+/* Runtime visibility polish: the lower runtime frame stays visibly alive while work is running. */
+.project-runtime-detail { color: var(--run) !important; font-weight: 700; }
+.cli-runtime-footer {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  border-top: 1px solid #29364a;
+  background: #172033;
+  color: #98a2b3;
+  font-size: 10px;
+  font-weight: 700;
+}
+.cli-runtime-footer strong { color: #e5e7eb; font-variant-numeric: tabular-nums; }
+.runtime-live-indicator { display: inline-flex; align-items: center; gap: 6px; color: #5eead4; }
+.cli-runtime-card.running .runtime-live-indicator::before { content: "●"; font-size: 8px; }
+  70% { box-shadow: 0 0 0 6px rgba(94,234,212,0); }
+  100% { box-shadow: 0 0 0 0 rgba(94,234,212,0); }
+}
+.runtime-elapsed strong { font-variant-numeric: tabular-nums; }
+
+
+/* Motion, immutable active-run settings, and ChatGPT-style composer growth. */
+html[data-motion="full"] { --motion-fast: 140ms; --motion-normal: 220ms; --motion-slow: 360ms; }
+html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion-slow: 0ms; }
+
+.composer-box textarea#messageInput {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 210px !important;
+  overflow-y: hidden !important;
+  resize: none;
+  transition: height var(--motion-fast, 140ms) ease, border-color var(--motion-fast, 140ms) ease, box-shadow var(--motion-fast, 140ms) ease;
+}
+.composer-validator-picker {
+  min-width: 0;
+  max-width: min(330px, 36vw);
+  height: 29px;
+  min-height: 29px;
+  padding: 0 8px;
+  flex: 0 1 auto;
+}
+.composer-validator-picker .compact-file-picker { min-width: 0; display: flex; align-items: center; gap: 4px; }
+.composer-validator-picker input { min-width: 72px; max-width: 150px; text-overflow: ellipsis; }
+.composer-validator-picker .file-choice-button.compact { min-height: 24px; padding: 0 7px; font-size: 10px; }
+.run-config-lock-note { padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 1.4; }
+.configuration-locked { opacity: .72; }
+#composePanel button:disabled, #composePanel input:disabled { cursor: not-allowed; }
+@media (max-width: 900px) { .composer-validator-picker { max-width: 260px; } }
+@media (max-width: 720px) { .composer-validator-picker { width: auto; min-width: 210px; max-width: 250px; } }

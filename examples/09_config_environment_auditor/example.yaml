@@ -1,0 +1,5 @@
+- goal_file: project/prompt.md
+  project_root: project
+  validator: project/validation.py
+  ai_validator_prompt_file: project/ai_validation.md
+  ai_validator_count: 3

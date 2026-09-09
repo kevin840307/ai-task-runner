@@ -1,0 +1,32 @@
+stages:
+  run_prompt:
+    type: task
+
+  review:
+    type: review
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+
+flow:
+  - stage: run_prompt
+    prompt: prompts/step_a.md
+
+  - stage: review
+    prompt: prompts/review_a.md
+    retry: 1
+    skip: true
+
+  - stage: run_prompt
+    prompt: prompts/step_b.md
+
+  - stage: review
+    prompt: prompts/review_b.md
+    skip: false
+
+  - stage: run_prompt
+    prompt: prompts/step_c.md
+
+  - validate_file

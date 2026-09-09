@@ -1,0 +1,12 @@
+protected_paths:
+  - prompt.md
+  - validation.py
+  - ai_validation.md
+
+  - ai_task_runner_validator.py
+instructions:
+  always: |
+    Work only inside this project root.
+    Never modify prompt.md, validation.py, ai_validation.md, .ai-task-runner.yaml,
+    runner state, or validator reports.
+    Keep the implementation generic and driven by runtime input.

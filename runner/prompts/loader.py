@@ -1,0 +1,91 @@
+"""Load and strictly render bundled/project prompt templates."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined, meta
+
+from ..project.policy import instruction_text
+from ..errors import RunnerError
+from ..resources import write_text
+from ..plugins.registry import collect_plugin_instructions
+from . import PROMPT_ROOT
+
+_ENV = Environment(
+    loader=FileSystemLoader(str(PROMPT_ROOT)),
+    undefined=StrictUndefined,
+    autoescape=False,
+    keep_trailing_newline=True,
+)
+
+
+def _resolve(filename: str, base: Path) -> Path:
+    path = Path(filename).expanduser()
+    return path.resolve() if path.is_absolute() else (base / path).resolve()
+
+
+def render_prompt(filename: str, values: dict[str, Any] | None = None, *, base: Path = PROMPT_ROOT) -> str:
+    """Render one prompt with Jinja StrictUndefined; missing variables fail immediately."""
+    path = _resolve(filename, base)
+    if not path.is_file():
+        raise RunnerError(f"missing prompt template: {path}")
+    try:
+        if path.is_relative_to(PROMPT_ROOT):
+            template = _ENV.get_template(path.relative_to(PROMPT_ROOT).as_posix())
+        else:
+            template = _ENV.from_string(path.read_text(encoding="utf-8-sig"))
+        return template.render(**(values or {}))
+    except OSError as error:
+        raise RunnerError(f"cannot read prompt template: {path}: {error}") from error
+    except Exception as error:
+        raise RunnerError(f"cannot render prompt template: {path}: {error}") from error
+
+
+def prompt_variables(filename: str, *, base: Path = PROMPT_ROOT) -> set[str]:
+    """Return undeclared top-level Jinja variables for contract tests/editors."""
+    path = _resolve(filename, base)
+    if not path.is_file():
+        raise RunnerError(f"missing prompt template: {path}")
+    try:
+        source = path.read_text(encoding="utf-8-sig")
+    except OSError as error:
+        raise RunnerError(f"cannot read prompt template: {path}: {error}") from error
+    return set(meta.find_undeclared_variables(_ENV.parse(source)))
+
+
+
+def save_prompt(
+    path: str | Path,
+    text: str,
+    *,
+    expected_hash: str | None = None,
+) -> str:
+    """Validate Jinja syntax and atomically save one editable prompt."""
+    target = Path(path).expanduser().resolve()
+
+    def validate(source_text: str) -> None:
+        try:
+            _ENV.parse(source_text)
+        except Exception as error:
+            raise RunnerError(f"invalid prompt template: {target}: {error}") from error
+
+    return write_text(target, text, expected_hash=expected_hash, validate=validate)
+
+def prompt_instructions(root: Path) -> tuple[str, str]:
+    """Build shared Runner rules and user always-on instructions with one policy read."""
+    text = instruction_text(root, "always")
+    always = f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
+    rules = render_prompt("system/rules.md", {
+        "project": {"root": str(root)},
+        "plugin_rules": collect_plugin_instructions(root),
+    }) + always
+    return rules, always
+
+
+__all__ = [
+    "prompt_instructions",
+    "prompt_variables",
+    "render_prompt",
+    "save_prompt",
+]

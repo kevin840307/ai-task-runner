@@ -1,0 +1,52 @@
+# Prompt and Session Contract
+
+## Prompt variables
+
+Prompt variables are a public contract, not ad-hoc dictionaries. `runner/prompts/context.py` builds the supported Stage context. Templates may use these top-level names:
+
+- `goal`: original user goal.
+- `stage`: current Stage name.
+- `task`: current TODO data or `None`.
+- `tasks`: normalized TODO list.
+- `workflow`: current cycle and validator feedback needed by Stage templates.
+- `validation`: validator path, feedback, and optional validator instructions.
+- `project`: project root.
+- `previous`: bounded previous-Stage handoff (`stage`, `status`, bounded `output`, and bounded structured `data`). Recover prompts should consume only concrete new feedback such as `reason` / `missing_items`; they must not rebuild or resend unrelated context.
+- `planning`: planning-only normalized progress/inspection context.
+- `rules`, `always_instructions`: shared rendered instruction text.
+
+
+Example recover prompt:
+```jinja2
+{% if previous.data %}
+Review feedback: {{ previous.data | tojson }}
+{% endif %}
+```
+
+Templates must not reference internal Python objects such as `state`, `args`, or `scratch`.
+
+All bundled prompts use one Jinja loader with `StrictUndefined`. A missing or misspelled variable fails immediately instead of silently rendering an empty value. `{% include %}` is supported for shared prompt fragments/output contracts.
+
+## Stage prompt ownership
+
+Ordinary write work should normally use semantic `type: task`; read-only verdict work should use `type: review`. Use `type: base` only when a custom AI Stage intentionally needs BaseStage defaults.
+
+Planning-specific computed context is handled inside `PlanStage`. `TaskStage` and `ReviewStage` remain thin semantic profiles over the shared AI Stage implementation; Review owns readonly mode and structured verdict parsing by default. Review prompts must return a verdict from available evidence instead of repairing, searching for tools, or requesting unavailable tools. There is no prompt-builder registry.
+
+## Session policy
+
+- Initial call: render the full Stage prompt. When the same session later sees the same Stage prompt contract again, bundled Stages may use a configured `continuation_prompt` that sends only the new TODO/evidence instead of repeating Goal/rules already in that session.
+- Same-session recovery: send only a short stage-aware delta: current Stage identity, new failure evidence, readonly reminder when applicable, and the required next action/output contract. Read-only recovery explicitly forbids write/shell/edit/tool-discovery actions so repeated tool or timeout failures converge to the Stage output contract. Do not resend known full context.
+- Fresh/rebuilt session: prepend only a short recovery header, then resend the original complete Stage prompt. The Stage prompt itself owns goal/task/rules, so the wrapper never duplicates them.
+- Final AI validation runs use independent fresh sessions; three configured runs therefore use three different sessions.
+- Structured-output parse failure first uses a short same-session JSON-only correction containing only parser feedback; configured fresh fallback starts a new session and resends the full Stage prompt.
+
+Full AI task prompts are passed through stdin and never embedded in argv. Qwen `/context` and `/compress-fast` are short backend control commands, not task prompts, so they may use the CLI control-argument path.
+
+## Prompt size rules
+
+- Global engineering/safety rules live in shared rules, not repeated in every TODO acceptance criterion.
+- Planning emits only task-specific, objectively checkable acceptance criteria for the TODO's resulting artifact or behavior, not future Stage/review/repair/validator outcomes.
+- When the Planner-visible Stage catalog contains a write Stage, every planned TODO must include at least one write Stage; read-only review-only TODOs are rejected.
+- Stage prompts prefer short scope/evidence/action/contract language over repeated prose or long example lists.
+- JSON output examples are intentionally retained because they materially improve structured-output reliability on smaller models.

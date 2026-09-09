@@ -1,0 +1,36 @@
+# Grill + deterministic validation + final AI validation.
+stages:
+  planning:
+    type: plan
+
+  grill:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    retry: 0
+    recover: [repair_plan]
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_file:
+    type: command
+    status: 正在執行 File Validator
+    run_state: validating
+    actor: validator
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    recover: [repair_plan]
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - grill
+  - validate_file
+  - validate_ai

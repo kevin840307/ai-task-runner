@@ -1,0 +1,43 @@
+# Workflow Builder
+
+`workflow_builder/` is the external integration surface for generating validated AI Task Runner Workflow packages without importing or modifying Runner Core.
+
+Canonical Builder assets live together here:
+
+- `workflow_builder.yaml` — Builder Workflow.
+- `prompt.md` — Builder Skill/Prompt.
+- `validation.py` — fixed trusted Builder validator; validates generated files and runs the real Workflow dry-run matrix.
+- `run.py` — generate a draft and optionally publish it.
+- `publish.py` — publish an already validated draft.
+
+`runner/workflow/system/workflow_builder.yaml` remains only as a compatibility mirror for the existing `SYSTEM_WORKFLOWS["workflow_builder"]` registry. It points to `workflow_builder/prompt.md` and uses the same fixed `workflow_builder/validation.py`. The Builder is system-internal and is intentionally excluded from the normal Workflow Studio / Tasks Workflow selector.
+
+## CLI: generate and publish
+
+```bash
+python workflow_builder/run.py \
+  --project-root /tmp/workflow-builder-workspace \
+  --request-file request.md \
+  --output-workflow /path/to/output/my.workflow.yaml \
+  --output-prompt-dir /path/to/output/prompts
+```
+
+`--project-root` is the Runner's filesystem workspace. External callers may intentionally point it at a real project when project inspection is desired, but the UI always supplies its own isolated temporary Builder job instead.
+
+## Draft-only mode
+
+The UI does **not** use the currently selected user Project as the Builder root. It creates an isolated UI-owned job workspace and passes that temporary directory to the Runner as its technical `--project-root`:
+
+```text
+ui/data/workflow-builder/
+├─ active.json            # points to the one resumable Generator job
+└─ <job-id>/
+   ├─ .ai-task-runner/    # isolated Builder runtime only
+   ├─ draft/
+   ├─ status.json
+   └─ result.json
+```
+
+This means Workflow generation works even when no Project has been opened or registered in the UI. The Runner still needs a filesystem `--project-root` internally, but for UI generation that root is the temporary Builder job itself, never the current user Project.
+
+Draft-only mode creates and validates files only under the job directory. It does **not** create a Custom or Project Workflow. The UI opens a dedicated Generator page, asks for the request plus Folder + Filename + Backend, shows status-only feedback plus the exact temporary workspace path while this command runs, and then reviews the temporary draft through Visual/YAML/Prompt views. The UI keeps exactly one active Generator job in `active.json`; closing or refreshing the browser leaves that job running, and reopening the UI restores the same generating/ready/failed state. A second Generate cannot start until the current job is cancelled/discarded/saved. Cancel requests stop the Builder Runner and discard the temporary job. Regenerate discards the old draft and starts a new job on the next Generate. Only the explicit **Save Workflow** action invokes `publish.py`; the Save dialog can adjust Folder/Filename/destination and the current edited draft is revalidated immediately before publication. **Custom** can be saved without any open Project. **Current Project** becomes available only when a Project is actually open at Save time.

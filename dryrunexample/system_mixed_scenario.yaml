@@ -1,0 +1,8 @@
+default: pass
+stages:
+  review:
+    - fail
+    - pass
+  validate_file:
+    - fail
+    - pass

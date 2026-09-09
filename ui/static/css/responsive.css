@@ -1,0 +1,176 @@
+/* Collapsed states */
+body.projects-collapsed {
+  grid-template-columns: var(--rail-collapsed) minmax(0, 1fr) var(--rail-right);
+}
+
+body.projects-collapsed .projects {
+  padding: 12px 10px;
+  overflow: hidden;
+}
+
+body.projects-collapsed .brand,
+body.projects-collapsed .button-text,
+body.projects-collapsed .project-root span,
+body.projects-collapsed .project-root strong,
+body.projects-collapsed .project-caret,
+body.projects-collapsed .project-item span,
+body.projects-collapsed .project-item strong,
+body.projects-collapsed .project-menu-button,
+body.projects-collapsed .project-children,
+body.projects-collapsed .project-row .danger {
+  display: none;
+}
+
+body.projects-collapsed .projects-head {
+  justify-content: center;
+}
+
+body.projects-collapsed .new-project-button,
+body.projects-collapsed .project-root,
+body.projects-collapsed .project-item {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+body.projects-collapsed .project-list { justify-items: center; }
+body.projects-collapsed .project-root-row,
+body.projects-collapsed .project-row { grid-template-columns: 42px; }
+body.projects-collapsed .project-root::before,
+body.projects-collapsed .project-item::before {
+  content: "P";
+  font-weight: 800;
+  color: var(--accent);
+}
+
+body.details-collapsed {
+  grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--details-collapsed);
+}
+
+body.projects-collapsed.details-collapsed {
+  grid-template-columns: var(--rail-collapsed) minmax(0, 1fr) var(--details-collapsed);
+}
+
+body.details-collapsed .details {
+  display: grid;
+  overflow: hidden;
+}
+
+body.details-collapsed .tabs {
+  grid-template-columns: 1fr;
+  align-content: start;
+  border-bottom: 0;
+  height: 100%;
+}
+
+body.details-collapsed .tab {
+  min-height: 48px;
+  padding: 6px 4px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+}
+
+body.details-collapsed .panel { display: none !important; }
+
+/* Responsive */
+@media (max-width: 1180px) {
+  .rail-resizer {
+    display: none;
+  }
+
+  body {
+    grid-template-columns: 240px 1fr;
+    overflow: auto;
+  }
+
+  .details {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    max-height: 55vh;
+  }
+
+  .console,
+  .artifact-content { height: 42vh; }
+
+  .header { padding: 8px 12px; }
+
+  .actions { gap: 6px; }
+
+  body.projects-collapsed,
+  body.projects-collapsed.details-collapsed {
+    grid-template-columns: var(--rail-collapsed) minmax(0, 1fr);
+  }
+
+  body.details-collapsed {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  body.details-collapsed .details { display: none; }
+}
+
+@media (max-width: 760px) {
+  body,
+  body.projects-collapsed,
+  body.details-collapsed,
+  body.projects-collapsed.details-collapsed {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .projects,
+  .details {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .projects {
+    max-height: min(48vh, 405px);
+  }
+
+  body.projects-collapsed .projects { display: none; }
+
+  .header { grid-template-columns: minmax(0, 1fr) auto; }
+  .header-tools { gap: 6px; }
+
+  .settings-menu {
+    left: 12px;
+    right: 12px;
+    max-width: none;
+  }
+
+  .actions { grid-template-columns: 1fr; }
+  .settings-status { grid-template-columns: 1fr; }
+
+  .setting,
+  .check {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .summary { flex-wrap: wrap; }
+
+  .composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .composer-left,
+  .composer-right {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .composer-shortcut { display: none; }
+}
+
+/* V20 collapsed Run Center uses one polished launcher instead of vertical tabs. */
+body.details-collapsed .details .tabs,
+body.details-collapsed .details .tab { display: none !important; }
+@media (max-width: 1180px) {
+  body.details-collapsed .run-center-collapsed-launch { display: none; }
+}

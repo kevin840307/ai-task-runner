@@ -1,0 +1,47 @@
+# CLI Reference
+
+Version: 1.2.61
+
+All CLI options map to the canonical `RunRequest`. Repeatable options append one argv element each.
+
+| Option | Meaning | Default / notes |
+|---|---|---|
+| `--goal` | Inline goal | mutually exclusive with `--goal-file` |
+| `--goal-file` | UTF-8 goal file | preferred for long goals |
+| `--project-root` | writable project boundary | `.` |
+| `--script` | YAML task array; items may use `prompt`/`goal` or `goal_file` | exclusive with goal |
+| `--workflow` | linear Workflow YAML | omitted: select Mixed, File-only, or AI-only from validator options |
+| `--validator` | file validator path or `ai` | required unless script mode or an explicit `--workflow` is used |
+| `--validator-prompt` | extra Final AI instructions for `--validator ai` | empty |
+| `--ai-validator-prompt` | optional Final AI instructions after a file validator passes | empty/off |
+| `--ai-validator-prompt-file` | UTF-8 file containing Final AI validation instructions; mutually exclusive with `--ai-validator-prompt` | empty/off |
+| `--backend` | `qwen` or `opencode` | `qwen` |
+| `--command` | backend executable override | backend default |
+| `--sandbox` | run agent calls in the backend sandbox | off; Qwen adds `-s`, OpenCode applies permission confinement |
+| `--agent-arg` | one extra backend argv element | repeatable |
+| `--validator-arg` | one extra validator argv element | repeatable |
+| `--protect-file` | additional protected file/directory | repeatable |
+| `--validator-timeout` | validator seconds | 1200; positive |
+| `--agent-timeout` | runtime AI-call seconds | 7200; 0 disables |
+| `--planning-timeout` | planning AI-call seconds | 600; 0 disables |
+| `--agent-idle-after-change-timeout` | idle seconds after changes/output stop | 900; 0 disables |
+| `--max-attempts` | same-session recovery limit | `-1` keeps recovering until PASS, `0` disables same-session retry, and a positive value switches to Fresh Session after that many retries. Default: `2`. |
+| `--review-retries` | AI Review recovery limit | `-1` retries until PASS, `0` disables retry, and a positive value skips Review after that many retries. Default: `1`; Final Validator remains authoritative. |
+| `--max-cycles` | workflow/replan cycle limit | `-1` keeps validating and repairing until PASS, `0` disables replan, and a positive value is a finite termination cap. Default: `-1`. |
+| `--retry-delay` | logical task retry delay | 2 seconds |
+| `--retry-wait` | initial model-call retry wait | 5 seconds |
+| `--retry-max-wait` | max model-call retry wait | 300 seconds |
+| `--final-ai-validations`, `--ai-validator-count` | independent fresh-session Final AI votes | 1 |
+| `--final-ai-required-passes` | required PASS count | 0 = strict majority; otherwise <= runs |
+| `--work-dir` | Runner state dir inside project root | `.ai-task-runner` |
+
+The work directory also contains display/diagnostic surfaces. `stream.log` is the latest bounded subprocess output for detached local UI/live inspection; it is reset per subprocess and is not part of CLI control or resume semantics.
+| `--json-events` | emit JSON Lines progress | off |
+| `--resume` | resume state | off |
+| `--force-new` | create new run | off; conflicts with resume |
+| `--plan-only` | plan/save/exit before execution | off |
+
+## Validator command construction
+For `--validator validation.py --validator-arg --fab --validator-arg FAB23`, Runner executes conceptually:
+`<python> validation.py --project-root <root> --state-file <state.json> --fab FAB23`.
+Arguments are not parsed as business semantics by Runner.

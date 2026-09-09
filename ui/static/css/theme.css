@@ -1,0 +1,593 @@
+/* Global palette + appearance layer. Imported last so themes can normalize legacy surfaces. */
+:root,
+html[data-theme="teal"][data-appearance="light"] {
+  color-scheme: light;
+  --bg: #f5f7f6;
+  --sidebar-bg: #eef2f0;
+  --panel: #ffffff;
+  --panel-2: #f9fbfa;
+  --panel-3: #f2f6f4;
+  --line: #dce4e0;
+  --line-strong: #c8d4ce;
+  --text: #202823;
+  --muted: #6b756f;
+  --accent: #2f8065;
+  --accent-dark: #286d57;
+  --accent-soft: #e8f2ed;
+  --accent-softer: #f1f7f4;
+  --input-bg: #ffffff;
+  --popover-bg: rgba(255,255,255,.98);
+  --code-bg: #111827;
+  --code-text: #e5e7eb;
+  --fail: #d64b4b;
+  --pass: #22a559;
+  --run: #3b82f6;
+  --warn: #d99016;
+  --blue: #3b82f6;
+  --neutral: #8b9490;
+  --success-soft: #eaf7ef;
+  --info-soft: #edf4ff;
+  --warning-soft: #fff6df;
+  --danger-soft: #fff0ee;
+  --shadow-sm: 0 1px 2px rgba(32,40,35,.06);
+  --shadow-md: 0 10px 28px rgba(32,40,35,.08);
+  --shadow-popover: 0 18px 45px rgba(32,40,35,.16);
+}
+
+html[data-theme="blue"][data-appearance="light"] {
+  --bg: #f5f7fa;
+  --sidebar-bg: #eef1f6;
+  --panel: #ffffff;
+  --panel-2: #fafbfe;
+  --panel-3: #f1f4f9;
+  --line: #dde2ea;
+  --line-strong: #c8d0dc;
+  --text: #202733;
+  --muted: #6b7482;
+  --accent: #3568b8;
+  --accent-dark: #2d599d;
+  --accent-soft: #e8eef8;
+  --accent-softer: #f1f4fa;
+  --input-bg: #ffffff;
+  --popover-bg: rgba(255,255,255,.98);
+}
+
+
+html[data-theme="violet"][data-appearance="light"] {
+  --bg: #f7f5fb; --sidebar-bg: #f0edf8; --panel: #ffffff; --panel-2: #fbfaff; --panel-3: #f3f0fa;
+  --line: #e1dced; --line-strong: #cbc2df; --text: #282434; --muted: #746d80; --accent: #7456d8; --accent-dark: #6246bd; --accent-soft: #eee9fb; --accent-softer: #f6f3fd; --input-bg: #ffffff; --popover-bg: rgba(255,255,255,.98);
+}
+
+html[data-theme="amber"][data-appearance="light"] {
+  --bg: #faf7f2; --sidebar-bg: #f5efe5; --panel: #ffffff; --panel-2: #fdfbf7; --panel-3: #f8f1e7;
+  --line: #e8dfd1; --line-strong: #d6c7b2; --text: #2f2921; --muted: #7d7265; --accent: #b86a12; --accent-dark: #97560e; --accent-soft: #faecd8; --accent-softer: #fdf6eb; --input-bg: #ffffff; --popover-bg: rgba(255,255,255,.98);
+}
+
+html[data-theme="rose"][data-appearance="light"] {
+  --bg: #faf5f7; --sidebar-bg: #f5edf0; --panel: #ffffff; --panel-2: #fdfafb; --panel-3: #f8eff2;
+  --line: #eadce1; --line-strong: #d8c3ca; --text: #30242a; --muted: #7c6c73; --accent: #b84f6a; --accent-dark: #9b4057; --accent-soft: #f8e7ec; --accent-softer: #fcf3f6; --input-bg: #ffffff; --popover-bg: rgba(255,255,255,.98);
+}
+
+html[data-theme="teal"][data-appearance="dark"] {
+  color-scheme: dark;
+  --bg: #101513;
+  --sidebar-bg: #141b18;
+  --panel: #19211e;
+  --panel-2: #1e2824;
+  --panel-3: #25302b;
+  --line: #303c36;
+  --line-strong: #435149;
+  --text: #e7ece9;
+  --muted: #9ba7a1;
+  --accent: #5bb994;
+  --accent-dark: #70c7a4;
+  --accent-soft: #203a30;
+  --accent-softer: #1a2e27;
+  --input-bg: #151d1a;
+  --popover-bg: rgba(25,33,30,.98);
+  --code-bg: #0b100e;
+  --code-text: #dce7e1;
+  --success-soft: #173326;
+  --info-soft: #172a45;
+  --warning-soft: #3a2d12;
+  --danger-soft: #3b2020;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.24);
+  --shadow-md: 0 12px 30px rgba(0,0,0,.28);
+  --shadow-popover: 0 20px 48px rgba(0,0,0,.42);
+}
+
+html[data-theme="blue"][data-appearance="dark"] {
+  color-scheme: dark;
+  --bg: #10141a;
+  --sidebar-bg: #151b23;
+  --panel: #1b222c;
+  --panel-2: #202936;
+  --panel-3: #273241;
+  --line: #313d4d;
+  --line-strong: #445266;
+  --text: #e7ebf1;
+  --muted: #9ba5b3;
+  --accent: #6094e4;
+  --accent-dark: #75a5eb;
+  --accent-soft: #21324c;
+  --accent-softer: #1b293d;
+  --input-bg: #151b23;
+  --popover-bg: rgba(27,34,44,.98);
+  --code-bg: #0c1118;
+  --code-text: #e1e7f0;
+  --success-soft: #173326;
+  --info-soft: #1a2f4f;
+  --warning-soft: #3a2d12;
+  --danger-soft: #3b2020;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.24);
+  --shadow-md: 0 12px 30px rgba(0,0,0,.28);
+  --shadow-popover: 0 20px 48px rgba(0,0,0,.42);
+}
+
+
+html[data-theme="violet"][data-appearance="dark"] {
+  color-scheme: dark; --bg:#121018; --sidebar-bg:#18151f; --panel:#1f1b28; --panel-2:#262030; --panel-3:#30283c; --line:#3b3249; --line-strong:#51445f; --text:#eeeaf5; --muted:#aaa0b8; --accent:#a78bfa; --accent-dark:#b9a3ff; --accent-soft:#34294f; --accent-softer:#2a223f; --input-bg:#18151f; --popover-bg:rgba(31,27,40,.98); --code-bg:#0d0b11; --code-text:#e8e2f1; --success-soft:#173326; --info-soft:#172a45; --warning-soft:#3a2d12; --danger-soft:#3b2020; --shadow-sm:0 1px 2px rgba(0,0,0,.24); --shadow-md:0 12px 30px rgba(0,0,0,.28); --shadow-popover:0 20px 48px rgba(0,0,0,.42);
+}
+html[data-theme="amber"][data-appearance="dark"] {
+  color-scheme: dark; --bg:#17130e; --sidebar-bg:#1d1811; --panel:#252018; --panel-2:#2d261c; --panel-3:#382f22; --line:#463b2d; --line-strong:#5e4d38; --text:#f1ece5; --muted:#b1a493; --accent:#e6a04b; --accent-dark:#f0b66f; --accent-soft:#49331a; --accent-softer:#392915; --input-bg:#1c1812; --popover-bg:rgba(37,32,24,.98); --code-bg:#0f0c08; --code-text:#eee8dd; --success-soft:#173326; --info-soft:#172a45; --warning-soft:#3a2d12; --danger-soft:#3b2020; --shadow-sm:0 1px 2px rgba(0,0,0,.24); --shadow-md:0 12px 30px rgba(0,0,0,.28); --shadow-popover:0 20px 48px rgba(0,0,0,.42);
+}
+html[data-theme="rose"][data-appearance="dark"] {
+  color-scheme: dark; --bg:#171012; --sidebar-bg:#1e1518; --panel:#261c20; --panel-2:#2e2227; --panel-3:#392a30; --line:#47353c; --line-strong:#604751; --text:#f2e9ec; --muted:#b2a0a7; --accent:#e8819a; --accent-dark:#f29bb0; --accent-soft:#4b2732; --accent-softer:#3a2029; --input-bg:#1d1518; --popover-bg:rgba(38,28,32,.98); --code-bg:#100b0d; --code-text:#eee4e7; --success-soft:#173326; --info-soft:#172a45; --warning-soft:#3a2d12; --danger-soft:#3b2020; --shadow-sm:0 1px 2px rgba(0,0,0,.24); --shadow-md:0 12px 30px rgba(0,0,0,.28); --shadow-popover:0 20px 48px rgba(0,0,0,.42);
+}
+
+/* Stable semantic colors across every palette. */
+html[data-appearance="dark"], html[data-appearance="light"] {
+  --pass: #22a559;
+  --run: #3b82f6;
+  --warn: #d99016;
+  --fail: #d64b4b;
+  --blue: #3b82f6;
+  --neutral: #8b9490;
+}
+
+/* Normalize core surfaces so dark mode is complete without changing layout. */
+html[data-appearance] body { background: var(--bg); color: var(--text); }
+html[data-appearance] .projects {
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--sidebar-bg) 0%, var(--bg) 100%);
+  border-color: var(--line);
+}
+html[data-appearance] .header,
+html[data-appearance] .summary,
+html[data-appearance] .compose-panel,
+html[data-appearance] .composer-box,
+html[data-appearance] .options-panel,
+html[data-appearance] .workflow-page,
+html[data-appearance] .designer-main,
+html[data-appearance] .designer-sidebar,
+html[data-appearance] .studio-workflow-sidebar,
+html[data-appearance] .studio-editor-card,
+html[data-appearance] .designer-step-modal-box,
+html[data-appearance] .modal-box,
+html[data-appearance] .workflow-result-card,
+html[data-appearance] .project-action-menu,
+html[data-appearance] .workflow-dropdown-menu,
+html[data-appearance] .backend-dropdown-menu,
+html[data-appearance] .theme-panel {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+html[data-appearance] input,
+html[data-appearance] textarea,
+html[data-appearance] select,
+html[data-appearance] .designer-input,
+html[data-appearance] .designer-textarea,
+html[data-appearance] .designer-select {
+  background: var(--input-bg);
+  color: var(--text);
+  border-color: var(--line);
+}
+html[data-appearance] input::placeholder,
+html[data-appearance] textarea::placeholder { color: var(--muted); }
+
+html[data-appearance] button:not(.primary):not(.danger),
+html[data-appearance] .project-nav-link,
+html[data-appearance] .designer-nav-link,
+html[data-appearance] .workflow-dropdown-button,
+html[data-appearance] .backend-dropdown-button,
+html[data-appearance] .options-button,
+html[data-appearance] .file-choice-button {
+  background: var(--panel-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+html[data-appearance] button:hover:not(:disabled):not(.primary) { border-color: var(--accent); }
+html[data-appearance] .project-nav-link:hover,
+html[data-appearance] .project-nav-link.active,
+html[data-appearance] .designer-nav-link:hover,
+html[data-appearance] .designer-nav-link.active,
+html[data-appearance] .options-button.active {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+html[data-appearance] .project-nav-link span,
+html[data-appearance] .designer-nav-link span { background: var(--accent-soft); color: var(--accent); }
+html[data-appearance] .project-nav-link.active span,
+html[data-appearance] .designer-nav-link.active span { background: var(--accent); color: #fff; }
+html[data-appearance] .side-toggle,
+html[data-appearance] .header-icon { background: linear-gradient(180deg, var(--panel), var(--panel-2)); }
+html[data-appearance] .side-toggle.active,
+html[data-appearance] .header-icon.active { background: var(--accent-soft); border-color: var(--accent); }
+html[data-appearance] .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+html[data-appearance] .primary:hover:not(:disabled) { background: var(--accent-dark); }
+
+/* Semantic status surfaces. */
+html[data-appearance] .runtime-badge.running { color: var(--run); background: var(--info-soft); border-color: color-mix(in srgb, var(--run) 42%, var(--line)); }
+html[data-appearance] .runtime-badge.completed { color: var(--pass); background: var(--success-soft); border-color: color-mix(in srgb, var(--pass) 42%, var(--line)); }
+html[data-appearance] .runtime-badge.interrupted,
+html[data-appearance] .runtime-badge.stopped { color: var(--fail); background: var(--danger-soft); border-color: color-mix(in srgb, var(--fail) 42%, var(--line)); }
+html[data-appearance] .environment-check-summary.warn,
+html[data-appearance] .environment-check-row.warn strong { color: var(--warn); }
+
+/* Keep real code/editor areas intentionally dark in both appearances.
+   Runtime activity is conversation UI, so it follows the normal panel surface. */
+html[data-appearance] .designer-code,
+html[data-appearance] .studio-code-editor {
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+html[data-appearance] .cli-runtime-card,
+html[data-appearance] .cli-runtime-card pre {
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* Theme-aware aliases and legacy hard-code normalization. */
+html[data-appearance] { --surface: var(--panel); --surface-soft: var(--panel-2); }
+html[data-appearance] .brand::before { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 28%, transparent); }
+html[data-appearance] .new-project-button { box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 22%, transparent); }
+html[data-appearance] .studio-search-wrap,
+html[data-appearance] .studio-asset-menu,
+html[data-appearance] .workflow-generator-input-card,
+html[data-appearance] .workflow-generator-workspace code,
+html[data-appearance] .workflow-generator-review-panel,
+html[data-appearance] .workflow-generator-review-tabs,
+html[data-appearance] .designer-workflow-summary-card,
+html[data-appearance] .designer-overview-card,
+html[data-appearance] .designer-step-card,
+html[data-appearance] .designer-stage-card,
+html[data-appearance] .studio-file-item,
+html[data-appearance] .studio-search-input { background-color: var(--panel); color: var(--text); border-color: var(--line); }
+html[data-appearance] .workflow-generator-review-tabs button.active { background: var(--panel-2); color: var(--accent-dark); }
+html[data-appearance] .workflow-generator-yaml,
+html[data-appearance] .workflow-generator-prompt-editor textarea { background: var(--input-bg); color: var(--text); }
+html[data-appearance] .workflow-generator-workspace code.workspace-copy-ready:hover,
+html[data-appearance] .workflow-generator-workspace code.workspace-copy-ready:focus-visible { background: var(--accent-softer); }
+html[data-appearance="dark"] .studio-search-clear:hover,
+html[data-appearance="dark"] .studio-asset-menu button:hover:not(:disabled) { background: var(--accent-soft); }
+html[data-appearance="dark"] .modal-card,
+html[data-appearance="dark"] .modal-scroll-body,
+html[data-appearance="dark"] .modal-head,
+html[data-appearance="dark"] .modal-actions { background: var(--panel); color: var(--text); border-color: var(--line); }
+html[data-appearance="dark"] .modal-title-with-icon h2 { color: var(--text); }
+html[data-appearance="dark"] .modal-title-with-icon p,
+html[data-appearance="dark"] .modal-hint { color: var(--muted); }
+html[data-appearance="dark"] .workflow-dropdown-menu,
+html[data-appearance="dark"] .workflow-dropdown-menu button,
+html[data-appearance="dark"] .backend-dropdown-menu,
+html[data-appearance="dark"] .backend-dropdown-menu button { background: var(--popover-bg); color: var(--text); border-color: var(--line); }
+html[data-appearance="dark"] .workflow-dropdown-menu button:hover,
+html[data-appearance="dark"] .backend-dropdown-menu button:hover { background: var(--accent-soft); }
+.custom-folder-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+.custom-folder-row .designer-form-row { margin:0; }
+.custom-folder-row > button { min-height:38px; white-space:nowrap; }
+.custom-folder-create-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); }
+
+/* Theme / appearance control. */
+.projects-head { position: relative; }
+.theme-toggle-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1;
+  background: var(--panel-2);
+}
+.theme-toggle-button.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.theme-panel {
+  position: fixed;
+  z-index: 240;
+  width: min(320px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  background: var(--popover-bg) !important;
+  backdrop-filter: blur(12px);
+}
+.theme-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.theme-panel-head strong { font-size:14px; }
+.theme-panel-head button { width:28px; height:28px; padding:0; border-radius:8px; }
+.theme-setting-group + .theme-setting-group { margin-top:12px; }
+.theme-setting-label { display:block; margin-bottom:7px; color:var(--muted); font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+.appearance-options { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.appearance-options button { min-height:34px; padding:6px 8px; }
+.appearance-options button.active { color:var(--accent-dark); background:var(--accent-soft); border-color:var(--accent); }
+.theme-options { display:grid; gap:7px; }
+.theme-option { width:100%; min-height:52px; display:grid; grid-template-columns:66px 1fr auto; grid-template-rows:auto auto; column-gap:10px; align-items:center; text-align:left; padding:8px 10px; }
+.theme-option.active { border-color:var(--accent); background:var(--accent-soft) !important; box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
+.theme-option strong { grid-column:2; grid-row:1; font-size:13px; }
+.theme-option small { grid-column:2; grid-row:2; color:var(--muted); font-size:11px; }
+.theme-option.active::after { content:"✓"; grid-column:3; grid-row:1 / span 2; color:var(--accent); font-weight:900; }
+.theme-swatches { grid-column:1; grid-row:1 / span 2; display:grid; grid-template-columns:repeat(3,1fr); height:28px; overflow:hidden; border-radius:8px; border:1px solid var(--line); }
+.theme-swatches i { display:block; }
+.theme-swatches-teal i:nth-child(1){background:#2f8065}.theme-swatches-teal i:nth-child(2){background:#e8f2ed}.theme-swatches-teal i:nth-child(3){background:#202823}
+.theme-swatches-blue i:nth-child(1){background:#3568b8}.theme-swatches-blue i:nth-child(2){background:#e8eef8}.theme-swatches-blue i:nth-child(3){background:#202733}
+.theme-swatches-violet i:nth-child(1){background:#7456d8}.theme-swatches-violet i:nth-child(2){background:#eee9fb}.theme-swatches-violet i:nth-child(3){background:#282434}
+.theme-swatches-amber i:nth-child(1){background:#b86a12}.theme-swatches-amber i:nth-child(2){background:#faecd8}.theme-swatches-amber i:nth-child(3){background:#2f2921}
+.theme-swatches-rose i:nth-child(1){background:#b84f6a}.theme-swatches-rose i:nth-child(2){background:#f8e7ec}.theme-swatches-rose i:nth-child(3){background:#30242a}
+
+html[data-appearance="dark"] .theme-swatches-teal i:nth-child(1){background:#5bb994}html[data-appearance="dark"] .theme-swatches-teal i:nth-child(2){background:#203a30}html[data-appearance="dark"] .theme-swatches-teal i:nth-child(3){background:#e7ece9}
+html[data-appearance="dark"] .theme-swatches-blue i:nth-child(1){background:#6094e4}html[data-appearance="dark"] .theme-swatches-blue i:nth-child(2){background:#21324c}html[data-appearance="dark"] .theme-swatches-blue i:nth-child(3){background:#e7ebf1}
+html[data-appearance="dark"] .theme-swatches-violet i:nth-child(1){background:#a78bfa}html[data-appearance="dark"] .theme-swatches-violet i:nth-child(2){background:#34294f}html[data-appearance="dark"] .theme-swatches-violet i:nth-child(3){background:#eeeaf5}
+html[data-appearance="dark"] .theme-swatches-amber i:nth-child(1){background:#e6a04b}html[data-appearance="dark"] .theme-swatches-amber i:nth-child(2){background:#49331a}html[data-appearance="dark"] .theme-swatches-amber i:nth-child(3){background:#f1ece5}
+html[data-appearance="dark"] .theme-swatches-rose i:nth-child(1){background:#e8819a}html[data-appearance="dark"] .theme-swatches-rose i:nth-child(2){background:#4b2732}html[data-appearance="dark"] .theme-swatches-rose i:nth-child(3){background:#f2e9ec}
+html[data-appearance="dark"] 
+body.projects-collapsed .theme-toggle-button { width:32px; height:32px; }
+@media (max-width: 720px) {
+  .theme-panel { left:12px !important; right:12px !important; width:auto; }
+}
+
+/* Project status markers follow the same semantic color contract. */
+html[data-appearance] .project-mark.runtime-running { background: var(--run) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--run) 16%, transparent); }
+html[data-appearance] .project-mark.runtime-completed { background: var(--pass) !important; }
+html[data-appearance] .project-mark.runtime-interrupted { background: var(--warn) !important; }
+html[data-appearance] .project-mark.runtime-stopped { background: var(--fail) !important; }
+html[data-appearance] .project-mark.runtime-missing,
+html[data-appearance] .project-mark.runtime-idle { background: var(--neutral) !important; }
+html[data-appearance] .project-runtime-label.runtime-running { color: var(--run); background: var(--info-soft); }
+html[data-appearance] .project-runtime-label.runtime-completed { color: var(--pass); background: var(--success-soft); }
+html[data-appearance] .project-runtime-label.runtime-interrupted { color: var(--warn); background: var(--warning-soft); }
+html[data-appearance] .project-runtime-label.runtime-stopped { color: var(--fail); background: var(--danger-soft); }
+html[data-appearance] .project-runtime-label.runtime-missing,
+html[data-appearance] .project-runtime-label.runtime-idle { color: var(--muted); background: var(--panel-3); }
+
+/* Common secondary/selected surfaces that previously used hard-coded teal tints. */
+html[data-appearance] .designer-step-type.ai,
+html[data-appearance] .studio-file-item.active,
+html[data-appearance] .designer-workflow-pill.active,
+html[data-appearance] .workflow-dropdown-item.active,
+html[data-appearance] .backend-dropdown-item.active,
+html[data-appearance] .stage-recovery-behavior {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+}
+html[data-appearance] .designer-step-type.ai { color: var(--accent); }
+html[data-appearance] .workflow-generator-main,
+html[data-appearance] .workflow-generator-card,
+html[data-appearance] .generate-workflow-review-card,
+html[data-appearance] .studio-prompt-panel,
+html[data-appearance] .studio-step-panel,
+html[data-appearance] .designer-settings-panel,
+html[data-appearance] .designer-warning-box,
+html[data-appearance] .stage-section-head {
+  border-color: var(--line);
+}
+
+/* Dark appearance: normalize remaining high-frequency white utility surfaces. */
+html[data-appearance="dark"] .project-root,
+html[data-appearance="dark"] .project-item,
+html[data-appearance="dark"] .project-menu-button,
+html[data-appearance="dark"] .studio-file-item,
+html[data-appearance="dark"] .designer-workflow-pill,
+html[data-appearance="dark"] .designer-step-card,
+html[data-appearance="dark"] .designer-form-row,
+html[data-appearance="dark"] .asset-file-picker,
+html[data-appearance="dark"] .compact-file-picker,
+html[data-appearance="dark"] .workflow-picker,
+html[data-appearance="dark"] .backend-picker,
+html[data-appearance="dark"] .environment-check-result,
+html[data-appearance="dark"] .generate-workflow-workspace,
+html[data-appearance="dark"] .generate-workflow-prompt-card,
+html[data-appearance="dark"] .generate-workflow-actions,
+html[data-appearance="dark"] .studio-footer {
+  background-color: var(--panel-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* Dark-mode polish: normalize remaining legacy light surfaces and strengthen modal hierarchy. */
+html[data-appearance="dark"] .designer-overview-card,
+html[data-appearance="dark"] .designer-editor,
+html[data-appearance="dark"] .designer-step-list-panel,
+html[data-appearance="dark"] .designer-settings-panel,
+html[data-appearance="dark"] .designer-overview-card.system,
+html[data-appearance="dark"] .designer-cli-card,
+html[data-appearance="dark"] .visual-flow-card,
+html[data-appearance="dark"] .studio-source-tabs button.active,
+html[data-appearance="dark"] .studio-code-editor,
+html[data-appearance="dark"] .studio-line-numbers,
+html[data-appearance="dark"] .generate-panel,
+html[data-appearance="dark"] .workflow-generator-review-tabs button.active,
+html[data-appearance="dark"] .workflow-generator-yaml,
+html[data-appearance="dark"] .workflow-generator-prompt-list,
+html[data-appearance="dark"] .workflow-generator-prompt-editor,
+html[data-appearance="dark"] .workflow-generator-review-card,
+html[data-appearance="dark"] .workflow-generator-review-panel {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+
+html[data-appearance="dark"] .visual-flow-card:hover,
+html[data-appearance="dark"] .visual-flow-card.active,
+html[data-appearance="dark"] .studio-file-item.active {
+  background: color-mix(in srgb, var(--panel) 78%, var(--accent) 22%) !important;
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line)) !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
+}
+
+html[data-appearance="dark"] .visual-flow-index,
+html[data-appearance="dark"] .workflow-dropdown-caret,
+html[data-appearance="dark"] .workflow-option-badge {
+  background: var(--accent-soft) !important;
+  color: var(--accent-dark) !important;
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line)) !important;
+}
+
+/* Tasks workflow selector: never fall back to white/light gradients in dark mode. */
+html[data-appearance="dark"] .workflow-picker {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel)) !important;
+  border-color: var(--line) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 1px 3px rgba(0,0,0,.24) !important;
+}
+html[data-appearance="dark"] .workflow-picker:hover,
+html[data-appearance="dark"] .workflow-picker.open,
+html[data-appearance="dark"] .workflow-picker:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 12px 30px rgba(0,0,0,.28) !important;
+}
+html[data-appearance="dark"] .workflow-picker-label {
+  color: var(--muted) !important;
+  border-right-color: var(--line) !important;
+}
+html[data-appearance="dark"] .workflow-dropdown-menu {
+  background: var(--popover-bg) !important;
+  color: var(--text) !important;
+  border-color: var(--line-strong) !important;
+  box-shadow: var(--shadow-popover) !important;
+}
+html[data-appearance="dark"] .workflow-dropdown-menu::after {
+  background: var(--panel) !important;
+  border-right-color: var(--line-strong) !important;
+  border-bottom-color: var(--line-strong) !important;
+}
+html[data-appearance="dark"] .workflow-dropdown-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 84%, var(--accent) 16%) !important;
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line)) !important;
+}
+html[data-appearance="dark"] .workflow-dropdown-option.active {
+  background: color-mix(in srgb, var(--panel) 74%, var(--accent) 26%) !important;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line)) !important;
+  box-shadow: inset 3px 0 0 var(--accent) !important;
+}
+html[data-appearance="dark"] .workflow-dropdown-option.active .workflow-option-badge {
+  background: var(--accent-soft) !important;
+  color: var(--accent-dark) !important;
+}
+
+/* Dialogs must read as floating layers, not ordinary panels. */
+html[data-appearance="dark"] .modal-backdrop,
+html[data-appearance="dark"] .designer-step-modal-backdrop,
+html[data-appearance="dark"] .step-detail-modal-backdrop,
+html[data-appearance="dark"] .step-files-modal-backdrop,
+html[data-appearance="dark"] .run-result-modal-backdrop,
+html[data-appearance="dark"] .diff-dialog-backdrop {
+  background: rgba(2, 8, 6, .72) !important;
+  backdrop-filter: blur(8px) saturate(.8) !important;
+}
+
+html[data-appearance="dark"] .modal-card,
+html[data-appearance="dark"] .designer-step-modal-card,
+html[data-appearance="dark"] .designer-template-modal-card,
+html[data-appearance="dark"] .step-detail-modal,
+html[data-appearance="dark"] .step-files-modal-card,
+html[data-appearance="dark"] .run-result-modal,
+html[data-appearance="dark"] .diff-dialog {
+  background: color-mix(in srgb, var(--panel-2) 88%, var(--accent) 12%) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--line-strong) !important;
+  box-shadow: 0 28px 90px rgba(0,0,0,.58), 0 0 0 1px rgba(255,255,255,.025) inset !important;
+}
+
+html[data-appearance="dark"] .modal-head,
+html[data-appearance="dark"] .designer-step-modal-head,
+html[data-appearance="dark"] .designer-template-modal-head,
+html[data-appearance="dark"] .step-detail-modal-head,
+html[data-appearance="dark"] .step-files-modal-head,
+html[data-appearance="dark"] .run-result-modal-head,
+html[data-appearance="dark"] .diff-dialog-head {
+  border-bottom: 1px solid var(--line) !important;
+  padding-bottom: 12px;
+}
+
+html[data-appearance="dark"] .modal-head h2,
+html[data-appearance="dark"] .designer-step-modal-head h2,
+html[data-appearance="dark"] .designer-template-modal-head h2,
+html[data-appearance="dark"] .step-detail-modal-head h2,
+html[data-appearance="dark"] .step-files-modal-title-wrap h2,
+html[data-appearance="dark"] .run-result-modal-head h2,
+html[data-appearance="dark"] .diff-dialog-head h2 {
+  color: var(--text) !important;
+  font-weight: 850 !important;
+  letter-spacing: -.01em;
+}
+
+html[data-appearance="dark"] .modal-head p,
+html[data-appearance="dark"] .designer-step-modal-head p,
+html[data-appearance="dark"] .designer-template-modal-head p,
+html[data-appearance="dark"] .step-detail-modal-head p,
+html[data-appearance="dark"] .step-files-modal-title-wrap p,
+html[data-appearance="dark"] .run-result-modal-head p,
+html[data-appearance="dark"] .diff-dialog-head p {
+  color: var(--muted) !important;
+}
+
+html[data-appearance="dark"] .modal-input:focus,
+html[data-appearance="dark"] .modal-textarea:focus,
+html[data-appearance="dark"] .designer-input:focus,
+html[data-appearance="dark"] .designer-textarea:focus,
+html[data-appearance="dark"] .designer-select:focus {
+  background: var(--input-bg) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent) !important;
+}
+
+/* Dialog title hierarchy is useful in both light and dark appearances. */
+html[data-appearance] .modal-head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+html[data-appearance] .modal-head h2 {
+  color: var(--text);
+  font-weight: 850;
+  letter-spacing: -.012em;
+}
+html[data-appearance] .modal-title-with-icon {
+  min-width: 0;
+  align-items: center;
+}
+html[data-appearance] .modal-title-icon {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+html[data-appearance="dark"] .studio-file-item.readonly,
+html[data-appearance="dark"] .app-toast,
+html[data-appearance="dark"] .designer-import-preview {
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  border-color: var(--line) !important;
+}
+html[data-appearance="dark"] .modal-title-icon,
+html[data-appearance="dark"] .modal-title-icon.prompt,
+html[data-appearance="dark"] .modal-title-icon.import,
+html[data-appearance="dark"] .modal-title-icon.workflow,
+html[data-appearance="dark"] .modal-title-icon.stage {
+  background: var(--accent-soft) !important;
+  color: var(--accent-dark) !important;
+}
+html[data-appearance="dark"] .app-toast.success { background: var(--success-soft) !important; color: var(--pass) !important; }
+html[data-appearance="dark"] .app-toast.error { background: var(--danger-soft) !important; color: var(--fail) !important; }
+
+.language-setting-group { margin-top: 4px; }
+.language-options { grid-template-columns: 1fr 1fr; }
+
+/* Compact elevation: ordinary surfaces stay flat; dialogs/popovers own depth. */
+html[data-appearance] {
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.045);
+  --shadow-md: 0 5px 16px rgba(0,0,0,.09);
+  --shadow-popover: 0 12px 32px rgba(0,0,0,.20);
+}

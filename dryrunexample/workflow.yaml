@@ -1,0 +1,20 @@
+stages:
+  work:
+    mode: write
+
+  check:
+    fresh_after_same_failures: 2
+    repeat: 3
+    recover: [fix]
+
+  fix:
+    mode: write
+
+  final:
+    type: ai_validator
+    validator: ai
+
+flow:
+  - work
+  - check
+  - final

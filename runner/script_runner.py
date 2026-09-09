@@ -1,0 +1,142 @@
+"""Execute validated YAML batch script items."""
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
+
+from .config.runtime import RuntimeConfig
+from .errors import ConfigurationError, RunnerError
+from .plugins.registry import merge_plugin_config
+from .runtime import events
+from .script_loader import load_yaml_script
+from .workflow.loader import load_default_workflow, load_workflow
+from .workflow.snapshot import load_run_resource, load_snapshot
+
+ExecuteOne = Callable[[RuntimeConfig], int]
+
+
+def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
+    script = Path(args.script).resolve()
+    if not script.is_file():
+        raise ConfigurationError("invalid YAML script")
+
+    try:
+        items = load_yaml_script(script, allow_missing_files=args.resume)
+    except RunnerError as error:
+        raise ConfigurationError(str(error)) from error
+    total = len(items)
+    for index, item in enumerate(items, 1):
+        _emit_script_event("script.item_started", index, total, item)
+        child = replace(
+            build_script_item_config(args, item, index),
+            script_index=index,
+            script_total=total,
+        )
+        code = execute_one(child)
+        if code != 0:
+            _emit_script_event(
+                "script.item_failed",
+                index,
+                total,
+                item,
+                exit_code=code,
+            )
+            return code
+        _emit_script_event("script.item_completed", index, total, item)
+    return 0
+
+
+def _emit_script_event(
+    event_type: str,
+    index: int,
+    total: int,
+    item: dict[str, Any],
+    exit_code: int | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "script_index": index,
+        "script_total": total,
+        "prompt_preview": item["goal"][:500],
+    }
+    if exit_code is not None:
+        payload["exit_code"] = exit_code
+    events.publish(event_type, event_type.rsplit("_", 1)[-1], **payload)
+
+
+def build_script_item_config(
+    args: RuntimeConfig,
+    item: dict[str, Any],
+    index: int,
+) -> RuntimeConfig:
+    item_root = Path(item["project_root"]) if "project_root" in item else Path(args.project_root)
+    if "project_root" in item and not item_root.is_absolute():
+        item_root = Path(args.project_root) / item_root
+    work_dir = str(Path(args.work_dir) / "script" / f"{index:03d}")
+    project_root = str(item_root.resolve())
+    resume = bool(args.resume and Path(project_root, work_dir, "state.json").is_file())
+    frozen_goal = load_run_resource(project_root, work_dir, "goal") if resume else None
+    frozen_ai_prompt = (
+        load_run_resource(project_root, work_dir, "ai_validator_prompt") if resume else None
+    )
+    goal = frozen_goal[1] if frozen_goal is not None else item["goal"]
+    goal_file = frozen_goal[0] if frozen_goal is not None else item.get("goal_file")
+    ai_validator_prompt = (
+        frozen_ai_prompt[1]
+        if frozen_ai_prompt is not None
+        else item.get("ai_validator_prompt", "")
+    )
+    ai_validator_prompt_file = (
+        frozen_ai_prompt[0]
+        if frozen_ai_prompt is not None
+        else item.get("ai_validator_prompt_file")
+    )
+    frozen = load_snapshot(project_root, work_dir) if resume else None
+    workflow, workflow_explicit = (
+        (frozen, True)
+        if frozen is not None
+        else select_script_workflow(args, item, ai_validator_prompt)
+    )
+    child = replace(
+        args,
+        script=None,
+        goal=goal,
+        goal_file=goal_file,
+        project_root=project_root,
+        validator=item.get("validator") or args.validator,
+        validator_prompt=item.get("validator_prompt", ""),
+        ai_validator_prompt=ai_validator_prompt,
+        ai_validator_prompt_file=ai_validator_prompt_file,
+        review_retries=item.get("review_retries", args.review_retries),
+        final_ai_validations=item.get("final_ai_validations", args.final_ai_validations),
+        final_ai_required_passes=item.get(
+            "final_ai_required_passes", args.final_ai_required_passes
+        ),
+        workflow=workflow,
+        workflow_explicit=workflow_explicit,
+        plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),
+        work_dir=work_dir,
+        resume=resume,
+        force_new=not resume,
+    )
+    try:
+        child.validate()
+    except ValueError as error:
+        raise RunnerError(f"script item {index} {error}") from error
+    return child
+
+
+def select_script_workflow(
+    args: RuntimeConfig,
+    item: dict[str, Any],
+    ai_validator_prompt: str,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Apply workflow precedence for one YAML List item."""
+    if item.get("workflow") is not None:
+        return item["workflow"], True
+    if item.get("workflow_file") is not None:
+        return load_workflow(item["workflow_file"]), True
+    if args.workflow_explicit:
+        return args.workflow, True
+    return load_default_workflow(item["validator"], ai_validator_prompt), False

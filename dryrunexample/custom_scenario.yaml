@@ -1,0 +1,6 @@
+default: pass
+stages:
+  check:
+    - fail
+    - fail
+    - fail

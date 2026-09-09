@@ -1,0 +1,62 @@
+"""AI client/backend contracts shared by workflow and backend implementations."""
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import ClassVar, Literal, Protocol
+
+BackendMode = Literal["planning", "review", "no_tool", "runtime"]
+
+
+@dataclass(frozen=True)
+class BackendResult:
+    text: str
+    session_id: str = ""
+
+
+class AIBackend(Protocol):
+    name: ClassVar[str]
+    default_command: ClassVar[str]
+    sandbox_flags: ClassVar[tuple[str, ...]]
+    supports_sandbox: ClassVar[bool]
+    root: Path
+    base_command: list[str]
+    extra_args: list[str]
+    timeout: int
+
+    def ask(
+        self,
+        prompt: str,
+        session_id: str = "",
+        idle_timeout_after_change: float = 0,
+        change_detected: Callable[[], bool] | None = None,
+    ) -> BackendResult: ...
+
+    def prepare_project(self) -> list[Path]: ...
+    def configure_runtime(self, mode: BackendMode, *, allow_project_read: bool = False, sandbox: bool = False) -> None: ...
+    def process_environment(self) -> dict[str, str]: ...
+    def update_goal_reference(self, goal_file: str | None) -> None: ...
+
+
+class AIClientProtocol(Protocol):
+    session_id: str
+    root: Path
+    extra_args: Sequence[str]
+
+    def ask(
+        self,
+        prompt: str,
+        idle_timeout_after_change: float = 0,
+        change_detected: Callable[[], bool] | None = None,
+        timeout: int | None = None,
+    ) -> str: ...
+
+    def set_extra_args(self, extra_args: Sequence[str]) -> None: ...
+    def set_runtime(self, mode: BackendMode, *, allow_project_read: bool = False, sandbox: bool = False) -> None: ...
+    def context_snapshot(self, session_id: str) -> str: ...
+    def context_usage_percent(self, snapshot: str) -> float | None: ...
+    def compress_session(self, session_id: str) -> str: ...
+
+
+__all__ = ["AIBackend", "AIClientProtocol", "BackendMode", "BackendResult"]

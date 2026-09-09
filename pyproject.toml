@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-task-runner"
+dynamic = ["version"]
+description = "Small retry/review/validator loop around coding agents."
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "Jinja2>=3.1",
+]
+
+[tool.setuptools]
+packages = [
+    "runner",
+    "runner.ai",
+    "runner.prompts",
+    "runner.prompts.stages",
+    "runner.prompts.system",
+    "runner.prompts.custom",
+    "runner.backends",
+    "runner.config",
+    "runner.plugins",
+    "runner.project",
+    "runner.workflow",
+    "runner.workflow.system",
+    "runner.workflow.custom",
+    "runner.runtime",
+    "runner.workflow.stages",
+    "runner.utils",
+    "workflow_builder",
+]
+py-modules = [
+    "ai_task_runner",
+    "ai_task_runner_validator",
+]
+
+
+[tool.setuptools.dynamic]
+version = {attr = "runner.version.__version__"}
+
+[tool.setuptools.package-data]
+"runner.prompts.stages" = ["*.md"]
+"runner.prompts.system" = ["*.md"]
+"runner.prompts.custom" = ["*.md"]
+"runner.workflow.system" = ["*.yaml"]
+"runner.workflow.custom" = ["*.yaml"]
+"workflow_builder" = ["*.yaml", "*.md"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

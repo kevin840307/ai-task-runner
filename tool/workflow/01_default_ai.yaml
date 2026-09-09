@@ -1,0 +1,19 @@
+# Default autonomous AI workflow.
+# Planning creates TODOs and owns the built-in Task -> Review -> Repair lifecycle.
+stages:
+  planning:
+    type: plan
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+flow:
+  - planning
+  - validate_ai

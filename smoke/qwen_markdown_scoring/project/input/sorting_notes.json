@@ -1,0 +1,10 @@
+{
+  "audience": "junior Python developers",
+  "algorithms": [
+    {"name": "Bubble Sort", "best": "O(n)", "average": "O(n^2)", "stable": "yes"},
+    {"name": "Insertion Sort", "best": "O(n)", "average": "O(n^2)", "stable": "yes"},
+    {"name": "Merge Sort", "best": "O(n log n)", "average": "O(n log n)", "stable": "yes"},
+    {"name": "Quick Sort", "best": "O(n log n)", "average": "O(n log n)", "stable": "no"}
+  ],
+  "required_example": [5, 1, 3, 1]
+}

@@ -1,0 +1,52 @@
+# Multiple File/AI validators can be placed anywhere in the top-level flow.
+# Every semantic FAIL below uses the same repair_plan recovery and then re-runs
+# the built-in Plan TODO lifecycle before returning through the remaining gates.
+stages:
+  planning:
+    type: plan
+
+  repair_plan:
+    type: plan
+    repair_plan: true
+    fresh_session_on_start: true
+
+  preflight_file:
+    type: command
+    result_kind: validation
+    command: ["{python}", -c, "print('PREFLIGHT_PASS')"]
+    recover: [repair_plan]
+
+  grill:
+    type: review
+    prompt: ../../runner/prompts/stages/grill.md
+    fresh_session_on_start: true
+    recover: [repair_plan]
+
+  ai_gate_1:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+  post_file:
+    type: command
+    result_kind: validation
+    command: ["{python}", -c, "print('POST_FILE_PASS')"]
+    recover: [repair_plan]
+
+  ai_gate_2:
+    type: ai_validator
+    validator: ai
+    recover: [repair_plan]
+
+  final_note:
+    type: command
+    command: ["{python}", -c, "print('WORKFLOW_DONE')"]
+
+flow:
+  - planning
+  - preflight_file
+  - grill
+  - ai_gate_1
+  - post_file
+  - ai_gate_2
+  - final_note
