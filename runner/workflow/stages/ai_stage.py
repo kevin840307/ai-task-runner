@@ -66,6 +66,17 @@ class AIValidatorStage(BaseStage):
     required_passes_config_attr = "final_ai_required_passes"
     result_flag = "passed"
 
+    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+        instructions = str(getattr(ctx.config, "ai_validator_prompt", "") or "").strip()
+        if not instructions or instructions in prompt:
+            return prompt
+        return (
+            prompt.rstrip()
+            + "\n\nRunner-provided AI validation resource (required):\n"
+            + instructions
+            + "\n"
+        )
+
     def enabled(self, ctx: StageContext) -> bool:
         # An explicit Workflow owns its validation topology: if ai_validator is
         # present in that Workflow, its presence is the user's intent to run it.

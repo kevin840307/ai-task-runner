@@ -254,7 +254,8 @@ class BaseStage:
         ):
             values = build_stage_prompt_context(ctx, self.spec.name, previous)
             values["instructions"] = self.spec.instructions
-            return self._with_immutable_protocol(render_prompt(self.spec.continuation_prompt, values))
+            rendered = render_prompt(self.spec.continuation_prompt, values)
+            return self._with_immutable_protocol(self._augment_rendered_prompt(ctx, rendered))
         original = self._original_prompt(ctx, previous)
         if mode == "initial":
             return original
@@ -278,7 +279,17 @@ class BaseStage:
             raise ConfigurationError(f"Base stage {self.spec.name} requires prompt")
         values = build_stage_prompt_context(ctx, self.spec.name, previous)
         values["instructions"] = self.spec.instructions
-        return self._with_immutable_protocol(render_prompt(self.spec.prompt, values))
+        rendered = render_prompt(self.spec.prompt, values)
+        return self._with_immutable_protocol(self._augment_rendered_prompt(ctx, rendered))
+
+    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+        """Allow semantic Stage types to guarantee run-level instructions are visible.
+
+        Editable templates remain free to render their normal context. Runner-owned
+        semantic requirements can be injected here before the immutable wire
+        protocol is appended, so custom templates cannot accidentally drop them.
+        """
+        return prompt
 
     def _with_immutable_protocol(self, prompt: str) -> str:
         """Append Runner-owned wire contract after editable Stage instructions."""
