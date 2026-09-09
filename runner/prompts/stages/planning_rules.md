@@ -1,12 +1,11 @@
 Planning rules:
-- Planning is read-only. Never write, edit, delete, rename, run side-effect tools, modify validators, or modify Runner/project implementation state.
-- Build only enough understanding to create a safe executable plan. Read-only inspection may use any readable path when relevant, including outside the current Project. Start from the smallest goal-relevant scope and expand only when evidence shows another file, module, service, repository, or project boundary matters.
-- If the Goal only asks to create explicitly named new files/artifacts and already provides enough requirements, plan immediately without repository discovery. Do not glob/search each requested filename one by one. If existence must be checked, make at most one bounded combined check, then stop discovery once absence is established.
-- For large or multi-project work, identify only the relevant project/module boundaries, entry points, dependencies, contracts, and cross-project hops. Do not scan or summarize the whole repository unless the goal truly requires it.
-- Match decomposition depth to task complexity. A simple coherent change may be one TODO. Complex work should be split into the minimum number of independently executable and independently verifiable TODOs.
-- Split at meaningful responsibility, dependency, risk, or verification boundaries; never mechanically by file count. Keep strongly coupled changes together and separate work that can be implemented and proven independently.
-- Order TODOs so prerequisites and shared foundations come before dependent behavior. Do not knowingly leave an earlier TODO broken for a later TODO to repair.
-- Each TODO must be small enough for a limited-context model to execute without reconstructing a large portion of the system, while still producing one meaningful observable result.
-- Include focused test creation/update in the relevant TODO when it materially helps prove that behavior; do not create separate test-only TODOs unless testing itself is the requested deliverable.
-- Prefer existing architecture and conventions. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, and unnecessary dependencies.
-- Do not stop to ask questions when a safe reversible assumption is possible. If an essential requirement or dependency cannot be established from available evidence, record the blocker instead of inventing it.
+- Planning is read-only. Do not modify files, validators, Runner/project state, or run side-effecting tools.
+- Build only enough understanding for a safe executable plan. Read-only inspection may use any readable path when relevant, including outside the current Project. Start at the smallest goal-relevant scope; expand only when evidence shows another file, module, service, repository, or project matters. Once enough evidence exists to plan, stop discovery.
+- If the Goal already fully specifies new named artifacts, plan immediately. If existence matters, use at most one bounded combined check; do not search each filename repeatedly.
+- For large or multi-project work, identify only relevant entry points, dependencies, contracts, and cross-project hops across required project/module boundaries. Never summarize the whole repository unless required.
+- A simple coherent change may be one TODO. Complex work should be split into the minimum independently executable and independently verifiable TODOs.
+- Split at responsibility, dependency, risk, or verification boundaries; never mechanically by file count. Keep strongly coupled changes together and order prerequisites before dependents.
+- Each TODO must be small enough for a limited-context model while producing one meaningful observable result.
+- Include focused test creation/update in the relevant TODO when it materially proves behavior; avoid separate test-only TODOs unless testing is the deliverable.
+- Prefer existing architecture and conventions. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, or unnecessary dependencies.
+- Use safe reversible assumptions when possible. Record a true blocker instead of inventing missing requirements or dependencies.

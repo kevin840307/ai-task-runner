@@ -1087,11 +1087,14 @@ def readonly_long_path_preflight() -> None:
         def _protected(self, root):
             return []
 
+    from runner.resources import read_text, write_text
+    from runner.utils.files import io_path
+
     with _long_path_temp_root("ai-runner-readonly-long-", 260) as root:
         work = root / ".ai-task-runner"
-        work.mkdir(parents=True, exist_ok=True)
+        io_path(work).mkdir(parents=True, exist_ok=True)
         target = root / "value.txt"
-        target.write_text("v1", encoding="utf-8")
+        write_text(target, "v1")
         hook = ProbeSafetyHook()
 
         def context(mode: str, actor: str):
@@ -1099,20 +1102,20 @@ def readonly_long_path_preflight() -> None:
 
         first = hook.before_execution(context("readonly", "review"))
         baseline = first.backup
-        target.write_text("bad", encoding="utf-8")
+        write_text(target, "bad")
         violations = hook.after_execution(context("readonly", "review"), first)
-        if target.read_text(encoding="utf-8") != "v1" or not violations:
+        if read_text(target)[0] != "v1" or not violations:
             raise RuntimeError("long-path read-only restore contract failed")
 
         write = hook.before_execution(context("write", "task"))
-        target.write_text("v2", encoding="utf-8")
+        write_text(target, "v2")
         hook.after_execution(context("write", "task"), write)
         second = hook.before_execution(context("readonly", "validator"))
         if second.backup != baseline:
             raise RuntimeError("read-only snapshot cache was not reused")
-        target.write_text("bad2", encoding="utf-8")
+        write_text(target, "bad2")
         hook.after_execution(context("readonly", "validator"), second)
-        if target.read_text(encoding="utf-8") != "v2":
+        if read_text(target)[0] != "v2":
             raise RuntimeError("read-only snapshot cache did not track legitimate writes")
 
 

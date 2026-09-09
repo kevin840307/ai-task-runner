@@ -736,6 +736,19 @@ def test_readonly_long_path_preflight_covers_snapshot_reuse_and_restore():
     live.readonly_long_path_preflight()
 
 
+
+
+def test_readonly_long_path_preflight_does_not_use_plain_pathlib_io():
+    import inspect
+
+    source = inspect.getsource(live.readonly_long_path_preflight)
+    assert "work.mkdir(" not in source
+    assert "target.write_text(" not in source
+    assert "target.read_text(" not in source
+    assert "io_path(work).mkdir(" in source
+    assert "write_text(target," in source
+    assert "read_text(target)" in source
+
 def test_deep_preflight_root_uses_extended_length_io_helper(monkeypatch, tmp_path):
     calls = []
     class ProbePath:

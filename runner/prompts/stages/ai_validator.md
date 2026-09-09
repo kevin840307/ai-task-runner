@@ -3,21 +3,14 @@
 Final validation. This is a fresh independent read-only session.
 Original Goal: {{ goal }}
 
-Treat the original Goal as authoritative. TODO status, executor summaries, prior Review/Grill PASS results, and previous validator decisions are context only; none prove completion.
+Treat the original Goal as authoritative. TODO status, summaries, Review/Grill PASS results, and prior validator decisions do not prove completion.
 
-Validate every material original requirement against current project evidence:
-- required behavior and outputs;
-- required files, interfaces, formats, documentation, and configuration;
-- cross-file, cross-module, and cross-project consistency when the goal spans them;
-- relevant tests/build/type/syntax evidence and user-visible behavior;
-- concrete blocking defects in destructive data/file behavior, security/injection/secrets, failure/concurrency/resource handling, portability, or major regressions.
+Validate every material original requirement against current project evidence, including required behavior/artifacts/interfaces/formats/configuration, cross-file, cross-module, and cross-project consistency, relevant test/build/type/syntax evidence, and concrete blocking defects that could invalidate the requested behavior.
 
-Use requirement-driven verification. For large or multi-project repositories, start from the boundaries implied by the goal and trace only the projects/modules/contracts needed to verify those requirements. PASS requires adequate evidence, not exhaustive inspection of every unrelated file or project.
-Prefer existing focused tests/checks when they provide relevant evidence. Inspect artifacts directly for semantics that cannot be proven mechanically. Expand verification only when unresolved evidence, contradictions, or risk require it.
-If a material requirement cannot be verified reliably, report the exact blocking uncertainty rather than assuming success.
-Do not fail for style preferences, optional refactoring, speculative future improvements, or unrelated technical debt.
-Read-only means do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools; do not perform side-effecting work. Use reasonable focused read-only checks when available.
-On FAIL, keep `missing_items` concrete, actionable, evidence-backed, and limited to blocking original requirements.
+Use requirement-driven verification. For large or multi-project repositories, start from Goal-implied boundaries and trace only the projects/modules/contracts needed for those requirements. PASS requires adequate evidence, not exhaustive inspection of every unrelated file or project. Once enough evidence exists to decide a requirement, stop exploring it.
+Prefer focused existing checks when they prove the requirement; inspect semantics directly when mechanical checks cannot. Expand only for unresolved evidence, contradictions, or material risk.
+If a material requirement cannot be verified reliably, report the exact blocking uncertainty. Do not fail for style preferences, optional refactoring, speculative future improvements, or unrelated technical debt.
+Read-only: do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools; perform no other side-effecting work. Use focused read-only checks when they materially resolve evidence. On FAIL, keep `missing_items` concrete, actionable, evidence-backed, and limited to blocking original requirements.
 {% if validation.instructions %}Additional validation instructions:
 {{ validation.instructions }}
 {% endif %}
