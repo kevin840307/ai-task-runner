@@ -1437,7 +1437,7 @@ async function openWorkflowFlowMap() {
     } catch (error) { showActionError(error.message, "Flow Map failed"); }
   });
 }
-fun// ------------------------------ AI Workflow Builder page ------------------------------
+// ------------------------------ AI Workflow Builder page ------------------------------
 const {
   clearGenerateWorkflowPoll,
   fillGenerateWorkflowBackends,
@@ -1479,10 +1479,6 @@ const {
   renderStudioFiles, renderWorkflowPicker, renderStudioPanels, refreshStudioFiles,
   applyStudioGuardToDialogs, refreshStudioGuard, openStudioFile,
 });
-
-}
-  finally { $("generateWorkflowSaveConfirm").disabled = false; }
-}
 
 // ------------------------------ Add Project modal ------------------------------
 function openProjectModal() { $("projectPathInput").value = ""; $("projectModalHint").textContent = window.I18n?.getLanguage?.() === "en" ? "Paste a path directly, or use Browse to choose a folder." : "可直接貼上路徑，或使用 Browse 選擇資料夾。"; $("projectModalHint").classList.remove("error"); $("projectModalBackdrop").hidden = false; setTimeout(() => $("projectPathInput").focus(), 0); }
