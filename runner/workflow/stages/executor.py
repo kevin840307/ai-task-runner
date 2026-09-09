@@ -157,6 +157,19 @@ class StageExecutor:
                 self._sleep(ctx)
                 continue
 
+            # Planning tool loops are a special bounded failure. They already got
+            # one same-session wake-up and one Fresh Session. Replanning the same
+            # static Planning stage would only start another cycle with the same
+            # failure fingerprint, which can spin unattended runs forever. Stop
+            # here and preserve the diagnostic instead. Non-loop Planning errors
+            # and all other stage types keep the generic replan behavior.
+            if self._planning_loop_type(stage, error):
+                progress.set_status(
+                    "Planning 重複循環，已停止自動重試",
+                    f"{self._planning_loop_type(stage, error)} · same → fresh 已耗盡",
+                )
+                break
+
             result = replace(result, status="replan")
             break
 

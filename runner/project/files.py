@@ -14,7 +14,7 @@ READONLY_EXCLUDE_DIRS = frozenset({
     "bin", "build", "coverage", "dist", "node_modules", "obj", "target",
 })
 STALE_TEMP_SECONDS = 7 * 24 * 60 * 60
-STALE_TEMP_PREFIXES = ("ai-task-runner-readonly-*", "ai-task-runner-protect-*")
+STALE_TEMP_PREFIXES = ("ai-task-runner-readonly-*", "ai-task-runner-readonly-cache-*", "ai-task-runner-protect-*")
 
 
 def excluded_dirs(root: Path, work: Path) -> set[str]:

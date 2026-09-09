@@ -38,7 +38,7 @@ The UI reads:
 - `.ai-task-runner/stream.log` — current bounded subprocess output retained for debugging/compatibility.
 - `.ai-task-runner/debug/last-result.txt` — best available completed model result for the first UI version.
 
-The browser does not recreate a separate runtime vocabulary. It renders `console-view.json` directly and falls back to `state.json` with the same CLI marker rules if the snapshot is briefly missing/stale. As soon as Plan persists TODOs, those TODO rows therefore appear in the UI. The spinner token is animated locally in the browser so the Runner does not need to rewrite a file every 120 ms.
+The browser does not recreate a separate runtime vocabulary. It renders `console-view.json` directly and falls back to `state.json` with the same CLI marker rules if the snapshot is briefly missing/stale. As soon as Plan persists TODOs, those TODO rows therefore appear in the UI. The runtime marker is intentionally static between polling updates. `Elapsed` / `Last update` may tick locally, but status/TODO content changes only when new runtime state is fetched, avoiding misleading pseudo-live animation.
 
 The UI writes only UI/control files:
 
@@ -124,7 +124,7 @@ When `state.json` reports a completed run, the UI reads `debug/last-result.txt` 
 
 There is no Thinking/Reasoning panel. The main runtime surface mirrors the CLI semantic display: Cycle/Progress, Plan TODO rows, current status and detail. Structured `reasoning`, `thinking`, `analysis`, and `chain_of_thought` fields/types are not promoted to this surface.
 
-While a task is Running, runtime feedback stays in the conversation instead of the input box: the white CLI Runtime card updates its status/TODO lines and spinner from the same file-based CLI state, while the current Project dot pulses and is labeled `RUN`. The composer keeps its normal placeholder. The bottom-right Run action is replaced by Stop while Running, then by Continue + Reset when an incomplete task is stopped. Idle/Completed/Interrupted/Stopped Projects have explicit `IDLE / DONE / INT / STOP` labels.
+While a task is Running, runtime feedback stays in the conversation instead of the input box: the white CLI Runtime card updates its status/TODO lines from the same file-based CLI state and uses a static Running marker; the current Project is labeled `RUN`. The composer keeps its normal placeholder. The bottom-right Run action is replaced by Stop while Running, then by Continue + Reset when an incomplete task is stopped. Idle/Completed/Interrupted/Stopped Projects have explicit `IDLE / DONE / INT / STOP` labels.
 Conversation entries are non-shrinking flex items. A long previous Assistant result therefore cannot collapse the newly appended Runtime card into a 1–2px line. The task history uses sticky-to-bottom behavior: new User/Runtime/Assistant entries follow the bottom while the user is already following the latest task, but manual upward scrolling disables auto-follow until the user returns to the bottom or starts a new task. A completed Runtime card is removed and the completed result is rendered as the normal Assistant conversation card.
 
 ## Runtime states
@@ -240,7 +240,7 @@ The UI is designed for fully local/offline use. Runtime UI assets must not depen
 Project/runtime polling is non-overlapping: the next request is scheduled only after the previous one finishes. On Windows, one `tasklist` PID snapshot is shared across all tracked Projects in a Project-list refresh. Workflow Generator status polling follows the same non-overlapping rule, avoiding stacked requests when the browser or machine is slow.
 
 ## UI/UX polish
-- Running feedback uses a CSS activity line/pulse independent of Runtime polling, so reduced polling does not make the UI feel stalled.
+- Runtime feedback deliberately avoids polling-independent spinner/pulse animation. The card remains visually stable between real state fetches, while `Elapsed` and `Last update` communicate freshness without pretending new Runner activity was received.
 - Runtime surfaces show Last update and warn when a running state has not changed for roughly 30 seconds.
 - Workflow Studio preserves dirty-state leave protection across file/project/mode switching, reload, and page unload.
 - Errors default to a compact summary; Details opens the complete error in a modal without interrupting background runs.
@@ -264,3 +264,8 @@ Workflow Studio has a **Flow Map** action beside **+ Stage**. It is a read-only 
 ### Project Workflow packages
 
 Workflow Studio discovers Project Workflows only from `<project>/.ai-task-runner/workflows/<folder>/workflow/`; matching owned Prompts live in `<folder>/prompts/`. `.ai-task-runner.yaml` is configuration, not a Workflow. The Flow header keeps `Flow Map` and `+ Stage` together across narrow layouts, and Runtime activity uses a JavaScript frame fallback so enterprise browsers that suppress CSS animation still show visible progress.
+
+### Concurrency and module ownership
+
+Project launch/runtime, Studio editing, Workflow Builder lifecycle, chat, and project-list mutations use independent locks so slow validation/publish work cannot block unrelated UI operations. Workflow Builder server state lives in `workflow_builder_state.py`; shared server primitives live in `server_support.py`; browser Generator behavior lives in `static/js/workflow-generator.js`. Non-loopback binding requires the explicit `--allow-remote` flag.
+

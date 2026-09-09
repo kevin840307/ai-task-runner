@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..utils.files import atomic_write_text
+from ..utils.files import atomic_write_text, io_path
 from ..utils.logs import append_bounded_log
 
 
@@ -50,7 +50,7 @@ class ObservabilityObserver:
             prompt = root / "current-prompt.txt"
             try:
                 if prompt.exists():
-                    atomic_write_text(root / "last-prompt.txt", prompt.read_text(encoding="utf-8"))
+                    atomic_write_text(root / "last-prompt.txt", io_path(prompt).read_text(encoding="utf-8"))
             except OSError:
                 pass
         atomic_write_text(path, text)

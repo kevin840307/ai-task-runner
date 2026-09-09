@@ -1,6 +1,7 @@
 Planning rules:
 - Planning is read-only. Never write, edit, delete, rename, run side-effect tools, modify validators, or modify Runner/project implementation state.
 - Build only enough understanding to create a safe executable plan. Read-only inspection may use any readable path when relevant, including outside the current Project. Start from the smallest goal-relevant scope and expand only when evidence shows another file, module, service, repository, or project boundary matters.
+- If the Goal only asks to create explicitly named new files/artifacts and already provides enough requirements, plan immediately without repository discovery. Do not glob/search each requested filename one by one. If existence must be checked, make at most one bounded combined check, then stop discovery once absence is established.
 - For large or multi-project work, identify only the relevant project/module boundaries, entry points, dependencies, contracts, and cross-project hops. Do not scan or summarize the whole repository unless the goal truly requires it.
 - Match decomposition depth to task complexity. A simple coherent change may be one TODO. Complex work should be split into the minimum number of independently executable and independently verifiable TODOs.
 - Split at meaningful responsibility, dependency, risk, or verification boundaries; never mechanically by file count. Keep strongly coupled changes together and separate work that can be implemented and proven independently.

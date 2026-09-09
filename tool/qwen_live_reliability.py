@@ -990,6 +990,113 @@ flow:
             raise RuntimeError("workflow dry-run did not report its convergence limit")
 
 
+def stage_result_mapping_preflight() -> None:
+    """Prove immutable Review/Validator booleans map to Runner PASS/FAIL correctly."""
+    from runner.workflow.stages.ai_stage import (
+        AIValidatorStage,
+        AIValidatorStageSpec,
+        ReviewStage,
+        ReviewStageSpec,
+    )
+
+    review = ReviewStage(ReviewStageSpec(name="review"))
+    validator = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
+    checks = [
+        (review.result_status({"completed": True}), "pass", "review true"),
+        (review.result_status({"completed": False}), "fail", "review false"),
+        (validator.result_status({"passed": True}), "pass", "validator true"),
+        (validator.result_status({"passed": False}), "fail", "validator false"),
+    ]
+    wrong = [label for actual, expected, label in checks if actual != expected]
+    if wrong:
+        raise RuntimeError("stage verdict mapping contract failed: " + ", ".join(wrong))
+
+
+def _deep_preflight_root(base: Path, minimum: int = 300) -> Path:
+    root = base
+    index = 0
+    while len(str(root)) <= minimum:
+        root = root / (f"segment-{index}-" + "x" * 38)
+        index += 1
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def runtime_long_path_preflight() -> None:
+    """Exercise core resource/state/snapshot I/O beyond traditional Windows MAX_PATH."""
+    from runner.resources import read_text, write_text
+    from runner.runtime.run_state import RunState, StateStore
+    from runner.utils.files import copy_path, digest, remove_path
+    from runner.workflow.snapshot import freeze_run_resource, load_run_resource
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-long-path-") as directory:
+        root = _deep_preflight_root(Path(directory), 300)
+        source = root / "source.txt"
+        write_text(source, "deep")
+        if read_text(source)[0] != "deep":
+            raise RuntimeError("long-path resource read/write contract failed")
+        copied = root / "nested" / "copy.txt"
+        copy_path(source, copied)
+        if digest(copied) != digest(source):
+            raise RuntimeError("long-path copy/digest contract failed")
+        remove_path(copied)
+        if copied.exists():
+            raise RuntimeError("long-path remove contract failed")
+
+        work = root / ".ai-task-runner"
+        store = StateStore(root, work)
+        store.save(RunState(run_id="long-path", goal="probe", project_root=str(root)))
+        resumed = store.load_or_create("", resume=True, force_new=False)
+        if resumed.run_id != "long-path":
+            raise RuntimeError("long-path state save/resume contract failed")
+
+        goal = root / "goal.md"
+        write_text(goal, "goal")
+        freeze_run_resource(goal, root, ".ai-task-runner", "goal")
+        loaded = load_run_resource(root, ".ai-task-runner", "goal")
+        if loaded is None or loaded[1] != "goal":
+            raise RuntimeError("long-path frozen run-resource contract failed")
+
+
+def readonly_long_path_preflight() -> None:
+    """Prove the reusable read-only baseline restores deep paths and follows valid writes."""
+    from types import SimpleNamespace
+    from runner.plugins.safety import SafetyHook
+
+    class ProbeSafetyHook(SafetyHook):
+        def _protected(self, root):
+            return []
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-readonly-long-") as directory:
+        root = _deep_preflight_root(Path(directory), 260)
+        work = root / ".ai-task-runner"
+        work.mkdir(parents=True, exist_ok=True)
+        target = root / "value.txt"
+        target.write_text("v1", encoding="utf-8")
+        hook = ProbeSafetyHook()
+
+        def context(mode: str, actor: str):
+            return SimpleNamespace(root=root, work=work, mode=mode, actor=actor)
+
+        first = hook.before_execution(context("readonly", "review"))
+        baseline = first.backup
+        target.write_text("bad", encoding="utf-8")
+        violations = hook.after_execution(context("readonly", "review"), first)
+        if target.read_text(encoding="utf-8") != "v1" or not violations:
+            raise RuntimeError("long-path read-only restore contract failed")
+
+        write = hook.before_execution(context("write", "task"))
+        target.write_text("v2", encoding="utf-8")
+        hook.after_execution(context("write", "task"), write)
+        second = hook.before_execution(context("readonly", "validator"))
+        if second.backup != baseline:
+            raise RuntimeError("read-only snapshot cache was not reused")
+        target.write_text("bad2", encoding="utf-8")
+        hook.after_execution(context("readonly", "validator"), second)
+        if target.read_text(encoding="utf-8") != "v2":
+            raise RuntimeError("read-only snapshot cache did not track legitimate writes")
+
+
 def loop_detection_contract_preflight() -> None:
     """Lock Qwen loop classification plus bounded Planning retry semantics."""
     if str(ROOT) not in sys.path:
@@ -1944,8 +2051,14 @@ def main() -> int:
     )
     workflow_dryrun_negative_preflight()
     print("PASS workflow dry-run negative/error preflight", flush=True)
+    stage_result_mapping_preflight()
+    print("PASS Review/Validator boolean verdict mapping preflight", flush=True)
     loop_detection_contract_preflight()
     print("PASS Qwen loop-detection + bounded Planning retry preflight", flush=True)
+    runtime_long_path_preflight()
+    print("PASS >MAX_PATH runtime resource/state/copy preflight", flush=True)
+    readonly_long_path_preflight()
+    print("PASS >MAX_PATH reusable read-only snapshot preflight", flush=True)
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
@@ -2014,6 +2127,9 @@ def main() -> int:
         "api_retry_classification_preflight": True,
         "workflow_dryrun_preflight": True,
         "workflow_dryrun_negative_preflight": True,
+        "stage_result_mapping_preflight": True,
+        "runtime_long_path_preflight": True,
+        "readonly_long_path_preflight": True,
         "stop_request_resume_probe": True,
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,

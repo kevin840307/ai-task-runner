@@ -131,7 +131,9 @@ class BaseStage:
         return True
 
     def result_status(self, data: Any) -> Literal["pass", "fail"]:
-        return "pass" if not self.result_flag or data[self.result_flag] else "fail"
+        if not self.result_flag:
+            return "pass"
+        return "pass" if data[self.result_flag] is True else "fail"
 
     def retry_limit(self, ctx: StageContext) -> int | None:
         if self.spec.retry is not None:

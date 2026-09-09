@@ -38,7 +38,7 @@ UI 以完全離線、本機使用為前提。Runtime UI 不依賴 CDN、Google F
 Project / Runtime polling 採 non-overlapping：上一個 request 完成後才排下一輪。Windows 每次 Project list refresh 只取得一次 `tasklist` PID snapshot，再由所有已追蹤 Project 共用。Workflow Generator status polling 也採相同規則，避免瀏覽器或主機較慢時堆疊 request。
 
 ## UI/UX polish
-- Running indicator 使用純 CSS activity line/pulse，與 Runtime polling 解耦，低頻 polling 仍保持視覺流暢。
+- Runtime feedback 不再使用與 polling 無關的 spinner/pulse 假活動動畫；兩次真實 state fetch 之間畫面保持穩定，只讓 `Elapsed` / `Last update` 表達新鮮度，避免抓取較慢時看起來像 lag。
 - Runtime 顯示 Last update；超過約 30 秒未有新狀態時以 Warning 呈現。
 - Workflow Studio 保留 dirty-state 離開保護：切檔、切專案、切模式、Reload、離頁都不會靜默丟失修改。
 - 錯誤預設顯示摘要；Details 才開啟完整錯誤 Modal，避免 Background Runner 錯誤中斷操作。
@@ -68,3 +68,8 @@ Generate with AI 現在在 Generate 前直接指定 **Folder + Filename**；Read
 ### Project Workflow packages
 
 Workflow Studio 只從 `<project>/.ai-task-runner/workflows/<folder>/workflow/` 偵測 Project Workflow；同一套 Workflow 自己的 Prompt 放在 `<folder>/prompts/`。`.ai-task-runner.yaml` 只是設定檔，不會再被當成 Workflow。Flow header 的 `Flow Map` / `+ Stage` 在窄解析度仍保持同一組排列；Runtime 活動指示另外有 JavaScript frame fallback，即使公司瀏覽器停用 CSS animation 仍可看到執行中的變化。
+
+### Concurrency 與模組 ownership
+
+Project launch/runtime、Studio edit、Workflow Builder lifecycle、chat、project-list mutation 使用彼此獨立的 lock，因此慢速 validation/publish 不會阻塞無關的 UI 操作。Workflow Builder server state 放在 `workflow_builder_state.py`，共用 server primitive 放在 `server_support.py`，瀏覽器 Generator 行為放在 `static/js/workflow-generator.js`。非 loopback bind 必須明確使用 `--allow-remote`。
+

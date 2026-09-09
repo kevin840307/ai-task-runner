@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..utils.files import io_path
+
 from .policy import instruction_text
 from ..plugins.registry import collect_plugin_instructions
 
@@ -22,7 +24,7 @@ def _without_managed_block(text: str, start_marker: str, end_marker: str) -> str
 
 def ensure_instruction_file(root: Path, filename: str) -> Path:
     path = root / filename
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    existing = io_path(path).read_text(encoding="utf-8") if io_path(path).exists() else ""
     if RUNNER_RULE_MARKER not in existing:
         existing = existing.rstrip() + f"""
 
@@ -50,7 +52,7 @@ def ensure_instruction_file(root: Path, filename: str) -> Path:
 {project}
 {PROJECT_INSTRUCTIONS_END}
 """
-    path.write_text(existing.rstrip() + "\n", encoding="utf-8")
+    io_path(path).write_text(existing.rstrip() + "\n", encoding="utf-8")
     return path
 
 GOAL_REFERENCE_START = "<!-- AI-TASK-RUNNER:GOAL-REFERENCE -->"
@@ -60,7 +62,7 @@ GOAL_REFERENCE_END = "<!-- /AI-TASK-RUNNER:GOAL-REFERENCE -->"
 def update_goal_reference(root: Path, filename: str, goal_file: str | None) -> Path:
     """Maintain one replaceable goal-file reference in a backend rule file."""
     path = ensure_instruction_file(root, filename)
-    text = path.read_text(encoding="utf-8")
+    text = io_path(path).read_text(encoding="utf-8")
     text = _without_managed_block(text, GOAL_REFERENCE_START, GOAL_REFERENCE_END)
     if goal_file:
         reference = Path(goal_file).expanduser().resolve().as_posix()
@@ -75,7 +77,7 @@ The original requirements remain authoritative; review or validator feedback
 does not replace or narrow them.
 {GOAL_REFERENCE_END}
 """
-    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    io_path(path).write_text(text.rstrip() + "\n", encoding="utf-8")
     return path
 
 

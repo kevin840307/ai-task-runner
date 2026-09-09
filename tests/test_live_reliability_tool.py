@@ -722,3 +722,15 @@ def test_api_retry_classification_preflight():
 def test_loop_detection_contract_preflight_covers_planning_retry_policy():
     live.loop_detection_contract_preflight()
 
+
+
+def test_stage_result_mapping_preflight_guards_review_and_validator_boolean_semantics():
+    live.stage_result_mapping_preflight()
+
+
+def test_runtime_long_path_preflight_covers_state_resources_and_copy():
+    live.runtime_long_path_preflight()
+
+
+def test_readonly_long_path_preflight_covers_snapshot_reuse_and_restore():
+    live.readonly_long_path_preflight()

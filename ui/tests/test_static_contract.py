@@ -6,7 +6,9 @@ class StaticContractTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(__file__).resolve().parents[1]
         self.html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
-        self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
+        self.js = self.app_js + "\n" + self.generator_js
 
     def test_ui_does_not_import_runner_core(self):
         for path in self.root.rglob("*.py"):
@@ -101,7 +103,9 @@ class LayoutRegressionTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(__file__).resolve().parents[1]
         self.html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
-        self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
+        self.js = self.app_js + "\n" + self.generator_js
         self.runner_css = (self.root / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
         self.studio_css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
         self.generator_css = (self.root / "static" / "css" / "workflow-generator.css").read_text(encoding="utf-8")
@@ -342,17 +346,17 @@ class LayoutRegressionTests(unittest.TestCase):
         for token in ('/api/project/stop', '/api/project/resume', '/api/project/reset', '$("sendButton").hidden = runtime.running || runtime.resumable'):
             self.assertIn(token, self.js)
 
-    def test_runtime_card_uses_cli_snapshot_and_poll_independent_activity_indicator(self):
+    def test_runtime_card_uses_cli_snapshot_without_fake_activity_animation(self):
         css = "".join(self.runner_css.split())
-        for token in ("CLI_SPINNER_FRAMES", "cliRuntimeText(runtime)", "renderCliRuntimeFrame()", "animateRuntimeFrame"):
-            self.assertIn(token, self.js)
-        self.assertIn('const CLI_SPINNER_FRAMES = ["|", "/", "-", "\\\\"]', self.js)
-        self.assertIn("state.spinnerFrame = (state.spinnerFrame + 1)", self.js)
-        self.assertIn("setInterval(animateRuntimeFrame, 1000)", self.js)
+        self.assertIn("cliRuntimeText(runtime)", self.js)
+        self.assertIn("renderCliRuntimeFrame()", self.js)
         self.assertIn("runtime.cli_lines", self.js)
+        self.assertIn('const marker = runtime.running ? ">" : " "', self.js)
+        self.assertIn("setInterval(updateRuntimeFreshness, 1000)", self.js)
+        for token in ("CLI_SPINNER_FRAMES", "spinnerFrame", "animateRuntimeFrame", "runtimeActivitySweep", "runtimeFooterPulse"):
+            self.assertNotIn(token, self.js + self.runner_css)
         self.assertIn(".cli-runtime-output{", css)
-        self.assertIn(".cli-runtime-card.running::before{", css)
-        self.assertIn("animation:runtimeActivitySweep1.05slinearinfinite", css)
+        self.assertIn(".runtime-live-indicator{", css)
 
     def test_project_rows_show_runtime_state_and_running_pulse(self):
         css = "".join(self.runner_css.split())
@@ -367,9 +371,9 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".designer-confirm-box{z-index:7000!important", css)
         self.assertIn("backdrop-filter:blur(3px)", css)
 
-    def test_runtime_motion_is_in_white_conversation_card_not_input(self):
+    def test_runtime_state_is_in_white_conversation_card_not_input(self):
         css = "".join(self.runner_css.split())
-        for token in ("renderLiveRuntimeHeader(runtime)", "renderCliRuntimeFrame()", "setInterval(animateRuntimeFrame, 1000)"):
+        for token in ("renderLiveRuntimeHeader(runtime)", "renderCliRuntimeFrame()", "setInterval(updateRuntimeFreshness, 1000)"):
             self.assertIn(token, self.js)
         self.assertNotIn("renderComposerRuntimeFrame", self.js)
         self.assertNotIn("Running · ${runtime.cli_status}", self.js)
@@ -541,7 +545,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('#backendDropdownMenu.backend-dropdown-portal{position:fixed!important;z-index:5100!important', css)
 
     def test_runtime_header_title_is_lifecycle_status_only(self):
-        block = self.js[self.js.index('function runtimeStatusLabel'):self.js.index('function animateRuntimeFrame')]
+        block = self.js[self.js.index('function runtimeStatusLabel'):self.js.index('function runtimeRenderSignature')]
         self.assertIn('if (runtime?.running) return "Running"', block)
         self.assertIn('if (runtime?.resumable) return "Stopped"', block)
         self.assertIn('setTextIfChanged(card.querySelector(".live-title"), runtimeStatusLabel(runtime))', block)
@@ -593,7 +597,9 @@ class ThemeContractTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(__file__).resolve().parents[1]
         self.html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
-        self.js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.app_js = (self.root / "static" / "app.js").read_text(encoding="utf-8")
+        self.generator_js = (self.root / "static" / "js" / "workflow-generator.js").read_text(encoding="utf-8")
+        self.js = self.app_js + "\n" + self.generator_js
         self.styles = (self.root / "static" / "styles.css").read_text(encoding="utf-8")
         self.theme_css = (self.root / "static" / "css" / "theme.css").read_text(encoding="utf-8")
 
@@ -704,13 +710,15 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
         self.assertIn('.studio-folder-group.collapsed .studio-folder-caret::before', self.css)
 
 def test_runtime_polling_is_non_overlapping():
-    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    base = Path(__file__).resolve().parents[1] / "static"
+    script = base.joinpath("app.js").read_text(encoding="utf-8")
+    generator = base.joinpath("js", "workflow-generator.js").read_text(encoding="utf-8")
     assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
     assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
     assert "setInterval(refreshRuntime, 1200)" not in script
     assert "setInterval(refreshProjectStatuses, 4000)" not in script
-    assert "setInterval(pollGenerateWorkflow" not in script
-    assert 'state.generateWorkflowPollTimer = window.setTimeout(tick, 800)' in script
+    assert "setInterval(pollGenerateWorkflow" not in script + generator
+    assert 'state.generateWorkflowPollTimer = window.setTimeout(tick, 800)' in generator
 
 
 def test_cli_runtime_card_uses_conversation_surface_not_code_surface():
@@ -723,14 +731,15 @@ def test_cli_runtime_card_uses_conversation_surface_not_code_surface():
 
 
 def test_runtime_polling_throttles_hidden_tabs_and_avoids_repaint():
-    script = Path(__file__).resolve().parents[1].joinpath("static", "app.js").read_text(encoding="utf-8")
+    base = Path(__file__).resolve().parents[1].joinpath("static")
+    script = base.joinpath("app.js").read_text(encoding="utf-8")
     assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
     assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
     assert "startNonOverlappingPoll(refreshStudioGuard, 2500, 10000)" in script
     assert 'document.addEventListener("visibilitychange"' in script
-    assert "function animateRuntimeFrame()" in script
-    assert "state.spinnerFrame = (state.spinnerFrame + 1)" in script
-    assert "if (document.hidden) return;" in script
+    assert "function animateRuntimeFrame()" not in script
+    assert "spinnerFrame" not in script
+    assert "setInterval(updateRuntimeFreshness, 1000)" in script
     assert "runtimeRenderSignature(runtime)" in script
     assert "signature !== state.lastRuntimeSignature" in script
     assert "state.runtimeRefreshProject === projectPath" in script
@@ -798,7 +807,7 @@ def test_project_async_actions_show_busy_feedback_and_prevent_duplicate_requests
     assert 'status.textContent = removing ? "REMOVING" : "OPENING"' in app
     assert 'path.textContent = removing ? "Removing from UI…" : "Loading project…"' in app
     assert 'withButtonBusy($("browseProjectButton"), "Opening…"' in app
-    assert 'withButtonBusy($("projectModalConfirm"), "Opening…"' in app
+    assert 'withButtonBusy($("projectModalConfirm"), "Adding…"' in app
     assert 'withButtonBusy($("flowMapButton"), "Loading…"' in app
     assert '.project-tree.project-busy .project-root' in css
 
@@ -835,7 +844,7 @@ def test_runtime_elapsed_footer_and_started_at_contract():
     assert 'cli-runtime-elapsed' in script
     assert 'runtime-live-indicator' in script
     assert 'function updateRuntimeElapsed()' in script
-    assert 'setInterval(animateRuntimeFrame, 1000)' in script
+    assert 'setInterval(updateRuntimeFreshness, 1000)' in script
     assert '"started_at": marker.get("started_at") or launch.get("created_at") or 0' in server
 
 def test_running_project_sidebar_shows_stage_and_progress_contract():
@@ -858,12 +867,13 @@ def test_motion_defaults_full_and_system_reduction_is_scoped():
     assert 'let motion = "full"' in html
     assert 'localStorage.getItem("ai-task-runner.motion")' in html
     assert 'document.documentElement.dataset.motion = motion' in html
-    assert 'data-motion-option="full"' in html
-    assert 'data-motion-option="system"' in html
-    assert 'data-motion-option="reduced"' in html
+    assert 'data-motion-option=' not in html
+    assert '>動畫<' not in html
     assert 'MOTION_STORAGE_KEY = "ai-task-runner.motion"' in app
-    assert 'html[data-motion="system"] .cli-runtime-card.running::before' in runner_css
-    assert 'html[data-motion="reduced"] .cli-runtime-card.running::before' in runner_css
+    assert 'runtimeActivitySweep' not in runner_css
+    assert 'runtimeFooterPulse' not in runner_css
+    assert '.cli-runtime-card.running .live-dot {' in runner_css
+    assert 'animation: none;' in runner_css
     assert 'html[data-motion="system"] .workflow-builder-spinner' in generator_css
 
 
@@ -910,3 +920,151 @@ def test_studio_custom_scope_badge_is_compact():
     assert "min-height: 18px;" in css
     assert "padding-inline: 6px;" in css
     assert "font-size: 8px;" in css
+
+
+def test_workflow_generator_logic_is_owned_by_dedicated_module():
+    base = Path(__file__).resolve().parents[1].joinpath("static")
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    module = base.joinpath("js", "workflow-generator.js").read_text(encoding="utf-8")
+    assert 'import { createWorkflowGenerator } from "./js/workflow-generator.js";' in app
+    assert "export function createWorkflowGenerator(deps)" in module
+    assert "async function pollGenerateWorkflow()" in module
+    assert "async function pollGenerateWorkflow()" not in app
+
+
+
+def test_app_has_no_orphan_fun_before_workflow_builder_marker():
+    base = Path(__file__).resolve().parents[1] / "static" / "app.js"
+    script = base.read_text(encoding="utf-8")
+    assert "fun// ------------------------------ AI Workflow Builder page" not in script
+    assert "// ------------------------------ AI Workflow Builder page ------------------------------" in script
+
+
+def test_flow_map_open_and_close_handlers_are_defined():
+    base = Path(__file__).resolve().parents[1] / "static" / "app.js"
+    script = base.read_text(encoding="utf-8")
+    assert "async function openWorkflowFlowMap()" in script
+    assert "function closeWorkflowFlowMap()" in script
+    assert '$("flowMapClose").onclick = closeWorkflowFlowMap' in script
+    assert '$("flowMapDone").onclick = closeWorkflowFlowMap' in script
+
+
+def test_slow_runtime_fake_motion_is_removed_but_normal_ui_motion_remains():
+    static = Path(__file__).resolve().parents[1] / "static"
+    app = (static / "app.js").read_text(encoding="utf-8")
+    lite = (static / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    generator = (static / "css" / "workflow-generator.css").read_text(encoding="utf-8")
+    flow_map = (static / "css" / "workflow-flow-map.css").read_text(encoding="utf-8")
+    modal = (static / "css" / "modal.css").read_text(encoding="utf-8")
+    runner = (static / "css" / "workflow-runner.css").read_text(encoding="utf-8")
+
+    # Polling-dependent Runtime pseudo-motion stays removed/static.
+    for token in ("CLI_SPINNER_FRAMES", "spinnerFrame", "animateRuntimeFrame"):
+        assert token not in app
+    for token in ("runtimeActivitySweep", "runtimeFooterPulse", "liveRuntimePulse"):
+        assert token not in lite
+    assert '.cli-runtime-card.running .live-dot {' in lite
+    assert 'animation: none;' in lite
+
+    # Ordinary UX motion remains available in Full motion mode.
+    assert '@keyframes projectRunningPulse' in lite
+    assert 'animation: projectRunningPulse' in lite
+    assert '@keyframes workflowBuilderSpin' in generator
+    assert '@keyframes flow-map-loading' in flow_map
+    assert '@keyframes modalIn' in modal
+    assert '@keyframes workflowResultIn' in modal
+    assert '@keyframes workflow-live-pulse' in runner
+
+
+
+def test_runtime_running_motion_and_real_busy_feedback_are_present():
+    root = Path(__file__).resolve().parents[1] / "static"
+    app = (root / "app.js").read_text(encoding="utf-8")
+    css = (root / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    assert 'setViewLoading("chatView", true, "Opening project…")' in app
+    assert 'setViewLoading("workflowView", true, "Loading workflows…")' in app
+    assert 'setAttribute("aria-busy", "true")' in app
+    assert "runtimeRunningBreath" in css
+    assert 'button[aria-busy="true"]::before' in css
+    assert "viewLoadingBar" in css
+    # Do not restore the old polling-driven pseudo-live CLI spinner.
+    assert "CLI_SPINNER_FRAMES" not in app
+    assert "animateRuntimeFrame" not in app
+
+
+def test_compose_panel_final_contract_restores_grid_owned_bottom_dock():
+    static = Path(__file__).resolve().parents[1] / "static"
+    css = (static / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    app = (static / "app.js").read_text(encoding="utf-8")
+    final = css[css.rfind("/* Final chat layout contract"):]
+    assert "position: absolute !important" in final
+    assert "inset: 0 !important" in final
+    assert "grid-template-rows: auto auto minmax(0, 1fr) auto !important" in final
+    assert "grid-row: 4 !important" in final
+    assert "position: relative !important" in final
+    assert "overflow-y: auto !important" in final
+    assert "position: fixed !important" not in final
+    assert "--composer-dock-left" not in app
+    assert "--composer-dock-width" not in app
+
+
+def test_chat_composer_uses_grid_dock_and_history_remains_scrollable():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    final = css[css.rfind("/* Final chat layout contract"):]
+    assert "position: relative !important" in final
+    assert "grid-row: 4 !important" in final
+    assert "overflow-y: auto !important" in final
+    assert "position: fixed !important" not in final
+    composer = final[final.index("#chatView > #composePanel.compose-panel"):final.index("/* Loading feedback", final.index("#chatView > #composePanel.compose-panel"))]
+    assert "position: absolute !important" not in composer
+
+def test_real_async_views_have_loading_feedback():
+    root = Path(__file__).resolve().parents[1] / "static"
+    app = (root / "app.js").read_text(encoding="utf-8")
+    css = (root / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    assert 'setViewLoading("workflowView", true, "Loading workflows…")' in app
+    assert "await refreshStudioFiles()" in app
+    assert "setStudioContentLoading(true" in app
+    assert "#studioEditor.content-loading::before" in css
+    assert "#workflowView.view-loading::before" in css
+
+
+def test_project_add_remove_use_real_async_loading_feedback():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    assert 'withButtonBusy($("projectModalConfirm"), "Adding…"' in app
+    assert 'setProjectListLoading(true, "Adding project…")' in app
+    assert 'setProjectListLoading(true, "Removing project…")' in app
+    assert 'setProjectListLoading(true, "Refreshing projects…")' in app
+    assert '#projectList.list-loading::before' in css
+    assert 'animation: projectListLoadingRail .78s ease-in-out infinite' in css
+
+
+def test_chat_composer_has_no_obsolete_viewport_fixed_override():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    assert 'position: fixed !important;\n  left: var(--composer-dock-left' not in css
+    assert '#chatView > #composePanel.compose-panel {' in css
+    assert 'position: relative !important;' in css
+
+
+def test_interface_settings_scrolls_and_animation_controls_are_not_exposed():
+    base = Path(__file__).resolve().parents[1] / "static"
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    css = base.joinpath("css", "theme.css").read_text(encoding="utf-8")
+    assert 'id="themePanel"' in html
+    assert 'data-motion-option=' not in html
+    assert 'max-height: calc(100vh - 24px);' in css
+    assert 'overflow-y: auto;' in css
+
+
+def test_python_and_ai_prompt_pickers_share_one_compact_row():
+    base = Path(__file__).resolve().parents[1] / "static"
+    html = base.joinpath("index.html").read_text(encoding="utf-8")
+    app = base.joinpath("app.js").read_text(encoding="utf-8")
+    css = base.joinpath("css", "runner-lite.css").read_text(encoding="utf-8")
+    assert 'id="validationPickers" class="composer-validation-row"' in html
+    assert 'id="validatorPicker"' in html
+    assert 'id="aiValidatorPromptPicker"' in html
+    assert 'id="aiValidatorPrompt"' in html
+    assert 'ai_validator_prompt_file:' in app
+    assert '.composer-validation-row {' in css

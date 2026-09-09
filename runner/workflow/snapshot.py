@@ -8,6 +8,7 @@ from typing import Any
 
 from ..errors import ConfigurationError, RunnerError
 from ..resources import text_hash, write_text
+from ..utils.files import io_path
 from .schema import validate_stage, validate_topology
 
 SNAPSHOT_FILE = "workflow.snapshot.json"
@@ -24,10 +25,10 @@ def snapshot_path(project_root: str | Path, work_dir: str | Path) -> Path:
 
 def load_snapshot(project_root: str | Path, work_dir: str | Path) -> list[dict[str, Any]] | None:
     path = snapshot_path(project_root, work_dir)
-    if not path.is_file():
+    if not io_path(path).is_file():
         return None
     try:
-        workflow = json.loads(path.read_text(encoding="utf-8"))
+        workflow = json.loads(io_path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ConfigurationError(f"invalid workflow snapshot: {path}: {error}") from error
     try:
@@ -56,10 +57,10 @@ def load_run_resource(
     name: str,
 ) -> tuple[str, str] | None:
     path = run_resource_path(project_root, work_dir, name)
-    if not path.is_file():
+    if not io_path(path).is_file():
         return None
     try:
-        return str(path.resolve()), path.read_text(encoding="utf-8-sig")
+        return str(path.resolve()), io_path(path).read_text(encoding="utf-8-sig")
     except OSError as error:
         raise ConfigurationError(f"cannot read run resource: {path}: {error}") from error
 
@@ -74,7 +75,7 @@ def freeze_run_resource(
         return None
     path = Path(source).expanduser()
     try:
-        text = path.read_text(encoding="utf-8-sig")
+        text = io_path(path).read_text(encoding="utf-8-sig")
     except OSError as error:
         raise ConfigurationError(f"cannot snapshot {name}: {path}: {error}") from error
     target = run_resource_path(project_root, work_dir, name)
@@ -105,13 +106,13 @@ def _snapshot_prompts(value: Any, resources: Path) -> None:
     prompt = value.get("prompt")
     if isinstance(prompt, str):
         path = Path(prompt).expanduser()
-        if path.is_absolute() and path.is_file():
+        if path.is_absolute() and io_path(path).is_file():
             try:
-                text = path.read_text(encoding="utf-8-sig")
+                text = io_path(path).read_text(encoding="utf-8-sig")
             except OSError as error:
                 raise RunnerError(f"cannot snapshot prompt: {path}: {error}") from error
             target = resources / f"{text_hash(text)}{path.suffix or '.txt'}"
-            if not target.is_file():
+            if not io_path(target).is_file():
                 write_text(target, text)
             value["prompt"] = str(target.resolve())
     for child in value.values():

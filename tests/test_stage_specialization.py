@@ -32,3 +32,19 @@ def test_file_validation_is_command_semantics():
     assert "validator" not in validate
     assert "clean_work" not in validate
     assert validate["command"].startswith("{python} {validator}")
+
+
+def test_review_and_validation_result_flags_map_true_to_pass_false_to_fail():
+    from runner.workflow.stages.ai_stage import (
+        AIValidatorStage,
+        AIValidatorStageSpec,
+        ReviewStage,
+        ReviewStageSpec,
+    )
+
+    review = ReviewStage(ReviewStageSpec(name="review"))
+    validator = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
+    assert review.result_status({"completed": True}) == "pass"
+    assert review.result_status({"completed": False}) == "fail"
+    assert validator.result_status({"passed": True}) == "pass"
+    assert validator.result_status({"passed": False}) == "fail"

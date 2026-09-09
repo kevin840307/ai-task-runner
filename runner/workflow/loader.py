@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import RunnerError
+from ..utils.files import io_path
 from ..resources import write_text
 from .schema import (
     validate_restart_targets,
@@ -35,7 +36,7 @@ def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
     except ImportError as error:
         raise RunnerError("Workflow YAML requires PyYAML: pip install PyYAML") from error
     try:
-        data = yaml.safe_load(source.read_text(encoding="utf-8"))
+        data = yaml.safe_load(io_path(source).read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError(f"invalid workflow YAML: {error}") from error
     return normalize_workflow(data, source.resolve())
@@ -264,7 +265,7 @@ def _read_text(value: Any, source: Path, name: str) -> str:
     if not path.is_absolute():
         path = source.parent / path
     try:
-        text = path.read_text(encoding="utf-8-sig").strip()
+        text = io_path(path).read_text(encoding="utf-8-sig").strip()
     except OSError as error:
         raise RunnerError(f"workflow stage {name} instructions not found: {value}") from error
     if not text:

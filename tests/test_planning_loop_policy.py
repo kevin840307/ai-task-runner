@@ -125,3 +125,27 @@ def test_planning_repeated_loop_rotates_fresh_after_one_same_session_retry(tmp_p
     assert stage.calls == 3
     assert stage.retry_modes == ["initial", "same", "fresh"]
     assert fresh_sessions == ["planning-session-1"]
+
+
+class AlwaysLoopPlanningStage(PlanningStage):
+    def run(self, ctx, previous=None):
+        self.calls += 1
+        self.retry_modes.append(ctx.execution.retry_mode)
+        raise planning_loop_error(
+            f"qwen loop attempt {self.calls} dynamic-turn={70 + self.calls}",
+            "consecutive_identical_tool_calls",
+        )
+
+
+def test_planning_loop_stops_after_same_then_fresh_instead_of_replanning_forever(tmp_path: Path):
+    stage = AlwaysLoopPlanningStage()
+    ctx = context(tmp_path)
+    executor = StageExecutor(Hooks())
+
+    result = executor.run(stage, ctx)
+
+    assert result.status == "error"
+    assert stage.calls == 3
+    assert stage.retry_modes == ["initial", "same", "fresh"]
+    assert ctx.state.fresh_session_round == 1
+    assert ctx.state.same_failures == 3

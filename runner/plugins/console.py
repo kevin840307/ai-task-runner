@@ -11,6 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from ..runtime.run_state import RunState, Task
+from ..utils.files import io_path
 
 
 class LiveUI:
@@ -330,10 +331,10 @@ class ConsoleObserver:
         if payload is None:
             return
         try:
-            self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+            io_path(self.snapshot_path.parent).mkdir(parents=True, exist_ok=True)
             tmp = self.snapshot_path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            os.replace(tmp, self.snapshot_path)
+            io_path(tmp).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            os.replace(io_path(tmp), io_path(self.snapshot_path))
         except (OSError, TypeError, ValueError):
             # Console/UI observation must never fail the Runner.
             return

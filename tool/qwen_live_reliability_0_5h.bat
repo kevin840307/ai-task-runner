@@ -3,7 +3,7 @@ setlocal
 pushd "%~dp0\.."
 set "PYTHONPATH=%~dp0..;%PYTHONPATH%"
 
-echo Target confidence: 95%% after PASS summary and full 0.5h wall-clock run.
+echo Short confidence gate. PASS increases engineering confidence; it is not a mathematical reliability percentage.
 python "tool\qwen_live_reliability.py" --hours 0.5 --high-density --require-transient ^
   --example-smoke-matrix-project "examples\01_basic_command_validator\project" ^
   --example-smoke-matrix-project "examples\10_skill_prompt_review_workflow\project" ^

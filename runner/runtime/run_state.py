@@ -15,6 +15,7 @@ from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils.text import bounded_text
+from ..utils.files import io_path
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
@@ -181,15 +182,15 @@ JSON_WRITE_RETRY_DELAY = 0.05
 
 def _write_json(path: Path, data: Any) -> None:
     """Atomically write indented UTF-8 JSON with Windows lock tolerance."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    io_path(path.parent).mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
+    io_path(temporary).write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     for attempt in range(JSON_WRITE_RETRIES):
         try:
-            os.replace(temporary, path)
+            os.replace(io_path(temporary), io_path(path))
             return
         except PermissionError:
             if attempt == JSON_WRITE_RETRIES - 1:
@@ -234,7 +235,7 @@ class StateStore:
                 return self._load_resume_state()
         if not goal:
             raise RunnerError("--goal is required")
-        if self.path.exists() and not force_new:
+        if io_path(self.path).exists() and not force_new:
             raise RunnerError("state exists; use --resume or --force-new")
         return RunState(
             run_id=str(uuid.uuid4()),
@@ -258,7 +259,7 @@ class StateStore:
         return True
 
     def _load_resume_state(self) -> RunState:
-        if not self.path.is_file():
+        if not io_path(self.path).is_file():
             raise ConfigurationError(f"resume state not found: {self.path}")
         loaded = self._read_state(self.path, strict=True)
         assert loaded is not None
@@ -280,7 +281,7 @@ class StateStore:
         strict: bool,
     ) -> tuple[dict[str, Any], RunState] | None:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(io_path(path).read_text(encoding="utf-8"))
             state = RunState.load(payload)
             return payload, state
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:

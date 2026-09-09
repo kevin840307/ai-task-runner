@@ -47,14 +47,6 @@
           </div>
         </div>
         <div class="theme-setting-group">
-          <span class="theme-setting-label">動畫</span>
-          <div class="appearance-options motion-options" role="group" aria-label="Motion">
-            <button type="button" data-motion-option="full">完整動畫</button>
-            <button type="button" data-motion-option="system">跟隨系統</button>
-            <button type="button" data-motion-option="reduced">減少動畫</button>
-          </div>
-        </div>
-        <div class="theme-setting-group">
           <span class="theme-setting-label" data-i18n="theme.palette">主題</span>
           <div class="theme-options">
             <button class="theme-option" type="button" data-theme-option="teal"><span class="theme-swatches theme-swatches-teal"><i></i><i></i><i></i></span><strong>Teal</strong><small data-i18n="theme.recommended">推薦</small></button>
@@ -141,14 +133,24 @@
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
-              <label id="validatorPicker" class="validator-picker composer-validator-picker" hidden>
-                <span class="workflow-picker-label" data-i18n="composer.python_validation">Python 驗證</span>
-                <div class="compact-file-picker">
-                  <input id="validator" placeholder="Choose validation.py" autocomplete="off" readonly title="" />
-                  <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
-                  <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
-                </div>
-              </label>
+              <div id="validationPickers" class="composer-validation-row" hidden>
+                <label id="validatorPicker" class="validator-picker composer-validator-picker" hidden>
+                  <span class="workflow-picker-label" data-i18n="composer.python_validation_short">Python</span>
+                  <div class="compact-file-picker">
+                    <input id="validator" placeholder="validation.py" autocomplete="off" readonly title="" />
+                    <button id="browseValidatorButton" class="file-choice-button compact" type="button">選擇…</button>
+                    <button id="clearValidatorButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
+                  </div>
+                </label>
+                <label id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker" hidden>
+                  <span class="workflow-picker-label" data-i18n="composer.ai_prompt">AI Prompt</span>
+                  <div class="compact-file-picker">
+                    <input id="aiValidatorPrompt" placeholder="ai_validation.md (optional)" autocomplete="off" readonly title="" />
+                    <button id="browseAiValidatorPromptButton" class="file-choice-button compact" type="button">選擇…</button>
+                    <button id="clearAiValidatorPromptButton" class="file-choice-button compact subtle" type="button" hidden>清除</button>
+                  </div>
+                </label>
+              </div>
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">

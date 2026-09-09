@@ -35,8 +35,13 @@ Example matrix command:
 python tool/qwen_live_reliability.py --hours 0.25 --high-density --require-transient --example-smoke-matrix-project examples/01_basic_command_validator/project --example-smoke-matrix-project examples/10_skill_prompt_review_workflow/project --example-smoke-matrix-workflow runner/workflow/system/file.yaml --example-smoke-matrix-workflow runner/workflow/system/mixed.yaml --example-smoke-matrix-workflow runner/workflow/custom/common/ralphy_ai_validate.yaml
 ```
 
-Windows convenience BAT files live under `tool/`: `qwen_live_reliability_0_5h.bat` targets a 95% confidence preflight, and `qwen_live_reliability_24h.bat` targets 99.99% confidence after the full 24-hour wall-clock run. The percentages are confidence targets for a passing run, not unconditional guarantees; the emitted `summary.json` remains the evidence. The 99.99% value is an engineering confidence target, not a statistically proven failure probability from one 24-hour run.
+Windows convenience BAT files live under `tool/`: `qwen_live_reliability_0_5h.bat` is a short confidence gate and `qwen_live_reliability_24h.bat` is the full soak gate. A PASS increases engineering confidence but is not a mathematical reliability percentage; the emitted `summary.json`, runtime artifacts, and observed wall-clock duration remain the evidence.
 
 - Worker-supervisor regression covers Direct/YAML child orphan cleanup by durable state directory.
 - StageExecutor regression requires `KeyboardInterrupt` / `SystemExit` to propagate instead of entering retry/recovery.
 - Stage capability regression covers `retry: 0` fresh-session escalation, `skip_on_error: false`, `track_changes` exposure, and shared direct `retry` / `skip_on_error` / `track_changes` options for process-backed Stage types.
+
+### Reliability preflight invariants
+
+Before the live Qwen probes start, `qwen_live_reliability.py` deterministically checks API retry classification, workflow dry-run convergence/non-convergence, immutable Review/AI-validator verdict mapping, bounded Planning loop recovery, >MAX_PATH runtime I/O/state/frozen resources, and >MAX_PATH read-only snapshot restore/update behavior. These preflights catch Runner regressions before model variability is introduced.
+

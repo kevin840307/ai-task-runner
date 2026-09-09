@@ -602,8 +602,9 @@ class WorkflowStudioTests(unittest.TestCase):
         return next(item for item in files["workflows"] if item["path"] == str(self.workflow.resolve()))
 
 
-    def test_launch_and_studio_save_share_lifecycle_lock(self) -> None:
-        self.assertIs(self.state._launch_lock, self.state._edit_lock)
+    def test_launch_studio_and_builder_use_independent_locks(self) -> None:
+        locks = [self.state._launch_lock, self.state._edit_lock, self.state._builder_lock, self.state._runtime_lock]
+        self.assertEqual(len({id(lock) for lock in locks}), len(locks))
 
     def test_studio_lists_workflow_and_prompt_files(self) -> None:
         files = self.state.studio_files(self.project)
@@ -1039,6 +1040,30 @@ flow: [validate]
         names = {p.name for p in Path(request["request_dir"]).iterdir()}
         self.assertEqual(names, {"prompt.md", "request.json"})
 
+    def test_ai_validator_custom_prompt_is_snapshotted_and_passed_to_runner(self) -> None:
+        prompt = self.root / "runner" / "prompts" / "custom" / "validate.md"
+        prompt.write_text("{{goal}}\n", encoding="utf-8")
+        self.workflow.write_text("stages:\n  ai:\n    type: ai_validator\n    prompt: custom/validate.md\nflow: [ai]\n", encoding="utf-8")
+        custom = self.project / "my_ai_validation.md"
+        custom.write_text("Check business rules.\n", encoding="utf-8")
+        with patch.object(self.state, "read_runtime", return_value={"running": False}), patch("ui.server.subprocess.Popen") as popen:
+            self.state.launch_message(self.project, "x", workflow=str(self.workflow), ai_validator_prompt_file=str(custom))
+        command = popen.call_args.args[0]
+        self.assertIn("--ai-validator-prompt-file", command)
+        snapshot = Path(command[command.index("--ai-validator-prompt-file") + 1])
+        self.assertEqual(snapshot.name, "ai_validation.md")
+        self.assertEqual(snapshot.read_text(encoding="utf-8"), "Check business rules.\n")
+        manifest = json.loads((snapshot.parent / "request.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["ai_validator_prompt_file"], str(snapshot))
+
+    def test_ai_prompt_is_ignored_when_workflow_has_no_ai_validator(self) -> None:
+        self.workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        custom = self.project / "my_ai_validation.md"
+        custom.write_text("ignored\n", encoding="utf-8")
+        request = self.state._create_run_request(self.project, "x", workflow=str(self.workflow), ai_validator_prompt_file=str(custom))
+        self.assertEqual(request["ai_validator_prompt_file"], "")
+        self.assertFalse((Path(request["request_dir"]) / "ai_validation.md").exists())
+
     def test_run_request_rejects_workflow_outside_allowed_roots(self) -> None:
         outside = self.root / "outside.yaml"; outside.write_text("stages: {}\nflow: []\n", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "outside the allowed"):
@@ -1383,3 +1408,11 @@ class ModelSelectionContractTests(unittest.TestCase):
     def test_model_validation_rejects_control_characters(self) -> None:
         with self.assertRaisesRegex(ValueError, "Model name is invalid"):
             self.state._normalize_model("bad\nmodel")
+
+
+def test_remote_ui_requires_explicit_opt_in_helper():
+    from ui.server import is_loopback_host
+    assert is_loopback_host("127.0.0.1")
+    assert is_loopback_host("::1")
+    assert is_loopback_host("localhost")
+    assert not is_loopback_host("0.0.0.0")

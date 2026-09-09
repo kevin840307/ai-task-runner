@@ -54,3 +54,12 @@ Planning 現在把 discovery 視為「有界行為」，不再要求每個任務
 如果 backend 回報 `consecutive_identical_tool_calls`、`turn_tool_call_cap` 等 loop signal，Planning 最多只做一次 same-session retry；同一類 loop 再發生時，Runner 會把該 Planning Stage 切到 Fresh Session，同時保留 durable workflow state。動態 turn/context stderr 會被正規化，避免因錯誤文字每次不同而重置 escalation counter。這個策略刻意只套在 Planning，不改一般 Task / Review retry 行為。
 
 測試涵蓋：unit test 固定 `initial -> same -> fresh` retry sequence、Prompt contract test 固定 bounded discovery、`workflow_dryrun.py --matrix` 持續驗證 deterministic workflow routing/recovery，而 `qwen_live_reliability.py` 在 live probes 前會先執行 loop classification/recovery policy preflight。
+
+### 目前無人值守安全要點
+
+- Read-only Planning / Review / AI validation 會重用同一份 project baseline cache，不再每個 read-only stage 都完整複製專案；合法 write 只增量同步 baseline，read-only 非預期修改仍會還原。
+- Windows 核心 runtime/state/resource I/O 內部使用 extended-length path；Live reliability 在真正模型 soak 前會先測 >300 字元 runtime path 與 >260 字元 read-only restore path。
+- Web UI 的 launch、Studio edit、Builder、runtime、chat、project lock 已分離；Builder validation 變慢時不再序列化無關的 Project launch/runtime 操作。
+- 非 loopback Web UI bind 預設拒絕，必須明確加 `--allow-remote`。UI 沒有 authentication layer，因此不建議一般情況暴露到遠端。
+- Browser 的 CLI Runtime 在兩次 polling fetch 間維持靜態，不使用 spinner/pulse 假裝收到新的 Runner 活動。
+

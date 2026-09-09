@@ -6,6 +6,8 @@ import os
 import re
 from collections.abc import Sequence
 from pathlib import Path
+
+from ..utils.files import io_path
 from typing import Any
 
 from ..config.defaults import DEFAULT_QWEN_COMMAND
@@ -189,9 +191,9 @@ def bridge_sandbox_session(
         if not sources:
             return
         source = max(sources, key=lambda path: path.stat().st_mtime_ns)
-        target.parent.mkdir(parents=True, exist_ok=True)
+        io_path(target.parent).mkdir(parents=True, exist_ok=True)
         lines = []
-        for line in source.read_text(encoding="utf-8").splitlines():
+        for line in io_path(source).read_text(encoding="utf-8").splitlines():
             record = json.loads(line)
             if isinstance(record, dict) and "cwd" in record:
                 record["cwd"] = str(root.resolve())
@@ -199,8 +201,8 @@ def bridge_sandbox_session(
                 record, ensure_ascii=False, separators=(",", ":")
             ))
         temporary = target.with_suffix(".jsonl.tmp")
-        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        os.replace(temporary, target)
+        io_path(temporary).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(io_path(temporary), io_path(target))
     except (OSError, json.JSONDecodeError) as error:
         raise BackendError("invalid Qwen sandbox session") from error
 

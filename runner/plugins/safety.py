@@ -1,6 +1,7 @@
 """Optional Git, protected-file, and read-only execution policy."""
 from __future__ import annotations
 
+import atexit
 import hashlib
 import os
 import shlex
@@ -8,6 +9,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -172,11 +174,60 @@ def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list
 class _Token:
     protected_snapshot: dict[Any, Any]
     before: dict[str, tuple[str, str | None]] | None = None
-    backup_root: Path | None = None
     backup: Path | None = None
+    readonly: bool = False
+
+
+@dataclass
+class _ReadonlyBaseline:
+    backup: Path
+    manifest: dict[str, tuple[str, str | None]]
 
 
 class SafetyHook:
+    def __init__(self) -> None:
+        self._baseline_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-readonly-cache-"))
+        self._baselines: dict[str, _ReadonlyBaseline] = {}
+        self._baseline_lock = threading.RLock()
+        atexit.register(shutil.rmtree, self._baseline_root, ignore_errors=True)
+
+    @staticmethod
+    def _baseline_key(root: Path) -> str:
+        return os.path.normcase(os.path.abspath(str(root)))
+
+    def _baseline_for(self, context) -> _ReadonlyBaseline:
+        key = self._baseline_key(context.root)
+        with self._baseline_lock:
+            cached = self._baselines.get(key)
+            if cached is not None:
+                return cached
+            excluded = excluded_dirs(context.root, context.work)
+            backup = self._baseline_root / hashlib.sha256(key.encode()).hexdigest()[:20]
+            if io_path(backup).exists():
+                remove_path(backup)
+            shutil.copytree(io_path(context.root), io_path(backup), symlinks=True, ignore=copy_ignore(excluded))
+            cached = _ReadonlyBaseline(backup=backup, manifest=tree_manifest(context.root, excluded))
+            self._baselines[key] = cached
+            return cached
+
+    def _sync_baseline(self, context, before: dict[str, tuple[str, str | None]]) -> None:
+        key = self._baseline_key(context.root)
+        with self._baseline_lock:
+            cached = self._baselines.get(key)
+            if cached is None:
+                return
+            excluded = excluded_dirs(context.root, context.work)
+            after = tree_manifest(context.root, excluded)
+            changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+            for relative in sorted((Path(path) for path in changed), key=lambda value: len(value.parts), reverse=True):
+                remove_path(cached.backup / relative)
+            for relative in sorted((Path(path) for path in changed), key=lambda value: len(value.parts)):
+                source = context.root / relative
+                source_io = io_path(source)
+                if source_io.exists() or source_io.is_symlink():
+                    copy_path(source, cached.backup / relative)
+            cached.manifest = after
+
     def _protected(self, root: Path) -> list[Path]:
         runtime = current_runtime()
         config = runtime.config
@@ -193,14 +244,15 @@ class SafetyHook:
 
     def before_execution(self, context) -> _Token:
         protected_snapshot = snapshot(self._protected(context.root))
-        if context.mode != "readonly":
-            return _Token(protected_snapshot)
-        excluded = excluded_dirs(context.root, context.work)
-        before = tree_manifest(context.root, excluded)
-        backup_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-readonly-"))
-        backup = backup_root / "project"
-        shutil.copytree(io_path(context.root), io_path(backup), symlinks=True, ignore=copy_ignore(excluded))
-        return _Token(protected_snapshot, before, backup_root, backup)
+        key = self._baseline_key(context.root)
+        if context.mode == "readonly":
+            baseline = self._baseline_for(context)
+            before = tree_manifest(context.root, excluded_dirs(context.root, context.work))
+            return _Token(protected_snapshot, before, baseline.backup, True)
+        with self._baseline_lock:
+            cached = self._baselines.get(key)
+        before = tree_manifest(context.root, excluded_dirs(context.root, context.work)) if cached is not None else None
+        return _Token(protected_snapshot, before, cached.backup if cached is not None else None, False)
 
     def wrap_change_detector(self, context, token: _Token, base):
         def changed() -> bool:
@@ -215,16 +267,17 @@ class SafetyHook:
         protected_changed: list[str] = []
         try:
             if token.before is not None and token.backup is not None:
-                after = tree_manifest(context.root, excluded_dirs(context.root, context.work))
-                project_changed = sorted(
-                    path for path in set(token.before) | set(after)
-                    if token.before.get(path) != after.get(path)
-                )
-                if project_changed:
-                    restore_project_changes(context.root, token.backup, project_changed)
+                if token.readonly:
+                    after = tree_manifest(context.root, excluded_dirs(context.root, context.work))
+                    project_changed = sorted(
+                        path for path in set(token.before) | set(after)
+                        if token.before.get(path) != after.get(path)
+                    )
+                    if project_changed:
+                        restore_project_changes(context.root, token.backup, project_changed)
+                else:
+                    self._sync_baseline(context, token.before)
         finally:
-            if token.backup_root is not None:
-                shutil.rmtree(token.backup_root, ignore_errors=True)
             protected_changed = restore_changed(token.protected_snapshot)
         violations: list[HookViolation] = []
         if protected_changed:

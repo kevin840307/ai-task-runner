@@ -9,6 +9,8 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
+
+from ..utils.files import io_path
 from typing import Any
 
 from .events import retry_event
@@ -140,7 +142,7 @@ def _sleep_until_retry(seconds: float, stop_request: Path) -> bool:
 
 def _clear_stop_request(path: Path) -> None:
     try:
-        path.unlink(missing_ok=True)
+        io_path(path).unlink(missing_ok=True)
     except OSError:
         pass
 
@@ -164,9 +166,9 @@ def _write_runtime_marker(
 
 def _remove_runtime_marker(path: Path) -> None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(io_path(path).read_text(encoding="utf-8"))
         if int(data.get("supervisor_pid", -1)) == os.getpid():
-            path.unlink(missing_ok=True)
+            io_path(path).unlink(missing_ok=True)
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         pass
 
@@ -180,7 +182,7 @@ def cleanup_orphans(state_files: Sequence[str | Path], worker_pid: int) -> None:
 
 def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
     try:
-        owner, child = map(int, path.read_text(encoding="ascii").split())
+        owner, child = map(int, io_path(path).read_text(encoding="ascii").split())
         if owner != worker_pid:
             return
         if os.name == "nt":
@@ -192,7 +194,7 @@ def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
             )
         else:
             os.killpg(child, signal.SIGKILL)
-        path.unlink(missing_ok=True)
+        io_path(path).unlink(missing_ok=True)
     except (OSError, ValueError):
         pass
 

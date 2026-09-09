@@ -54,3 +54,12 @@ Planning now treats discovery as a bounded activity rather than a prerequisite f
 For backend loop signals such as `consecutive_identical_tool_calls` or `turn_tool_call_cap`, Planning gets at most one same-session retry. If the same loop class repeats, Runner rotates that Planning Stage to a fresh session while preserving durable workflow state. Dynamic backend turn/context text is normalized so the escalation counter cannot be reset by noisy stderr. This policy is intentionally Planning-specific; normal task/review retry semantics are unchanged.
 
 Validation coverage: unit tests lock the retry sequence (`initial -> same -> fresh`), prompt-contract tests lock bounded discovery, `workflow_dryrun.py --matrix` continues to validate deterministic workflow routing/recovery, and `qwen_live_reliability.py` includes the loop classification/recovery policy preflight before live probes.
+
+### Current unattended-safety notes
+
+- Read-only Planning/Review/AI validation reuse one cached project baseline instead of copying the full project before every read-only stage. Legitimate writes incrementally update that baseline; unexpected read-only mutations are still restored.
+- Windows core runtime/state/resource I/O uses extended-length paths internally. The live reliability preflight exercises >300-character runtime paths plus >260-character read-only restore paths before any model soak begins.
+- The Web UI uses independent launch, Studio-edit, Builder, runtime, chat, and project locks. A slow Builder validation no longer serializes unrelated project launch/runtime operations.
+- Non-loopback Web UI binding is rejected unless `--allow-remote` is explicitly supplied. The UI has no authentication layer, so remote exposure should remain exceptional.
+- CLI Runtime status in the browser is static between polling fetches; no spinner/pulse is used to imply activity that has not actually been fetched.
+

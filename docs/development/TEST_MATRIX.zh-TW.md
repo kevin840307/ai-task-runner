@@ -35,8 +35,13 @@ Matrix command 範例：
 python tool/qwen_live_reliability.py --hours 0.25 --high-density --require-transient --example-smoke-matrix-project examples/01_basic_command_validator/project --example-smoke-matrix-project examples/10_skill_prompt_review_workflow/project --example-smoke-matrix-workflow runner/workflow/system/file.yaml --example-smoke-matrix-workflow runner/workflow/system/mixed.yaml --example-smoke-matrix-workflow runner/workflow/custom/common/ralphy_ai_validate.yaml
 ```
 
-Windows 便利 BAT 放在 `tool/`：`qwen_live_reliability_0_5h.bat` 是目標 95% 信心度的 preflight；`qwen_live_reliability_24h.bat` 是跑滿 24 小時後目標 99.99% 信心度的 soak。這些百分比是 PASS 後的信心目標，不是無條件保證；實際證據仍以輸出的 `summary.json` 為準。99.99% 是工程信心目標，不是由單次 24 小時執行統計證明的失敗機率。
+Windows 便利 BAT 放在 `tool/`：`qwen_live_reliability_0_5h.bat` 是短時間 confidence gate；`qwen_live_reliability_24h.bat` 是完整 soak gate。PASS 會提高工程信心，但不等於可數學證明的可靠度百分比；實際證據仍以 `summary.json`、runtime artifacts 與實際 wall-clock duration 為準。
 
 - Worker Supervisor regression 需涵蓋依 durable state directory 清理 Direct/YAML child orphan process。
 - StageExecutor regression 需確認 `KeyboardInterrupt` / `SystemExit` 直接往上傳遞，不進入 retry/recovery。
 - Stage capability regression 需涵蓋 `retry: 0` 直接升級 Fresh Session、`skip_on_error: false`、`track_changes` exposure，以及 process-backed Stage 共用的直接 `retry` / `skip_on_error` / `track_changes` 選項。
+
+### Reliability preflight invariants
+
+`qwen_live_reliability.py` 在真正 Qwen probe 前，會 deterministic 驗證 API retry classification、workflow dry-run convergence/non-convergence、immutable Review/AI-validator verdict mapping、bounded Planning loop recovery、>MAX_PATH runtime I/O/state/frozen resources，以及 >MAX_PATH read-only snapshot restore/update。目的是先排除 Runner regression，再引入模型本身的變異。
+

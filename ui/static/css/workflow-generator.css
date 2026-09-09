@@ -543,3 +543,8 @@ html[data-motion="reduced"] .workflow-builder-spinner { animation: none; }
  .workflow-generator-request{height:260px;max-height:340px}
  .workflow-generator-input-meta{grid-template-columns:1fr}
 }
+
+/* Generator-owned density overrides; keep Generator selectors out of runner-lite.css. */
+.workflow-generator-topbar { min-height: var(--header-height); padding-top: 9px; padding-bottom: 9px; }
+.workflow-generator-topbar h1 { font-size: var(--font-title); }
+.workflow-generator-topbar p { font-size: var(--font-helper); line-height: 1.45; }

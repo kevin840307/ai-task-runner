@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
-from ..utils.files import atomic_write_text
+from ..utils.files import atomic_write_text, io_path
 from ..utils.text import bounded_text
 
 
@@ -111,9 +111,9 @@ def _active_process(process: subprocess.Popen[str], active: bool) -> None:
         path = current_runtime().work / ACTIVE_PROCESS_FILE
         value = f"{os.getpid()} {process.pid}"
         if active:
-            path.write_text(value, encoding="ascii")
-        elif path.read_text(encoding="ascii").strip() == value:
-            path.unlink(missing_ok=True)
+            io_path(path).write_text(value, encoding="ascii")
+        elif io_path(path).read_text(encoding="ascii").strip() == value:
+            io_path(path).unlink(missing_ok=True)
     except (RuntimeError, OSError):
         pass
 

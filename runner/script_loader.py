@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .utils.files import io_path
 from .errors import RunnerError
 from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 
@@ -29,7 +30,7 @@ def _read_item_file(
     if not path.is_absolute():
         path = script.parent / path
     try:
-        return path.read_text(encoding=encoding), str(path.resolve())
+        return io_path(path).read_text(encoding=encoding), str(path.resolve())
     except OSError as error:
         if allow_missing:
             return "", str(path.resolve())
@@ -151,7 +152,7 @@ def load_yaml_script(
     except ImportError as error:
         raise RunnerError("YAML script requires PyYAML: pip install PyYAML") from error
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(io_path(path).read_text(encoding="utf-8"))
     except Exception as error:
         raise RunnerError(f"invalid YAML script: {error}") from error
     if not isinstance(data, list) or not data:

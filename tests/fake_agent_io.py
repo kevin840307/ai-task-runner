@@ -39,6 +39,10 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "plan_finalize"
     if "Review only. Finalize the current review now." in prompt:
         return "review_finalize"
+    if "[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]" in prompt:
+        return "review"
+    if "[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]" in prompt:
+        return "validator"
     if (
         "Review only. You are a read-only task reviewer" in prompt
         or "Review only. Read-only: do not modify project files." in prompt
@@ -58,6 +62,7 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Current TODO is the only executable scope",
             "Work only on this Current TODO",
             "Continue only the same current TODO",
+            "Continue the CURRENT TODO in this same execution session.",
             "Continue the current task. Fix the previous failure and finish it.",
             "Continue the same execute stage.",
             "Continue the same repair stage.",

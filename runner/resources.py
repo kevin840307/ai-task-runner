@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .errors import RunnerError
+from .utils.files import io_path
 
 Validator = Callable[[str], None]
 
@@ -19,7 +20,7 @@ def text_hash(text: str) -> str:
 def read_text(path: str | Path) -> tuple[str, str]:
     source = Path(path).expanduser().resolve()
     try:
-        text = source.read_text(encoding="utf-8-sig")
+        text = io_path(source).read_text(encoding="utf-8-sig")
     except OSError as error:
         raise RunnerError(f"cannot read resource: {source}: {error}") from error
     return text, text_hash(text)
@@ -27,7 +28,7 @@ def read_text(path: str | Path) -> tuple[str, str]:
 
 def _check_expected_hash(path: Path, expected_hash: str | None) -> None:
     if expected_hash is not None and (
-        not path.exists() or read_text(path)[1] != expected_hash
+        not io_path(path).exists() or read_text(path)[1] != expected_hash
     ):
         raise RunnerError(f"resource changed since it was read: {path}")
 
@@ -46,14 +47,14 @@ def write_text(
     if validate is not None:
         validate(text)
     _check_expected_hash(target, expected_hash)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    io_path(target.parent).mkdir(parents=True, exist_ok=True)
     temp = target.parent / f".tmp-{os.getpid()}-{uuid.uuid4().hex}"
     try:
-        temp.write_text(text, encoding="utf-8")
-        os.replace(temp, target)
+        io_path(temp).write_text(text, encoding="utf-8")
+        os.replace(io_path(temp), io_path(target))
     except OSError as error:
         try:
-            temp.unlink(missing_ok=True)
+            io_path(temp).unlink(missing_ok=True)
         except OSError:
             pass
         raise RunnerError(f"cannot write resource: {target}: {error}") from error
@@ -64,7 +65,7 @@ def delete(path: str | Path, *, expected_hash: str | None = None) -> None:
     target = Path(path).expanduser().resolve()
     _check_expected_hash(target, expected_hash)
     try:
-        target.unlink()
+        io_path(target).unlink()
     except FileNotFoundError:
         return
     except OSError as error:

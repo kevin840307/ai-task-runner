@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from ..utils.files import io_path
 from ..errors import RunnerError
 
 POLICY_FILENAME = ".ai-task-runner.yaml"
@@ -16,7 +17,7 @@ def _load(root: Path) -> dict[str, Any]:
     if not policy.is_file():
         return {}
     try:
-        data: Any = yaml.safe_load(policy.read_text(encoding="utf-8")) or {}
+        data: Any = yaml.safe_load(io_path(policy).read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as error:
         raise RunnerError(f"invalid {POLICY_FILENAME}: {error}") from error
     if not isinstance(data, dict):

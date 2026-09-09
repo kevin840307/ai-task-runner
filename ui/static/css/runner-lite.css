@@ -418,13 +418,8 @@ body {
 }
 .cli-runtime-card.running .live-dot {
   background: #2dd4bf;
-  box-shadow: 0 0 0 0 rgba(45,212,191,.48);
-  animation: liveRuntimePulse 1.25s ease-out infinite;
-}
-@keyframes liveRuntimePulse {
-  0% { box-shadow: 0 0 0 0 rgba(45,212,191,.50); }
-  70% { box-shadow: 0 0 0 7px rgba(45,212,191,0); }
-  100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); }
+  box-shadow: 0 0 0 3px rgba(45,212,191,.14);
+  animation: none;
 }
 
 /* Confirmation overlays must cover the floating composer and portal menus. */
@@ -439,11 +434,9 @@ body {
 .project-list { padding-left: 8px; }
 .project-root { padding-left: 15px; }
 .project-runtime-label.runtime-idle { color: #64748b; background: #eef2f6; }
-html[data-motion="reduced"] .project-row.runtime-running .project-mark::after,
-html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: none !important; }
+html[data-motion="reduced"] .project-row.runtime-running .project-mark::after { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  html[data-motion="system"] .project-row.runtime-running .project-mark::after,
-  html[data-motion="system"] .cli-runtime-card.running .live-dot { animation: none !important; }
+  html[data-motion="system"] .project-row.runtime-running .project-mark::after { animation: none !important; }
 }
 
 /* Round 11: runtime feedback belongs in the conversation, not the input box. */
@@ -631,25 +624,31 @@ html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: non
 }
 .workflow-dropdown-menu.dropdown-scrollable { overflow-y: auto; }
 
-/* Chat viewport: keep the scrollbar fully above the composer instead of
-   letting its bottom track sit behind the floating composer overlay. */
+/* Composer remains pinned to the bottom of the Chat view. History owns the
+   scroll area and reserves the measured composer height, so long output never
+   pushes the composer away from the viewport bottom. */
 #chatView {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 #chatView > .history {
   grid-row: 3;
-  padding-bottom: 18px;
-  scroll-padding-bottom: 18px;
+  padding-bottom: calc(var(--composer-reserve) + 18px);
+  scroll-padding-bottom: calc(var(--composer-reserve) + 18px);
 }
 #chatView > .compose-panel {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  grid-row: 4;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 90;
+  width: 100%;
+  margin: 0;
   padding: 10px 14px 14px;
-  background: var(--panel);
+  box-sizing: border-box;
+  background: linear-gradient(to bottom, rgba(247,249,252,0), var(--bg) 18px, var(--bg) 100%);
+  pointer-events: none;
+}
+#chatView > .compose-panel > .composer-box {
   pointer-events: auto;
 }
 .clear-history-button {
@@ -755,14 +754,11 @@ html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: non
 
 /* UI polish: smooth runtime feedback + compact engineering-tool density. */
 .header,
-.designer-topbar,
-.workflow-generator-topbar { min-height: var(--header-height); padding-top: 9px; padding-bottom: 9px; }
+.designer-topbar { min-height: var(--header-height); padding-top: 9px; padding-bottom: 9px; }
 .header h1,
-.designer-topbar h1,
-.workflow-generator-topbar h1 { font-size: var(--font-title); }
+.designer-topbar h1 { font-size: var(--font-title); }
 .header p,
 .designer-topbar p,
-.workflow-generator-topbar p,
 .modal-hint,
 .designer-help,
 .designer-field-help { font-size: var(--font-helper); line-height: 1.45; }
@@ -780,15 +776,6 @@ html[data-motion="reduced"] .cli-runtime-card.running .live-dot { animation: non
 .designer-overview-card,
 .studio-editor-card { border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 .cli-runtime-card { position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
-.cli-runtime-card.running::before {
-  content: ""; position: absolute; z-index: 2; left: 0; top: 0; width: 34%; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--run), transparent);
-  animation: runtimeActivitySweep 1.05s linear infinite; will-change: transform;
-}
-@keyframes runtimeActivitySweep { from { transform: translateX(-115%); } to { transform: translateX(340%); } }
-html[data-motion="reduced"] .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; }
-@media (prefers-reduced-motion: reduce) { html[data-motion="system"] .cli-runtime-card.running::before { animation: none; width: 100%; opacity: .65; } }
-.cli-runtime-card.running .live-dot { animation: liveRuntimePulse 1.15s ease-out infinite; }
 .live-activity-head .live-progress { margin-left: auto; }
 .live-activity-head .live-updated { margin-left: 6px; color: var(--muted); font-weight: 600; }
 .runtime-freshness strong { font-variant-numeric: tabular-nums; }
@@ -830,7 +817,7 @@ html[data-motion="reduced"] .cli-runtime-card.running::before { animation: none;
 .theme-panel,
 .project-action-menu { box-shadow: var(--shadow-popover); }
 
-/* Runtime visibility polish: the lower runtime frame stays visibly alive while work is running. */
+/* Runtime freshness UI: keep this static between real polling updates to avoid pseudo-live lag. */
 .project-runtime-detail { color: var(--run) !important; font-weight: 700; }
 .cli-runtime-footer {
   min-height: 34px;
@@ -847,23 +834,8 @@ html[data-motion="reduced"] .cli-runtime-card.running::before { animation: none;
 }
 .cli-runtime-footer strong { color: #e5e7eb; font-variant-numeric: tabular-nums; }
 .runtime-live-indicator { display: inline-flex; align-items: center; gap: 6px; color: #5eead4; }
-.cli-runtime-card.running .runtime-live-indicator::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 0 rgba(94,234,212,.38);
-  animation: runtimeFooterPulse 1.25s ease-out infinite;
-}
-@keyframes runtimeFooterPulse {
-  0% { box-shadow: 0 0 0 0 rgba(94,234,212,.38); }
-  70% { box-shadow: 0 0 0 6px rgba(94,234,212,0); }
-  100% { box-shadow: 0 0 0 0 rgba(94,234,212,0); }
-}
+.cli-runtime-card.running .runtime-live-indicator::before { content: "●"; font-size: 8px; }
 .runtime-elapsed strong { font-variant-numeric: tabular-nums; }
-html[data-motion="reduced"] .cli-runtime-card.running .runtime-live-indicator::before { animation: none; }
-@media (prefers-reduced-motion: reduce) { html[data-motion="system"] .cli-runtime-card.running .runtime-live-indicator::before { animation: none; } }
 
 
 /* Motion, immutable active-run settings, and ChatGPT-style composer growth. */
@@ -894,3 +866,260 @@ html[data-motion="reduced"] { --motion-fast: 0ms; --motion-normal: 0ms; --motion
 #composePanel button:disabled, #composePanel input:disabled { cursor: not-allowed; }
 @media (max-width: 900px) { .composer-validator-picker { max-width: 260px; } }
 @media (max-width: 720px) { .composer-validator-picker { width: auto; min-width: 210px; max-width: 250px; } }
+
+.composer-validation-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+}
+.composer-validation-row[hidden] { display: none !important; }
+.composer-validation-row .composer-validator-picker {
+  max-width: min(250px, 27vw);
+}
+.composer-validation-row .composer-validator-picker input {
+  max-width: 112px;
+}
+@media (max-width: 900px) {
+  .composer-validation-row { flex-wrap: wrap; }
+  .composer-validation-row .composer-validator-picker { max-width: 240px; }
+}
+
+
+/* Responsive activity motion: indicate real work without animating stale runtime text. */
+@keyframes runtimeRunningBreath {
+  0%, 100% { transform: scale(.82); opacity: .72; box-shadow: 0 0 0 2px rgba(45,212,191,.10); }
+  50% { transform: scale(1.08); opacity: 1; box-shadow: 0 0 0 5px rgba(45,212,191,.16); }
+}
+@keyframes runtimeBadgeBreath {
+  0%, 100% { opacity: .62; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@keyframes uiBusySpin { to { transform: rotate(360deg); } }
+@keyframes projectBusyGlow {
+  0%, 100% { opacity: .68; }
+  50% { opacity: 1; }
+}
+@keyframes projectListLoadingRail {
+  0% { transform: translateX(-120%) scaleX(.42); opacity: .35; }
+  55% { transform: translateX(60%) scaleX(.8); opacity: 1; }
+  100% { transform: translateX(245%) scaleX(.42); opacity: .35; }
+}
+@keyframes viewLoadingBar {
+  0% { transform: translateX(-105%) scaleX(.36); }
+  55% { transform: translateX(28%) scaleX(.72); }
+  100% { transform: translateX(205%) scaleX(.36); }
+}
+@keyframes viewEnterSoft {
+  from { opacity: .82; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Running should be obvious, but the CLI text itself only changes on real polling updates. */
+.cli-runtime-card.running .live-dot {
+  animation: runtimeRunningBreath 1.15s ease-in-out infinite;
+}
+.runtime-badge.running::before {
+  animation: runtimeBadgeBreath 1.2s ease-in-out infinite;
+}
+.cli-runtime-card.running .runtime-live-indicator::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: runtimeRunningBreath 1.15s ease-in-out infinite;
+}
+
+/* Only animate controls while an actual async request is pending. */
+button[aria-busy="true"] { cursor: progress; }
+button[aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: uiBusySpin .62s linear infinite;
+}
+.project-tree.project-busy .project-runtime-label.runtime-busy {
+  animation: projectBusyGlow .9s ease-in-out infinite;
+}
+
+/* Project add/remove/refresh: animate only while the real async request is pending. */
+#projectList.list-loading {
+  position: relative;
+}
+#projectList.list-loading::before {
+  content: "";
+  position: sticky;
+  display: block;
+  z-index: 12;
+  top: 0;
+  left: 0;
+  width: 42%;
+  height: 2px;
+  margin-bottom: -2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform-origin: left center;
+  animation: projectListLoadingRail .78s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Project switching gets a short loading rail and a soft content transition. */
+#chatView { position: relative; }
+#chatView.view-loading::before {
+  content: "";
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  width: 46%;
+  height: 2px;
+  transform-origin: left center;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: viewLoadingBar .82s ease-in-out infinite;
+  pointer-events: none;
+}
+#chatView:not([hidden]),
+#workflowView:not([hidden]) {
+  animation: viewEnterSoft var(--motion-fast, 140ms) ease-out;
+}
+
+html[data-motion="reduced"] .cli-runtime-card.running .live-dot,
+html[data-motion="reduced"] .runtime-badge.running::before,
+html[data-motion="reduced"] .cli-runtime-card.running .runtime-live-indicator::before,
+html[data-motion="reduced"] button[aria-busy="true"]::before,
+html[data-motion="reduced"] .project-tree.project-busy .project-runtime-label.runtime-busy,
+html[data-motion="reduced"] #projectList.list-loading::before,
+html[data-motion="reduced"] #chatView.view-loading::before,
+html[data-motion="reduced"] #chatView:not([hidden]),
+html[data-motion="reduced"] #workflowView:not([hidden]) { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="system"] .cli-runtime-card.running .live-dot,
+  html[data-motion="system"] .runtime-badge.running::before,
+  html[data-motion="system"] .cli-runtime-card.running .runtime-live-indicator::before,
+  html[data-motion="system"] button[aria-busy="true"]::before,
+  html[data-motion="system"] .project-tree.project-busy .project-runtime-label.runtime-busy,
+  html[data-motion="system"] #projectList.list-loading::before,
+  html[data-motion="system"] #chatView.view-loading::before,
+  html[data-motion="system"] #chatView:not([hidden]),
+  html[data-motion="system"] #workflowView:not([hidden]) { animation: none !important; }
+}
+
+
+
+/* Final chat layout contract: composer is a real bottom grid row. This restores
+   native history scrolling while keeping the composer pinned to the bottom of
+   the Chat view. Do not viewport-fix or absolutely position this panel. */
+#chatView {
+  position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  overflow: hidden !important;
+}
+#chatView > #messages.history {
+  grid-row: 3 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  padding-bottom: 18px !important;
+  scroll-padding-bottom: 18px !important;
+  -webkit-overflow-scrolling: touch;
+}
+#chatView > #composePanel.compose-panel {
+  grid-row: 4 !important;
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  flex: 0 0 auto;
+  align-self: end;
+  margin: 0 !important;
+  z-index: 90 !important;
+}
+
+/* Loading feedback belongs to real asynchronous work, not polling animation. */
+#workflowView.view-loading,
+#chatView.view-loading { position: absolute; }
+#workflowView.view-loading::before,
+#chatView.view-loading::before {
+  content: "";
+  position: absolute;
+  z-index: 220;
+  top: 0; left: 0;
+  width: 46%; height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: viewLoadingBar .82s ease-in-out infinite;
+  pointer-events: none;
+}
+#workflowView.view-loading::after,
+#chatView.view-loading::after {
+  content: attr(data-loading-label);
+  position: absolute;
+  z-index: 219;
+  top: 12px; right: 16px;
+  padding: 6px 10px 6px 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+#workflowView.view-loading::after { position: fixed; top: 14px; right: calc(var(--rail-right) + 18px); }
+
+#studioEditor { position: relative; }
+#studioEditor.content-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 180;
+  background: color-mix(in srgb, var(--bg) 42%, transparent);
+  backdrop-filter: blur(1px);
+  pointer-events: all;
+}
+#studioEditor.content-loading::after {
+  content: attr(data-loading-label);
+  position: absolute;
+  z-index: 181;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 14px 10px 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 750;
+  pointer-events: none;
+}
+#studioEditor.content-loading::after,
+#workflowView.view-loading::after,
+#chatView.view-loading::after {
+  background-image: radial-gradient(circle at 16px 50%, transparent 5px, var(--accent) 6px, var(--accent) 7px, transparent 8px);
+}
+
+html[data-motion="reduced"] #workflowView.view-loading::before,
+html[data-motion="reduced"] #chatView.view-loading::before { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="system"] #workflowView.view-loading::before,
+  html[data-motion="system"] #chatView.view-loading::before { animation: none !important; }
+}

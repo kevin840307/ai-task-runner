@@ -18,6 +18,7 @@ You are producing executable TODO data for Runner, not prose or workflow orchest
 Planning invariants:
 - A simple coherent task may be one TODO.
 - For a self-contained or greenfield task, do not inspect the repository unless existing project context is actually needed. If the requested artifact is absent and the Goal already provides enough information, stop discovery and produce the plan immediately.
+- If the Goal is simply to create explicitly named new files/artifacts and already states enough requirements, perform zero repository searches and emit the plan immediately. If an existence check is genuinely necessary, use one bounded combined check; never glob/search each requested filename repeatedly.
 - Once a read/search has established that a relevant file or symbol does not exist, do not repeat equivalent searches unless new evidence changes the scope.
 - For existing-code work, inspect only the smallest goal-relevant entry point and expand to another file/module/project only when concrete evidence requires it.
 - Complex, cross-file, cross-module, cross-project, high-risk, or limited-context work must be decomposed into the smallest practical set of independently executable and independently verifiable TODOs.
