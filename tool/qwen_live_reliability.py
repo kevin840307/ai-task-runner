@@ -1024,6 +1024,25 @@ def _deep_preflight_root(base: Path, minimum: int = 300) -> Path:
     return root
 
 
+@contextmanager
+def _long_path_temp_root(prefix: str, minimum: int):
+    """Create and clean a deep temp tree using the same long-path-safe I/O contract.
+
+    tempfile.TemporaryDirectory ultimately calls shutil.rmtree() with the normal
+    non-extended root path. On Windows, cleanup can therefore fail after a
+    successful >MAX_PATH preflight with WinError 145 because descendants cannot
+    be removed. Keep the logical path for the test, but always clean through
+    runner.utils.files.remove_path(), which applies the extended-length prefix.
+    """
+    from runner.utils.files import remove_path
+
+    base = Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        yield _deep_preflight_root(base, minimum)
+    finally:
+        remove_path(base)
+
+
 def runtime_long_path_preflight() -> None:
     """Exercise core resource/state/snapshot I/O beyond traditional Windows MAX_PATH."""
     from runner.resources import read_text, write_text
@@ -1031,8 +1050,7 @@ def runtime_long_path_preflight() -> None:
     from runner.utils.files import copy_path, digest, remove_path
     from runner.workflow.snapshot import freeze_run_resource, load_run_resource
 
-    with tempfile.TemporaryDirectory(prefix="ai-runner-long-path-") as directory:
-        root = _deep_preflight_root(Path(directory), 300)
+    with _long_path_temp_root("ai-runner-long-path-", 300) as root:
         source = root / "source.txt"
         write_text(source, "deep")
         if read_text(source)[0] != "deep":
@@ -1069,8 +1087,7 @@ def readonly_long_path_preflight() -> None:
         def _protected(self, root):
             return []
 
-    with tempfile.TemporaryDirectory(prefix="ai-runner-readonly-long-") as directory:
-        root = _deep_preflight_root(Path(directory), 260)
+    with _long_path_temp_root("ai-runner-readonly-long-", 260) as root:
         work = root / ".ai-task-runner"
         work.mkdir(parents=True, exist_ok=True)
         target = root / "value.txt"

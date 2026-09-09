@@ -745,3 +745,16 @@ def test_deep_preflight_root_uses_extended_length_io_helper(monkeypatch, tmp_pat
     root = live._deep_preflight_root(tmp_path, len(str(tmp_path)) + 80)
     assert len(str(root)) > len(str(tmp_path)) + 80
     assert calls == [(True, True)]
+
+
+def test_long_path_temp_root_uses_long_path_safe_cleanup(monkeypatch, tmp_path):
+    base = tmp_path / "long-temp"
+    removed = []
+    monkeypatch.setattr(live.tempfile, "mkdtemp", lambda prefix: str(base))
+    monkeypatch.setattr("runner.utils.files.remove_path", lambda path: removed.append(Path(path)))
+    monkeypatch.setattr(live, "_deep_preflight_root", lambda root, minimum: root / "deep")
+
+    with live._long_path_temp_root("ai-runner-long-path-", 300) as root:
+        assert root == base / "deep"
+
+    assert removed == [base]
