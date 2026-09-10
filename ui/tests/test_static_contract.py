@@ -688,6 +688,14 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
         self.css = (self.root / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
         self.support = (self.root / "static" / "js" / "studio-support.js").read_text(encoding="utf-8")
 
+    def test_duplicate_and_prompt_import_expose_folder_selection_without_custom_layout(self):
+        html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
+        for token in ('id="duplicateAssetBackdrop"', 'id="duplicateAssetFolder"', 'id="importAssetFolderRow"', 'id="importAssetFolder"'):
+            self.assertIn(token, html)
+        for token in ("fillDuplicateFolderSelect", "syncImportPromptFolder", 'folder: $("duplicateAssetFolder").value', 'folder: importFolder'):
+            self.assertIn(token, self.js)
+        self.assertNotIn("duplicate-asset-card", html)
+
     def test_custom_assets_render_as_collapsible_folder_groups(self):
         for token in ("appendStudioFolderGroup", "studio-folder-header", "studio-folder-items", "aria-expanded", "STUDIO_FOLDER_STATE_KEY"):
             self.assertIn(token, self.js)

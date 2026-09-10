@@ -1088,6 +1088,34 @@ flow: [validate]
         self.assertEqual(copy_path.read_text(encoding="utf-8"), renamed_path.read_text(encoding="utf-8"))
         self.assertEqual(copied["item"]["group"], "Custom")
 
+    def test_duplicate_can_target_custom_folder_for_workflow_and_prompt(self) -> None:
+        self.state.studio_custom_folder_create("workflow", "copies/ui")
+        workflow_item = self._workflow_item()
+        copied_workflow = self.state.studio_duplicate(workflow_item["id"], "folder copy.workflow.yaml", self.project, "copies/ui")
+        self.assertEqual(Path(copied_workflow["item"]["path"]), (self.root / "runner" / "workflow" / "custom" / "copies" / "ui" / "folder copy.workflow.yaml").resolve())
+
+        prompt = self.root / "runner" / "prompts" / "custom" / "source.md"
+        prompt.write_text("{{ goal }}\n", encoding="utf-8")
+        self.state.studio_custom_folder_create("prompt", "copies/prompts")
+        prompt_item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(prompt.resolve()))
+        copied_prompt = self.state.studio_duplicate(prompt_item["id"], "source copy.md", self.project, "copies/prompts")
+        self.assertEqual(Path(copied_prompt["item"]["path"]), (self.root / "runner" / "prompts" / "custom" / "copies" / "prompts" / "source copy.md").resolve())
+
+    def test_project_duplicate_can_target_an_existing_workflow_folder(self) -> None:
+        first = self.state.studio_workflow_create("first", "project", self.project)
+        self.state.studio_workflow_create("second", "project", self.project)
+        copied = self.state.studio_duplicate(first["item"]["id"], "first copy.workflow.yaml", self.project, "second")
+        expected = self.project / ".ai-task-runner" / "workflows" / "second" / "workflow" / "first copy.workflow.yaml"
+        self.assertEqual(Path(copied["item"]["path"]), expected.resolve())
+        self.assertTrue(expected.is_file())
+
+    def test_custom_prompt_import_honors_selected_folder(self) -> None:
+        self.state.studio_custom_folder_create("prompt", "imports/review")
+        result = self.state.studio_import("prompt", "review.md", "{{ goal }}\n", "custom", self.project, "imports/review")
+        expected = self.root / "runner" / "prompts" / "custom" / "imports" / "review" / "review.md"
+        self.assertEqual(Path(result["item"]["path"]), expected.resolve())
+        self.assertTrue(expected.is_file())
+
     def test_prompt_rename_is_blocked_when_referenced_but_duplicate_is_allowed(self) -> None:
         prompt = self.root / "runner" / "prompts" / "custom" / "used.md"; prompt.write_text("{{goal}}\n", encoding="utf-8")
         self.workflow.write_text("stages:\n  work:\n    type: task\n    prompt: custom/used.md\nflow: [work]\n", encoding="utf-8")

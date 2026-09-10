@@ -1511,8 +1511,7 @@ def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
         options["start_new_session"] = True
     process = subprocess.Popen(runner_command(settings, project), **options)
     deadline = time.monotonic() + settings.run_timeout
-    first_attempts = None
-    first_mtime = None
+    checkpoint_seen = False
     try:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
@@ -1522,8 +1521,11 @@ def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
                 and state.get("current", 0) >= 1
                 and state.get("completed") is not True
             ):
-                first_attempts = tasks[0].get("attempts")
-                first_mtime = (project / "one.txt").stat().st_mtime_ns
+                checkpoint_seen = True
+                # Stop first, then establish the baseline from durable state.
+                # Reading attempts/mtime before termination races with the live
+                # process and can falsely blame resume for work done between
+                # observation and taskkill.
                 terminate(process)
                 break
             time.sleep(0.1)
@@ -1531,8 +1533,41 @@ def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
         if process.poll() is None:
             terminate(process)
         stream.close()
-    if first_attempts is None or first_mtime is None:
+    if not checkpoint_seen:
         raise RuntimeError("could not interrupt after the first TODO checkpoint")
+
+    checkpoint = read_state(project)
+    checkpoint_tasks = checkpoint.get("tasks", [])
+    checkpoint_current = checkpoint.get("current", 0)
+    if (
+        not isinstance(checkpoint_tasks, list)
+        or len(checkpoint_tasks) < 3
+        or not isinstance(checkpoint_current, int)
+        or checkpoint_current < 1
+        or checkpoint_current >= len(checkpoint_tasks)
+        or checkpoint.get("completed") is True
+    ):
+        raise RuntimeError(
+            "process did not stop at a resumable multi-TODO checkpoint: "
+            f"current={checkpoint_current!r}, completed={checkpoint.get('completed')!r}"
+        )
+
+    completed_baseline: list[tuple[int, object, int]] = []
+    output_names = ("one.txt", "two.txt", "three.txt")
+    for index in range(checkpoint_current):
+        task = checkpoint_tasks[index]
+        if not isinstance(task, dict) or task.get("status") != "completed":
+            raise RuntimeError(
+                f"checkpoint TODO {index + 1} is not durably completed before resume"
+            )
+        output = project / output_names[index]
+        if not output.is_file():
+            raise RuntimeError(
+                f"checkpoint TODO {index + 1} output is missing before resume: {output.name}"
+            )
+        completed_baseline.append(
+            (index, task.get("attempts"), output.stat().st_mtime_ns)
+        )
 
     code = run_command(
         runner_command(settings, project, resume=True),
@@ -1542,13 +1577,26 @@ def multi_todo_resume_probe(settings: Settings, root: Path) -> None:
     assert_completed(project, code, "three.txt", "THREE")
     state = read_state(project)
     tasks = state.get("tasks", [])
-    if (
-        len(tasks) < 3
-        or any(task.get("status") != "completed" for task in tasks)
-        or tasks[0].get("attempts") != first_attempts
-        or (project / "one.txt").stat().st_mtime_ns != first_mtime
-    ):
-        raise RuntimeError("resume repeated or skipped a checkpointed TODO")
+    if len(tasks) < 3:
+        raise RuntimeError(f"resume lost TODOs: expected>=3 actual={len(tasks)}")
+    incomplete = [
+        index + 1 for index, task in enumerate(tasks)
+        if task.get("status") != "completed"
+    ]
+    if incomplete:
+        raise RuntimeError(f"resume skipped TODO completion(s): {incomplete}")
+    for index, attempts, mtime in completed_baseline:
+        if tasks[index].get("attempts") != attempts:
+            raise RuntimeError(
+                f"resume re-executed checkpointed TODO {index + 1}: "
+                f"attempts {attempts!r} -> {tasks[index].get('attempts')!r}"
+            )
+        current_mtime = (project / output_names[index]).stat().st_mtime_ns
+        if current_mtime != mtime:
+            raise RuntimeError(
+                f"resume modified checkpointed TODO {index + 1} output: "
+                f"{output_names[index]} mtime {mtime} -> {current_mtime}"
+            )
     if (project / "two.txt").read_text(encoding="utf-8") != "TWO":
         raise RuntimeError("second TODO output is incorrect")
 

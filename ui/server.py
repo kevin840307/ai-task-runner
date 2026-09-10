@@ -1935,8 +1935,13 @@ class UIState(WorkflowBuilderMixin):
             item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
-    def studio_duplicate(self, file_id: str, name: str, project: Path | None = None) -> dict:
-        """Create an independent copy. System assets duplicate to Custom; others keep scope."""
+    def studio_duplicate(self, file_id: str, name: str, project: Path | None = None, folder: str = "") -> dict:
+        """Create an independent copy in an explicitly selected folder.
+
+        System assets still duplicate into Custom.  Custom assets may target any
+        Custom subfolder; Project assets may target any existing owned Workflow
+        package.  An empty folder keeps the previous/default location.
+        """
         with self._edit_lock:
             self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
@@ -1948,10 +1953,31 @@ class UIState(WorkflowBuilderMixin):
                 package = project_package_for_asset(project, path)
                 if package is None:
                     raise ValueError("Project asset is outside a Workflow-owned package")
-                _folder, _package_root, workflow_dir, prompt_dir = package
-                root = workflow_dir if kind == "workflow" else prompt_dir
+                source_folder, _package_root, _workflow_dir, _prompt_dir = package
+                selected_folder = self._normalize_workflow_folder(folder or source_folder)
+                if selected_folder not in project_package_folders(project):
+                    raise ValueError("Select an existing Project Workflow folder for the duplicate")
+                root = project_package_workflow_dir(project, selected_folder) if kind == "workflow" else project_package_prompt_dir(project, selected_folder)
+                root.mkdir(parents=True, exist_ok=True)
             else:
-                root = self._studio_scope_root(kind, target_scope, project)
+                root = self._custom_asset_root(kind)
+                root.mkdir(parents=True, exist_ok=True)
+                # System assets default to Custom root.  Existing Custom assets
+                # default to their current folder, while the UI may override it.
+                default_folder = ""
+                if scope == "custom":
+                    try:
+                        default_folder = path.resolve().parent.relative_to(root).as_posix()
+                        if default_folder == ".":
+                            default_folder = ""
+                    except ValueError:
+                        default_folder = ""
+                selected_folder = self._normalize_custom_folder(folder if folder != "" else default_folder)
+                if selected_folder:
+                    root = (root / Path(selected_folder)).resolve()
+                    if not self._is_within(root, self._custom_asset_root(kind)):
+                        raise ValueError("Duplicated asset folder is outside the Custom root")
+                    root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if not self._is_within(target, root):
                 raise ValueError("Duplicated asset path is outside the allowed scope")
@@ -2109,8 +2135,14 @@ class UIState(WorkflowBuilderMixin):
                 root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True)
                 scope = "project"
             elif destination == "custom":
-                root = (self.repo_root / "runner" / "workflow" / "custom").resolve() if kind == "workflow" else (self.repo_root / "runner" / "prompts" / "custom").resolve()
+                root = self._custom_asset_root(kind)
                 root.mkdir(parents=True, exist_ok=True); scope = "custom"
+                rel_folder = self._normalize_custom_folder(folder)
+                if rel_folder:
+                    root = (root / Path(rel_folder)).resolve()
+                    if not self._is_within(root, self._custom_asset_root(kind)):
+                        raise ValueError("Import folder is outside the Custom root")
+                    root.mkdir(parents=True, exist_ok=True)
             else:
                 raise ValueError("Import destination must be project or custom")
             raw = str(name or "").strip()
@@ -2614,7 +2646,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_rename(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/duplicate":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
+                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project, str(body.get("folder", ""))))
             if parsed.path == "/api/studio/import/inspect":
                 return self._json(self.state.studio_folder_inspect(str(body.get("content", ""))))
             if parsed.path == "/api/studio/import":

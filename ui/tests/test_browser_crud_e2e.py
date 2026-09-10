@@ -117,7 +117,7 @@ def _bridge_for(state: UIState):
                         flow_index=body.get("flow_index"),
                     )
                 elif path == "/api/studio/duplicate":
-                    data = state.studio_duplicate(body.get("id", ""), body.get("name", ""), None)
+                    data = state.studio_duplicate(body.get("id", ""), body.get("name", ""), None, body.get("folder", ""))
                 elif path == "/api/studio/rename":
                     data = state.studio_rename(body.get("id", ""), body.get("name", ""), None)
                 elif path == "/api/studio/delete":
@@ -270,8 +270,9 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.locator("#studioFileList .studio-file-item").filter(has_text="e2e_crud.workflow.yaml").click()
             page.click("#studioAssetMenuButton")
             page.click("#duplicateStudioButton")
-            page.fill(".ui-dialog-input", "e2e_crud copy.workflow.yaml")
-            page.click("[data-dialog-ok]")
+            page.fill("#duplicateAssetName", "e2e_crud copy.workflow.yaml")
+            page.select_option("#duplicateAssetFolder", "")
+            page.click("#duplicateAssetConfirm")
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_crud copy.workflow.yaml"
             page.click("#studioAssetMenuButton")

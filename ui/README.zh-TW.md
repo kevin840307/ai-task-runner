@@ -74,4 +74,5 @@ Workflow Studio 只從 `<project>/.ai-task-runner/workflows/<folder>/workflow/` 
 Project launch/runtime、Studio edit、Workflow Builder lifecycle、chat、project-list mutation 使用彼此獨立的 lock，因此慢速 validation/publish 不會阻塞無關的 UI 操作。Workflow Builder server state 放在 `workflow_builder_state.py`，共用 server primitive 放在 `server_support.py`，瀏覽器 Generator 行為放在 `static/js/workflow-generator.js`。非 loopback bind 必須明確使用 `--allow-remote`。
 
 
+- Workflow / Prompt 的 **Duplicate** 會顯示精簡的目標表單，可選 Custom 子資料夾；Project 資產可選既有 Workflow-owned folder。System 資產仍只會複製到 Custom。Prompt Import 也改成明確選擇 Custom / Project folder，不再自動猜測。
 - 若 Tasks 選擇額外 AI 驗證 Prompt，UI 會把它快照到該 request 的 `resources/ai_validation.md`；Runner 會保證把這份 resource 注入 `ai_validator`，不再依賴自訂 Prompt 是否有寫 `{{ validation.instructions }}`。

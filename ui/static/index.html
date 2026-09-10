@@ -438,6 +438,22 @@ flow:
     </div>
   </div>
 
+  <!-- Compact Duplicate modal. Reuses existing form/modal styles to avoid layout drift. -->
+  <div id="duplicateAssetBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="duplicateAssetTitle">
+      <div class="modal-head">
+        <div class="modal-title-with-icon"><span id="duplicateAssetIcon" class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="duplicateAssetTitle">Duplicate Workflow</h2><p id="duplicateAssetDescription">Create an independent copy. The source file is not modified.</p></div></div>
+        <button id="duplicateAssetClose" class="modal-close" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <label class="designer-form-row"><span class="designer-label">Name</span><input id="duplicateAssetName" class="designer-input" /></label>
+        <label class="designer-form-row"><span id="duplicateAssetFolderLabel" class="designer-label">Folder</span><select id="duplicateAssetFolder" class="designer-select"></select><span id="duplicateAssetFolderHint" class="designer-form-hint"></span></label>
+        <div id="duplicateAssetHint" class="modal-hint"></div>
+      </div>
+      <div class="modal-actions"><button id="duplicateAssetCancel" class="modal-secondary" type="button">Cancel</button><button id="duplicateAssetConfirm" class="primary modal-primary" type="button">Duplicate</button></div>
+    </div>
+  </div>
+
   <!-- Static-style Import modal for both Workflow and Prompt assets. -->
   <div id="generateWorkflowSaveBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-save-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowSaveTitle">
@@ -467,6 +483,7 @@ flow:
             <div class="designer-form-row"><span class="designer-label">Choose File</span><div class="asset-file-picker"><input id="importAssetFile" class="visually-hidden-file" type="file" accept=".zip,.json,.yaml,.yml,.md,application/zip,application/json,text/yaml,text/markdown,text/plain" /><button id="importAssetChooseButton" class="file-choice-button" type="button">Choose file</button><span id="importAssetFileName" class="selected-file-name">No file selected</span></div></div>
             <label id="importAssetNameRow" class="designer-form-row"><span class="designer-label">Name</span><input id="importAssetName" class="designer-input" placeholder="workflow.yaml" /></label>
             <label id="importAssetDestinationRow" class="designer-form-row"><span class="designer-label">Destination</span><select id="importAssetDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
+            <label id="importAssetFolderRow" class="designer-form-row"><span id="importAssetFolderLabel" class="designer-label">Custom folder</span><select id="importAssetFolder" class="designer-select"><option value="">Custom root</option></select></label>
             <label id="importAssetContentRow" class="designer-form-row designer-import-json-wrap"><span class="designer-label">Content</span><textarea id="importAssetContent" class="designer-textarea designer-import-json" placeholder="Paste YAML / Markdown or exported JSON here"></textarea></label>
           </section>
           <aside class="designer-import-preview"><span class="designer-label">Validation</span><div id="importAssetPreview" class="designer-empty-state">Choose a file or paste content.</div></aside>
