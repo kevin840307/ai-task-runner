@@ -847,6 +847,16 @@ class UIState(WorkflowBuilderMixin):
         raise ValueError("Custom asset kind must be workflow or prompt")
 
     @staticmethod
+    def _is_technical_folder_part(part: str) -> bool:
+        value = str(part or "").strip().lower()
+        return (
+            not value
+            or value.startswith(".")
+            or value in {"__pycache__", "__pypackages__", "node_modules"}
+            or value.endswith(".egg-info")
+        )
+
+    @staticmethod
     def _normalize_custom_folder(folder: str) -> str:
         raw = str(folder or "").strip().replace("\\", "/")
         if not raw or raw in {".", "/"}:
@@ -856,6 +866,8 @@ class UIState(WorkflowBuilderMixin):
         parts = [part.strip() for part in raw.split("/") if part.strip()]
         if not parts or any(part in {".", ".."} for part in parts):
             raise ValueError("Custom folder cannot contain . or ..")
+        if any(UIState._is_technical_folder_part(part) for part in parts):
+            raise ValueError("Custom folder contains a reserved technical directory")
         if any(not re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
             raise ValueError("Custom folder contains unsupported characters")
         return "/".join(parts)
@@ -866,7 +878,7 @@ class UIState(WorkflowBuilderMixin):
         folders = [""]
         for path in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: str(p).lower()):
             rel = path.relative_to(root).as_posix()
-            if rel and not any(part.startswith(".") for part in Path(rel).parts):
+            if rel and not any(self._is_technical_folder_part(part) for part in Path(rel).parts):
                 folders.append(rel)
         return folders
 
@@ -1955,8 +1967,9 @@ class UIState(WorkflowBuilderMixin):
                     raise ValueError("Project asset is outside a Workflow-owned package")
                 source_folder, _package_root, _workflow_dir, _prompt_dir = package
                 selected_folder = self._normalize_workflow_folder(folder or source_folder)
-                if selected_folder not in project_package_folders(project):
-                    raise ValueError("Select an existing Project Workflow folder for the duplicate")
+                existing_folders = project_package_folders(project)
+                if kind == "prompt" and selected_folder not in existing_folders:
+                    raise ValueError("Project Prompt duplicates must use an existing Project Workflow folder")
                 root = project_package_workflow_dir(project, selected_folder) if kind == "workflow" else project_package_prompt_dir(project, selected_folder)
                 root.mkdir(parents=True, exist_ok=True)
             else:
@@ -2235,6 +2248,8 @@ class UIState(WorkflowBuilderMixin):
             raise ValueError("Workflow folder contains an invalid path segment")
         if raw == "common" or raw.startswith("common/"):
             raise ValueError("The common folder is reserved and cannot own a Workflow")
+        if any(UIState._is_technical_folder_part(part) for part in parts):
+            raise ValueError("Workflow folder contains a reserved technical directory")
         if not all(re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
             raise ValueError("Workflow folder contains unsupported characters")
         return "/".join(parts)

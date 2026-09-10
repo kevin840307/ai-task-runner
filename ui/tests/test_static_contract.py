@@ -692,8 +692,10 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
         html = (self.root / "static" / "index.html").read_text(encoding="utf-8")
         for token in ('id="duplicateAssetBackdrop"', 'id="duplicateAssetFolder"', 'id="importAssetFolderRow"', 'id="importAssetFolder"'):
             self.assertIn(token, html)
-        for token in ("fillDuplicateFolderSelect", "syncImportPromptFolder", 'folder: $("duplicateAssetFolder").value', 'folder: importFolder'):
+        for token in ("fillDuplicateFolderInput", "fillFolderInput", "syncImportPromptFolder", 'folder: $("duplicateAssetFolder").value', 'folder: importFolder'):
             self.assertIn(token, self.js)
+        for token in ('list="duplicateAssetFolderSuggestions"', 'list="importAssetFolderSuggestions"', 'list="newWorkflowFolderSuggestions"', 'list="newPromptFolderSuggestions"'):
+            self.assertIn(token, html)
         self.assertNotIn("duplicate-asset-card", html)
 
     def test_custom_assets_render_as_collapsible_folder_groups(self):

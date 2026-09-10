@@ -474,6 +474,22 @@ class UIStateTests(unittest.TestCase):
         self.assertTrue(Path(created_prompt["file"]["path"]).is_file())
         self.assertEqual(created_prompt["item"]["display_name"], "e2e/review.md")
 
+    def test_custom_folder_discovery_hides_and_rejects_technical_directories(self):
+        root = self.root / "runner" / "workflow" / "custom"
+        (root / "e2e" / "nested").mkdir(parents=True, exist_ok=True)
+        (root / "__pycache__" / "nested").mkdir(parents=True, exist_ok=True)
+        (root / ".pytest_cache" / "nested").mkdir(parents=True, exist_ok=True)
+        (root / "node_modules" / "pkg").mkdir(parents=True, exist_ok=True)
+        folders = self.state.studio_custom_folders("workflow")
+        self.assertIn("e2e", folders)
+        self.assertIn("e2e/nested", folders)
+        self.assertFalse(any("__pycache__" in value for value in folders))
+        self.assertFalse(any(".pytest_cache" in value for value in folders))
+        self.assertFalse(any("node_modules" in value for value in folders))
+        for bad in ("__pycache__", "e2e/__pycache__", ".pytest_cache", "node_modules"):
+            with self.assertRaises(ValueError):
+                self.state.studio_custom_folder_create("workflow", bad)
+
     def test_custom_folder_rejects_path_escape(self):
         for bad in ("../escape", "e2e/../escape", "/absolute", "C:/absolute"):
             with self.assertRaises(ValueError):
@@ -1100,6 +1116,17 @@ flow: [validate]
         prompt_item = next(x for x in self.state.studio_files(self.project)["prompts"] if x["path"] == str(prompt.resolve()))
         copied_prompt = self.state.studio_duplicate(prompt_item["id"], "source copy.md", self.project, "copies/prompts")
         self.assertEqual(Path(copied_prompt["item"]["path"]), (self.root / "runner" / "prompts" / "custom" / "copies" / "prompts" / "source copy.md").resolve())
+
+    def test_duplicate_can_create_typed_custom_and_project_workflow_folders(self) -> None:
+        workflow_item = self._workflow_item()
+        custom = self.state.studio_duplicate(workflow_item["id"], "typed copy.workflow.yaml", self.project, "typed/new")
+        self.assertEqual(Path(custom["item"]["path"]), (self.root / "runner" / "workflow" / "custom" / "typed" / "new" / "typed copy.workflow.yaml").resolve())
+
+        project_source = self.state.studio_workflow_create("source", "project", self.project, "source")
+        project_copy = self.state.studio_duplicate(project_source["item"]["id"], "project copy.workflow.yaml", self.project, "typed-target")
+        expected = self.project / ".ai-task-runner" / "workflows" / "typed-target" / "workflow" / "project copy.workflow.yaml"
+        self.assertEqual(Path(project_copy["item"]["path"]), expected.resolve())
+        self.assertTrue(expected.is_file())
 
     def test_project_duplicate_can_target_an_existing_workflow_folder(self) -> None:
         first = self.state.studio_workflow_create("first", "project", self.project)

@@ -1335,35 +1335,28 @@ async function confirmDiscardStudio() {
 }
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
-function fillCustomFolderSelect(kind, selectId, selected = "", destination = "custom") {
-  const select = $(selectId); if (!select) return;
-  const folders = destination === "project" ? (state.studioFiles?.project_folders || []) : (state.studioFiles?.custom_folders?.[kind] || [""]);
-  select.innerHTML = "";
-  if (destination === "project" && !folders.length) { const option = document.createElement("option"); option.value = ""; option.textContent = "No Project Workflow folders"; select.appendChild(option); return; }
-  folders.forEach((folder) => { const option = document.createElement("option"); option.value = folder; option.textContent = folder || "Custom root"; select.appendChild(option); });
-  if ([...select.options].some((o) => o.value === selected)) select.value = selected;
+function fillFolderInput(kind, inputId, selected = "", destination = "custom") {
+  const input = $(inputId); if (!input) return;
+  const listId = input.getAttribute("list"), list = listId ? $(listId) : null;
+  const folders = destination === "project" ? (state.studioFiles?.project_folders || []) : (state.studioFiles?.custom_folders?.[kind] || []);
+  if (list) {
+    list.innerHTML = "";
+    if (destination === "custom") { const root = document.createElement("option"); root.value = ""; root.label = "Custom root"; list.appendChild(root); }
+    folders.filter(Boolean).forEach((folder) => { const option = document.createElement("option"); option.value = folder; list.appendChild(option); });
+  }
+  input.value = selected || "";
+  input.placeholder = destination === "project" ? "workflow-folder" : "e2e/regression";
 }
 function syncCustomFolderVisibility(kind) {
-  const workflow = kind === "workflow"; const destination = $(workflow ? "newWorkflowDestination" : "newPromptDestination")?.value;
-  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow"); const createRow = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow"); const toggle = $(workflow ? "newWorkflowFolderToggle" : "newPromptFolderToggle");
-  const custom = destination === "custom";
-  // Project Workflows get an owned folder automatically from the filename. Project Prompts must attach to an existing owned Workflow folder.
-  if (row) row.hidden = workflow ? !custom : !(custom || destination === "project");
-  if (toggle) toggle.hidden = !custom;
-  if (!custom && createRow) createRow.hidden = true;
-  if (!workflow && destination === "project") fillCustomFolderSelect("prompt", "newPromptFolder", "", "project");
-  else if (custom) fillCustomFolderSelect(kind, workflow ? "newWorkflowFolder" : "newPromptFolder", "", "custom");
+  const workflow = kind === "workflow"; const destination = $(workflow ? "newWorkflowDestination" : "newPromptDestination")?.value || "custom";
+  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow");
+  if (row) row.hidden = false;
+  fillFolderInput(kind, workflow ? "newWorkflowFolder" : "newPromptFolder", "", destination);
   const label = row?.querySelector(".designer-label"); if (label) label.textContent = destination === "project" ? "Workflow folder" : "Custom folder";
-}
-async function createCustomFolder(kind) {
-  const workflow = kind === "workflow"; const input = $(workflow ? "newWorkflowFolderName" : "newPromptFolderName"); const selectId = workflow ? "newWorkflowFolder" : "newPromptFolder"; const row = $(workflow ? "newWorkflowFolderCreateRow" : "newPromptFolderCreateRow");
-  const folder = input?.value.trim() || ""; if (!folder) return;
-  try { const result = await api("/api/studio/custom-folder/create", { method: "POST", body: JSON.stringify({ kind, folder }) }); state.studioFiles.custom_folders ||= {}; state.studioFiles.custom_folders[kind] = result.folders || [""]; fillCustomFolderSelect(kind, selectId, result.folder); if (input) input.value = ""; if (row) row.hidden = true; showToast(`Folder ${result.folder} ready`); }
-  catch (error) { showActionError(error.message, "Folder creation failed"); }
 }
 function openNewWorkflowModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Workflow.", true);
-  state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; fillCustomFolderSelect("workflow", "newWorkflowFolder"); $("newWorkflowFolderCreateRow").hidden = true; $("newWorkflowFolderName").value = ""; syncCustomFolderVisibility("workflow"); $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
+  state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; syncCustomFolderVisibility("workflow"); $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
 }
 async function closeNewWorkflowModal(force = false) { if ($("newWorkflowBackdrop").hidden) return true; if (!force && state.newWorkflowDirty) { const ok = await confirmDialog({ title: "Discard new Workflow?", message: "Discard this unsaved Workflow draft?", confirmLabel: "Discard Workflow", danger: true }); if (!ok) return false; } $("newWorkflowBackdrop").hidden = true; state.newWorkflowDirty = false; return true; }
 async function confirmNewWorkflow() {
@@ -1373,7 +1366,7 @@ async function confirmNewWorkflow() {
 }
 function openNewPromptModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Prompt.", true);
-  state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; fillCustomFolderSelect("prompt", "newPromptFolder"); $("newPromptFolderCreateRow").hidden = true; $("newPromptFolderName").value = ""; syncCustomFolderVisibility("prompt"); $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
+  state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; syncCustomFolderVisibility("prompt"); $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
 }
 async function closeNewPromptModal(force = false) { if ($("newPromptBackdrop").hidden) return true; if (!force && state.newPromptDirty) { const ok = await confirmDialog({ title: "Discard new Prompt?", message: "Discard this unsaved Prompt draft?", confirmLabel: "Discard Prompt", danger: true }); if (!ok) return false; } $("newPromptBackdrop").hidden = true; state.newPromptDirty = false; return true; }
 async function confirmNewPrompt() {
@@ -1424,7 +1417,7 @@ async function readImportAssetFile() {
 }
 function syncImportPromptFolder() {
   if (state.studioSourceKind === "workflow") return; const destination = $("importAssetDestination")?.value || "custom";
-  fillCustomFolderSelect("prompt", "importAssetFolder", currentStudioFolder(state.studioFile), destination);
+  fillFolderInput("prompt", "importAssetFolder", currentStudioFolder(state.studioFile), destination);
   $("importAssetFolderLabel").textContent = destination === "project" ? "Workflow folder" : "Custom folder";
 }
 async function confirmImportAsset() {
@@ -1498,16 +1491,15 @@ function currentStudioFolder(item) {
   }
   return "";
 }
-function fillDuplicateFolderSelect(item) {
-  const select = $("duplicateAssetFolder"); if (!select || !item) return;
+function fillDuplicateFolderInput(item) {
+  const input = $("duplicateAssetFolder"); if (!input || !item) return;
   const targetScope = item.scope === "system" || item.readonly ? "custom" : item.scope;
-  const folders = targetScope === "project" ? (state.studioFiles?.project_folders || []) : (state.studioFiles?.custom_folders?.[item.kind] || [""]);
   const current = targetScope === "custom" && item.scope !== "custom" ? "" : currentStudioFolder(item);
-  select.innerHTML = "";
-  folders.forEach((folder) => { const option = document.createElement("option"); option.value = folder; option.textContent = folder || "Custom root"; select.appendChild(option); });
-  if ([...select.options].some((o) => o.value === current)) select.value = current;
+  fillFolderInput(item.kind, "duplicateAssetFolder", current, targetScope);
   $("duplicateAssetFolderLabel").textContent = targetScope === "project" ? "Workflow folder" : "Custom folder";
-  $("duplicateAssetFolderHint").textContent = targetScope === "project" ? "Choose an existing Project Workflow folder." : "Choose where the independent copy is stored.";
+  $("duplicateAssetFolderHint").textContent = targetScope === "project"
+    ? (item.kind === "workflow" ? "Type a new folder or choose an existing Project Workflow folder." : "Type or choose an existing Project Workflow folder.")
+    : "Type a folder path or choose an existing suggestion.";
 }
 async function duplicateStudioAsset() {
   closeStudioAssetMenu(); const current = state.studioFile; if (!current || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
@@ -1515,7 +1507,7 @@ async function duplicateStudioAsset() {
   $("duplicateAssetTitle").textContent = `Duplicate ${label}`; $("duplicateAssetIcon").textContent = label[0]; $("duplicateAssetIcon").className = `modal-title-icon ${current.kind}`;
   $("duplicateAssetDescription").textContent = `Create an independent ${destination} copy. The source file is not modified.`;
   $("duplicateAssetName").value = window.StudioSupport.duplicateName(current.name); $("duplicateAssetHint").textContent = ""; $("duplicateAssetHint").classList.remove("error");
-  fillDuplicateFolderSelect(current); $("duplicateAssetBackdrop").hidden = false; setTimeout(() => $("duplicateAssetName").focus(), 0);
+  fillDuplicateFolderInput(current); $("duplicateAssetBackdrop").hidden = false; setTimeout(() => $("duplicateAssetName").focus(), 0);
 }
 function closeDuplicateAssetModal() { $("duplicateAssetBackdrop").hidden = true; }
 async function confirmDuplicateAsset() {
@@ -1743,7 +1735,3 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) Prom
 
 $("newWorkflowDestination").onchange = () => syncCustomFolderVisibility("workflow");
 $("newPromptDestination").onchange = () => syncCustomFolderVisibility("prompt");
-$("newWorkflowFolderToggle").onclick = () => { $("newWorkflowFolderCreateRow").hidden = !$("newWorkflowFolderCreateRow").hidden; if (!$("newWorkflowFolderCreateRow").hidden) $("newWorkflowFolderName").focus(); };
-$("newPromptFolderToggle").onclick = () => { $("newPromptFolderCreateRow").hidden = !$("newPromptFolderCreateRow").hidden; if (!$("newPromptFolderCreateRow").hidden) $("newPromptFolderName").focus(); };
-$("newWorkflowFolderCreate").onclick = () => createCustomFolder("workflow");
-$("newPromptFolderCreate").onclick = () => createCustomFolder("prompt");

@@ -5,6 +5,7 @@ from pathlib import Path
 
 PROJECT_WORKFLOW_ROOT = Path(".ai-task-runner") / "workflows"
 _FOLDER_PART = re.compile(r"^[A-Za-z0-9_. -]+$")
+_RESERVED_TECHNICAL_FOLDERS = {"__pycache__", "__pypackages__", "node_modules"}
 
 
 def _normalize_package_folder(folder: str) -> str:
@@ -14,6 +15,9 @@ def _normalize_package_folder(folder: str) -> str:
     # One immediate folder == one owned Project Workflow package.  Keeping this
     # flat prevents support directories such as assets/workflow from becoming
     # accidental packages during discovery.
+    lowered = raw.lower()
+    if (lowered.startswith(".") or lowered in _RESERVED_TECHNICAL_FOLDERS or lowered.endswith(".egg-info")):
+        raise ValueError("Project Workflow folder cannot be a reserved technical directory")
     if "/" in raw or raw in {".", ".."} or not _FOLDER_PART.fullmatch(raw):
         raise ValueError("Project Workflow folder must be one safe folder name")
     return raw

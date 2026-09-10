@@ -177,10 +177,7 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.click("#yamlPromptSource")
             page.click("#newWorkflowButton")
             page.fill("#newPromptName", "e2e_prompt")
-            page.click("#newPromptFolderToggle")
-            page.fill("#newPromptFolderName", "e2e")
-            page.click("#newPromptFolderCreate")
-            page.wait_for_timeout(80)
+            page.fill("#newPromptFolder", "e2e")
             assert page.locator("#newPromptFolder").input_value() == "e2e"
             page.click("#newPromptConfirm")
             page.wait_for_timeout(120)
@@ -194,10 +191,7 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             page.click("#yamlWorkflowSource")
             page.click("#newWorkflowButton")
             page.fill("#newWorkflowName", "e2e_crud")
-            page.click("#newWorkflowFolderToggle")
-            page.fill("#newWorkflowFolderName", "e2e")
-            page.click("#newWorkflowFolderCreate")
-            page.wait_for_timeout(80)
+            page.fill("#newWorkflowFolder", "e2e")
             assert page.locator("#newWorkflowFolder").input_value() == "e2e"
             page.click("#newWorkflowConfirm")
             page.wait_for_timeout(120)

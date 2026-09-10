@@ -405,8 +405,7 @@
         <div class="modal-section-label">Workflow file</div>
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newWorkflowName" class="designer-input" placeholder="regression.workflow.yaml" /><span class="designer-form-hint" data-i18n="workflow.name_hint">未輸入副檔名時會自動建立 .workflow.yaml。</span></label>
         <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newWorkflowDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select><span class="designer-form-hint" data-i18n="workflow.destination_hint">Custom workflow 可被多個 Project 使用；Project workflow 跟著目前專案。</span></label>
-        <div id="newWorkflowFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><select id="newWorkflowFolder" class="designer-select"><option value="">Custom root</option></select></label><button id="newWorkflowFolderToggle" type="button">+ New Folder</button></div>
-        <div id="newWorkflowFolderCreateRow" class="custom-folder-create-row" hidden><input id="newWorkflowFolderName" class="designer-input" placeholder="e2e/regression" /><button id="newWorkflowFolderCreate" type="button">Create Folder</button></div>
+        <div id="newWorkflowFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><input id="newWorkflowFolder" class="designer-input" list="newWorkflowFolderSuggestions" placeholder="e2e/regression" autocomplete="off" /><datalist id="newWorkflowFolderSuggestions"></datalist></label></div>
         <div class="workflow-create-preview"><span class="designer-eyebrow">Initial YAML</span><code>stages:
   planning:
     type: plan
@@ -430,8 +429,7 @@ flow:
       <div class="modal-scroll-body">
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newPromptName" class="designer-input" placeholder="my_prompt.md" /></label>
         <label class="designer-form-row"><span class="designer-label">Destination</span><select id="newPromptDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
-        <div id="newPromptFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><select id="newPromptFolder" class="designer-select"><option value="">Custom root</option></select></label><button id="newPromptFolderToggle" type="button">+ New Folder</button></div>
-        <div id="newPromptFolderCreateRow" class="custom-folder-create-row" hidden><input id="newPromptFolderName" class="designer-input" placeholder="e2e" /><button id="newPromptFolderCreate" type="button">Create Folder</button></div>
+        <div id="newPromptFolderRow" class="custom-folder-row"><label class="designer-form-row"><span class="designer-label">Custom folder</span><input id="newPromptFolder" class="designer-input" list="newPromptFolderSuggestions" placeholder="e2e/regression" autocomplete="off" /><datalist id="newPromptFolderSuggestions"></datalist></label></div>
         <div id="newPromptHint" class="modal-hint"></div>
       </div>
       <div class="modal-actions"><button id="newPromptCancel" class="modal-secondary" type="button">Cancel</button><button id="newPromptConfirm" class="primary modal-primary" type="button">Create Prompt</button></div>
@@ -447,7 +445,7 @@ flow:
       </div>
       <div class="modal-scroll-body">
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="duplicateAssetName" class="designer-input" /></label>
-        <label class="designer-form-row"><span id="duplicateAssetFolderLabel" class="designer-label">Folder</span><select id="duplicateAssetFolder" class="designer-select"></select><span id="duplicateAssetFolderHint" class="designer-form-hint"></span></label>
+        <label class="designer-form-row"><span id="duplicateAssetFolderLabel" class="designer-label">Folder</span><input id="duplicateAssetFolder" class="designer-input" list="duplicateAssetFolderSuggestions" placeholder="e2e/regression" autocomplete="off" /><datalist id="duplicateAssetFolderSuggestions"></datalist><span id="duplicateAssetFolderHint" class="designer-form-hint"></span></label>
         <div id="duplicateAssetHint" class="modal-hint"></div>
       </div>
       <div class="modal-actions"><button id="duplicateAssetCancel" class="modal-secondary" type="button">Cancel</button><button id="duplicateAssetConfirm" class="primary modal-primary" type="button">Duplicate</button></div>
@@ -483,7 +481,7 @@ flow:
             <div class="designer-form-row"><span class="designer-label">Choose File</span><div class="asset-file-picker"><input id="importAssetFile" class="visually-hidden-file" type="file" accept=".zip,.json,.yaml,.yml,.md,application/zip,application/json,text/yaml,text/markdown,text/plain" /><button id="importAssetChooseButton" class="file-choice-button" type="button">Choose file</button><span id="importAssetFileName" class="selected-file-name">No file selected</span></div></div>
             <label id="importAssetNameRow" class="designer-form-row"><span class="designer-label">Name</span><input id="importAssetName" class="designer-input" placeholder="workflow.yaml" /></label>
             <label id="importAssetDestinationRow" class="designer-form-row"><span class="designer-label">Destination</span><select id="importAssetDestination" class="designer-select"><option value="custom">Custom</option><option value="project">Current Project</option></select></label>
-            <label id="importAssetFolderRow" class="designer-form-row"><span id="importAssetFolderLabel" class="designer-label">Custom folder</span><select id="importAssetFolder" class="designer-select"><option value="">Custom root</option></select></label>
+            <label id="importAssetFolderRow" class="designer-form-row"><span id="importAssetFolderLabel" class="designer-label">Custom folder</span><input id="importAssetFolder" class="designer-input" list="importAssetFolderSuggestions" placeholder="e2e/regression" autocomplete="off" /><datalist id="importAssetFolderSuggestions"></datalist></label>
             <label id="importAssetContentRow" class="designer-form-row designer-import-json-wrap"><span class="designer-label">Content</span><textarea id="importAssetContent" class="designer-textarea designer-import-json" placeholder="Paste YAML / Markdown or exported JSON here"></textarea></label>
           </section>
           <aside class="designer-import-preview"><span class="designer-label">Validation</span><div id="importAssetPreview" class="designer-empty-state">Choose a file or paste content.</div></aside>
