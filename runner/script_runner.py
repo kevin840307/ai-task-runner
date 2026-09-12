@@ -10,6 +10,7 @@ from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .plugins.registry import merge_plugin_config
 from .runtime import events
+from .runtime.run_state import StateStore
 from .script_loader import load_yaml_script
 from .workflow.loader import load_default_workflow, load_workflow
 from .workflow.snapshot import load_run_resource, load_snapshot
@@ -49,6 +50,10 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
         )
         _emit_script_event("script.item_started", index, total, item, child=child)
         code = execute_one(child)
+        if code == 0 and not _child_completed(child):
+            # A child can exit cleanly after saving resumable, unfinished state.
+            # Batch orchestration must not report that as a completed script item.
+            code = 1
         if code != 0:
             _emit_script_event(
                 "script.item_failed",
@@ -61,6 +66,16 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
             return code
         _emit_script_event("script.item_completed", index, total, item, child=child)
     return 0
+
+
+def _child_completed(child: RuntimeConfig) -> bool:
+    state_path = Path(child.project_root) / child.work_dir / "state.json"
+    store = StateStore(Path(child.project_root), state_path.parent)
+    try:
+        _, state = store._read_state(state_path, strict=True)  # noqa: SLF001
+    except ConfigurationError:
+        return False
+    return state is not None and state.completed and state.stage == "completed"
 
 
 def _emit_script_event(

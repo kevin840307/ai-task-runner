@@ -4,6 +4,7 @@ import pytest
 
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
+from runner.runtime.run_state import RunState, StateStore
 from runner.script_loader import load_yaml_script
 from runner.script_runner import build_script_item_config, select_script_workflow
 
@@ -59,12 +60,46 @@ def test_execute_script_uses_distinct_item_project_roots(tmp_path):
     seen=[]
     def execute_one(child):
         seen.append((Path(child.project_root), Path(child.work_dir), child.script_index))
+        root = Path(child.project_root)
+        store = StateStore(root, root / child.work_dir)
+        store.save(RunState(
+            run_id=f"run-{child.script_index}", goal=child.goal,
+            project_root=str(root), completed=True, stage="completed",
+        ))
         return 0
     assert execute_script(args, execute_one)==0
     assert seen==[
         ((tmp_path/'a').resolve(), Path('.ai-task-runner')/'script'/'001', 1),
         ((tmp_path/'b').resolve(), Path('.ai-task-runner')/'script'/'002', 2),
     ]
+
+
+def test_execute_script_does_not_treat_unfinished_child_as_pass(tmp_path):
+    from runner.script_runner import execute_script
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    args = base_args(tmp_path)
+    args.script = str(script)
+    args.human_output = False
+    args.json_events = False
+    args.event_callback = None
+    seen = []
+
+    def execute_one(child):
+        seen.append(child.script_index)
+        root = Path(child.project_root)
+        StateStore(root, root / child.work_dir).save(RunState(
+            run_id="unfinished", goal=child.goal, project_root=str(root),
+            completed=False, stage="executing",
+        ))
+        return 0
+
+    assert execute_script(args, execute_one) == 1
+    assert seen == [1]
 
 
 def test_yaml_item_goal_file_loads_relative_to_script(tmp_path):
