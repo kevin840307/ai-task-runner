@@ -96,3 +96,36 @@ def test_plan_only_then_resume(tmp_path,monkeypatch):
  after=records(sd)[len(before):]
  assert after and after[0]['stage']=='execute'
  assert after[0]['resumed'] is True
+
+def test_python_validator_cache_inside_protected_tools_does_not_replan(tmp_path, monkeypatch):
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "helper.py").write_text("VALUE = 7\n", encoding="utf-8")
+    (tmp_path / ".ai-task-runner.yaml").write_text(
+        "protected_paths:\n  - tools/\n",
+        encoding="utf-8",
+    )
+    validator_path = tmp_path / "validation.py"
+    validator_path.write_text(textwrap.dedent('''\
+        import argparse
+        import importlib
+        import sys
+        from pathlib import Path
+        p=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()
+        root=Path(a.project_root)
+        sys.path.insert(0, str(root))
+        # Deliberately re-enable bytecode to emulate a tool that ignores the
+        # runner environment. Safety must still treat the cache as technical.
+        sys.dont_write_bytecode=False
+        importlib.invalidate_caches()
+        import tools.helper
+        assert tools.helper.VALUE == 7
+        raise SystemExit(0 if (root/"done.txt").exists() else 5)
+    '''), encoding="utf-8")
+
+    result, _recs = base(tmp_path, monkeypatch, "happy_path", str(validator_path))
+
+    assert result.completed
+    assert result.states[0]["cycle"] == 1
+    assert (tools / "__pycache__").is_dir()
+    assert stages(tmp_path).count("validate_file") == 1

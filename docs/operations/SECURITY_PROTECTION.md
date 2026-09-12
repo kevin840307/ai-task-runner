@@ -1,6 +1,6 @@
 # Protection and Safety Model
 
-Version: 1.2.65
+Version: 1.2.66
 
 ## Project root
 The project root is the task workspace boundary. Project policy is read only from `<project-root>/.ai-task-runner.yaml`; parent directories are not searched.
@@ -9,6 +9,8 @@ The project root is the task workspace boundary. Project policy is read only fro
 `protected_paths` entries are project-relative files or directories. Directory entries protect the whole subtree. Paths are normalized and descendant entries are collapsed when a protected parent already exists. Absolute paths and `..` escapes are rejected. The policy file itself is always protected automatically. External Python-validator projects should also protect `ai_task_runner_validator.py`; source-mode runs may place this shared helper beside `validation.py`.
 
 Protected-path snapshots detect modification, deletion, creation under protected directory roots, and restore violations. CLI `--protect-file` can add ad-hoc protection; project policy is preferred for stable rules.
+
+Safety snapshots intentionally exclude known technical/runtime artifacts so tool side effects cannot masquerade as source changes. Built-in ignored directories include `.git`, `.ai-task-runner`, `.vs`, `.vscode`, `.idea`, `.gradle`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.tox`, `.nox`, `.venv`, `__pycache__`, `bin`, `obj`, `build`, `dist`, `coverage`, `htmlcov`, `node_modules`, `target`, and `TestResults`; `.pyc`/`.pyo`, `.coverage`, `.DS_Store`, and `Thumbs.db` files are also ignored. This is not a blanket dot-file rule: project files such as `.gitignore`, `.gitattributes`, `.editorconfig`, `.env.example`, and `.github/**` remain normal protected/project content. Ignored artifacts are preserved if Safety restores a real source mutation. Runner-controlled child processes also set `PYTHONDONTWRITEBYTECODE=1` to avoid Python cache churn at the source.
 
 On Windows, Safety filesystem I/O uses extended-length paths internally, so deep protected/readonly trees are not silently skipped when their absolute paths exceed the traditional `MAX_PATH` limit. Logical Project paths and policy syntax stay unchanged.
 

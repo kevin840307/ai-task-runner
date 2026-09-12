@@ -1,6 +1,6 @@
 # Python API Reference
 
-Version: 1.2.65
+Version: 1.2.66
 
 ## Canonical integration surface
 External callers should use `runner.api.RunRequest` and `runner.api.run()`. CLI, programmatic/remote UI integrations, and skills should adapt to this same request model instead of implementing another Runner flow. A detached local monitoring UI may intentionally use no Python API at all and read display-only runtime visibility files from the work directory.

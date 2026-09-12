@@ -13,6 +13,7 @@ Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance. Al
 - Use the shared structured-result parser; do not create stage-specific JSON extraction logic.
 - Qwen prompt transport is stdin-only. Do not place the full prompt in `-p` or argv; this avoids Windows command-line limits and keeps one input route.
 - Never modify protected paths or the project-root `.ai-task-runner.yaml`.
+- Safety ignores only the shared technical/runtime artifact set (`.git`, `.vs`, `.vscode`, `bin`, `obj`, `TestResults`, caches, etc.); do not treat all dot-files as disposable project metadata.
 - Never run `git add`, `git commit`, or `git push`.
 - Do not change validators or immutable fixtures to make a failing implementation pass.
 

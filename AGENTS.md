@@ -36,6 +36,7 @@ These rules are mandatory for changes to this repository. `DevFollow.txt` is the
 - Do not modify protected fixtures, validator inputs, Runner source, or Runner-managed state through an AI call.
 - AI must never `git add`, `git commit`, or `git push`; final Git acceptance is human-owned.
 - Debug/history files must remain diagnostic side effects only and must not influence changed-file detection, progress, validation, or resume semantics.
+- Safety change detection ignores only the centralized technical/runtime artifact policy (`.git`, Runner state, IDE/build/test/cache outputs such as `.vs`, `.vscode`, `bin`, `obj`, `TestResults`, `__pycache__`, `.pyc`, etc.). Do not generalize this into ignoring all dot-files; real project metadata such as `.gitignore`, `.github/**`, and `.editorconfig` remains source evidence.
 
 ## Validation
 - Configured deterministic file validation is the authoritative correctness gate; it executes through the generic `command` Stage.

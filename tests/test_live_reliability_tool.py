@@ -851,3 +851,7 @@ def test_final_validation_sessions_supports_yaml_child_work_dir(tmp_path: Path):
     assert live.final_validation_sessions(
         tmp_path, ".ai-task-runner/script/002"
     ) == {"fresh-a", "fresh-b", "fresh-c"}
+
+
+def test_technical_artifact_safety_preflight_ignores_metadata_but_protects_source():
+    live.technical_artifact_safety_preflight()

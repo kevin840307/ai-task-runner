@@ -78,9 +78,14 @@ def copy_path(source: Path, target: Path) -> None:
 
 
 def copy_ignore(excluded: set[str]):
+    excluded_keys = {name.casefold() for name in excluded}
+
     def ignore(source: str, names: list[str]) -> list[str]:
         base = Path(source)
-        return [name for name in names if name in excluded and (base / name).is_dir()]
+        return [
+            name for name in names
+            if name.casefold() in excluded_keys and (base / name).is_dir()
+        ]
     return ignore
 
 

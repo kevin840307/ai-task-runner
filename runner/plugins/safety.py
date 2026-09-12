@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import hashlib
+import json
 import os
 import shlex
 import shutil
@@ -21,7 +22,10 @@ from ..utils.files import copy_ignore, copy_path, digest, io_path, remove_path
 from ..bootstrap import current_runtime
 from .contracts import HookViolation
 
-from ..project.files import excluded_dirs, restore_project_changes, tree_manifest
+from ..project.files import (
+    TECHNICAL_EXCLUDE_DIRS, excluded_dirs, is_technical_artifact,
+    restore_project_changes, tree_manifest,
+)
 
 BLOCKED_GIT_SUBCOMMANDS = frozenset({"add", "commit", "push"})
 _VALUE_OPTIONS = frozenset({
@@ -48,6 +52,7 @@ def git_subcommand(args: list[str]) -> str:
 
 def _guarded_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ if base is None else base)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     real_git = shutil.which("git", path=env.get("PATH"))
     if not real_git:
         return env
@@ -126,24 +131,72 @@ def normalize_paths(paths: Sequence[Path]) -> list[Path]:
     return roots
 
 
+def _technical_copy_ignore(source: str, names: list[str]) -> list[str]:
+    base = Path(source)
+    ignored: list[str] = []
+    for name in names:
+        child = base / name
+        try:
+            is_dir = child.is_dir() and not child.is_symlink()
+        except OSError:
+            is_dir = False
+        if is_technical_artifact(Path(name), is_dir=is_dir) or (
+            child.is_symlink() and name.casefold() in TECHNICAL_EXCLUDE_DIRS
+        ):
+            ignored.append(name)
+    return ignored
+
+
+def _directory_manifest(path: Path) -> dict[str, tuple[str, str | None]]:
+    return tree_manifest(path, set(TECHNICAL_EXCLUDE_DIRS))
+
+
+def _protected_digest(path: Path) -> str | None:
+    source = io_path(path)
+    if is_technical_artifact(Path(path.name), is_dir=source.is_dir() if source.exists() else None):
+        return "technical-artifact"
+    if not source.exists() and not source.is_symlink():
+        return None
+    if source.is_dir() and not source.is_symlink():
+        payload = json.dumps(_directory_manifest(path), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(("dir\0" + payload).encode()).hexdigest()
+    return digest(path)
+
+
 def _snapshot_data(path: Path) -> ProtectedData:
     source = io_path(path)
+    if is_technical_artifact(Path(path.name), is_dir=source.is_dir() if source.exists() else None):
+        return None
     if not source.exists() and not source.is_symlink():
         return None
     if source.is_dir() and not source.is_symlink():
         backup_root = Path(tempfile.mkdtemp(prefix="ai-task-runner-protect-"))
         backup = backup_root / "snapshot"
-        copy_path(path, backup)
+        shutil.copytree(source, io_path(backup), symlinks=True, ignore=_technical_copy_ignore)
         return backup
     return source.read_bytes()
 
 
 def snapshot(paths: Sequence[Path]) -> dict[Path, tuple[str | None, ProtectedData]]:
-    return {path: (digest(path), _snapshot_data(path)) for path in paths}
+    return {path: (_protected_digest(path), _snapshot_data(path)) for path in paths}
 
 
 def changed_snapshot_paths(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
-    return [str(path) for path, (old_hash, _data) in saved.items() if digest(path) != old_hash]
+    return [str(path) for path, (old_hash, _data) in saved.items() if _protected_digest(path) != old_hash]
+
+
+def _restore_directory(path: Path, backup: Path) -> None:
+    target_io = io_path(path)
+    if not target_io.is_dir() or target_io.is_symlink():
+        if target_io.exists() or target_io.is_symlink():
+            remove_path(path)
+        copy_path(backup, path)
+        return
+    before = _directory_manifest(backup)
+    after = _directory_manifest(path)
+    changed = sorted(relative for relative in set(before) | set(after) if before.get(relative) != after.get(relative))
+    if changed:
+        restore_project_changes(path, backup, changed)
 
 
 def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list[str]:
@@ -151,19 +204,21 @@ def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list
     backup_roots = [old_data.parent for _path, (_hash, old_data) in saved.items() if isinstance(old_data, Path)]
     try:
         for path, (old_hash, old_data) in saved.items():
-            if digest(path) == old_hash:
+            if _protected_digest(path) == old_hash:
                 continue
             changed.append(str(path))
             path_io = io_path(path)
+            if old_data is None:
+                if not is_technical_artifact(Path(path.name), is_dir=path_io.is_dir() if path_io.exists() else None):
+                    remove_path(path)
+                continue
+            if isinstance(old_data, Path):
+                _restore_directory(path, old_data)
+                continue
             if path_io.exists() or path_io.is_symlink():
                 remove_path(path)
-            if old_data is None:
-                continue
             io_path(path.parent).mkdir(parents=True, exist_ok=True)
-            if isinstance(old_data, Path):
-                copy_path(old_data, path)
-            else:
-                io_path(path).write_bytes(old_data)
+            path_io.write_bytes(old_data)
         return changed
     finally:
         for backup_root in backup_roots:
@@ -240,7 +295,21 @@ class SafetyHook:
         values.append(root / config.work_dir / "state.json")
         values.extend(policy_protected_paths(root))
         values.extend(Path(value).resolve() for value in config.protect_files)
-        return normalize_paths(values)
+        protected: list[Path] = []
+        for path in normalize_paths(values):
+            try:
+                relative = path.relative_to(root)
+            except ValueError:
+                protected.append(path)
+                continue
+            source = io_path(path)
+            if is_technical_artifact(
+                relative,
+                is_dir=source.is_dir() if source.exists() else None,
+            ):
+                continue
+            protected.append(path)
+        return protected
 
     def before_execution(self, context) -> _Token:
         protected_snapshot = snapshot(self._protected(context.root))

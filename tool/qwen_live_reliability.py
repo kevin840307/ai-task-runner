@@ -1230,6 +1230,47 @@ def readonly_long_path_preflight() -> None:
             raise RuntimeError("read-only snapshot cache did not track legitimate writes")
 
 
+def technical_artifact_safety_preflight() -> None:
+    """Prove caches/build/IDE metadata cannot cause protected-path replans."""
+    from runner.plugins.safety import restore_changed, snapshot
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-safety-artifacts-") as temporary:
+        protected = Path(temporary) / "tools"
+        protected.mkdir()
+        source = protected / "helper.py"
+        source.write_text("VALUE = 1\n", encoding="utf-8")
+        saved = snapshot([protected])
+
+        ignored = (
+            ".git/index", ".vs/state.bin", ".vscode/settings.json",
+            ".pytest_cache/state", "__pycache__/helper.cpython-310.pyc",
+            "bin/app.dll", "obj/app.obj", "TestResults/result.trx",
+        )
+        for relative in ignored:
+            path = protected / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("runtime", encoding="utf-8")
+        if restore_changed(saved):
+            raise RuntimeError("technical artifacts were treated as protected source changes")
+
+        saved = snapshot([protected])
+        source.write_text("changed\n", encoding="utf-8")
+        generated = protected / "bin" / "app.dll"
+        generated.write_text("keep-generated", encoding="utf-8")
+        changed = restore_changed(saved)
+        if changed != [str(protected)] or source.read_text(encoding="utf-8") != "VALUE = 1\n":
+            raise RuntimeError("real protected source mutation was not restored")
+        if generated.read_text(encoding="utf-8") != "keep-generated":
+            raise RuntimeError("protected restore removed an ignored build artifact")
+
+        dotfile = protected / ".gitignore"
+        dotfile.write_text("before\n", encoding="utf-8")
+        saved = snapshot([protected])
+        dotfile.write_text("after\n", encoding="utf-8")
+        if restore_changed(saved) != [str(protected)] or dotfile.read_text(encoding="utf-8") != "before\n":
+            raise RuntimeError("project dotfiles were incorrectly blanket-ignored")
+
+
 def loop_detection_contract_preflight() -> None:
     """Lock Qwen loop classification plus bounded Planning retry semantics."""
     if str(ROOT) not in sys.path:
@@ -2333,6 +2374,8 @@ def main() -> int:
     print("PASS >MAX_PATH runtime resource/state/copy preflight", flush=True)
     readonly_long_path_preflight()
     print("PASS >MAX_PATH reusable read-only snapshot preflight", flush=True)
+    technical_artifact_safety_preflight()
+    print("PASS protected-path technical-artifact ignore preflight", flush=True)
     with qwen_test_endpoint(settings.sandbox, settings.api_port):
         resume_probe(settings, run_root)
         print("PASS resume/process-restart probe", flush=True)
@@ -2424,6 +2467,7 @@ def main() -> int:
         "stage_result_mapping_preflight": True,
         "runtime_long_path_preflight": True,
         "readonly_long_path_preflight": True,
+        "technical_artifact_safety_preflight": True,
         "stop_request_resume_probe": True,
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,

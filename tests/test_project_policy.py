@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -172,10 +173,10 @@ def test_restore_changed_cleans_snapshot_if_restore_fails(tmp_path: Path, monkey
     backup_root = backup.parent
     (protected / "keep.txt").write_text("changed", encoding="utf-8")
 
-    def fail_copytree(*_args, **_kwargs):
+    def fail_restore(*_args, **_kwargs):
         raise OSError("restore failed")
 
-    monkeypatch.setattr(safety.shutil, "copytree", fail_copytree)
+    monkeypatch.setattr(safety, "restore_project_changes", fail_restore)
     with pytest.raises(OSError, match="restore failed"):
         restore_changed(saved)
 
@@ -197,3 +198,81 @@ def test_safety_snapshot_and_restore_supports_deep_paths(tmp_path: Path) -> None
 
     assert restore_changed(saved) == [str(protected)]
     assert protected.read_text(encoding="utf-8") == "before"
+
+
+def test_protected_folder_ignores_common_runtime_build_and_ide_artifacts(tmp_path: Path) -> None:
+    protected = tmp_path / "locked"
+    protected.mkdir()
+    (protected / "source.py").write_text("original", encoding="utf-8")
+    saved = snapshot([protected])
+
+    ignored_files = [
+        ".git/index", ".vs/state.bin", ".vscode/settings.json", ".idea/workspace.xml",
+        ".gradle/cache.bin", ".pytest_cache/state", ".mypy_cache/state",
+        ".ruff_cache/state", "__pycache__/source.cpython-310.pyc", "bin/app.dll",
+        "obj/app.obj", "build/output.bin", "dist/package.bin", "coverage/result.xml",
+        "htmlcov/index.html", "node_modules/pkg/index.js", "target/app.jar",
+        "TestResults/result.trx",
+    ]
+    for relative in ignored_files:
+        path = protected / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("runtime", encoding="utf-8")
+    (protected / ".coverage").write_text("runtime", encoding="utf-8")
+    (protected / ".DS_Store").write_text("runtime", encoding="utf-8")
+    (protected / "Thumbs.db").write_text("runtime", encoding="utf-8")
+
+    assert restore_changed(saved) == []
+    assert all((protected / relative).exists() for relative in ignored_files)
+
+
+def test_protected_restore_preserves_ignored_artifacts_when_source_changes(tmp_path: Path) -> None:
+    protected = tmp_path / "locked"
+    protected.mkdir()
+    source = protected / "source.py"
+    source.write_text("original", encoding="utf-8")
+    generated = protected / "bin" / "app.dll"
+    generated.parent.mkdir()
+    generated.write_text("before", encoding="utf-8")
+    saved = snapshot([protected])
+
+    source.write_text("changed", encoding="utf-8")
+    generated.write_text("after", encoding="utf-8")
+
+    assert restore_changed(saved) == [str(protected)]
+    assert source.read_text(encoding="utf-8") == "original"
+    assert generated.read_text(encoding="utf-8") == "after"
+
+
+def test_dotfiles_are_not_blanket_ignored_by_safety(tmp_path: Path) -> None:
+    protected = tmp_path / "locked"
+    protected.mkdir()
+    dotfile = protected / ".gitignore"
+    dotfile.write_text("before\n", encoding="utf-8")
+    saved = snapshot([protected])
+
+    dotfile.write_text("after\n", encoding="utf-8")
+
+    assert restore_changed(saved) == [str(protected)]
+    assert dotfile.read_text(encoding="utf-8") == "before\n"
+
+
+def test_runner_child_process_disables_python_bytecode_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bootstrap, "_current", None)
+    module = tmp_path / "helper.py"
+    module.write_text("VALUE = 1\n", encoding="utf-8")
+    config = RuntimeConfig(project_root=str(tmp_path), validator="ai", human_output=False)
+    with bootstrap.runtime_scope(config):
+        result = run_process(
+            [
+                sys.executable,
+                "-c",
+                "import os, helper; print(os.environ.get('PYTHONDONTWRITEBYTECODE')); print(helper.VALUE)",
+            ],
+            tmp_path,
+            10,
+        )
+
+    assert result.return_code == 0
+    assert result.output.splitlines()[-2:] == ["1", "1"]
+    assert not (tmp_path / "__pycache__").exists()
