@@ -83,3 +83,23 @@ def test_console_observer_persists_yaml_script_child_pointer(tmp_path):
     assert payload["child_project_root"] == str(child_root)
     assert payload["child_work_dir"] == ".ai-task-runner/script/002"
     assert payload["prompt_preview"] == "second task"
+
+
+def test_console_observer_creates_outer_runtime_for_first_yaml_item(tmp_path):
+    work = tmp_path / "not-created" / ".ai-task-runner"
+    runtime = SimpleNamespace(config=SimpleNamespace(human_output=False), work=work)
+    observer = ConsoleObserver(runtime)
+
+    observer({
+        "type": "script.item_started",
+        "script_index": 1,
+        "script_total": 6,
+        "prompt_preview": "first task",
+        "child_project_root": str(tmp_path),
+        "child_work_dir": ".ai-task-runner/script/001",
+    })
+
+    payload = json.loads((work / "console-view.json").read_text(encoding="utf-8"))
+    assert payload["script_index"] == 1
+    assert payload["script_total"] == 6
+    assert payload["script_status"] == "running"

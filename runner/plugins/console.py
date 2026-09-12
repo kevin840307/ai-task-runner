@@ -382,10 +382,9 @@ class ConsoleObserver:
         if kind.startswith("script.item_"):
             self.ui.stop()
             snapshot = self._script_snapshot(event)
-            # The detached CLI Supervisor creates the outer runtime directory.
-            # Programmatic YAML runs keep their historical child-only footprint.
-            if self.snapshot_path is not None and self.snapshot_path.parent.is_dir():
-                self._write_payload(snapshot)
+            # The outer runtime may not exist yet when the first YAML item
+            # starts. _write_payload creates it, so never retain a stale view.
+            self._write_payload(snapshot)
             if self.ui.human_output:
                 index = event.get("script_index", "?")
                 total = event.get("script_total", "?")
