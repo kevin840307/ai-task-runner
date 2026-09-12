@@ -1,6 +1,6 @@
 # Python API 參考
 
-版本：1.2.61
+版本：1.2.62
 
 ## 正式共用入口
 外部 caller 應使用 `runner.api.RunRequest` 與 `runner.api.run()`。CLI、programmatic/remote UI integration、Skill 都應轉成同一個 request model，不應再做第二套 Runner flow。本機 detached monitoring UI 可以刻意完全不使用 Python API，只讀 work directory 的 display-only runtime visibility files。

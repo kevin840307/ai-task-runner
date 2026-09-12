@@ -10,7 +10,6 @@ from .registry import STAGE_REGISTRY, stage_result_kind
 
 ROUTING_FIELDS = frozenset({"recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "label", "scope"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
-VALIDATORS = frozenset({"ai"})
 
 
 def validate_stage(name: str, values: dict[str, Any]) -> None:

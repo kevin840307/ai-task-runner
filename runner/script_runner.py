@@ -17,6 +17,20 @@ from .workflow.snapshot import load_run_resource, load_snapshot
 ExecuteOne = Callable[[RuntimeConfig], int]
 
 
+SCRIPT_ITEM_RUNTIME_FIELDS = frozenset({
+    "backend", "command", "sandbox", "agent_args", "validator_args",
+    "protect_files", "validator_timeout", "agent_timeout", "planning_timeout",
+    "agent_idle_after_change_timeout", "api_retry_timeout", "watchdog_interval",
+    "same_session_retries", "review_retries", "max_cycles", "stage_retry_delay",
+    "api_retry_wait", "api_retry_max_wait", "final_ai_validations",
+    "final_ai_required_passes",
+})
+
+
+def _runtime_overrides(item: dict[str, Any]) -> dict[str, Any]:
+    return {name: item[name] for name in SCRIPT_ITEM_RUNTIME_FIELDS if name in item}
+
+
 def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
     script = Path(args.script).resolve()
     if not script.is_file():
@@ -108,11 +122,7 @@ def build_script_item_config(
         validator_prompt=item.get("validator_prompt", ""),
         ai_validator_prompt=ai_validator_prompt,
         ai_validator_prompt_file=ai_validator_prompt_file,
-        review_retries=item.get("review_retries", args.review_retries),
-        final_ai_validations=item.get("final_ai_validations", args.final_ai_validations),
-        final_ai_required_passes=item.get(
-            "final_ai_required_passes", args.final_ai_required_passes
-        ),
+        **_runtime_overrides(item),
         workflow=workflow,
         workflow_explicit=workflow_explicit,
         plugins=merge_plugin_config(args.plugins, item.get("plugins", {})),

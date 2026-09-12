@@ -156,9 +156,6 @@ class RunState:
             values["ai_session_id"] = values.pop("model_session_id", values.pop("agent_session_id", ""))
         # Legacy dynamic-workflow state is intentionally ignored.
         # The slim runner resumes the current TODO through the static task-scoped SOP.
-        values.pop("task_workflow", None)
-        values.pop("dynamic_steps", None)
-        values.pop("dynamic_index", None)
         raw_tasks = values.get("tasks", [])
         if not isinstance(raw_tasks, list):
             raise ValueError("state.tasks must be an array")

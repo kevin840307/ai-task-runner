@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.61
+Version: 1.2.62
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -34,7 +34,7 @@ Protected paths are project-relative and may name files or directories. The poli
 - `--plan-only`: build/refresh TODOs, persist state, and exit before execution.
 
 ## YAML script mode
-`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`. A `validator` is required unless that item supplies an explicit `workflow_file`/`workflow`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. Optional fields include `validator_prompt`, either `ai_validator_prompt` or `ai_validator_prompt_file`, `ai_validator_count`, `ai_validator_required_passes`, `project_root`, and `workflow_file`. Relative per-item file paths, including `workflow_file`, are resolved from the script YAML directory. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
+`--script tasks.yaml` runs a YAML array sequentially. Each item requires exactly one of `prompt`/`goal` or `goal_file`. A `validator` is required unless that item supplies an explicit `workflow_file`/`workflow`. `goal_file` and `ai_validator_prompt_file` are UTF-8; relative paths are resolved from the YAML file directory. In addition to validation prompts and Workflow selection, each item may override the task-scoped CLI/runtime controls: `backend`, `command`, `sandbox`, `agent_args`, `validator_args`, `protect_files`, validator/agent/planning/idle/API/watchdog timeouts, `max_attempts`, `review_retries`, `max_cycles`, retry delay/wait/max-wait, and Final-AI quorum via either `final_ai_validations` / `final_ai_required_passes` or the YAML aliases `ai_validator_count` / `ai_validator_required_passes`. Plugin YAML keys such as loop-context compression use the same plugin normalization as CLI/API. Batch-orchestration controls (`script`, `work_dir`, `resume`, `force_new`, `plan_only`, and output mode) remain outer-run only so durable child state always stays under `<work-dir>/script/<index>`. Relative per-item file paths, including `workflow_file`, are resolved from the script YAML directory. Relative per-item `project_root` values are resolved from the outer `--project-root`; omitting it preserves the existing shared-root behavior. Each item stores Runner-managed state under its own `<project-root>/.ai-task-runner/script/<index>`. The outer YAML orchestrator emits callback/JSON/UI events without creating another work directory. Completion and resume use each item's state path. The child runtime scope restores the parent script runtime when the item exits, preventing Plugin/Event/State context leakage across items.
 
 ```yaml
 - goal_file: prompts/example-a.md

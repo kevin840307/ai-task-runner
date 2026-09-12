@@ -771,3 +771,20 @@ def test_long_path_temp_root_uses_long_path_safe_cleanup(monkeypatch, tmp_path):
         assert root == base / "deep"
 
     assert removed == [base]
+
+
+def test_final_validation_sessions_supports_yaml_child_work_dir(tmp_path: Path):
+    work = tmp_path / ".ai-task-runner" / "script" / "002"
+    work.mkdir(parents=True)
+    (work / "log.txt").write_text(
+        '\n'.join([
+            '{"type":"runner.stage","action":"start","stage":"validate_ai"}',
+            '{"type":"model.result","session":"fresh-a"}',
+            '{"type":"model.result","session":"fresh-b"}',
+            '{"type":"model.result","session":"fresh-c"}',
+        ]) + '\n',
+        encoding="utf-8",
+    )
+    assert live.final_validation_sessions(
+        tmp_path, ".ai-task-runner/script/002"
+    ) == {"fresh-a", "fresh-b", "fresh-c"}

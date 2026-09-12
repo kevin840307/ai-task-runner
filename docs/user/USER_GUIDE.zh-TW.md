@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.61
+版本：1.2.62
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -40,7 +40,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## YAML script mode
 `--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一。除非該 item 明確提供 `workflow_file`/`workflow`，否則必須提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
 
-可選欄位包含 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file` 二選一、`ai_validator_count`、`ai_validator_required_passes`、`project_root`、`workflow_file`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
+除了 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file`、`project_root`、`workflow_file` 外，每個 item 也可覆寫 task-scoped CLI/runtime 設定：`backend`、`command`、`sandbox`、`agent_args`、`validator_args`、`protect_files`、validator/agent/planning/idle/API/watchdog timeout、`max_attempts`、`review_retries`、`max_cycles`、retry delay/wait/max-wait，以及 Final AI quorum；quorum 可使用 canonical `final_ai_validations` / `final_ai_required_passes`，也可使用 YAML alias `ai_validator_count` / `ai_validator_required_passes`。Plugin 類設定（例如 loop-context compression）沿用 CLI/API 相同 normalization。`script`、`work_dir`、`resume`、`force_new`、`plan_only`、output mode 屬於 batch orchestration，刻意只允許外層設定，確保 child durable state 固定在 `<work-dir>/script/<index>`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
 
 ```yaml
 - goal_file: prompts/example-a.md

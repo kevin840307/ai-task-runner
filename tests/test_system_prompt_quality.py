@@ -109,3 +109,27 @@ def test_plan_protocol_bounds_greenfield_and_repeated_discovery():
     assert "do not repeat equivalent searches" in PLAN_PROTOCOL
     assert "smallest goal-relevant entry point" in PLAN_PROTOCOL
 
+
+
+def test_small_model_prompts_have_explicit_stop_rules():
+    core = _text(SYSTEM / "rules.md")
+    planning = _text(STAGES / "planning_rules.md")
+    execution = _text(STAGES / "execution.md")
+    validator = _text(STAGES / "ai_validator.md")
+    assert "stop exploring" in core
+    assert "stop discovery" in planning
+    assert "stop exploring" in execution
+    assert "stop exploring" in validator
+
+
+def test_editable_prompt_word_budgets_stay_bounded_for_small_models():
+    limits = {
+        SYSTEM / "rules.md": 260,
+        STAGES / "planning_rules.md": 280,
+        STAGES / "execution.md": 440,
+        STAGES / "review.md": 170,
+        STAGES / "ai_validator.md": 300,
+    }
+    for path, maximum in limits.items():
+        words = len(_text(path).split())
+        assert words <= maximum, f"{path.name} grew to {words} words (budget {maximum})"

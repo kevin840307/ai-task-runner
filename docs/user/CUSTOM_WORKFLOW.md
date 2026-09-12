@@ -1,6 +1,6 @@
 # Custom Workflow Guide
 
-Version: 1.2.61
+Version: 1.2.62
 
 This guide shows the current Workflow contract. Prefer semantic Stage types and keep YAML limited to behavior that truly changes the SOP. Do not copy implementation-only fields from older examples.
 
@@ -222,7 +222,7 @@ Both fields are optional. If `max_attempts` is omitted, recovery behavior is exa
 
 ## 7. YAML task-list mode
 
-Each script item may still use a different project, validator, validator arguments, and Workflow:
+Each script item may use a different project, validator, validator arguments, Workflow, backend/runtime timeouts/retry policy, and Final-AI quorum. Task-scoped YAML options use the same `RuntimeConfig` validation as CLI/API:
 
 ```yaml
 - goal_file: projects/a/prompt.md

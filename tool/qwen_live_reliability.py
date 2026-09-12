@@ -86,6 +86,25 @@ instructions:
   always: Work only inside this project root and keep the change minimal.
 """
 
+YAML_ARG_VALIDATOR = f'''from __future__ import annotations
+import argparse
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--project-root", required=True)
+p.add_argument("--state-file", required=True)
+p.add_argument("--case-token", required=True)
+a = p.parse_args()
+if a.case_token != "ITEM-1":
+    print("VALIDATION_FAILED: YAML validator_args were not propagated")
+    raise SystemExit(1)
+target = Path(a.project_root).resolve() / "health.txt"
+if not target.is_file() or target.read_text(encoding="utf-8") != {EXPECTED!r}:
+    print("VALIDATION_FAILED: health.txt mismatch")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
 PROTECTED_VALIDATOR = f'''from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -489,8 +508,10 @@ def console_log(project: Path, name: str) -> Path:
     return project.parent / "_harness-logs" / f"{project.name}-{name}"
 
 
-def runner_events(project: Path) -> list[dict[str, object]]:
-    return jsonl_events(project / ".ai-task-runner" / "log.txt")
+def runner_events(
+    project: Path, work_dir: str = ".ai-task-runner"
+) -> list[dict[str, object]]:
+    return jsonl_events(project / work_dir / "log.txt")
 
 
 def jsonl_events(path: Path) -> list[dict[str, object]]:
@@ -638,10 +659,12 @@ def observed_session(project: Path, session_id: str, mode: str) -> bool:
     )
 
 
-def final_validation_sessions(project: Path) -> set[str]:
+def final_validation_sessions(
+    project: Path, work_dir: str = ".ai-task-runner"
+) -> set[str]:
     sessions: set[str] = set()
     validating = False
-    for event in runner_events(project):
+    for event in runner_events(project, work_dir):
         if (
             event.get("type") == "runner.stage"
             and event.get("action") == "start"
@@ -1610,14 +1633,25 @@ def yaml_list_resume_probe(
     batch.mkdir()
     (batch / ".ai-task-runner.yaml").write_text(POLICY, encoding="utf-8")
     projects = [create_project(batch, f"item-{index}") for index in (1, 2)]
+    (projects[0] / "validation.py").write_text(YAML_ARG_VALIDATOR, encoding="utf-8")
     script = batch / "tasks.yaml"
     script.write_text(json.dumps([
         {
-            "prompt": case_prompt(PROMPT, f"{name}-item-{index}"),
-            "project_root": project.name,
-            "validator": str(project / "validation.py"),
-        }
-        for index, project in enumerate(projects, 1)
+            "prompt": case_prompt(PROMPT, f"{name}-item-1"),
+            "project_root": projects[0].name,
+            "validator": str(projects[0] / "validation.py"),
+            "validator_args": ["--case-token", "ITEM-1"],
+            "max_attempts": 1,
+            "retry_delay": 0,
+        },
+        {
+            "prompt": case_prompt(PROMPT, f"{name}-item-2"),
+            "project_root": projects[1].name,
+            "validator": str(projects[1] / "validation.py"),
+            "ai_validator_prompt": case_prompt(FINAL_AI_PROMPT, f"{name}-item-2-final-ai"),
+            "ai_validator_count": 3,
+            "ai_validator_required_passes": 2,
+        },
     ], indent=2), encoding="utf-8")
 
     first_log = console_log(batch, "first-console.jsonl")
@@ -1669,6 +1703,21 @@ def yaml_list_resume_probe(
         )
     if (projects[0] / "health.txt").stat().st_mtime_ns != first_mtime:
         raise RuntimeError("YAML List resume repeated its completed first item")
+
+    second_work = ".ai-task-runner/script/002"
+    second_state = read_json(projects[1] / second_work / "state.json")
+    try:
+        quorum = json.loads(str(second_state.get("validator_output", "")))
+    except json.JSONDecodeError as error:
+        raise RuntimeError("YAML List Final AI quorum evidence is not JSON") from error
+    if not (
+        quorum.get("passed") is True
+        and quorum.get("required_passes") == 2
+        and quorum.get("passes", 0) >= 2
+        and len(quorum.get("runs", [])) == 3
+        and len(final_validation_sessions(projects[1], second_work)) >= 3
+    ):
+        raise RuntimeError("YAML List per-item Final AI 3/2 quorum was not honored")
 
     events = jsonl_events(resume_log)
     completed = {
@@ -2161,11 +2210,9 @@ def main() -> int:
         multi_todo_resume_probe(settings, run_root)
         print("PASS multi-TODO/checkpoint resume probe", flush=True)
         yaml_list_resume_probe(settings, run_root)
-        print("PASS YAML List/process-restart resume probe", flush=True)
+        print("PASS YAML List/resume + validator_args + per-item Final AI 3/2 probe", flush=True)
         final_ai_quorum_probe(settings, run_root, mixed=False)
         print("PASS Final AI 3/2 quorum probe", flush=True)
-        final_ai_quorum_probe(settings, run_root, mixed=True)
-        print("PASS Python + Final AI 3/2 mixed probe", flush=True)
         timeout_probe(settings, run_root)
         print("PASS timeout/recovery-budget probe", flush=True)
         soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
@@ -2208,6 +2255,8 @@ def main() -> int:
         "review_repair_prompt_probe": True,
         "validator_repair_prompt_contract": True,
         "yaml_list_resume_probe": True,
+        "yaml_list_item_runtime_options_probe": True,
+        "yaml_list_final_ai_quorum_probe": True,
         "soak_runs_completed": soak_result.completed,
         "soak_elapsed_seconds": round(soak_result.elapsed_seconds, 3),
         "soak_final_ai_every": settings.soak_final_ai_every,

@@ -35,7 +35,7 @@ examples\11_regression_workflow_demo\run_example.bat --backend qwen
 所有 Python example Validator 都統一使用共用的 `ai_task_runner_validator.ValidatorReport` 契約。功能失敗透過 `ValidatorReport.error()` 回報；適用的 JSON output 使用 `parse_json()`；完整報告會寫入各 project 的 `.ai-task-runner/validator-reports/`。
 
 
-每個 YAML item 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。每個 project 會把 `prompt.md`、Python `validation.py` 與可選的 `ai_validation.md` 放在自己的 root 內，並由 `.ai-task-runner.yaml` 的 `protected_paths` 明確保護；policy 本身也會自動受保護。`examples.yaml` 使用 `goal_file` 與 `ai_validator_prompt_file` 引用這些檔案。
+每個 YAML item 都有自己的 `project_root`；相對路徑以外層 `--project-root` 為基準。每個 project 會把 `prompt.md`、Python `validation.py` 與可選的 `ai_validation.md` 放在自己的 root 內，並由 `.ai-task-runner.yaml` 的 `protected_paths` 明確保護；policy 本身也會自動受保護。`examples.yaml` 使用 `goal_file` 與 `ai_validator_prompt_file` 引用這些檔案。 YAML item 也可個別覆寫 `validator_args`、timeout/retry policy、Final AI quorum 等 task-scoped CLI 設定。
 
 Workflow Schema 範例放在擁有它的資料夾中。`workflow_multi_prompt.yaml` 保留為原本精簡的 multi-prompt 範例。Qwen live reliability 的客製化 workflow 放在 `../runner/workflow/custom/common/ralphy_ai_validate.yaml`；`10_skill_prompt_review_workflow` 會用真實 project 實跑這個 Workflow；舊範例資料夾名稱為了相容性保留。
 

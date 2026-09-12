@@ -24,11 +24,6 @@ def io_path(path: Path | str) -> Path:
     return Path("\\\\?\\" + text)
 
 
-def _exists(path: Path) -> bool:
-    value = io_path(path)
-    return value.exists() or value.is_symlink()
-
-
 def digest(path: Path) -> str | None:
     logical = Path(path)
     source = io_path(logical)

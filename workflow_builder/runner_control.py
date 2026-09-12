@@ -7,7 +7,6 @@ operation, so the Builder may safely retry once with a fresh Runner state/sessio
 """
 from __future__ import annotations
 
-import os
 import subprocess
 import time
 from pathlib import Path

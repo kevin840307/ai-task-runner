@@ -10,6 +10,35 @@ from .errors import RunnerError
 from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 
 
+
+# Per-item overrides intentionally mirror task-scoped CLI options. Batch orchestration
+# controls (script/work_dir/resume/force_new/plan_only/output mode) stay outer-run only
+# so durable YAML child state remains <work_dir>/script/<index>.
+SCRIPT_ITEM_RUNTIME_ALIASES = {
+    "backend": "backend",
+    "command": "command",
+    "sandbox": "sandbox",
+    "agent_args": "agent_args",
+    "validator_args": "validator_args",
+    "protect_files": "protect_files",
+    "validator_timeout": "validator_timeout",
+    "agent_timeout": "agent_timeout",
+    "planning_timeout": "planning_timeout",
+    "agent_idle_after_change_timeout": "agent_idle_after_change_timeout",
+    "api_wait_timeout": "api_retry_timeout",
+    "watchdog_interval": "watchdog_interval",
+    "max_attempts": "same_session_retries",
+    "review_retries": "review_retries",
+    "max_cycles": "max_cycles",
+    "retry_delay": "stage_retry_delay",
+    "retry_wait": "api_retry_wait",
+    "retry_max_wait": "api_retry_max_wait",
+    "final_ai_validations": "final_ai_validations",
+    "ai_validator_count": "final_ai_validations",
+    "final_ai_required_passes": "final_ai_required_passes",
+    "ai_validator_required_passes": "final_ai_required_passes",
+}
+
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
     value = item.get(field_name, "")
     if not isinstance(value, str):
@@ -101,15 +130,25 @@ def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
             path = script.parent / path
         result["workflow_file"] = str(path.resolve())
 
-    aliases = {
-        "review_retries": "review_retries",
-        "ai_validator_count": "final_ai_validations",
-        "ai_validator_required_passes": "final_ai_required_passes",
-    }
-    for source, target in aliases.items():
+    seen_targets: dict[str, str] = {}
+    for source, target in SCRIPT_ITEM_RUNTIME_ALIASES.items():
         if source not in item:
             continue
+        previous = seen_targets.get(target)
+        if previous is not None:
+            raise RunnerError(
+                f"script item {index} must not set both {previous} and {source}"
+            )
+        seen_targets[target] = source
         result[target] = item[source]
+
+    if "workflow" in item:
+        if "workflow_file" in item:
+            raise RunnerError(
+                f"script item {index} must use either workflow or workflow_file, not both"
+            )
+        from .workflow.loader import normalize_workflow
+        result["workflow"] = normalize_workflow(item["workflow"], script.resolve())
     return result
 
 
