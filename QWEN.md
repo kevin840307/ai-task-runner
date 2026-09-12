@@ -1,6 +1,6 @@
 # Qwen Development Rules
 
-Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance. Also preserve the owner constraints in `DevFollow.txt` and the removable-UI boundary in `Future.txt`.
+Follow `AGENTS.md`; the same rules are mandatory for Qwen-driven maintenance. Also preserve the owner constraints in `DevFollow.txt` and the removable-UI boundary in `UI.txt`.
 
 - No hardcoded project-specific behavior in generic Runner code.
 - Reuse one shared function for the same behavior; do not duplicate implementations.

@@ -1,6 +1,6 @@
 # AI Task Runner
 
-版本：1.2.62
+版本：1.2.63
 
 Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每個 `examples\*/run_example.bat` 都只會把選定的 Example（`--all` 時才複製 examples 集合）複製到新的 `<repo>\.example_runs\...` 工作區，再由原專案 Runner 執行，因此 canonical fixture 每次測試後都維持原狀。
 
@@ -207,4 +207,4 @@ Planning 現在把 discovery 視為「有界行為」，不再要求每個任務
 
 如果 backend 回報 `consecutive_identical_tool_calls`、`turn_tool_call_cap` 等 loop signal，Planning 最多只做一次 same-session retry；同一類 loop 再發生時，Runner 會把該 Planning Stage 切到 Fresh Session，同時保留 durable workflow state。動態 turn/context stderr 會被正規化，避免因錯誤文字每次不同而重置 escalation counter。這個策略刻意只套在 Planning，不改一般 Task / Review retry 行為。
 
-測試涵蓋：unit test 固定 `initial -> same -> fresh` retry sequence、Prompt contract test 固定 bounded discovery、`workflow_dryrun.py --matrix` 持續驗證 deterministic workflow routing/recovery，而 `qwen_live_reliability.py` 在 live probes 前會先執行 loop classification/recovery policy preflight。
+測試涵蓋：unit test 固定 `initial -> same -> fresh` retry sequence、Prompt contract test 固定 bounded discovery、`workflow_dryrun.py --matrix` 持續驗證 deterministic workflow routing/recovery，而 `qwen_live_reliability.py` 在 live probes 前會先執行 loop classification/recovery policy preflight。 Live gate 另外驗證 expired-session 切換 Fresh Session、經 Qwen endpoint proxy 的真實 HTTP `429` / `502` / `503` 與 disconnect recovery、帶 item-level validator/quorum 參數的 YAML List restart/resume，以及可選的 single-process YAML endurance burst。24H preset 仍以完整 wall-clock soak 作為主要耐久訊號；burst 用來補抓同一 process 內 state/resource 長時間累積問題。

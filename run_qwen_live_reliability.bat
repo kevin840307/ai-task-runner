@@ -3,7 +3,7 @@ setlocal
 pushd "%~dp0"
 
 if "%~1"=="" (
-    python "tool\qwen_live_reliability.py" --hours 0.5 --high-density --require-transient
+    python "tool\qwen_live_reliability.py" --hours 0.5 --high-density --require-transient --single-process-yaml-items 4
 ) else (
     python "tool\qwen_live_reliability.py" %*
 )

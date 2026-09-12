@@ -1,6 +1,6 @@
 # AI / Maintainer Development Rules
 
-These rules are mandatory for changes to this repository. `DevFollow.txt` is the concise owner contract and `Future.txt` is the UI-extension contract; maintenance must preserve both.
+These rules are mandatory for changes to this repository. `DevFollow.txt` is the concise owner contract and `UI.txt` is the UI-extension contract; maintenance must preserve both.
 
 ## Core engineering contract
 - Never hardcode project-specific names, paths, workflows, FABs, environments, versions, filenames, sample values, model names, or business values into generic Runner logic.

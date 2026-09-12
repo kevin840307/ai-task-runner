@@ -39,6 +39,7 @@ The UI reads:
 - `.ai-task-runner/debug/last-result.txt` — best available completed model result for the first UI version.
 
 The browser does not recreate a separate runtime vocabulary. It renders `console-view.json` directly and falls back to `state.json` with the same CLI marker rules if the snapshot is briefly missing/stale. As soon as Plan persists TODOs, those TODO rows therefore appear in the UI. The runtime marker is intentionally static between polling updates. `Elapsed` / `Last update` may tick locally, but status/TODO content changes only when new runtime state is fetched, avoiding misleading pseudo-live animation.
+For CLI YAML List / Multi-task runs, the outer `console-view.json` is only a pointer to the current child (`script_index`, `script_total`, `child_project_root`, `child_work_dir`). The UI follows that pointer and reads the child runtime's own state/snapshot/stream, so Stage/TODO display stays synchronized without creating a second aggregate state. `state.goal` is exposed read-only as a collapsible **Input prompt** card inside the existing scrollable history. It is never copied into UI chat history and never adds a new Chat grid row, so the header/summary/history/composer layout remains unchanged.
 
 The UI writes only UI/control files:
 

@@ -1,6 +1,6 @@
 # 24H 運行與故障排查
 
-版本：1.2.62
+版本：1.2.63
 
 ## 長時間執行行為
 預設刻意允許模型長時間工作：runtime 7200 秒、planning 600 秒、validator 1200 秒、idle-after-change 900 秒。次數限制預設為 0（不以次數限制）。恢復依 error、session availability、no-progress fingerprint、Review 與 Final Validation 決定。Timeout failure 使用穩定語意 recovery key，同時保留完整 backend stderr 供 Debug，避免 sandbox/container ID 每次改變而讓 same-failure escalation 永遠重新計數。
@@ -45,7 +45,7 @@ Worker 異常退出後，Supervisor 會依該 Run 實際 durable state 對應的
 一般模式與 watchdog 模式的 subprocess stdout 都會 bounded，避免外部命令大量輸出時讓 Runner 記憶體無限制成長。
 
 ## Reliability 驗證
-Release / 24H 信心度請先跑 deterministic test suite，再跑 opt-in live gate。`tool/workflow_dryrun.py --matrix` 會驗 happy/recovery 路徑，以及沒有 recover 的 FAIL / technical ERROR 必須 fail-closed；`tool/qwen_live_reliability.py` 再用真實 Qwen 覆蓋 process restart、三分鐘 API disconnect recovery、timeout/session recovery、YAML List resume（含 per-item runtime options）、Final AI Fresh Session voting，以及 detached UI 的 `stop.request -> exit 130 -> --resume`。要宣稱 24H 仍必須真的跑滿要求的 wall-clock soak 並得到 PASS `summary.json`；只通過 preflight probes 不能等同 24H。
+Release / 24H 信心度請先跑 deterministic test suite，再跑 opt-in live gate。`tool/workflow_dryrun.py --matrix` 會驗 happy/recovery 路徑，以及沒有 recover 的 FAIL / technical ERROR 必須 fail-closed；`tool/qwen_live_reliability.py` 再覆蓋真實 Qwen process restart、deterministic expired-session -> Fresh Session recovery、HTTP 429/502/503 與三分鐘 disconnect recovery、timeout/session recovery、YAML List resume（含 per-item runtime options）、Final AI Fresh Session voting、detached UI 的 `stop.request -> exit 130 -> --resume`，以及可選的 single-process YAML endurance burst。Windows 0.5H / 24H preset 會在同一個 CLI process 依序跑 4 / 8 個 YAML item，用來補足 wall-clock soak 對 process 累積狀態的盲點。要宣稱 24H 仍必須真的跑滿要求的 wall-clock soak 並得到 PASS `summary.json`；只通過 preflight / burst 不能等同 24H。
 
 ## Planning 有界探索與 Loop Recovery
 

@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.62
+Version: 1.2.63
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`

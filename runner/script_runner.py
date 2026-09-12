@@ -42,12 +42,12 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
         raise ConfigurationError(str(error)) from error
     total = len(items)
     for index, item in enumerate(items, 1):
-        _emit_script_event("script.item_started", index, total, item)
         child = replace(
             build_script_item_config(args, item, index),
             script_index=index,
             script_total=total,
         )
+        _emit_script_event("script.item_started", index, total, item, child=child)
         code = execute_one(child)
         if code != 0:
             _emit_script_event(
@@ -55,10 +55,11 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
                 index,
                 total,
                 item,
+                child=child,
                 exit_code=code,
             )
             return code
-        _emit_script_event("script.item_completed", index, total, item)
+        _emit_script_event("script.item_completed", index, total, item, child=child)
     return 0
 
 
@@ -67,6 +68,8 @@ def _emit_script_event(
     index: int,
     total: int,
     item: dict[str, Any],
+    *,
+    child: RuntimeConfig | None = None,
     exit_code: int | None = None,
 ) -> None:
     payload: dict[str, Any] = {
@@ -74,6 +77,9 @@ def _emit_script_event(
         "script_total": total,
         "prompt_preview": item["goal"][:500],
     }
+    if child is not None:
+        payload["child_project_root"] = child.project_root
+        payload["child_work_dir"] = child.work_dir
     if exit_code is not None:
         payload["exit_code"] = exit_code
     events.publish(event_type, event_type.rsplit("_", 1)[-1], **payload)

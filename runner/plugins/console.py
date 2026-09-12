@@ -324,11 +324,8 @@ class ConsoleObserver:
         work = getattr(runtime, "work", None)
         self.snapshot_path = Path(work) / "console-view.json" if work is not None else None
 
-    def _write_snapshot(self) -> None:
+    def _write_payload(self, payload: dict) -> None:
         if self.snapshot_path is None:
-            return
-        payload = self.ui.snapshot()
-        if payload is None:
             return
         try:
             io_path(self.snapshot_path.parent).mkdir(parents=True, exist_ok=True)
@@ -339,21 +336,61 @@ class ConsoleObserver:
             # Console/UI observation must never fail the Runner.
             return
 
+    def _write_snapshot(self) -> None:
+        payload = self.ui.snapshot()
+        if payload is not None:
+            self._write_payload(payload)
+
+    @staticmethod
+    def _script_snapshot(event: dict) -> dict:
+        kind = str(event.get("type", ""))
+        index = int(event.get("script_index") or 0)
+        total = int(event.get("script_total") or 0)
+        preview = " ".join(str(event.get("prompt_preview") or "").splitlines())
+        if kind == "script.item_started":
+            item_status = "running"
+            detail = preview
+        elif kind == "script.item_completed":
+            item_status = "completed"
+            detail = "PASS"
+        else:
+            item_status = "failed"
+            detail = f"FAILED ({event.get('exit_code', '?')})"
+        status = f"Script {index}/{total}" if index and total else "Script"
+        lines = [f"AI Task Runner  {status}", "", f"  {{spinner}} {detail or item_status}"]
+        return {
+            "schema_version": 1,
+            "mode": "script",
+            "script_index": index,
+            "script_total": total,
+            "script_status": item_status,
+            "child_project_root": str(event.get("child_project_root") or ""),
+            "child_work_dir": str(event.get("child_work_dir") or ""),
+            "prompt_preview": str(event.get("prompt_preview") or ""),
+            "status": status,
+            "detail": detail,
+            "completed": bool(item_status == "completed" and index and index == total),
+            "completed_count": max(0, index - (0 if item_status == "completed" else 1)),
+            "total": total,
+            "tasks": [],
+            "lines": lines,
+            "updated_at": time.time(),
+        }
+
     def __call__(self, event: dict) -> None:
         kind = str(event.get("type", ""))
         if kind.startswith("script.item_"):
             self.ui.stop()
+            snapshot = self._script_snapshot(event)
+            # The detached CLI Supervisor creates the outer runtime directory.
+            # Programmatic YAML runs keep their historical child-only footprint.
+            if self.snapshot_path is not None and self.snapshot_path.parent.is_dir():
+                self._write_payload(snapshot)
             if self.ui.human_output:
                 index = event.get("script_index", "?")
                 total = event.get("script_total", "?")
-                if kind == "script.item_started":
-                    detail = event.get("prompt_preview", "")
-                elif kind == "script.item_completed":
-                    detail = "PASS"
-                else:
-                    detail = f"FAILED ({event.get('exit_code', '?')})"
                 print(
-                    f"[Script {index}/{total}] {detail}",
+                    f"[Script {index}/{total}] {snapshot['detail']}",
                     file=sys.stderr if kind == "script.item_failed" else sys.stdout,
                     flush=True,
                 )

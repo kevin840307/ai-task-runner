@@ -274,6 +274,104 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(info["cli_status"], "AI running skill")
         self.assertEqual(info["cli_detail"], "Plan TODO")
 
+
+    def test_yaml_script_runtime_follows_current_child_and_exposes_input_prompt(self) -> None:
+        self.state.add_project(str(self.project))
+        runtime = self.project / ".ai-task-runner"
+        child_root = self.project / "child"
+        child_runtime = child_root / ".ai-task-runner" / "script" / "002"
+        child_runtime.mkdir(parents=True)
+        self.write_json(runtime / "console-view.json", {
+            "schema_version": 1,
+            "mode": "script",
+            "script_index": 2,
+            "script_total": 3,
+            "script_status": "running",
+            "child_project_root": str(child_root.resolve()),
+            "child_work_dir": ".ai-task-runner/script/002",
+            "prompt_preview": "short preview",
+            "updated_at": 123.0,
+        })
+        self.write_json(runtime / "runner-process.json", {"supervisor_pid": 12345, "worker_pid": 12346, "started_at": 100.0})
+        tasks = [{"id": "t1", "title": "Child TODO", "status": "pending", "attempts": 1}]
+        self.write_json(child_runtime / "state.json", {
+            "run_id": "child-run-2",
+            "goal": "full YAML item prompt",
+            "cycle": 1,
+            "current": 0,
+            "completed": False,
+            "stage": "review",
+            "last_activity_at": 124.0,
+            "tasks": tasks,
+        })
+        self.write_json(child_runtime / "console-view.json", {
+            "run_id": "child-run-2",
+            "cycle": 1,
+            "current": 0,
+            "completed": False,
+            "completed_count": 0,
+            "total": 1,
+            "status": "AI reviewing",
+            "detail": "Child TODO",
+            "tasks": [{"index": 1, **tasks[0], "mark": ">", "line": "  [>] 1. Child TODO"}],
+            "lines": ["AI Task Runner  Cycle 1  Progress 0/1", "", "  [>] 1. Child TODO", "", "  {spinner} AI reviewing"],
+        })
+        (child_runtime / "stream.log").write_text("child output", encoding="utf-8")
+
+        with patch.object(UIState, "_pid_alive", return_value=True):
+            info = self.state.read_runtime(self.project)
+            project_row = self.state.projects()[0]
+
+        self.assertTrue(info["running"])
+        self.assertTrue(info["script_mode"])
+        self.assertEqual((info["script_index"], info["script_total"]), (2, 3))
+        self.assertEqual(info["run_id"], "child-run-2")
+        self.assertEqual(info["stage"], "review")
+        self.assertEqual(info["input_prompt"], "full YAML item prompt")
+        self.assertEqual(info["stream"], "child output")
+        self.assertEqual(info["cli_status"], "AI reviewing")
+        self.assertEqual(info["cli_lines"][0], "AI Task Runner  Script 2/3")
+        self.assertIn("Script 2/3", project_row["runtime_stage"])
+        self.assertIn("review", project_row["runtime_stage"])
+
+    def test_direct_cli_runtime_exposes_goal_as_input_prompt(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {
+            "run_id": "cli-run",
+            "goal": "CLI supplied requirement",
+            "completed": False,
+            "stage": "execute",
+            "tasks": [],
+        })
+
+        info = self.state.read_runtime(self.project)
+
+        self.assertFalse(info["script_mode"])
+        self.assertEqual(info["input_prompt"], "CLI supplied requirement")
+
+    def test_finished_yaml_script_uses_outer_item_completion_not_child_only(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        child_runtime = self.project / ".ai-task-runner" / "script" / "002"
+        self.write_json(runtime / "console-view.json", {
+            "mode": "script",
+            "script_index": 2,
+            "script_total": 2,
+            "script_status": "completed",
+            "child_project_root": str(self.project.resolve()),
+            "child_work_dir": ".ai-task-runner/script/002",
+        })
+        self.write_json(child_runtime / "state.json", {
+            "run_id": "child-done",
+            "goal": "second",
+            "completed": True,
+            "tasks": [],
+        })
+
+        info = self.state.read_runtime(self.project)
+
+        self.assertTrue(info["completed"])
+        self.assertFalse(info["resumable"])
+
     def test_project_list_reports_runtime_status(self) -> None:
         self.state.add_project(str(self.project))
         runtime = self.project / ".ai-task-runner"

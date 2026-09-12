@@ -1,6 +1,6 @@
 # AI Task Runner
 
-Version: 1.2.62
+Version: 1.2.63
 
 Example launchers are isolated by default: `examples\run_examples.bat` and every `examples\*/run_example.bat` copy only the selected example (or the examples set for `--all`) into a fresh `<repo>\.example_runs\...` workspace before running, so canonical fixtures remain unchanged between tests.
 
@@ -214,4 +214,4 @@ Planning now treats discovery as a bounded activity rather than a prerequisite f
 
 For backend loop signals such as `consecutive_identical_tool_calls` or `turn_tool_call_cap`, Planning gets at most one same-session retry. If the same loop class repeats, Runner rotates that Planning Stage to a fresh session while preserving durable workflow state. Dynamic backend turn/context text is normalized so the escalation counter cannot be reset by noisy stderr. This policy is intentionally Planning-specific; normal task/review retry semantics are unchanged.
 
-Validation coverage: unit tests lock the retry sequence (`initial -> same -> fresh`), prompt-contract tests lock bounded discovery, `workflow_dryrun.py --matrix` continues to validate deterministic workflow routing/recovery, and `qwen_live_reliability.py` includes the loop classification/recovery policy preflight before live probes.
+Validation coverage: unit tests lock the retry sequence (`initial -> same -> fresh`), prompt-contract tests lock bounded discovery, `workflow_dryrun.py --matrix` continues to validate deterministic workflow routing/recovery, and `qwen_live_reliability.py` includes the loop classification/recovery policy preflight before live probes. The live gate also verifies expired-session recovery into a Fresh Session, real HTTP `429` / `502` / `503` and disconnect recovery through the Qwen endpoint proxy, YAML List restart/resume with item-level validator/quorum options, and an opt-in single-process YAML endurance burst. The 24H preset keeps the wall-clock soak as the primary endurance signal; the burst complements it by checking same-process state/resource accumulation.

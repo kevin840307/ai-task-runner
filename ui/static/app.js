@@ -348,11 +348,13 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
   const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
   const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`);
   if (state.project?.path !== projectPath) return;
+  const input = root.querySelector(".runtime-input-card");
   const live = root.querySelector(".live-activity"); root.innerHTML = "";
   for (const message of data.messages || []) {
     const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant";
     const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.content || ""; item.appendChild(body); root.appendChild(item);
   }
+  if (input) root.appendChild(input);
   if (live) root.appendChild(live);
   if (shouldFollow) { state.historyPinnedToBottom = true; followHistoryToBottom(true); }
 }
@@ -386,14 +388,43 @@ function runtimeStatusLabel(runtime) {
   if (runtime?.completed) return "Completed";
   return "Idle";
 }
+function runtimeScriptLabel(runtime) {
+  const index = Number(runtime?.script_index || 0), total = Number(runtime?.script_total || 0);
+  return runtime?.script_mode && index && total ? `Script ${index}/${total}` : "";
+}
+function runtimeProgressLabel(runtime) {
+  const script = runtimeScriptLabel(runtime);
+  const todo = runtime?.total ? `${runtime.completed_count || 0}/${runtime.total} TODO` : "";
+  return [script, todo].filter(Boolean).join(" · ") || (runtime?.console_snapshot_exists ? "CLI synced" : "State fallback");
+}
+function ensureRuntimeInputCard() {
+  const root = $("messages");
+  let card = root?.querySelector(".runtime-input-card");
+  if (card || !root) return card;
+  card = document.createElement("article");
+  card.className = "runtime-input-card";
+  card.innerHTML = `<details><summary><span>Input prompt</span><strong class="runtime-input-label">Runtime input</strong></summary><pre class="runtime-input-prompt"></pre></details>`;
+  const live = root.querySelector(".live-activity");
+  if (live) root.insertBefore(card, live); else root.appendChild(card);
+  return card;
+}
+function removeRuntimeInputCard() { $("messages")?.querySelector(".runtime-input-card")?.remove(); }
+function renderRuntimeInput(runtime) {
+  const text = String(runtime?.input_prompt || "").trim();
+  if (!text) { removeRuntimeInputCard(); return; }
+  const card = ensureRuntimeInputCard();
+  if (!card) return;
+  setTextIfChanged(card.querySelector(".runtime-input-label"), runtimeScriptLabel(runtime) || "Runtime input");
+  setTextIfChanged(card.querySelector(".runtime-input-prompt"), text);
+}
 function renderLiveRuntimeHeader(runtime) {
   const card = $("messages")?.querySelector(".live-activity"); if (!card || !runtime) return;
   setTextIfChanged(card.querySelector(".live-title"), runtimeStatusLabel(runtime));
-  setTextIfChanged(card.querySelector(".live-progress"), runtime.total ? `${runtime.completed_count || 0}/${runtime.total} TODO` : (runtime.console_snapshot_exists ? "CLI synced" : "State fallback")); updateRuntimeFreshness();
+  setTextIfChanged(card.querySelector(".live-progress"), runtimeProgressLabel(runtime)); updateRuntimeFreshness();
 }
 function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
-  return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || []]);
+  return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
 }
 async function refreshRuntime({ projectPath = state.project?.path || "" } = {}) {
   if (!projectPath) return;
@@ -467,10 +498,13 @@ function renderRuntime(runtime) {
   else if (runtime.stale && runtime.resumable) badge.classList.add("interrupted");
   else if (runtime.resumable) badge.classList.add("failed");
   else if (runtime.completed) badge.classList.add("completed");
-  const runtimeStage = String(runtime.cli_status || runtime.stage || "").trim();
-  const runtimeProgress = runtime.total ? `${runtime.completed_count || 0}/${runtime.total}` : "";
+  const baseStage = String(runtime.cli_status || runtime.stage || "").trim();
+  const scriptStage = runtimeScriptLabel(runtime);
+  const runtimeStage = scriptStage ? `${scriptStage}${baseStage ? ` · ${baseStage}` : ""}` : baseStage;
+  const runtimeProgress = runtimeProgressLabel(runtime);
   const badgeDetail = runtime.running && (runtimeStage || runtimeProgress) ? ` · ${runtimeStage || "Working"}${runtimeProgress ? ` · ${runtimeProgress}` : ""}` : "";
-  setTextIfChanged(badge, `${label}${badgeDetail}`); setTextIfChanged($("currentStage"), runtimeStage || label); setTextIfChanged($("progressText"), runtime.total ? `${runtime.completed_count || 0} / ${runtime.total}` : "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
+  setTextIfChanged(badge, `${label}${badgeDetail}`); setTextIfChanged($("currentStage"), runtimeStage || label); setTextIfChanged($("progressText"), runtimeProgress || "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
+  renderRuntimeInput(runtime);
   $("clearHistoryButton").disabled = Boolean(runtime.running); $("clearHistoryButton").title = runtime.running ? "Stop the active task before clearing this chat history" : "Clear chat history";
   $("sendButton").hidden = runtime.running || runtime.resumable;
   $("stopButton").hidden = !runtime.running;

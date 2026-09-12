@@ -93,15 +93,24 @@ class UIState(WorkflowBuilderMixin):
             seen.add(key)
             project_path = Path(path)
             runtime_status = self._project_runtime_status(project_path, alive_pids)
-            runtime_state = self._read_json(self.runtime_dir(project_path) / "state.json") or {} if project_path.is_dir() else {}
+            runtime_state: dict = {}
+            script_view: dict = {}
+            if project_path.is_dir():
+                _, _, script_view, runtime_state = self._runtime_display(project_path)
             runtime_tasks = runtime_state.get("tasks") if isinstance(runtime_state.get("tasks"), list) else []
             completed_count = sum(1 for task in runtime_tasks if isinstance(task, dict) and task.get("status") == "completed")
+            stage = str(runtime_state.get("stage") or "")
+            if script_view.get("mode") == "script":
+                index = int(script_view.get("script_index") or 0)
+                total = int(script_view.get("script_total") or 0)
+                prefix = f"Script {index}/{total}" if index and total else "Script"
+                stage = f"{prefix} · {stage}" if stage else prefix
             result.append({
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
                 "exists": project_path.is_dir(),
                 "runtime_status": runtime_status,
-                "runtime_stage": str(runtime_state.get("stage") or ""),
+                "runtime_stage": stage,
                 "runtime_completed_count": completed_count,
                 "runtime_total": len(runtime_tasks),
             })
@@ -313,11 +322,38 @@ class UIState(WorkflowBuilderMixin):
             return ">"
         return " "
 
+    def _runtime_display(self, project: Path) -> tuple[Path, Path, dict, dict]:
+        """Resolve the Runner-owned runtime currently visible for one Project.
+
+        Direct runs use the root runtime. YAML List runs publish only a small
+        script pointer in the root console snapshot; the child keeps the real
+        durable state under ``script/NNN``. The UI follows that pointer instead
+        of inventing a second aggregate workflow state.
+        """
+        runtime = self.runtime_dir(project)
+        script_view = self._read_json(runtime / "console-view.json") or {}
+        display_runtime = runtime
+        if script_view.get("mode") == "script":
+            child_root = str(script_view.get("child_project_root") or "").strip()
+            child_work = str(script_view.get("child_work_dir") or "").strip()
+            work = Path(child_work) if child_work else Path()
+            if child_root and child_work and Path(child_root).is_absolute() and not work.is_absolute() and ".." not in work.parts:
+                display_runtime = Path(child_root).resolve() / work
+        state = self._read_json(display_runtime / "state.json") or {}
+        return runtime, display_runtime, script_view, state
+
+    @staticmethod
+    def _script_completed(script_view: dict) -> bool:
+        if script_view.get("mode") != "script":
+            return False
+        index = int(script_view.get("script_index") or 0)
+        total = int(script_view.get("script_total") or 0)
+        return bool(total and index == total and script_view.get("script_status") == "completed")
+
     def _project_runtime_status(self, project: Path, alive_pids: set[int] | None = None) -> str:
         if not project.is_dir():
             return "missing"
-        runtime = self.runtime_dir(project)
-        state = self._read_json(runtime / "state.json") or {}
+        runtime, _, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         pid_value = self._marker_pid(marker.get("supervisor_pid"))
         if pid_value and self._pid_alive(pid_value, alive_pids):
@@ -325,7 +361,8 @@ class UIState(WorkflowBuilderMixin):
             return "running"
         if self._active_launch_reservation(project, alive_pids):
             return "running"
-        if bool(state.get("completed")):
+        completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
+        if completed:
             return "completed"
         if marker and state:
             return "interrupted"
@@ -443,11 +480,10 @@ class UIState(WorkflowBuilderMixin):
         return {}
 
     def read_runtime(self, project: Path) -> dict:
-        runtime = self.runtime_dir(project)
-        state = self._read_json(runtime / "state.json") or {}
+        runtime, display_runtime, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         request = self._latest_run_request(project)
-        stream = self._display_stream(self._read_text(runtime / "stream.log", limit=12000))
+        stream = self._display_stream(self._read_text(display_runtime / "stream.log", limit=12000))
         supervisor_pid = self._marker_pid(marker.get("supervisor_pid"))
         supervisor_running = bool(supervisor_pid and self._pid_alive(supervisor_pid))
         if supervisor_running:
@@ -460,7 +496,17 @@ class UIState(WorkflowBuilderMixin):
         stale = bool(marker and not supervisor_running and not launching)
         pid = marker.get("supervisor_pid") if supervisor_running else (launch.get("child_pid") or launch.get("owner_pid") or marker.get("supervisor_pid"))
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
-        console, console_snapshot_exists = self._console_view(runtime, state)
+        console, console_snapshot_exists = self._console_view(display_runtime, state)
+        script_mode = script_view.get("mode") == "script"
+        script_index = int(script_view.get("script_index") or 0) if script_mode else 0
+        script_total = int(script_view.get("script_total") or 0) if script_mode else 0
+        script_completed = self._script_completed(script_view) if script_mode else False
+        if script_mode:
+            script_label = f"Script {script_index}/{script_total}" if script_index and script_total else "Script"
+            child_lines = [str(line) for line in console.get("lines", [])]
+            console = dict(console)
+            console["lines"] = [f"AI Task Runner  {script_label}", "", *child_lines]
+            console_snapshot_exists = console_snapshot_exists or (runtime / "console-view.json").is_file()
         resettable = bool(
             not running
             and runtime.exists()
@@ -472,7 +518,9 @@ class UIState(WorkflowBuilderMixin):
             task = tasks[current]
             if isinstance(task, dict):
                 current_task = str(task.get("title") or task.get("id") or "")
-        if not running and bool(state.get("completed")):
+        completed = script_completed if script_mode else bool(state.get("completed"))
+        resumable = bool(state and not completed)
+        if not running and completed and not script_mode:
             self.sync_completion(project)
         return {
             "running": running,
@@ -485,10 +533,15 @@ class UIState(WorkflowBuilderMixin):
             "task": current_task,
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
-            "completed": bool(state.get("completed")),
+            "completed": completed,
             "has_state": bool(state),
-            "resumable": bool(state and not state.get("completed")),
+            "resumable": resumable,
             "resettable": resettable,
+            "script_mode": script_mode,
+            "script_index": script_index,
+            "script_total": script_total,
+            "script_status": str(script_view.get("script_status") or "") if script_mode else "",
+            "input_prompt": str(state.get("goal") or script_view.get("prompt_preview") or ""),
             "last_error": state.get("last_error") or "",
             "stream": stream,
             "cli_lines": [str(line) for line in console.get("lines", [])],
@@ -498,7 +551,7 @@ class UIState(WorkflowBuilderMixin):
             "completed_count": int(console.get("completed_count") or 0),
             "console_snapshot_exists": console_snapshot_exists,
             "started_at": marker.get("started_at") or launch.get("created_at") or 0,
-            "updated_at": state.get("last_activity_at") or marker.get("started_at") or launch.get("created_at") or 0,
+            "updated_at": state.get("last_activity_at") or script_view.get("updated_at") or marker.get("started_at") or launch.get("created_at") or 0,
             "backend": str(request.get("backend") or ""),
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),

@@ -41,7 +41,16 @@ elif stage == "execute":
         or (not is_qwen and "--session" in args and args[args.index("--session") + 1] == "old-session")
     )
     if attempt == 1 and has_old_session:
-        print(os.environ.get("SESSION_FAILURE_MESSAGE", "session not found"))
+        message = os.environ.get("SESSION_FAILURE_MESSAGE", "session not found")
+        if is_qwen:
+            print(json.dumps({
+                "type": "result",
+                "subtype": "error",
+                "session_id": "old-session",
+                "error": {"message": message},
+            }))
+        else:
+            print(message, file=sys.stderr)
         raise SystemExit(7)
     session = "new-session"
     (root / "done.txt").write_text("done", encoding="utf-8")

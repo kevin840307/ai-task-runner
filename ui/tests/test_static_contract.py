@@ -1078,3 +1078,16 @@ def test_python_and_ai_prompt_pickers_share_one_compact_row():
     assert 'id="aiValidatorPrompt"' in html
     assert 'ai_validator_prompt_file:' in app
     assert '.composer-validation-row {' in css
+
+
+def test_runtime_input_prompt_does_not_add_a_chat_grid_row():
+    static = Path(__file__).resolve().parents[1] / "static"
+    html = (static / "index.html").read_text(encoding="utf-8")
+    app = (static / "app.js").read_text(encoding="utf-8")
+    css = (static / "css" / "runner-lite.css").read_text(encoding="utf-8")
+    assert 'id="runtimeInputPanel"' not in html
+    assert 'className = "runtime-input-card"' in app
+    assert 'root.insertBefore(card, live)' in app
+    assert '.runtime-input-card' in css
+    assert '.runtime-input-panel' not in css
+    assert 'grid-template-rows: auto auto minmax(0, 1fr) auto !important' in css

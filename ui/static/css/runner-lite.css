@@ -1177,3 +1177,40 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   .composer-resource-picker { max-width: min(100%, 270px); }
   .composer-resource-picker .resource-name { max-width: 96px; }
 }
+
+/* Runner-owned input visibility stays inside the existing scrollable history.
+   It must never add a Chat grid row or move the bottom composer. */
+.runtime-input-card {
+  margin: 8px 14px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.runtime-input-card summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--font-helper);
+  font-weight: 700;
+}
+.runtime-input-card summary strong {
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.runtime-input-card pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

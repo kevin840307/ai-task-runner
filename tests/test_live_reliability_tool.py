@@ -98,7 +98,9 @@ def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
 
 def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
-    assert live.arguments().long_api_outage_seconds == 180
+    args = live.arguments()
+    assert args.long_api_outage_seconds == 180
+    assert args.single_process_yaml_items == 0
 
 
 def test_live_probe_prompts_vary_from_the_first_line(tmp_path: Path):
@@ -152,6 +154,21 @@ def test_example_smoke_case_validation_rejects_missing_workflow(tmp_path: Path):
 
     with pytest.raises(SystemExit, match="workflow must be an existing YAML file"):
         live.validate_example_smoke_cases(cases)
+
+
+def test_transient_proxy_can_simulate_429_and_503_statuses():
+    with live.transient_proxy(1) as control:
+        control.fail = True
+        for status in (429, 503):
+            control.status_code = status
+            connection = http.client.HTTPConnection("127.0.0.1", control.port, timeout=2)
+            connection.request("POST", "/v1/chat/completions", body=b"{}")
+            response = connection.getresponse()
+            body = response.read().decode("utf-8")
+            connection.close()
+            assert response.status == status
+            assert f"HTTP {status}" in body
+        assert control.failures == 2
 
 
 def test_transient_proxy_can_simulate_real_disconnect_and_recovery():
@@ -347,16 +364,17 @@ def test_example_smoke_probe_uses_case_name_for_copy(
 
 
 @pytest.mark.parametrize(
-    ("name", "hours"),
+    ("name", "hours", "yaml_items"),
     [
-        ("qwen_live_reliability_0_5h.bat", "0.5"),
-        ("qwen_live_reliability_24h.bat", "24"),
+        ("qwen_live_reliability_0_5h.bat", "0.5", "4"),
+        ("qwen_live_reliability_24h.bat", "24", "8"),
     ],
 )
-def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str):
+def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml_items: str):
     text = (ROOT / "tool" / name).read_text(encoding="utf-8")
     assert f"--hours {hours}" in text
     assert "--high-density --require-transient" in text
+    assert f"--single-process-yaml-items {yaml_items}" in text
     assert "--example-smoke-matrix-project" in text
     assert "runner\\workflow\\system\\file.yaml" in text
     assert "runner\\workflow\\system\\mixed.yaml" in text
@@ -702,6 +720,47 @@ raise SystemExit(130)
     monkeypatch.setattr(live, "run_command", fake_run)
 
     live.stop_request_resume_probe(settings(tmp_path), tmp_path)
+
+
+def test_session_expiry_recovery_preflight_rebuilds_fresh_session():
+    live.session_expiry_recovery_preflight()
+
+
+def test_yaml_list_endurance_probe_uses_one_process_and_all_child_work_dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    completed: list[tuple[Path, int, str]] = []
+
+    def fake_create(parent: Path, name: str, *args, **kwargs) -> Path:
+        project = parent / name
+        project.mkdir(parents=True)
+        (project / "validation.py").write_text("pass", encoding="utf-8")
+        return project
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("".join(
+            json.dumps({"type": "script.item_completed", "script_index": index}) + "\n"
+            for index in range(1, 4)
+        ), encoding="utf-8")
+        assert "--script" in command
+        assert timeout == settings(tmp_path).run_timeout * 3
+        return 0
+
+    def fake_assert(project: Path, code: int, expected_file="health.txt", expected_text=live.EXPECTED, work_dir=".ai-task-runner") -> None:
+        completed.append((project, code, work_dir))
+
+    monkeypatch.setattr(live, "create_project", fake_create)
+    monkeypatch.setattr(live, "run_command", fake_run)
+    monkeypatch.setattr(live, "assert_completed", fake_assert)
+
+    live.yaml_list_endurance_probe(settings(tmp_path), tmp_path, 3)
+
+    assert [item[2] for item in completed] == [
+        ".ai-task-runner/script/001",
+        ".ai-task-runner/script/002",
+        ".ai-task-runner/script/003",
+    ]
 
 
 def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):

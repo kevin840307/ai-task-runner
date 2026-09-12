@@ -1,6 +1,6 @@
 # Custom Workflow Guide
 
-Version: 1.2.62
+Version: 1.2.63
 
 This guide shows the current Workflow contract. Prefer semantic Stage types and keep YAML limited to behavior that truly changes the SOP. Do not copy implementation-only fields from older examples.
 

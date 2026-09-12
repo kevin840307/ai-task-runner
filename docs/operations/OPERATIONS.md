@@ -1,6 +1,6 @@
 # Operations and Troubleshooting
 
-Version: 1.2.62
+Version: 1.2.63
 
 ## Long-running behavior
 Defaults intentionally allow long model calls: runtime 7200s, planning 600s, validator 1200s, idle-after-change 900s. Recovery thresholds escalate behavior instead of terminating the run: task failures move through same-session retry, fresh-session retry, and replan; validator failures move through repair planning and fresh full replanning. Recovery is driven by errors, session availability, no-progress fingerprints, review, and final validation. Timeout failures use a stable semantic recovery key while retaining full backend stderr for debugging, preventing changing sandbox/container IDs from indefinitely resetting same-failure escalation.
@@ -45,7 +45,7 @@ After an abnormal worker exit, the supervisor cleans active child-process marker
 All subprocess stdout collection is bounded in both normal and watchdog modes, so a noisy external command cannot grow Runner memory without limit.
 
 ## Reliability verification
-For release/24H confidence, run the deterministic test suite first, then the opt-in live gate. `tool/workflow_dryrun.py --matrix` verifies happy/recovery paths and fail-closed behavior for unrecovered FAIL / technical ERROR. `tool/qwen_live_reliability.py` adds real Qwen process restart, three-minute API disconnect recovery, timeout/session recovery, YAML List resume with per-item runtime options, Final AI fresh-session voting, and detached-UI `stop.request -> exit 130 -> --resume` coverage. A 24H claim still requires the full requested wall-clock soak and a passing `summary.json`; preflight probes alone are not a 24H claim.
+For release/24H confidence, run the deterministic test suite first, then the opt-in live gate. `tool/workflow_dryrun.py --matrix` verifies happy/recovery paths and fail-closed behavior for unrecovered FAIL / technical ERROR. `tool/qwen_live_reliability.py` adds real Qwen process restart, deterministic expired-session -> Fresh Session recovery, HTTP 429/502/503 and three-minute disconnect recovery, timeout/session recovery, YAML List resume with per-item runtime options, Final AI fresh-session voting, detached-UI `stop.request -> exit 130 -> --resume`, and an opt-in single-process YAML endurance burst. The Windows 0.5H/24H presets run 4/8 sequential YAML items in one CLI process to complement the wall-clock soak. A 24H claim still requires the full requested wall-clock soak and a passing `summary.json`; preflight/burst probes alone are not a 24H claim.
 
 ## Planning bounded discovery and loop recovery
 

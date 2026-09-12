@@ -204,7 +204,9 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
     )
 
     assert result.completed is True
-    assert any(event["type"] == "script.item_started" for event in events)
+    started = next(event for event in events if event["type"] == "script.item_started")
+    assert Path(started["child_project_root"]).resolve() == child.resolve()
+    assert Path(started["child_work_dir"]) == Path(".ai-task-runner") / "script" / "001"
     task_events = [event for event in events if event["type"].startswith("runner.")]
     assert task_events
     assert all(event["script_index"] == 1 for event in task_events)

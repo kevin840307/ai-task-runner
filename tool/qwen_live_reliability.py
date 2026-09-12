@@ -236,6 +236,7 @@ class ProxyControl:
     port: int = 0
     fail: bool = False
     disconnect: bool = False
+    status_code: int = 502
     failures: int = 0
     successes: int = 0
 
@@ -338,6 +339,15 @@ def arguments() -> argparse.Namespace:
         type=float,
         default=180,
         help="disconnect the API for this many seconds in the long recovery probe",
+    )
+    parser.add_argument(
+        "--single-process-yaml-items",
+        type=int,
+        default=0,
+        help=(
+            "run one additional YAML List invocation containing N sequential real-Qwen "
+            "items to exercise same-process state/resource accumulation; 0 disables"
+        ),
     )
     parser.add_argument(
         "--require-transient",
@@ -867,6 +877,65 @@ def api_retry_classification_preflight() -> None:
             api_module.execute = original_execute
         if not result.completed or calls != [False, True]:
             raise RuntimeError(f"transient RunnerError resume contract failed: {calls}")
+
+
+def session_expiry_recovery_preflight() -> None:
+    """Prove an unavailable durable Qwen session resets to Fresh and resumes from Runner state."""
+    agent = ROOT / "tests" / "session_expired_agent.py"
+    if not agent.is_file():
+        raise RuntimeError(f"session-expiry probe agent is missing: {agent}")
+    with tempfile.TemporaryDirectory(prefix="ai-runner-session-expiry-") as directory:
+        container = Path(directory)
+        root = container / "project"
+        root.mkdir()
+        # Fake-agent counters are deliberately outside project_root so read-only
+        # Planning cannot mistake probe bookkeeping for an AI file mutation.
+        state_dir = container / "probe-state"
+        command = [
+            sys.executable, str(RUNNER),
+            "--backend", "qwen",
+            "--command", subprocess.list2cmdline([sys.executable, str(agent)]),
+            "--project-root", str(root),
+            "--goal", "Create done.txt and validate it.",
+            "--validator", "ai",
+            "--max-attempts", "2",
+            "--retry-delay", "0",
+            "--retry-wait", "0",
+            "--retry-max-wait", "0",
+            "--agent-timeout", "30",
+            "--planning-timeout", "30",
+            "--force-new",
+            "--json-events",
+        ]
+        previous = os.environ.get("SESSION_TEST_STATE_DIR")
+        os.environ["SESSION_TEST_STATE_DIR"] = str(state_dir)
+        try:
+            code = run_command(command, root / "console.jsonl", 60)
+        finally:
+            if previous is None:
+                os.environ.pop("SESSION_TEST_STATE_DIR", None)
+            else:
+                os.environ["SESSION_TEST_STATE_DIR"] = previous
+        assert_state_completed(root, code)
+        if not (root / "done.txt").is_file():
+            raise RuntimeError("expired-session recovery did not complete from durable Runner state")
+        events = runner_events(root)
+        reset_indexes = [
+            index for index, event in enumerate(events)
+            if event.get("type") == "model.result"
+            and event.get("session") == "old-session"
+            and "session_recovery_action=reset_session" in str(event.get("error", ""))
+        ]
+        if not reset_indexes:
+            raise RuntimeError("expired-session recovery did not record reset_session evidence")
+        fresh_seen = any(
+            index > reset_indexes[-1]
+            and event.get("type") == "model.prompt"
+            and event.get("session_mode") == "new"
+            for index, event in enumerate(events)
+        )
+        if not fresh_seen:
+            raise RuntimeError("expired-session recovery did not continue in a Fresh Session")
 
 
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
@@ -1731,6 +1800,61 @@ def yaml_list_resume_probe(
         raise RuntimeError("YAML List resume events are incomplete")
 
 
+def yaml_list_endurance_probe(
+    settings: Settings,
+    root: Path,
+    items: int,
+) -> None:
+    """Run several real-Qwen YAML items in one CLI process to catch accumulated state leaks."""
+    if items <= 0:
+        return
+    batch = root / "yaml-list-endurance-probe"
+    batch.mkdir()
+    projects: list[Path] = []
+    payload: list[dict[str, object]] = []
+    for index in range(1, items + 1):
+        project = create_project(batch, f"item-{index:03d}")
+        projects.append(project)
+        payload.append({
+            "prompt": case_prompt(PROMPT, f"yaml-endurance-{index:03d}"),
+            "project_root": project.name,
+            "validator": str(project / "validation.py"),
+            "max_attempts": 1,
+            "retry_delay": 0,
+        })
+    script = batch / "tasks.yaml"
+    script.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    log = console_log(batch, "console.jsonl")
+    code = run_command(
+        runner_command(settings, batch, script=script),
+        log,
+        settings.run_timeout * max(1, items),
+    )
+    if code != 0:
+        raise RuntimeError(f"YAML endurance process failed: exit={code}")
+    for index, project in enumerate(projects, 1):
+        assert_completed(
+            project,
+            code,
+            work_dir=f".ai-task-runner/script/{index:03d}",
+        )
+    events = jsonl_events(log)
+    completed = {
+        int(event.get("script_index"))
+        for event in events
+        if event.get("type") == "script.item_completed"
+        and isinstance(event.get("script_index"), int)
+    }
+    expected = set(range(1, items + 1))
+    if completed != expected or any(
+        event.get("type") == "script.item_failed" for event in events
+    ):
+        raise RuntimeError(
+            f"YAML endurance item evidence mismatch: expected={sorted(expected)} "
+            f"completed={sorted(completed)}"
+        )
+
+
 def final_ai_quorum_probe(
     settings: Settings,
     root: Path,
@@ -1769,6 +1893,7 @@ def api_recovery_probe(
     *,
     outage_seconds: float = 15,
     disconnect: bool = False,
+    status_code: int = 502,
 ) -> bool:
     with (
         transient_proxy(settings.api_port) as proxy,
@@ -1803,6 +1928,7 @@ def api_recovery_probe(
                     session_id = current_session
                     successes_before_outage = proxy.successes
                     proxy.disconnect = disconnect
+                    proxy.status_code = status_code
                     proxy.fail = not disconnect
                     outage_until = time.monotonic() + outage_seconds
                 if (proxy.fail or proxy.disconnect) and time.monotonic() >= outage_until:
@@ -1980,8 +2106,12 @@ def transient_proxy(upstream_port: int):
                 return
             if control.fail:
                 control.failures += 1
-                payload = b'{"error":{"message":"temporary live-test gateway outage"}}'
-                self.send_response(502)
+                payload = json.dumps({
+                    "error": {
+                        "message": f"temporary live-test HTTP {control.status_code} outage"
+                    }
+                }).encode("utf-8")
+                self.send_response(control.status_code)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
@@ -2134,11 +2264,13 @@ def main() -> int:
         or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
         or args.long_api_outage_seconds <= 0
+        or args.single_process_yaml_items < 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
             "hours/pause/soak-* frequency values must be non-negative; "
-            "run-timeout, agent-timeout, planning-timeout, long API outage, and api-port must be valid"
+            "run-timeout, agent-timeout, planning-timeout, long API outage, "
+            "single-process YAML items, and api-port must be valid"
         )
     if args.example_smoke_matrix_workflow and not args.example_smoke_matrix_project:
         raise SystemExit(
@@ -2162,6 +2294,8 @@ def main() -> int:
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
     api_retry_classification_preflight()
     print("PASS API transient/deterministic retry classification preflight", flush=True)
+    session_expiry_recovery_preflight()
+    print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
 
     dryrun_results = workflow_dryrun_preflight()
     print(
@@ -2195,7 +2329,17 @@ def main() -> int:
         file_protection_probe(settings, run_root)
         print("PASS protected-file policy probe", flush=True)
         transient_observed = api_recovery_probe(settings, run_root)
-        print("PASS transient API/same-session recovery probe", flush=True)
+        print("PASS HTTP 502 transient API/same-session recovery probe", flush=True)
+        api_recovery_probe(
+            settings, run_root, "api-rate-limit-429-probe",
+            outage_seconds=5, status_code=429,
+        )
+        print("PASS HTTP 429 rate-limit same-session recovery probe", flush=True)
+        api_recovery_probe(
+            settings, run_root, "api-service-unavailable-503-probe",
+            outage_seconds=5, status_code=503,
+        )
+        print("PASS HTTP 503 service-unavailable same-session recovery probe", flush=True)
         api_recovery_probe(
             settings,
             run_root,
@@ -2211,6 +2355,12 @@ def main() -> int:
         print("PASS multi-TODO/checkpoint resume probe", flush=True)
         yaml_list_resume_probe(settings, run_root)
         print("PASS YAML List/resume + validator_args + per-item Final AI 3/2 probe", flush=True)
+        yaml_list_endurance_probe(settings, run_root, args.single_process_yaml_items)
+        if args.single_process_yaml_items:
+            print(
+                f"PASS single-process YAML endurance ({args.single_process_yaml_items} items)",
+                flush=True,
+            )
         final_ai_quorum_probe(settings, run_root, mixed=False)
         print("PASS Final AI 3/2 quorum probe", flush=True)
         timeout_probe(settings, run_root)
@@ -2242,6 +2392,11 @@ def main() -> int:
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
         "api_retry_classification_preflight": True,
+        "session_expiry_recovery_preflight": True,
+        "http_429_recovered": True,
+        "http_502_recovered": True,
+        "http_503_recovered": True,
+        "single_process_yaml_items": args.single_process_yaml_items,
         "workflow_dryrun_preflight": True,
         "workflow_dryrun_negative_preflight": True,
         "stage_result_mapping_preflight": True,

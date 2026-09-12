@@ -59,3 +59,27 @@ def test_console_observer_persists_cli_view_for_ui_without_importing_core(tmp_pa
     assert payload["detail"] == "Second TODO"
     assert payload["tasks"][1]["mark"] == ">"
     assert payload["lines"][-2] == "  {spinner} Review running"
+
+
+def test_console_observer_persists_yaml_script_child_pointer(tmp_path):
+    runtime = SimpleNamespace(config=SimpleNamespace(human_output=False), work=tmp_path)
+    observer = ConsoleObserver(runtime)
+    child_root = tmp_path / "child"
+
+    observer({
+        "type": "script.item_started",
+        "script_index": 2,
+        "script_total": 4,
+        "prompt_preview": "second task",
+        "child_project_root": str(child_root),
+        "child_work_dir": ".ai-task-runner/script/002",
+    })
+
+    payload = json.loads((tmp_path / "console-view.json").read_text(encoding="utf-8"))
+    assert payload["mode"] == "script"
+    assert payload["script_index"] == 2
+    assert payload["script_total"] == 4
+    assert payload["script_status"] == "running"
+    assert payload["child_project_root"] == str(child_root)
+    assert payload["child_work_dir"] == ".ai-task-runner/script/002"
+    assert payload["prompt_preview"] == "second task"
