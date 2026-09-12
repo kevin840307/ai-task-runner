@@ -28,9 +28,9 @@ Planning invariants:
 - Include focused test/verification work inside the relevant TODO when it materially proves that TODO; do not create low-value test-count work.
 - Do not put Review/Repair/Validator/Retry/Session orchestration into TODOs. Runner owns orchestration.
 
-Return exactly one JSON object and no markdown:
+Return exactly one complete JSON value and no markdown. Prefer the object envelope:
 {"tasks":[{"title":"string","description":"string","deliverable":"string","acceptance_criteria":["specific observable criterion"]}]}
-`tasks` must contain at least the minimum number required by Runner. Every field is required; acceptance_criteria must be a non-empty array of non-empty strings.
+A direct task array with the same task objects is also valid. The task collection must contain at least the minimum number required by Runner. Every field is required; acceptance_criteria must be a non-empty array of non-empty strings.
 [/RUNNER_IMMUTABLE_PLAN_PROTOCOL]
 """.strip()
 

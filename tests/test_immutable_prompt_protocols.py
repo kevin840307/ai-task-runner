@@ -1,7 +1,9 @@
+import json
 from pathlib import Path
 
 import pytest
 
+from runner.ai.structured_output import parse_result
 from runner.errors import RunnerError
 from runner.prompts.protocols import (
     PLAN_PROTOCOL,
@@ -12,6 +14,36 @@ from runner.prompts.protocols import (
 )
 from runner.workflow.result_parsers import parse_ai_validation, parse_review
 from runner.workflow.task_output import decode_tasks
+
+
+def _valid_task_payload() -> dict[str, object]:
+    return {
+        "title": "one",
+        "description": "do one thing",
+        "deliverable": "artifact",
+        "acceptance_criteria": ["observable result"],
+    }
+
+
+def test_plan_decoder_accepts_direct_task_array_without_weakening_task_schema():
+    tasks = decode_tasks([_valid_task_payload()], cycle=2, minimum=1)
+    assert [task.id for task in tasks] == ["c02-t001"]
+    assert tasks[0].title == "one"
+    with pytest.raises(RunnerError):
+        decode_tasks([{"title": "umbrella"}], cycle=2, minimum=1)
+
+
+def test_plan_parser_can_use_complete_task_array_inside_broken_object_envelope():
+    payload = [_valid_task_payload()]
+    malformed = '{"tasks":' + json.dumps(payload, ensure_ascii=False)  # missing outer }
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(malformed)
+
+    tasks = parse_result(
+        malformed, lambda value: decode_tasks(value, cycle=3, minimum=1)
+    )
+    assert [task.id for task in tasks] == ["c03-t001"]
+    assert tasks[0].acceptance_criteria == ["observable result"]
 
 
 def test_editable_prompt_cannot_remove_review_wire_contract():
@@ -34,6 +66,7 @@ def test_plan_protocol_keeps_decomposition_and_task_schema_in_code():
     assert "do not split mechanically by file" in PLAN_PROTOCOL.lower()
     assert '"tasks"' in PLAN_PROTOCOL
     assert '"acceptance_criteria"' in PLAN_PROTOCOL
+    assert "direct task array" in PLAN_PROTOCOL.lower()
 
 
 def test_review_parser_rejects_boolean_strings_and_inconsistent_verdicts():
@@ -55,10 +88,7 @@ def test_validator_parser_rejects_boolean_strings_and_inconsistent_verdicts():
 
 
 def test_plan_decoder_remains_strict_even_if_editable_planning_prompt_changes():
-    tasks = decode_tasks({"tasks":[{
-        "title":"one", "description":"do one thing", "deliverable":"artifact",
-        "acceptance_criteria":["observable result"],
-    }]}, cycle=1, minimum=1)
+    tasks = decode_tasks({"tasks": [_valid_task_payload()]}, cycle=1, minimum=1)
     assert len(tasks) == 1
     with pytest.raises(RunnerError):
         decode_tasks({"tasks":[{"title":"umbrella"}]}, cycle=1, minimum=1)

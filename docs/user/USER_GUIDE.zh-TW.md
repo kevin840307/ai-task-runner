@@ -1,6 +1,6 @@
 # 使用指南
 
-版本：1.2.64
+版本：1.2.65
 
 ## 單一 Goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -74,7 +74,7 @@ flow:
     scope: task
 ```
 
-Producer 輸出 `{"tasks":[...]}`；`scope: task` 只看 pending tasks，不判斷 Stage 是否為 Plan。
+Producer 建議輸出 `{"tasks":[...]}`；也接受使用相同嚴格 Task schema 的直接 JSON task array `[...]`。`scope: task` 只看 pending tasks，不判斷 Stage 是否為 Plan。
 
 ```yaml
 stages:

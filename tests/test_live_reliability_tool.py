@@ -778,6 +778,10 @@ def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):
 def test_api_retry_classification_preflight():
     live.api_retry_classification_preflight()
 
+def test_task_array_recovery_preflight_covers_broken_planning_envelope():
+    live.task_array_recovery_preflight()
+
+
 def test_loop_detection_contract_preflight_covers_planning_retry_policy():
     live.loop_detection_contract_preflight()
 

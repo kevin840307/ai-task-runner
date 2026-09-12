@@ -1,6 +1,6 @@
 # User Guide
 
-Version: 1.2.64
+Version: 1.2.65
 
 ## Single goal
 `python ai_task_runner.py --goal-file prompt.md --project-root <project> --validator validation.py`
@@ -68,7 +68,7 @@ flow:
     scope: task
 ```
 
-The producer prints `{"tasks":[...]}`. `scope: task` depends on pending tasks, not on `PlanStage`.
+The preferred producer form is `{"tasks":[...]}`; a direct JSON task array `[...]` with the same strict task schema is also accepted. `scope: task` depends on pending tasks, not on `PlanStage`.
 
 ```yaml
 stages:

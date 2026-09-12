@@ -1,6 +1,6 @@
 # 自訂 Workflow 指南
 
-版本：1.2.64
+版本：1.2.65
 
 這份文件示範目前最新的 Workflow 寫法。優先使用語意化 Stage type，YAML 只保留真正會改變 SOP 的設定，不要再複製舊版 implementation detail。
 

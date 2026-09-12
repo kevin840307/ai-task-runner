@@ -879,6 +879,25 @@ def api_retry_classification_preflight() -> None:
             raise RuntimeError(f"transient RunnerError resume contract failed: {calls}")
 
 
+def task_array_recovery_preflight() -> None:
+    """Prove Planning can recover a complete TaskArray from a broken object envelope."""
+    from types import SimpleNamespace
+
+    from runner.workflow.stages.plan_stage import parse_plan_tasks
+
+    payload = [{
+        "title": "Create artifact",
+        "description": "Create the requested artifact.",
+        "deliverable": "artifact.txt",
+        "acceptance_criteria": ["artifact.txt exists"],
+    }]
+    malformed = '{"tasks":' + json.dumps(payload)  # deliberately missing outer }
+    context = SimpleNamespace(state=SimpleNamespace(cycle=4))
+    tasks = parse_plan_tasks(malformed, context, minimum=1)
+    if len(tasks) != 1 or tasks[0].id != "c04-t001" or tasks[0].title != "Create artifact":
+        raise RuntimeError("TaskArray structured-output recovery contract failed")
+
+
 def session_expiry_recovery_preflight() -> None:
     """Prove an unavailable durable Qwen session resets to Fresh and resumes from Runner state."""
     agent = ROOT / "tests" / "session_expired_agent.py"
@@ -2294,6 +2313,8 @@ def main() -> int:
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
     api_retry_classification_preflight()
     print("PASS API transient/deterministic retry classification preflight", flush=True)
+    task_array_recovery_preflight()
+    print("PASS malformed Task envelope -> complete TaskArray recovery preflight", flush=True)
     session_expiry_recovery_preflight()
     print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
 
@@ -2392,6 +2413,7 @@ def main() -> int:
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
         "api_retry_classification_preflight": True,
+        "task_array_recovery_preflight": True,
         "session_expiry_recovery_preflight": True,
         "http_429_recovered": True,
         "http_502_recovered": True,
