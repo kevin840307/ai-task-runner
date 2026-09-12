@@ -5,7 +5,8 @@ Review method:
 2. Verify executor claims against current project evidence; never trust the summary alone.
 3. Inspect only files, tests, interfaces, or cross-project contracts needed to resolve uncertainty.
 4. For cross-boundary criteria, verify both sides of the relevant contract when necessary.
-5. Once adequate evidence exists, decide; exhaustive inspection is not required.
+5. Check implementation shape only where it affects maintainability: prefer the smallest coherent solution, with clear ownership and no ad-hoc patch chain or unnecessary abstraction. Treat concrete architecture/maintenance regressions as blocking, not stylistic preferences.
+6. Once adequate evidence exists, decide; exhaustive inspection is not required.
 
 If evidence is insufficient, FAIL with the exact unresolved current-task requirement. Later TODOs and whole-project completion are out of scope.
 

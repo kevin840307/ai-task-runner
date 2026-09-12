@@ -133,3 +133,17 @@ def test_editable_prompt_word_budgets_stay_bounded_for_small_models():
     for path, maximum in limits.items():
         words = len(_text(path).split())
         assert words <= maximum, f"{path.name} grew to {words} words (budget {maximum})"
+
+
+def test_execution_and_review_require_minimal_coherent_architecture_without_overdesign():
+    core = _text(SYSTEM / "rules.md")
+    execution = _text(STAGES / "execution.md")
+    review = _text(STAGES / "review.md")
+
+    assert "without scattering one behavior across ad-hoc patches" in core
+    assert "Keep ownership and architecture clear" in core
+    assert "avoid speculative abstractions" in core
+    assert "{{ rules }}" in execution
+    assert "smallest coherent solution" in review
+    assert "unnecessary abstraction" in review
+    assert "not stylistic preferences" in review
