@@ -35,8 +35,12 @@ def supervise_cli(
     state_locator: StateLocator | None = None,
 ) -> int:
     """Keep a worker process isolated and resume persisted state after hard exits."""
-    if os.environ.get(WORKER_ENV) == "1":
-        return worker_entry(argv)
+    worker_parent = os.environ.get(WORKER_ENV)
+    if worker_parent:
+        if worker_parent == str(os.getppid()):
+            return worker_entry(argv)
+        print("ERROR: nested AI Task Runner launch blocked", file=sys.stderr)
+        return 2
 
     request = request_factory(argv)
     states = (
@@ -76,7 +80,7 @@ def _supervise_workers(
 ) -> int:
     while True:
         env = dict(os.environ)
-        env[WORKER_ENV] = "1"
+        env[WORKER_ENV] = str(os.getpid())
         worker = subprocess.Popen(
             [sys.executable, str(Path(worker_script).resolve()), *worker_args],
             env=env,

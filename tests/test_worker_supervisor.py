@@ -66,7 +66,7 @@ def test_supervisor_resumes_after_abnormal_worker_exit(tmp_path, monkeypatch):
     assert "--resume" not in calls[0][0]
     assert ("cleanup", (state,), 101) in calls
     assert "--resume" in calls[2][0]
-    assert calls[2][1][supervisor_module.WORKER_ENV] == "1"
+    assert calls[2][1][supervisor_module.WORKER_ENV] == str(os.getpid())
 
 
 
@@ -130,13 +130,28 @@ def test_supervisor_does_not_restart_without_saved_state(tmp_path, monkeypatch):
 
 
 def test_worker_mode_calls_entry_directly(monkeypatch):
-    monkeypatch.setenv(supervisor_module.WORKER_ENV, "1")
+    monkeypatch.setenv(supervisor_module.WORKER_ENV, str(os.getppid()))
     assert supervisor_module.supervise_cli(
         ["--anything"],
         worker_script="runner.py",
         request_factory=lambda argv: None,
         worker_entry=lambda argv: 7,
     ) == 7
+
+
+def test_inherited_worker_mode_blocks_nested_runner(monkeypatch, capsys):
+    monkeypatch.setenv(supervisor_module.WORKER_ENV, "1")
+    called = []
+
+    assert supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: called.append("request"),
+        worker_entry=lambda argv: called.append("worker") or 0,
+    ) == 2
+
+    assert called == []
+    assert "nested AI Task Runner launch blocked" in capsys.readouterr().err
 
 
 def test_run_process_logs_pid_return_code_and_clears_active_file(tmp_path, monkeypatch):
