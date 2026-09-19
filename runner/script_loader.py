@@ -37,6 +37,7 @@ SCRIPT_ITEM_RUNTIME_ALIASES = {
     "ai_validator_count": "final_ai_validations",
     "final_ai_required_passes": "final_ai_required_passes",
     "ai_validator_required_passes": "final_ai_required_passes",
+    "ai_validator_yolo": "ai_validator_yolo",
 }
 
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:

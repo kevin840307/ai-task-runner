@@ -31,6 +31,8 @@ SYSTEM_WORKFLOWS = {
     name: ROOT / "runner" / "workflow" / "system" / f"{name}.yaml"
     for name in ("file", "ai", "mixed")
 }
+SYSTEM_FINAL_AI_RUNS = 3
+SYSTEM_FINAL_AI_REQUIRED_PASSES = 2
 REPAIR_INITIAL = "INITIAL"
 REPAIR_FINAL = "RECOVERED"
 FINAL_AI_PROMPT = """Inspect only the deliverable required by the original goal.
@@ -442,6 +444,34 @@ def whole_seconds_arg(value: float) -> str:
     if value != whole:
         raise ValueError("Runner timeout arguments must be whole seconds")
     return str(whole)
+
+
+def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
+    """Return and verify the bundled system Final AI contract."""
+    if workflow not in {"ai", "mixed"}:
+        raise ValueError(f"system/{workflow} has no Final AI contract")
+    from runner.workflow.loader import load_workflow
+
+    validators = [
+        node for node in load_workflow(SYSTEM_WORKFLOWS[workflow])
+        if node.get("name") == "validate_ai" and node.get("type") == "ai_validator"
+    ]
+    if len(validators) != 1:
+        raise RuntimeError(f"system/{workflow} must contain exactly one validate_ai stage")
+    validator = validators[0]
+    runs = int(validator.get("runs", 1))
+    required = int(validator.get("required_passes") or (runs // 2 + 1))
+    yolo = validator.get("ai_validator_yolo") is True
+    if (runs, required, yolo) != (
+        SYSTEM_FINAL_AI_RUNS,
+        SYSTEM_FINAL_AI_REQUIRED_PASSES,
+        True,
+    ):
+        raise RuntimeError(
+            f"system/{workflow} Final AI contract mismatch: "
+            f"runs={runs}, required_passes={required}, yolo={yolo}"
+        )
+    return runs, required, yolo
 
 
 def run_command(
@@ -929,7 +959,7 @@ def session_expiry_recovery_preflight() -> None:
         previous = os.environ.get("SESSION_TEST_STATE_DIR")
         os.environ["SESSION_TEST_STATE_DIR"] = str(state_dir)
         try:
-            code = run_command(command, root / "console.jsonl", 60)
+            code = run_command(command, console_log(root, "console.jsonl"), 60)
         finally:
             if previous is None:
                 os.environ.pop("SESSION_TEST_STATE_DIR", None)
@@ -1459,6 +1489,9 @@ def custom_task_producer_probe(settings: Settings, root: Path) -> None:
 def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
     project = create_project(root, f"system-{workflow}-probe")
     ai_validation = workflow in {"ai", "mixed"}
+    expected_ai_sessions = (
+        system_final_ai_contract(workflow)[0] if ai_validation else 0
+    )
     code = run_command(
         runner_command(
             settings,
@@ -1473,8 +1506,13 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
     assert_completed(project, code)
     assert_system_topology(project, workflow)
     assert_prompt_transport_contract(project)
-    if ai_validation and len(final_validation_sessions(project)) < 3:
-        raise RuntimeError(f"system/{workflow} reused Final AI validation sessions")
+    if ai_validation:
+        sessions = final_validation_sessions(project)
+        if len(sessions) < expected_ai_sessions:
+            raise RuntimeError(
+                f"system/{workflow} reused Final AI validation sessions: "
+                f"expected {expected_ai_sessions}, got {len(sessions)}"
+            )
 
 
 REVIEW_REPAIR_PROMPT = """Make review.txt contain exactly these two logical lines:
@@ -2110,9 +2148,11 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
         mixed_validations = result.mixed_validations
         if mixed:
             mixed_validations += 1
-            if len(final_validation_sessions(project)) < 3:
+            expected_ai_sessions = system_final_ai_contract("mixed")[0]
+            if len(final_validation_sessions(project)) < expected_ai_sessions:
                 raise RuntimeError(
-                    f"soak-{run_number:04d} did not use three Final AI sessions"
+                    f"soak-{run_number:04d} did not use {expected_ai_sessions} "
+                    "Final AI sessions"
                 )
         result = replace(
             result,

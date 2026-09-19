@@ -76,6 +76,7 @@ class RunRequest:
     retry_max_wait: float = 300
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
+    ai_validator_yolo: bool = False
     loop_context_compress: bool = DEFAULT_LOOP_CONTEXT_COMPRESS
     loop_context_compress_threshold: float = DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -123,6 +124,7 @@ class RunRequest:
             final_ai_required_passes=getattr(
                 args, "final_ai_required_passes", DEFAULT_FINAL_AI_REQUIRED_PASSES
             ),
+            ai_validator_yolo=getattr(args, "ai_validator_yolo", False),
             loop_context_compress=getattr(args, "loop_context_compress", False),
             loop_context_compress_threshold=getattr(
                 args, "loop_context_compress_threshold", DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD
@@ -215,6 +217,7 @@ class RunRequest:
             api_retry_max_wait=self.retry_max_wait,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
+            ai_validator_yolo=self.ai_validator_yolo,
             plugins=merge_plugin_config(plugin_config_from_request(self), self.plugins),
             work_dir=self.work_dir,
             resume=self.resume,

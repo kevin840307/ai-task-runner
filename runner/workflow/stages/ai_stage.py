@@ -51,6 +51,7 @@ class AIValidatorStageSpec(BaseStageSpec):
     mode: str = MODE_READONLY
     actor: str = "validator"
     prompt: str = "stages/ai_validator.md"
+    ai_validator_yolo: bool | None = None
     structured_retries: int = 2
     structured_fresh_retries: int = 1
     retry: int | None = -1
@@ -66,16 +67,34 @@ class AIValidatorStage(BaseStage):
     required_passes_config_attr = "final_ai_required_passes"
     result_flag = "passed"
 
+    def _backend_mode(self, ctx: StageContext) -> str:
+        return "validation" if self._yolo_enabled(ctx) else "review"
+
     def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
-        instructions = str(getattr(ctx.config, "ai_validator_prompt", "") or "").strip()
-        if not instructions or instructions in prompt:
-            return prompt
-        return (
-            prompt.rstrip()
-            + "\n\nRunner-provided AI validation resource (required):\n"
-            + instructions
-            + "\n"
+        mode = (
+            "Runner final validation mode: YOLO verification is enabled. "
+            "You may write small temporary verification scripts, run command-based checks, "
+            "execute build/code/test commands, and run coverage validation when they materially improve evidence. "
+            "Keep all scripts and generated artifacts in temporary locations or Runner work/debug/cache outputs, never in maintained project source. "
+            "Do not modify production/source files, repair code, create tasks, search for tools, or ask for unavailable tools."
+            if self._yolo_enabled(ctx)
+            else "Runner final validation mode: read-only. Do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools. Use focused read-only checks when they materially resolve evidence."
         )
+        instructions = str(getattr(ctx.config, "ai_validator_prompt", "") or "").strip()
+        result = prompt.rstrip()
+        if "Runner final validation mode:" not in result:
+            result += "\n\n" + mode + "\n"
+        else:
+            result += "\n"
+        if instructions and instructions not in result:
+            result += "\nRunner-provided AI validation resource (required):\n" + instructions + "\n"
+        return result
+
+    def _yolo_enabled(self, ctx: StageContext) -> bool:
+        value = self.spec.ai_validator_yolo
+        if value is None:
+            value = bool(getattr(ctx.config, "ai_validator_yolo", False))
+        return bool(value)
 
     def enabled(self, ctx: StageContext) -> bool:
         # An explicit Workflow owns its validation topology: if ai_validator is

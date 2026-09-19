@@ -149,10 +149,11 @@ class BaseStage:
 
     def _run_once(self, ctx: StageContext, previous: StageResult | None, client) -> StageResult:
         spec = self.spec
+        backend_mode = self._backend_mode(ctx)
         configure_ai_client(
             client,
             ctx.config,
-            self.backend_mode,
+            backend_mode,
             allow_project_read=spec.allow_project_read,
         )
         try:
@@ -229,6 +230,9 @@ class BaseStage:
             return float(self.spec.timeout)
         return float(getattr(ctx.config, self.timeout_config_attr))
 
+    def _backend_mode(self, ctx: StageContext) -> str:
+        return self.backend_mode
+
     def _client(self, ctx: StageContext):
         key = self.spec.session_key or self.client_cache_key
         if not key:
@@ -239,7 +243,7 @@ class BaseStage:
                 ctx.config,
                 ctx.root,
                 ctx.work / "debug",
-                mode=self.backend_mode,
+                mode=self._backend_mode(ctx),
                 timeout=self._timeout(ctx),
             )
             ctx.scratch[key] = client

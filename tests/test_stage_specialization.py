@@ -21,6 +21,23 @@ def test_final_ai_validation_retries_until_pass():
     assert stage.backend_mode == "review"
 
 
+def test_final_ai_validation_yolo_switches_backend_mode():
+    from types import SimpleNamespace
+    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+
+    ctx_off = SimpleNamespace(config=SimpleNamespace(ai_validator_yolo=False))
+    ctx_on = SimpleNamespace(config=SimpleNamespace(ai_validator_yolo=True))
+
+    default_stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
+    assert default_stage._backend_mode(ctx_off) == "review"
+    assert default_stage._backend_mode(ctx_on) == "validation"
+
+    stage_override = AIValidatorStage(
+        AIValidatorStageSpec(name="validate_ai", ai_validator_yolo=False)
+    )
+    assert stage_override._backend_mode(ctx_on) == "review"
+
+
 def test_plan_stage_is_base_stage_with_only_plan_parser_difference():
     assert issubclass(PlanStage, BaseStage)
 

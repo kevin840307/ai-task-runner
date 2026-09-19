@@ -24,7 +24,7 @@ SCRIPT_ITEM_RUNTIME_FIELDS = frozenset({
     "agent_idle_after_change_timeout", "api_retry_timeout", "watchdog_interval",
     "same_session_retries", "review_retries", "max_cycles", "stage_retry_delay",
     "api_retry_wait", "api_retry_max_wait", "final_ai_validations",
-    "final_ai_required_passes",
+    "final_ai_required_passes", "ai_validator_yolo",
 })
 
 

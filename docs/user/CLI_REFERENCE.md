@@ -33,6 +33,7 @@ All CLI options map to the canonical `RunRequest`. Repeatable options append one
 | `--retry-max-wait` | max model-call retry wait | 300 seconds |
 | `--final-ai-validations`, `--ai-validator-count` | independent fresh-session Final AI votes | 1 |
 | `--final-ai-required-passes` | required PASS count | 0 = strict majority; otherwise <= runs |
+| `--ai-validator-yolo` | allow Final AI validation to run command/build/test/coverage checks and temporary verification scripts | run-level default off; bundled AI/mixed workflows set the stage option explicitly |
 | `--work-dir` | Runner state dir inside project root | `.ai-task-runner` |
 
 The work directory also contains display/diagnostic surfaces. `stream.log` is the latest bounded subprocess output for detached local UI/live inspection; it is reset per subprocess and is not part of CLI control or resume semantics.

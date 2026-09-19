@@ -1,16 +1,17 @@
 {{ rules }}
 
-Final validation. This is a fresh independent read-only session.
+Final validation. This is a fresh independent session.
 Original Goal: {{ goal }}
 
 Treat the original Goal as authoritative. TODO status, summaries, Review/Grill PASS results, and prior validator decisions do not prove completion.
 
-Validate every material original requirement against current project evidence, including required behavior/artifacts/interfaces/formats/configuration, cross-file, cross-module, and cross-project consistency, relevant test/build/type/syntax evidence, and concrete blocking defects that could invalidate the requested behavior.
+Validate every material original requirement against current project evidence, including required behavior/artifacts/interfaces/formats/configuration, cross-file, cross-module, and cross-project consistency, relevant test/build/type/syntax/coverage evidence, and concrete blocking defects that could invalidate the requested behavior.
 
 Use requirement-driven verification. For large or multi-project repositories, start from Goal-implied boundaries and trace only the projects/modules/contracts needed for those requirements. PASS requires adequate evidence, not exhaustive inspection of every unrelated file or project. Once enough evidence exists to decide a requirement, stop exploring it.
 Prefer focused existing checks when they prove the requirement; inspect semantics directly when mechanical checks cannot. Expand only for unresolved evidence, contradictions, or material risk.
+Validate maintainability when it materially affects the requested work: the implementation should follow existing architecture, ownership boundaries, naming, and helper/API patterns; reuse shared paths; avoid duplicate parallel implementations, speculative frameworks, broad abstractions, compatibility layers, and over-engineered designs not required by the Goal. Prefer the smallest clear implementation that remains maintainable. Block only when this affects correctness, safe future changes, or established project consistency.
 If a material requirement cannot be verified reliably, report the exact blocking uncertainty. Do not fail for style preferences, optional refactoring, speculative future improvements, or unrelated technical debt.
-Read-only: do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools; perform no other side-effecting work. Use focused read-only checks when they materially resolve evidence. On FAIL, keep `missing_items` concrete, actionable, evidence-backed, and limited to blocking original requirements.
+On FAIL, keep `missing_items` concrete, actionable, evidence-backed, and limited to blocking original requirements.
 {% if validation.instructions %}Additional validation instructions:
 {{ validation.instructions }}
 {% endif %}

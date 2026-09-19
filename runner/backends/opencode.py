@@ -120,6 +120,11 @@ class OpenCodeBackend(BaseBackend):
             if self.sandbox:
                 policy["external_directory"] = "deny"
             return policy
+        if self.mode == "validation":
+            policy = {"task": "deny"}
+            if self.sandbox:
+                policy["external_directory"] = "deny"
+            return policy
         if self.sandbox:
             # OpenCode has no Qwen-style container flag. Its public isolation
             # primitive is permission policy. Deny subagent delegation too: an

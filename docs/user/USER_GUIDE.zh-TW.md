@@ -40,7 +40,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
 ## YAML script mode
 `--script tasks.yaml` 會依序執行 YAML array。每筆必須在 `prompt`/`goal` 與 `goal_file` 中二選一。除非該 item 明確提供 `workflow_file`/`workflow`，否則必須提供 `validator`。`goal_file` 與 `ai_validator_prompt_file` 使用 UTF-8；相對路徑都以 YAML 檔案所在目錄為基準。
 
-除了 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file`、`project_root`、`workflow_file` 外，每個 item 也可覆寫 task-scoped CLI/runtime 設定：`backend`、`command`、`sandbox`、`agent_args`、`validator_args`、`protect_files`、validator/agent/planning/idle/API/watchdog timeout、`max_attempts`、`review_retries`、`max_cycles`、retry delay/wait/max-wait，以及 Final AI quorum；quorum 可使用 canonical `final_ai_validations` / `final_ai_required_passes`，也可使用 YAML alias `ai_validator_count` / `ai_validator_required_passes`。Plugin 類設定（例如 loop-context compression）沿用 CLI/API 相同 normalization。`script`、`work_dir`、`resume`、`force_new`、`plan_only`、output mode 屬於 batch orchestration，刻意只允許外層設定，確保 child durable state 固定在 `<work-dir>/script/<index>`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
+除了 `validator_prompt`、`ai_validator_prompt`/`ai_validator_prompt_file`、`project_root`、`workflow_file` 外，每個 item 也可覆寫 task-scoped CLI/runtime 設定：`backend`、`command`、`sandbox`、`agent_args`、`validator_args`、`protect_files`、validator/agent/planning/idle/API/watchdog timeout、`max_attempts`、`review_retries`、`max_cycles`、retry delay/wait/max-wait、`ai_validator_yolo`，以及 Final AI quorum；quorum 可使用 canonical `final_ai_validations` / `final_ai_required_passes`，也可使用 YAML alias `ai_validator_count` / `ai_validator_required_passes`。Plugin 類設定（例如 loop-context compression）沿用 CLI/API 相同 normalization。`script`、`work_dir`、`resume`、`force_new`、`plan_only`、output mode 屬於 batch orchestration，刻意只允許外層設定，確保 child durable state 固定在 `<work-dir>/script/<index>`。每筆引用的相對檔案路徑（包含 `workflow_file`）都以 script YAML 所在目錄為基準。每筆相對 `project_root` 以外層 `--project-root` 為基準；未指定時維持共用 root。每個 item 都在自己的 `<project-root>/.ai-task-runner/script/<index>` 保存 Runner-managed state；外層 YAML orchestrator 只送出 callback／JSON／UI event，不會再建立另一個 work directory。完成判定與 resume 使用各 item 的 state path。內層 runtime 結束後會恢復外層 script runtime，避免 Plugin/Event/State context 互相污染。
 
 ```yaml
 - goal_file: prompts/example-a.md
@@ -48,6 +48,7 @@ Resume 時若 state 已保存原始 Goal，就不需要再次提供 `--goal`；�
   validator: validation.py
   ai_validator_prompt_file: ai_validation.md
   ai_validator_count: 3
+  ai_validator_yolo: true
   workflow_file: workflows/build.yaml
 ```
 
@@ -148,7 +149,7 @@ flow:
   - validate_file
 ```
 
-`skip` 是 `skip_on_error` 的精簡 alias。Semantic Stage type（`plan`、`task`、`review`、`ai_validator`、`command`）自己擁有合理預設，因此 YAML 只需要描述真正的 Workflow 差異。`result_kind: validation` 表示外部 command validation gate；`validator: ai` 表示 AI validation capability。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。頂層 Plan 使用 Loader 提供的標準 task SOP；只有刻意自訂逐 Task 流程時才使用顯式 `scope: task`。Runtime 不再產生 `next_steps`、`expand` 或 `foreach` graph。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。Validation Stage 現在就是一般 top-level gate：可在 `flow` 任意位置放置多個 File / AI Validator，後面也可以繼續接一般 Stage；每個 Validator 都可有自己的 `recover`。Validator 不允許放在 `scope: task`。
+`skip` 是 `skip_on_error` 的精簡 alias。Semantic Stage type（`plan`、`task`、`review`、`ai_validator`、`command`）自己擁有合理預設，因此 YAML 只需要描述真正的 Workflow 差異。`result_kind: validation` 表示外部 command validation gate；`validator: ai` 表示 AI validation capability。AI validator Stage 上的 `ai_validator_yolo: true` 允許該 Stage 執行 command/build/test/coverage 檢查並寫入暫時驗證腳本；設為 `false` 則即使 run-level 開關開啟也強制 read-only。`recover` 直接放靜態 recovery Stage sequence，`restart_at` 仍是 FlowNode routing metadata。頂層 Plan 使用 Loader 提供的標準 task SOP；只有刻意自訂逐 Task 流程時才使用顯式 `scope: task`。Runtime 不再產生 `next_steps`、`expand` 或 `foreach` graph。`instructions_file` 以 Workflow YAML 所在目錄為基準載入 UTF-8 instructions；相對 `prompt` path 若在 Workflow YAML 旁存在，會優先解析為該本地檔案，否則保留 bundled prompt path，例如 `stages/execution.md`；`retry` 可為 `-1`、`0` 或有限非負整數。Validation Stage 現在就是一般 top-level gate：可在 `flow` 任意位置放置多個 File / AI Validator，後面也可以繼續接一般 Stage；每個 Validator 都可有自己的 `recover`。Validator 不允許放在 `scope: task`。
 
 
 完整自訂 Workflow 範例請看 `docs/user/CUSTOM_WORKFLOW.zh-TW.md` 與 `examples/custom_workflow_latest.yaml`。
@@ -159,6 +160,7 @@ flow:
 - Mixed Validation：使用 file `--validator`，再加 `--ai-validator-prompt` 或 `--ai-validator-prompt-file`。File Validator 是 deterministic hard gate，必須先 PASS；之後 Final AI voting 才會執行，而且兩個 gate 都要 PASS。
 - `--final-ai-validations`（alias `--ai-validator-count`）控制獨立的 Fresh Session 驗證次數。
 - `--final-ai-required-passes 0` 使用嚴格過半；設為正整數時，必須達到明確指定的 PASS 數。
+- `--ai-validator-yolo` 允許 Final AI validation 執行 command/build/test/coverage 檢查並建立暫時驗證腳本。Run-level 開關預設關閉，但 bundled `ai.yaml` 與 `mixed.yaml` 會在 Final AI stage 明確設定 `ai_validator_yolo: true`，方便直接改 YAML 調整。產物必須留在 temporary 或 Runner work/debug/cache 位置，仍禁止修改 production/source 檔案。
 
 例如 `--validator validation.py --ai-validator-prompt-file ai_validation.md --ai-validator-count 3` 代表 File Validator 必須 PASS，接著 3 個不同 Fresh Session 獨立驗證；未指定 required passes 時至少 2/3 PASS。
 

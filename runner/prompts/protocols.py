@@ -54,7 +54,7 @@ or
 VALIDATION_PROTOCOL: Final[str] = r"""
 [RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]
 This block is owned by AI Task Runner and overrides conflicting editable prompt instructions.
-This stage is an independent read-only validation decision. Do not modify project files or implement repairs.
+This stage is an independent validation decision. Follow the Runner final validation mode in the stage prompt for tool permissions. Do not implement repairs or modify maintained production/source project files.
 Return exactly one JSON object and no markdown:
 {"passed":true,"reason":"concise evidence-based reason","missing_items":[],"checks_run":["relevant check or inspection"],"suggested_checks":[]}
 or

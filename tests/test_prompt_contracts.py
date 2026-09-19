@@ -79,13 +79,13 @@ def test_immutable_protocols_own_structured_contracts():
     assert "RUNNER_IMMUTABLE_STRUCTURED_RETRY" in STRUCTURED_RETRY_PROTOCOL
     assert "never invent a missing item" in STRUCTURED_RETRY_PROTOCOL.lower()
 
-def test_ai_validator_prompt_is_readonly_and_tool_bounded():
+def test_ai_validator_prompt_mode_is_injected_by_stage():
     prompt = (PROMPT_ROOT / "stages" / "ai_validator.md").read_text(encoding="utf-8")
 
-    assert "Final validation. This is a fresh independent read-only session." in prompt
-    assert "do not modify files, run shell/write/edit tools" in prompt
-    assert "create tasks, search for tools, or ask for unavailable tools" in prompt
-    assert "focused read-only checks" in prompt
+    assert "Final validation. This is a fresh independent session." in prompt
+    assert "coverage evidence" in prompt
+    assert "write small temporary verification scripts" not in prompt
+    assert "read-only" not in prompt
 
 
 def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
@@ -102,10 +102,26 @@ def test_ai_validator_stage_always_injects_run_level_validation_resource():
     from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
 
     stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
-    ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="CHECK_MAGIC_BUSINESS_RULE"))
+    ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="CHECK_MAGIC_BUSINESS_RULE", ai_validator_yolo=False))
     custom_template_output = "Custom validator template that forgot validation.instructions."
     rendered = stage._augment_rendered_prompt(ctx, custom_template_output)
 
     assert "CHECK_MAGIC_BUSINESS_RULE" in rendered
+    assert "Runner final validation mode: read-only" in rendered
     assert "Runner-provided AI validation resource (required):" in rendered
     assert stage._augment_rendered_prompt(ctx, rendered) == rendered
+
+
+def test_ai_validator_stage_injects_yolo_validation_mode():
+    from types import SimpleNamespace
+    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+
+    stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai", ai_validator_yolo=True))
+    ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="", ai_validator_yolo=False))
+    rendered = stage._augment_rendered_prompt(ctx, "Validator template")
+
+    assert "Runner final validation mode: YOLO verification is enabled" in rendered
+    assert "write small temporary verification scripts" in rendered
+    assert "execute build/code/test commands" in rendered
+    assert "coverage validation" in rendered
+    assert "never in maintained project source" in rendered

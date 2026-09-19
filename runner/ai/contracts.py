@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal, Protocol
 
-BackendMode = Literal["planning", "review", "no_tool", "runtime"]
+BackendMode = Literal["planning", "review", "validation", "no_tool", "runtime"]
 
 
 @dataclass(frozen=True)

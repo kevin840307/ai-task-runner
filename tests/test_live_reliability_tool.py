@@ -77,6 +77,60 @@ def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path
     assert _option(file_only, "--planning-timeout") == "40"
 
 
+def test_live_system_final_ai_contract_matches_bundled_workflows():
+    assert live.system_final_ai_contract("ai") == (3, 2, True)
+    assert live.system_final_ai_contract("mixed") == (3, 2, True)
+
+
+def test_system_workflow_probe_rejects_reused_final_ai_sessions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1])
+        assert Path(command[command.index("--workflow") + 1]) == live.SYSTEM_WORKFLOWS["ai"]
+        work = project / ".ai-task-runner"
+        history = work / "debug" / "history"
+        history.mkdir(parents=True)
+        (work / "state.json").write_text(
+            json.dumps({"completed": True, "stage": "completed"}),
+            encoding="utf-8",
+        )
+        events = [
+            {"type": "runner.stage", "action": "start", "stage": "planning"},
+            {
+                "type": "model.prompt",
+                "call_id": "planning-1",
+                "session": "planner",
+                "session_mode": "fresh",
+            },
+            {"type": "runner.stage", "action": "start", "stage": "__plan_task__"},
+            {"type": "runner.stage", "action": "start", "stage": "__plan_review__"},
+            {"type": "runner.stage", "action": "start", "stage": "validate_ai"},
+            {"type": "model.result", "session": "validator-a"},
+            {"type": "model.result", "session": "validator-b"},
+        ]
+        (work / "log.txt").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        (history / "planning-1-prompt.txt").write_text(
+            "Plan the current goal.\n",
+            encoding="utf-8",
+        )
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    with pytest.raises(RuntimeError, match="expected 3, got 2"):
+        live.system_workflow_probe(settings(tmp_path), tmp_path, "ai")
+
+
 def test_runner_timeout_arguments_must_be_whole_seconds():
     assert live.whole_seconds_arg(12.0) == "12"
     with pytest.raises(ValueError, match="whole seconds"):
@@ -724,6 +778,24 @@ raise SystemExit(130)
 
 def test_session_expiry_recovery_preflight_rebuilds_fresh_session():
     live.session_expiry_recovery_preflight()
+
+
+def test_session_expiry_preflight_writes_harness_log_outside_project_root(monkeypatch):
+    seen = {}
+
+    def fake_run(command, log, timeout, observe=None):
+        seen["project"] = Path(command[command.index("--project-root") + 1]).resolve()
+        seen["log"] = Path(log).resolve()
+        seen["timeout"] = timeout
+        raise RuntimeError("stop after path capture")
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    with pytest.raises(RuntimeError, match="stop after path capture"):
+        live.session_expiry_recovery_preflight()
+
+    assert seen["timeout"] == 60
+    assert seen["project"] not in (seen["log"], *seen["log"].parents)
 
 
 def test_yaml_list_endurance_probe_uses_one_process_and_all_child_work_dirs(

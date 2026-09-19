@@ -386,12 +386,14 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
         "--project-root", str(tmp_path),
         "--validator", "ai",
         "--backend", "opencode",
+        "--ai-validator-yolo",
     ])
 
     assert code == 0
     assert len(captured) == 1
     assert captured[0].goal == "x"
     assert captured[0].backend == "opencode"
+    assert captured[0].ai_validator_yolo is True
     assert captured[0].human_output is True
 
 
@@ -447,6 +449,36 @@ def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
     assert config.ai_validator_prompt_file == str(prompt_file)
 
 
+def test_ai_validator_prompt_file_reaches_final_validation_prompt(tmp_path):
+    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+
+    prompt_file = tmp_path / "ai_validation.md"
+    prompt_file.write_text("USER_FILE_RULE: verify domain behavior.\n", encoding="utf-8")
+    config = RunRequest(
+        goal="build",
+        validator="ai",
+        ai_validator_prompt_file=str(prompt_file),
+    ).normalized_config()
+    stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
+    ctx = type("Ctx", (), {"config": config})()
+
+    rendered = stage._augment_rendered_prompt(ctx, "System Final AI prompt")
+
+    assert "System Final AI prompt" in rendered
+    assert "Runner-provided AI validation resource (required):" in rendered
+    assert "USER_FILE_RULE: verify domain behavior." in rendered
+
+
+def test_ai_validator_yolo_is_public_request_config():
+    config = RunRequest(
+        goal="build",
+        validator="ai",
+        ai_validator_yolo=True,
+    ).normalized_config()
+
+    assert config.ai_validator_yolo is True
+
+
 def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
     prompt_file = tmp_path / "ai_validation.md"
     prompt_file.write_text("check", encoding="utf-8")
@@ -482,6 +514,10 @@ def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
         (
             RunRequest(goal="x", validator="ai", retry_wait=10, retry_max_wait=5),
             "greater than or equal",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", ai_validator_yolo="true"),
+            "ai_validator_yolo must be a boolean",
         ),
     ],
 )

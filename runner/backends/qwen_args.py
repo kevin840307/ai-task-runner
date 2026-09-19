@@ -156,6 +156,23 @@ def configure_qwen_args(
         ensure_qwen_compat_tool(result)
         return result
 
+    if mode == "validation":
+        ensure_qwen_yolo(result)
+        ensure_qwen_max_tool_calls(result)
+        exclude_qwen_tools(
+            result,
+            (
+                "edit",
+                "notebook_edit",
+                "todo_write",
+                "skill",
+                "agent",
+                *QWEN_COMPUTER_USE_TOOLS,
+            ),
+        )
+        ensure_qwen_compat_tool(result)
+        return result
+
     ensure_qwen_yolo(result)
     ensure_qwen_max_tool_calls(result)
     exclude_qwen_tools(result, QWEN_RUNTIME_EXCLUDED_TOOLS)

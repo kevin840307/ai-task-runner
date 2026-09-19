@@ -167,6 +167,16 @@ def test_qwen_review_mode_is_read_only_and_project_readable():
     )
 
 
+def test_qwen_validation_mode_allows_commands_and_temp_script_writes():
+    args = configure_backend_args("qwen", "validation", [])
+    excluded = qwen_excluded_tools(args)
+
+    assert "--yolo" in args
+    assert args[args.index("--max-tool-calls") + 1] == "-1"
+    assert {"run_shell_command", "write_file"}.isdisjoint(excluded)
+    assert {"edit", "notebook_edit", "todo_write", "agent"} <= excluded
+
+
 def test_qwen_review_mode_respects_explicit_tool_call_limit():
     args = configure_backend_args("qwen", "review", ["--max-tool-calls", "8"])
 
@@ -242,6 +252,13 @@ def test_opencode_permission_policy_matches_stage_and_sandbox(tmp_path, monkeypa
     assert review["edit"] == "deny"
     assert review["bash"] == "deny"
     assert review["external_directory"] == "deny"
+
+    backend.configure_runtime("validation", sandbox=True)
+    validation = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]
+    assert validation["task"] == "deny"
+    assert validation["external_directory"] == "deny"
+    assert validation.get("bash", "allow") == "allow"
+    assert validation.get("edit", "allow") == "allow"
 
     backend.configure_runtime("runtime", sandbox=True)
     runtime = json.loads(backend.process_environment()["OPENCODE_CONFIG_CONTENT"])["permission"]

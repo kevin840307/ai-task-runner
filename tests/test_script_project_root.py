@@ -249,6 +249,7 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
   retry_max_wait: 9
   ai_validator_count: 3
   ai_validator_required_passes: 2
+  ai_validator_yolo: true
 """,
         encoding="utf-8",
     )
@@ -276,6 +277,18 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
     assert child.api_retry_max_wait == 9
     assert child.final_ai_validations == 3
     assert child.final_ai_required_passes == 2
+    assert child.ai_validator_yolo is True
+
+
+def test_yaml_item_ai_validator_yolo_rejects_non_boolean(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: ai\n  ai_validator_yolo: yes please\n",
+        encoding="utf-8",
+    )
+    item = load_yaml_script(script)[0]
+    with pytest.raises(RunnerError, match="ai_validator_yolo must be a boolean"):
+        build_script_item_config(base_args(tmp_path), item, 1)
 
 
 def test_yaml_item_canonical_final_ai_names_are_supported(tmp_path):

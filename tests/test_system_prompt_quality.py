@@ -46,9 +46,14 @@ def test_execution_is_incremental_and_test_aware():
 def test_final_validator_scales_to_multi_project_without_exhaustive_scan():
     text = _text(STAGES / "ai_validator.md")
     assert "cross-file, cross-module, and cross-project consistency" in text
+    assert "coverage evidence" in text
     assert "large or multi-project repositories" in text
     assert "not exhaustive inspection of every unrelated file or project" in text
     assert "original Goal as authoritative" in text
+    assert "follow existing architecture, ownership boundaries, naming, and helper/API patterns" in text
+    assert "avoid duplicate parallel implementations" in text
+    assert "over-engineered designs not required by the Goal" in text
+    assert "smallest clear implementation that remains maintainable" in text
 
 
 def test_system_workflow_topology_was_not_changed_by_prompt_optimization():
@@ -100,6 +105,12 @@ def test_system_workflow_stages_are_explicit_without_changing_flow():
     assert mixed["flow"] == ["planning", "validate_file", "validate_ai"]
     assert ai["stages"]["validate_ai"]["fresh_session_each_run"] is True
     assert mixed["stages"]["validate_ai"]["fresh_session_each_run"] is True
+    assert ai["stages"]["validate_ai"]["runs"] == 3
+    assert ai["stages"]["validate_ai"]["required_passes"] == 2
+    assert ai["stages"]["validate_ai"]["ai_validator_yolo"] is True
+    assert mixed["stages"]["validate_ai"]["runs"] == 3
+    assert mixed["stages"]["validate_ai"]["required_passes"] == 2
+    assert mixed["stages"]["validate_ai"]["ai_validator_yolo"] is True
     assert file["stages"]["validate_file"]["status"] == "正在執行 Python Validator"
 
 def test_plan_protocol_bounds_greenfield_and_repeated_discovery():
@@ -128,7 +139,7 @@ def test_editable_prompt_word_budgets_stay_bounded_for_small_models():
         STAGES / "planning_rules.md": 280,
         STAGES / "execution.md": 440,
         STAGES / "review.md": 170,
-        STAGES / "ai_validator.md": 300,
+        STAGES / "ai_validator.md": 320,
     }
     for path, maximum in limits.items():
         words = len(_text(path).split())

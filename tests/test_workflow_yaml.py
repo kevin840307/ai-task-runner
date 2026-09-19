@@ -870,6 +870,43 @@ flow:
     assert stage.status == "AI Stage"
 
 
+def test_ai_validator_yolo_can_be_set_in_workflow_stage(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  final:
+    type: ai_validator
+    validator: ai
+    ai_validator_yolo: true
+flow: [final]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    stage = create_stage(workflow[0])
+
+    assert workflow[0]["ai_validator_yolo"] is True
+    assert stage.spec.ai_validator_yolo is True
+
+
+def test_ai_validator_yolo_in_workflow_must_be_boolean(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  final:
+    type: ai_validator
+    validator: ai
+    ai_validator_yolo: "true"
+flow: [final]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="ai_validator_yolo must be a boolean"):
+        load_workflow(workflow_file)
+
+
 
 
 def test_system_review_owns_semantic_fresh_default():
