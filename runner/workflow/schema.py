@@ -43,6 +43,11 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     produces = values.get("produces")
     if produces not in {None, "", "tasks"}:
         raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
+    readonly_safety = values.get("readonly_safety")
+    if readonly_safety not in {None, "", "restore", "observe"}:
+        raise RunnerError(
+            f"workflow stage {name} readonly_safety must be restore or observe"
+        )
     for field in ("ai_validator_yolo",):
         if field in values and values[field] is not None and not isinstance(values[field], bool):
             raise RunnerError(f"workflow stage {name} {field} must be a boolean")

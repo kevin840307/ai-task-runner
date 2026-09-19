@@ -34,6 +34,7 @@
 | `--final-ai-validations`, `--ai-validator-count` | fresh session 的獨立 Final AI 投票數 | 1 |
 | `--final-ai-required-passes` | 必要 PASS 數 | 0 = 嚴格過半；否則不可超過總票數 |
 | `--ai-validator-yolo` | 允許 Final AI validation 執行 command/build/test/coverage 檢查與暫時驗證腳本 | run-level 預設關閉；bundled AI/mixed workflow 會在 stage 明確設定 |
+| `--readonly-safety` | Read-only Stage 變更處理：`restore` 或 `observe` | 預設 `restore`；`observe` 只回報一般 read-only 變更、不復原，但 protected paths 仍會復原 |
 | `--work-dir` | project root 內 Runner state dir | `.ai-task-runner` |
 
 Work directory 也包含顯示／診斷用途的檔案。`stream.log` 是給 detached local UI／live inspection 使用的最近 bounded subprocess output；每個 subprocess 會重置，且不屬於 CLI control 或 Resume semantics。

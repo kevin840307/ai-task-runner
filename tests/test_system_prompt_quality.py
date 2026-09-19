@@ -103,14 +103,19 @@ def test_system_workflow_stages_are_explicit_without_changing_flow():
     assert ai["flow"] == ["planning", "validate_ai"]
     assert file["flow"] == ["planning", "validate_file"]
     assert mixed["flow"] == ["planning", "validate_file", "validate_ai"]
+    assert ai["stages"]["planning"]["readonly_safety"] == "observe"
+    assert file["stages"]["planning"]["readonly_safety"] == "observe"
+    assert mixed["stages"]["planning"]["readonly_safety"] == "observe"
     assert ai["stages"]["validate_ai"]["fresh_session_each_run"] is True
     assert mixed["stages"]["validate_ai"]["fresh_session_each_run"] is True
     assert ai["stages"]["validate_ai"]["runs"] == 3
     assert ai["stages"]["validate_ai"]["required_passes"] == 2
     assert ai["stages"]["validate_ai"]["ai_validator_yolo"] is True
+    assert ai["stages"]["validate_ai"]["readonly_safety"] == "observe"
     assert mixed["stages"]["validate_ai"]["runs"] == 3
     assert mixed["stages"]["validate_ai"]["required_passes"] == 2
     assert mixed["stages"]["validate_ai"]["ai_validator_yolo"] is True
+    assert mixed["stages"]["validate_ai"]["readonly_safety"] == "observe"
     assert file["stages"]["validate_file"]["status"] == "正在執行 Python Validator"
 
 def test_plan_protocol_bounds_greenfield_and_repeated_discovery():

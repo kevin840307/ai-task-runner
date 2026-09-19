@@ -82,6 +82,45 @@ def test_live_system_final_ai_contract_matches_bundled_workflows():
     assert live.system_final_ai_contract("mixed") == (3, 2, True)
 
 
+def test_live_system_readonly_safety_contract_matches_bundled_workflows():
+    assert live.system_readonly_safety_contract() == {
+        "file": {"planning": "observe", "__plan_review__": "observe"},
+        "ai": {
+            "planning": "observe",
+            "__plan_review__": "observe",
+            "validate_ai": "observe",
+        },
+        "mixed": {
+            "planning": "observe",
+            "__plan_review__": "observe",
+            "validate_ai": "observe",
+        },
+    }
+
+
+def test_live_system_readonly_safety_contract_rejects_missing_observe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bad = tmp_path / "file.yaml"
+    bad.write_text(
+        """
+stages:
+  planning:
+    type: plan
+    status: Plan
+flow: [planning]
+""",
+        encoding="utf-8",
+    )
+    workflows = dict(live.SYSTEM_WORKFLOWS)
+    workflows["file"] = bad
+    monkeypatch.setattr(live, "SYSTEM_WORKFLOWS", workflows)
+
+    with pytest.raises(RuntimeError, match="system/file planning readonly_safety mismatch"):
+        live.system_readonly_safety_contract()
+
+
 def test_system_workflow_probe_rejects_reused_final_ai_sessions(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -833,6 +872,85 @@ def test_yaml_list_endurance_probe_uses_one_process_and_all_child_work_dirs(
         ".ai-task-runner/script/002",
         ".ai-task-runner/script/003",
     ]
+
+
+def test_yaml_list_resume_probe_accepts_first_item_completion_event(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeProcess:
+        pid = 12345
+
+        def __init__(self, command, **options):
+            batch = Path(command[command.index("--project-root") + 1])
+            item = batch / "item-1"
+            (item / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+            options["stdout"].write(
+                json.dumps({"type": "script.item_completed", "script_index": 1})
+                + "\n"
+            )
+            options["stdout"].flush()
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 130
+            return self.returncode
+
+    def fake_terminate(process):
+        process.returncode = 130
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        batch = Path(command[command.index("--project-root") + 1])
+        assert "--resume" in command
+        for index in (1, 2):
+            project = batch / f"item-{index}"
+            work = project / ".ai-task-runner" / "script" / f"{index:03d}"
+            (work / "debug").mkdir(parents=True, exist_ok=True)
+            state = {"completed": True, "stage": "completed"}
+            if index == 2:
+                state["validator_output"] = json.dumps({
+                    "passed": True,
+                    "required_passes": 2,
+                    "passes": 2,
+                    "runs": [{}, {}, {}],
+                })
+                (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+                (work / "log.txt").write_text(
+                    "\n".join([
+                        json.dumps({
+                            "type": "runner.stage",
+                            "action": "start",
+                            "stage": "validate_ai",
+                        }),
+                        json.dumps({"type": "model.result", "session": "a"}),
+                        json.dumps({"type": "model.result", "session": "b"}),
+                        json.dumps({"type": "model.result", "session": "c"}),
+                    ]) + "\n",
+                    encoding="utf-8",
+                )
+            else:
+                (work / "log.txt").write_text("{}\n", encoding="utf-8")
+            (work / "state.json").write_text(json.dumps(state), encoding="utf-8")
+            (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+            (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(
+            "\n".join([
+                json.dumps({"type": "script.item_completed", "script_index": 1}),
+                json.dumps({"type": "script.item_completed", "script_index": 2}),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(live, "terminate", fake_terminate)
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    live.yaml_list_resume_probe(settings(tmp_path), tmp_path)
 
 
 def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):

@@ -909,10 +909,46 @@ flow: [final]
 
 
 
+def test_readonly_safety_can_be_set_in_workflow_stage(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  check:
+    type: review
+    readonly_safety: observe
+flow: [check]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    stage = create_stage(workflow[0])
+
+    assert workflow[0]["readonly_safety"] == "observe"
+    assert stage.spec.readonly_safety == "observe"
+
+
+def test_readonly_safety_in_workflow_must_be_known_value(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  check:
+    type: review
+    readonly_safety: watch
+flow: [check]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="readonly_safety must be restore or observe"):
+        load_workflow(workflow_file)
+
+
 def test_system_review_owns_semantic_fresh_default():
     workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     review = next(item for item in workflow if item["name"] == "__plan_review__")
     assert "fresh_after_same_failures" not in review
+    assert review["readonly_safety"] == "observe"
     stage = create_stage(review)
     assert stage.semantic_failure_threshold == 2
 

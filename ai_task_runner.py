@@ -147,6 +147,12 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="allow Final AI validation to run commands and temporary verification scripts",
     )
+    command_parser.add_argument(
+        "--readonly-safety",
+        choices=("restore", "observe"),
+        default="restore",
+        help="restore or only observe unexpected project changes during read-only stages",
+    )
     command_parser.add_argument("--retry-max-wait", type=float, default=300, help="maximum model-call retry wait")
     add_plugin_arguments(command_parser)
     command_parser.add_argument("--work-dir", default=".ai-task-runner")

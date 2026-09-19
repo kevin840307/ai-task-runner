@@ -225,6 +225,17 @@ def restore_changed(saved: dict[Path, tuple[str | None, ProtectedData]]) -> list
             shutil.rmtree(backup_root, ignore_errors=True)
 
 
+def _readonly_safety_mode(context=None) -> str:
+    stage_value = getattr(getattr(context, "stage", None), "readonly_safety", "")
+    if stage_value:
+        return str(stage_value)
+    try:
+        runtime = current_runtime()
+    except RuntimeError:
+        return "restore"
+    return str(getattr(runtime.config, "readonly_safety", "restore") or "restore")
+
+
 @dataclass
 class _Token:
     protected_snapshot: dict[Any, Any]
@@ -333,6 +344,7 @@ class SafetyHook:
 
     def after_execution(self, context, token: _Token) -> list[HookViolation]:
         project_changed: list[str] = []
+        observed_only = False
         protected_changed: list[str] = []
         try:
             if token.before is not None and token.backup is not None:
@@ -343,16 +355,22 @@ class SafetyHook:
                         if token.before.get(path) != after.get(path)
                     )
                     if project_changed:
-                        restore_project_changes(context.root, token.backup, project_changed)
+                        if _readonly_safety_mode(context) == "observe":
+                            observed_only = True
+                        else:
+                            restore_project_changes(context.root, token.backup, project_changed)
                 else:
                     self._sync_baseline(context, token.before)
         finally:
             protected_changed = restore_changed(token.protected_snapshot)
+        if observed_only and token.before is not None:
+            self._sync_baseline(context, token.before)
         violations: list[HookViolation] = []
         if protected_changed:
             violations.append(HookViolation("protected file modified and restored: " + ", ".join(protected_changed), "protected", tuple(protected_changed)))
         if project_changed:
-            violations.append(HookViolation(f"{context.actor} modified files and they were restored: " + ", ".join(project_changed), "readonly", tuple(project_changed)))
+            action = "observed and not restored" if observed_only else "restored"
+            violations.append(HookViolation(f"{context.actor} modified files and they were {action}: " + ", ".join(project_changed), "readonly", tuple(project_changed)))
         return violations
 
     def process_environment(self, environment):

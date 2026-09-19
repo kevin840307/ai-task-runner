@@ -5,6 +5,7 @@
 - `design/DESIGN.zh-TW.md`：完整流程、Retry/Recovery 設計。
 - `design/ARCHITECTURE.zh-TW.md`：模組、責任邊界、資料流。
 - `user/USER_GUIDE.zh-TW.md`：使用方式。
+- `user/WORKTREE_CONCURRENT_DEVELOPMENT.zh-TW.md`：使用不同 Git worktree 同時開發多個需求。
 - `user/CLI_REFERENCE.zh-TW.md`：所有 CLI option 與 validator argument。
 - `user/API_REFERENCE.zh-TW.md`：Python integration API。
 - `design/PROMPT_SESSION.zh-TW.md`：Fresh/Same/Rebuilt Prompt/Session 契約。

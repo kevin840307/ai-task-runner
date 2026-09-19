@@ -63,6 +63,7 @@ class RuntimeConfig:
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     ai_validator_yolo: bool = False
+    readonly_safety: str = "restore"
     workflow: list[dict[str, Any]] = field(default_factory=_default_workflow)
     workflow_explicit: bool = False
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -139,6 +140,8 @@ class RuntimeConfig:
             )
         if not isinstance(self.ai_validator_yolo, bool):
             raise ValueError("ai_validator_yolo must be a boolean")  # noqa: TRY004
+        if self.readonly_safety not in {"restore", "observe"}:
+            raise ValueError("readonly_safety must be 'restore' or 'observe'")
         if not isinstance(self.plugins, dict):
             raise ValueError("plugins must be an object")  # noqa: TRY004
         if not isinstance(self.workflow, list) or not self.workflow:

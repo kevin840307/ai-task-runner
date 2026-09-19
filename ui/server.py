@@ -666,7 +666,7 @@ class UIState(WorkflowBuilderMixin):
         tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "") -> None:
+    def launch_message(self, project: Path, message: str, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
         """Start one Workflow task from an immutable UI request snapshot.
 
         A completed prior run is reset automatically. An interrupted/stopped run
@@ -691,6 +691,7 @@ class UIState(WorkflowBuilderMixin):
                 validator=validator,
                 workflow=workflow,
                 ai_validator_prompt_file=ai_validator_prompt_file,
+                readonly_safety=readonly_safety,
                 request_mode="workflow",
             )
             try:
@@ -704,6 +705,7 @@ class UIState(WorkflowBuilderMixin):
                     workflow=request["workflow"],
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
+                    readonly_safety=request.get("readonly_safety", "restore"),
                 )
             except Exception:
                 # A failed launch must not leave a fake user message or an orphan request snapshot.
@@ -732,6 +734,7 @@ class UIState(WorkflowBuilderMixin):
         workflow: str = "",
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
+        readonly_safety: str = "restore",
     ) -> None:
         with self._launch_lock:
             runtime = self.read_runtime(project)
@@ -758,6 +761,8 @@ class UIState(WorkflowBuilderMixin):
                 command += ["--workflow", workflow]
             if ai_validator_prompt_file:
                 command += ["--ai-validator-prompt-file", ai_validator_prompt_file]
+            if readonly_safety == "observe":
+                command += ["--readonly-safety", "observe"]
             token, reservation = self._reserve_launch(project, mode)
             try:
                 kwargs = _background_process_kwargs()
@@ -785,6 +790,7 @@ class UIState(WorkflowBuilderMixin):
         validator: str = "",
         workflow: str = "",
         ai_validator_prompt_file: str = "",
+        readonly_safety: str = "restore",
         request_mode: str = "workflow",
     ) -> dict:
         text = str(message or "").strip()
@@ -799,6 +805,9 @@ class UIState(WorkflowBuilderMixin):
                 raise ValueError(f"Workflow not found: {workflow_path}")
         requirements = self._workflow_requirements(workflow_path) if workflow_path else {"requires_python_validator": False, "has_ai_validator": False}
         model_value = self._normalize_model(model)
+        readonly_safety_value = str(readonly_safety or "restore").strip() or "restore"
+        if readonly_safety_value not in {"restore", "observe"}:
+            raise ValueError("readonly_safety must be restore or observe")
         validator_value = str(validator or "").strip()
         if requirements["requires_python_validator"]:
             if not validator_value:
@@ -852,6 +861,7 @@ class UIState(WorkflowBuilderMixin):
             "prompt_file": str(prompt_file),
             "validator": validator_value,
             "ai_validator_prompt_file": ai_prompt_snapshot,
+            "readonly_safety": readonly_safety_value,
             "requires_python_validator": bool(requirements["requires_python_validator"]),
             "has_ai_validator": bool(requirements["has_ai_validator"]),
         }
@@ -2639,6 +2649,7 @@ class Handler(SimpleHTTPRequestHandler):
                     validator=str(body.get("validator", "")),
                     workflow=str(body.get("workflow", "")),
                     ai_validator_prompt_file=str(body.get("ai_validator_prompt_file", "")),
+                    readonly_safety=str(body.get("readonly_safety", "restore")),
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/project/history/clear":
@@ -2657,6 +2668,7 @@ class Handler(SimpleHTTPRequestHandler):
                     model=str(request.get("model") or ""),
                     validator=str(request.get("validator") or ""),
                     workflow=str(request.get("workflow") or ""),
+                    readonly_safety=str(request.get("readonly_safety") or "restore"),
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/project/reset":

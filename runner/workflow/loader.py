@@ -153,7 +153,11 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
     )
     review = _normalize_stage(
         "__plan_review__",
-        {"type": "review", "status": "AI 正在確認任務是否完成"},
+        {
+            "type": "review",
+            "status": "AI 正在確認任務是否完成",
+            "readonly_safety": "observe",
+        },
         source,
     )
     review["scope"] = "task"

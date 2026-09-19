@@ -250,6 +250,7 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
   ai_validator_count: 3
   ai_validator_required_passes: 2
   ai_validator_yolo: true
+  readonly_safety: observe
 """,
         encoding="utf-8",
     )
@@ -278,6 +279,7 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
     assert child.final_ai_validations == 3
     assert child.final_ai_required_passes == 2
     assert child.ai_validator_yolo is True
+    assert child.readonly_safety == "observe"
 
 
 def test_yaml_item_ai_validator_yolo_rejects_non_boolean(tmp_path):
@@ -288,6 +290,17 @@ def test_yaml_item_ai_validator_yolo_rejects_non_boolean(tmp_path):
     )
     item = load_yaml_script(script)[0]
     with pytest.raises(RunnerError, match="ai_validator_yolo must be a boolean"):
+        build_script_item_config(base_args(tmp_path), item, 1)
+
+
+def test_yaml_item_readonly_safety_rejects_invalid_value(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: ai\n  readonly_safety: watch\n",
+        encoding="utf-8",
+    )
+    item = load_yaml_script(script)[0]
+    with pytest.raises(RunnerError, match="readonly_safety must be 'restore' or 'observe'"):
         build_script_item_config(base_args(tmp_path), item, 1)
 
 

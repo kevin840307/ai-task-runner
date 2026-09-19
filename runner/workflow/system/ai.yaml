@@ -2,6 +2,7 @@ stages:
   planning:
     type: plan
     status: AI 正在依任務複雜度建立可驗證 TODO
+    readonly_safety: observe
 
   repair_plan:
     type: plan
@@ -17,6 +18,7 @@ stages:
     runs: 3
     required_passes: 2
     ai_validator_yolo: true
+    readonly_safety: observe
     recover: [repair_plan]
 
 flow:

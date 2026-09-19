@@ -387,6 +387,7 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
         "--validator", "ai",
         "--backend", "opencode",
         "--ai-validator-yolo",
+        "--readonly-safety", "observe",
     ])
 
     assert code == 0
@@ -394,6 +395,7 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
     assert captured[0].goal == "x"
     assert captured[0].backend == "opencode"
     assert captured[0].ai_validator_yolo is True
+    assert captured[0].readonly_safety == "observe"
     assert captured[0].human_output is True
 
 
@@ -479,6 +481,16 @@ def test_ai_validator_yolo_is_public_request_config():
     assert config.ai_validator_yolo is True
 
 
+def test_readonly_safety_observe_is_public_request_config():
+    config = RunRequest(
+        goal="build",
+        validator="ai",
+        readonly_safety="observe",
+    ).normalized_config()
+
+    assert config.readonly_safety == "observe"
+
+
 def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
     prompt_file = tmp_path / "ai_validation.md"
     prompt_file.write_text("check", encoding="utf-8")
@@ -518,6 +530,10 @@ def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
         (
             RunRequest(goal="x", validator="ai", ai_validator_yolo="true"),
             "ai_validator_yolo must be a boolean",
+        ),
+        (
+            RunRequest(goal="x", validator="ai", readonly_safety="watch"),
+            "readonly_safety must be 'restore' or 'observe'",
         ),
     ],
 )

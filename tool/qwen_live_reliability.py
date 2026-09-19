@@ -474,6 +474,39 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     return runs, required, yolo
 
 
+def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
+    """Verify bundled system workflows default read-only AI stages to observe."""
+    from runner.workflow.loader import load_workflow
+
+    expected = {
+        "file": {"planning": "observe", "__plan_review__": "observe"},
+        "ai": {
+            "planning": "observe",
+            "__plan_review__": "observe",
+            "validate_ai": "observe",
+        },
+        "mixed": {
+            "planning": "observe",
+            "__plan_review__": "observe",
+            "validate_ai": "observe",
+        },
+    }
+    observed: dict[str, dict[str, str | None]] = {}
+    for workflow, stages in expected.items():
+        loaded = load_workflow(SYSTEM_WORKFLOWS[workflow])
+        by_name = {str(node.get("name", "")): node for node in loaded}
+        observed[workflow] = {}
+        for stage, expected_value in stages.items():
+            actual = by_name.get(stage, {}).get("readonly_safety")
+            observed[workflow][stage] = actual if isinstance(actual, str) else None
+            if actual != expected_value:
+                raise RuntimeError(
+                    f"system/{workflow} {stage} readonly_safety mismatch: "
+                    f"expected {expected_value!r}, got {actual!r}"
+                )
+    return observed
+
+
 def run_command(
     command: list[str],
     log: Path,
@@ -1222,6 +1255,8 @@ def runtime_long_path_preflight() -> None:
 def readonly_long_path_preflight() -> None:
     """Prove the reusable read-only baseline restores deep paths and follows valid writes."""
     from types import SimpleNamespace
+    from runner.bootstrap import runtime_scope
+    from runner.config.runtime import RuntimeConfig
     from runner.plugins.safety import SafetyHook
 
     class ProbeSafetyHook(SafetyHook):
@@ -1258,6 +1293,33 @@ def readonly_long_path_preflight() -> None:
         hook.after_execution(context("readonly", "validator"), second)
         if read_text(target)[0] != "v2":
             raise RuntimeError("read-only snapshot cache did not track legitimate writes")
+
+        observe_config = RuntimeConfig(
+            goal="readonly observe preflight",
+            project_root=str(root),
+            validator="ai",
+            readonly_safety="observe",
+        )
+        with runtime_scope(observe_config):
+            observed = hook.before_execution(context("readonly", "review"))
+            write_text(target, "observed")
+            violations = hook.after_execution(context("readonly", "review"), observed)
+            if read_text(target)[0] != "observed" or not any(
+                "observed and not restored" in violation.message
+                for violation in violations
+            ):
+                raise RuntimeError("read-only observe mode restored an ordinary change")
+
+            class ProtectedProbeSafetyHook(SafetyHook):
+                def _protected(self, root):
+                    return [target]
+
+            protected_hook = ProtectedProbeSafetyHook()
+            protected = protected_hook.before_execution(context("readonly", "review"))
+            write_text(target, "protected-bad")
+            protected_hook.after_execution(context("readonly", "review"), protected)
+            if read_text(target)[0] != "observed":
+                raise RuntimeError("read-only observe mode failed to restore protected data")
 
 
 def technical_artifact_safety_preflight() -> None:
@@ -1842,19 +1904,38 @@ def yaml_list_resume_probe(
     deadline = time.monotonic() + settings.run_timeout
     first_mtime = None
     first_state = projects[0] / ".ai-task-runner" / "script" / "001" / "state.json"
+
+    def first_item_mtime() -> int | None:
+        state_done = read_json(first_state).get("completed") is True
+        event_done = any(
+            event.get("type") == "script.item_completed"
+            and event.get("script_index") == 1
+            for event in jsonl_events(first_log)
+        )
+        health = projects[0] / "health.txt"
+        if (state_done or event_done) and health.is_file():
+            return health.stat().st_mtime_ns
+        return None
+
     try:
         while process.poll() is None and time.monotonic() < deadline:
-            if read_json(first_state).get("completed") is True:
-                first_mtime = (projects[0] / "health.txt").stat().st_mtime_ns
+            first_mtime = first_item_mtime()
+            if first_mtime is not None:
                 terminate(process)
                 break
             time.sleep(0.1)
     finally:
+        if first_mtime is None:
+            first_mtime = first_item_mtime()
         if process.poll() is None:
             terminate(process)
         stream.close()
     if first_mtime is None:
-        raise RuntimeError("could not interrupt YAML List after its first completed item")
+        exit_code = process.poll()
+        raise RuntimeError(
+            "could not interrupt YAML List after its first completed item: "
+            f"exit={exit_code}, state={read_json(first_state)}"
+        )
 
     resume_log = console_log(batch, "resume-console.jsonl")
     code = run_command(
@@ -2404,6 +2485,8 @@ def main() -> int:
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
         flush=True,
     )
+    readonly_contract = system_readonly_safety_contract()
+    print("PASS system Workflow readonly_safety observe contract preflight", flush=True)
     workflow_dryrun_negative_preflight()
     print("PASS workflow dry-run negative/error preflight", flush=True)
     stage_result_mapping_preflight()
@@ -2503,6 +2586,7 @@ def main() -> int:
         "http_503_recovered": True,
         "single_process_yaml_items": args.single_process_yaml_items,
         "workflow_dryrun_preflight": True,
+        "system_readonly_safety_contract": readonly_contract,
         "workflow_dryrun_negative_preflight": True,
         "stage_result_mapping_preflight": True,
         "runtime_long_path_preflight": True,

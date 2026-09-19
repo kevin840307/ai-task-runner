@@ -1132,6 +1132,26 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(manifest["validator"], "")
         self.assertFalse(manifest["requires_python_validator"]); self.assertFalse(manifest["has_ai_validator"])
 
+    def test_launch_message_passes_readonly_safety_observe(self) -> None:
+        self.workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+        with (
+            patch.object(self.state, "_known_workflow_paths", return_value=[self.workflow]),
+            patch.object(self.state, "read_runtime", return_value={"running": False}),
+            patch("ui.server.subprocess.Popen") as popen,
+        ):
+            self.state.launch_message(
+                self.project,
+                "fix this",
+                workflow=str(self.workflow),
+                readonly_safety="observe",
+            )
+        command = popen.call_args.args[0]
+        self.assertIn("--readonly-safety", command)
+        self.assertEqual(command[command.index("--readonly-safety") + 1], "observe")
+        goal_file = Path(command[command.index("--goal-file") + 1])
+        manifest = json.loads((goal_file.parent / "request.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["readonly_safety"], "observe")
+
     def test_run_request_requires_python_validator_only_when_workflow_uses_it(self) -> None:
         self.workflow.write_text("""stages:
   validate:

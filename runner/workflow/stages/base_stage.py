@@ -33,6 +33,7 @@ class BaseStageSpec:
     retry: int | None = None
     runs: int | None = None
     required_passes: int | None = None
+    readonly_safety: str = ""
     track_changes: bool = False
     tolerate_restored_changes: bool = False
     timeout: float | None = None
@@ -68,6 +69,7 @@ class BaseStage:
         self.retry = spec.retry
         self.skip_on_error = spec.skip_on_error
         self.tolerate_restored_changes = spec.tolerate_restored_changes
+        self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
         self.fresh_session_on_start = spec.fresh_session_on_start
         if spec.parser is None and self.parser_name:

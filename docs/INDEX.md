@@ -5,6 +5,7 @@ Version: 1.2.66
 - `design/DESIGN.md`: complete behavior and recovery design.
 - `design/ARCHITECTURE.md`: modules, boundaries, and data flow.
 - `user/USER_GUIDE.md`: end-user workflows.
+- `user/WORKTREE_CONCURRENT_DEVELOPMENT.md`: running concurrent requirements through separate Git worktrees.
 - `user/CLI_REFERENCE.md`: every CLI option and validator argument behavior.
 - `user/API_REFERENCE.md`: Python integration API.
 - `design/PROMPT_SESSION.md`: Fresh/Same/Rebuilt prompt/session contract.

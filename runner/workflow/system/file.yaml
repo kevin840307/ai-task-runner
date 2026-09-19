@@ -2,6 +2,7 @@ stages:
   planning:
     type: plan
     status: AI 正在依任務複雜度建立可驗證 TODO
+    readonly_safety: observe
 
   repair_plan:
     type: plan
