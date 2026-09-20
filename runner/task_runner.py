@@ -9,6 +9,7 @@ from .errors import ConfigurationError, RunnerError
 from .project.files import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
+from .ui_projects import register_ui_project
 from .workflow.loader import workflow_fingerprint
 from .workflow.snapshot import (
     freeze_run_resource,
@@ -29,6 +30,8 @@ class TaskRunner:
             raise RunnerError("--validator is required unless an explicit workflow is used")
 
         self.root = Path(self.config.project_root).resolve()
+        if self.config.auto_register_ui_project:
+            register_ui_project(self.root)
         self.validator_is_ai = bool(self.config.validator) and self.config.validator.lower() == "ai"
         self.validator_path = (
             None

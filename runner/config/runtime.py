@@ -73,6 +73,7 @@ class RuntimeConfig:
     plan_only: bool = False
     human_output: bool = True
     json_events: bool = False
+    auto_register_ui_project: bool = False
     event_callback: EventHandler | None = None
     script_index: int | None = None
     script_total: int | None = None

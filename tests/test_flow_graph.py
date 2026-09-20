@@ -185,6 +185,57 @@ def test_task_scoped_stages_run_for_each_planned_todo():
     assert ctx.state.task_step == 0
     assert ctx.state.workflow_position == 3
 
+
+def test_task_error_with_changed_files_continues_to_review_gate():
+    task = Task("t1", "one", "d", ["a"], "o")
+    workflow = [
+        item("execute", scope="task", _workflow_index=0),
+        item("review", scope="task", _workflow_index=1),
+        item("validate", _workflow_index=2),
+    ]
+    ctx = context(workflow, [task])
+
+    def callback(stage, *_):
+        if stage.name == "execute":
+            return StageResult(
+                "execute",
+                "error",
+                output="agent process exited after writing files",
+                changed_files=["health.txt"],
+                kind="task",
+            )
+        if stage.name == "review":
+            return StageResult("review", "pass", kind="review")
+        return StageResult(stage.name, "pass", kind="validation")
+
+    executor = Executor(callback)
+    code = Pipeline(ctx, workflow).run(executor)
+
+    assert executor.seen == ["execute", "review", "validate"]
+    assert ctx.state.current == 1
+    assert ctx.state.completed is True
+    assert code == 0
+
+
+def test_task_error_without_changed_files_stops_before_review_gate():
+    task = Task("t1", "one", "d", ["a"], "o")
+    workflow = [
+        item("execute", scope="task", _workflow_index=0),
+        item("review", scope="task", _workflow_index=1),
+    ]
+    ctx = context(workflow, [task])
+    executor = Executor(
+        lambda stage, *_: StageResult(stage.name, "error", kind="task")
+    )
+
+    code = Pipeline(ctx, workflow).run(executor)
+
+    assert executor.seen == ["execute"]
+    assert ctx.state.current == 0
+    assert ctx.state.completed is False
+    assert code == 1
+
+
 def test_repeat_is_opt_in_and_default_recovery_is_unchanged():
     workflow = [item("review", recover=[item("repair")])]
     ctx = context(workflow)
@@ -559,9 +610,23 @@ def test_max_attempts_fail_policy_stops_without_final_recovery():
     workflow = [item("gate", max_attempts=2, on_exhausted="fail", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "fail" if stage.name == "gate" else "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    code = Pipeline(ctx, workflow).run(executor)
     assert executor.seen == ["gate", "repair", "gate"]
     assert ctx.state.workflow_position == 0
+    assert code == 1
+
+
+def test_unrecovered_failure_returns_nonzero_without_advancing():
+    workflow = [item("validate", _workflow_index=0)]
+    ctx = context(workflow)
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "fail"))
+
+    code = Pipeline(ctx, workflow).run(executor)
+
+    assert executor.seen == ["validate"]
+    assert ctx.state.workflow_position == 0
+    assert ctx.state.completed is False
+    assert code == 1
 
 
 def test_max_attempts_resets_after_forward_progress_then_later_restart():

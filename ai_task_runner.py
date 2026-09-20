@@ -156,6 +156,12 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument("--retry-max-wait", type=float, default=300, help="maximum model-call retry wait")
     add_plugin_arguments(command_parser)
     command_parser.add_argument("--work-dir", default=".ai-task-runner")
+    command_parser.add_argument(
+        "--no-ui-project-register",
+        dest="auto_register_ui_project",
+        action="store_false",
+        help="do not add this CLI run's project root to the local UI project list",
+    )
     command_parser.add_argument("--json-events", action="store_true", help="emit JSON Lines progress events")
     command_parser.add_argument("--resume", action="store_true")
     command_parser.add_argument("--force-new", action="store_true")

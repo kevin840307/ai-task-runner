@@ -33,6 +33,13 @@ SYSTEM_WORKFLOWS = {
 }
 SYSTEM_FINAL_AI_RUNS = 3
 SYSTEM_FINAL_AI_REQUIRED_PASSES = 2
+QWEN_SANDBOX_ERROR_MARKERS = (
+    "failed to connect to the docker api",
+    "dockerdesktoplinuxengine",
+    "failed to obtain sandbox image",
+    "sandbox image",
+    "failed to relaunch the cli process",
+)
 REPAIR_INITIAL = "INITIAL"
 REPAIR_FINAL = "RECOVERED"
 FINAL_AI_PROMPT = """Inspect only the deliverable required by the original goal.
@@ -402,6 +409,7 @@ def runner_command(
         "--retry-wait", "0" if timeout_probe else "2",
         "--retry-max-wait", "30",
         "--json-events",
+        "--no-ui-project-register",
     ]
     command.extend(
         ["--script", str(script)]
@@ -542,6 +550,66 @@ def run_command(
         if process.poll() is None:
             terminate(process)
         stream.close()
+
+
+def _tail_text(text: str, limit: int = 1200) -> str:
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def qwen_sandbox_required(settings: Settings, hours: float = 0) -> bool:
+    return settings.sandbox or (hours > 0 and settings.soak_sandbox_every > 0)
+
+
+def qwen_sandbox_log_diagnostic(path: Path) -> str:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    lowered = text.lower()
+    if not any(marker in lowered for marker in QWEN_SANDBOX_ERROR_MARKERS):
+        return ""
+    return (
+        "Qwen sandbox unavailable: Docker daemon/image access failed. "
+        "Start Docker Desktop or disable sandbox probes with --soak-sandbox-every 0. "
+        "Recent evidence: "
+        + _tail_text(text)
+    )
+
+
+def qwen_sandbox_preflight(settings: Settings, hours: float = 0) -> None:
+    if not qwen_sandbox_required(settings, hours):
+        return
+    docker = shutil.which("docker")
+    if not docker:
+        raise RuntimeError(
+            "Qwen sandbox unavailable: docker command not found. "
+            "Install/start Docker Desktop or disable sandbox probes with --soak-sandbox-every 0."
+        )
+    try:
+        result = subprocess.run(
+            [docker, "info"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(
+            "Qwen sandbox unavailable: Docker daemon not reachable. "
+            "Start Docker Desktop or disable sandbox probes with --soak-sandbox-every 0. "
+            f"Detail: {error}"
+        ) from error
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Qwen sandbox unavailable: Docker daemon not reachable. "
+            "Start Docker Desktop or disable sandbox probes with --soak-sandbox-every 0. "
+            "Recent evidence: "
+            + _tail_text(result.stdout)
+        )
 
 
 def terminate(process: subprocess.Popen[str]) -> None:
@@ -987,6 +1055,7 @@ def session_expiry_recovery_preflight() -> None:
             "--agent-timeout", "30",
             "--planning-timeout", "30",
             "--force-new",
+            "--no-ui-project-register",
             "--json-events",
         ]
         previous = os.environ.get("SESSION_TEST_STATE_DIR")
@@ -1626,7 +1695,8 @@ flow:
     scope: task
   - stage: review
     scope: task
-  - validate_file
+  - stage: validate_file
+    recover: [repair]
 '''
 
 REVIEW_REPAIR_VALIDATOR = '''from __future__ import annotations
@@ -1932,6 +2002,12 @@ def yaml_list_resume_probe(
         stream.close()
     if first_mtime is None:
         exit_code = process.poll()
+        diagnostic = qwen_sandbox_log_diagnostic(first_log)
+        if diagnostic:
+            raise RuntimeError(
+                "YAML List first item did not complete because "
+                f"{diagnostic}: exit={exit_code}, state={read_json(first_state)}"
+            )
         raise RuntimeError(
             "could not interrupt YAML List after its first completed item: "
             f"exit={exit_code}, state={read_json(first_state)}"
@@ -2473,6 +2549,9 @@ def main() -> int:
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
+    qwen_sandbox_preflight(settings, args.hours)
+    if qwen_sandbox_required(settings, args.hours):
+        print("PASS Qwen sandbox Docker preflight", flush=True)
     api_retry_classification_preflight()
     print("PASS API transient/deterministic retry classification preflight", flush=True)
     task_array_recovery_preflight()

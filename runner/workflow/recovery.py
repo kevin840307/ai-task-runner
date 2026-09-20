@@ -106,6 +106,12 @@ class RecoveryPolicy:
             return RecoveryAction("restart", limit_reached)
         if result.status == "fail" and node.recover:
             return RecoveryAction("recover", limit_reached)
+        if (
+            result.status == "error"
+            and result.kind == "task"
+            and result.changed_files
+        ):
+            return RecoveryAction("next", limit_reached)
         if result.status in {"fail", "error"}:
             return RecoveryAction("stop", limit_reached)
 

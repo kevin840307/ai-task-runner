@@ -37,15 +37,15 @@ def test_multi_retry(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'execution_model_error',max_attempts=2); assert r.completed; ex=[x for x in recs if x['stage']=='execute']; assert len(ex)>=4; assert any(not x['resumed'] for x in ex[1:])
 def test_review_repair(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'review_retry'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=2; assert sum(x['stage']=='execute' for x in recs)>=2
-def test_ai_replan(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'ai_replan'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=2; assert r.states[0]['cycle']>=2
-def test_default_unlimited_cycles_continue_past_four_failures(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'ai_replan_many'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=5; assert r.states[0]['cycle']>=5
+def test_ai_quorum_absorbs_one_failed_vote(tmp_path,monkeypatch):
+ r,recs=base(tmp_path,monkeypatch,'ai_replan'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=3; assert r.states[0]['cycle']==1
+def test_default_ai_quorum_replans_after_failed_vote_set(tmp_path,monkeypatch):
+ r,recs=base(tmp_path,monkeypatch,'ai_replan_many'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=6; assert r.states[0]['cycle']==2
 def test_yaml_default_unlimited_cycles_continue_past_four_failures(tmp_path,monkeypatch):
  sd=tmp_path.parent/f'{tmp_path.name}-yaml-many-state'; monkeypatch.setenv('SCENARIO','ai_replan_many'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
  script=tmp_path/'tasks.yaml'; script.write_text('- prompt: Create requested result\n  validator: ai\n',encoding='utf-8')
  r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
- assert r.completed; assert r.states[0]['cycle']>=5
+ assert r.completed; assert r.states[0]['cycle']==2
 def test_yaml_mixed_reliability_gate_survives_repeated_final_ai_replans(tmp_path,monkeypatch):
  sd=tmp_path.parent/f'{tmp_path.name}-yaml-mixed-reliability-state'; monkeypatch.setenv('SCENARIO','ai_replan_many_per_project'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
  for name in ('one','two'): mixed_project(tmp_path/name)
@@ -76,13 +76,13 @@ def test_stagnation_repair(tmp_path,monkeypatch):
 def test_api_503_recovers(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'api_503',max_attempts=1); assert r.completed; assert sum(x['stage']=='execute' for x in recs)>=4
 
-def test_readonly_review_validator_restores_mutation(tmp_path,monkeypatch):
+def test_system_readonly_review_validator_observes_mutation(tmp_path,monkeypatch):
  r,recs=base(tmp_path,monkeypatch,'readonly',max_attempts=2)
  assert r.completed
- assert not (tmp_path/'review_mutation.txt').exists()
- assert not (tmp_path/'validator_mutation.txt').exists()
- assert sum(x['stage']=='review' for x in recs)>=2
- assert sum(x['stage']=='validator' for x in recs)>=2
+ assert (tmp_path/'review_mutation.txt').exists()
+ assert (tmp_path/'validator_mutation.txt').exists()
+ assert sum(x['stage']=='review' for x in recs)>=1
+ assert sum(x['stage']=='validator' for x in recs)>=3
 
 def test_plan_only_then_resume(tmp_path,monkeypatch):
  sd=tmp_path.parent/f'{tmp_path.name}-resume-state'; monkeypatch.setenv('SCENARIO','happy_path'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))

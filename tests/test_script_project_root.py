@@ -38,6 +38,20 @@ def test_yaml_item_project_root_resolves_from_outer_project_root(tmp_path):
     )
 
 
+def test_yaml_item_inherits_cli_ui_auto_registration_flag(tmp_path):
+    project = tmp_path / "one"
+    project.mkdir()
+    script = tmp_path / "tasks.yaml"
+    script.write_text("- prompt: one\n  project_root: one\n  validator: ai\n", encoding="utf-8")
+    item = load_yaml_script(script)[0]
+    args = base_args(tmp_path)
+    args.auto_register_ui_project = True
+
+    child = build_script_item_config(args, item, 1)
+
+    assert child.auto_register_ui_project is True
+
+
 def test_yaml_item_project_root_rejects_empty_value(tmp_path):
     script=tmp_path/'tasks.yaml'
     script.write_text('- prompt: one\n  project_root: ""\n  validator: ai\n', encoding='utf-8')

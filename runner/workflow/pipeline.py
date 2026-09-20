@@ -118,7 +118,7 @@ class Pipeline:
         ):
             finish_run(self.context)
             self.context.save_state()
-        return 0
+        return 1 if stop and not state.completed else 0
 
     def _run_task_block(
         self,

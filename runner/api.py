@@ -87,6 +87,7 @@ class RunRequest:
     plan_only: bool = False
     human_output: bool = False
     json_events: bool = False
+    auto_register_ui_project: bool = False
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RunRequest:
@@ -138,6 +139,7 @@ class RunRequest:
             plan_only=args.plan_only,
             human_output=not args.json_events,
             json_events=args.json_events,
+            auto_register_ui_project=getattr(args, "auto_register_ui_project", True),
         )
 
     @classmethod
@@ -228,6 +230,7 @@ class RunRequest:
             plan_only=self.plan_only,
             json_events=self.json_events,
             human_output=self.human_output,
+            auto_register_ui_project=self.auto_register_ui_project,
             event_callback=on_event,
         )
 
@@ -321,6 +324,8 @@ def run(
             exit_code = execute(config)
             result = _result(request, exit_code)
             if request.plan_only or result.completed:
+                return result
+            if exit_code != 0:
                 return result
             config = _resume_config(request, config, result.state_files)
             _report_retry(

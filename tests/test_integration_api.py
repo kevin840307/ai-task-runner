@@ -75,6 +75,36 @@ def test_api_transient_failure_resumes_saved_direct_or_yaml_state(
     assert calls == [False, True]
 
 
+def test_api_nonzero_incomplete_result_does_not_resume(tmp_path, monkeypatch):
+    import runner.api as api_module
+
+    request = RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    )
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            '{"completed":false,"stage":"validator_failed"}',
+            encoding="utf-8",
+        )
+        return 1
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+
+    result = run(request)
+
+    assert result.exit_code == 1
+    assert result.completed is False
+    assert calls == [False]
+
+
 def test_yaml_result_reads_state_from_each_item_project_root(tmp_path, monkeypatch):
     import runner.api as api_module
 
@@ -397,6 +427,29 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
     assert captured[0].ai_validator_yolo is True
     assert captured[0].readonly_safety == "observe"
     assert captured[0].human_output is True
+    assert captured[0].auto_register_ui_project is True
+
+
+def test_cli_can_disable_ui_project_auto_registration(monkeypatch, tmp_path):
+    import ai_task_runner
+    from runner.api import RunResult
+
+    captured = []
+
+    def fake_run(request, on_event=None):
+        captured.append(request)
+        return RunResult(exit_code=0, state_files=(), states=())
+
+    monkeypatch.setattr(ai_task_runner, "run", fake_run)
+    code = ai_task_runner.main([
+        "--goal", "x",
+        "--project-root", str(tmp_path),
+        "--validator", "ai",
+        "--no-ui-project-register",
+    ])
+
+    assert code == 0
+    assert captured[0].auto_register_ui_project is False
 
 
 def test_shared_run_entry_accepts_json_like_request(tmp_path):
@@ -415,6 +468,12 @@ def test_shared_run_entry_accepts_json_like_request(tmp_path):
 
     assert result.completed is True
     assert any(event["type"] == "runner.status" for event in events)
+
+
+def test_programmatic_run_request_does_not_auto_register_ui_project_by_default():
+    request = RunRequest(goal="x")
+
+    assert request.auto_register_ui_project is False
 
 
 def test_goal_file_is_loaded_by_public_request(tmp_path):

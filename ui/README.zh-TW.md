@@ -41,6 +41,8 @@ Project / Runtime polling 採 non-overlapping：上一個 request 完成後才�
 
 CLI YAML List / Multi-task 執行時，outer `.ai-task-runner/console-view.json` 只保存目前 child 的 `script_index`、`script_total`、`child_project_root`、`child_work_dir` pointer；UI 會跟隨 pointer 讀 child runtime 自己的 `state.json` / `console-view.json` / `stream.log`，不建立第二份 aggregate state。CLI / YAML item 的 `state.goal` 只讀顯示成 history 裡可收合的 **Input prompt** 卡片，不寫進 UI chat history，也不新增 Chat grid row，因此不改變既有 header / summary / history / composer 排版。
 
+CLI 啟動的 Project 會自動加入 `ui/data/projects.json`，讓本機 UI 側邊欄不用再手動 **Open Project**。一般 CLI run 會加入 `--project-root`；YAML List / Multi-task run 會加入每個 item 的 project root。soak/live/CI 不想出現在側邊欄時可加 `--no-ui-project-register`。程式化 API 預設不啟用這個行為，除非呼叫端明確 opt in。
+
 ## UI/UX polish
 - Runtime feedback 不再使用與 polling 無關的 spinner/pulse 假活動動畫；兩次真實 state fetch 之間畫面保持穩定，只讓 `Elapsed` / `Last update` 表達新鮮度，避免抓取較慢時看起來像 lag。
 - Runtime 顯示 Last update；超過約 30 秒未有新狀態時以 Warning 呈現。

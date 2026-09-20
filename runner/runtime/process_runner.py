@@ -187,13 +187,13 @@ def _communicate_bounded(
 
         if process.poll() is not None:
             partial = _finish_reader(reader, output_queue, partial)
-            return ProcessResult(partial, process.returncode or 0)
+            return ProcessResult(_normalize_output_newlines(partial), process.returncode or 0)
 
         if deadline is not None and now >= deadline:
             terminate_process_tree(process)
             partial = _finish_reader(reader, output_queue, partial)
             return ProcessResult(
-                partial,
+                _normalize_output_newlines(partial),
                 process.returncode or -1,
                 timed_out=True,
             )
@@ -202,7 +202,7 @@ def _communicate_bounded(
             terminate_process_tree(process)
             partial = _finish_reader(reader, output_queue, partial)
             return ProcessResult(
-                partial,
+                _normalize_output_newlines(partial),
                 process.returncode or -1,
                 timed_out=True,
                 idle_timed_out=True,
@@ -256,7 +256,10 @@ def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
     if pipe is None:
         return
     try:
-        pipe.write(input_text)
+        if hasattr(pipe, "buffer"):
+            pipe.buffer.write(input_text.encode("utf-8"))
+        else:
+            pipe.write(input_text)
         pipe.flush()
     except OSError:
         pass
@@ -266,6 +269,12 @@ def _send_input(process: subprocess.Popen[str], input_text: str) -> None:
         except OSError:
             pass
         process.stdin = None
+
+
+def _normalize_output_newlines(text: str) -> str:
+    """Match TextIOWrapper universal-newline reads while using raw stream reads."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
 
 def _read_stdout(pipe: Any, output_queue: queue.Queue[str]) -> None:
     """Stream pipe bytes without waiting for TextIOWrapper EOF/full-buffer reads.

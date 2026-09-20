@@ -15,6 +15,7 @@ from runner.ai.contracts import BackendResult
 from runner.backends.base import BaseBackend, split_command
 from runner.ai.client import AIClient
 from runner.ai.errors import AIError, BackendError
+from runner.ai.session import is_transient_service_error
 from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.backends.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
@@ -93,6 +94,17 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
         ["--sandbox"],
         sandbox=True,
     ).count("-s") == 0
+
+
+def test_transient_service_classifier_excludes_qwen_sandbox_docker_failures():
+    assert is_transient_service_error("HTTP 503 Service Unavailable")
+    assert is_transient_service_error("connection reset by peer")
+    assert not is_transient_service_error(
+        "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine"
+    )
+    assert not is_transient_service_error(
+        "Failed to obtain sandbox image ghcr.io/qwenlm/qwen-code:0.21.0"
+    )
 
 
 def qwen_excluded_tools(args):

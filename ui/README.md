@@ -41,6 +41,8 @@ The UI reads:
 The browser does not recreate a separate runtime vocabulary. It renders `console-view.json` directly and falls back to `state.json` with the same CLI marker rules if the snapshot is briefly missing/stale. As soon as Plan persists TODOs, those TODO rows therefore appear in the UI. The runtime marker is intentionally static between polling updates. `Elapsed` / `Last update` may tick locally, but status/TODO content changes only when new runtime state is fetched, avoiding misleading pseudo-live animation.
 For CLI YAML List / Multi-task runs, the outer `console-view.json` is only a pointer to the current child (`script_index`, `script_total`, `child_project_root`, `child_work_dir`). The UI follows that pointer and reads the child runtime's own state/snapshot/stream, so Stage/TODO display stays synchronized without creating a second aggregate state. `state.goal` is exposed read-only as a collapsible **Input prompt** card inside the existing scrollable history. It is never copied into UI chat history and never adds a new Chat grid row, so the header/summary/history/composer layout remains unchanged.
 
+CLI-launched projects are added to `ui/data/projects.json` automatically so the local UI sidebar can discover them without a manual **Open Project** step. Direct CLI runs add their `--project-root`; YAML List / Multi-task runs add each item project root. Use `--no-ui-project-register` for soak/live/CI runs that should not appear in the sidebar. Programmatic API calls keep this off by default unless the caller opts in.
+
 The UI writes only UI/control files:
 
 - `.ai-task-runner/stop.request` — request the Supervisor to stop.
@@ -269,4 +271,3 @@ Workflow Studio discovers Project Workflows only from `<project>/.ai-task-runner
 ### Concurrency and module ownership
 
 Project launch/runtime, Studio editing, Workflow Builder lifecycle, chat, and project-list mutations use independent locks so slow validation/publish work cannot block unrelated UI operations. Workflow Builder server state lives in `workflow_builder_state.py`; shared server primitives live in `server_support.py`; browser Generator behavior lives in `static/js/workflow-generator.js`. Non-loopback binding requires the explicit `--allow-remote` flag.
-

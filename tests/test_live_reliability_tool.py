@@ -42,6 +42,7 @@ def test_script_command_uses_canonical_yaml_entry(tmp_path: Path):
     assert "--goal-file" not in command
     assert "--validator" not in command
     assert "--resume" in command
+    assert "--no-ui-project-register" in command
 
 
 def _option(command: list[str], name: str) -> str:
@@ -75,6 +76,26 @@ def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path
     assert "--workflow" not in ai_only
     assert _option(file_only, "--agent-timeout") == "30"
     assert _option(file_only, "--planning-timeout") == "40"
+
+
+def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
+    project = tmp_path / "project"
+    script = tmp_path / "tasks.yaml"
+    workflow = tmp_path / "workflow.yaml"
+    config = replace(settings(tmp_path), sandbox=True)
+
+    commands = [
+        live.runner_command(config, project),
+        live.runner_command(config, project, final_ai=True),
+        live.runner_command(config, project, final_ai=True, ai_only=True),
+        live.runner_command(config, project, timeout_probe=True),
+        live.runner_command(config, project, script=script),
+        live.runner_command(config, project, workflow=workflow),
+        live.runner_command(config, project, resume=True),
+        live.runner_command(config, project, sandbox=False),
+    ]
+
+    assert all("--no-ui-project-register" in command for command in commands)
 
 
 def test_live_system_final_ai_contract_matches_bundled_workflows():
@@ -326,6 +347,54 @@ def test_dense_coverage_requires_every_mixed_probe():
                 elapsed_seconds=1800,
             )
         )
+
+
+def test_qwen_sandbox_preflight_rejects_unreachable_docker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = replace(settings(tmp_path), soak_sandbox_every=7)
+    monkeypatch.setattr(live.shutil, "which", lambda command: "docker")
+
+    def fake_run(*args, **kwargs):
+        return live.subprocess.CompletedProcess(
+            args[0],
+            1,
+            stdout="failed to connect to the docker API at npipe",
+        )
+
+    monkeypatch.setattr(live.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="Qwen sandbox unavailable"):
+        live.qwen_sandbox_preflight(config, hours=1)
+
+
+def test_qwen_sandbox_preflight_skips_when_sandbox_disabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = replace(settings(tmp_path), sandbox=False, soak_sandbox_every=0)
+
+    def fail_which(command: str):
+        raise AssertionError("docker should not be checked")
+
+    monkeypatch.setattr(live.shutil, "which", fail_which)
+
+    live.qwen_sandbox_preflight(config)
+
+
+def test_qwen_sandbox_preflight_skips_periodic_soak_when_hours_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    config = replace(settings(tmp_path), sandbox=False, soak_sandbox_every=7)
+
+    def fail_which(command: str):
+        raise AssertionError("docker should not be checked for zero-hour soak")
+
+    monkeypatch.setattr(live.shutil, "which", fail_which)
+
+    live.qwen_sandbox_preflight(config, hours=0)
 
 
 def test_assert_completed_supports_yaml_child_work_dir(tmp_path: Path):
@@ -686,6 +755,7 @@ def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
     assert workflow[1]["type"] == "command"
     assert workflow[2]["scope"] == "task"
     assert workflow[2]["recover"][0]["name"] == "repair"
+    assert workflow[3]["recover"][0]["name"] == "repair"
 
     compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")
 
@@ -826,6 +896,7 @@ def test_session_expiry_preflight_writes_harness_log_outside_project_root(monkey
         seen["project"] = Path(command[command.index("--project-root") + 1]).resolve()
         seen["log"] = Path(log).resolve()
         seen["timeout"] = timeout
+        seen["command"] = command
         raise RuntimeError("stop after path capture")
 
     monkeypatch.setattr(live, "run_command", fake_run)
@@ -834,6 +905,7 @@ def test_session_expiry_preflight_writes_harness_log_outside_project_root(monkey
         live.session_expiry_recovery_preflight()
 
     assert seen["timeout"] == 60
+    assert "--no-ui-project-register" in seen["command"]
     assert seen["project"] not in (seen["log"], *seen["log"].parents)
 
 
@@ -951,6 +1023,34 @@ def test_yaml_list_resume_probe_accepts_first_item_completion_event(
     monkeypatch.setattr(live, "run_command", fake_run)
 
     live.yaml_list_resume_probe(settings(tmp_path), tmp_path)
+
+
+def test_yaml_list_resume_probe_reports_qwen_sandbox_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeProcess:
+        pid = 12345
+        returncode = 1
+
+        def __init__(self, command, **options):
+            options["stdout"].write(
+                "qwen exit 1:\n"
+                "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine\n"
+                "Failed to obtain sandbox image ghcr.io/qwenlm/qwen-code:0.21.0\n"
+            )
+            options["stdout"].flush()
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
+
+    with pytest.raises(RuntimeError, match="Qwen sandbox unavailable"):
+        live.yaml_list_resume_probe(settings(tmp_path), tmp_path)
 
 
 def test_assert_state_completed_rejects_stale_runtime_marker(tmp_path: Path):
