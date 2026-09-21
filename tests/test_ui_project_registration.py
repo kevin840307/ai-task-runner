@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from runner.ui_projects import register_ui_project
@@ -36,3 +37,24 @@ def test_register_ui_project_is_best_effort_for_missing_project(tmp_path):
     register_ui_project(tmp_path / "missing", repo_root=repo)
 
     assert not (repo / "ui" / "data" / "projects.json").exists()
+
+
+def test_register_ui_project_preserves_concurrent_cli_updates(tmp_path):
+    repo = tmp_path / "repo"
+    projects = [tmp_path / f"project-{index}" for index in range(20)]
+    for project in projects:
+        project.mkdir()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(
+            lambda project: register_ui_project(project, repo_root=repo),
+            projects,
+        ))
+
+    rows = json.loads(
+        (repo / "ui" / "data" / "projects.json").read_text(encoding="utf-8")
+    )
+    paths = {row["path"] for row in rows}
+
+    assert paths == {str(project.resolve()) for project in projects}
+    assert not (repo / "ui" / "data" / "projects.json.lock").exists()

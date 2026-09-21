@@ -892,13 +892,20 @@ def example_smoke_probe(
     name: str = "example-smoke-probe",
 ) -> Path:
     project = copy_example_project(source.resolve(), root, name)
+    ai_only = workflow is not None and not workflow_uses_stage(workflow, "validate_file")
     code = run_command(
-        runner_command(settings, project, workflow=workflow),
+        runner_command(settings, project, workflow=workflow, ai_only=ai_only),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
     assert_state_completed(project, code)
     return project
+
+
+def workflow_uses_stage(workflow: Path, name: str) -> bool:
+    from runner.workflow.loader import load_workflow
+
+    return any(item.get("name") == name for item in load_workflow(workflow))
 
 
 def example_smoke_cases(args: argparse.Namespace) -> list[ExampleSmokeCase]:

@@ -468,7 +468,14 @@ def test_example_smoke_probe_can_run_custom_workflow(
     (source / "prompt.md").write_text("build\n", encoding="utf-8")
     (source / "validation.py").write_text("validate\n", encoding="utf-8")
     workflow = tmp_path / "workflow.yaml"
-    workflow.write_text("stages: {}\nflow: []\n", encoding="utf-8")
+    workflow.write_text(
+        "stages:\n"
+        "  validate_file:\n"
+        "    type: command\n"
+        "    command: check\n"
+        "flow: [validate_file]\n",
+        encoding="utf-8",
+    )
     captured = {}
 
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
@@ -492,6 +499,55 @@ def test_example_smoke_probe_can_run_custom_workflow(
 
     command = captured["command"]
     assert command[command.index("--workflow") + 1] == str(workflow)
+    assert command[command.index("--validator") + 1] == str(
+        tmp_path / "example-smoke-probe" / "validation.py"
+    )
+    assert "--script" not in command
+
+
+def test_example_smoke_probe_uses_ai_validator_for_ai_only_workflow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "prompt.md").write_text("build\n", encoding="utf-8")
+    (source / "validation.py").write_text("validate\n", encoding="utf-8")
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        "stages:\n"
+        "  execute:\n"
+        "    type: task\n"
+        "  validate_ai:\n"
+        "    type: ai_validator\n"
+        "    validator: ai\n"
+        "flow: [execute, validate_ai]\n",
+        encoding="utf-8",
+    )
+    captured = {}
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        captured["command"] = command
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        (work / "debug").mkdir(parents=True)
+        (work / "state.json").write_text(
+            '{"completed": true, "stage": "completed"}', encoding="utf-8"
+        )
+        (work / "log.txt").write_text("{}\n", encoding="utf-8")
+        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    live.example_smoke_probe(settings(tmp_path), tmp_path, source, workflow)
+
+    command = captured["command"]
+    assert command[command.index("--workflow") + 1] == str(workflow)
+    assert command[command.index("--validator") + 1] == "ai"
     assert "--script" not in command
 
 
