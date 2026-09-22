@@ -299,7 +299,7 @@ class WorkflowBuilderMixin:
         pid = int(status.get("pid") or 0)
         if state in {"queued", "running", "cancelling"}:
             age = max(0.0, time.time() - float(status.get("updated_at") or status.get("created_at") or time.time()))
-            stale = (pid and not self._pid_alive(pid)) or (not pid and age >= 30)
+            stale = age >= 30 and ((pid and not self._pid_alive(pid)) or not pid)
             if stale:
                 terminal = "cancelled" if state == "cancelling" else "failed"
                 if terminal == "cancelled":

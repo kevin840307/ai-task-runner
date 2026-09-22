@@ -33,8 +33,8 @@ const state = {
   generateWorkflowDraft: null, generateWorkflowPromptIndex: 0, generateWorkflowReviewTab: "visual", generateWorkflowRequestText: "",
   generateWorkflowWorkspace: "", generateWorkflowWorkspacePattern: "",
   syntaxTimer: 0,
-  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", projectRefreshPromise: null, studioGuardRefreshPromise: null,
-  studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
+  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
+  studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", studioCatalogLoading: false, projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
   runLaunching: false,
 };
 const runActionGate = createLatestActionGate();
@@ -190,7 +190,7 @@ function followHistoryToBottom(force = false) {
 
 // ------------------------------ Projects / Chat ------------------------------
 async function loadProjects() {
-  const data = await api("/api/projects"); state.projects = data.projects || []; renderProjects();
+  const data = await api("/api/projects"); applyProjectPollMeta(data); state.projects = data.projects || []; renderProjects();
   if (!state.project && state.projects.length) {
     const saved = state.preferences?.lastProject || "";
     const first = state.projects.find((p) => p.path === saved && p.exists !== false) || state.projects.find((p) => p.exists !== false);
@@ -198,7 +198,12 @@ async function loadProjects() {
   }
 }
 
-function pollDelay(visibleDelay, hiddenDelay) { return document.hidden ? hiddenDelay : visibleDelay; }
+function resolvedPollDelay(value) { return typeof value === "function" ? value() : value; }
+function pollDelay(visibleDelay, hiddenDelay) {
+  const base = Number(document.hidden ? resolvedPollDelay(hiddenDelay) : resolvedPollDelay(visibleDelay)) || 1000;
+  const jitter = Math.min(2000, Math.max(250, base * 0.2));
+  return Math.round(base + Math.random() * jitter);
+}
 function startNonOverlappingPoll(fn, visibleDelay, hiddenDelay = visibleDelay) {
   let stopped = false, timer = 0;
   const schedule = () => { if (!stopped) timer = window.setTimeout(tick, pollDelay(visibleDelay, hiddenDelay)); };
@@ -210,12 +215,19 @@ function startNonOverlappingPoll(fn, visibleDelay, hiddenDelay = visibleDelay) {
   return () => { stopped = true; if (timer) window.clearTimeout(timer); };
 }
 
-function projectRuntimeSignature(projects) { return (projects || []).map((p) => `${p.path}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
+function applyProjectPollMeta(data) {
+  const interval = Number(data?.meta?.suggested_poll_ms || 0);
+  if (Number.isFinite(interval) && interval > 0) state.projectPollMs = Math.min(20000, Math.max(8000, interval));
+}
+function projectStatusPollDelay() { return state.projectPollMs || 8000; }
+function projectStatusHiddenPollDelay() { return Math.max(12000, (state.projectPollMs || 8000) * 2); }
+function projectRuntimeSignature(projects) { return (projects || []).map((p) => `${p.path}:${p.name || ""}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
 async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
       const data = await api("/api/projects"), next = data.projects || [];
+      applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
       if (state.project) state.project = next.find((p) => p.path === state.project.path) || state.project;
@@ -253,67 +265,91 @@ function openProjectMenu(menu, anchor, row) {
   menu.hidden = false; menu.classList.add("project-action-menu-portal"); document.body.appendChild(menu);
   positionProjectMenu(menu, anchor);
 }
-function renderProjects() {
-  const root = $("projectList"); closeProjectMenus(); root.innerHTML = ""; root.onscroll = () => closeProjectMenus();
+const PROJECT_RUNTIME_LABELS = { running: "RUN", completed: "DONE", interrupted: "INT", stopped: "STOP", idle: "IDLE", missing: "MISS" };
+function projectRuntimeStatus(project) { return project.exists === false ? "missing" : (project.runtime_status || "idle"); }
+function projectRowSignature(project) {
+  return JSON.stringify([
+    project.path, project.name, project.exists !== false, projectRuntimeStatus(project), project.runtime_stage || "",
+    project.runtime_completed_count || 0, project.runtime_total || 0, state.project?.path === project.path,
+    state.removingProjectPath === project.path, state.projectSwitching && state.project?.path === project.path,
+  ]);
+}
+function syncProjectListLoadingState(root) {
   root.classList.toggle("list-loading", !!state.projectListLoading);
   root.toggleAttribute("aria-busy", !!state.projectListLoading);
   if (state.projectListLoading) root.dataset.loadingLabel = state.projectListLoadingLabel || "Updating projects…"; else delete root.dataset.loadingLabel;
-  const labels = { running: "RUN", completed: "DONE", interrupted: "INT", stopped: "STOP", idle: "IDLE", missing: "MISS" };
-  for (const project of state.projects) {
-    const runtimeStatus = project.exists === false ? "missing" : (project.runtime_status || "idle");
-    const removing = state.removingProjectPath === project.path;
-    const opening = state.projectSwitching && state.project?.path === project.path;
-    const row = document.createElement("div"); row.className = `project-tree project-row runtime-${runtimeStatus}`;
-    if (removing || opening) row.classList.add("project-busy");
-    if (state.project?.path === project.path) row.classList.add("active");
-    if (project.exists === false) row.classList.add("missing");
-    const button = document.createElement("button"); button.className = "project-root"; button.type = "button";
-    const mark = document.createElement("span"); mark.className = `project-mark runtime-${runtimeStatus}`; mark.title = runtimeStatus === "running" ? "Running" : runtimeStatus.charAt(0).toUpperCase() + runtimeStatus.slice(1);
-    const copy = document.createElement("span"); copy.className = "project-copy";
-    const nameLine = document.createElement("span"); nameLine.className = "project-name-line";
-    const name = document.createElement("strong"); name.textContent = project.name;
-    nameLine.appendChild(name);
-    if (removing || opening) { const status = document.createElement("span"); status.className = "project-runtime-label runtime-busy"; status.textContent = removing ? "REMOVING" : "OPENING"; nameLine.appendChild(status); }
-    else if (labels[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = labels[runtimeStatus]; nameLine.appendChild(status); }
-    const path = document.createElement("small");
-    if (removing || opening) { path.textContent = removing ? "Removing from UI…" : "Loading project…"; path.className = "project-runtime-detail"; path.title = project.path; }
-    else if (runtimeStatus === "running") {
-      const stage = String(project.runtime_stage || "").trim() || "Working";
-      const progress = project.runtime_total ? `${project.runtime_completed_count || 0}/${project.runtime_total}` : "";
-      path.textContent = `${stage}${progress ? ` · ${progress}` : ""}`;
-      path.className = "project-runtime-detail";
-      path.title = project.path;
-    } else {
-      path.textContent = project.exists === false ? `${t("project.missing", "Missing")} · ${project.path}` : project.path;
-    }
-    copy.append(nameLine, path); button.append(mark, copy); button.disabled = removing || state.projectSwitching; button.onclick = () => project.exists === false ? null : selectProject(project);
-
-    const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>"; menuButton.disabled = removing || state.projectSwitching;
-    const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
-    const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = t("project.remove", "Remove project");
-    menu.appendChild(remove);
-    menuButton.onclick = (event) => {
-      event.stopPropagation(); const open = menu.hidden;
-      if (open) openProjectMenu(menu, menuButton, row); else closeProjectMenus();
-    };
-    remove.onclick = async (event) => {
-      event.stopPropagation();
-      if (!(await confirmDiscardStudio())) return;
-      const ok = await confirmDialog({ title: "Remove Project?", message: `Remove ${project.name} from this UI? Project files are not deleted.`, confirmLabel: "Remove Project", danger: true });
-      if (!ok) return;
-      closeStageEditor(true); closeAddStageModal(true); closeProjectMenus(); state.removingProjectPath = project.path; setProjectListLoading(true, "Removing project…"); renderProjects();
-      try {
-        await api("/api/projects/remove", { method: "POST", body: JSON.stringify({ path: project.path }) });
-        setProjectListLoading(true, "Refreshing projects…");
-        if (state.project?.path === project.path) { state.project = null; showEmpty(); }
-        await loadProjects();
-        showToast("Project removed");
-      }
-      catch (error) { showAppError(error.message); showActionError(error.message, "Remove Project failed"); }
-      finally { if (state.removingProjectPath === project.path) state.removingProjectPath = ""; setProjectListLoading(false); renderProjects(); }
-    };
-    row.append(button, menuButton, menu); root.appendChild(row);
+}
+function createProjectRow(project) {
+  const runtimeStatus = projectRuntimeStatus(project);
+  const removing = state.removingProjectPath === project.path;
+  const opening = state.projectSwitching && state.project?.path === project.path;
+  const row = document.createElement("div"); row.className = `project-tree project-row runtime-${runtimeStatus}`;
+  row.dataset.projectPath = project.path;
+  row.dataset.renderSignature = projectRowSignature(project);
+  if (removing || opening) row.classList.add("project-busy");
+  if (state.project?.path === project.path) row.classList.add("active");
+  if (project.exists === false) row.classList.add("missing");
+  const button = document.createElement("button"); button.className = "project-root"; button.type = "button";
+  const mark = document.createElement("span"); mark.className = `project-mark runtime-${runtimeStatus}`; mark.title = runtimeStatus === "running" ? "Running" : runtimeStatus.charAt(0).toUpperCase() + runtimeStatus.slice(1);
+  const copy = document.createElement("span"); copy.className = "project-copy";
+  const nameLine = document.createElement("span"); nameLine.className = "project-name-line";
+  const name = document.createElement("strong"); name.textContent = project.name;
+  nameLine.appendChild(name);
+  if (removing || opening) { const status = document.createElement("span"); status.className = "project-runtime-label runtime-busy"; status.textContent = removing ? "REMOVING" : "OPENING"; nameLine.appendChild(status); }
+  else if (PROJECT_RUNTIME_LABELS[runtimeStatus]) { const status = document.createElement("span"); status.className = `project-runtime-label runtime-${runtimeStatus}`; status.textContent = PROJECT_RUNTIME_LABELS[runtimeStatus]; nameLine.appendChild(status); }
+  const path = document.createElement("small");
+  if (removing || opening) { path.textContent = removing ? "Removing from UI…" : "Loading project…"; path.className = "project-runtime-detail"; path.title = project.path; }
+  else if (runtimeStatus === "running") {
+    const stage = String(project.runtime_stage || "").trim() || "Working";
+    const progress = project.runtime_total ? `${project.runtime_completed_count || 0}/${project.runtime_total}` : "";
+    path.textContent = `${stage}${progress ? ` · ${progress}` : ""}`;
+    path.className = "project-runtime-detail";
+    path.title = project.path;
+  } else {
+    path.textContent = project.exists === false ? `${t("project.missing", "Missing")} · ${project.path}` : project.path;
   }
+  copy.append(nameLine, path); button.append(mark, copy); button.disabled = removing || state.projectSwitching; button.onclick = () => project.exists === false ? null : selectProject(project);
+
+  const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>"; menuButton.disabled = removing || state.projectSwitching;
+  const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
+  const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = t("project.remove", "Remove project");
+  menu.appendChild(remove);
+  menuButton.onclick = (event) => {
+    event.stopPropagation(); const open = menu.hidden;
+    if (open) openProjectMenu(menu, menuButton, row); else closeProjectMenus();
+  };
+  remove.onclick = async (event) => {
+    event.stopPropagation();
+    if (!(await confirmDiscardStudio())) return;
+    const ok = await confirmDialog({ title: "Remove Project?", message: `Remove ${project.name} from this UI? Project files are not deleted.`, confirmLabel: "Remove Project", danger: true });
+    if (!ok) return;
+    closeStageEditor(true); closeAddStageModal(true); closeProjectMenus(); state.removingProjectPath = project.path; setProjectListLoading(true, "Removing project…"); renderProjects();
+    try {
+      await api("/api/projects/remove", { method: "POST", body: JSON.stringify({ path: project.path }) });
+      setProjectListLoading(true, "Refreshing projects…");
+      if (state.project?.path === project.path) { state.project = null; showEmpty(); }
+      await loadProjects();
+      showToast("Project removed");
+    }
+    catch (error) { showAppError(error.message); showActionError(error.message, "Remove Project failed"); }
+    finally { if (state.removingProjectPath === project.path) state.removingProjectPath = ""; setProjectListLoading(false); renderProjects(); }
+  };
+  row.append(button, menuButton, menu);
+  return row;
+}
+function renderProjects() {
+  const root = $("projectList"); closeProjectMenus(); root.onscroll = () => closeProjectMenus(); syncProjectListLoadingState(root);
+  const existing = new Map([...root.querySelectorAll(".project-row[data-project-path]")].map((row) => [row.dataset.projectPath, row]));
+  const fragment = document.createDocumentFragment();
+  const seen = new Set();
+  for (const project of state.projects) {
+    const signature = projectRowSignature(project);
+    const current = existing.get(project.path);
+    seen.add(project.path);
+    fragment.appendChild(current?.dataset.renderSignature === signature ? current : createProjectRow(project));
+  }
+  for (const [path, row] of existing) if (!seen.has(path)) row.remove();
+  root.appendChild(fragment);
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
@@ -337,7 +373,8 @@ async function selectProject(project) {
   $("projectName").textContent = project.name; $("projectPath").textContent = project.path; $("emptyState").hidden = true;
   $("summary").hidden = false; $("messages").hidden = false; $("composePanel").hidden = false; $("errorText").textContent = ""; requestAnimationFrame(syncComposerReserve);
   try {
-    await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path }), refreshStudioFiles({ force: true, projectPath: project.path })]);
+    await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path })]);
+    refreshStudioFiles({ force: true, projectPath: project.path });
   } catch (error) { showActionError(error.message, "Project loading failed"); }
   finally { setViewLoading("chatView", false); state.projectSwitching = false; renderProjects(); }
 }
@@ -472,7 +509,7 @@ function updateRuntimeFreshness() {
   const stale = Boolean(state.runtime?.running && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000); $("lastUpdateText")?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
-function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable); }
+function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable || state.studioCatalogLoading); }
 function renderRunConfigurationLock() {
   const locked = runConfigurationLocked();
   const reason = locked ? "Current task configuration is locked until Reset or completion." : "";
@@ -511,7 +548,7 @@ function renderRuntime(runtime) {
   $("resumeButton").hidden = runtime.running || !runtime.resumable;
   $("resetButton").hidden = runtime.running || !runtime.resumable;
   $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
-  const blockNew = runtime.running || runtime.resumable || state.runLaunching;
+  const blockNew = runtime.running || runtime.resumable || state.runLaunching || state.studioCatalogLoading;
   $("sendButton").disabled = blockNew; $("messageInput").disabled = blockNew;
   renderRunConfigurationLock();
   $("messageInput").placeholder = "描述要完成的功能或修復內容...";
@@ -593,6 +630,7 @@ async function refreshStudioFiles({ force = false, projectPath = state.project?.
   if (!force && fresh) { renderStudioFiles(); renderWorkflowPicker(); return state.studioFiles; }
   if (state.studioFilesRefreshPromise && state.studioFilesRefreshKey === key) return state.studioFilesRefreshPromise;
   const query = projectPath ? `&project=${encodeURIComponent(projectPath)}` : "";
+  state.studioCatalogLoading = true; renderWorkflowPicker(); renderRunConfigurationLock();
   const request = (async () => {
     try {
       const data = await api(`/api/studio/files?x=1${query}`);
@@ -605,7 +643,7 @@ async function refreshStudioFiles({ force = false, projectPath = state.project?.
   })();
   state.studioFilesRefreshPromise = request; state.studioFilesRefreshKey = key;
   try { return await request; }
-  finally { if (state.studioFilesRefreshPromise === request) { state.studioFilesRefreshPromise = null; state.studioFilesRefreshKey = ""; } }
+  finally { if (state.studioFilesRefreshPromise === request) { state.studioFilesRefreshPromise = null; state.studioFilesRefreshKey = ""; state.studioCatalogLoading = false; renderWorkflowPicker(); renderRunConfigurationLock(); } }
 }
 
 function closeWorkflowDropdown() {
@@ -638,7 +676,7 @@ function renderWorkflowPicker() {
   else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
   else if (select.options.length) select.selectedIndex = 0;
   if (select.value) rememberProjectPreference("workflow", select.value);
-  label.textContent = select.options[select.selectedIndex]?.textContent || "No workflow";
+  label.textContent = state.studioCatalogLoading ? "Loading workflows..." : (select.options[select.selectedIndex]?.textContent || "No workflow");
   renderWorkflowPickerSelection();
 }
 function renderWorkflowPickerSelection() {
@@ -1764,7 +1802,7 @@ window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
+}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) Promise.allSettled([refreshRuntime(), refreshProjectStatuses(), refreshStudioGuard()]); });
 
 $("newWorkflowDestination").onchange = () => syncCustomFolderVisibility("workflow");

@@ -365,6 +365,16 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".project-row.runtime-running.project-mark::after", css)
         self.assertIn("animation:projectRunningPulse", css)
 
+    def test_project_status_polling_is_load_aware(self):
+        for token in (
+            "applyProjectPollMeta(data)",
+            "projectStatusPollDelay",
+            "projectStatusHiddenPollDelay",
+            "startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay)",
+        ):
+            self.assertIn(token, self.js)
+        self.assertNotIn("startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)", self.js)
+
     def test_confirmation_overlay_sits_above_floating_composer_and_portals(self):
         css = "".join(self.runner_css.split())
         self.assertIn(".designer-export-box{z-index:6500!important", css)
@@ -724,7 +734,7 @@ def test_runtime_polling_is_non_overlapping():
     script = base.joinpath("app.js").read_text(encoding="utf-8")
     generator = base.joinpath("js", "workflow-generator.js").read_text(encoding="utf-8")
     assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
-    assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
+    assert "startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay)" in script
     assert "setInterval(refreshRuntime, 1200)" not in script
     assert "setInterval(refreshProjectStatuses, 4000)" not in script
     assert "setInterval(pollGenerateWorkflow" not in script + generator
@@ -744,8 +754,10 @@ def test_runtime_polling_throttles_hidden_tabs_and_avoids_repaint():
     base = Path(__file__).resolve().parents[1].joinpath("static")
     script = base.joinpath("app.js").read_text(encoding="utf-8")
     assert "startNonOverlappingPoll(refreshRuntime, 1200, 6000)" in script
-    assert "startNonOverlappingPoll(refreshProjectStatuses, 4000, 12000)" in script
+    assert "startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay)" in script
     assert "startNonOverlappingPoll(refreshStudioGuard, 2500, 10000)" in script
+    assert "function pollDelay(visibleDelay, hiddenDelay)" in script
+    assert "Math.random() * jitter" in script
     assert 'document.addEventListener("visibilitychange"' in script
     assert "function animateRuntimeFrame()" not in script
     assert "spinnerFrame" not in script
@@ -1037,6 +1049,16 @@ def test_real_async_views_have_loading_feedback():
     assert "setStudioContentLoading(true" in app
     assert "#studioEditor.content-loading::before" in css
     assert "#workflowView.view-loading::before" in css
+
+
+def test_project_switch_does_not_wait_for_studio_catalog():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    block = app[app.index("async function selectProject"):app.index("async function refreshMessages")]
+    assert "await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path })])" in block
+    assert "refreshStudioFiles({ force: true, projectPath: project.path });" in block
+    assert "await Promise.all([refreshMessages({ projectPath: project.path }), refreshRuntime({ projectPath: project.path }), refreshStudioFiles" not in block
+    assert "studioCatalogLoading" in app
+    assert "state.runLaunching || state.runtime?.running || state.runtime?.resumable || state.studioCatalogLoading" in app
 
 
 def test_project_add_remove_use_real_async_loading_feedback():

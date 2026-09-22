@@ -381,6 +381,36 @@ class UIStateTests(unittest.TestCase):
         with patch.object(UIState, "_pid_alive", return_value=True):
             self.assertEqual(self.state.projects()[0]["runtime_status"], "running")
 
+    def test_project_payload_suggests_slower_polling_under_load(self) -> None:
+        for index in range(20):
+            project = self.root / f"load-{index:02d}"
+            project.mkdir()
+            self.state.add_project(str(project))
+
+        payload = self.state.projects_payload()
+
+        self.assertEqual(payload["meta"]["total"], 20)
+        self.assertEqual(payload["meta"]["suggested_poll_ms"], 12000)
+
+    def test_project_list_reads_runtime_display_once_per_project(self) -> None:
+        self.state.add_project(str(self.project))
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-status",
+            "completed": False,
+            "stage": "execute",
+            "tasks": [{"id": "t1", "status": "completed"}, {"id": "t2", "status": "pending"}],
+        })
+
+        original = self.state._runtime_display
+        with patch.object(self.state, "_runtime_display", wraps=original) as runtime_display:
+            row = self.state.projects()[0]
+
+        runtime_display.assert_called_once_with(self.project)
+        self.assertEqual(row["runtime_stage"], "execute")
+        self.assertEqual(row["runtime_completed_count"], 1)
+        self.assertEqual(row["runtime_total"], 2)
+
     def test_stream_hides_reasoning_fields_but_keeps_normal_analysis_text(self) -> None:
         raw = "\n".join([
             json.dumps({"type": "reasoning", "content": "private"}),
@@ -613,7 +643,8 @@ class HTTPServerSmokeTests(unittest.TestCase):
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/projects", timeout=2) as response:
                     payload = json.loads(response.read().decode("utf-8"))
-                    self.assertEqual(payload, {"projects": []})
+                    self.assertEqual(payload["projects"], [])
+                    self.assertEqual(payload["meta"]["suggested_poll_ms"], 8000)
                 with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=2) as response:
                     self.assertIn("UI OK", response.read().decode("utf-8"))
             finally:
@@ -1525,6 +1556,28 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
         snapshot.assert_called_once_with()
         process_run.assert_not_called()
         self.assertEqual([row["runtime_status"] for row in rows], ["running", "running", "idle"])
+
+    def test_idle_project_list_skips_process_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            project = root / "idle-project"
+            project.mkdir(parents=True)
+            state = UIState(root)
+            state._write_projects([{"name": project.name, "path": str(project)}])
+
+            with patch.object(state, "_process_snapshot") as snapshot:
+                rows = state.projects()
+
+        snapshot.assert_not_called()
+        self.assertEqual(rows[0]["runtime_status"], "idle")
+
+    def test_projects_payload_reuses_short_cache(self) -> None:
+        with patch.object(self.state, "_process_snapshot", return_value={111, 222}) as snapshot:
+            first = self.state.projects_payload()
+            second = self.state.projects_payload()
+
+        snapshot.assert_called_once_with()
+        self.assertIs(first, second)
 
 
 def test_process_snapshot_windows_branch_has_csv_import():

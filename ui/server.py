@@ -43,6 +43,7 @@ LAUNCH_RESERVATION_GRACE = 30.0
 RUNTIME_DIR = ".ai-task-runner"
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
 SYSTEM_SCOPES = {"system"}
+PROJECTS_PAYLOAD_CACHE_SECONDS = 1.5
 
 
 
@@ -67,23 +68,58 @@ class UIState(WorkflowBuilderMixin):
         self._builder_lock = threading.RLock()
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
+        self._projects_payload_cache: tuple[int, float, dict] | None = None
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
             self._atomic_json(self.workflow_visibility_file, {})
 
     # ------------------------------ projects/runtime/chat ------------------------------
+    def projects_payload(self) -> dict:
+        try:
+            stat = self.projects_file.stat()
+            version = stat.st_mtime_ns
+        except OSError:
+            version = 0
+        now = time.monotonic()
+        cached = self._projects_payload_cache
+        if cached and cached[0] == version and cached[1] > now:
+            return cached[2]
+        projects = self.projects()
+        running = sum(1 for item in projects if item.get("runtime_status") == "running")
+        payload = {
+            "projects": projects,
+            "meta": {
+                "total": len(projects),
+                "running": running,
+                "suggested_poll_ms": self._project_poll_interval_ms(len(projects), running),
+            },
+        }
+        self._projects_payload_cache = (version, now + PROJECTS_PAYLOAD_CACHE_SECONDS, payload)
+        return payload
+
+    @staticmethod
+    def _project_poll_interval_ms(total: int, running: int) -> int:
+        if total >= 20 or running >= 10:
+            return 12000
+        if total >= 10 or running >= 5:
+            return 10000
+        return 8000
+
     def projects(self) -> list[dict]:
         try:
             rows = json.loads(self.projects_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rows = []
-        # One process snapshot per project-list refresh avoids spawning one
-        # tasklist.exe per Project every polling cycle on Windows.
-        alive_pids = self._process_snapshot()
+        project_rows = rows if isinstance(rows, list) else []
+        # Take the Windows process snapshot only when at least one tracked
+        # Project has runtime process evidence. Idle-only lists avoid tasklist.
+        alive_pids = self._process_snapshot() if self._projects_need_process_snapshot(project_rows) else None
         result: list[dict] = []
         seen: set[str] = set()
-        for item in rows if isinstance(rows, list) else []:
+        for item in project_rows:
+            if not isinstance(item, dict):
+                continue
             path = str(item.get("path", "")).strip()
             if not path:
                 continue
@@ -92,29 +128,30 @@ class UIState(WorkflowBuilderMixin):
                 continue
             seen.add(key)
             project_path = Path(path)
-            runtime_status = self._project_runtime_status(project_path, alive_pids)
-            runtime_state: dict = {}
-            script_view: dict = {}
-            if project_path.is_dir():
-                _, _, script_view, runtime_state = self._runtime_display(project_path)
-            runtime_tasks = runtime_state.get("tasks") if isinstance(runtime_state.get("tasks"), list) else []
-            completed_count = sum(1 for task in runtime_tasks if isinstance(task, dict) and task.get("status") == "completed")
-            stage = str(runtime_state.get("stage") or "")
-            if script_view.get("mode") == "script":
-                index = int(script_view.get("script_index") or 0)
-                total = int(script_view.get("script_total") or 0)
-                prefix = f"Script {index}/{total}" if index and total else "Script"
-                stage = f"{prefix} · {stage}" if stage else prefix
+            summary = self._project_runtime_summary(project_path, alive_pids)
             result.append({
                 "name": item.get("name") or project_path.name or path,
                 "path": path,
                 "exists": project_path.is_dir(),
-                "runtime_status": runtime_status,
-                "runtime_stage": stage,
-                "runtime_completed_count": completed_count,
-                "runtime_total": len(runtime_tasks),
+                "runtime_status": summary["status"],
+                "runtime_stage": summary["stage"],
+                "runtime_completed_count": summary["completed_count"],
+                "runtime_total": summary["total"],
             })
         return result
+
+    def _projects_need_process_snapshot(self, rows: list[dict]) -> bool:
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("path", "")).strip()
+            if not path:
+                continue
+            project = Path(path)
+            runtime = self.runtime_dir(project)
+            if (runtime / "runner-process.json").is_file() or self._launch_state_path(project).exists():
+                return True
+        return False
 
     def environment_check(self) -> dict:
         """Run the standalone local environment checker used by both CLI and UI."""
@@ -207,6 +244,7 @@ class UIState(WorkflowBuilderMixin):
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
+        self._projects_payload_cache = None
 
     def runtime_dir(self, project: Path) -> Path:
         return project / RUNTIME_DIR
@@ -351,24 +389,42 @@ class UIState(WorkflowBuilderMixin):
         return bool(total and index == total and script_view.get("script_status") == "completed")
 
     def _project_runtime_status(self, project: Path, alive_pids: set[int] | None = None) -> str:
+        return str(self._project_runtime_summary(project, alive_pids)["status"])
+
+    def _project_runtime_summary(self, project: Path, alive_pids: set[int] | None = None) -> dict:
         if not project.is_dir():
-            return "missing"
+            return {"status": "missing", "stage": "", "completed_count": 0, "total": 0}
         runtime, _, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         pid_value = self._marker_pid(marker.get("supervisor_pid"))
+        status = "idle"
         if pid_value and self._pid_alive(pid_value, alive_pids):
             self._clear_launch_reservation(project)
-            return "running"
-        if self._active_launch_reservation(project, alive_pids):
-            return "running"
-        completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
-        if completed:
-            return "completed"
-        if marker and state:
-            return "interrupted"
-        if state:
-            return "stopped"
-        return "idle"
+            status = "running"
+        elif self._active_launch_reservation(project, alive_pids):
+            status = "running"
+        else:
+            completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
+            if completed:
+                status = "completed"
+            elif marker and state:
+                status = "interrupted"
+            elif state:
+                status = "stopped"
+        tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
+        completed_count = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "completed")
+        stage = str(state.get("stage") or "")
+        if script_view.get("mode") == "script":
+            index = int(script_view.get("script_index") or 0)
+            total = int(script_view.get("script_total") or 0)
+            prefix = f"Script {index}/{total}" if index and total else "Script"
+            stage = f"{prefix} · {stage}" if stage else prefix
+        return {
+            "status": status,
+            "stage": stage,
+            "completed_count": completed_count,
+            "total": len(tasks),
+        }
 
     def _fallback_console_view(self, state: dict, status_hint: str = "", detail_hint: str = "") -> dict:
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
@@ -2529,7 +2585,7 @@ class UIState(WorkflowBuilderMixin):
                 except (TypeError, ValueError):
                     continue
             return pids
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, subprocess.SubprocessError, ValueError):
             return None
 
     @staticmethod
@@ -2551,6 +2607,8 @@ class UIState(WorkflowBuilderMixin):
                 return bool(output and "no tasks are running" not in output and str(pid) in output)
             except (OSError, subprocess.SubprocessError):
                 return False
+            except ValueError:
+                return True
         try:
             os.kill(pid, 0)
             return True
@@ -2577,7 +2635,7 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/api/projects":
-                return self._json({"projects": self.state.projects()})
+                return self._json(self.state.projects_payload())
             if parsed.path == "/api/backends":
                 return self._json(self.state.backend_catalog())
             if parsed.path == "/api/environment/check":
