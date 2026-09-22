@@ -40,13 +40,17 @@ def register_ui_project(project_root: str | Path, *, repo_root: Path | None = No
                 rows = []
 
             key = os.path.normcase(os.path.abspath(str(root)))
-            items = [
-                row
-                for row in rows
-                if isinstance(row, dict)
-                and os.path.normcase(os.path.abspath(str(row.get("path") or ""))) != key
-            ]
-            items.insert(0, {"name": root.name or str(root), "path": str(root)})
+            existing_name = ""
+            items = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                row_key = os.path.normcase(os.path.abspath(str(row.get("path") or "")))
+                if row_key == key:
+                    existing_name = str(row.get("name") or "")
+                    continue
+                items.append(row)
+            items.insert(0, {"name": existing_name or root.name or str(root), "path": str(root)})
 
             tmp = projects_file.with_name(
                 f"{projects_file.name}.{os.getpid()}.{threading.get_ident()}.tmp"

@@ -26,9 +26,27 @@ def test_register_ui_project_adds_deduped_project_to_ui_list(tmp_path):
 
     rows = json.loads(projects.read_text(encoding="utf-8"))
     assert rows == [
-        {"name": "alpha", "path": str(project_a.resolve())},
+        {"name": "Alpha old", "path": str(project_a.resolve())},
         {"name": "Beta", "path": str(project_b)},
     ]
+
+
+def test_register_ui_project_preserves_renamed_display_name(tmp_path):
+    repo = tmp_path / "repo"
+    project = tmp_path / "alpha"
+    project.mkdir()
+    data = repo / "ui" / "data"
+    data.mkdir(parents=True)
+    projects = data / "projects.json"
+    projects.write_text(
+        json.dumps([{"name": "Login Worktree", "path": str(project)}]),
+        encoding="utf-8",
+    )
+
+    register_ui_project(project, repo_root=repo)
+
+    rows = json.loads(projects.read_text(encoding="utf-8"))
+    assert rows == [{"name": "Login Worktree", "path": str(project.resolve())}]
 
 
 def test_register_ui_project_is_best_effort_for_missing_project(tmp_path):

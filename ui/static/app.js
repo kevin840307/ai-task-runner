@@ -190,10 +190,10 @@ function followHistoryToBottom(force = false) {
 
 // ------------------------------ Projects / Chat ------------------------------
 async function loadProjects() {
-  const data = await api("/api/projects"); applyProjectPollMeta(data); state.projects = data.projects || []; renderProjects();
+  const data = await api("/api/projects"); applyProjectPollMeta(data); state.projects = uniqueProjects(data.projects || []); renderProjects();
   if (!state.project && state.projects.length) {
     const saved = state.preferences?.lastProject || "";
-    const first = state.projects.find((p) => p.path === saved && p.exists !== false) || state.projects.find((p) => p.exists !== false);
+    const first = state.projects.find((p) => sameProjectPath(p.path, saved) && p.exists !== false) || state.projects.find((p) => p.exists !== false);
     if (first) await selectProject(first);
   }
 }
@@ -221,16 +221,30 @@ function applyProjectPollMeta(data) {
 }
 function projectStatusPollDelay() { return state.projectPollMs || 8000; }
 function projectStatusHiddenPollDelay() { return Math.max(12000, (state.projectPollMs || 8000) * 2); }
-function projectRuntimeSignature(projects) { return (projects || []).map((p) => `${p.path}:${p.name || ""}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
+function projectPathKey(path) {
+  const value = String(path || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return /^[A-Za-z]:\//.test(value) ? value.toLowerCase() : value;
+}
+function sameProjectPath(left, right) { return projectPathKey(left) === projectPathKey(right); }
+function uniqueProjects(projects) {
+  const seen = new Set(), result = [];
+  for (const project of projects || []) {
+    const key = projectPathKey(project?.path);
+    if (!key || seen.has(key)) continue;
+    seen.add(key); result.push(project);
+  }
+  return result;
+}
+function projectRuntimeSignature(projects) { return uniqueProjects(projects || []).map((p) => `${projectPathKey(p.path)}:${p.name || ""}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
 async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
-      const data = await api("/api/projects"), next = data.projects || [];
+      const data = await api("/api/projects"), next = uniqueProjects(data.projects || []);
       applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
-      if (state.project) state.project = next.find((p) => p.path === state.project.path) || state.project;
+      if (state.project) state.project = next.find((p) => sameProjectPath(p.path, state.project.path)) || state.project;
       renderProjects();
     } catch (_) {}
     finally { state.projectRefreshPromise = null; }
@@ -270,8 +284,8 @@ function projectRuntimeStatus(project) { return project.exists === false ? "miss
 function projectRowSignature(project) {
   return JSON.stringify([
     project.path, project.name, project.exists !== false, projectRuntimeStatus(project), project.runtime_stage || "",
-    project.runtime_completed_count || 0, project.runtime_total || 0, state.project?.path === project.path,
-    state.removingProjectPath === project.path, state.projectSwitching && state.project?.path === project.path,
+    project.runtime_completed_count || 0, project.runtime_total || 0, sameProjectPath(state.project?.path, project.path),
+    sameProjectPath(state.removingProjectPath, project.path), state.projectSwitching && sameProjectPath(state.project?.path, project.path),
   ]);
 }
 function syncProjectListLoadingState(root) {
@@ -281,13 +295,14 @@ function syncProjectListLoadingState(root) {
 }
 function createProjectRow(project) {
   const runtimeStatus = projectRuntimeStatus(project);
-  const removing = state.removingProjectPath === project.path;
-  const opening = state.projectSwitching && state.project?.path === project.path;
+  const removing = sameProjectPath(state.removingProjectPath, project.path);
+  const opening = state.projectSwitching && sameProjectPath(state.project?.path, project.path);
   const row = document.createElement("div"); row.className = `project-tree project-row runtime-${runtimeStatus}`;
   row.dataset.projectPath = project.path;
+  row.dataset.projectKey = projectPathKey(project.path);
   row.dataset.renderSignature = projectRowSignature(project);
   if (removing || opening) row.classList.add("project-busy");
-  if (state.project?.path === project.path) row.classList.add("active");
+  if (sameProjectPath(state.project?.path, project.path)) row.classList.add("active");
   if (project.exists === false) row.classList.add("missing");
   const button = document.createElement("button"); button.className = "project-root"; button.type = "button";
   const mark = document.createElement("span"); mark.className = `project-mark runtime-${runtimeStatus}`; mark.title = runtimeStatus === "running" ? "Running" : runtimeStatus.charAt(0).toUpperCase() + runtimeStatus.slice(1);
@@ -312,8 +327,9 @@ function createProjectRow(project) {
 
   const menuButton = document.createElement("button"); menuButton.className = "project-menu-button"; menuButton.type = "button"; menuButton.title = t("project.actions", "Project actions"); menuButton.setAttribute("aria-label", `${t("project.actions", "Project actions")} · ${project.name}`); menuButton.innerHTML = "<span aria-hidden=\"true\"></span>"; menuButton.disabled = removing || state.projectSwitching;
   const menu = document.createElement("div"); menu.className = "project-action-menu"; menu.hidden = true;
+  const rename = document.createElement("button"); rename.type = "button"; rename.textContent = t("project.rename", "Rename project");
   const remove = document.createElement("button"); remove.type = "button"; remove.className = "danger-text"; remove.textContent = t("project.remove", "Remove project");
-  menu.appendChild(remove);
+  menu.append(rename, remove);
   menuButton.onclick = (event) => {
     event.stopPropagation(); const open = menu.hidden;
     if (open) openProjectMenu(menu, menuButton, row); else closeProjectMenus();
@@ -327,28 +343,54 @@ function createProjectRow(project) {
     try {
       await api("/api/projects/remove", { method: "POST", body: JSON.stringify({ path: project.path }) });
       setProjectListLoading(true, "Refreshing projects…");
-      if (state.project?.path === project.path) { state.project = null; showEmpty(); }
+      if (sameProjectPath(state.project?.path, project.path)) { state.project = null; showEmpty(); }
       await loadProjects();
       showToast("Project removed");
     }
     catch (error) { showAppError(error.message); showActionError(error.message, "Remove Project failed"); }
-    finally { if (state.removingProjectPath === project.path) state.removingProjectPath = ""; setProjectListLoading(false); renderProjects(); }
+    finally { if (sameProjectPath(state.removingProjectPath, project.path)) state.removingProjectPath = ""; setProjectListLoading(false); renderProjects(); }
+  };
+  rename.onclick = async (event) => {
+    event.stopPropagation(); closeProjectMenus();
+    const name = await inputDialog({ title: t("project.rename_title", "Rename Project"), message: project.path, label: t("project.rename_label", "Display name"), value: project.name, confirmLabel: t("project.rename_confirm", "Rename") });
+    if (!name || name === project.name) return;
+    try {
+      const updated = await api("/api/projects/rename", { method: "POST", body: JSON.stringify({ path: project.path, name }) });
+      const current = state.projects.find((item) => sameProjectPath(item.path, project.path));
+      if (current) current.name = updated.name;
+      if (sameProjectPath(state.project?.path, project.path)) { state.project = { ...state.project, name: updated.name }; $("projectName").textContent = updated.name; }
+      renderProjects(); showToast(t("project.renamed", "Project renamed"));
+    } catch (error) { showActionError(error.message, "Rename Project failed"); }
   };
   row.append(button, menuButton, menu);
   return row;
 }
 function renderProjects() {
   const root = $("projectList"); closeProjectMenus(); root.onscroll = () => closeProjectMenus(); syncProjectListLoadingState(root);
-  const existing = new Map([...root.querySelectorAll(".project-row[data-project-path]")].map((row) => [row.dataset.projectPath, row]));
+  const existing = new Map(), staleRows = [];
+  for (const row of root.querySelectorAll(".project-row[data-project-path]")) {
+    const key = row.dataset.projectKey || projectPathKey(row.dataset.projectPath);
+    if (!key || existing.has(key)) staleRows.push(row);
+    else existing.set(key, row);
+  }
   const fragment = document.createDocumentFragment();
   const seen = new Set();
-  for (const project of state.projects) {
+  const projects = uniqueProjects(state.projects);
+  if (projects.length !== state.projects.length) state.projects = projects;
+  for (const project of projects) {
+    const key = projectPathKey(project.path);
     const signature = projectRowSignature(project);
-    const current = existing.get(project.path);
-    seen.add(project.path);
-    fragment.appendChild(current?.dataset.renderSignature === signature ? current : createProjectRow(project));
+    const current = existing.get(key);
+    seen.add(key);
+    if (current?.dataset.renderSignature === signature) {
+      fragment.appendChild(current);
+    } else {
+      current?.remove();
+      fragment.appendChild(createProjectRow(project));
+    }
   }
-  for (const [path, row] of existing) if (!seen.has(path)) row.remove();
+  for (const row of staleRows) row.remove();
+  for (const [key, row] of existing) if (!seen.has(key)) row.remove();
   root.appendChild(fragment);
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
@@ -359,7 +401,7 @@ function showEmpty() {
 async function selectProject(project) {
   if (!project || state.projectSwitching) return;
   state.lastRuntimeSignature = "";
-  const changingProject = state.project?.path !== project.path;
+  const changingProject = !sameProjectPath(state.project?.path, project.path);
   if (changingProject && state.studioFile?.scope === "project") {
     if ((state.studioDirty || state.visualDirty) && !(await confirmDiscardStudio())) return;
     clearStudioEditor();
@@ -384,7 +426,7 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
   const root = $("messages");
   const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
   const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`);
-  if (state.project?.path !== projectPath) return;
+  if (!sameProjectPath(state.project?.path, projectPath)) return;
   const input = root.querySelector(".runtime-input-card");
   const live = root.querySelector(".live-activity"); root.innerHTML = "";
   for (const message of data.messages || []) {
@@ -465,17 +507,18 @@ function runtimeRenderSignature(runtime) {
 }
 async function refreshRuntime({ projectPath = state.project?.path || "" } = {}) {
   if (!projectPath) return;
-  if (state.runtimeRefreshPromise && state.runtimeRefreshProject === projectPath) return state.runtimeRefreshPromise;
+  const projectKey = projectPathKey(projectPath);
+  if (state.runtimeRefreshPromise && state.runtimeRefreshProject === projectKey) return state.runtimeRefreshPromise;
   const request = (async () => {
     try {
       const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`);
-      if (state.project?.path !== projectPath) return;
+      if (!sameProjectPath(state.project?.path, projectPath)) return;
       state.runtime = runtime;
       const signature = runtimeRenderSignature(runtime);
       if (signature !== state.lastRuntimeSignature) { state.lastRuntimeSignature = signature; state.runtimeLastChangedAt = Date.now(); renderRuntime(runtime); }
-    } catch (error) { if (state.project?.path === projectPath) setTextIfChanged($("errorText"), error.message); }
+    } catch (error) { if (sameProjectPath(state.project?.path, projectPath)) setTextIfChanged($("errorText"), error.message); }
   })();
-  state.runtimeRefreshPromise = request; state.runtimeRefreshProject = projectPath;
+  state.runtimeRefreshPromise = request; state.runtimeRefreshProject = projectKey;
   try { return await request; }
   finally { if (state.runtimeRefreshPromise === request) { state.runtimeRefreshPromise = null; state.runtimeRefreshProject = ""; } }
 }
@@ -559,7 +602,7 @@ function renderRuntime(runtime) {
     renderCliRuntimeFrame();
     followHistoryToBottom();
   } else removeLiveCard();
-  const current = state.projects.find((p) => p.path === state.project?.path);
+  const current = state.projects.find((p) => sameProjectPath(p.path, state.project?.path));
   if (current) { const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle"; if (current.runtime_status !== nextStatus) { current.runtime_status = nextStatus; renderProjects(); } }
   if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
 }
@@ -1667,8 +1710,8 @@ async function confirmProjectModal() {
       closeProjectModal();
       setProjectListLoading(true, "Refreshing projects…");
       await loadProjects();
-      const picked = state.projects.find((p) => p.path === added.path);
-      if (picked && state.project?.path !== picked.path) {
+      const picked = state.projects.find((p) => sameProjectPath(p.path, added.path));
+      if (picked && !sameProjectPath(state.project?.path, picked.path)) {
         setProjectListLoading(true, "Opening project…");
         await selectProject(picked);
       }

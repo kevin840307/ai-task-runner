@@ -323,7 +323,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('Object.prototype.hasOwnProperty.call(item, "status")', self.js)
 
     def test_project_actions_use_static_menu_and_confirmed_remove(self):
-        for token in ("project-action-menu", "project-menu-button", 'remove.textContent = t("project.remove", "Remove project")', 'title: "Remove Project?"'):
+        for token in ("project-action-menu", "project-menu-button", 'rename.textContent = t("project.rename", "Rename project")', 'remove.textContent = t("project.remove", "Remove project")', 'title: "Remove Project?"', '/api/projects/rename'):
             self.assertIn(token, self.js)
 
     def test_project_action_menu_portals_out_of_scroll_container(self):
@@ -764,8 +764,8 @@ def test_runtime_polling_throttles_hidden_tabs_and_avoids_repaint():
     assert "setInterval(updateRuntimeFreshness, 1000)" in script
     assert "runtimeRenderSignature(runtime)" in script
     assert "signature !== state.lastRuntimeSignature" in script
-    assert "state.runtimeRefreshProject === projectPath" in script
-    assert "state.project?.path !== projectPath" in script
+    assert "state.runtimeRefreshProject === projectKey" in script
+    assert "!sameProjectPath(state.project?.path, projectPath)" in script
     assert "if (state.projectRefreshPromise) return state.projectRefreshPromise;" in script
     assert "if (state.studioGuardRefreshPromise) return state.studioGuardRefreshPromise;" in script
     assert "setTextIfChanged(output, cliRuntimeText(runtime))" in script
@@ -832,6 +832,23 @@ def test_project_async_actions_show_busy_feedback_and_prevent_duplicate_requests
     assert 'withButtonBusy($("projectModalConfirm"), "Adding…"' in app
     assert 'withButtonBusy($("flowMapButton"), "Loading…"' in app
     assert '.project-tree.project-busy .project-root' in css
+
+def test_project_list_deduplicates_by_normalized_path_and_removes_stale_rows():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "function projectPathKey(path)" in app
+    assert "function uniqueProjects(projects)" in app
+    assert "sameProjectPath(p.path, saved)" in app
+    assert "row.dataset.projectKey = projectPathKey(project.path)" in app
+    assert "if (!key || existing.has(key)) staleRows.push(row)" in app
+    assert "current?.remove()" in app
+    assert "for (const row of staleRows) row.remove()" in app
+
+def test_ui_handler_disables_browser_cache_for_static_and_api_responses():
+    server = (Path(__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
+    assert "def end_headers(self) -> None:" in server
+    assert 'self.send_header("Cache-Control", "no-store")' in server
+    assert 'self.send_header("Pragma", "no-cache")' in server
+    assert 'self.send_header("Expires", "0")' in server
 
 def test_studio_validation_details_use_dedicated_compact_state():
     base = Path(__file__).resolve().parents[1] / "static"

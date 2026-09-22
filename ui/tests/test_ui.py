@@ -153,6 +153,47 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertFalse(rows[0]["exists"])
 
+    def test_add_project_deduplicates_equivalent_path_spellings(self) -> None:
+        self.state.add_project(str(self.project) + os.sep)
+        self.state.add_project(str(self.project))
+
+        rows = self.state.projects()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(Path(rows[0]["path"]).resolve(), self.project.resolve())
+
+    def test_write_projects_deduplicates_equivalent_path_spellings(self) -> None:
+        self.state._write_projects([
+            {"name": "First", "path": str(self.project) + os.sep},
+            {"name": "Second", "path": str(self.project)},
+        ])
+
+        rows = self.state.projects()
+
+        self.assertEqual(rows, [{
+            "name": "First",
+            "path": str(self.project.resolve()),
+            "exists": True,
+            "runtime_status": "idle",
+            "runtime_stage": "",
+            "runtime_completed_count": 0,
+            "runtime_total": 0,
+        }])
+
+    def test_project_display_name_can_be_renamed_without_changing_path(self) -> None:
+        self.state.add_project(str(self.project))
+
+        renamed = self.state.rename_project(str(self.project), "  Login Worktree  ")
+        rows = self.state.projects()
+
+        self.assertEqual(renamed, {"name": "Login Worktree", "path": str(self.project.resolve())})
+        self.assertEqual(rows[0]["name"], "Login Worktree")
+        self.assertEqual(Path(rows[0]["path"]).resolve(), self.project.resolve())
+
+    def test_project_rename_requires_existing_sidebar_project(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not in the sidebar"):
+            self.state.rename_project(str(self.project), "New Name")
+
     def test_completed_run_appends_assistant_once(self) -> None:
         runtime = self.project / ".ai-task-runner"
         self.write_json(runtime / "state.json", {"run_id": "run-1", "completed": True})

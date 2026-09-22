@@ -75,6 +75,14 @@ class UIState(WorkflowBuilderMixin):
             self._atomic_json(self.workflow_visibility_file, {})
 
     # ------------------------------ projects/runtime/chat ------------------------------
+    @staticmethod
+    def _project_path_key(path: str | Path) -> str:
+        return os.path.normcase(os.path.abspath(str(path)))
+
+    @staticmethod
+    def _project_display_path(path: str | Path) -> str:
+        return str(Path(path).expanduser().resolve())
+
     def projects_payload(self) -> dict:
         try:
             stat = self.projects_file.stat()
@@ -120,10 +128,11 @@ class UIState(WorkflowBuilderMixin):
         for item in project_rows:
             if not isinstance(item, dict):
                 continue
-            path = str(item.get("path", "")).strip()
-            if not path:
+            raw_path = str(item.get("path", "")).strip()
+            if not raw_path:
                 continue
-            key = os.path.normcase(os.path.abspath(path))
+            path = self._project_display_path(raw_path)
+            key = self._project_path_key(path)
             if key in seen:
                 continue
             seen.add(key)
@@ -220,7 +229,8 @@ class UIState(WorkflowBuilderMixin):
             resolved = Path(path).expanduser().resolve()
             if not resolved.is_dir():
                 raise ValueError("Project folder does not exist")
-            items = [p for p in self.projects() if os.path.normcase(p["path"]) != os.path.normcase(str(resolved))]
+            key = self._project_path_key(resolved)
+            items = [p for p in self.projects() if self._project_path_key(p["path"]) != key]
             project = {"name": resolved.name or str(resolved), "path": str(resolved)}
             items.insert(0, project)
             self._write_projects(items)
@@ -228,19 +238,47 @@ class UIState(WorkflowBuilderMixin):
 
     def remove_project(self, path: str) -> None:
         with self._projects_lock:
-            key = os.path.normcase(os.path.abspath(path))
-            target = next((p for p in self.projects() if os.path.normcase(os.path.abspath(p["path"])) == key), None)
+            key = self._project_path_key(path)
+            target = next((p for p in self.projects() if self._project_path_key(p["path"]) == key), None)
             if target and Path(target["path"]).is_dir() and self.read_runtime(Path(target["path"])).get("running"):
                 raise ValueError("Stop the active runtime before removing this project")
-            self._write_projects([p for p in self.projects() if os.path.normcase(os.path.abspath(p["path"])) != key])
+            self._write_projects([p for p in self.projects() if self._project_path_key(p["path"]) != key])
+
+    def rename_project(self, path: str, name: str) -> dict:
+        label = " ".join(str(name or "").split())
+        if not label:
+            raise ValueError("Project name is required")
+        if len(label) > 120:
+            raise ValueError("Project name is too long")
+        with self._projects_lock:
+            key = self._project_path_key(path)
+            rows = self.projects()
+            renamed: dict | None = None
+            for item in rows:
+                if self._project_path_key(item["path"]) != key:
+                    continue
+                item["name"] = label
+                renamed = {"name": label, "path": item["path"]}
+                break
+            if not renamed:
+                raise ValueError("Project is not in the sidebar")
+            self._write_projects(rows)
+            return renamed
 
     def _write_projects(self, items: list[dict]) -> None:
         # Persist identity only; existence/runtime status are live filesystem data.
-        rows = [
-            {"name": str(item.get("name") or Path(str(item.get("path") or "")).name), "path": str(item.get("path") or "")}
-            for item in items
-            if str(item.get("path") or "").strip()
-        ]
+        rows = []
+        seen: set[str] = set()
+        for item in items:
+            path = str(item.get("path") or "").strip()
+            if not path:
+                continue
+            display_path = self._project_display_path(path)
+            key = self._project_path_key(display_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({"name": str(item.get("name") or Path(display_path).name), "path": display_path})
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
@@ -2690,6 +2728,8 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/projects/remove":
                 self.state.remove_project(str(body.get("path", "")))
                 return self._json({"ok": True})
+            if parsed.path == "/api/projects/rename":
+                return self._json(self.state.rename_project(str(body.get("path", "")), str(body.get("name", ""))))
             if parsed.path == "/api/projects/pick":
                 return self._pick_folder()
             if parsed.path == "/api/files/pick":
@@ -2909,7 +2949,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(payload)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
@@ -2917,6 +2956,12 @@ class Handler(SimpleHTTPRequestHandler):
             # navigation, or page close. The client is already gone, so there
             # is no error response left to send and no server fault to report.
             return
+
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
 
     def log_message(self, fmt: str, *args: object) -> None:
         return
