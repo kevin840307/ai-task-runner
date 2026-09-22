@@ -414,6 +414,7 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
     code = ai_task_runner.main([
         "--goal", "x",
         "--project-root", str(tmp_path),
+        "--project-name", "CLI Project",
         "--validator", "ai",
         "--backend", "opencode",
         "--ai-validator-yolo",
@@ -423,6 +424,7 @@ def test_cli_delegates_to_shared_run_entry(monkeypatch, tmp_path):
     assert code == 0
     assert len(captured) == 1
     assert captured[0].goal == "x"
+    assert captured[0].project_name == "CLI Project"
     assert captured[0].backend == "opencode"
     assert captured[0].ai_validator_yolo is True
     assert captured[0].readonly_safety == "observe"
@@ -773,3 +775,20 @@ def test_api_deterministic_runner_error_fails_closed_without_resume_loop(tmp_pat
     with pytest.raises(RunnerError, match="saved task_step"):
         run(request)
     assert calls == [False]
+
+
+def test_yaml_script_project_name_overrides_outer_default(tmp_path):
+    from runner.api import RunRequest
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import build_script_item_config
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text("- prompt: x\n  validator: ai\n  project_name: Child Display\n", encoding="utf-8")
+    item = load_yaml_script(script)[0]
+    outer = RunRequest(
+        project_root=str(tmp_path), project_name="Outer Display", script=str(script), validator="ai"
+    ).normalized_config()
+
+    child = build_script_item_config(outer, item, 1)
+
+    assert child.project_name == "Child Display"

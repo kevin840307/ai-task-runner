@@ -76,3 +76,18 @@ def test_register_ui_project_preserves_concurrent_cli_updates(tmp_path):
 
     assert paths == {str(project.resolve()) for project in projects}
     assert not (repo / "ui" / "data" / "projects.json.lock").exists()
+
+
+def test_register_ui_project_explicit_name_overrides_existing_display_name(tmp_path):
+    repo = tmp_path / "repo"
+    project = tmp_path / "alpha"
+    project.mkdir()
+    data = repo / "ui" / "data"
+    data.mkdir(parents=True)
+    projects = data / "projects.json"
+    projects.write_text(json.dumps([{"name": "Old Name", "path": str(project)}]), encoding="utf-8")
+
+    register_ui_project(project, project_name="  YAML Project  ", repo_root=repo)
+
+    rows = json.loads(projects.read_text(encoding="utf-8"))
+    assert rows == [{"name": "YAML Project", "path": str(project.resolve())}]

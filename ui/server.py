@@ -19,6 +19,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from project_registry import project_file_lock
+
 try:
     from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from .workflow_graph import build_workflow_graph
@@ -225,7 +227,7 @@ class UIState(WorkflowBuilderMixin):
         return {"default": default, "backends": sorted(names)}
 
     def add_project(self, path: str) -> dict:
-        with self._projects_lock:
+        with self._projects_lock, project_file_lock(self.projects_file):
             resolved = Path(path).expanduser().resolve()
             if not resolved.is_dir():
                 raise ValueError("Project folder does not exist")
@@ -233,16 +235,16 @@ class UIState(WorkflowBuilderMixin):
             items = [p for p in self.projects() if self._project_path_key(p["path"]) != key]
             project = {"name": resolved.name or str(resolved), "path": str(resolved)}
             items.insert(0, project)
-            self._write_projects(items)
+            self._write_projects_unlocked(items)
             return project
 
     def remove_project(self, path: str) -> None:
-        with self._projects_lock:
+        with self._projects_lock, project_file_lock(self.projects_file):
             key = self._project_path_key(path)
             target = next((p for p in self.projects() if self._project_path_key(p["path"]) == key), None)
             if target and Path(target["path"]).is_dir() and self.read_runtime(Path(target["path"])).get("running"):
                 raise ValueError("Stop the active runtime before removing this project")
-            self._write_projects([p for p in self.projects() if self._project_path_key(p["path"]) != key])
+            self._write_projects_unlocked([p for p in self.projects() if self._project_path_key(p["path"]) != key])
 
     def rename_project(self, path: str, name: str) -> dict:
         label = " ".join(str(name or "").split())
@@ -250,7 +252,7 @@ class UIState(WorkflowBuilderMixin):
             raise ValueError("Project name is required")
         if len(label) > 120:
             raise ValueError("Project name is too long")
-        with self._projects_lock:
+        with self._projects_lock, project_file_lock(self.projects_file):
             key = self._project_path_key(path)
             rows = self.projects()
             renamed: dict | None = None
@@ -262,10 +264,14 @@ class UIState(WorkflowBuilderMixin):
                 break
             if not renamed:
                 raise ValueError("Project is not in the sidebar")
-            self._write_projects(rows)
+            self._write_projects_unlocked(rows)
             return renamed
 
     def _write_projects(self, items: list[dict]) -> None:
+        with self._projects_lock, project_file_lock(self.projects_file):
+            self._write_projects_unlocked(items)
+
+    def _write_projects_unlocked(self, items: list[dict]) -> None:
         # Persist identity only; existence/runtime status are live filesystem data.
         rows = []
         seen: set[str] = set()
@@ -815,6 +821,34 @@ class UIState(WorkflowBuilderMixin):
                     pass
                 raise
             self.append_message(project, "user", message)
+
+    def rerun_last(self, project: Path, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
+        """Atomically reset and relaunch the last user task within this UI process."""
+        with self._chat_lock, self._runtime_lock:
+            runtime = self.read_runtime(project)
+            if runtime.get("running"):
+                raise ValueError("This project already has an active runtime")
+            last = next((m["content"] for m in reversed(self.messages(project)) if m.get("role") == "user"), "")
+            if not last:
+                raise ValueError("No previous task to rerun")
+            self._reset_runtime_locked(project)
+            request = self._create_run_request(
+                project, last, backend=backend, model=model, validator=validator, workflow=workflow,
+                ai_validator_prompt_file=ai_validator_prompt_file, readonly_safety=readonly_safety,
+                request_mode="workflow",
+            )
+            try:
+                self.launch(
+                    project, None, mode="run", backend=backend, model=request["model"],
+                    validator=request["validator"], workflow=request["workflow"],
+                    goal_file=request["prompt_file"],
+                    ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
+                    readonly_safety=request.get("readonly_safety", "restore"),
+                )
+            except Exception:
+                folder = Path(request["request_dir"])
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
 
     def launch(
         self,
@@ -2772,29 +2806,14 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/project/reset":
                 return self._json(self.state.reset_runtime(self._project(body)))
             if parsed.path == "/api/project/rerun":
-                project = self._project(body)
-                last = next((m["content"] for m in reversed(self.state.messages(project)) if m.get("role") == "user"), "")
-                if not last:
-                    raise ValueError("No previous task to rerun")
-                self.state.reset_runtime(project)
-                request = self.state._create_run_request(
-                    project,
-                    last,
+                self.state.rerun_last(
+                    self._project(body),
                     backend=str(body.get("backend", "")),
                     model=str(body.get("model", "")),
                     validator=str(body.get("validator", "")),
                     workflow=str(body.get("workflow", "")),
-                    request_mode="workflow",
-                )
-                self.state.launch(
-                    project,
-                    None,
-                    mode="run",
-                    backend=str(body.get("backend", "")),
-                    model=request["model"],
-                    validator=request["validator"],
-                    workflow=request["workflow"],
-                    goal_file=request["prompt_file"],
+                    ai_validator_prompt_file=str(body.get("ai_validator_prompt_file", "")),
+                    readonly_safety=str(body.get("readonly_safety", "restore")),
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/studio/generate":

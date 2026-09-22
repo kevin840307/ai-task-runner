@@ -37,6 +37,7 @@ class RuntimeConfig:
     goal: str = ""
     goal_file: str | None = None
     project_root: str = "."
+    project_name: str = ""
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -85,6 +86,11 @@ class RuntimeConfig:
 
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
+        if not isinstance(self.project_name, str):
+            raise ValueError("project_name must be a string")
+        self.project_name = " ".join(self.project_name.split())
+        if len(self.project_name) > 120:
+            raise ValueError("project_name is too long")
         if not self.script and not self.resume and not self.goal.strip():
             raise ValueError("goal is required unless script or resume is used")
         if not self.script and not self.workflow_explicit and not (

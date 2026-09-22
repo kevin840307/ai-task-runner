@@ -31,7 +31,7 @@ class TaskRunner:
 
         self.root = Path(self.config.project_root).resolve()
         if self.config.auto_register_ui_project:
-            register_ui_project(self.root)
+            register_ui_project(self.root, project_name=self.config.project_name)
         self.validator_is_ai = bool(self.config.validator) and self.config.validator.lower() == "ai"
         self.validator_path = (
             None

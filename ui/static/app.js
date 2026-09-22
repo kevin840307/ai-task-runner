@@ -223,7 +223,7 @@ function projectStatusPollDelay() { return state.projectPollMs || 8000; }
 function projectStatusHiddenPollDelay() { return Math.max(12000, (state.projectPollMs || 8000) * 2); }
 function projectPathKey(path) {
   const value = String(path || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  return /^[A-Za-z]:\//.test(value) ? value.toLowerCase() : value;
+  return (/^[A-Za-z]:\//.test(value) || value.startsWith("//")) ? value.toLowerCase() : value;
 }
 function sameProjectPath(left, right) { return projectPathKey(left) === projectPathKey(right); }
 function uniqueProjects(projects) {
@@ -677,12 +677,12 @@ async function refreshStudioFiles({ force = false, projectPath = state.project?.
   const request = (async () => {
     try {
       const data = await api(`/api/studio/files?x=1${query}`);
-      if ((state.project?.path || "") !== projectPath) return state.studioFiles;
+      if (!sameProjectPath(state.project?.path || "", projectPath)) return state.studioFiles;
       state.studioFiles = data; state.studioGuard = data.guard || { editable: true, active_projects: [] };
       state.studioCatalogKey = key; state.studioCatalogLoadedAt = Date.now();
       renderStudioGuard(); renderStudioFiles(); renderWorkflowPicker(); fillAddStagePromptOptions(); refreshPromptTags();
       return data;
-    } catch (error) { if ((state.project?.path || "") === projectPath) setStudioStatus(error.message, true); return state.studioFiles; }
+    } catch (error) { if (sameProjectPath(state.project?.path || "", projectPath)) setStudioStatus(error.message, true); return state.studioFiles; }
   })();
   state.studioFilesRefreshPromise = request; state.studioFilesRefreshKey = key;
   try { return await request; }
@@ -1833,7 +1833,7 @@ $("resetButton").onclick = async () => {
   const ok = await confirmDialog({ title: "Reset stopped task?", message: "Discard resumable Runner state? UI task history and request snapshots are kept.", confirmLabel: "Reset", danger: true }); if (!ok) return;
   try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime(); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
-$("rerunButton").onclick = async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } };
+$("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
 state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {

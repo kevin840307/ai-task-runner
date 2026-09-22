@@ -40,6 +40,7 @@ def parser() -> argparse.ArgumentParser:
         help="UTF-8 text file containing the goal; mutually exclusive with --goal",
     )
     command_parser.add_argument("--project-root", default=".")
+    command_parser.add_argument("--project-name", default="", help="optional UI display name for this project")
     command_parser.add_argument("--script", help="YAML array of prompt + validator items")
     command_parser.add_argument(
         "--workflow",

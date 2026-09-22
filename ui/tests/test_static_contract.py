@@ -816,7 +816,7 @@ def test_workflow_catalog_refresh_is_cached_and_non_overlapping():
     assert "studioFilesRefreshPromise" in app
     assert "Date.now() - state.studioCatalogLoadedAt" in app
     assert "state.studioFilesRefreshKey === key" in app
-    assert '(state.project?.path || "") !== projectPath' in app
+    assert '!sameProjectPath(state.project?.path || "", projectPath)' in app
 
 
 

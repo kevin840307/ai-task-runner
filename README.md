@@ -18,7 +18,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 - TODO execution runs the built-in Task -> Review lifecycle for each task. Same-task failures prefer the same session and rebuild only when needed; timeout recovery uses a stable semantic failure key so volatile backend output such as sandbox/container IDs cannot reset the failure streak; Review uses an independent read-only client/session.
 - Bundled Task/Review prompts use bounded `continuation_prompt` handoffs after the same session has already seen the full Stage contract, so later TODOs/repair evidence do not resend Goal/rules; first and fresh/rebuilt calls still receive complete necessary context.
 - Deterministic final validator as the hard correctness gate; optional fresh-session Final AI voting can be used alone or after the hard gate.
-- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, one canonical Python/CLI/UI API boundary, linear Workflow YAML, and YAML script mode with optional per-item `project_root`, `goal_file`, and `workflow_file`.
+- Retry/resume, session rebuild, no-progress recovery, protected paths, Git write guard, JSONL events, one canonical Python/CLI/UI API boundary, linear Workflow YAML, and YAML script mode with optional per-item `project_root`, `project_name`, `goal_file`, and `workflow_file`.
 - Worker crash/interrupt cleanup follows each durable Run work directory, including YAML List children, so orphan AI/sandbox processes are not left behind; all subprocess stdout paths are bounded, and `KeyboardInterrupt`/`SystemExit` never enter Stage retry/recovery.
 - Resume treats a valid project `state.json` as authoritative and uses the temp backup only when the primary state is missing or invalid, preventing stale-backup rollback after a crash window.
 - UI-ready extension boundary: owner-module editor/catalog APIs (`runner.resources`, `runner.workflow.loader` / `registry`, `runner.prompts.loader`), installed Stage/backend registration before Workflow validation, external runtime Plugins, atomic Workflow/Prompt editing, and per-Run Workflow/Stage-prompt/goal/final-AI-prompt snapshots.
@@ -30,7 +30,7 @@ A small reusable Python orchestrator for long-running AI coding tasks. It separa
 
 ## Quick start
 ```bat
-python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py"
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --project-name "My Project" --validator "validation.py"
 ```
 
 Validator-specific arguments are repeatable:
@@ -38,6 +38,8 @@ Validator-specific arguments are repeatable:
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --validator-arg "--fab" --validator-arg "FAB23"
 ```
 The Runner invokes the validator as `python validation.py --project-root <root> --state-file <state> --fab FAB23`. Do not combine validator arguments into the `--validator` path string.
+
+`--project-name` only changes the local UI display name; project identity, state, and resume behavior still use `project_root`. YAML List items may set `project_name:` per item, overriding the CLI default.
 
 Mixed hard + AI validation:
 ```bat

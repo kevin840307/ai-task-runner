@@ -16,7 +16,7 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 - TODO 隔離執行：每個 TODO 依序走內建 Task -> Review；同 TODO failure 優先 Same Session，必要時才 Fresh Session。Timeout recovery 使用穩定語意 failure key，因此 sandbox/container ID 等動態 backend output 不會把同一 failure 誤判成新 failure。Review 使用獨立 read-only client/session。
 - System Task/Review 在同一 Session 已看過完整 Stage contract 後，使用 bounded `continuation_prompt` 只補新的 TODO／Repair／Review evidence，不重送 Goal/rules；第一次與 Fresh/Rebuilt Session 仍取得完整必要 Context。
 - Deterministic Final Validator 是 hard gate；可單獨使用 Final AI Validator，也可在 hard gate PASS 後追加 fresh-session AI 投票。
-- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`goal_file`、`workflow_file`）。
+- Retry / Resume、session rebuild、no-progress recovery、protected paths、Git write guard、JSONL events、CLI/Python/UI 共用的 canonical API boundary、線性 Workflow YAML、YAML script mode（每筆可指定 `project_root`、`project_name`、`goal_file`、`workflow_file`）。
 - Worker crash/中斷 cleanup 會依每個 durable Run 的實際 work directory 處理，包含 YAML List child，避免遺留 AI/sandbox orphan process；所有 subprocess stdout 路徑都會 bounded，`KeyboardInterrupt` / `SystemExit` 不會進入 Stage retry/recovery。
 - Resume 以合法的 project `state.json` 為 authoritative state，只有 primary state 缺失或損壞時才使用 temp backup，避免 crash window 後被 stale backup 回滾。
 - UI-ready extension boundary：UI/editor 直接使用各能力的 owner module（`runner.resources`、`runner.workflow.loader` / `registry`、`runner.prompts.loader`）；Workflow validation 前可註冊 installed Stage/Backend、runtime Plugin 可外掛，Workflow/Prompt 支援 atomic edit，且每個 Run 都有自己的 Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。
@@ -28,7 +28,7 @@ Example 啟動器預設使用隔離副本：`examples\run_examples.bat` 與每�
 
 ## 快速開始
 ```bat
-python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py"
+python ai_task_runner.py --goal-file "prompt.md" --project-root "." --project-name "My Project" --validator "validation.py"
 ```
 
 Validator 額外參數可重複指定：
@@ -36,6 +36,8 @@ Validator 額外參數可重複指定：
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --validator-arg "--fab" --validator-arg "FAB23"
 ```
 Runner 實際呼叫會是 `python validation.py --project-root <root> --state-file <state> --fab FAB23`。不要把 `--fab FAB23` 塞進 `--validator` 的檔案路徑字串。
+
+`--project-name` 只影響本機 UI 顯示名稱；Project identity、state、resume 仍以 `project_root` 為準。YAML List 每筆可用 `project_name:` 覆蓋 CLI 預設名稱。
 
 Hard + AI 混合驗證：
 ```bat

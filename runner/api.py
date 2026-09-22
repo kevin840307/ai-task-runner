@@ -50,6 +50,7 @@ class RunRequest:
     goal: str | None = None
     goal_file: str | None = None
     project_root: str = "."
+    project_name: str = ""
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -96,6 +97,7 @@ class RunRequest:
             goal=args.goal,
             goal_file=args.goal_file,
             project_root=args.project_root,
+            project_name=getattr(args, "project_name", ""),
             script=args.script,
             validator=args.validator,
             validator_prompt=args.validator_prompt,
@@ -194,6 +196,7 @@ class RunRequest:
             goal=goal,
             goal_file=goal_file,
             project_root=self.project_root,
+            project_name=self.project_name,
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
@@ -256,6 +259,10 @@ class RunRequest:
     def _validate_request_source(self) -> None:
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
+        if not isinstance(self.project_name, str):
+            raise ValueError("project_name must be a string")
+        if len(" ".join(self.project_name.split())) > 120:
+            raise ValueError("project_name is too long")
         if self.goal and self.goal_file:
             raise ValueError("use either goal or goal_file, not both")
         if self.script and (self.goal or self.goal_file):

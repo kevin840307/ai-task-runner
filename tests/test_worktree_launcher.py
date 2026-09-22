@@ -163,3 +163,39 @@ def test_unsupported_old_multi_mode_fields_fail_fast(tmp_path):
 
     with pytest.raises(launcher.LauncherError, match="unsupported config field"):
         launcher.load_config(config)
+
+
+def test_prepare_rejects_existing_wrong_worktree_branch(tmp_path, monkeypatch):
+    repo = tmp_path / "TestProject"; repo.mkdir()
+    source = repo / "xxxxx.yaml"; write_tasks(source, 1)
+    worktree = tmp_path / "TestProject_1"; worktree.mkdir()
+    runner = tmp_path / "runner.py"; runner.write_text("runner", encoding="utf-8")
+    config = launcher.LaunchConfig(
+        repo=repo, runner=runner, base_branch="main", concurrency=1, start_jitter_seconds=(0, 0),
+        jobs=(launcher.Job("xxxxx_1", "ai/xxxxx_1", worktree, source, worktree / ".ai-task-runner/launcher/scripts/xxxxx_1.yaml", ({"prompt":"x","validator":"ai"},)),),
+    )
+    monkeypatch.setattr(launcher, "ensure_git_repo", lambda repo: None)
+    monkeypatch.setattr(launcher, "verify_existing_worktree", lambda config, job: (_ for _ in ()).throw(launcher.LauncherError("branch mismatch")))
+    with pytest.raises(launcher.LauncherError, match="branch mismatch"):
+        launcher.prepare(config)
+
+
+def test_clean_includes_stale_numbered_worktrees(tmp_path, monkeypatch):
+    repo = tmp_path / "TestProject"; repo.mkdir()
+    source = repo / "xxxxx.yaml"; write_tasks(source, 1)
+    current = tmp_path / "TestProject_1"; stale = tmp_path / "TestProject_3"
+    current.mkdir(); stale.mkdir()
+    runner = tmp_path / "runner.py"; runner.write_text("runner", encoding="utf-8")
+    config = launcher.LaunchConfig(
+        repo=repo, runner=runner, base_branch="main", concurrency=1, start_jitter_seconds=(0, 0),
+        jobs=(launcher.Job("xxxxx_1", "ai/xxxxx_1", current, source, current / ".ai-task-runner/launcher/scripts/xxxxx_1.yaml", ({"prompt":"x","validator":"ai"},)),),
+        worktree_root=tmp_path, job_stem="xxxxx",
+    )
+    calls=[]
+    monkeypatch.setattr(launcher, "ensure_git_repo", lambda repo: None)
+    monkeypatch.setattr(launcher, "_run", lambda command, **kwargs: calls.append(command) or subprocess.CompletedProcess(command,0,"",""))
+    launcher.clean(config, delete_branches=True, force=True)
+    removed = [cmd[-1] for cmd in calls if cmd[:3] == ["git","worktree","remove"] or cmd[:4] == ["git","worktree","remove","--force"]]
+    assert str(current) in removed
+    assert str(stale) in removed
+    assert ["git", "branch", "-D", "ai/xxxxx_3"] in calls

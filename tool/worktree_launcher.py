@@ -39,6 +39,8 @@ class LaunchConfig:
     concurrency: int
     start_jitter_seconds: tuple[float, float]
     jobs: tuple[Job, ...]
+    worktree_root: Path | None = None
+    job_stem: str = ""
 
 
 def _require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -163,6 +165,8 @@ def load_config(path: Path) -> LaunchConfig:
         concurrency=concurrency,
         start_jitter_seconds=_jitter(cfg.get("start_jitter_seconds")),
         jobs=tuple(jobs),
+        worktree_root=worktree_root,
+        job_stem=stem,
     )
 
 
@@ -207,12 +211,57 @@ def ensure_git_repo(repo: Path) -> None:
         raise LauncherError(f"not a git repository: {repo}")
 
 
+def verify_existing_worktree(config: LaunchConfig, job: Job) -> None:
+    """Fail fast instead of reusing an unrelated/stale directory."""
+    result = subprocess.run(
+        ["git", "-C", str(job.worktree), "rev-parse", "--show-toplevel"],
+        text=True, capture_output=True,
+    )
+    if result.returncode != 0 or Path(result.stdout.strip()).resolve() != job.worktree.resolve():
+        raise LauncherError(f"existing path is not the expected Git worktree: {job.worktree}")
+    branch = subprocess.run(
+        ["git", "-C", str(job.worktree), "branch", "--show-current"],
+        text=True, capture_output=True,
+    )
+    if branch.returncode != 0 or branch.stdout.strip() != job.branch:
+        found = branch.stdout.strip() or "detached/unknown"
+        raise LauncherError(
+            f"existing worktree branch mismatch for {job.worktree}: expected {job.branch}, found {found}"
+        )
+
+
+def _managed_jobs(config: LaunchConfig) -> list[Job]:
+    """Return current jobs plus stale launcher-owned worktree directories."""
+    jobs = {job.worktree.resolve(): job for job in config.jobs}
+    if not config.jobs:
+        return []
+    root = (config.worktree_root or config.jobs[0].worktree.parent).resolve()
+    stem = config.job_stem or _slug(config.jobs[0].source_task_yaml.stem)
+    pattern = re.compile(rf"^{re.escape(config.repo.name)}_(\d+)$")
+    for path in root.glob(f"{config.repo.name}_*"):
+        match = pattern.match(path.name)
+        if not match or not path.exists():
+            continue
+        index = int(match.group(1))
+        resolved = path.resolve()
+        if resolved in jobs:
+            continue
+        jobs[resolved] = Job(
+            name=f"{stem}_{index}", branch=f"ai/{stem}_{index}", worktree=resolved,
+            source_task_yaml=config.jobs[0].source_task_yaml,
+            task_yaml=resolved / ".ai-task-runner" / "launcher" / "scripts" / f"{stem}_{index}.yaml",
+            task_items=(),
+        )
+    return sorted(jobs.values(), key=lambda item: item.worktree.name)
+
+
 def prepare(config: LaunchConfig, *, dry_run: bool = False) -> None:
     ensure_git_repo(config.repo)
     if not config.runner.is_file():
         raise LauncherError(f"runner not found: {config.runner}")
     for job in config.jobs:
         if job.worktree.exists():
+            verify_existing_worktree(config, job)
             print(f"exists: {job.worktree}")
         else:
             job.worktree.parent.mkdir(parents=True, exist_ok=True)
@@ -223,7 +272,7 @@ def prepare(config: LaunchConfig, *, dry_run: bool = False) -> None:
 
 def clean(config: LaunchConfig, *, delete_branches: bool = False, force: bool = False, dry_run: bool = False) -> None:
     ensure_git_repo(config.repo)
-    for job in config.jobs:
+    for job in _managed_jobs(config):
         if job.worktree.exists():
             command = ["git", "worktree", "remove"]
             if force:

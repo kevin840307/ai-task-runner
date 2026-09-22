@@ -139,6 +139,7 @@ def build_script_item_config(
         goal=goal,
         goal_file=goal_file,
         project_root=project_root,
+        project_name=item.get("project_name", args.project_name),
         validator=item.get("validator") or args.validator,
         validator_prompt=item.get("validator_prompt", ""),
         ai_validator_prompt=ai_validator_prompt,

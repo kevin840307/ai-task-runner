@@ -103,6 +103,14 @@ def _ai_validator_prompt(
 
 def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
     result: dict[str, Any] = {}
+    if "project_name" in item:
+        value = item["project_name"]
+        if not isinstance(value, str):
+            raise RunnerError(f"script item {index} project_name must be a string")
+        value = " ".join(value.split())
+        if len(value) > 120:
+            raise RunnerError(f"script item {index} project_name is too long")
+        result["project_name"] = value
     if "project_root" in item:
         value = item["project_root"]
         if not isinstance(value, str) or not value.strip():
