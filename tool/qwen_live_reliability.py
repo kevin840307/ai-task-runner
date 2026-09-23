@@ -2498,6 +2498,83 @@ def _atomic_write(path: Path, content: bytes) -> None:
     os.replace(temporary, path)
 
 
+def runner_ownership_preflight(root: Path) -> None:
+    """Exercise the real cross-process project/work-dir ownership lock."""
+    from runner.runtime.supervisor import _acquire_run_lock, _release_run_lock
+
+    work = root / "ownership-preflight" / ".ai-task-runner"
+    work.mkdir(parents=True, exist_ok=True)
+    lock = work / "run.lock"
+    token = _acquire_run_lock(lock)
+    code = """
+from pathlib import Path
+import sys
+from runner.runtime.supervisor import _acquire_run_lock
+path = Path(sys.argv[1])
+try:
+    _acquire_run_lock(path)
+except RuntimeError:
+    raise SystemExit(0)
+raise SystemExit(3)
+"""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    try:
+        duplicate = subprocess.run(
+            [sys.executable, "-c", code, str(lock)],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if duplicate.returncode != 0:
+            raise RuntimeError(
+                "duplicate Runner ownership was not rejected: "
+                f"exit={duplicate.returncode} stderr={duplicate.stderr[-1000:]}"
+            )
+    finally:
+        _release_run_lock(lock, token)
+
+    reacquired = _acquire_run_lock(lock)
+    _release_run_lock(lock, reacquired)
+    if lock.exists():
+        raise RuntimeError("Runner ownership lock was not released cleanly")
+
+
+def windows_orphan_cleanup_preflight(root: Path) -> None:
+    """On Windows, exercise real taskkill-based descendant cleanup with the bounded path."""
+    if os.name != "nt":
+        return
+    from runner.runtime.process_runner import ACTIVE_PROCESS_FILE
+    from runner.runtime.supervisor import cleanup_orphans
+
+    work = root / "windows-orphan-preflight"
+    work.mkdir(parents=True, exist_ok=True)
+    state = work / "state.json"
+    state.write_text("{}", encoding="utf-8")
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(300)"],
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+    )
+    marker = work / ACTIVE_PROCESS_FILE
+    marker.write_text(f"{os.getpid()} {child.pid}", encoding="ascii")
+    try:
+        started = time.monotonic()
+        cleanup_orphans([state], os.getpid())
+        elapsed = time.monotonic() - started
+        if elapsed > 15:
+            raise RuntimeError(f"Windows orphan cleanup exceeded bounded time: {elapsed:.1f}s")
+        try:
+            child.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("Windows orphan cleanup left the child alive") from error
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
+
+
 def main() -> int:
     args = arguments()
     if args.high_density:
@@ -2556,6 +2633,11 @@ def main() -> int:
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
+    runner_ownership_preflight(run_root)
+    print("PASS cross-process Runner ownership lock preflight", flush=True)
+    windows_orphan_cleanup_preflight(run_root)
+    if os.name == "nt":
+        print("PASS bounded Windows orphan taskkill preflight", flush=True)
     qwen_sandbox_preflight(settings, args.hours)
     if qwen_sandbox_required(settings, args.hours):
         print("PASS Qwen sandbox Docker preflight", flush=True)
@@ -2664,6 +2746,8 @@ def main() -> int:
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
         "protected_file_probe": True,
+        "runner_ownership_preflight": True,
+        "windows_orphan_cleanup_preflight": os.name == "nt",
         "api_retry_classification_preflight": True,
         "task_array_recovery_preflight": True,
         "session_expiry_recovery_preflight": True,
