@@ -103,6 +103,11 @@ def _ai_validator_prompt(
 
 def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
     result: dict[str, Any] = {}
+    if "skip_on_max_cycles" in item:
+        value = item["skip_on_max_cycles"]
+        if not isinstance(value, bool):
+            raise RunnerError(f"script item {index} skip_on_max_cycles must be a boolean")
+        result["skip_on_max_cycles"] = value
     if "project_name" in item:
         value = item["project_name"]
         if not isinstance(value, str):
