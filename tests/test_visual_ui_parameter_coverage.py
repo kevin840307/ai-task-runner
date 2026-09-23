@@ -19,6 +19,7 @@ FIELD_CONTROLS = {
     "detail": "stageDetail",
     "run_state": "stageRunState",
     "mode": "stageMode",
+    "readonly_safety": "stageReadonlySafety",
     "actor": "stageActor",
     "allow_project_read": "stageAllowProjectRead",
     "parser": "stageParser",
