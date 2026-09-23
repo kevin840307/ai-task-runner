@@ -785,9 +785,12 @@ def assert_system_topology(project: Path, workflow: str) -> None:
     }[workflow]
     missing = sorted(required - set(starts))
     validators = {name for name in starts if name.startswith("validate_")}
-    if missing or validators != expected_validators:
+    task_runs = starts.count("__plan_task__")
+    review_runs = starts.count("__plan_review__")
+    if missing or validators != expected_validators or task_runs != 1 or review_runs != 1:
         raise RuntimeError(
-            f"system/{workflow} topology mismatch: missing={missing}, validators={sorted(validators)}"
+            f"system/{workflow} topology mismatch: missing={missing}, "
+            f"validators={sorted(validators)}, task_runs={task_runs}, review_runs={review_runs}"
         )
 
 
