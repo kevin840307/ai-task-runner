@@ -14,6 +14,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
       - name: Test sidebar regression
         run: python -m pytest -q ui/tests/test_static_contract.py
       - name: Build bundle
