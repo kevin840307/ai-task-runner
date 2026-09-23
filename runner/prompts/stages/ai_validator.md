@@ -1,6 +1,6 @@
 {{ rules }}
 
-Final validation in a fresh independent session.
+Final validation. This is a fresh independent session.
 Original Goal: {{ goal }}
 
 Treat the original Goal as authoritative. TODO status, summaries, Review/Grill PASS results, and prior validator decisions do not prove completion.
