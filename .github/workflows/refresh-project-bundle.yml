@@ -1,0 +1,32 @@
+name: Refresh project bundle
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build bundle
+        run: |
+          python tool/bundle.py pack . /tmp/project.bundle.txt --exclude project.bundle.txt
+          python tool/bundle.py verify /tmp/project.bundle.txt
+          mv /tmp/project.bundle.txt project.bundle.txt
+      - name: Commit bundle
+        run: |
+          if git diff --quiet -- project.bundle.txt; then
+            echo "Bundle already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add project.bundle.txt
+          git commit -m "Refresh project bundle"
+          git push
