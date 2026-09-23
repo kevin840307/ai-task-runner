@@ -1130,3 +1130,12 @@ def test_runtime_input_prompt_does_not_add_a_chat_grid_row():
     assert '.runtime-input-card' in css
     assert '.runtime-input-panel' not in css
     assert 'grid-template-rows: auto auto minmax(0, 1fr) auto !important' in css
+
+
+def test_project_sidebar_switch_restores_buttons_and_scroll_position():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert '!!state.projectSwitching' in app
+    assert 'button.disabled = removing || state.projectSwitching' in app
+    assert 'menuButton.disabled = removing || state.projectSwitching' in app
+    assert 'const previousScrollTop = root.scrollTop;' in app
+    assert 'if (root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;' in app
