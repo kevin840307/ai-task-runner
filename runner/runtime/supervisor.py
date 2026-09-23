@@ -19,8 +19,11 @@ from ..utils.files import atomic_write_text
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
 RUNNER_PROCESS_FILE = "runner-process.json"
+RUN_LOCK_FILE = "run.lock"
 STOP_REQUEST_FILE = "stop.request"
 CONTROL_POLL_INTERVAL = 0.2
+RUN_LOCK_STALE_GRACE_SECONDS = 5.0
+TASKKILL_TIMEOUT_SECONDS = 10
 RequestFactory = Callable[[Sequence[str]], Any]
 WorkerEntry = Callable[[Sequence[str]], int]
 StateLocator = Callable[[Any], Sequence[str | Path]]
@@ -50,6 +53,12 @@ def supervise_cli(
     )
     worker_args = list(argv)
     runtime_marker = Path(request.project_root, request.work_dir, RUNNER_PROCESS_FILE).resolve()
+    run_lock = runtime_marker.with_name(RUN_LOCK_FILE)
+    try:
+        lock_token = _acquire_run_lock(run_lock)
+    except RuntimeError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 2
     started_at = time.time()
     stop_request = runtime_marker.with_name(STOP_REQUEST_FILE)
     _clear_stop_request(stop_request)
@@ -66,6 +75,7 @@ def supervise_cli(
         )
     finally:
         _remove_runtime_marker(runtime_marker)
+        _release_run_lock(run_lock, lock_token)
 
 
 def _supervise_workers(
@@ -144,6 +154,103 @@ def _sleep_until_retry(seconds: float, stop_request: Path) -> bool:
         time.sleep(min(CONTROL_POLL_INTERVAL, remaining))
 
 
+def _acquire_run_lock(path: Path) -> str:
+    """Own one project_root + work_dir across CLI/UI launches and resumes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    token = f"{os.getpid()}-{time.time_ns()}"
+    payload = json.dumps({
+        "schema_version": 1,
+        "pid": os.getpid(),
+        "token": token,
+        "started_at": time.time(),
+    }, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    for _ in range(2):
+        try:
+            fd = os.open(str(io_path(path)), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if not _remove_stale_run_lock(path):
+                raise RuntimeError(
+                    f"another AI Task Runner already owns this project/work_dir: {path}"
+                )
+            continue
+        try:
+            os.write(fd, payload)
+        finally:
+            os.close(fd)
+        return token
+    raise RuntimeError(
+        f"another AI Task Runner already owns this project/work_dir: {path}"
+    )
+
+
+def _remove_stale_run_lock(path: Path) -> bool:
+    try:
+        stat = io_path(path).stat()
+        raw = io_path(path).read_text(encoding="utf-8")
+        data = json.loads(raw)
+        pid = int(data.get("pid", 0))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        try:
+            age = time.time() - io_path(path).stat().st_mtime
+        except OSError:
+            return True
+        if age < RUN_LOCK_STALE_GRACE_SECONDS:
+            return False
+        try:
+            io_path(path).unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False
+    if pid > 0 and _owner_pid_alive(pid):
+        return False
+    try:
+        # Re-read before unlinking so a changed/replaced lock is never stolen.
+        current = json.loads(io_path(path).read_text(encoding="utf-8"))
+        if current.get("token") != data.get("token"):
+            return False
+        io_path(path).unlink(missing_ok=True)
+        return True
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _owner_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                check=False,
+                timeout=3,
+            )
+            output = result.stdout.strip().lower()
+            return bool(output and "no tasks are running" not in output and str(pid) in output)
+        except (OSError, subprocess.SubprocessError):
+            return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def _release_run_lock(path: Path, token: str) -> None:
+    try:
+        data = json.loads(io_path(path).read_text(encoding="utf-8"))
+        if data.get("token") == token:
+            io_path(path).unlink(missing_ok=True)
+    except (OSError, json.JSONDecodeError):
+        pass
+
+
 def _clear_stop_request(path: Path) -> None:
     try:
         io_path(path).unlink(missing_ok=True)
@@ -195,11 +302,12 @@ def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
+                timeout=TASKKILL_TIMEOUT_SECONDS,
             )
         else:
             os.killpg(child, signal.SIGKILL)
         io_path(path).unlink(missing_ok=True)
-    except (OSError, ValueError):
+    except (OSError, ValueError, subprocess.SubprocessError):
         pass
 
 
@@ -210,4 +318,4 @@ def _report_retry(request: Any, message: str) -> None:
         print(f"ERROR: {message}", file=sys.stderr)
 
 
-__all__ = ["RUNNER_PROCESS_FILE", "STOP_REQUEST_FILE", "WORKER_ENV", "cleanup_orphans", "supervise_cli"]
+__all__ = ["RUNNER_PROCESS_FILE", "RUN_LOCK_FILE", "STOP_REQUEST_FILE", "WORKER_ENV", "cleanup_orphans", "supervise_cli"]
