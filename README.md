@@ -41,6 +41,17 @@ The Runner invokes the validator as `python validation.py --project-root <root> 
 
 `--project-name` only changes the local UI display name; project identity, state, and resume behavior still use `project_root`. YAML List items may set `project_name:` per item, overriding the CLI default.
 
+YAML List items can also opt into continuing after their own `max_cycles` limit is reached:
+```yaml
+- prompt: Fix task A
+  validator: ai
+  max_cycles: 3
+  skip_on_max_cycles: true
+- prompt: Run task B
+  validator: ai
+```
+`skip_on_max_cycles` defaults to `false`. It only skips the current YAML item when the Runner raises `max cycles reached`; other failures still stop the batch. The skip is persisted so `--resume` continues with later items instead of retrying the skipped item.
+
 Mixed hard + AI validation:
 ```bat
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
