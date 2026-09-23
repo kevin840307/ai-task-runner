@@ -366,7 +366,9 @@ function createProjectRow(project) {
   return row;
 }
 function renderProjects() {
-  const root = $("projectList"); closeProjectMenus(); root.onscroll = () => closeProjectMenus(); syncProjectListLoadingState(root);
+  const root = $("projectList");
+  const previousScrollTop = root.scrollTop;
+  closeProjectMenus(); root.onscroll = () => closeProjectMenus(); syncProjectListLoadingState(root);
   const existing = new Map(), staleRows = [];
   for (const row of root.querySelectorAll(".project-row[data-project-path]")) {
     const key = row.dataset.projectKey || projectPathKey(row.dataset.projectPath);
@@ -392,6 +394,7 @@ function renderProjects() {
   for (const row of staleRows) row.remove();
   for (const [key, row] of existing) if (!seen.has(key)) row.remove();
   root.appendChild(fragment);
+  if (root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
