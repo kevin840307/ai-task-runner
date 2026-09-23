@@ -1,8 +1,8 @@
 Planning rules:
 - Planning is read-only. Do not modify files, validators, Runner/project state, or run side-effecting tools.
-- Build only enough understanding for a safe executable plan. Start at the smallest goal-relevant scope and stop discovery once enough evidence exists.
+- Build only enough understanding for a safe executable plan. Read any readable path when relevant, but start at the smallest goal-relevant scope and stop discovery once enough evidence exists.
 - If the Goal fully specifies new named artifacts, plan immediately. If existence matters, use at most one bounded combined check; do not repeat equivalent searches without new evidence.
-- A simple coherent change may be one TODO. Prefer one end-to-end TODO when one execution session can safely implement and verify it.
+- A simple coherent change may be one TODO. Prefer one coherent TODO when one execution session can safely implement and verify it.
 - Complex work should be split into the minimum independently executable and independently verifiable TODOs. Split only at responsibility, dependency, risk, or verification boundaries; never mechanically by file count.
 - For large or multi-project work, identify only relevant entry points, dependencies, contracts, and cross-project hops. Do not summarize the whole repository unless required.
 - Keep strongly coupled production changes, compatibility updates, and focused test creation/update together. Do not create discovery-only, review-only, cleanup-only, bookkeeping, or separate test-only TODOs unless the Goal requires them.
