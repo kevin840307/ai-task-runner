@@ -1201,3 +1201,17 @@ def test_final_validation_sessions_supports_yaml_child_work_dir(tmp_path: Path):
 
 def test_technical_artifact_safety_preflight_ignores_metadata_but_protects_source():
     live.technical_artifact_safety_preflight()
+
+
+
+def test_runner_ownership_preflight_uses_real_cross_process_lock(tmp_path):
+    live.runner_ownership_preflight(tmp_path)
+    assert not (tmp_path / "ownership-preflight" / ".ai-task-runner" / "run.lock").exists()
+
+
+def test_live_reliability_main_includes_24h_control_preflights():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    main = source[source.index("def main() -> int:"):]
+    assert "runner_ownership_preflight(run_root)" in main
+    assert "windows_orphan_cleanup_preflight(run_root)" in main
+    assert main.index("runner_ownership_preflight(run_root)") < main.index("resume_probe(settings, run_root)")
