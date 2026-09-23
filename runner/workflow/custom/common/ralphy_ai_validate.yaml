@@ -10,8 +10,6 @@ stages:
     validator: ai
     status: AI 正在獨立驗證結果
     fresh_session_on_start: true
-    runs: 1
-    required_passes: 1
     recover: [ralphy]
 
 flow:
