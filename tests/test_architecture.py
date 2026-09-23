@@ -74,7 +74,7 @@ def test_runtime_does_not_own_ai_calls_or_stage_hooks():
 
 
 def test_root_python_files_stay_minimal():
-    assert {path.name for path in ROOT.glob("*.py")} == {"ai_task_runner.py", "ai_task_runner_validator.py"}
+    assert {path.name for path in ROOT.glob("*.py")} == {"ai_task_runner.py", "ai_task_runner_validator.py", "project_registry.py"}
 
 
 def test_recovery_is_centralized_in_stage_executor():
