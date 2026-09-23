@@ -416,3 +416,100 @@ def test_yaml_item_inline_workflow_is_normalized_from_script_directory(tmp_path)
     item = load_yaml_script(script)[0]
     assert item["validator"] is None
     assert [node["name"] for node in item["workflow"]] == ["check"]
+
+
+
+def test_yaml_item_skip_on_max_cycles_must_be_boolean(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: ai\n  skip_on_max_cycles: yes please\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="skip_on_max_cycles must be a boolean"):
+        load_yaml_script(script)
+
+
+def test_execute_script_can_skip_max_cycle_item_and_continue(tmp_path):
+    from runner.errors import ConfigurationError
+    from runner.script_runner import execute_script
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  max_cycles: 2\n  skip_on_max_cycles: true\n"
+        "- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    args = base_args(tmp_path)
+    args.script = str(script)
+    seen = []
+
+    def execute_one(child):
+        seen.append(child.script_index)
+        root = Path(child.project_root)
+        store = StateStore(root, root / child.work_dir)
+        if child.script_index == 1:
+            store.save(RunState(
+                run_id="skip-me", goal=child.goal, project_root=str(root),
+                cycle=2, completed=False, stage="validator_failed",
+            ))
+            raise ConfigurationError("max cycles reached: 2")
+        store.save(RunState(
+            run_id="done", goal=child.goal, project_root=str(root),
+            completed=True, stage="completed",
+        ))
+        return 0
+
+    assert execute_script(args, execute_one) == 0
+    assert seen == [1, 2]
+    marker = tmp_path / ".ai-task-runner" / "script" / "001" / "script-item-skipped.json"
+    assert marker.is_file()
+    assert "max cycles reached: 2" in marker.read_text(encoding="utf-8")
+
+
+def test_execute_script_max_cycles_still_fails_without_skip_flag(tmp_path):
+    from runner.errors import ConfigurationError
+    from runner.script_runner import execute_script
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  max_cycles: 2\n",
+        encoding="utf-8",
+    )
+    args = base_args(tmp_path)
+    args.script = str(script)
+
+    def execute_one(child):
+        raise ConfigurationError("max cycles reached: 2")
+
+    with pytest.raises(ConfigurationError, match="max cycles reached: 2"):
+        execute_script(args, execute_one)
+
+
+def test_execute_script_resume_honors_durable_max_cycle_skip_marker(tmp_path):
+    from runner.script_runner import execute_script
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  skip_on_max_cycles: true\n"
+        "- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    marker = tmp_path / ".ai-task-runner" / "script" / "001" / "script-item-skipped.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text('{"reason":"max cycles reached: 2"}', encoding="utf-8")
+    args = base_args(tmp_path)
+    args.script = str(script)
+    args.resume = True
+    seen = []
+
+    def execute_one(child):
+        seen.append(child.script_index)
+        root = Path(child.project_root)
+        StateStore(root, root / child.work_dir).save(RunState(
+            run_id="done", goal=child.goal, project_root=str(root),
+            completed=True, stage="completed",
+        ))
+        return 0
+
+    assert execute_script(args, execute_one) == 0
+    assert seen == [2]
