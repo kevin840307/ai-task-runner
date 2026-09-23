@@ -432,21 +432,18 @@ def test_supervisor_reclaims_stale_project_work_dir_lock(tmp_path, monkeypatch):
     assert not lock.exists()
 
 
-def test_windows_orphan_taskkill_has_timeout_and_timeout_is_fail_safe(tmp_path, monkeypatch):
-    marker = tmp_path / "active-process.txt"
-    marker.write_text("101 202", encoding="ascii")
+def test_windows_orphan_taskkill_has_timeout_and_timeout_is_fail_safe(monkeypatch):
     calls = []
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
         raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
 
-    monkeypatch.setattr(supervisor_module.os, "name", "nt", raising=False)
     monkeypatch.setattr(supervisor_module.subprocess, "run", fake_run)
 
-    supervisor_module._cleanup_orphan_marker(marker, 101)
+    with pytest.raises(subprocess.TimeoutExpired):
+        supervisor_module._windows_taskkill_tree(202)
 
     assert calls
+    assert calls[0][0] == ["taskkill", "/PID", "202", "/T", "/F"]
     assert calls[0][1]["timeout"] == supervisor_module.TASKKILL_TIMEOUT_SECONDS
-    # A timed-out taskkill is uncertain; keep the marker for a later cleanup attempt.
-    assert marker.exists()
