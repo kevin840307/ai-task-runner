@@ -80,7 +80,11 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch, b
         for record in records
         if str(tmp_path) in record["prompt"]
     } == {"plan_finalize", "execute", "validator"}
-    assert len({record["prompt"] for record in records}) == len(records)
+    non_validators = [record["prompt"] for record in records if record["stage"] != "validator"]
+    validators = [record["prompt"] for record in records if record["stage"] == "validator"]
+    assert len(set(non_validators)) == len(non_validators)
+    assert len(validators) == 3
+    assert len(set(validators)) == 1
 
 
 def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypatch):
