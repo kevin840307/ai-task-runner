@@ -39,6 +39,17 @@ Runner 實際呼叫會是 `python validation.py --project-root <root> --state-fi
 
 `--project-name` 只影響本機 UI 顯示名稱；Project identity、state、resume 仍以 `project_root` 為準。YAML List 每筆可用 `project_name:` 覆蓋 CLI 預設名稱。
 
+YAML List 每筆也可設定超過自己的 `max_cycles` 後跳過並繼續下一筆：
+```yaml
+- prompt: 修正任務 A
+  validator: ai
+  max_cycles: 3
+  skip_on_max_cycles: true
+- prompt: 執行任務 B
+  validator: ai
+```
+`skip_on_max_cycles` 預設為 `false`。它只會在目前 YAML item 發生 `max cycles reached` 時跳過；其他失敗仍會停止整批。Skip 會 durable 保存，因此 `--resume` 會繼續後續 item，不會重新跑已跳過的任務。
+
 Hard + AI 混合驗證：
 ```bat
 python ai_task_runner.py --goal-file "prompt.md" --project-root "." --validator "validation.py" --ai-validator-prompt-file "ai_validation.md" --ai-validator-count 3
