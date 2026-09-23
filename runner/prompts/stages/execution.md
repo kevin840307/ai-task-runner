@@ -6,22 +6,16 @@ Goal (global constraints only):
 The Current TODO is the only executable scope.
 
 Execution:
-- Understand the TODO, inspect only the needed existing implementation, and reuse established code paths/conventions.
-- Work from the smallest relevant scope. For large or multi-project systems, trace only callers, dependencies, contracts, and project boundaries required by this TODO; expand only from evidence.
-- If internally complex, execute it incrementally inside this same session: inspect once, implement all tightly coupled changes for this TODO, verify an important intermediate result when useful, run focused verification, and continue until every acceptance criterion is either satisfied or a genuine blocker is proven. Do not stop after a partial sub-change merely because one file or component is finished. Do not create Runner TODOs.
-- Make the smallest maintainable change satisfying the deliverable and acceptance criteria. Do not work on later TODOs or unrelated cleanup/refactoring.
-- If evidence disproves the approach, adjust it. Report a genuine blocker instead of guessing. Once enough evidence exists to execute or decide, stop exploring.
+- Inspect only what this TODO needs and reuse established code paths/conventions. For large or multi-project systems, trace only required callers, dependencies, contracts, and boundaries; once enough evidence exists, stop exploring.
+- If internally complex, execute it incrementally inside this same session: implement tightly coupled changes together, verify an important intermediate result when useful, then continue until every acceptance criterion is satisfied or a genuine blocker is proven.
+- Make the smallest maintainable change. Do not work on later TODOs, unrelated cleanup, or speculative refactoring. Preserve correct existing work.
+- If evidence disproves the approach, adjust it instead of repeating failed actions.
 
 Evidence and testing:
-- Use the cheapest validation that provides adequate evidence and finish the TODO in one pass when practical: focused existing check/test, then targeted regression/command, then relevant module/package suite; use broader validation only when the change or risk requires it. Avoid returning to Review with obvious acceptance criteria still unchecked.
-- Add or update focused tests when they materially protect a reproducible bug, important behavior, new path, or regression-prone edge case.
-- Do not repeatedly run expensive broad validation after small edits or run the final project validator unless this TODO requires it.
-- Before returning, explicitly check every acceptance criterion against the current project state. Stop only when concrete evidence proves all criteria or a genuine blocker remains. Treat Review/Validator failures as evidence. Diagnose the root cause and preserve correct work.
-- Validator files may be read for expected behavior but never modified, bypassed, weakened, replaced, or hardcoded against. Do not alter expected/reference/golden/snapshot/fixture data merely to force PASS unless the Goal intentionally changes it.
-
-Safety:
-- After a tool error, change action, target, or arguments; do not immediately repeat the identical failed action without new evidence.
-- Use only tools needed for this TODO; do not start unrelated/background work or leave unnecessary scratch/diagnostic files.
+- Use the cheapest validation that provides adequate evidence: focused existing check/test first, then targeted regression/command, then broader validation only when the change or risk requires it.
+- Add or update focused tests when they protect a reproducible bug, important behavior, new path, or regression-prone edge case.
+- Before returning, check every acceptance criterion against current project evidence. Diagnose the root cause of failures; do not return to Review with an obvious unchecked requirement.
+- Validator files may be read for expected behavior but are never modified, bypassed, weakened, replaced, or hardcoded against. Do not alter expected/reference/golden/snapshot/fixture data merely to force PASS unless the Goal intentionally changes it.
 
 Context:
 {{ {"cycle": workflow.cycle, "validator_feedback": workflow.validator_feedback[-2000:]} | tojson }}
