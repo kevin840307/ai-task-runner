@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -48,8 +50,30 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
             script_index=index,
             script_total=total,
         )
+        marker = _skip_marker(child)
+        if not args.resume:
+            try:
+                marker.unlink()
+            except FileNotFoundError:
+                pass
+        elif item.get("skip_on_max_cycles") is True and marker.is_file():
+            _emit_script_event(
+                "script.item_skipped", index, total, item, child=child,
+                reason="previously skipped after max cycles",
+            )
+            continue
+
         _emit_script_event("script.item_started", index, total, item, child=child)
-        code = execute_one(child)
+        try:
+            code = execute_one(child)
+        except ConfigurationError as error:
+            if item.get("skip_on_max_cycles") is True and _is_max_cycles_error(error):
+                _write_skip_marker(marker, child, str(error))
+                _emit_script_event(
+                    "script.item_skipped", index, total, item, child=child, reason=str(error)
+                )
+                continue
+            raise
         if code == 0 and not _child_completed(child):
             # A child can exit cleanly after saving resumable, unfinished state.
             # Batch orchestration must not report that as a completed script item.
@@ -68,7 +92,30 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
     return 0
 
 
+def _skip_marker(child: RuntimeConfig) -> Path:
+    return Path(child.project_root) / child.work_dir / "script-item-skipped.json"
+
+
+def _is_max_cycles_error(error: BaseException) -> bool:
+    return str(error).strip().lower().startswith("max cycles reached:")
+
+
+def _write_skip_marker(path: Path, child: RuntimeConfig, reason: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "reason": reason,
+        "max_cycles": child.max_cycles,
+        "script_index": child.script_index,
+        "script_total": child.script_total,
+    }
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def _child_completed(child: RuntimeConfig) -> bool:
+    if _skip_marker(child).is_file():
+        return True
     state_path = Path(child.project_root) / child.work_dir / "state.json"
     store = StateStore(Path(child.project_root), state_path.parent)
     try:
@@ -86,6 +133,7 @@ def _emit_script_event(
     *,
     child: RuntimeConfig | None = None,
     exit_code: int | None = None,
+    reason: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "script_index": index,
@@ -97,6 +145,8 @@ def _emit_script_event(
         payload["child_work_dir"] = child.work_dir
     if exit_code is not None:
         payload["exit_code"] = exit_code
+    if reason:
+        payload["reason"] = reason
     events.publish(event_type, event_type.rsplit("_", 1)[-1], **payload)
 
 
