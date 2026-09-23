@@ -792,3 +792,42 @@ def test_yaml_script_project_name_overrides_outer_default(tmp_path):
     child = build_script_item_config(outer, item, 1)
 
     assert child.project_name == "Child Display"
+
+
+
+def test_yaml_api_treats_durable_max_cycle_skip_as_completed(tmp_path, monkeypatch):
+    import runner.api as api_module
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  skip_on_max_cycles: true\n"
+        "- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    first = tmp_path / ".ai-task-runner" / "script" / "001"
+    second = tmp_path / ".ai-task-runner" / "script" / "002"
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        first.mkdir(parents=True, exist_ok=True)
+        second.mkdir(parents=True, exist_ok=True)
+        (first / "script-item-skipped.json").write_text(
+            '{"reason":"max cycles reached: 2"}', encoding="utf-8"
+        )
+        (first / "state.json").write_text(
+            '{"completed":false,"stage":"validator_failed"}', encoding="utf-8"
+        )
+        (second / "state.json").write_text(
+            '{"completed":true,"stage":"completed"}', encoding="utf-8"
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(project_root=str(tmp_path), script=str(script), retry_delay=0))
+
+    assert result.exit_code == 0
+    assert result.completed is True
+    assert result.states[0]["stage"] == "skipped"
+    assert result.states[0]["skip_reason"] == "max cycles reached: 2"
+    assert calls == [False]
