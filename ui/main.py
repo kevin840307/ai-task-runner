@@ -2,8 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import webbrowser
 from pathlib import Path
+
+# Direct execution (python ui/main.py) puts only ui/ on sys.path. Add the
+# repository root so shared root modules such as project_registry remain importable.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from .server import UIServer
