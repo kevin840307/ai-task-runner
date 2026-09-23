@@ -291,19 +291,23 @@ def cleanup_orphans(state_files: Sequence[str | Path], worker_pid: int) -> None:
         _cleanup_orphan_marker(work / ACTIVE_PROCESS_FILE, worker_pid)
 
 
+def _windows_taskkill_tree(child_pid: int) -> None:
+    subprocess.run(
+        ["taskkill", "/PID", str(child_pid), "/T", "/F"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=TASKKILL_TIMEOUT_SECONDS,
+    )
+
+
 def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
     try:
         owner, child = map(int, io_path(path).read_text(encoding="ascii").split())
         if owner != worker_pid:
             return
         if os.name == "nt":
-            subprocess.run(
-                ["taskkill", "/PID", str(child), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=TASKKILL_TIMEOUT_SECONDS,
-            )
+            _windows_taskkill_tree(child)
         else:
             os.killpg(child, signal.SIGKILL)
         io_path(path).unlink(missing_ok=True)
