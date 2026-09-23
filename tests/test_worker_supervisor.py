@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import os
 import sys
+import subprocess
 
 from runner.runtime import process_runner as process_module
 from runner.runtime import supervisor as supervisor_module
@@ -375,3 +376,77 @@ def test_supervisor_clears_stale_stop_request_before_new_run(tmp_path, monkeypat
 
     assert result == 0
     assert not stop_request.exists()
+
+
+
+def test_supervisor_rejects_duplicate_project_work_dir_owner(tmp_path, monkeypatch, capsys):
+    request = _request(tmp_path)
+    lock = tmp_path / ".ai-task-runner" / supervisor_module.RUN_LOCK_FILE
+    token = supervisor_module._acquire_run_lock(lock)
+    popen_calls = []
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(
+        supervisor_module.subprocess,
+        "Popen",
+        lambda *args, **kwargs: popen_calls.append((args, kwargs)),
+    )
+    try:
+        result = supervisor_module.supervise_cli(
+            [],
+            worker_script="runner.py",
+            request_factory=lambda argv: request,
+            worker_entry=lambda argv: 0,
+            state_locator=lambda current: [],
+        )
+    finally:
+        supervisor_module._release_run_lock(lock, token)
+
+    assert result == 2
+    assert popen_calls == []
+    assert "already owns this project/work_dir" in capsys.readouterr().err
+
+
+def test_supervisor_reclaims_stale_project_work_dir_lock(tmp_path, monkeypatch):
+    request = _request(tmp_path)
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    lock = work / supervisor_module.RUN_LOCK_FILE
+    lock.write_text(
+        '{"schema_version":1,"pid":99999999,"token":"dead","started_at":1}',
+        encoding="utf-8",
+    )
+    worker = FakeWorker(0, 202)
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module, "_owner_pid_alive", lambda pid: False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", lambda command, env: worker)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [],
+    )
+
+    assert result == 0
+    assert not lock.exists()
+
+
+def test_windows_orphan_taskkill_has_timeout_and_timeout_is_fail_safe(tmp_path, monkeypatch):
+    marker = tmp_path / "active-process.txt"
+    marker.write_text("101 202", encoding="ascii")
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(supervisor_module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "run", fake_run)
+
+    supervisor_module._cleanup_orphan_marker(marker, 101)
+
+    assert calls
+    assert calls[0][1]["timeout"] == supervisor_module.TASKKILL_TIMEOUT_SECONDS
+    # A timed-out taskkill is uncertain; keep the marker for a later cleanup attempt.
+    assert marker.exists()
