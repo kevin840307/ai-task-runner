@@ -7,7 +7,7 @@ The Current TODO is the only executable scope.
 
 Execution:
 - Inspect only what this TODO needs and reuse established code paths/conventions. For large or multi-project systems, trace only required callers, dependencies, contracts, and boundaries; once enough evidence exists, stop exploring.
-- If internally complex, execute it incrementally inside this same session: implement tightly coupled changes together, verify an important intermediate result when useful, then continue until every acceptance criterion is satisfied or a genuine blocker is proven.
+- If internally complex, execute it incrementally inside this same session: implement tightly coupled changes together, verify an important intermediate result when useful, then continue until every acceptance criterion is satisfied or a genuine blocker is proven. Do not stop after a partial sub-change.
 - Make the smallest maintainable change. Do not work on later TODOs, unrelated cleanup, or speculative refactoring. Preserve correct existing work.
 - If evidence disproves the approach, adjust it instead of repeating failed actions.
 
