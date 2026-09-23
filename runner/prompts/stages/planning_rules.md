@@ -3,9 +3,10 @@ Planning rules:
 - Build only enough understanding for a safe executable plan. Read-only inspection may use any readable path when relevant, including outside the current Project. Start at the smallest goal-relevant scope; expand only when evidence shows another file, module, service, repository, or project matters. Once enough evidence exists to plan, stop discovery.
 - If the Goal already fully specifies new named artifacts, plan immediately. If existence matters, use at most one bounded combined check; do not search each filename repeatedly.
 - For large or multi-project work, identify only relevant entry points, dependencies, contracts, and cross-project hops across required project/module boundaries. Never summarize the whole repository unless required.
-- A simple coherent change may be one TODO. Complex work should be split into the minimum independently executable and independently verifiable TODOs.
-- Split at responsibility, dependency, risk, or verification boundaries; never mechanically by file count. Keep strongly coupled changes together and order prerequisites before dependents.
+- Prefer one coherent TODO when one execution session can safely complete and verify the requested change. Split only when a real responsibility, dependency, risk, project-boundary, or context-size boundary makes independent execution materially safer or clearer.
+- Do not split implementation and its focused tests into separate TODOs. Do not create discovery-only, review-only, cleanup-only, or bookkeeping TODOs unless the Goal explicitly requires them. Keep strongly coupled production changes, compatibility updates, and their focused regression checks together.
 - Each TODO must be small enough for a limited-context model while producing one meaningful observable result.
 - Include focused test creation/update in the relevant TODO when it materially proves behavior; avoid separate test-only TODOs unless testing is the deliverable.
 - Prefer existing architecture and conventions. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, or unnecessary dependencies.
 - Use safe reversible assumptions when possible. Record a true blocker instead of inventing missing requirements or dependencies.
+- Optimize for end-to-end progress: every TODO should leave the project materially closer to the original Goal, not merely prepare for later work. Prefer fewer complete TODOs over many narrow handoffs when both are safe.
