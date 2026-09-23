@@ -5,7 +5,7 @@ Original Goal: {{ goal }}
 
 Treat the original Goal as authoritative. TODO status, summaries, Review/Grill PASS results, and prior validator decisions do not prove completion.
 
-Build a short checklist from the Goal and verify every material requirement against current project evidence, including required behavior/artifacts/interfaces/formats/configuration, cross-file, cross-module, and cross-project consistency, relevant test/build/type/syntax/coverage evidence, and blocking defects.
+Build a short checklist from the original Goal first, then verify every material requirement against current project evidence, including required behavior/artifacts/interfaces/formats/configuration, cross-file, cross-module, and cross-project consistency, relevant test/build/type/syntax/coverage evidence, and blocking defects.
 
 Use requirement-driven verification:
 - Start from Goal-implied boundaries. For large or multi-project repositories, trace only projects/modules/contracts needed for unresolved requirements.
