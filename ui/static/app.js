@@ -1144,6 +1144,7 @@ function renderStageEditorContent(cfg, item) {
         <label class="designer-form-row"><span class="designer-label">Run state</span><input id="stageRunState" class="designer-input" value="${escapeHtml(cfg.run_state || "")}" placeholder="Stage default" ${disabled} /></label>
         <label class="designer-form-row"><span class="designer-label">Actor</span><input id="stageActor" class="designer-input" value="${escapeHtml(cfg.actor || "")}" placeholder="Stage default" ${disabled} /></label>
         <label class="designer-form-row"><span class="designer-label">Mode</span><select id="stageMode" class="designer-select" ${disabled}><option value="" ${!cfg.mode ? "selected" : ""}>Stage default</option><option value="readonly" ${cfg.mode === "readonly" ? "selected" : ""}>readonly</option><option value="write" ${cfg.mode === "write" ? "selected" : ""}>write</option></select></label>
+        <label class="designer-form-row"><span class="designer-label">Readonly safety</span><select id="stageReadonlySafety" class="designer-select" ${disabled}><option value="" ${!cfg.readonly_safety ? "selected" : ""}>Stage / Run default</option><option value="restore" ${cfg.readonly_safety === "restore" ? "selected" : ""}>restore</option><option value="observe" ${cfg.readonly_safety === "observe" ? "selected" : ""}>observe</option></select></label>
         <label id="stageParserRow" class="designer-form-row"><span class="designer-label">Parser</span><select id="stageParser" class="designer-select" ${disabled}>${parserOptions(cfg.parser)}</select></label>
         <label class="designer-form-row"><span class="designer-label">Produces</span><input id="stageProduces" class="designer-input" value="${escapeHtml(cfg.produces || "")}" placeholder="tasks" ${disabled} /></label>
         <label id="stageSessionKeyRow" class="designer-form-row"><span class="designer-label">Session key</span><input id="stageSessionKey" class="designer-input" value="${escapeHtml(cfg.session_key || "")}" placeholder="Optional session cache key" ${disabled} /></label>
@@ -1207,7 +1208,7 @@ function renderStageEditorContent(cfg, item) {
 
   $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); }); renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
 }
-function hasAdvancedStageOverrides(cfg) { return ["run_state", "actor", "mode", "parser", "produces", "session_key", "instructions"].some((key) => cfg[key] !== undefined && cfg[key] !== ""); }
+function hasAdvancedStageOverrides(cfg) { return ["run_state", "actor", "mode", "readonly_safety", "parser", "produces", "session_key", "instructions"].some((key) => cfg[key] !== undefined && cfg[key] !== ""); }
 function switchRow(id, title, hint, value, disabled) { return `<label class="designer-switch-row"><input id="${id}" type="checkbox" ${value ? "checked" : ""} ${disabled} /><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></span></label>`; }
 function helpMark(text) { return `<span class="stage-help" tabindex="0" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`; }
 function fieldLabel(title, help = "") { return `<span class="designer-label">${escapeHtml(title)}${help ? helpMark(help) : ""}</span>`; }
@@ -1238,7 +1239,7 @@ function numberOrNull(id) { const value = fieldValue(id).trim(); return value ==
 function listOrNull(id) { const values = fieldValue(id).split(",").map((x) => x.trim()).filter(Boolean); return values.length ? values : null; }
 function changedFields(cfg, item) {
   const type = fieldValue("stageType"); const aiBacked = type !== "command"; const flowHasStatus = !!item && Object.prototype.hasOwnProperty.call(item, "status"); const flowHasPrompt = !!item && Object.prototype.hasOwnProperty.call(item, "prompt"); const candidates = {
-    type, run_state: valueOrNull("stageRunState"), actor: valueOrNull("stageActor"), mode: valueOrNull("stageMode"), timeout: numberOrNull("stageTimeout"), produces: valueOrNull("stageProduces"), detail: valueOrNull("stageDetail"),
+    type, run_state: valueOrNull("stageRunState"), actor: valueOrNull("stageActor"), mode: valueOrNull("stageMode"), readonly_safety: valueOrNull("stageReadonlySafety"), timeout: numberOrNull("stageTimeout"), produces: valueOrNull("stageProduces"), detail: valueOrNull("stageDetail"),
     recover: listOrNull("stageRecover"), retry: numberOrNull("stageRetry"), skip_on_error: checked("stageSkipOnError"), track_changes: checked("stageTrackChanges"), tolerate_restored_changes: checked("stageTolerateRestored"),
   };
   if (!flowHasStatus) candidates.status = valueOrNull("stageStatus");
