@@ -312,7 +312,8 @@ class RunResult:
     @property
     def completed(self) -> bool:
         return self.exit_code == 0 and bool(self.states) and all(
-            state.get("completed") is True and state.get("stage") == "completed"
+            state.get("completed") is True
+            and state.get("stage") in {"completed", "skipped"}
             for state in self.states
         )
 
@@ -365,7 +366,19 @@ def run(
 
 def _result(request: RunRequest, exit_code: int) -> RunResult:
     state_files = _state_files(request)
-    states = tuple(_read_state(path) for path in state_files if path.is_file())
+    states_list: list[dict[str, Any]] = []
+    for path in state_files:
+        skip_marker = path.parent / "script-item-skipped.json"
+        if request.script and skip_marker.is_file():
+            states_list.append({
+                "completed": True,
+                "stage": "skipped",
+                "skipped": True,
+                "skip_reason": _read_skip_reason(skip_marker),
+            })
+        elif path.is_file():
+            states_list.append(_read_state(path))
+    states = tuple(states_list)
     return RunResult(
         exit_code=exit_code,
         state_files=tuple(str(path) for path in state_files),
@@ -453,6 +466,14 @@ def _state_files(request: RunRequest) -> list[Path]:
 
 def _read_state(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_skip_reason(path: Path) -> str:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "max cycles reached"
+    return str(data.get("reason") or "max cycles reached") if isinstance(data, dict) else "max cycles reached"
 
 
 __all__ = [
