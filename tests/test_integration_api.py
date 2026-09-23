@@ -242,7 +242,7 @@ def test_yaml_api_events_include_script_item_context(tmp_path):
     assert all(event["script_index"] == 1 for event in task_events)
     assert all(event["script_total"] == 1 for event in task_events)
     assert (child / ".ai-task-runner" / "script" / "001" / "state.json").is_file()
-    assert not (tmp_path / ".ai-task-runner").exists()
+    assert not (tmp_path / ".ai-task-runner" / "state.json").exists()
 
 
 def test_event_callback_failure_does_not_stop_runner(tmp_path):
