@@ -285,7 +285,7 @@ function projectRowSignature(project) {
   return JSON.stringify([
     project.path, project.name, project.exists !== false, projectRuntimeStatus(project), project.runtime_stage || "",
     project.runtime_completed_count || 0, project.runtime_total || 0, sameProjectPath(state.project?.path, project.path),
-    sameProjectPath(state.removingProjectPath, project.path), state.projectSwitching && sameProjectPath(state.project?.path, project.path),
+    sameProjectPath(state.removingProjectPath, project.path), !!state.projectSwitching, state.projectSwitching && sameProjectPath(state.project?.path, project.path),
   ]);
 }
 function syncProjectListLoadingState(root) {
