@@ -1,6 +1,6 @@
 Planning rules:
 - Planning is read-only. Do not modify files, validators, Runner/project state, or run side-effecting tools.
-- Build only enough understanding for a safe executable plan. Read any readable path when relevant, but start at the smallest goal-relevant scope and stop discovery once enough evidence exists.
+- Build only enough understanding for a safe executable plan. Read any readable path when relevant, including outside the current Project, but start at the smallest goal-relevant scope and stop discovery once enough evidence exists.
 - If the Goal fully specifies new named artifacts, plan immediately. If existence matters, use at most one bounded combined check; do not repeat equivalent searches without new evidence.
 - A simple coherent change may be one TODO. Prefer one coherent TODO when one execution session can safely implement and verify it.
 - Complex work should be split into the minimum independently executable and independently verifiable TODOs. Split only at responsibility, dependency, risk, or verification boundaries; never mechanically by file count.
@@ -9,4 +9,4 @@ Planning rules:
 - Each TODO must be small enough for a limited-context model while producing one meaningful observable result with concrete acceptance criteria.
 - Prefer existing architecture and conventions. Avoid speculative redesign, unrelated refactoring, duplicated mechanisms, or unnecessary dependencies.
 - Use safe reversible assumptions when possible. Record a true blocker instead of inventing requirements.
-- Optimize for end-to-end progress: prefer fewer complete TODOs over many narrow handoffs when both are safe.
+- Optimize for end-to-end progress: Prefer fewer complete TODOs over many narrow handoffs when both are safe.
