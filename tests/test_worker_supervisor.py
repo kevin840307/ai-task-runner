@@ -6,6 +6,8 @@ import os
 import sys
 import subprocess
 
+import pytest
+
 from runner.runtime import process_runner as process_module
 from runner.runtime import supervisor as supervisor_module
 
