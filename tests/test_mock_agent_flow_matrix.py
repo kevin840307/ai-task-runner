@@ -53,10 +53,14 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch, b
         "execute",
         "review",
         "validator",
+        "validator",
+        "validator",
     ]
     assert [record["resumed"] for record in records] == [
         False,
         True,
+        False,
+        False,
         False,
         False,
     ]
@@ -85,19 +89,19 @@ def test_recovery_scenarios_add_only_explainable_model_calls(tmp_path, monkeypat
             "plan_finalize": 1,
             "execute": 2,
             "review": 2,
-            "validator": 1,
+            "validator": 3,
         },
         "execution_model_error": {
             "plan_finalize": 1,
             "execute": 4,
             "review": 1,
-            "validator": 1,
+            "validator": 3,
         },
         "ai_replan": {
-            "plan_finalize": 2,
-            "execute": 2,
-            "review": 2,
-            "validator": 2,
+            "plan_finalize": 1,
+            "execute": 1,
+            "review": 1,
+            "validator": 3,
         },
     }
 
@@ -259,11 +263,11 @@ def test_multi_task_same_session_sends_only_new_todo_context(tmp_path, monkeypat
     execute = [record for record in _records(state_dir) if record["stage"] == "execute"]
     assert len(execute) == 2
     assert execute[0]["resumed"] is True
-    assert "Goal (context/global constraints only):" in execute[0]["prompt"]
+    assert "Goal (global constraints only):" in execute[0]["prompt"]
     assert execute[1]["resumed"] is True
-    assert execute[1]["prompt"].startswith("Continue normal task execution in this same session.")
+    assert execute[1]["prompt"].startswith("Continue the CURRENT TODO in this same execution session.")
     assert '"title": "Create second marker"' in execute[1]["prompt"]
-    assert "Goal (context/global constraints only):" not in execute[1]["prompt"]
+    assert "Goal (global constraints only):" not in execute[1]["prompt"]
     assert "Hard rules:" not in execute[1]["prompt"]
     assert execute[1]["chars"] < execute[0]["chars"] // 2
 
@@ -293,12 +297,12 @@ def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatc
     executes = [record for record in records if record["stage"] == "execute"]
     assert len(reviews) == 2
     assert reviews[1]["resumed"] is True
-    assert "same read-only review session" in reviews[1]["prompt"]
-    assert "do not reuse the previous verdict" in reviews[1]["prompt"]
+    assert "same read-only session" in reviews[1]["prompt"]
+    assert "Do not reuse the previous verdict" in reviews[1]["prompt"]
     assert "Evidence order:" not in reviews[1]["prompt"]
     assert "Decision:" not in reviews[1]["prompt"]
     assert any(
-        record["prompt"].startswith("Continue normal task execution in this same session.")
+        record["prompt"].startswith("Continue the CURRENT TODO in this same execution session.")
         and "Latest review:" in record["prompt"]
         for record in executes
     )
@@ -487,3 +491,20 @@ def test_repeated_semantic_failures_freshen_review_without_resetting_recover_ses
     assert fixes[1]["resumed"] is True
     assert "Re-review CURRENT result after repair" in reviews[1]["prompt"]
     assert "Review only. You are a read-only task reviewer" in reviews[2]["prompt"]
+
+
+
+def test_system_prompts_optimize_for_fewer_complete_handoffs():
+    prompt_root = ROOT / "runner" / "prompts" / "stages"
+    planning = (prompt_root / "planning_rules.md").read_text(encoding="utf-8")
+    execution = (prompt_root / "execution.md").read_text(encoding="utf-8")
+    review = (prompt_root / "review.md").read_text(encoding="utf-8")
+    validator = (prompt_root / "ai_validator.md").read_text(encoding="utf-8")
+
+    assert "Prefer one coherent TODO" in planning
+    assert "Prefer fewer complete TODOs over many narrow handoffs" in planning
+    assert "every acceptance criterion" in execution
+    assert "Do not stop after a partial sub-change" in execution
+    assert "decide immediately" in review
+    assert "fresh broad code review" in review
+    assert "Build a short checklist from the original Goal first" in validator
