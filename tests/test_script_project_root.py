@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -59,8 +60,7 @@ def test_yaml_item_project_root_rejects_empty_value(tmp_path):
         load_yaml_script(script)
 
 def test_execute_script_uses_distinct_item_project_roots(tmp_path):
-    from runner.script_loader import load_yaml_script
-    from runner.script_runner import _script_item_fingerprint, execute_script
+    from runner.script_runner import execute_script
     (tmp_path/'a').mkdir(); (tmp_path/'b').mkdir()
     script=tmp_path/'tasks.yaml'
     script.write_text('''
