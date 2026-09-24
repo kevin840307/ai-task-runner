@@ -1180,3 +1180,27 @@ def test_workflow_catalog_loading_does_not_block_typing():
     assert "const blockTyping = runtime.running || runtime.resumable || state.runLaunching;" in app
     assert '$("sendButton").disabled = blockNew; $("messageInput").disabled = blockTyping;' in app
     assert "state.studioCatalogLoading" in app
+
+
+def test_project_switch_invalidates_inflight_run_ui_action():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    block = app[app.index("async function selectProject"):app.index("async function refreshMessages")]
+    assert "if (changingProject && state.runLaunching)" in block
+    assert "runActionGate.invalidate();" in block
+    assert "state.runLaunching = false;" in block
+    assert '$("sendButton")?.removeAttribute("aria-busy");' in block
+
+
+def test_local_ui_polling_reads_have_bounded_timeout():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "const { timeoutMs = 0, ...fetchOptions } = options;" in app
+    assert "controller.abort()" in app
+    for token in (
+        'api("/api/projects", { timeoutMs: 15000 })',
+        'api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 })',
+        'api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 })',
+        'api(`/api/studio/files?x=1${query}`, { timeoutMs: 15000 })',
+        'api("/api/backends", { timeoutMs: 15000 })',
+        'api("/api/studio/guard", { timeoutMs: 15000 })',
+    ):
+        assert token in app
