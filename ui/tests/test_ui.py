@@ -1661,6 +1661,16 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
         self.assertIsNot(first, second)
 
 
+def test_windows_pid_probe_failure_does_not_report_process_dead(monkeypatch):
+    def fail(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0] if args else "tasklist", 2)
+
+    monkeypatch.setattr("ui.server.os.name", "nt", raising=False)
+    monkeypatch.setattr("ui.server.subprocess.run", fail)
+
+    assert UIState._pid_alive(12345) is True
+
+
 def test_process_snapshot_windows_branch_has_csv_import():
     """Regression: Windows process snapshot must not fail with NameError for csv."""
     import ast
