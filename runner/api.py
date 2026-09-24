@@ -470,7 +470,7 @@ def _script_items(request: RunRequest) -> list[dict[str, Any]]:
         return []
     if not isinstance(data, list):
         return []
-    return [item for item in data if isinstance(item, dict)]
+    return [item if isinstance(item, dict) else {} for item in data]
 
 
 def _state_files(request: RunRequest) -> list[Path]:
