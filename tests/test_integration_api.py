@@ -643,11 +643,11 @@ def test_shared_api_stops_after_same_unexpected_exception_repeats(monkeypatch, t
 
     def fake_execute(config):
         calls.append(config.resume)
-        raise RuntimeError("permanent bug")
+        raise RuntimeError(f"permanent bug attempt {len(calls)}")
 
     monkeypatch.setattr(api_module, "execute", fake_execute)
 
-    with pytest.raises(RuntimeError, match="permanent bug"):
+    with pytest.raises(RuntimeError, match="permanent bug attempt 3"):
         run(RunRequest(
             goal="x",
             project_root=str(tmp_path),
