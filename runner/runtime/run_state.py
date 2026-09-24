@@ -242,8 +242,12 @@ class StateStore:
 
     def save(self, state: RunState) -> None:
         data = state.dump()
-        _write_json(self.path, data)
+        # Commit the recovery copy first and the authoritative project state
+        # last. If backup persistence fails, primary state has not advanced and
+        # the caller can safely retry. If primary persistence fails afterward,
+        # resume can recover the newest state from the backup.
         _write_json(self.backup_path, data)
+        _write_json(self.path, data)
 
     def restore_backup(self) -> bool:
         loaded = self._read_state(self.backup_path, strict=False)
