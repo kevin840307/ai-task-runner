@@ -1173,3 +1173,10 @@ def test_selected_project_sidebar_syncs_stage_and_progress_from_runtime_poll():
     assert "current.runtime_stage = nextStage;" in script
     assert "current.runtime_completed_count = nextCompleted;" in script
     assert "current.runtime_total = nextTotal;" in script
+
+
+def test_workflow_catalog_loading_does_not_block_typing():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "const blockTyping = runtime.running || runtime.resumable || state.runLaunching;" in app
+    assert '$("sendButton").disabled = blockNew; $("messageInput").disabled = blockTyping;' in app
+    assert "state.studioCatalogLoading" in app
