@@ -594,7 +594,36 @@ def test_clear_stop_request_can_fail_closed(monkeypatch, tmp_path):
             raise PermissionError("locked")
 
     monkeypatch.setattr(supervisor_module, "io_path", lambda value: LockedPath())
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
 
     supervisor_module._clear_stop_request(path)
     with pytest.raises(PermissionError, match="locked"):
         supervisor_module._clear_stop_request(path, strict=True)
+
+
+def test_runtime_marker_retries_transient_permission_error(tmp_path, monkeypatch):
+    marker = tmp_path / "runner-process.json"
+    request = _request(tmp_path)
+    original_replace = supervisor_module.os.replace
+    calls = []
+
+    def flaky_replace(source, target):
+        calls.append((source, target))
+        if len(calls) < 3:
+            raise PermissionError("busy")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(supervisor_module.os, "replace", flaky_replace)
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+
+    supervisor_module._write_runtime_marker(
+        marker,
+        request,
+        123.0,
+        worker_pid=456,
+    )
+
+    assert len(calls) == 3
+    payload = __import__("json").loads(marker.read_text(encoding="utf-8"))
+    assert payload["worker_pid"] == 456
+    assert payload["started_at"] == 123.0
