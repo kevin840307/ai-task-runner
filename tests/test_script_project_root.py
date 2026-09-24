@@ -59,7 +59,8 @@ def test_yaml_item_project_root_rejects_empty_value(tmp_path):
         load_yaml_script(script)
 
 def test_execute_script_uses_distinct_item_project_roots(tmp_path):
-    from runner.script_runner import execute_script
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import _script_item_fingerprint, execute_script
     (tmp_path/'a').mkdir(); (tmp_path/'b').mkdir()
     script=tmp_path/'tasks.yaml'
     script.write_text('''
@@ -486,7 +487,8 @@ def test_execute_script_max_cycles_still_fails_without_skip_flag(tmp_path):
 
 
 def test_execute_script_resume_honors_durable_max_cycle_skip_marker(tmp_path):
-    from runner.script_runner import execute_script
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import _script_item_fingerprint, execute_script
 
     script = tmp_path / "tasks.yaml"
     script.write_text(
@@ -496,7 +498,11 @@ def test_execute_script_resume_honors_durable_max_cycle_skip_marker(tmp_path):
     )
     marker = tmp_path / ".ai-task-runner" / "script" / "001" / "script-item-skipped.json"
     marker.parent.mkdir(parents=True)
-    marker.write_text('{"reason":"max cycles reached: 2"}', encoding="utf-8")
+    item = load_yaml_script(script, allow_missing_files=True)[0]
+    marker.write_text(json.dumps({
+        "reason": "max cycles reached: 2",
+        "item_fingerprint": _script_item_fingerprint(item),
+    }), encoding="utf-8")
     args = base_args(tmp_path)
     args.script = str(script)
     args.resume = True
@@ -513,3 +519,42 @@ def test_execute_script_resume_honors_durable_max_cycle_skip_marker(tmp_path):
 
     assert execute_script(args, execute_one) == 0
     assert seen == [2]
+
+
+def test_execute_script_resume_ignores_skip_marker_for_changed_item(tmp_path):
+    from runner.script_loader import load_yaml_script
+    from runner.script_runner import _script_item_fingerprint, execute_script
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: original\n  validator: ai\n  skip_on_max_cycles: true\n",
+        encoding="utf-8",
+    )
+    old_item = load_yaml_script(script, allow_missing_files=True)[0]
+    marker = tmp_path / ".ai-task-runner" / "script" / "001" / "script-item-skipped.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({
+        "reason": "max cycles reached: 2",
+        "item_fingerprint": _script_item_fingerprint(old_item),
+    }), encoding="utf-8")
+
+    script.write_text(
+        "- prompt: changed\n  validator: ai\n  skip_on_max_cycles: true\n",
+        encoding="utf-8",
+    )
+    args = base_args(tmp_path)
+    args.script = str(script)
+    args.resume = True
+    seen = []
+
+    def execute_one(child):
+        seen.append(child.goal)
+        root = Path(child.project_root)
+        StateStore(root, root / child.work_dir).save(RunState(
+            run_id="done", goal=child.goal, project_root=str(root),
+            completed=True, stage="completed",
+        ))
+        return 0
+
+    assert execute_script(args, execute_one) == 0
+    assert seen == ["changed"]
