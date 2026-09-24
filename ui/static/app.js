@@ -582,7 +582,9 @@ function renderRunConfigurationLock() {
 
 function renderRuntime(runtime) {
   const startedAt = Number(runtime.started_at || 0);
-  if (runtime.running && startedAt) {
+  if (!runtime.running && !runtime.has_state && !runtime.resumable && !runtime.completed) {
+    state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0;
+  } else if (runtime.running && startedAt) {
     if (state.runtimeStartedAt !== startedAt) { state.runtimeStartedAt = startedAt; state.runtimeStoppedAt = 0; }
   } else if (!runtime.running && state.runtimeStartedAt && !state.runtimeStoppedAt) {
     state.runtimeStoppedAt = Date.now();
