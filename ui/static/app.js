@@ -80,10 +80,24 @@ function closeThemePanel() { const panel = $("themePanel"), button = $("themeBut
 function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); requestAnimationFrame(positionThemePanel); }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+  const { timeoutMs = 0, ...fetchOptions } = options;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : 0;
+  try {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...fetchOptions,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    if (controller?.signal.aborted) throw new Error(`Request timed out after ${timeoutMs} ms`);
+    throw error;
+  } finally {
+    if (timer) window.clearTimeout(timer);
+  }
 }
 function selectedWorkflowItem() { const value = $("workflowSelect")?.value || ""; return (state.studioFiles.workflows || []).find((item) => item.path === value) || null; }
 function payload(extra = {}) {
@@ -251,7 +265,7 @@ async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
-      const data = await api("/api/projects"), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
+      const data = await api("/api/projects", { timeoutMs: 15000 }), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
       applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
@@ -445,7 +459,7 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
   if (!projectPath) return;
   const root = $("messages");
   const shouldFollow = forceFollow || state.historyPinnedToBottom || historyNearBottom(root);
-  const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`);
+  const data = await api(`/api/project/messages?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
   if (!sameProjectPath(state.project?.path, projectPath)) return;
   const input = root.querySelector(".runtime-input-card");
   const live = root.querySelector(".live-activity"); root.innerHTML = "";
@@ -532,7 +546,7 @@ async function refreshRuntime({ projectPath = state.project?.path || "", force =
   const token = ++state.runtimeRefreshToken;
   const request = (async () => {
     try {
-      const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`);
+      const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
       if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;
       state.runtime = runtime;
       const signature = runtimeRenderSignature(runtime);
@@ -714,7 +728,7 @@ async function refreshStudioFiles({ force = false, projectPath = state.project?.
   state.studioCatalogLoading = true; renderWorkflowPicker(); renderRunConfigurationLock();
   const request = (async () => {
     try {
-      const data = await api(`/api/studio/files?x=1${query}`);
+      const data = await api(`/api/studio/files?x=1${query}`, { timeoutMs: 15000 });
       if (!sameProjectPath(state.project?.path || "", projectPath)) return state.studioFiles;
       state.studioFiles = data; state.studioGuard = data.guard || { editable: true, active_projects: [] };
       state.studioCatalogKey = key; state.studioCatalogLoadedAt = Date.now();
