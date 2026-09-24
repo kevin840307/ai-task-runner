@@ -558,3 +558,4 @@ def test_execute_script_resume_ignores_skip_marker_for_changed_item(tmp_path):
 
     assert execute_script(args, execute_one) == 0
     assert seen == ["changed"]
+    assert not marker.exists()
