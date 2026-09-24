@@ -627,6 +627,22 @@ class UIStateTests(unittest.TestCase):
             self.assertFalse(info["launching"])
             self.assertFalse((self.project / ".ai-task-runner" / "ui" / "launching.json").exists())
 
+    def test_old_launch_reservation_expires_even_if_child_pid_is_reused(self) -> None:
+        launch = self.project / ".ai-task-runner" / "ui" / "launching.json"
+        self.write_json(launch, {
+            "token": "old-reused",
+            "owner_pid": 1,
+            "child_pid": 24680,
+            "created_at": time.time() - 30 - 5,
+            "mode": "run",
+        })
+        with patch.object(UIState, "_pid_alive", return_value=True):
+            info = self.state.read_runtime(self.project)
+
+        self.assertFalse(info["running"])
+        self.assertFalse(info["launching"])
+        self.assertFalse(launch.exists())
+
     def test_dead_launch_reservation_is_cleaned_and_does_not_block_relaunch(self) -> None:
         launch = self.project / ".ai-task-runner" / "ui" / "launching.json"
         self.write_json(launch, {"token": "old", "owner_pid": 1, "child_pid": 99999, "created_at": time.time(), "mode": "run"})
