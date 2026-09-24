@@ -689,6 +689,97 @@ def test_shared_api_continues_when_execute_returns_before_completion(monkeypatch
     assert calls == [False, True]
 
 
+def test_shared_api_fails_closed_after_repeated_incomplete_state_without_progress(
+    monkeypatch,
+    tmp_path,
+):
+    import runner.api as api_module
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = 0
+
+    def fake_execute(config):
+        nonlocal calls
+        calls += 1
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            json.dumps({
+                "run_id": "same-run",
+                "completed": False,
+                "stage": "reviewing",
+                "current": 0,
+                "cycle": 1,
+                "tasks": [{"id": "t1", "status": "pending", "attempts": 1}],
+            }),
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+
+    with pytest.raises(RunnerError, match="without Workflow progress"):
+        run(RunRequest(
+            goal="x",
+            project_root=str(tmp_path),
+            validator="ai",
+            retry_delay=0,
+        ))
+
+    assert calls == 3
+
+
+def test_shared_api_incomplete_progress_resets_stall_counter(monkeypatch, tmp_path):
+    import runner.api as api_module
+
+    state_file = tmp_path / ".ai-task-runner" / "state.json"
+    calls = 0
+
+    def fake_execute(config):
+        nonlocal calls
+        calls += 1
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        if calls == 1:
+            payload = {
+                "run_id": "run-progress",
+                "completed": False,
+                "stage": "executing",
+                "current": 0,
+                "cycle": 1,
+                "tasks": [{"id": "t1", "status": "pending", "attempts": 1}],
+            }
+        elif calls == 2:
+            payload = {
+                "run_id": "run-progress",
+                "completed": False,
+                "stage": "reviewing",
+                "current": 0,
+                "cycle": 1,
+                "tasks": [{"id": "t1", "status": "pending", "attempts": 1}],
+            }
+        else:
+            payload = {
+                "run_id": "run-progress",
+                "completed": True,
+                "stage": "completed",
+                "current": 1,
+                "cycle": 1,
+                "tasks": [{"id": "t1", "status": "completed", "attempts": 1}],
+            }
+        state_file.write_text(json.dumps(payload), encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+    result = run(RunRequest(
+        goal="x",
+        project_root=str(tmp_path),
+        validator="ai",
+        retry_delay=0,
+    ))
+
+    assert result.completed is True
+    assert calls == 3
+
+
 def test_cli_does_not_retry_configuration_error(monkeypatch, tmp_path):
     import ai_task_runner
     from runner.errors import ConfigurationError
