@@ -33,7 +33,7 @@ const state = {
   generateWorkflowDraft: null, generateWorkflowPromptIndex: 0, generateWorkflowReviewTab: "visual", generateWorkflowRequestText: "",
   generateWorkflowWorkspace: "", generateWorkflowWorkspacePattern: "",
   syntaxTimer: 0,
-  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
+  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", runtimeRefreshToken: 0, projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
   studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", studioCatalogLoading: false, projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
   runLaunching: false,
 };
@@ -236,11 +236,22 @@ function uniqueProjects(projects) {
   return result;
 }
 function projectRuntimeSignature(projects) { return uniqueProjects(projects || []).map((p) => `${projectPathKey(p.path)}:${p.name || ""}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
+function applySelectedRuntimeToProjectList(projects) {
+  if (!state.project || !state.runtime) return projects;
+  const current = projects.find((p) => sameProjectPath(p.path, state.project.path));
+  if (!current) return projects;
+  const runtime = state.runtime;
+  current.runtime_status = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+  current.runtime_stage = String(runtime.cli_status || runtime.stage || "");
+  current.runtime_completed_count = Number(runtime.completed_count || 0);
+  current.runtime_total = Number(runtime.total || 0);
+  return projects;
+}
 async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
-      const data = await api("/api/projects"), next = uniqueProjects(data.projects || []);
+      const data = await api("/api/projects"), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
       applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
@@ -508,18 +519,19 @@ function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
   return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
 }
-async function refreshRuntime({ projectPath = state.project?.path || "" } = {}) {
+async function refreshRuntime({ projectPath = state.project?.path || "", force = false } = {}) {
   if (!projectPath) return;
   const projectKey = projectPathKey(projectPath);
-  if (state.runtimeRefreshPromise && state.runtimeRefreshProject === projectKey) return state.runtimeRefreshPromise;
+  if (!force && state.runtimeRefreshPromise && state.runtimeRefreshProject === projectKey) return state.runtimeRefreshPromise;
+  const token = ++state.runtimeRefreshToken;
   const request = (async () => {
     try {
       const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`);
-      if (!sameProjectPath(state.project?.path, projectPath)) return;
+      if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;
       state.runtime = runtime;
       const signature = runtimeRenderSignature(runtime);
       if (signature !== state.lastRuntimeSignature) { state.lastRuntimeSignature = signature; state.runtimeLastChangedAt = Date.now(); renderRuntime(runtime); }
-    } catch (error) { if (sameProjectPath(state.project?.path, projectPath)) setTextIfChanged($("errorText"), error.message); }
+    } catch (error) { if (token === state.runtimeRefreshToken && sameProjectPath(state.project?.path, projectPath)) setTextIfChanged($("errorText"), error.message); }
   })();
   state.runtimeRefreshPromise = request; state.runtimeRefreshProject = projectKey;
   try { return await request; }
@@ -1806,13 +1818,19 @@ $("sendButton").onclick = sendMessage;
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
-  const ok = await confirmDialog({ title: t("history.confirm_title", "Clear chat history?"), message: t("history.confirm_message", "Delete this Project's saved chat history?"), confirmLabel: t("history.clear", "Clear history"), danger: true });
+  const resetStopped = Boolean(state.runtime?.resumable);
+  const message = resetStopped
+    ? "Delete this Project's saved chat history and discard the stopped/resumable task so a new task can be entered?"
+    : t("history.confirm_message", "Delete this Project's saved chat history?");
+  const ok = await confirmDialog({ title: t("history.confirm_title", "Clear chat history?"), message, confirmLabel: t("history.clear", "Clear history"), danger: true });
   if (!ok) return;
   try {
-    await api("/api/project/history/clear", { method: "POST", body: JSON.stringify(payload()) });
-    state.historyPinnedToBottom = true;
+    await api("/api/project/history/clear", { method: "POST", body: JSON.stringify(payload({ reset_stopped: resetStopped })) });
+    state.historyPinnedToBottom = true; state.lastStream = "";
+    removeLiveCard();
     await refreshMessages({ forceFollow: true });
-    showToast(t("history.cleared", "Chat history cleared"));
+    await refreshRuntime({ force: true });
+    showToast(resetStopped ? "Chat history and stopped task cleared" : t("history.cleared", "Chat history cleared"));
   } catch (error) { showActionError(error.message, "Clear history failed"); }
 };
 $("messages").addEventListener("scroll", () => { state.historyPinnedToBottom = historyNearBottom($("messages")); }, { passive: true });
@@ -1835,7 +1853,7 @@ $("stopButton").onclick = async () => { await withButtonBusy($("stopButton"), "S
 $("resumeButton").onclick = async () => { await withButtonBusy($("resumeButton"), "Continuing…", async () => { try { await api("/api/project/resume", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task continued"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Continue failed"); } }); };
 $("resetButton").onclick = async () => {
   const ok = await confirmDialog({ title: "Reset stopped task?", message: "Discard resumable Runner state? UI task history and request snapshots are kept.", confirmLabel: "Reset", danger: true }); if (!ok) return;
-  try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime(); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
+  try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime({ force: true }); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
 $("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
 window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
