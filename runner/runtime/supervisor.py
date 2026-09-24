@@ -320,7 +320,7 @@ def _terminate_worker(worker: Any, timeout: float = 5.0) -> None:
     try:
         worker.terminate()
     except OSError:
-        return
+        pass
     wait = getattr(worker, "wait", None)
     if not callable(wait):
         return
