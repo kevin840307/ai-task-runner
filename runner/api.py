@@ -331,6 +331,8 @@ def run(
     config = request.normalized_config(on_event)
     unexpected_key: tuple[type[BaseException], str] | None = None
     unexpected_repeats = 0
+    incomplete_key = ""
+    incomplete_repeats = 0
     while True:
         try:
             exit_code = execute(config)
@@ -341,6 +343,13 @@ def run(
                 return result
             if exit_code != 0:
                 return result
+            progress_key = _incomplete_progress_key(result)
+            incomplete_repeats = incomplete_repeats + 1 if progress_key == incomplete_key else 1
+            incomplete_key = progress_key
+            if incomplete_repeats >= 3:
+                raise RunnerError(
+                    "run returned repeatedly without Workflow progress"
+                )
             config = _resume_config(request, config, result.state_files)
             _report_retry(
                 request,
@@ -405,6 +414,31 @@ def _result(request: RunRequest, exit_code: int) -> RunResult:
         state_files=tuple(str(path) for path in state_files),
         states=states,
     )
+
+
+def _incomplete_progress_key(result: RunResult) -> str:
+    summary = []
+    for state in result.states:
+        tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
+        summary.append({
+            "run_id": state.get("run_id"),
+            "stage": state.get("stage"),
+            "current": state.get("current"),
+            "cycle": state.get("cycle"),
+            "workflow_position": state.get("workflow_position"),
+            "task_step": state.get("task_step"),
+            "completed": state.get("completed"),
+            "tasks": [
+                {
+                    "id": task.get("id"),
+                    "status": task.get("status"),
+                    "attempts": task.get("attempts"),
+                }
+                for task in tasks
+                if isinstance(task, dict)
+            ],
+        })
+    return json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _resume_config(
