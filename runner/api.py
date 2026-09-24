@@ -371,7 +371,7 @@ def run(
             _report_retry(request, on_event, f"service wait window exhausted: {error}")
         except Exception as error:
             _log_unexpected(request, error)
-            key = (type(error), str(error))
+            key = _unexpected_error_key(error)
             unexpected_repeats = unexpected_repeats + 1 if key == unexpected_key else 1
             unexpected_key = key
             if unexpected_repeats >= 3:
@@ -414,6 +414,16 @@ def _result(request: RunRequest, exit_code: int) -> RunResult:
         state_files=tuple(str(path) for path in state_files),
         states=states,
     )
+
+
+def _unexpected_error_key(error: BaseException) -> tuple[type[BaseException], str]:
+    frames = traceback.extract_tb(error.__traceback__) if error.__traceback__ else []
+    if frames:
+        frame = frames[-1]
+        location = f"{frame.filename}:{frame.lineno}:{frame.name}"
+    else:
+        location = str(error)
+    return type(error), location
 
 
 def _incomplete_progress_key(result: RunResult) -> str:
