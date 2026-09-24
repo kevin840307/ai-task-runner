@@ -620,7 +620,21 @@ function renderRuntime(runtime) {
     followHistoryToBottom();
   } else removeLiveCard();
   const current = state.projects.find((p) => sameProjectPath(p.path, state.project?.path));
-  if (current) { const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle"; if (current.runtime_status !== nextStatus) { current.runtime_status = nextStatus; renderProjects(); } }
+  if (current) {
+    const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+    const nextStage = String(runtime.cli_status || runtime.stage || "");
+    const nextCompleted = Number(runtime.completed_count || 0);
+    const nextTotal = Number(runtime.total || 0);
+    const changed = current.runtime_status !== nextStatus
+      || current.runtime_stage !== nextStage
+      || Number(current.runtime_completed_count || 0) !== nextCompleted
+      || Number(current.runtime_total || 0) !== nextTotal;
+    current.runtime_status = nextStatus;
+    current.runtime_stage = nextStage;
+    current.runtime_completed_count = nextCompleted;
+    current.runtime_total = nextTotal;
+    if (changed) renderProjects();
+  }
   if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
