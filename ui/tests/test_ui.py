@@ -1652,13 +1652,13 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
         snapshot.assert_not_called()
         self.assertEqual(rows[0]["runtime_status"], "idle")
 
-    def test_projects_payload_reuses_short_cache(self) -> None:
+    def test_projects_payload_does_not_cache_live_runtime_status(self) -> None:
         with patch.object(self.state, "_process_snapshot", return_value={111, 222}) as snapshot:
             first = self.state.projects_payload()
             second = self.state.projects_payload()
 
-        snapshot.assert_called_once_with()
-        self.assertIs(first, second)
+        self.assertEqual(snapshot.call_count, 2)
+        self.assertIsNot(first, second)
 
 
 def test_process_snapshot_windows_branch_has_csv_import():
