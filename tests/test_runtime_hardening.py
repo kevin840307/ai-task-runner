@@ -161,3 +161,42 @@ def test_run_state_roundtrip_preserves_bounded_recovery_attempt():
     assert loaded.recovery_attempt_key == "workflow:2"
     assert loaded.recovery_attempt_count == 2
     assert loaded.recovery_attempt_previous == state.recovery_attempt_previous
+
+
+def test_terminate_process_tree_waits_again_after_force_kill(monkeypatch):
+    import os
+    import subprocess
+    from runner.runtime import process_runner as process_module
+
+    class StubbornProcess:
+        pid = 4242
+
+        def __init__(self):
+            self.wait_calls = []
+            self.killed = False
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            self.wait_calls.append(timeout)
+            if len(self.wait_calls) == 1:
+                raise subprocess.TimeoutExpired("worker", timeout)
+            return 0
+
+        def kill(self):
+            self.killed = True
+
+    process = StubbornProcess()
+    if os.name == "nt":
+        monkeypatch.setattr(process_module.subprocess, "run", lambda *args, **kwargs: None)
+    else:
+        monkeypatch.setattr(process_module.os, "killpg", lambda *args, **kwargs: None)
+
+    process_module.terminate_process_tree(process)
+
+    assert process.killed is True
+    assert process.wait_calls == [
+        process_module.TERMINATION_GRACE_SECONDS,
+        process_module.TERMINATION_GRACE_SECONDS,
+    ]
