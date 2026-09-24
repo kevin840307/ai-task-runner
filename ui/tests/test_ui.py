@@ -515,6 +515,27 @@ class UIStateTests(unittest.TestCase):
             self.state.launch_message(self.project, "hello", workflow=str(self.workflow))
         self.assertEqual([m["content"] for m in self.state.messages(self.project)], ["hello"])
 
+    def test_failed_launch_removes_nested_request_snapshot_resources(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  ai:\n    type: ai_validator\n    prompt: custom/validate.md\nflow: [ai]\n",
+            encoding="utf-8",
+        )
+        custom = self.project / "my_ai_validation.md"
+        custom.write_text("Check business rules.\n", encoding="utf-8")
+
+        with patch.object(self.state, "launch", side_effect=ValueError("boom")):
+            with self.assertRaisesRegex(ValueError, "boom"):
+                self.state.launch_message(
+                    self.project,
+                    "hello",
+                    workflow=str(self.workflow),
+                    ai_validator_prompt_file=str(custom),
+                )
+
+        requests = self.project / ".ai-task-runner" / "ui" / "requests"
+        self.assertEqual(list(requests.glob("*")) if requests.exists() else [], [])
+        self.assertEqual(self.state.messages(self.project), [])
+
     def test_launch_message_requires_selected_workflow_and_creates_request_snapshot(self) -> None:
         with self.assertRaisesRegex(ValueError, "Select a Workflow"):
             self.state.launch_message(self.project, "what does this project do?")
