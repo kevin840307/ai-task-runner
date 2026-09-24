@@ -2675,9 +2675,11 @@ class UIState(WorkflowBuilderMixin):
                 )
                 output = result.stdout.strip().lower()
                 return bool(output and "no tasks are running" not in output and str(pid) in output)
-            except (OSError, subprocess.SubprocessError):
-                return False
-            except ValueError:
+            except (OSError, subprocess.SubprocessError, ValueError):
+                # A failed Windows process probe is "unknown", not proof that
+                # the process died. Fail safe for one polling cycle to avoid
+                # RUN -> STOP/INT -> RUN sidebar flicker on transient tasklist
+                # failures; a later successful snapshot will correct status.
                 return True
         try:
             os.kill(pid, 0)
