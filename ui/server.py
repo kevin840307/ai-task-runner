@@ -86,18 +86,12 @@ class UIState(WorkflowBuilderMixin):
         return str(Path(path).expanduser().resolve())
 
     def projects_payload(self) -> dict:
-        try:
-            stat = self.projects_file.stat()
-            version = stat.st_mtime_ns
-        except OSError:
-            version = 0
-        now = time.monotonic()
-        cached = self._projects_payload_cache
-        if cached and cached[0] == version and cached[1] > now:
-            return cached[2]
+        # Runtime status is live process/state data. Do not cache it using only
+        # projects.json mtime: that can replay a pre-run/pre-stop status on the
+        # next sidebar poll and make rows visibly oscillate.
         projects = self.projects()
         running = sum(1 for item in projects if item.get("runtime_status") == "running")
-        payload = {
+        return {
             "projects": projects,
             "meta": {
                 "total": len(projects),
@@ -105,8 +99,6 @@ class UIState(WorkflowBuilderMixin):
                 "suggested_poll_ms": self._project_poll_interval_ms(len(projects), running),
             },
         }
-        self._projects_payload_cache = (version, now + PROJECTS_PAYLOAD_CACHE_SECONDS, payload)
-        return payload
 
     @staticmethod
     def _project_poll_interval_ms(total: int, running: int) -> int:
@@ -709,16 +701,22 @@ class UIState(WorkflowBuilderMixin):
             with (folder / MESSAGES_FILE).open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    def clear_chat_history(self, project: Path) -> dict:
-        """Clear persisted UI conversation history without touching Runner state.
+    def clear_chat_history(self, project: Path, *, reset_stopped: bool = False) -> dict:
+        """Clear persisted UI conversation history.
 
-        Running chat history is intentionally immutable from the UI so the active
-        task and its visible conversation cannot disappear while execution is in
-        progress. Other Projects remain independently clearable.
+        A stopped/interrupted task remains resumable by default. When the UI
+        explicitly asks to clear a stopped task too, reset Runner-owned runtime
+        state in the same lock order used by launch_message so reopening the UI
+        cannot leave the composer locked by hidden resumable state.
         """
-        if self.read_runtime(project).get("running"):
-            raise ValueError("Cannot clear chat history while this Project is running")
-        with self._chat_lock:
+        with self._chat_lock, self._runtime_lock:
+            runtime = self.read_runtime(project)
+            if runtime.get("running"):
+                raise ValueError("Cannot clear chat history while this Project is running")
+            reset = bool(reset_stopped and runtime.get("resumable"))
+            if reset:
+                self._reset_runtime_locked(project)
+
             folder = project / UI_STATE_DIR
             messages_path = folder / MESSAGES_FILE
             try:
@@ -739,7 +737,7 @@ class UIState(WorkflowBuilderMixin):
                     (folder / CHAT_STATE_FILE).unlink()
                 except FileNotFoundError:
                     pass
-            return {"ok": True}
+            return {"ok": True, "runtime_reset": reset}
 
     def sync_completion(self, project: Path) -> bool:
         with self._chat_lock:
@@ -2785,7 +2783,10 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/project/history/clear":
-                return self._json(self.state.clear_chat_history(self._project(body)))
+                return self._json(self.state.clear_chat_history(
+                    self._project(body),
+                    reset_stopped=bool(body.get("reset_stopped")),
+                ))
             if parsed.path == "/api/project/stop":
                 self.state.stop(self._project(body))
                 return self._json({"ok": True})
