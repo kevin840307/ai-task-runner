@@ -204,7 +204,7 @@ function followHistoryToBottom(force = false) {
 
 // ------------------------------ Projects / Chat ------------------------------
 async function loadProjects() {
-  const data = await api("/api/projects"); applyProjectPollMeta(data); state.projects = uniqueProjects(data.projects || []); renderProjects();
+  const data = await api("/api/projects", { timeoutMs: 15000 }); applyProjectPollMeta(data); state.projects = uniqueProjects(data.projects || []); renderProjects();
   if (!state.project && state.projects.length) {
     const saved = state.preferences?.lastProject || "";
     const first = state.projects.find((p) => sameProjectPath(p.path, saved) && p.exists !== false) || state.projects.find((p) => p.exists !== false);
@@ -681,7 +681,7 @@ async function sendMessage() {
 }
 
 async function refreshBackends() {
-  try { const data = await api("/api/backends"); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
+  try { const data = await api("/api/backends", { timeoutMs: 15000 }); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
   catch (_) { state.backends = ["qwen", "opencode"]; state.defaultBackend = "qwen"; renderBackendPicker(); }
 }
 function closeBackendDropdown() {
@@ -1444,7 +1444,7 @@ async function refreshStudioGuard() {
   if (state.view !== "workflow") return;
   if (state.studioGuardRefreshPromise) return state.studioGuardRefreshPromise;
   state.studioGuardRefreshPromise = (async () => {
-    try { state.studioGuard = await api("/api/studio/guard"); renderStudioGuard(); } catch (_) {}
+    try { state.studioGuard = await api("/api/studio/guard", { timeoutMs: 15000 }); renderStudioGuard(); } catch (_) {}
     finally { state.studioGuardRefreshPromise = null; }
   })();
   return state.studioGuardRefreshPromise;
