@@ -443,6 +443,13 @@ async function selectProject(project) {
   if (state.view === "workflow" && !(await switchView("chat"))) return;
   state.projectSwitching = true;
   setViewLoading("chatView", true, "Opening project…");
+  if (changingProject) {
+    state.studioFiles = { workflows: [], prompts: [] };
+    state.studioCatalogKey = "";
+    state.studioCatalogLoadedAt = 0;
+    state.validatorWorkflowPath = "";
+    state.aiValidatorPromptWorkflowPath = "";
+  }
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
   if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
