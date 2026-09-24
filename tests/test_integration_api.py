@@ -636,6 +636,28 @@ def test_shared_api_logs_unexpected_exception_and_retries_original_without_state
     assert "RuntimeError: boom" in log.read_text(encoding="utf-8")
 
 
+def test_shared_api_stops_after_same_unexpected_exception_repeats(monkeypatch, tmp_path):
+    import runner.api as api_module
+
+    calls = []
+
+    def fake_execute(config):
+        calls.append(config.resume)
+        raise RuntimeError("permanent bug")
+
+    monkeypatch.setattr(api_module, "execute", fake_execute)
+
+    with pytest.raises(RuntimeError, match="permanent bug"):
+        run(RunRequest(
+            goal="x",
+            project_root=str(tmp_path),
+            validator="ai",
+            retry_delay=0,
+        ))
+
+    assert calls == [False, False, False]
+
+
 def test_shared_api_continues_when_execute_returns_before_completion(monkeypatch, tmp_path):
     import runner.api as api_module
 
@@ -812,8 +834,15 @@ def test_yaml_api_treats_durable_max_cycle_skip_as_completed(tmp_path, monkeypat
         calls.append(config.resume)
         first.mkdir(parents=True, exist_ok=True)
         second.mkdir(parents=True, exist_ok=True)
+        from runner.script_loader import load_yaml_script
+        from runner.script_runner import _script_item_fingerprint
+        item = load_yaml_script(script, allow_missing_files=True)[0]
         (first / "script-item-skipped.json").write_text(
-            '{"reason":"max cycles reached: 2"}', encoding="utf-8"
+            json.dumps({
+                "reason": "max cycles reached: 2",
+                "item_fingerprint": _script_item_fingerprint(item),
+            }),
+            encoding="utf-8",
         )
         (first / "state.json").write_text(
             '{"completed":false,"stage":"validator_failed"}', encoding="utf-8"
