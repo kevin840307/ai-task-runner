@@ -475,3 +475,126 @@ def test_terminate_worker_waits_then_kills_stubborn_process():
         "kill",
         ("wait", 0.1),
     ]
+
+
+def test_supervisor_initial_marker_failure_releases_run_lock(tmp_path, monkeypatch):
+    request = _request(tmp_path)
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    lock = work / supervisor_module.RUN_LOCK_FILE
+    popen_calls = []
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(
+        supervisor_module,
+        "_write_runtime_marker",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk unavailable")),
+    )
+    monkeypatch.setattr(
+        supervisor_module.subprocess,
+        "Popen",
+        lambda *args, **kwargs: popen_calls.append((args, kwargs)),
+    )
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        supervisor_module.supervise_cli(
+            [],
+            worker_script="runner.py",
+            request_factory=lambda argv: request,
+            worker_entry=lambda argv: 0,
+            state_locator=lambda current: [],
+        )
+
+    assert popen_calls == []
+    assert not lock.exists()
+
+
+def test_supervisor_worker_marker_failure_terminates_worker_before_unlock(tmp_path, monkeypatch):
+    request = _request(tmp_path)
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    lock = work / supervisor_module.RUN_LOCK_FILE
+    worker = FakeWorker(0, 5150)
+    cleanup = []
+    writes = []
+
+    def fake_marker(path, request, started_at, *, worker_pid):
+        writes.append(worker_pid)
+        if worker_pid is not None:
+            raise OSError("marker update failed")
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module, "_write_runtime_marker", fake_marker)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", lambda *args, **kwargs: worker)
+    monkeypatch.setattr(
+        supervisor_module,
+        "cleanup_orphans",
+        lambda states, pid: cleanup.append((tuple(states), pid)),
+    )
+
+    with pytest.raises(OSError, match="marker update failed"):
+        supervisor_module.supervise_cli(
+            [],
+            worker_script="runner.py",
+            request_factory=lambda argv: request,
+            worker_entry=lambda argv: 0,
+            state_locator=lambda current: [],
+        )
+
+    assert writes == [None, 5150]
+    assert worker.terminated is True
+    assert cleanup == [((), 5150)]
+    assert not lock.exists()
+
+
+def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text(
+        '{"run_id":"same","stage":"executing","current":0,"cycle":1,'
+        '"completed":false,"tasks":[{"id":"t1","status":"pending","attempts":1}]}',
+        encoding="utf-8",
+    )
+    request = _request(tmp_path)
+    workers = iter([
+        FakeWorker(9, 101),
+        FakeWorker(9, 102),
+        FakeWorker(9, 103),
+    ])
+    calls = []
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(
+        supervisor_module.subprocess,
+        "Popen",
+        lambda command, env: calls.append(command) or next(workers),
+    )
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+    monkeypatch.setattr(supervisor_module, "cleanup_orphans", lambda *args: None)
+    monkeypatch.setattr(supervisor_module, "_report_retry", lambda *args: None)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 9
+    assert len(calls) == 3
+
+
+def test_clear_stop_request_can_fail_closed(monkeypatch, tmp_path):
+    path = tmp_path / "stop.request"
+
+    class LockedPath:
+        def unlink(self, missing_ok=False):
+            raise PermissionError("locked")
+
+    monkeypatch.setattr(supervisor_module, "io_path", lambda value: LockedPath())
+
+    supervisor_module._clear_stop_request(path)
+    with pytest.raises(PermissionError, match="locked"):
+        supervisor_module._clear_stop_request(path, strict=True)
