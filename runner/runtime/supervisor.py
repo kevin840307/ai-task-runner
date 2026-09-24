@@ -418,9 +418,13 @@ def _terminate_worker(worker: Any, timeout: float = 5.0) -> None:
         # Lightweight test doubles may not expose Popen.wait(timeout=...).
         try:
             wait()
-        except Exception:
+            return
+        except KeyboardInterrupt:
             pass
-        return
+        except Exception:
+            return
+    except KeyboardInterrupt:
+        pass
     except subprocess.TimeoutExpired:
         pass
     try:
@@ -429,7 +433,7 @@ def _terminate_worker(worker: Any, timeout: float = 5.0) -> None:
         return
     try:
         wait(timeout=timeout)
-    except (TypeError, OSError, subprocess.SubprocessError):
+    except (KeyboardInterrupt, TypeError, OSError, subprocess.SubprocessError):
         pass
 
 
