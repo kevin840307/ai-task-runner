@@ -1157,3 +1157,9 @@ def test_clear_history_resets_stopped_runtime_before_reenabling_composer():
     assert "reset_stopped: resetStopped" in script
     assert "Chat history and stopped task cleared" in script
     assert "await refreshRuntime({ force: true })" in script
+
+
+def test_idle_runtime_clears_previous_elapsed_timing():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "if (!runtime.running && !runtime.has_state && !runtime.resumable && !runtime.completed)" in script
+    assert "state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0;" in script
