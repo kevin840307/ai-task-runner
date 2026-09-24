@@ -449,3 +449,29 @@ def test_windows_orphan_taskkill_has_timeout_and_timeout_is_fail_safe(monkeypatc
     assert calls
     assert calls[0][0] == ["taskkill", "/PID", "202", "/T", "/F"]
     assert calls[0][1]["timeout"] == supervisor_module.TASKKILL_TIMEOUT_SECONDS
+
+
+def test_terminate_worker_waits_then_kills_stubborn_process():
+    calls = []
+
+    class StubbornWorker:
+        def terminate(self):
+            calls.append("terminate")
+
+        def wait(self, timeout=None):
+            calls.append(("wait", timeout))
+            if len([item for item in calls if isinstance(item, tuple) and item[0] == "wait"]) == 1:
+                raise subprocess.TimeoutExpired("worker", timeout)
+            return 0
+
+        def kill(self):
+            calls.append("kill")
+
+    supervisor_module._terminate_worker(StubbornWorker(), timeout=0.1)
+
+    assert calls == [
+        "terminate",
+        ("wait", 0.1),
+        "kill",
+        ("wait", 0.1),
+    ]
