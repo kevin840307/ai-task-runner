@@ -1204,3 +1204,12 @@ def test_local_ui_polling_reads_have_bounded_timeout():
         'api("/api/studio/guard", { timeoutMs: 15000 })',
     ):
         assert token in app
+
+
+def test_project_switch_clears_previous_project_workflow_catalog():
+    app = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    block = app[app.index("async function selectProject"):app.index("async function refreshMessages")]
+    assert "state.studioFiles = { workflows: [], prompts: [] };" in block
+    assert 'state.studioCatalogKey = "";' in block
+    assert "state.studioCatalogLoadedAt = 0;" in block
+    assert 'state.aiValidatorPromptWorkflowPath = "";' in block
