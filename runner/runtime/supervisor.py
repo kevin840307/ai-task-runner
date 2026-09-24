@@ -61,9 +61,9 @@ def supervise_cli(
         return 2
     started_at = time.time()
     stop_request = runtime_marker.with_name(STOP_REQUEST_FILE)
-    _clear_stop_request(stop_request)
-    _write_runtime_marker(runtime_marker, request, started_at, worker_pid=None)
     try:
+        _clear_stop_request(stop_request)
+        _write_runtime_marker(runtime_marker, request, started_at, worker_pid=None)
         return _supervise_workers(
             request,
             worker_args,
@@ -95,7 +95,12 @@ def _supervise_workers(
             [sys.executable, str(Path(worker_script).resolve()), *worker_args],
             env=env,
         )
-        _write_runtime_marker(runtime_marker, request, started_at, worker_pid=worker.pid)
+        try:
+            _write_runtime_marker(runtime_marker, request, started_at, worker_pid=worker.pid)
+        except OSError:
+            _terminate_worker(worker)
+            cleanup_orphans(states, worker.pid)
+            raise
         try:
             code = _wait_for_worker(worker, stop_request)
         except _StopRequested:
@@ -272,7 +277,20 @@ def _write_runtime_marker(
         "project_root": str(Path(request.project_root).resolve()),
         "work_dir": str(request.work_dir),
     }
-    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        os.replace(io_path(temporary), io_path(path))
+    except OSError:
+        try:
+            io_path(temporary).unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _remove_runtime_marker(path: Path) -> None:
