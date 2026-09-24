@@ -23,6 +23,8 @@ STOP_REQUEST_FILE = "stop.request"
 CONTROL_POLL_INTERVAL = 0.2
 RUN_LOCK_STALE_GRACE_SECONDS = 5.0
 TASKKILL_TIMEOUT_SECONDS = 10
+CONTROL_FILE_RETRIES = 10
+CONTROL_FILE_RETRY_DELAY = 0.05
 RequestFactory = Callable[[Sequence[str]], Any]
 WorkerEntry = Callable[[Sequence[str]], int]
 StateLocator = Callable[[Any], Sequence[str | Path]]
@@ -273,11 +275,21 @@ def _release_run_lock(path: Path, token: str) -> None:
 
 
 def _clear_stop_request(path: Path, *, strict: bool = False) -> None:
-    try:
-        io_path(path).unlink(missing_ok=True)
-    except OSError:
-        if strict:
-            raise
+    for attempt in range(CONTROL_FILE_RETRIES):
+        try:
+            io_path(path).unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if attempt < CONTROL_FILE_RETRIES - 1:
+                time.sleep(CONTROL_FILE_RETRY_DELAY * (attempt + 1))
+                continue
+            if strict:
+                raise
+            return
+        except OSError:
+            if strict:
+                raise
+            return
 
 def _write_runtime_marker(
     path: Path,
@@ -301,7 +313,14 @@ def _write_runtime_marker(
         encoding="utf-8",
     )
     try:
-        os.replace(io_path(temporary), io_path(path))
+        for attempt in range(CONTROL_FILE_RETRIES):
+            try:
+                os.replace(io_path(temporary), io_path(path))
+                return
+            except PermissionError:
+                if attempt == CONTROL_FILE_RETRIES - 1:
+                    raise
+                time.sleep(CONTROL_FILE_RETRY_DELAY * (attempt + 1))
     except OSError:
         try:
             io_path(temporary).unlink(missing_ok=True)
