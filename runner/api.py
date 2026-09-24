@@ -327,9 +327,13 @@ def run(
         request = RunRequest.from_mapping(request)
 
     config = request.normalized_config(on_event)
+    unexpected_key: tuple[type[BaseException], str] | None = None
+    unexpected_repeats = 0
     while True:
         try:
             exit_code = execute(config)
+            unexpected_key = None
+            unexpected_repeats = 0
             result = _result(request, exit_code)
             if request.plan_only or result.completed:
                 return result
@@ -356,9 +360,17 @@ def run(
             _report_retry(request, on_event, f"service wait window exhausted: {error}")
         except Exception as error:
             _log_unexpected(request, error)
+            key = (type(error), str(error))
+            unexpected_repeats = unexpected_repeats + 1 if key == unexpected_key else 1
+            unexpected_key = key
+            if unexpected_repeats >= 3:
+                raise
             config = _resume_config(request, config)
             _report_retry(
-                request, on_event, f"{type(error).__name__}: {error}; retrying"
+                request,
+                on_event,
+                f"{type(error).__name__}: {error}; retrying "
+                f"({unexpected_repeats}/2 automatic recoveries)",
             )
         if config.stage_retry_delay:
             time.sleep(config.stage_retry_delay)
