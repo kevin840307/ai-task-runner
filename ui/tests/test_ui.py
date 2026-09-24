@@ -222,7 +222,7 @@ class UIStateTests(unittest.TestCase):
         self.assertTrue(self.state.sync_completion(self.project))
         self.assertEqual(len(self.state.messages(self.project)), 2)
 
-        self.assertEqual(self.state.clear_chat_history(self.project), {"ok": True})
+        self.assertEqual(self.state.clear_chat_history(self.project), {"ok": True, "runtime_reset": False})
         self.assertEqual(self.state.messages(self.project), [])
         marker = json.loads((runtime / "ui" / "chat-state.json").read_text(encoding="utf-8"))
         self.assertEqual(marker["last_assistant_run_id"], "run-clear")
@@ -240,7 +240,7 @@ class UIStateTests(unittest.TestCase):
         def runtime(project):
             return {"running": Path(project).resolve() == self.project.resolve()}
         with patch.object(self.state, "read_runtime", side_effect=runtime):
-            self.assertEqual(self.state.clear_chat_history(other), {"ok": True})
+            self.assertEqual(self.state.clear_chat_history(other), {"ok": True, "runtime_reset": False})
         self.assertEqual(self.state.messages(other), [])
 
     def test_clear_chat_history_does_not_touch_runner_or_request_snapshots(self) -> None:
@@ -256,6 +256,46 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(self.state.messages(self.project), [])
         self.assertTrue((runtime / "state.json").is_file())
         self.assertTrue((request / "prompt.md").is_file())
+
+    def test_clear_chat_history_can_atomically_discard_stopped_runtime(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True, exist_ok=True)
+        self.write_json(runtime / "state.json", {
+            "run_id": "stopped-1",
+            "completed": False,
+            "stage": "execute",
+            "tasks": [{"id": "t1", "status": "pending"}],
+        })
+        self.state.append_message(self.project, "user", "old task")
+
+        result = self.state.clear_chat_history(self.project, reset_stopped=True)
+
+        self.assertEqual(result, {"ok": True, "runtime_reset": True})
+        self.assertEqual(self.state.messages(self.project), [])
+        self.assertFalse((runtime / "state.json").exists())
+        self.assertFalse(self.state.read_runtime(self.project)["resumable"])
+
+    def test_projects_payload_does_not_replay_cached_runtime_status(self) -> None:
+        self.state.add_project(str(self.project))
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True, exist_ok=True)
+        self.write_json(runtime / "state.json", {
+            "run_id": "status-1",
+            "completed": False,
+            "stage": "execute",
+        })
+
+        first = self.state.projects_payload()
+        self.assertEqual(first["projects"][0]["runtime_status"], "stopped")
+
+        self.write_json(runtime / "state.json", {
+            "run_id": "status-1",
+            "completed": True,
+            "stage": "completed",
+        })
+        second = self.state.projects_payload()
+
+        self.assertEqual(second["projects"][0]["runtime_status"], "completed")
 
     def test_runtime_reports_interrupted_when_marker_is_stale(self) -> None:
         runtime = self.project / ".ai-task-runner"
