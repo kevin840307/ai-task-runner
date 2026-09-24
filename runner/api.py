@@ -37,6 +37,7 @@ from .plugins.registry import (
     plugin_config_from_request,
 )
 from .runtime.events import retry_event
+from .script_loader import load_yaml_script
 from .script_runner import _valid_skip_marker
 from .utils.logs import append_bounded_log
 from .version import __version__
@@ -462,15 +463,13 @@ def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
 def _script_items(request: RunRequest) -> list[dict[str, Any]]:
     if not request.script:
         return []
-    script = Path(request.script).expanduser().resolve()
     try:
-        import yaml
-        data = yaml.safe_load(script.read_text(encoding="utf-8"))
-    except Exception:
+        return load_yaml_script(
+            Path(request.script).expanduser().resolve(),
+            allow_missing_files=True,
+        )
+    except RunnerError:
         return []
-    if not isinstance(data, list):
-        return []
-    return [item if isinstance(item, dict) else {} for item in data]
 
 
 def _state_files(request: RunRequest) -> list[Path]:
