@@ -267,3 +267,33 @@ def test_invalid_resume_state_is_configuration_error(tmp_path):
 
     with pytest.raises(ConfigurationError, match="invalid resume state"):
         store.load_or_create("", resume=True, force_new=False)
+
+
+def test_state_save_does_not_repeat_committed_state_when_backup_write_fails(tmp_path, monkeypatch):
+    import json
+    import runner.runtime.run_state as run_state_module
+    from runner.runtime.run_state import RunState, StateStore
+
+    work = tmp_path / ".run"
+    work.mkdir()
+    store = StateStore(tmp_path.resolve(), work)
+    state = RunState(
+        run_id="run-commit",
+        goal="goal",
+        project_root=str(tmp_path.resolve()),
+        stage="executing",
+    )
+    original = run_state_module._write_json
+
+    def fail_backup(path, data):
+        if path == store.backup_path:
+            raise OSError("backup unavailable")
+        return original(path, data)
+
+    monkeypatch.setattr(run_state_module, "_write_json", fail_backup)
+
+    store.save(state)
+
+    payload = json.loads(store.path.read_text(encoding="utf-8"))
+    assert payload["run_id"] == "run-commit"
+    assert payload["stage"] == "executing"
