@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -56,7 +57,7 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
                 marker.unlink()
             except FileNotFoundError:
                 pass
-        elif item.get("skip_on_max_cycles") is True and marker.is_file():
+        elif item.get("skip_on_max_cycles") is True and _valid_skip_marker(marker, item):
             _emit_script_event(
                 "script.item_skipped", index, total, item, child=child,
                 reason="previously skipped after max cycles",
@@ -68,13 +69,13 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
             code = execute_one(child)
         except ConfigurationError as error:
             if item.get("skip_on_max_cycles") is True and _is_max_cycles_error(error):
-                _write_skip_marker(marker, child, str(error))
+                _write_skip_marker(marker, child, item, str(error))
                 _emit_script_event(
                     "script.item_skipped", index, total, item, child=child, reason=str(error)
                 )
                 continue
             raise
-        if code == 0 and not _child_completed(child):
+        if code == 0 and not _child_completed(child, item):
             # A child can exit cleanly after saving resumable, unfinished state.
             # Batch orchestration must not report that as a completed script item.
             code = 1
@@ -100,21 +101,49 @@ def _is_max_cycles_error(error: BaseException) -> bool:
     return str(error).strip().lower().startswith("max cycles reached:")
 
 
-def _write_skip_marker(path: Path, child: RuntimeConfig, reason: str) -> None:
+def _script_item_fingerprint(item: dict[str, Any]) -> str:
+    payload = json.dumps(
+        item,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _valid_skip_marker(path: Path, item: dict[str, Any]) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(
+        isinstance(data, dict)
+        and data.get("item_fingerprint") == _script_item_fingerprint(item)
+    )
+
+
+def _write_skip_marker(
+    path: Path,
+    child: RuntimeConfig,
+    item: dict[str, Any],
+    reason: str,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "reason": reason,
         "max_cycles": child.max_cycles,
         "script_index": child.script_index,
         "script_total": child.script_total,
+        "item_fingerprint": _script_item_fingerprint(item),
     }
     temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(temporary, path)
 
 
-def _child_completed(child: RuntimeConfig) -> bool:
-    if _skip_marker(child).is_file():
+def _child_completed(child: RuntimeConfig, item: dict[str, Any]) -> bool:
+    if item.get("skip_on_max_cycles") is True and _valid_skip_marker(_skip_marker(child), item):
         return True
     state_path = Path(child.project_root) / child.work_dir / "state.json"
     store = StateStore(Path(child.project_root), state_path.parent)
