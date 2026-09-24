@@ -416,6 +416,12 @@ async function selectProject(project) {
   if (!project || state.projectSwitching) return;
   state.lastRuntimeSignature = "";
   const changingProject = !sameProjectPath(state.project?.path, project.path);
+  if (changingProject && state.runLaunching) {
+    runActionGate.invalidate();
+    state.runLaunching = false;
+    $("sendButton")?.removeAttribute("aria-busy");
+    renderRunConfigurationLock();
+  }
   if (changingProject && state.studioFile?.scope === "project") {
     if ((state.studioDirty || state.visualDirty) && !(await confirmDiscardStudio())) return;
     clearStudioEditor();
