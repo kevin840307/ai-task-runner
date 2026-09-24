@@ -37,6 +37,7 @@ from .plugins.registry import (
     plugin_config_from_request,
 )
 from .runtime.events import retry_event
+from .script_runner import _valid_skip_marker
 from .utils.logs import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
@@ -378,10 +379,17 @@ def run(
 
 def _result(request: RunRequest, exit_code: int) -> RunResult:
     state_files = _state_files(request)
+    script_items = _script_items(request) if request.script else []
     states_list: list[dict[str, Any]] = []
-    for path in state_files:
+    for index, path in enumerate(state_files):
         skip_marker = path.parent / "script-item-skipped.json"
-        if request.script and skip_marker.is_file():
+        item = script_items[index] if index < len(script_items) else None
+        if (
+            request.script
+            and isinstance(item, dict)
+            and item.get("skip_on_max_cycles") is True
+            and _valid_skip_marker(skip_marker, item)
+        ):
             states_list.append({
                 "completed": True,
                 "stage": "skipped",
@@ -449,6 +457,20 @@ def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
     return tuple(str(path) for path in _state_files(request))
+
+
+def _script_items(request: RunRequest) -> list[dict[str, Any]]:
+    if not request.script:
+        return []
+    script = Path(request.script).expanduser().resolve()
+    try:
+        import yaml
+        data = yaml.safe_load(script.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, dict)]
 
 
 def _state_files(request: RunRequest) -> list[Path]:
