@@ -242,12 +242,14 @@ class StateStore:
 
     def save(self, state: RunState) -> None:
         data = state.dump()
-        # Commit the recovery copy first and the authoritative project state
-        # last. If backup persistence fails, primary state has not advanced and
-        # the caller can safely retry. If primary persistence fails afterward,
-        # resume can recover the newest state from the backup.
-        _write_json(self.backup_path, data)
+        # state.json is the authoritative commit point. Once it is durable, a
+        # recovery-copy failure must not make the caller repeat an already
+        # committed workflow action.
         _write_json(self.path, data)
+        try:
+            _write_json(self.backup_path, data)
+        except OSError:
+            pass
 
     def restore_backup(self) -> bool:
         loaded = self._read_state(self.backup_path, strict=False)
