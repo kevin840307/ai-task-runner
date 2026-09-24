@@ -15,7 +15,6 @@ from typing import Any
 
 from .events import retry_event
 from .process_runner import ACTIVE_PROCESS_FILE
-from ..utils.files import atomic_write_text
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
 RUNNER_PROCESS_FILE = "runner-process.json"
@@ -88,6 +87,8 @@ def _supervise_workers(
     started_at: float,
     stop_request: Path,
 ) -> int:
+    crash_key = ""
+    crash_repeats = 0
     while True:
         env = dict(os.environ)
         env[WORKER_ENV] = str(os.getpid())
@@ -116,6 +117,21 @@ def _supervise_workers(
             return code
         cleanup_orphans(states, worker.pid)
         if not any(path.is_file() for path in states):
+            return code
+        progress_key = _state_progress_fingerprint(states)
+        crash_repeats = crash_repeats + 1 if progress_key == crash_key else 1
+        crash_key = progress_key
+        if crash_repeats >= 3:
+            if request.json_events:
+                print(json.dumps(retry_event(
+                    "worker repeatedly exited without durable progress",
+                    exit_code=code,
+                )), flush=True)
+            else:
+                print(
+                    "ERROR: worker repeatedly exited without durable progress",
+                    file=sys.stderr,
+                )
             return code
         _report_retry(
             request,
@@ -332,6 +348,39 @@ def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
         io_path(path).unlink(missing_ok=True)
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
+
+
+def _state_progress_fingerprint(states: Sequence[Path]) -> str:
+    summary: list[dict[str, Any]] = []
+    for path in states:
+        if not path.is_file():
+            continue
+        try:
+            state = json.loads(io_path(path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            summary.append({"path": str(path.resolve()), "unreadable": True})
+            continue
+        tasks = state.get("tasks") if isinstance(state, dict) and isinstance(state.get("tasks"), list) else []
+        summary.append({
+            "path": str(path.resolve()),
+            "run_id": state.get("run_id") if isinstance(state, dict) else None,
+            "stage": state.get("stage") if isinstance(state, dict) else None,
+            "current": state.get("current") if isinstance(state, dict) else None,
+            "cycle": state.get("cycle") if isinstance(state, dict) else None,
+            "workflow_position": state.get("workflow_position") if isinstance(state, dict) else None,
+            "task_step": state.get("task_step") if isinstance(state, dict) else None,
+            "completed": state.get("completed") if isinstance(state, dict) else None,
+            "tasks": [
+                {
+                    "id": task.get("id"),
+                    "status": task.get("status"),
+                    "attempts": task.get("attempts"),
+                }
+                for task in tasks
+                if isinstance(task, dict)
+            ],
+        })
+    return json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _terminate_worker(worker: Any, timeout: float = 5.0) -> None:
