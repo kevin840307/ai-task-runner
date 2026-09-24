@@ -1139,3 +1139,21 @@ def test_project_sidebar_switch_restores_buttons_and_scroll_position():
     assert 'menuButton.disabled = removing || state.projectSwitching' in app
     assert 'const previousScrollTop = root.scrollTop;' in app
     assert 'if (root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;' in app
+
+
+def test_runtime_refresh_force_supersedes_stale_response_and_sidebar_uses_selected_runtime():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "runtimeRefreshToken" in script
+    assert "const token = ++state.runtimeRefreshToken;" in script
+    assert "token !== state.runtimeRefreshToken" in script
+    assert "refreshRuntime({ force: true })" in script
+    assert "applySelectedRuntimeToProjectList" in script
+    assert 'next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []))' in script
+
+
+def test_clear_history_resets_stopped_runtime_before_reenabling_composer():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "const resetStopped = Boolean(state.runtime?.resumable);" in script
+    assert "reset_stopped: resetStopped" in script
+    assert "Chat history and stopped task cleared" in script
+    assert "await refreshRuntime({ force: true })" in script
