@@ -99,12 +99,12 @@ def _supervise_workers(
         try:
             code = _wait_for_worker(worker, stop_request)
         except _StopRequested:
-            worker.terminate()
+            _terminate_worker(worker)
             cleanup_orphans(states, worker.pid)
             _clear_stop_request(stop_request)
             return 130
         except KeyboardInterrupt:
-            worker.terminate()
+            _terminate_worker(worker)
             cleanup_orphans(states, worker.pid)
             return 130
         if code in (0, 1, 130):
@@ -312,6 +312,37 @@ def _cleanup_orphan_marker(path: Path, worker_pid: int) -> None:
             os.killpg(child, signal.SIGKILL)
         io_path(path).unlink(missing_ok=True)
     except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+
+def _terminate_worker(worker: Any, timeout: float = 5.0) -> None:
+    """Bound worker shutdown before releasing the project/work_dir ownership lock."""
+    try:
+        worker.terminate()
+    except OSError:
+        return
+    wait = getattr(worker, "wait", None)
+    if not callable(wait):
+        return
+    try:
+        wait(timeout=timeout)
+        return
+    except TypeError:
+        # Lightweight test doubles may not expose Popen.wait(timeout=...).
+        try:
+            wait()
+        except Exception:
+            pass
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        worker.kill()
+    except (AttributeError, OSError):
+        return
+    try:
+        wait(timeout=timeout)
+    except (TypeError, OSError, subprocess.SubprocessError):
         pass
 
 
