@@ -1163,3 +1163,13 @@ def test_idle_runtime_clears_previous_elapsed_timing():
     script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
     assert "if (!runtime.running && !runtime.has_state && !runtime.resumable && !runtime.completed)" in script
     assert "state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0;" in script
+
+
+def test_selected_project_sidebar_syncs_stage_and_progress_from_runtime_poll():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'const nextStage = String(runtime.cli_status || runtime.stage || "");' in script
+    assert "const nextCompleted = Number(runtime.completed_count || 0);" in script
+    assert "const nextTotal = Number(runtime.total || 0);" in script
+    assert "current.runtime_stage = nextStage;" in script
+    assert "current.runtime_completed_count = nextCompleted;" in script
+    assert "current.runtime_total = nextTotal;" in script
