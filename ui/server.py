@@ -813,17 +813,9 @@ class UIState(WorkflowBuilderMixin):
                     readonly_safety=request.get("readonly_safety", "restore"),
                 )
             except Exception:
-                # A failed launch must not leave a fake user message or an orphan request snapshot.
-                folder = Path(request["request_dir"])
-                for child in folder.iterdir() if folder.is_dir() else ():
-                    try:
-                        child.unlink()
-                    except OSError:
-                        pass
-                try:
-                    folder.rmdir()
-                except OSError:
-                    pass
+                # A failed launch must not leave a fake user message or an orphan
+                # request snapshot, including nested validator resources.
+                shutil.rmtree(Path(request["request_dir"]), ignore_errors=True)
                 raise
             self.append_message(project, "user", message)
 
