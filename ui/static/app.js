@@ -609,7 +609,8 @@ function renderRuntime(runtime) {
   $("resetButton").hidden = runtime.running || !runtime.resumable;
   $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
   const blockNew = runtime.running || runtime.resumable || state.runLaunching || state.studioCatalogLoading;
-  $("sendButton").disabled = blockNew; $("messageInput").disabled = blockNew;
+  const blockTyping = runtime.running || runtime.resumable || state.runLaunching;
+  $("sendButton").disabled = blockNew; $("messageInput").disabled = blockTyping;
   renderRunConfigurationLock();
   $("messageInput").placeholder = "描述要完成的功能或修復內容...";
   if (runtime.running || runtime.resumable) {
