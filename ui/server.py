@@ -322,13 +322,20 @@ class UIState(WorkflowBuilderMixin):
             created_at = float(marker.get("created_at") or 0.0)
         except (TypeError, ValueError):
             created_at = 0.0
+        age = max(0.0, time.time() - created_at) if created_at else float("inf")
         if child_pid:
-            active = self._pid_alive(child_pid, alive_pids)
+            # launching.json only bridges the short gap between Popen and the
+            # supervisor-owned runner-process.json. Never let a recycled PID
+            # keep a project "running" indefinitely.
+            active = bool(
+                age <= LAUNCH_RESERVATION_GRACE
+                and self._pid_alive(child_pid, alive_pids)
+            )
         else:
             active = bool(
                 owner_pid
+                and age <= LAUNCH_RESERVATION_GRACE
                 and self._pid_alive(owner_pid, alive_pids)
-                and time.time() - created_at <= LAUNCH_RESERVATION_GRACE
             )
         if active:
             return marker
