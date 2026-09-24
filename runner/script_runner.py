@@ -57,12 +57,19 @@ def execute_script(args: RuntimeConfig, execute_one: ExecuteOne) -> int:
                 marker.unlink()
             except FileNotFoundError:
                 pass
-        elif item.get("skip_on_max_cycles") is True and _valid_skip_marker(marker, item):
-            _emit_script_event(
-                "script.item_skipped", index, total, item, child=child,
-                reason="previously skipped after max cycles",
-            )
-            continue
+        elif marker.is_file():
+            if item.get("skip_on_max_cycles") is True and _valid_skip_marker(marker, item):
+                _emit_script_event(
+                    "script.item_skipped", index, total, item, child=child,
+                    reason="previously skipped after max cycles",
+                )
+                continue
+            # A marker from a previous YAML definition must never become valid
+            # again after configuration changes. Remove it before executing.
+            try:
+                marker.unlink()
+            except FileNotFoundError:
+                pass
 
         _emit_script_event("script.item_started", index, total, item, child=child)
         try:
