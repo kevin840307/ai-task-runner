@@ -340,8 +340,13 @@ def terminate_process_tree(process: subprocess.Popen[str]) -> None:
 
     try:
         process.wait(timeout=TERMINATION_GRACE_SECONDS)
+        return
     except subprocess.TimeoutExpired:
         try:
             process.kill()
         except OSError:
-            pass
+            return
+    try:
+        process.wait(timeout=TERMINATION_GRACE_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
