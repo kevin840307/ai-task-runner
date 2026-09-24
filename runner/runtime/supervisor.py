@@ -62,7 +62,7 @@ def supervise_cli(
     started_at = time.time()
     stop_request = runtime_marker.with_name(STOP_REQUEST_FILE)
     try:
-        _clear_stop_request(stop_request)
+        _clear_stop_request(stop_request, strict=True)
         _write_runtime_marker(runtime_marker, request, started_at, worker_pid=None)
         return _supervise_workers(
             request,
@@ -256,11 +256,12 @@ def _release_run_lock(path: Path, token: str) -> None:
         pass
 
 
-def _clear_stop_request(path: Path) -> None:
+def _clear_stop_request(path: Path, *, strict: bool = False) -> None:
     try:
         io_path(path).unlink(missing_ok=True)
     except OSError:
-        pass
+        if strict:
+            raise
 
 def _write_runtime_marker(
     path: Path,
