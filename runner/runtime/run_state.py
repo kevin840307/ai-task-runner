@@ -16,6 +16,7 @@ from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils.text import bounded_text
 from ..utils.files import io_path
+from .heartbeat import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
@@ -246,6 +247,7 @@ class StateStore:
         # recovery-copy failure must not make the caller repeat an already
         # committed workflow action.
         _write_json(self.path, data)
+        touch_heartbeat()
         try:
             _write_json(self.backup_path, data)
         except OSError:
