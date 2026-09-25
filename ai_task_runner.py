@@ -23,6 +23,7 @@ from runner.config.defaults import (
     DEFAULT_REVIEW_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
+    DEFAULT_WORKER_HANG_TIMEOUT,
 )
 from runner.errors import ConfigurationError
 from runner.extensions import discover_extensions
@@ -108,6 +109,12 @@ def parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_WATCHDOG_INTERVAL,
         help="seconds between watchdog checks",
+    )
+    command_parser.add_argument(
+        "--worker-hang-timeout",
+        type=float,
+        default=DEFAULT_WORKER_HANG_TIMEOUT,
+        help="seconds without Runner progress before the Supervisor restarts the worker; 0 disables it",
     )
     command_parser.add_argument(
         "--max-attempts",
