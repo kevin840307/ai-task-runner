@@ -693,3 +693,52 @@ def test_supervisor_passes_heartbeat_path_to_worker_environment(tmp_path, monkey
     heartbeat = tmp_path / ".ai-task-runner" / supervisor_module.WORKER_HEARTBEAT_FILE
     assert seen["AI_TASK_RUNNER_HEARTBEAT"] == str(heartbeat.resolve())
     assert not heartbeat.exists()
+
+
+def test_supervisor_recovers_hung_worker_from_durable_state(tmp_path, monkeypatch):
+    work = tmp_path / ".ai-task-runner"
+    work.mkdir()
+    state = work / "state.json"
+    state.write_text(
+        '{"run_id":"hang-resume","stage":"executing","current":0,"cycle":1,'
+        '"completed":false,"tasks":[{"id":"t1","status":"pending","attempts":1}]}',
+        encoding="utf-8",
+    )
+    request = _request(tmp_path)
+    request.worker_hang_timeout = 600
+    first = FakeWorker(0, 7001)
+    second = FakeWorker(0, 7002)
+    workers = iter([first, second])
+    commands = []
+    waits = iter(["hung", 0])
+
+    def fake_popen(command, env):
+        commands.append(list(command))
+        return next(workers)
+
+    def fake_wait(worker, stop_request, **kwargs):
+        value = next(waits)
+        if value == "hung":
+            raise supervisor_module._WorkerHung
+        return value
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(supervisor_module, "_wait_for_worker", fake_wait)
+    monkeypatch.setattr(supervisor_module, "cleanup_orphans", lambda *args: None)
+    monkeypatch.setattr(supervisor_module, "_report_retry", lambda *args: None)
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+
+    result = supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [state],
+    )
+
+    assert result == 0
+    assert first.terminated is True
+    assert len(commands) == 2
+    assert "--resume" not in commands[0]
+    assert "--resume" in commands[1]
