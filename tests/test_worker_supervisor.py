@@ -627,3 +627,69 @@ def test_runtime_marker_retries_transient_permission_error(tmp_path, monkeypatch
     payload = __import__("json").loads(marker.read_text(encoding="utf-8"))
     assert payload["worker_pid"] == 456
     assert payload["started_at"] == 123.0
+
+
+def test_worker_wait_detects_stale_heartbeat(tmp_path):
+    heartbeat = tmp_path / supervisor_module.WORKER_HEARTBEAT_FILE
+    heartbeat.write_text("", encoding="utf-8")
+    stale = supervisor_module.time.time() - 601
+    os.utime(heartbeat, (stale, stale))
+
+    class RunningWorker:
+        def poll(self):
+            return None
+
+    with pytest.raises(supervisor_module._WorkerHung):
+        supervisor_module._wait_for_worker(
+            RunningWorker(),
+            tmp_path / "stop.request",
+            heartbeat_path=heartbeat,
+            hang_timeout=600,
+        )
+
+
+def test_worker_hang_watchdog_can_be_disabled(tmp_path, monkeypatch):
+    heartbeat = tmp_path / supervisor_module.WORKER_HEARTBEAT_FILE
+    heartbeat.write_text("", encoding="utf-8")
+    stale = supervisor_module.time.time() - 3600
+    os.utime(heartbeat, (stale, stale))
+    polls = iter([None, 0])
+
+    class Worker:
+        def poll(self):
+            return next(polls)
+
+    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
+
+    assert supervisor_module._wait_for_worker(
+        Worker(),
+        tmp_path / "stop.request",
+        heartbeat_path=heartbeat,
+        hang_timeout=0,
+    ) == 0
+
+
+def test_supervisor_passes_heartbeat_path_to_worker_environment(tmp_path, monkeypatch):
+    request = _request(tmp_path)
+    request.worker_hang_timeout = 600
+    seen = {}
+    worker = FakeWorker(0, 8080)
+
+    def fake_popen(command, env):
+        seen.update(env)
+        return worker
+
+    monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
+    monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
+
+    assert supervisor_module.supervise_cli(
+        [],
+        worker_script="runner.py",
+        request_factory=lambda argv: request,
+        worker_entry=lambda argv: 0,
+        state_locator=lambda current: [],
+    ) == 0
+
+    heartbeat = tmp_path / ".ai-task-runner" / supervisor_module.WORKER_HEARTBEAT_FILE
+    assert seen["AI_TASK_RUNNER_HEARTBEAT"] == str(heartbeat.resolve())
+    assert not heartbeat.exists()
