@@ -146,6 +146,7 @@ def _communicate_bounded(
     deadline = time.monotonic() + timeout if timeout else None
     last_activity_at = time.monotonic()
     next_watchdog_at = last_activity_at
+    next_worker_heartbeat_at = last_activity_at
     partial = ""
     output_queue: queue.Queue[str] = queue.Queue(maxsize=OUTPUT_QUEUE_CHUNKS)
 
@@ -173,6 +174,9 @@ def _communicate_bounded(
 
     while True:
         now = time.monotonic()
+        if now >= next_worker_heartbeat_at:
+            touch_heartbeat()
+            next_worker_heartbeat_at = now + 60.0
         output, had_output = _drain_output(output_queue)
         partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
         if had_output:
