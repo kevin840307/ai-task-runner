@@ -30,9 +30,8 @@ def sleep_with_heartbeat(seconds: float, *, interval: float = 60.0) -> None:
     while remaining > 0:
         touch_heartbeat()
         step = min(interval, remaining)
-        started = time.monotonic()
         time.sleep(step)
-        remaining -= max(0.0, time.monotonic() - started)
+        remaining -= step
     touch_heartbeat()
 
 
