@@ -38,6 +38,7 @@ from .plugins.registry import (
     plugin_config_from_request,
 )
 from .runtime.events import retry_event
+from .runtime.heartbeat import sleep_with_heartbeat
 from .script_loader import load_yaml_script
 from .script_runner import _valid_skip_marker
 from .utils.logs import append_bounded_log
@@ -388,7 +389,7 @@ def run(
                 f"({unexpected_repeats}/2 automatic recoveries)",
             )
         if config.stage_retry_delay:
-            time.sleep(config.stage_retry_delay)
+            sleep_with_heartbeat(config.stage_retry_delay)
 
 
 def _result(request: RunRequest, exit_code: int) -> RunResult:
