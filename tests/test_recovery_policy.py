@@ -253,7 +253,9 @@ def test_api_retry_sleep_never_exceeds_remaining_wait_window(monkeypatch):
         raise error
     with pytest.raises(RunnerError):
         ai_client_module._run_with_backoff(fail, 'api', '', 300, 300, max_elapsed=3600)
-    assert sleeps == [100.0]
+    assert sum(sleeps) == pytest.approx(100.0)
+    assert sleeps
+    assert max(sleeps) <= 60.0
 
 
 def test_invalid_resume_state_is_configuration_error(tmp_path):
