@@ -344,7 +344,7 @@ class StageExecutor:
     @staticmethod
     def _sleep(ctx: StageContext) -> None:
         if ctx.config.stage_retry_delay:
-            time.sleep(ctx.config.stage_retry_delay)
+            sleep_with_heartbeat(ctx.config.stage_retry_delay)
 
 
 __all__ = ["StageAction", "StageExecutor"]
