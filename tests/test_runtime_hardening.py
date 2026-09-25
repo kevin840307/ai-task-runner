@@ -257,7 +257,6 @@ def test_project_changes_refresh_worker_heartbeat_without_cli_output(tmp_path, m
         5,
         idle_timeout_after_change=1,
         change_detected=lambda: True,
-        watchdog_interval=0.01,
     )
 
     assert result.return_code == 0
