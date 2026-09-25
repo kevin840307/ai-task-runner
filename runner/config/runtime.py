@@ -19,6 +19,7 @@ from .defaults import (
     DEFAULT_REVIEW_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
+    DEFAULT_WORKER_HANG_TIMEOUT,
 )
 
 EventHandler = Callable[[dict[str, Any]], None]
@@ -55,6 +56,7 @@ class RuntimeConfig:
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
     api_retry_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
+    worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     same_session_retries: int = DEFAULT_MAX_ATTEMPTS
     review_retries: int = DEFAULT_REVIEW_RETRIES
     max_cycles: int = DEFAULT_MAX_CYCLES
@@ -130,6 +132,7 @@ class RuntimeConfig:
             "stage_retry_delay",
             "api_retry_wait",
             "api_retry_max_wait",
+            "worker_hang_timeout",
         ):
             _non_negative(self, name)
         if not is_number(self.watchdog_interval) or self.watchdog_interval <= 0:
