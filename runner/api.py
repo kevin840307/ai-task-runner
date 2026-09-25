@@ -28,6 +28,7 @@ from .config.defaults import (
     DEFAULT_REVIEW_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
+    DEFAULT_WORKER_HANG_TIMEOUT,
 )
 from .errors import ConfigurationError, RunnerError, is_transient_error
 from .extensions import discover_extensions
@@ -71,6 +72,7 @@ class RunRequest:
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
     api_wait_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
+    worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     max_attempts: int = DEFAULT_MAX_ATTEMPTS
     review_retries: int = DEFAULT_REVIEW_RETRIES
     max_cycles: int = DEFAULT_MAX_CYCLES
@@ -118,6 +120,7 @@ class RunRequest:
             agent_idle_after_change_timeout=args.agent_idle_after_change_timeout,
             api_wait_timeout=getattr(args, "api_wait_timeout", DEFAULT_API_WAIT_TIMEOUT),
             watchdog_interval=getattr(args, "watchdog_interval", DEFAULT_WATCHDOG_INTERVAL),
+            worker_hang_timeout=getattr(args, "worker_hang_timeout", DEFAULT_WORKER_HANG_TIMEOUT),
             max_attempts=args.max_attempts,
             review_retries=getattr(args, "review_retries", DEFAULT_REVIEW_RETRIES),
             max_cycles=args.max_cycles,
@@ -218,6 +221,7 @@ class RunRequest:
             agent_idle_after_change_timeout=self.agent_idle_after_change_timeout,
             api_retry_timeout=self.api_wait_timeout,
             watchdog_interval=self.watchdog_interval,
+            worker_hang_timeout=self.worker_hang_timeout,
             same_session_retries=self.max_attempts,
             review_retries=self.review_retries,
             max_cycles=self.max_cycles,
