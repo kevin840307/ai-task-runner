@@ -282,3 +282,26 @@ def test_silent_managed_subprocess_refreshes_worker_heartbeat(tmp_path, monkeypa
 
     assert result.return_code == 0
     assert heartbeat.stat().st_mtime > old
+
+
+def test_state_backup_failure_is_logged_without_failing_primary_commit(tmp_path, monkeypatch):
+    import runner.runtime.run_state as run_state_module
+
+    store = StateStore(tmp_path.resolve(), tmp_path / ".run")
+    state = _state(tmp_path, cycle=7, stage="executing")
+    original_write = run_state_module._write_json
+
+    def fail_backup(path, data):
+        if path == store.backup_path:
+            raise PermissionError("backup locked")
+        return original_write(path, data)
+
+    monkeypatch.setattr(run_state_module, "_write_json", fail_backup)
+
+    store.save(state)
+
+    assert json.loads(store.path.read_text(encoding="utf-8"))["cycle"] == 7
+    warning = (store.work / "state-backup-warning.log").read_text(encoding="utf-8")
+    assert "WARNING state backup failed" in warning
+    assert "primary state remains authoritative" in warning
+    assert "PermissionError: backup locked" in warning
