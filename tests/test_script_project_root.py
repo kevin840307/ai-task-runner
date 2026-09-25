@@ -256,6 +256,7 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
   agent_idle_after_change_timeout: 61
   api_wait_timeout: 71
   watchdog_interval: 2.5
+  worker_hang_timeout: 601
   max_attempts: 4
   review_retries: 5
   max_cycles: 6
@@ -285,6 +286,7 @@ def test_yaml_item_task_runtime_options_match_cli_contract(tmp_path):
     assert child.agent_idle_after_change_timeout == 61
     assert child.api_retry_timeout == 71
     assert child.watchdog_interval == 2.5
+    assert child.worker_hang_timeout == 601
     assert child.same_session_retries == 4
     assert child.review_retries == 5
     assert child.max_cycles == 6
