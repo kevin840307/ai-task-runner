@@ -16,6 +16,7 @@ from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils.text import bounded_text
 from ..utils.files import io_path
+from ..utils.logs import append_bounded_log
 from .heartbeat import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
@@ -250,8 +251,15 @@ class StateStore:
         touch_heartbeat()
         try:
             _write_json(self.backup_path, data)
-        except OSError:
-            pass
+        except OSError as error:
+            append_bounded_log(
+                self.work / "state-backup-warning.log",
+                (
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"WARNING state backup failed; primary state remains authoritative; "
+                    f"backup={self.backup_path}; {type(error).__name__}: {error}\n"
+                ),
+            )
 
     def restore_backup(self) -> bool:
         loaded = self._read_state(self.backup_path, strict=False)
