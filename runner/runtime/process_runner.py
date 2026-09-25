@@ -16,6 +16,7 @@ from typing import Any
 from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
 from ..utils.files import atomic_write_text, io_path
 from ..utils.text import bounded_text
+from .heartbeat import touch_heartbeat
 
 
 TERMINATION_GRACE_SECONDS = 5
@@ -175,6 +176,7 @@ def _communicate_bounded(
         output, had_output = _drain_output(output_queue)
         partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
         if had_output:
+            touch_heartbeat()
             _write_stream(partial[-STREAM_OUTPUT_CHARS:])
 
         if watchdog_enabled:
@@ -226,6 +228,7 @@ def _finish_reader(
         output, had_output = _drain_output(output_queue)
         partial = bounded_text(partial + output, MAX_PROCESS_OUTPUT_CHARS)
         if had_output:
+            touch_heartbeat()
             _write_stream(partial[-STREAM_OUTPUT_CHARS:])
         reader.join(timeout=0.01)
     output, had_output = _drain_output(output_queue)
