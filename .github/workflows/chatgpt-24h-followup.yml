@@ -1,0 +1,20 @@
+name: ChatGPT 24H follow-up verification
+on:
+  push:
+    branches: [chatgpt-validation]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Targeted 24H regressions
+        run: python -m pytest -q tests/test_worker_supervisor.py tests/test_runtime_hardening.py tests/test_live_reliability_tool.py
+      - name: Full pytest
+        run: python -m pytest -q
