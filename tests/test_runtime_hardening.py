@@ -200,3 +200,41 @@ def test_terminate_process_tree_waits_again_after_force_kill(monkeypatch):
         process_module.TERMINATION_GRACE_SECONDS,
         process_module.TERMINATION_GRACE_SECONDS,
     ]
+
+
+def test_state_commit_refreshes_worker_heartbeat(tmp_path, monkeypatch):
+    import os
+    import time
+    from runner.runtime.heartbeat import HEARTBEAT_ENV
+
+    heartbeat = tmp_path / "heartbeat"
+    heartbeat.write_text("", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(heartbeat, (old, old))
+    monkeypatch.setenv(HEARTBEAT_ENV, str(heartbeat))
+
+    store = StateStore(tmp_path.resolve(), tmp_path / ".run")
+    store.save(_state(tmp_path, cycle=1, stage="executing"))
+
+    assert heartbeat.stat().st_mtime > old
+
+
+def test_child_output_refreshes_worker_heartbeat(tmp_path, monkeypatch):
+    import os
+    import time
+    from runner.runtime.heartbeat import HEARTBEAT_ENV
+
+    heartbeat = tmp_path / "heartbeat"
+    heartbeat.write_text("", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(heartbeat, (old, old))
+    monkeypatch.setenv(HEARTBEAT_ENV, str(heartbeat))
+
+    result = run_process(
+        [sys.executable, "-c", "print('progress', flush=True)"],
+        tmp_path,
+        10,
+    )
+
+    assert result.return_code == 0
+    assert heartbeat.stat().st_mtime > old
