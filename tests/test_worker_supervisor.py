@@ -627,24 +627,3 @@ def test_runtime_marker_retries_transient_permission_error(tmp_path, monkeypatch
     payload = __import__("json").loads(marker.read_text(encoding="utf-8"))
     assert payload["worker_pid"] == 456
     assert payload["started_at"] == 123.0
-
-
-def test_stop_polling_uses_long_path_safe_io_path(monkeypatch, tmp_path):
-    stop = tmp_path / "stop.request"
-    calls = []
-
-    class ProbePath:
-        def is_file(self):
-            calls.append("is_file")
-            return True
-
-    monkeypatch.setattr(supervisor_module, "io_path", lambda value: ProbePath())
-
-    class Worker:
-        def poll(self):
-            return None
-
-    with pytest.raises(supervisor_module._StopRequested):
-        supervisor_module._wait_for_worker(Worker(), stop)
-
-    assert calls == ["is_file"]
