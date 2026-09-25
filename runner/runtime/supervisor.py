@@ -14,12 +14,15 @@ from ..utils.files import io_path
 from typing import Any
 
 from .events import retry_event
+from .heartbeat import HEARTBEAT_ENV, touch_heartbeat_path
 from .process_runner import ACTIVE_PROCESS_FILE
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
 RUNNER_PROCESS_FILE = "runner-process.json"
 RUN_LOCK_FILE = "run.lock"
 STOP_REQUEST_FILE = "stop.request"
+WORKER_HEARTBEAT_FILE = "worker-heartbeat"
+WORKER_HANG_EXIT_CODE = 124
 CONTROL_POLL_INTERVAL = 0.2
 RUN_LOCK_STALE_GRACE_SECONDS = 5.0
 TASKKILL_TIMEOUT_SECONDS = 10
@@ -62,8 +65,10 @@ def supervise_cli(
         return 2
     started_at = time.time()
     stop_request = runtime_marker.with_name(STOP_REQUEST_FILE)
+    heartbeat_path = runtime_marker.with_name(WORKER_HEARTBEAT_FILE)
     try:
         _clear_stop_request(stop_request, strict=True)
+        touch_heartbeat_path(heartbeat_path)
         _write_runtime_marker(runtime_marker, request, started_at, worker_pid=None)
         return _supervise_workers(
             request,
@@ -73,9 +78,11 @@ def supervise_cli(
             runtime_marker=runtime_marker,
             started_at=started_at,
             stop_request=stop_request,
+            heartbeat_path=heartbeat_path,
         )
     finally:
         _remove_runtime_marker(runtime_marker)
+        _remove_heartbeat(heartbeat_path)
         _release_run_lock(run_lock, lock_token)
 
 
@@ -88,12 +95,15 @@ def _supervise_workers(
     runtime_marker: Path,
     started_at: float,
     stop_request: Path,
+    heartbeat_path: Path,
 ) -> int:
     crash_key = ""
     crash_repeats = 0
     while True:
         env = dict(os.environ)
         env[WORKER_ENV] = str(os.getpid())
+        env[HEARTBEAT_ENV] = str(heartbeat_path)
+        touch_heartbeat_path(heartbeat_path)
         worker = subprocess.Popen(
             [sys.executable, str(Path(worker_script).resolve()), *worker_args],
             env=env,
@@ -104,8 +114,18 @@ def _supervise_workers(
             _terminate_worker(worker)
             cleanup_orphans(states, worker.pid)
             raise
+        hung = False
         try:
-            code = _wait_for_worker(worker, stop_request)
+            code = _wait_for_worker(
+                worker,
+                stop_request,
+                heartbeat_path=heartbeat_path,
+                hang_timeout=float(getattr(request, "worker_hang_timeout", 600.0)),
+            )
+        except _WorkerHung:
+            hung = True
+            _terminate_worker(worker)
+            code = WORKER_HANG_EXIT_CODE
         except _StopRequested:
             _terminate_worker(worker)
             cleanup_orphans(states, worker.pid)
@@ -137,7 +157,11 @@ def _supervise_workers(
             return code
         _report_retry(
             request,
-            f"worker exited unexpectedly ({code}); resuming saved state",
+            (
+                f"worker made no progress for {float(getattr(request, 'worker_hang_timeout', 600.0)):g}s; resuming saved state"
+                if hung
+                else f"worker exited unexpectedly ({code}); resuming saved state"
+            ),
         )
         worker_args = [
             arg for arg in worker_args if arg not in {"--resume", "--force-new"}
@@ -152,7 +176,17 @@ class _StopRequested(Exception):
     pass
 
 
-def _wait_for_worker(worker: Any, stop_request: Path) -> int:
+class _WorkerHung(Exception):
+    pass
+
+
+def _wait_for_worker(
+    worker: Any,
+    stop_request: Path,
+    *,
+    heartbeat_path: Path | None = None,
+    hang_timeout: float = 0,
+) -> int:
     """Wait for one worker while allowing a detached UI to request a safe stop."""
     poll = getattr(worker, "poll", None)
     if poll is None:
@@ -163,7 +197,28 @@ def _wait_for_worker(worker: Any, stop_request: Path) -> int:
             return int(code)
         if stop_request.is_file():
             raise _StopRequested
+        if (
+            heartbeat_path is not None
+            and hang_timeout > 0
+            and _heartbeat_stale(heartbeat_path, hang_timeout)
+        ):
+            raise _WorkerHung
         time.sleep(CONTROL_POLL_INTERVAL)
+
+
+def _heartbeat_stale(path: Path, timeout: float) -> bool:
+    try:
+        age = time.time() - io_path(path).stat().st_mtime
+    except OSError:
+        return False
+    return age >= timeout
+
+
+def _remove_heartbeat(path: Path) -> None:
+    try:
+        io_path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _sleep_until_retry(seconds: float, stop_request: Path) -> bool:
@@ -444,4 +499,4 @@ def _report_retry(request: Any, message: str) -> None:
         print(f"ERROR: {message}", file=sys.stderr)
 
 
-__all__ = ["RUNNER_PROCESS_FILE", "RUN_LOCK_FILE", "STOP_REQUEST_FILE", "WORKER_ENV", "cleanup_orphans", "supervise_cli"]
+__all__ = ["RUNNER_PROCESS_FILE", "RUN_LOCK_FILE", "STOP_REQUEST_FILE", "WORKER_HEARTBEAT_FILE", "WORKER_ENV", "cleanup_orphans", "supervise_cli"]
