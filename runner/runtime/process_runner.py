@@ -185,6 +185,7 @@ def _communicate_bounded(
                 changed = _safe_change_detected(change_detected)
                 next_watchdog_at = now + watchdog_interval
             if changed or had_output:
+                touch_heartbeat()
                 last_activity_at = now
 
         if process.poll() is not None:
