@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .run_state import RunState
+from .heartbeat import touch_heartbeat
 from ..version import __version__
 
 EventHandler = Callable[[dict[str, Any]], None]
@@ -112,6 +113,7 @@ def show_todo(state: RunState | None = None) -> None:
 
 def publish(event_type: str, action: str, **payload: Any) -> None:
     """Publish a public runner event while preserving existing event fields."""
+    touch_heartbeat()
     if _bus is None:
         return
     event: dict[str, Any] = {
