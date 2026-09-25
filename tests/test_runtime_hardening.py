@@ -262,3 +262,24 @@ def test_project_changes_refresh_worker_heartbeat_without_cli_output(tmp_path, m
 
     assert result.return_code == 0
     assert heartbeat.stat().st_mtime > old
+
+
+def test_silent_managed_subprocess_refreshes_worker_heartbeat(tmp_path, monkeypatch):
+    import os
+    import time
+    from runner.runtime.heartbeat import HEARTBEAT_ENV
+
+    heartbeat = tmp_path / "heartbeat"
+    heartbeat.write_text("", encoding="utf-8")
+    old = time.time() - 120
+    os.utime(heartbeat, (old, old))
+    monkeypatch.setenv(HEARTBEAT_ENV, str(heartbeat))
+
+    result = run_process(
+        [sys.executable, "-c", "import time; time.sleep(0.2)"],
+        tmp_path,
+        5,
+    )
+
+    assert result.return_code == 0
+    assert heartbeat.stat().st_mtime > old
