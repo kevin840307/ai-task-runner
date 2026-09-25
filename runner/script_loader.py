@@ -27,6 +27,7 @@ SCRIPT_ITEM_RUNTIME_ALIASES = {
     "agent_idle_after_change_timeout": "agent_idle_after_change_timeout",
     "api_wait_timeout": "api_retry_timeout",
     "watchdog_interval": "watchdog_interval",
+    "worker_hang_timeout": "worker_hang_timeout",
     "max_attempts": "same_session_retries",
     "review_retries": "review_retries",
     "max_cycles": "max_cycles",
