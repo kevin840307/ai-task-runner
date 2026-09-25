@@ -15,7 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -238,6 +238,9 @@ class SoakResult:
     yaml_runs: int = 0
     sandbox_runs: int = 0
     elapsed_seconds: float = 0
+    resource_start: dict[str, int] = field(default_factory=dict)
+    resource_max: dict[str, int] = field(default_factory=dict)
+    resource_end: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -2273,10 +2276,128 @@ def run_endpoint(settings: Settings, sandbox: bool):
     return qwen_test_endpoint(sandbox, settings.api_port)
 
 
+def _rss_bytes() -> int:
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            counters = PROCESS_MEMORY_COUNTERS()
+            counters.cb = ctypes.sizeof(counters)
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            if ctypes.windll.psapi.GetProcessMemoryInfo(
+                handle, ctypes.byref(counters), counters.cb
+            ):
+                return int(counters.WorkingSetSize)
+        except (AttributeError, OSError, ValueError):
+            return 0
+        return 0
+
+    status = Path("/proc/self/status")
+    if status.is_file():
+        try:
+            for line in status.read_text(encoding="utf-8").splitlines():
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+        except (OSError, ValueError, IndexError):
+            pass
+    try:
+        import resource
+        value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        return value if sys.platform == "darwin" else value * 1024
+    except (ImportError, ValueError):
+        return 0
+
+
+def _handle_count() -> int:
+    if os.name != "nt":
+        return -1
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        count = wintypes.DWORD()
+        handle = ctypes.windll.kernel32.GetCurrentProcess()
+        if ctypes.windll.kernel32.GetProcessHandleCount(handle, ctypes.byref(count)):
+            return int(count.value)
+    except (AttributeError, OSError, ValueError):
+        pass
+    return -1
+
+
+def _tree_bytes(root: Path) -> int:
+    total = 0
+    try:
+        files = root.rglob("*")
+        for path in files:
+            try:
+                if path.is_file():
+                    total += path.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return total
+
+
+def resource_snapshot(root: Path) -> dict[str, int]:
+    return {
+        "rss_bytes": _rss_bytes(),
+        "threads": threading.active_count(),
+        "handles": _handle_count(),
+        "run_root_bytes": _tree_bytes(root),
+        "active_process_markers": sum(
+            1 for path in root.rglob("active-process.txt") if path.is_file()
+        ),
+    }
+
+
+def _resource_maximum(
+    current: dict[str, int],
+    sample: dict[str, int],
+) -> dict[str, int]:
+    keys = set(current) | set(sample)
+    return {
+        key: max(int(current.get(key, -1)), int(sample.get(key, -1)))
+        for key in keys
+    }
+
+
+def _record_resource_snapshot(
+    root: Path,
+    run_number: int,
+    sample: dict[str, int],
+) -> None:
+    record = {
+        "timestamp": time.time(),
+        "run_number": run_number,
+        **sample,
+    }
+    with (root / "resource-observation.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
 def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
     started = time.monotonic()
     deadline = started + hours * 3600
-    result = SoakResult()
+    baseline = resource_snapshot(root)
+    maximum = dict(baseline)
+    _record_resource_snapshot(root, 0, baseline)
+    result = SoakResult(resource_start=baseline, resource_max=maximum)
     while time.monotonic() < deadline:
         run_number = result.completed + 1
         sandboxed = settings.sandbox or every_nth(settings.soak_sandbox_every, run_number)
@@ -2327,9 +2448,21 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             mixed_validations=mixed_validations,
             sandbox_runs=result.sandbox_runs + int(sandboxed),
         )
+        sample = resource_snapshot(root)
+        maximum = _resource_maximum(maximum, sample)
+        _record_resource_snapshot(root, run_number, sample)
+        result = replace(result, resource_max=maximum, resource_end=sample)
         if settings.pause:
             time.sleep(min(settings.pause, max(0, deadline - time.monotonic())))
-    return replace(result, elapsed_seconds=time.monotonic() - started)
+    final_sample = resource_snapshot(root)
+    maximum = _resource_maximum(maximum, final_sample)
+    _record_resource_snapshot(root, result.completed, final_sample)
+    return replace(
+        result,
+        elapsed_seconds=time.monotonic() - started,
+        resource_max=maximum,
+        resource_end=final_sample,
+    )
 
 
 def require_dense_coverage(result: SoakResult) -> None:
@@ -2787,6 +2920,11 @@ def main() -> int:
         "soak_yaml_runs": soak_result.yaml_runs,
         "soak_sandbox_every": settings.soak_sandbox_every,
         "soak_sandbox_runs": soak_result.sandbox_runs,
+        "resource_observation": {
+            "start": soak_result.resource_start,
+            "max": soak_result.resource_max,
+            "end": soak_result.resource_end,
+        },
         "transient_observed": transient_observed,
         "long_api_outage_seconds": args.long_api_outage_seconds,
         "long_api_disconnect_recovered": True,
