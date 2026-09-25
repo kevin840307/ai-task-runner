@@ -161,7 +161,7 @@ def _wait_for_worker(worker: Any, stop_request: Path) -> int:
         code = poll()
         if code is not None:
             return int(code)
-        if io_path(stop_request).is_file():
+        if stop_request.is_file():
             raise _StopRequested
         time.sleep(CONTROL_POLL_INTERVAL)
 
@@ -169,7 +169,7 @@ def _wait_for_worker(worker: Any, stop_request: Path) -> int:
 def _sleep_until_retry(seconds: float, stop_request: Path) -> bool:
     deadline = time.monotonic() + seconds
     while True:
-        if io_path(stop_request).is_file():
+        if stop_request.is_file():
             return True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
