@@ -8,6 +8,7 @@ from typing import NoReturn, TypeVar
 
 from ..errors import RunnerError, diagnostic_detail
 from ..runtime import events
+from ..runtime.heartbeat import sleep_with_heartbeat
 from .diagnostics import error_result, prepare_session_recovery
 from .errors import AIError, BackendError
 from .session import is_session_invalid_error, is_transient_service_error
@@ -290,7 +291,7 @@ def _run_with_backoff(
             if delay:
                 sleep_for = min(delay, max_elapsed - elapsed) if max_elapsed > 0 else delay
                 if sleep_for > 0:
-                    time.sleep(sleep_for)
+                    sleep_with_heartbeat(sleep_for)
                 delay = min(max_wait, max(wait, delay * 2))
 
 
