@@ -10,7 +10,7 @@ from ai_task_runner import parser
 from runner.backends.opencode import OpenCodeBackend
 from runner.backends.qwen import QwenBackend
 from runner.config.runtime import RuntimeConfig
-from runner.config.defaults import DEFAULT_WATCHDOG_INTERVAL
+from runner.config.defaults import DEFAULT_WATCHDOG_INTERVAL, DEFAULT_WORKER_HANG_TIMEOUT
 from runner.errors import ConfigurationError, RunnerError
 from runner.plugins.console import LiveUI
 from runner.workflow.rules import invalidate_plan
@@ -51,6 +51,35 @@ def test_watchdog_default_is_configurable_15_seconds():
     assert parser().parse_args([
         '--goal', 'x', '--validator', 'ai', '--watchdog-interval', '3'
     ]).watchdog_interval == 3
+
+
+
+def test_worker_hang_timeout_defaults_to_10_minutes_and_is_configurable():
+    args = parser().parse_args(["--goal", "x", "--validator", "ai"])
+    assert args.worker_hang_timeout == DEFAULT_WORKER_HANG_TIMEOUT == 600.0
+
+    configured = parser().parse_args([
+        "--goal", "x", "--validator", "ai",
+        "--worker-hang-timeout", "1800",
+    ])
+    assert configured.worker_hang_timeout == 1800.0
+
+    disabled = parser().parse_args([
+        "--goal", "x", "--validator", "ai",
+        "--worker-hang-timeout", "0",
+    ])
+    assert disabled.worker_hang_timeout == 0.0
+
+
+def test_runtime_rejects_negative_worker_hang_timeout():
+    config = RuntimeConfig(
+        goal="x",
+        project_root=".",
+        validator="ai",
+        worker_hang_timeout=-1,
+    )
+    with pytest.raises(ValueError, match="worker_hang_timeout"):
+        config.validate()
 
 
 def test_plain_console_deduplicates_same_status(tmp_path, capsys):
