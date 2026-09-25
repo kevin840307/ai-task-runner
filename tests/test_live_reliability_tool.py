@@ -1215,3 +1215,66 @@ def test_live_reliability_main_includes_24h_control_preflights():
     assert "runner_ownership_preflight(run_root)" in main
     assert "windows_orphan_cleanup_preflight(run_root)" in main
     assert main.index("runner_ownership_preflight(run_root)") < main.index("resume_probe(settings, run_root)")
+
+
+def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, monkeypatch):
+    monkeypatch.setattr(live, "_rss_bytes", lambda: 123456)
+    monkeypatch.setattr(live, "_handle_count", lambda: 77)
+    (tmp_path / "data.bin").write_bytes(b"x" * 10)
+    marker = tmp_path / "nested" / "active-process.txt"
+    marker.parent.mkdir()
+    marker.write_text("1 2", encoding="ascii")
+
+    sample = live.resource_snapshot(tmp_path)
+
+    assert sample["rss_bytes"] == 123456
+    assert sample["threads"] >= 1
+    assert sample["handles"] == 77
+    assert sample["run_root_bytes"] >= 13
+    assert sample["active_process_markers"] == 1
+
+
+def test_resource_maximum_preserves_peak_values():
+    assert live._resource_maximum(
+        {
+            "rss_bytes": 100,
+            "threads": 5,
+            "handles": -1,
+            "run_root_bytes": 20,
+            "active_process_markers": 0,
+        },
+        {
+            "rss_bytes": 90,
+            "threads": 7,
+            "handles": 40,
+            "run_root_bytes": 30,
+            "active_process_markers": 1,
+        },
+    ) == {
+        "rss_bytes": 100,
+        "threads": 7,
+        "handles": 40,
+        "run_root_bytes": 30,
+        "active_process_markers": 1,
+    }
+
+
+def test_record_resource_snapshot_writes_jsonl(tmp_path):
+    live._record_resource_snapshot(
+        tmp_path,
+        3,
+        {
+            "rss_bytes": 10,
+            "threads": 2,
+            "handles": -1,
+            "run_root_bytes": 100,
+            "active_process_markers": 0,
+        },
+    )
+
+    record = json.loads(
+        (tmp_path / "resource-observation.jsonl").read_text(encoding="utf-8")
+    )
+    assert record["run_number"] == 3
+    assert record["rss_bytes"] == 10
+    assert "timestamp" in record
