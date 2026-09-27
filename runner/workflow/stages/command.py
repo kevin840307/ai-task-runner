@@ -122,9 +122,13 @@ class CommandStage:
                 result.append(str(_project_file(ctx, ctx.validator_path, "validator")))
                 continue
             expanded = value
+            path_prefixed = any(
+                value.startswith(token)
+                for token in ("{project_root}", "{work_dir}", "{state_file}", "{runner_root}")
+            )
             for placeholder, replacement in mapping.items():
                 expanded = expanded.replace(placeholder, replacement)
-            result.append(expanded)
+            result.append(os.path.normpath(expanded) if path_prefixed else expanded)
         return result
 
 
