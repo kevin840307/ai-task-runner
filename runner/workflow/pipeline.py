@@ -8,7 +8,7 @@ from typing import Any
 
 from ..errors import RunnerError
 from .recovery import RecoveryPolicy
-from .registry import create_stage
+from .registry import create_stage, stage_result_kind
 from .rules import finish_run, finish_task, prepare_replan
 from .stages import Stage, StageContext, StageExecutor, StageResult
 
@@ -196,6 +196,11 @@ class Pipeline:
                     prepare_replan(self.context, result)
                     return self._restart(node.restart_at, result), result, False
                 if action.kind == "restart":
+                    if (
+                        result.kind == "validation"
+                        and self._restart_target_produces_tasks(node.restart_at)
+                    ):
+                        prepare_replan(self.context, result)
                     return self._restart(node.restart_at, result), result, False
                 if action.kind == "stop":
                     return None, result, True
@@ -268,6 +273,13 @@ class Pipeline:
 
     def _has_pending_task(self) -> bool:
         return self.context.state.current < len(self.context.state.tasks)
+
+    def _restart_target_produces_tasks(self, target: str | None) -> bool:
+        target = target or next(iter(self.positions), "")
+        position = self.positions.get(target)
+        if position is None:
+            return False
+        return stage_result_kind(self.workflow[position]) == "tasks"
 
     def _restart(
         self, target: str | None, result: StageResult
