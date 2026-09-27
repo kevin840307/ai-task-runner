@@ -1897,12 +1897,13 @@ instructions:
 FULL_LOOP_VALIDATOR = '''from pathlib import Path
 root = Path(".").resolve()
 target = root / "loop.txt"
-marker = root / ".validator-failed-once"
+marker = root / ".ai-task-runner" / "full-loop-validator-failed-once"
 lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
 if "READY" not in lines or "REVIEW_OK" not in lines:
     print("VALIDATION_FAILED: READY and REVIEW_OK must already be present")
     raise SystemExit(1)
 if not marker.exists():
+    marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("1", encoding="utf-8")
     print("VALIDATION_FAILED: add VALIDATOR_OK as its own logical line; preserve READY and REVIEW_OK")
     raise SystemExit(1)
