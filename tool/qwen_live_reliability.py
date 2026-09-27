@@ -732,46 +732,40 @@ def stage_result_sessions(project: Path, stage: str) -> list[str]:
 
 
 def assert_prompt_transport_contract(project: Path) -> None:
-    """Lock Same/Fresh retry prompt rules without brittle token thresholds."""
+    """Lock shared-control prompt transport without brittle token thresholds."""
     records = prompt_records(project)
     if not records:
         raise RuntimeError("prompt audit found no model.prompt history")
+    static_markers = (
+        "Goal (global constraints only):",
+        "Current TODO is the only executable scope.",
+        "Evidence order:",
+        "Decision:",
+        "Project root:",
+    )
     for record in records:
         text = record.text
-        if text.startswith("Continue the same " ) and " in a fresh session." not in text:
-            forbidden = (
-                "Goal (context/global constraints only):",
-                "Current TODO is the only executable scope.",
-                "Review only. Read-only:",
-                "Project root:",
+        if text.startswith("RUNNER_SHARED_STAGE_CONTROL"):
+            if record.session_mode != "resume":
+                raise RuntimeError(
+                    f"shared same-session control did not resume existing session: {record.stage}"
+                )
+            if "mode: continue" not in text and "mode: retry" not in text:
+                raise RuntimeError(
+                    f"shared same-session control has unexpected mode: {record.stage}"
+                )
+            if any(value in text for value in static_markers):
+                raise RuntimeError(
+                    f"shared same-session control resent static stage context: {record.stage}"
+                )
+        if "mode: retry" in text and "previous_error:" not in text:
+            raise RuntimeError(
+                f"shared retry omitted previous failure evidence: {record.stage}"
             )
-            if any(value in text for value in forbidden):
-                raise RuntimeError(
-                    f"same-session retry resent static stage context: {record.stage}"
-                )
-            if "Previous failure:" not in text:
-                raise RuntimeError(
-                    f"same-session retry omitted new failure evidence: {record.stage}"
-                )
-        if text.startswith("Continue the same " ) and " in a fresh session." in text:
-            if "Stage instructions:" not in text:
-                raise RuntimeError(
-                    f"fresh-session retry omitted stage instructions: {record.stage}"
-                )
-        if text.startswith("Continue normal task execution in this same session."):
-            if record.session_mode != "resume" or any(value in text for value in (
-                "Hard rules:",
-                "Goal (context/global constraints only):",
-                "Current TODO is the only executable scope.",
-            )):
-                raise RuntimeError("normal same-session execution resent static context")
-        if text.startswith("Continue reviewing the same current TODO in this same review session."):
-            if record.session_mode != "resume" or any(value in text for value in (
-                "Evidence order:",
-                "Decision:",
-                "Judge only the current TODO.",
-            )):
-                raise RuntimeError("same-session Review resent static review contract")
+        if "mode: recover" in text and record.session_mode == "resume":
+            raise RuntimeError(
+                f"recover control unexpectedly reused an existing session: {record.stage}"
+            )
 
 
 def assert_system_topology(project: Path, workflow: str) -> None:
