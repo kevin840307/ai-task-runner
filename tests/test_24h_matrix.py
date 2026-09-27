@@ -141,3 +141,16 @@ def test_live_review_routing_probe_forces_first_review_failure_deterministically
     assert block.index("- stage: seed") < block.index("- stage: review")
     assert 'Path(".ai-task-runner") / "review-seeded-once"' in source
     assert "one-shot command Stage deterministically seeds review.txt with only READY" in source
+
+
+def test_live_complete_closed_loop_probe_forces_review_then_validator_failures():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    start = source.index("FULL_LOOP_WORKFLOW =")
+    end = source.index("FULL_LOOP_POLICY =", start)
+    block = source[start:end]
+
+    assert block.index("- execute") < block.index("- seed")
+    assert block.index("- seed") < block.index("- stage: review")
+    assert block.index("- stage: review") < block.index("- stage: validate_file")
+    assert 'Path(".ai-task-runner") / "full-loop-seeded-once"' in source
+    assert 'marker = root / ".validator-failed-once"' in source
