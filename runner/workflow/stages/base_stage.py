@@ -316,8 +316,8 @@ class BaseStage:
             )
         elif mode == "retry":
             lines.append(
-                "Retry only the failed part of this Stage. Preserve valid existing work "
-                "and do not repeat the exact failed action without new evidence."
+                "Retry only the failed part of this Stage. Preserve valid existing work. "
+                "Do not repeat the exact failed action without new evidence."
             )
         else:
             lines.append(
