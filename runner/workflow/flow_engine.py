@@ -7,7 +7,9 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import RunnerError
+from ..utils.text import bounded_text
 from .semantic_routing import SemanticRoutingPolicy
 from .registry import create_stage
 from .routing import LinearRouting
@@ -259,15 +261,22 @@ class FlowEngine:
         )
 
     def _remember_transition(self, result: StageResult) -> None:
+        data_json = json.dumps(result.data, ensure_ascii=False, default=str)
+        data = (
+            json.loads(data_json)
+            if len(data_json) <= MAX_VALIDATOR_OUTPUT_CHARS
+            else {
+                "_truncated": True,
+                "text": bounded_text(data_json, MAX_VALIDATOR_OUTPUT_CHARS),
+            }
+        )
         self.context.state.transition_previous = {
             "stage": result.stage,
             "status": result.status,
-            "output": result.output,
+            "output": bounded_text(result.output, MAX_VALIDATOR_OUTPUT_CHARS),
             "changed_files": list(result.changed_files),
             "skipped": result.skipped,
-            "data": json.loads(
-                json.dumps(result.data, ensure_ascii=False, default=str)
-            ),
+            "data": data,
             "kind": result.kind,
         }
         self.context.save_state()
