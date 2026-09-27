@@ -1826,3 +1826,27 @@ def test_workflow_catalog_is_loaded_through_standalone_tool(tmp_path):
     assert "dynamic_agent" in result["stage_types"]
     command = run.call_args.args[0]
     assert "workflow_catalog.py" in " ".join(map(str, command))
+
+
+def test_execution_mode_catalog_is_loaded_through_standalone_tool(tmp_path):
+    state = UIState(tmp_path)
+    payload = {
+        "linear": {
+            "name": "linear",
+            "requires_workflow": True,
+            "description": "Linear Workflow",
+        },
+        "dynamic_handoff": {
+            "name": "dynamic_handoff",
+            "requires_workflow": False,
+            "description": "Dynamic handoff",
+        },
+    }
+    completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+    )
+    with patch("ui.server.subprocess.run", return_value=completed) as run:
+        result = state.execution_mode_catalog()
+    assert "dynamic_handoff" in result
+    command = run.call_args.args[0]
+    assert "execution_mode_catalog.py" in " ".join(map(str, command))
