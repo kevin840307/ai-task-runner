@@ -36,7 +36,7 @@ The main reading path for runtime behavior should remain:
 
 1. `runner/workflow_runner.py`
 2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/routing.py`
+3. `runner/workflow/linear_routing.py`
 4. `runner/workflow/stages/executor.py`
 5. `runner/runtime/run_state.py`
 
@@ -192,6 +192,6 @@ These remain temporarily to avoid breaking callers:
 
 - `TaskRunner` -> `WorkflowRunner`
 - `Pipeline` -> `FlowEngine`
-- `RecoveryPolicy` -> `SemanticRoutingPolicy`\n- `workflow/rules.py` -> `workflow/reducers.py`\n- `workflow/recovery.py` -> `workflow/semantic_routing.py`
+- `RecoveryPolicy` -> `SemanticRoutingPolicy`\n- `workflow/rules.py` -> `workflow/reducers.py`\n- `workflow/recovery.py` -> `workflow/semantic_routing.py`\n- `workflow/routing.py` -> `workflow/linear_routing.py`
 
 New code should use the canonical names.
