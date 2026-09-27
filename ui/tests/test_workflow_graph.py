@@ -57,3 +57,47 @@ def test_flow_map_node_routing_includes_fresh_after_same_failures():
 
     gate = next(node for node in graph["nodes"] if node["id"] == "gate")
     assert gate["routing"]["fresh_after_same_failures"] == 2
+
+
+def test_flow_map_mirrors_implicit_plan_task_review_lifecycle():
+    graph = build_workflow_graph(
+        {
+            "stages": {
+                "planning": {"type": "plan"},
+                "validate_ai": {"type": "ai_validator", "restart_at": "planning"},
+            },
+            "flow": ["planning", "validate_ai"],
+        }
+    )
+
+    task = next(node for node in graph["nodes"] if node.get("runtime_stage") == "__plan_task__")
+    review = next(node for node in graph["nodes"] if node.get("runtime_stage") == "__plan_review__")
+    assert task["virtual"] is True and task["type"] == "task"
+    assert review["virtual"] is True and review["type"] == "review"
+    normal = _edges(graph, "normal")
+    assert ("planning", task["id"], "next") in normal
+    assert (task["id"], review["id"], "next") in normal
+    assert (review["id"], "validate_ai", "next") in normal
+    assert (review["id"], task["id"], "FAIL → Execute") in _edges(graph, "restart")
+
+
+def test_flow_map_does_not_inject_builtin_task_lifecycle_when_plan_has_explicit_task_scope():
+    graph = build_workflow_graph(
+        {
+            "stages": {
+                "planning": {"type": "plan"},
+                "custom_task": {"type": "task"},
+                "custom_review": {"type": "review"},
+                "validate_ai": {"type": "ai_validator"},
+            },
+            "flow": [
+                "planning",
+                {"stage": "custom_task", "scope": "task"},
+                {"stage": "custom_review", "scope": "task"},
+                "validate_ai",
+            ],
+        }
+    )
+
+    assert not any(node.get("runtime_stage") == "__plan_task__" for node in graph["nodes"])
+    assert not any(node.get("runtime_stage") == "__plan_review__" for node in graph["nodes"])
