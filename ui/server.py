@@ -1610,7 +1610,8 @@ class UIState(WorkflowBuilderMixin):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
                 raise ValueError("Stage key must start with a letter/underscore and contain only letters, numbers, _ or -")
             stage_type = str(stage_type or "base").strip()
-            if stage_type not in {"base", "task", "review", "ai_validator", "command", "plan"}:
+            stage_types = self.workflow_catalog().get("stage_types", {})
+            if stage_type not in stage_types:
                 raise ValueError("Unsupported Stage type")
             data = self._load_workflow_yaml(content)
             stages = data.get("stages") if isinstance(data, dict) else None
@@ -1655,11 +1656,12 @@ class UIState(WorkflowBuilderMixin):
             message = getattr(exc, "problem", None) or str(exc).splitlines()[0]
             return {"ok": False, "summary": str(message), "line": line, "column": column}
 
-    @staticmethod
-    def _validate_stage_editor_fields(fields: dict) -> None:
+    def _validate_stage_editor_fields(self, fields: dict) -> None:
         stage_type = fields.get("type")
-        if stage_type is not None and stage_type not in {"base", "task", "review", "ai_validator", "command", "plan"}:
-            raise ValueError("Unsupported Stage type")
+        if stage_type is not None:
+            stage_types = self.workflow_catalog().get("stage_types", {})
+            if stage_type not in stage_types:
+                raise ValueError("Unsupported Stage type")
         mode = fields.get("mode")
         if mode not in (None, "", "readonly", "write"):
             raise ValueError("Stage mode must be readonly or write")
