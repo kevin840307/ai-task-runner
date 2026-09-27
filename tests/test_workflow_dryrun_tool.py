@@ -400,6 +400,8 @@ def test_dryrun_json_declares_semantic_only_coverage():
     result = run("runner/workflow/system/ai.yaml", "--matrix", "--json")
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
+    assert payload["execution_mode"] == "linear"
+    assert payload["validation_scope"] == "linear_workflow"
     assert payload["coverage"] == {
         "semantic_pipeline_routing": True,
         "technical_stage_retry": False,
