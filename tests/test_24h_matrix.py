@@ -153,4 +153,4 @@ def test_live_complete_closed_loop_probe_forces_review_then_validator_failures()
     assert block.index("- seed") < block.index("- stage: review")
     assert block.index("- stage: review") < block.index("- stage: validate_file")
     assert 'Path(".ai-task-runner") / "full-loop-seeded-once"' in source
-    assert 'marker = root / ".validator-failed-once"' in source
+    assert 'marker = root / ".ai-task-runner" / "full-loop-validator-failed-once"' in source
