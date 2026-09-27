@@ -20,6 +20,7 @@ class PlanStageSpec(BaseStageSpec):
     # including paths outside the current project root.
     allow_project_read: bool = True
     run_state: str = "planning"
+    prompt: str = "stages/plan_finalize.md"
     min_tasks: int = MIN_PLANNED_TASKS
     repair_plan: bool = False
 
@@ -43,11 +44,8 @@ class PlanStage(BaseStage):
             "" if repair else bounded_text(previous.output if previous else "", 12000)
         )
         values["planning"] = planning
-        if not repair and ctx.ai_client.session_id and previous and previous.output:
-            prompt = render_prompt("stages/plan_finalize_same_session.md", values)
-        else:
-            prompt = render_prompt("stages/plan_finalize.md", values)
-        return self._with_immutable_protocol(prompt)
+        prompt = render_prompt(self.spec.prompt, values)
+        return self._augment_rendered_prompt(ctx, prompt)
 
 
 def parse_plan_tasks(
