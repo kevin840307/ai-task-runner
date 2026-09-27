@@ -7,45 +7,21 @@ import pytest
 
 from runner.bootstrap import execute
 from runner.config.runtime import RuntimeConfig
-from runner.execution_modes import (
-    execution_mode_catalog,
-    execution_mode_names,
-    register_execution_mode,
-)
+from runner.execution_modes import execution_mode_catalog, execution_mode_names
 
 
-def test_linear_execution_mode_is_builtin_and_requires_workflow():
-    assert "linear" in execution_mode_names()
+def test_linear_execution_mode_is_the_only_current_mode_and_requires_workflow():
+    assert execution_mode_names() == ("linear",)
     linear = execution_mode_catalog()["linear"]
     assert linear["requires_workflow"] is True
     assert "Linear Workflow" in str(linear["description"])
 
 
-def test_registered_non_workflow_mode_can_run_through_shared_bootstrap(tmp_path: Path):
-    name = "test_dynamic_handoff_mode"
+def test_execution_mode_metadata_does_not_register_alternate_runners():
+    import runner.execution_modes as modes
 
-    def runner(config: RuntimeConfig) -> int:
-        assert config.execution_mode == name
-        assert config.workflow == []
-        return 17
-
-    if name not in execution_mode_names():
-        register_execution_mode(
-            name,
-            runner,
-            requires_workflow=False,
-            description="test-only dynamic mode",
-        )
-
-    config = RuntimeConfig(
-        goal="test goal",
-        project_root=str(tmp_path),
-        execution_mode=name,
-        workflow=[],
-        human_output=False,
-    )
-    config.validate()
-    assert execute(config) == 17
+    assert not hasattr(modes, "register_execution_mode")
+    assert not hasattr(modes, "execute_execution_mode")
 
 
 def test_unknown_execution_mode_fails_validation(tmp_path: Path):
@@ -60,12 +36,13 @@ def test_unknown_execution_mode_fails_validation(tmp_path: Path):
         config.validate()
 
 
-def test_bootstrap_does_not_own_linear_task_runner():
+def test_bootstrap_routes_current_execution_through_workflow_runner():
     source = Path(__file__).resolve().parents[1].joinpath("runner", "bootstrap.py").read_text(
         encoding="utf-8"
     )
     assert "TaskRunner" not in source
-    assert "execute_execution_mode" in source
+    assert "execute_execution_mode" not in source
+    assert "WorkflowRunner" in source
 
 
 def test_durable_run_state_rejects_execution_mode_change_on_resume(tmp_path: Path):
@@ -87,7 +64,7 @@ def test_durable_run_state_rejects_execution_mode_change_on_resume(tmp_path: Pat
             "goal",
             resume=True,
             force_new=False,
-            execution_mode="test_dynamic_handoff_mode",
+            execution_mode="future-mode",
         )
 
 
@@ -113,21 +90,12 @@ def test_legacy_state_without_execution_mode_resumes_as_linear(tmp_path: Path):
 def test_yaml_batch_rejects_non_linear_execution_mode(tmp_path: Path):
     from runner.errors import ConfigurationError
 
-    name = "test_batch_non_linear_mode"
-    if name not in execution_mode_names():
-        register_execution_mode(
-            name,
-            lambda config: 0,
-            requires_workflow=False,
-            description="test-only non-linear mode",
-        )
-
     script = tmp_path / "tasks.yaml"
     script.write_text("- prompt: x\n  validator: ai\n", encoding="utf-8")
     config = RuntimeConfig(
         project_root=str(tmp_path),
         script=str(script),
-        execution_mode=name,
+        execution_mode="future-mode",
         workflow=[],
         human_output=False,
     )
