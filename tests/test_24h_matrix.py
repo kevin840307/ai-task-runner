@@ -129,3 +129,15 @@ def test_python_validator_cache_inside_protected_tools_does_not_replan(tmp_path,
     assert result.states[0]["cycle"] == 1
     assert (tools / "__pycache__").is_dir()
     assert stages(tmp_path).count("validate_file") == 1
+
+
+def test_live_review_routing_probe_forces_first_review_failure_deterministically():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    start = source.index("REVIEW_ROUTING_WORKFLOW =")
+    end = source.index("REVIEW_ROUTING_VALIDATOR =", start)
+    block = source[start:end]
+
+    assert block.index("- stage: execute") < block.index("- stage: seed")
+    assert block.index("- stage: seed") < block.index("- stage: review")
+    assert 'Path(".ai-task-runner") / "review-seeded-once"' in source
+    assert "one-shot command Stage deliberately forces the first Review" in source
