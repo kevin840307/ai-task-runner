@@ -124,3 +124,47 @@ def test_ai_validator_stage_injects_yolo_validation_mode():
     assert "execute build/code/test commands" in rendered
     assert "coverage validation" in rendered
     assert "never in maintained project source" in rendered
+
+
+def test_shared_stage_control_has_only_continue_retry_recover_modes():
+    from types import SimpleNamespace
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+    from runner.workflow.stages.contracts import StageExecution
+
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    task = SimpleNamespace(
+        last_review={"completed": False, "reason": "missing check", "missing_items": ["x"]}
+    )
+    state = SimpleNamespace(validator_output="", tasks=[task], current=0)
+    client = SimpleNamespace(session_id="session-1")
+    ctx = SimpleNamespace(
+        execution=StageExecution(),
+        task=task,
+        state=state,
+        scratch={"prompt_contracts": {("stages/execution.md", "session-1")}},
+    )
+
+    continued = stage._shared_control_prompt(ctx, None, client)
+    assert "mode: continue" in continued
+    assert "mode: repair" not in continued
+    assert "feedback:" in continued
+
+    ctx.execution = StageExecution(attempt=2, retry_mode="retry", previous_error="boom")
+    retried = stage._shared_control_prompt(ctx, None, client)
+    assert "mode: retry" in retried
+    assert "previous_error: boom" in retried
+
+    ctx.execution = StageExecution(attempt=3, retry_mode="recover", previous_error="crash")
+    recovered = stage._shared_control_prompt(ctx, None, SimpleNamespace(session_id=""))
+    assert "mode: recover" in recovered
+    assert "same_session: false" in recovered
+
+
+def test_obsolete_alternate_stage_prompts_are_removed():
+    stages = PROMPT_ROOT / "stages"
+    for name in (
+        "execution_continue.md",
+        "review_continue.md",
+        "plan_finalize_same_session.md",
+    ):
+        assert not (stages / name).exists()
