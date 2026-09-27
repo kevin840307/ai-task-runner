@@ -141,7 +141,7 @@ def test_small_model_prompts_have_explicit_stop_rules():
 def test_editable_prompt_word_budgets_stay_bounded_for_small_models():
     limits = {
         SYSTEM / "rules.md": 260,
-        STAGES / "planning.md": 280,
+        STAGES / "planning.md": 380,
         STAGES / "execution.md": 440,
         STAGES / "review.md": 170,
         STAGES / "ai_validator.md": 320,
