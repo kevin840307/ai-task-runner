@@ -207,7 +207,9 @@ class BaseStage:
             control = self._shared_control_prompt(ctx, previous, client)
         finally:
             ctx.execution.retry_mode = original_mode
-        prompt = original.rstrip() + ("\n\n" + control if control else "")
+        prompt = "Stage instructions:\n" + original.rstrip()
+        if control:
+            prompt += "\n\n" + control
         return self._ask(ctx, client, self._with_immutable_protocol(prompt))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
