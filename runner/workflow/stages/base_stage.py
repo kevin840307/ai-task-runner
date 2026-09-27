@@ -258,10 +258,20 @@ class BaseStage:
         return client
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
-        body = self._original_prompt(ctx, previous)
+        original = self._original_prompt(ctx, previous)
         control = self._shared_control_prompt(ctx, previous, client)
-        if control:
-            body = body.rstrip() + "\n\n" + control
+        reuse_session_context = bool(
+            control
+            and ctx.execution.retry_mode != "recover"
+            and getattr(client, "session_id", "")
+            and self._prompt_seen(ctx, client)
+        )
+        if reuse_session_context:
+            body = control
+        else:
+            body = original
+            if control:
+                body = body.rstrip() + "\n\n" + control
         return self._with_immutable_protocol(body)
 
     def _shared_control_prompt(
