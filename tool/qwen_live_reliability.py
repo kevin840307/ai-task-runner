@@ -1834,11 +1834,11 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
 
 
 FULL_LOOP_EXECUTION_PROMPT = """This Stage proves a complete semantic closed loop.
-The project starts with loop.txt containing only READY.
-- On the initial execution, before Review or Validator feedback exists, leave loop.txt unchanged.
+A one-shot seed Stage later forces the first Review to observe only READY.
+- Before Review or Validator feedback exists, no special action is required.
 - When Review feedback says REVIEW_OK is missing, preserve READY and add REVIEW_OK as its own logical line. Do not add VALIDATOR_OK yet.
 - Only when Validator feedback says VALIDATOR_OK is missing, preserve existing lines and add VALIDATOR_OK as its own logical line.
-Modify loop.txt only. Do not anticipate later feedback.
+Modify loop.txt only.
 """
 
 FULL_LOOP_REVIEW_PROMPT = """Inspect loop.txt only.
@@ -1848,7 +1848,11 @@ FAIL only when READY or REVIEW_OK is missing, and name the missing logical line.
 """
 
 FULL_LOOP_SEED = '''from pathlib import Path
-Path("loop.txt").write_text("READY\\n", encoding="utf-8")
+marker = Path(".ai-task-runner") / "full-loop-seeded-once"
+if not marker.exists():
+    Path("loop.txt").write_text("READY\\n", encoding="utf-8")
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("seeded\\n", encoding="utf-8")
 '''
 
 FULL_LOOP_WORKFLOW = '''stages:
@@ -1871,8 +1875,8 @@ FULL_LOOP_WORKFLOW = '''stages:
     command: "{python} full_loop_validator.py"
 
 flow:
-  - seed
   - execute
+  - seed
   - stage: review
     restart_at: execute
   - stage: validate_file
