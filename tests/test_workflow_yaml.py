@@ -23,6 +23,7 @@ from runner.workflow.flow_engine import FlowEngine as CanonicalFlowEngine
 from runner.workflow.pipeline import FlowEngine, FlowNode, Pipeline
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.recovery import RecoveryPolicy, SemanticRoutingPolicy
+from runner.workflow.semantic_routing import SemanticRoutingPolicy as CanonicalSemanticRoutingPolicy
 from runner.workflow.routing import LinearRouting
 from runner.workflow.rules import handle_validation_result
 from runner.workflow.stages.contracts import StageContext, StageResult
@@ -1491,7 +1492,8 @@ def test_validator_restart_to_ordinary_stage_does_not_replan(tmp_path):
 def test_runtime_names_keep_backward_compatible_aliases():
     assert FlowEngine is CanonicalFlowEngine
     assert Pipeline is CanonicalFlowEngine
-    assert RecoveryPolicy is SemanticRoutingPolicy
+    assert SemanticRoutingPolicy is CanonicalSemanticRoutingPolicy
+    assert RecoveryPolicy is CanonicalSemanticRoutingPolicy
     assert WorkflowRunner is CanonicalWorkflowRunner
     assert TaskRunner is CanonicalWorkflowRunner
 
