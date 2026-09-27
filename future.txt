@@ -202,6 +202,17 @@ Required architecture changes before adding the two multi-agent modes
    UI/server may use it to discover supported modes and editor/config metadata instead
    of hardcoding future mode names.
 
+Current YAML batch boundary
+---------------------------
+The existing --script YAML List runner is part of the Linear execution surface today.
+It batches Linear Workflow runs and must fail fast if paired with a non-linear
+execution_mode. This avoids bypassing ExecutionModeRegistry with ambiguous semantics.
+
+Future Dynamic Handoff / Group Chat batching should be introduced only with an explicit
+mode-aware asset/batch contract. Do not silently reinterpret the current YAML List format
+or add per-item execution_mode overrides until resume identity, mode-owned state, and
+completion/progress contracts are generic.
+
 Dry-run / validation direction
 ------------------------------
 Do not claim one dry-run engine validates every mode.
