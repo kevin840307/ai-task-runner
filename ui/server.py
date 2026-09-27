@@ -277,7 +277,7 @@ class UIState(WorkflowBuilderMixin):
 
     def add_project(self, path: str) -> dict:
         with self._projects_lock, project_file_lock(self.projects_file):
-            resolved = Path(path).expanduser().resolve()
+            resolved = Path(path).expanduser().absolute()
             if not resolved.is_dir():
                 raise ValueError("Project folder does not exist")
             key = self._project_path_key(resolved)
