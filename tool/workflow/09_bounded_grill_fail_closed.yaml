@@ -8,13 +8,13 @@ stages:
     prompt: ../../runner/prompts/stages/grill.md
     fresh_session_on_start: true
     retry: 0
-    recover: [repair_plan]
+    recover: [planning]
     max_attempts: 3
     on_exhausted: fail
 
-  repair_plan:
+  planning:
     type: plan
-    repair_plan: true
+    planning: true
     fresh_session_on_start: true
 
 flow:
