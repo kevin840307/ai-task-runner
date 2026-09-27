@@ -1875,6 +1875,17 @@ flow:
     restart_at: execute
 '''
 
+FULL_LOOP_POLICY = """protected_paths:
+  - prompt.md
+  - validation.py
+  - seed_loop.py
+  - full_loop_execute.md
+  - full_loop_review.md
+  - full_loop_validator.py
+instructions:
+  always: Work only inside this project root. Modify loop.txt only for this probe.
+"""
+
 FULL_LOOP_VALIDATOR = '''from pathlib import Path
 root = Path(".").resolve()
 target = root / "loop.txt"
@@ -1896,7 +1907,11 @@ print("VALIDATION_PASSED")
 
 def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
     """Exercise Review FAIL and Validator FAIL in one real-Qwen linear run."""
-    project = create_project(root, "complete-closed-loop-probe")
+    project = create_project(
+        root,
+        "complete-closed-loop-probe",
+        policy=FULL_LOOP_POLICY,
+    )
     (project / "seed_loop.py").write_text(FULL_LOOP_SEED, encoding="utf-8")
     (project / "full_loop_execute.md").write_text(
         FULL_LOOP_EXECUTION_PROMPT, encoding="utf-8"
