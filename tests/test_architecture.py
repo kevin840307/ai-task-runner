@@ -172,3 +172,24 @@ def test_public_capabilities_use_owner_modules_without_reexport_only_facades():
     ):
         tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
         assert not any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree)), relative
+
+
+def test_linear_cursor_writes_are_owned_by_linear_routing_only():
+    roots = [ROOT / "runner" / "workflow", ROOT / "runner" / "runtime", ROOT / "runner"]
+    checked: set[Path] = set()
+    offenders: list[str] = []
+    patterns = ("state.workflow_position =", "state.task_step =", "self.context.state.task_step =")
+
+    for root in roots:
+        for path in root.rglob("*.py"):
+            if path in checked:
+                continue
+            checked.add(path)
+            if path.name == "linear_routing.py":
+                continue
+            text = path.read_text(encoding="utf-8")
+            for pattern in patterns:
+                if pattern in text:
+                    offenders.append(f"{path.relative_to(ROOT)}: {pattern}")
+
+    assert offenders == []
