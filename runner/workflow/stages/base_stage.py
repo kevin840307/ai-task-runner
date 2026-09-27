@@ -12,7 +12,7 @@ from ...errors import ConfigurationError
 from ...prompts.context import build_stage_prompt_context
 from ...prompts.loader import render_prompt
 from ...prompts.protocols import append_stage_protocol
-from .contracts import StageContext, StageMode, StageResult
+from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
 @dataclass(frozen=True)
