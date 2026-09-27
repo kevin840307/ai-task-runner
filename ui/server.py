@@ -1910,7 +1910,7 @@ class UIState(WorkflowBuilderMixin):
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
                 raise ValueError("Workflow validation returned invalid JSON") from exc
-            if payload.get("execution_mode") != "linear":
+            if payload.get("execution_mode", "linear") != "linear":
                 raise ValueError("Workflow validation used an incompatible execution mode")
             if not payload.get("closed"):
                 raise ValueError("Workflow validation matrix did not reach closure")
