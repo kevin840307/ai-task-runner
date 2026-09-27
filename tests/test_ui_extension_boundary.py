@@ -288,15 +288,16 @@ def test_workflow_catalog_tool_is_json_process_boundary():
     assert payload["flow_options"]["on_exhausted"]["values"] == ["continue", "fail"]
 
 
-def test_ui_server_keeps_linear_workflow_mode_identity_explicit():
-    source = Path("ui/server.py").read_text(encoding="utf-8")
-    assert 'item["execution_mode"] = "linear"' in source
-    assert 'command += ["--execution-mode", str(execution_mode or "linear")]' in source
-    assert '"execution_mode": "linear"' in source
-    assert 'execution_mode=str(request.get("execution_mode") or "linear")' in source
+def test_ui_keeps_linear_workflow_mode_identity_explicit():
+    server = Path("ui/server.py").read_text(encoding="utf-8")
+    studio = Path("ui/workflow_studio_state.py").read_text(encoding="utf-8")
+    assert 'item["execution_mode"] = "linear"' in studio
+    assert 'command += ["--execution-mode", str(execution_mode or "linear")]' in server
+    assert '"execution_mode": "linear"' in server
+    assert 'execution_mode=str(request.get("execution_mode") or "linear")' in server
 
 
 def test_ui_workflow_validation_requires_matching_linear_dryrun_mode():
-    source = Path("ui/server.py").read_text(encoding="utf-8")
+    source = Path("ui/workflow_studio_state.py").read_text(encoding="utf-8")
     assert 'payload.get("execution_mode", "linear") != "linear"' in source
     assert "incompatible execution mode" in source
