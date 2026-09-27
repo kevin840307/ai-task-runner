@@ -1,12 +1,15 @@
 """Backward-compatible imports for semantic workflow routing."""
 
 from .semantic_routing import (
-    RecoveryAction,
-    RecoveryKind,
-    RecoveryNode,
+    RoutingAction,
+    RoutingKind,
+    RoutingNode,
     SemanticRoutingPolicy,
 )
 
+RecoveryAction = RoutingAction
+RecoveryKind = RoutingKind
+RecoveryNode = RoutingNode
 RecoveryPolicy = SemanticRoutingPolicy
 
 __all__ = [
@@ -14,5 +17,8 @@ __all__ = [
     "RecoveryKind",
     "RecoveryNode",
     "RecoveryPolicy",
+    "RoutingAction",
+    "RoutingKind",
+    "RoutingNode",
     "SemanticRoutingPolicy",
 ]
