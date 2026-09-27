@@ -1,4 +1,8 @@
-"""Small recovery decision layer shared by Pipeline routing."""
+"""Semantic routing decisions for Stage results.
+
+Technical retry/session recovery lives in StageExecutor. This module only
+classifies semantic workflow outcomes such as recover/restart/replan/stop.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +33,7 @@ class RecoveryAction:
     limit_reached: bool = False
 
 
-class RecoveryPolicy:
+class SemanticRoutingPolicy:
     """Classify semantic Stage results without owning Pipeline control flow."""
 
     def __init__(self, context: StageContext) -> None:
@@ -266,4 +270,8 @@ class RecoveryPolicy:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-__all__ = ["RecoveryAction", "RecoveryPolicy"]
+# Backward-compatible alias for existing imports/extensions.
+RecoveryPolicy = SemanticRoutingPolicy
+
+
+__all__ = ["RecoveryAction", "RecoveryPolicy", "SemanticRoutingPolicy"]
