@@ -153,9 +153,9 @@ stages:
   challenge:
     type: command
     command: [python, -c, "print('CHALLENGE')"]
-  repair:
+  fallback:
     type: command
-    command: [python, -c, "print('REPAIR')"]
+    command: [python, -c, "print('FALLBACK')"]
   restartable:
     type: command
     command: [python, -c, "print('RESTARTABLE')"]
@@ -163,7 +163,7 @@ flow:
   - start
   - stage: challenge
     repeat: 3
-    recover: [repair]
+    recover: [fallback]
   - stage: restartable
     restart_at: start
 """.lstrip(),
@@ -332,7 +332,7 @@ flow:
     assert payload["features"]["max_attempts"] == 1
     case = next(item for item in payload["cases"] if "exhausted -> continue" in item["name"])
     assert case["passed"] is True
-    assert case["expected_stage_calls"] == {"gate": 3, "repair": 2}
+    assert case["expected_stage_calls"] == {"gate": 3}
     assert case["stage_calls"]["gate"] == 3
     assert case["stage_calls"]["repair"] == 2
 
