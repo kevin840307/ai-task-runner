@@ -7,6 +7,8 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+
+from project_registry import path_key
 from unittest.mock import patch
 
 from ui.server import Handler, UIState
@@ -487,7 +489,8 @@ class UIStateTests(unittest.TestCase):
         with patch.object(self.state, "_runtime_display", wraps=original) as runtime_display:
             row = self.state.projects()[0]
 
-        runtime_display.assert_called_once_with(self.project)
+        runtime_display.assert_called_once()
+        self.assertEqual(path_key(runtime_display.call_args.args[0]), path_key(self.project))
         self.assertEqual(row["runtime_stage"], "execute")
         self.assertEqual(row["runtime_completed_count"], 1)
         self.assertEqual(row["runtime_total"], 2)
@@ -1522,7 +1525,8 @@ flow: [validate]
         self.assertEqual(result["folder"], "generated")
         self.assertEqual(result["filename"], "generated.workflow.yaml")
         command = popen.call_args.args[0]
-        self.assertIn(str(builder_dir / "run.py"), command)
+        script_arg = Path(command[1])
+        self.assertEqual(path_key(script_arg), path_key(builder_dir / "run.py"))
         self.assertIn("--project-root", command)
         workspace = Path(command[command.index("--project-root") + 1]).resolve()
         expected = (self.root / "ui" / "data" / "workflow-builder" / result["job_id"]).resolve()
