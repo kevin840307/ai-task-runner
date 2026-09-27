@@ -267,6 +267,30 @@ Phase 4 - Optional composition
     a structured result.
   - Avoid arbitrary recursive orchestration by default.
 
+Current implementation status
+-----------------------------
+Phase 1 foundation is now partially implemented:
+  - public RunRequest/RuntimeConfig support execution_mode with backward-compatible
+    default "linear";
+  - bootstrap dispatches through ExecutionModeRegistry instead of importing TaskRunner;
+  - current TaskRunner is registered as the linear execution-mode adapter;
+  - modes declare whether they require a Workflow;
+  - a standalone execution-mode catalog exists for detached UI discovery;
+  - UI server exposes the execution-mode catalog without importing Runner Core;
+  - existing linear CLI/UI behavior remains the default and requires no migration.
+
+Still intentionally NOT implemented:
+  - Chat execution-mode selector;
+  - DynamicHandoffOrchestrator;
+  - GroupChatOrchestrator;
+  - stable runtime node/invocation IDs for general dynamic graphs;
+  - agent/team profile schema;
+  - handoff/discussion state and policy;
+  - dynamic/group dry-run simulators.
+
+The next multi-agent implementation should build on this boundary rather than adding
+special cases to TaskRunner/Pipeline.
+
 Design rule
 -----------
 Keep the current reliable linear engine simple.
