@@ -88,6 +88,7 @@ def test_dryrun_matrix_covers_system_recovery_paths():
     assert "__plan_review__ FAIL -> restart_at -> closure" in result.stdout
     assert "validate_file FAIL -> restart_at -> closure" in result.stdout
     assert "validate_ai FAIL -> restart_at -> closure" in result.stdout
+    assert "compound recoverable FAILs -> closure" in result.stdout
 
 
 def test_dryrun_matrix_covers_custom_recovery_paths():
@@ -414,3 +415,18 @@ def test_dryrun_text_does_not_claim_technical_retry_execution():
     assert result.returncode == 0, result.stdout + result.stderr
     assert "semantic Pipeline routing only" in result.stdout
     assert "technical StageExecutor retry" in result.stdout
+
+
+def test_system_mixed_compound_closed_loop_path_is_explicitly_verified():
+    result = run("runner/workflow/system/mixed.yaml", "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    compound = next(
+        case for case in payload["cases"]
+        if case["name"] == "compound recoverable FAILs -> closure"
+    )
+    assert compound["passed"] is True
+    assert compound["completed"] is True
+    assert compound["stage_calls"]["__plan_review__"] >= 2
+    assert compound["stage_calls"]["validate_file"] >= 2
+    assert compound["stage_calls"]["validate_ai"] >= 2
