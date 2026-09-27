@@ -181,22 +181,25 @@ def test_changed_error_is_not_counted_as_failure(tmp_path):
     assert ctx.state.same_failures == 0
 
 
-def test_same_session_prompt_is_short_and_fresh_wrapper_does_not_duplicate_context(tmp_path):
+def test_shared_control_is_short_for_retry_and_full_context_returns_on_recover(tmp_path):
     model = SessionFakeAI([])
     ctx = context(tmp_path, model)
-    stage = BaseStage(BaseStageSpec(name='execute', status='execute'))
+    stage = BaseStage(BaseStageSpec(name='execute', status='execute', prompt='stages/execution.md'))
+    model.session_id = 'session-A'
+    ctx.scratch['prompt_contracts'] = {('stages/execution.md', 'session-A')}
+    ctx.execution.retry_mode = 'retry'
     ctx.execution.previous_error = 'Loop detection halted the run'
-    same = stage._same_session_prompt(ctx)
-    original = 'ORIGINAL SPEC\nCurrent TODO\nDo only this TODO\nSTAGE-SPEC'
-    fresh = stage._fresh_session_prompt(original)
-    assert 'ORIGINAL SPEC' not in same
-    assert 'Do only this TODO' not in same
-    assert 'Do not repeat the exact failed action' in same
-    assert fresh.count('ORIGINAL SPEC') == 1
-    assert fresh.count('Current TODO') == 1
-    assert fresh.count('Do only this TODO') == 1
-    assert 'Inspect the CURRENT project state first' in fresh
-    assert 'STAGE-SPEC' in fresh
+    retry = stage._shared_control_prompt(ctx, None, model)
+    assert 'mode: retry' in retry
+    assert 'Goal (global constraints only):' not in retry
+    assert 'Do not repeat the exact failed action' in retry
+
+    ctx.execution.retry_mode = 'recover'
+    model.session_id = ''
+    recover = stage._shared_control_prompt(ctx, None, model)
+    assert 'mode: recover' in recover
+    assert 'same_session: false' in recover
+    assert 'current durable project state' in recover
 
 
 def test_plan_installs_tasks_without_expanding_task_flows(tmp_path):
