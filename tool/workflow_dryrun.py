@@ -249,6 +249,8 @@ def _result_payload(
     completed = bool(ctx.state.completed) and not error
     return {
         "valid": True,
+        "execution_mode": "linear",
+        "validation_scope": "linear_workflow",
         "completed": completed,
         "workflow": str(workflow_path),
         "coverage": {
@@ -510,6 +512,8 @@ def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
     passed = sum(bool(case["passed"]) for case in cases)
     return {
         "valid": True,
+        "execution_mode": "linear",
+        "validation_scope": "linear_workflow",
         "closed": passed == len(cases),
         "workflow": str(workflow_path),
         "coverage": {
