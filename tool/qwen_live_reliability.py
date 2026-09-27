@@ -1489,15 +1489,60 @@ def loop_detection_contract_preflight() -> None:
         raise RuntimeError("Planning loop recovery key is no longer stable")
 
 
+RESUME_PROBE_PAUSE = '''from __future__ import annotations
+import time
+time.sleep(3)
+'''
+
+RESUME_PROBE_WORKFLOW = '''stages:
+  planning:
+    type: plan
+    readonly_safety: observe
+    status: Planning resume probe
+
+  execute_first:
+    type: task
+    status: Execute before forced restart
+
+  pause:
+    type: command
+    status: Holding durable resume checkpoint
+    command: "{python} resume_pause.py"
+
+  execute_second:
+    type: task
+    status: Continue same session after restart
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+
+flow:
+  - planning
+  - stage: execute_first
+    scope: task
+  - stage: pause
+    scope: task
+  - stage: execute_second
+    scope: task
+  - validate_file
+'''
+
+
 def resume_probe(settings: Settings, root: Path) -> None:
     project = create_project(root, "resume-probe")
+    (project / "resume_pause.py").write_text(RESUME_PROBE_PAUSE, encoding="utf-8")
+    workflow = project / "resume-workflow.yaml"
+    workflow.write_text(RESUME_PROBE_WORKFLOW, encoding="utf-8")
     first_log = console_log(project, "first-console.jsonl")
     first_log.parent.mkdir(parents=True, exist_ok=True)
-    command = runner_command(settings, project)
+    command = runner_command(settings, project, workflow=workflow)
+    stream = first_log.open("w", encoding="utf-8")
     options: dict[str, object] = {
         "cwd": ROOT,
         "stdin": subprocess.DEVNULL,
-        "stdout": first_log.open("w", encoding="utf-8"),
+        "stdout": stream,
         "stderr": subprocess.STDOUT,
         "text": True,
     }
@@ -1512,19 +1557,27 @@ def resume_probe(settings: Settings, root: Path) -> None:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
             session = state.get("ai_session_id")
-            if isinstance(session, str) and session and state.get("completed") is not True:
+            if (
+                isinstance(session, str)
+                and session
+                and state.get("completed") is not True
+                and state.get("task_step") == 1
+            ):
                 interrupted_session = session
                 terminate(process)
                 break
-            time.sleep(0.2)
+            time.sleep(0.05)
     finally:
         if process.poll() is None:
             terminate(process)
-        stream = options["stdout"]
-        if hasattr(stream, "close"):
-            stream.close()
+        stream.close()
     if not interrupted_session:
-        raise RuntimeError("could not capture a durable session before completion")
+        state = read_state(project)
+        raise RuntimeError(
+            "could not capture the deterministic durable resume checkpoint "
+            f"(stage={state.get('stage')}, task_step={state.get('task_step')}, "
+            f"completed={state.get('completed')})"
+        )
 
     saw_resume = False
 
@@ -1535,7 +1588,7 @@ def resume_probe(settings: Settings, root: Path) -> None:
         )
 
     code = run_command(
-        runner_command(settings, project, resume=True),
+        runner_command(settings, project, resume=True, workflow=workflow),
         console_log(project, "resume-console.jsonl"),
         settings.run_timeout,
         observe_resume,
