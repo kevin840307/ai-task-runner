@@ -15,7 +15,7 @@ from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils.text import bounded_text
-from ..utils.files import io_path
+from ..utils.files import io_path, same_path
 from ..utils.logs import append_bounded_log
 from .heartbeat import touch_heartbeat
 
@@ -282,7 +282,7 @@ class StateStore:
         if loaded is None:
             return False
         payload, state = loaded
-        if Path(state.project_root).resolve() != self.root:
+        if not same_path(state.project_root, self.root):
             return False
         _write_json(self.path, payload)
         return True
