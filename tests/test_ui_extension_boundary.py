@@ -298,5 +298,5 @@ def test_ui_server_keeps_linear_workflow_mode_identity_explicit():
 
 def test_ui_workflow_validation_requires_matching_linear_dryrun_mode():
     source = Path("ui/server.py").read_text(encoding="utf-8")
-    assert 'payload.get("execution_mode") != "linear"' in source
+    assert 'payload.get("execution_mode", "linear") != "linear"' in source
     assert "incompatible execution mode" in source
