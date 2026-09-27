@@ -1720,10 +1720,10 @@ READY
 REVIEW_REQUIRED
 
 A standard final newline is allowed.
-A one-shot command Stage deliberately forces the first Review to observe only READY,
-regardless of what the first Execute attempted.
-After Review FAIL routes back to Execute, preserve READY, add REVIEW_REQUIRED,
-and modify review.txt only.
+The one-shot command Stage deterministically seeds review.txt with only READY before
+the first Review, regardless of what the first Execute attempted.
+After Review FAIL routes back to Execute, preserve READY, add REVIEW_REQUIRED.
+Modify review.txt only.
 """
 
 REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
