@@ -1409,3 +1409,75 @@ def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
     text = prompt.read_text(encoding="utf-8")
     assert "Keep changes small, targeted" in text
     assert "previous.data" in text
+
+
+def test_validator_reducer_records_failure_without_forcing_replan(tmp_path):
+    state = RunState(
+        "run",
+        "goal",
+        str(tmp_path),
+        cycle=3,
+        tasks=[Task("t1", "done", "done", ["done"], "done", status="completed")],
+        current=1,
+    )
+    context = _context(tmp_path, [], state)
+    context.set_stage = lambda stage, detail="": setattr(context.state, "stage", stage)
+
+    handle_validation_result(
+        context,
+        StageResult("validate", "fail", output="VALIDATION_FAILED: repair output", kind="validation"),
+    )
+
+    assert state.cycle == 3
+    assert state.current == 1
+    assert state.tasks[0].status == "completed"
+    assert state.validator_output == "VALIDATION_FAILED: repair output"
+    assert state.stage == "validator_failed"
+
+
+def test_validator_restart_to_ordinary_stage_does_not_replan(tmp_path):
+    import sys
+    from runner.plugins.contracts import HookChain
+    from runner.workflow.pipeline import Pipeline
+    from runner.workflow.stages.executor import StageExecutor
+
+    fix = tmp_path / "fix.py"
+    fix.write_text(
+        "from pathlib import Path\n"
+        "p=Path('fix-count.txt')\n"
+        "n=int(p.read_text())+1 if p.exists() else 1\n"
+        "p.write_text(str(n))\n"
+        "if n >= 2: Path('done.txt').write_text('DONE')\n",
+        encoding="utf-8",
+    )
+    validate = tmp_path / "validate.py"
+    validate.write_text(
+        "from pathlib import Path\n"
+        "raise SystemExit(0 if Path('done.txt').exists() else 1)\n",
+        encoding="utf-8",
+    )
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        "stages:\n"
+        "  fix:\n"
+        "    type: command\n"
+        f"    command: [{json.dumps(sys.executable)}, {json.dumps(str(fix))}]\n"
+        "  validate:\n"
+        "    type: command\n"
+        "    result_kind: validation\n"
+        f"    command: [{json.dumps(sys.executable)}, {json.dumps(str(validate))}]\n"
+        "flow:\n"
+        "  - fix\n"
+        "  - stage: validate\n"
+        "    restart_at: fix\n",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    context = _context(tmp_path, workflow)
+
+    code = Pipeline(context, workflow).run(StageExecutor(HookChain()))
+
+    assert code == 0
+    assert context.state.completed is True
+    assert context.state.cycle == 1
+    assert (tmp_path / "fix-count.txt").read_text(encoding="utf-8") == "2"
