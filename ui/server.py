@@ -19,8 +19,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from project_registry import project_file_lock
-from runner.utils.files import path_key
+from project_registry import path_key, project_file_lock
 
 try:
     from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
