@@ -1388,7 +1388,7 @@ class WorkflowStudioMixin:
             raise ValueError("Workflow folder contains an invalid path segment")
         if raw == "common" or raw.startswith("common/"):
             raise ValueError("The common folder is reserved and cannot own a Workflow")
-        if any(UIState._is_technical_folder_part(part) for part in parts):
+        if any(self._is_technical_folder_part(part) for part in parts):
             raise ValueError("Workflow folder contains a reserved technical directory")
         if not all(re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
             raise ValueError("Workflow folder contains unsupported characters")
