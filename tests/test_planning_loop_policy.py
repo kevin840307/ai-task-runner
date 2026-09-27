@@ -89,7 +89,7 @@ def context(tmp_path: Path) -> StageContext:
 def test_planning_loop_caps_retry_to_one():
     stage = PlanningStage()
     error = planning_loop_error("loop", "consecutive_identical_tool_calls")
-    assert StageExecutor._retry_limit(stage, error, 5) == 1
+    assert StageExecutor._same_session_retry_limit(stage, error, 5) == 1
 
 
 def test_planning_loop_failure_key_ignores_dynamic_backend_noise(tmp_path: Path):
@@ -106,7 +106,7 @@ def test_non_planning_stage_keeps_generic_retry_budget():
     stage = PlanningStage()
     stage.result_kind = "review"
     error = planning_loop_error("loop", "consecutive_identical_tool_calls")
-    assert StageExecutor._retry_limit(stage, error, 5) == 5
+    assert StageExecutor._same_session_retry_limit(stage, error, 5) == 5
 
 
 def test_planning_repeated_loop_rotates_fresh_after_one_retry(tmp_path: Path):
