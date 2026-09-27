@@ -15,7 +15,7 @@ from .task_output import decode_tasks
 
 
 def prepare_replan(ctx: StageContext, result: StageResult) -> StageResult:
-    """Invalidate the current plan before Pipeline restarts the static flow."""
+    """Invalidate plan semantics; FlowEngine owns all cursor/routing changes."""
     feedback = str(result.error or result.output)[-4000:]
     invalidate_plan(ctx, feedback)
     ctx.reset_sessions()
@@ -200,10 +200,10 @@ def invalidate_plan(
         raise ConfigurationError(f"max cycles reached: {limit}")
     state.cycle += 1
     state.current = len(state.tasks)
-    state.task_step = 0
     state.completed = False
-    if reset_workflow:
-        state.workflow_position = 0
+    # reset_workflow is retained for API compatibility only. Cursor ownership
+    # belongs to FlowEngine/LinearRouting, never to result reducers.
+    _ = reset_workflow
     state.replan_feedback = feedback[-4000:]
 
 
