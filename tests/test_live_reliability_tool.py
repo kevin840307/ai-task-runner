@@ -641,7 +641,7 @@ def test_prompt_contract_rejects_static_context_on_same_session_retry(tmp_path: 
         {
             "c1": (
                 "RUNNER_SHARED_STAGE_CONTROL\nmode: retry\n"
-                "Previous failure: x\n"
+                "previous_error: x\n"
                 "Goal (context/global constraints only): repeated\n"
             )
         },
