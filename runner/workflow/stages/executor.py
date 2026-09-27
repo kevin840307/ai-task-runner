@@ -129,7 +129,7 @@ class StageExecutor:
                 and error_retry_limit > 0
             ):
                 if attempt <= error_retry_limit:
-                    retry_mode = "same" if self._has_session(ctx) else "fresh"
+                    retry_mode = "retry" if self._has_session(ctx) else "recover"
                     self._sleep(ctx)
                     continue
                 self._reset_failure(ctx)
@@ -138,7 +138,7 @@ class StageExecutor:
 
             failure_count, fresh_round = self._record_failure(stage, ctx, error)
             if failure_count <= error_retry_limit:
-                retry_mode = "same" if self._has_session(ctx) else "fresh"
+                retry_mode = "retry" if self._has_session(ctx) else "recover"
                 self._sleep(ctx)
                 continue
 
@@ -146,14 +146,14 @@ class StageExecutor:
                 self._fresh_session(ctx)
                 ctx.state.fresh_session_round = 1
                 ctx.save_state()
-                retry_mode = "fresh"
+                retry_mode = "recover"
                 continue
 
             if unlimited_retry:
                 self._reset_failure(ctx)
                 self._fresh_session(ctx)
                 ctx.save_state()
-                retry_mode = "fresh"
+                retry_mode = "recover"
                 self._sleep(ctx)
                 continue
 
