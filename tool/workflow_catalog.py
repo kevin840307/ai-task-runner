@@ -14,7 +14,7 @@ from runner.workflow.registry import workflow_catalog
 
 
 def main() -> int:
-    print(json.dumps(workflow_catalog(), ensure_ascii=False, indent=2, default=str))
+    print(json.dumps(workflow_catalog(), ensure_ascii=True, indent=2, default=str))
     return 0
 
 
