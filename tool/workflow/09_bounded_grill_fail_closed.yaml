@@ -1,4 +1,5 @@
 # Same bounded Grill policy, but exhaustion stops instead of allowing progress.
+# Grill failure reuses the existing Planning Stage; there is no dedicated Repair Stage.
 stages:
   planning:
     type: plan
@@ -11,7 +12,6 @@ stages:
     recover: [planning]
     max_attempts: 3
     on_exhausted: fail
-
 
 flow:
   - planning
