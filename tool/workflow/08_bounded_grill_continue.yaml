@@ -1,6 +1,5 @@
-# Grill may FAIL -> Planning -> Grill again at most three times.
-# The third FAIL is accepted and the workflow continues to final validation.
-# If a later routing step brings execution back to Grill, the counter starts at 1 again.
+# Grill may FAIL -> existing Planning -> Grill again at most three times.
+# There is no dedicated Repair Stage. The third FAIL is accepted and the workflow continues.
 stages:
   planning:
     type: plan
@@ -14,11 +13,10 @@ stages:
     max_attempts: 3
     on_exhausted: continue
 
-
   validate_ai:
     type: ai_validator
     validator: ai
-    recover: [planning]
+    restart_at: planning
 
 flow:
   - planning
