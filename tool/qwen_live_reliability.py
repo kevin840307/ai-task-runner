@@ -40,8 +40,8 @@ QWEN_SANDBOX_ERROR_MARKERS = (
     "sandbox image",
     "failed to relaunch the cli process",
 )
-REPAIR_INITIAL = "INITIAL"
-REPAIR_FINAL = "RECOVERED"
+ROUTING_INITIAL = "INITIAL"
+ROUTING_FINAL = "RECOVERED"
 FINAL_AI_PROMPT = """Inspect only the deliverable required by the original goal.
 Use the smallest focused read needed, do not repeat a path, and return the JSON
 verdict immediately after sufficient evidence is available.
@@ -136,11 +136,6 @@ if not locked.is_file() or locked.read_text(encoding="utf-8") != {LOCKED_CONTENT
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
-
-REPAIR_PROMPT = f"""Create repair.txt with exactly `{REPAIR_INITIAL}` and no trailing newline or whitespace.
-If the Python Validator later requests replacement content, apply that feedback to
-the same file exactly, again with no trailing newline or whitespace, and continue until validation passes.
-"""
 
 MULTI_PROMPT = """Create these three independent UTF-8 deliverables:
 - one.txt containing exactly ONE
@@ -1144,17 +1139,17 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
                 f'    command: ["{{python}}", -c, "print(\'{name}\')"]',
             ])
             if index == 5:
-                flow_lines.extend(["  - stage: s05", "    repeat: 3", "    recover: [repair]"])
+                flow_lines.extend(["  - stage: s05", "    repeat: 3", "    recover: [fallback]"])
             elif index == 9:
-                flow_lines.extend(["  - stage: s09", "    recover: [repair]"])
+                flow_lines.extend(["  - stage: s09", "    recover: [fallback]"])
             elif index == 10:
                 flow_lines.extend(["  - stage: s10", "    restart_at: s08"])
             else:
                 flow_lines.append(f"  - {name}")
         stage_lines.extend([
-            "  repair:",
+            "  fallback:",
             "    type: command",
-            '    command: ["{python}", -c, "print(\'repair\')"]',
+            '    command: ["{python}", -c, "print(\'fallback\')"]',
         ])
         path.write_text(
             "stages:\n" + "\n".join(stage_lines) + "\nflow:\n" + "\n".join(flow_lines) + "\n",
@@ -1211,10 +1206,10 @@ def workflow_dryrun_negative_preflight() -> None:
   check:
     type: command
     command: [python, -c, "print('CHECK')"]
-    recover: [repair]
-  repair:
+    recover: [fallback]
+  fallback:
     type: command
-    command: [python, -c, "print('REPAIR')"]
+    command: [python, -c, "print('FALLBACK')"]
 flow:
   - check
 """,
@@ -1835,19 +1830,19 @@ a = p.parse_args()
 target = Path(a.project_root).resolve() / "route.txt"
 marker = Path({str(marker)!r})
 if not marker.exists():
-    if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_INITIAL!r}:
-        print("VALIDATION_FAILED: route.txt must contain exactly {REPAIR_INITIAL} with no trailing whitespace")
+    if not target.is_file() or target.read_text(encoding="utf-8") != {ROUTING_INITIAL!r}:
+        print("VALIDATION_FAILED: route.txt must contain exactly {ROUTING_INITIAL} with no trailing whitespace")
         raise SystemExit(1)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
-    print("VALIDATION_FAILED: replace route.txt content with exactly {REPAIR_FINAL}")
+    print("VALIDATION_FAILED: replace route.txt content with exactly {ROUTING_FINAL}")
     raise SystemExit(1)
-if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_FINAL!r}:
-    print("VALIDATION_FAILED: route.txt must contain exactly {REPAIR_FINAL} with no trailing whitespace")
+if not target.is_file() or target.read_text(encoding="utf-8") != {ROUTING_FINAL!r}:
+    print("VALIDATION_FAILED: route.txt must contain exactly {ROUTING_FINAL} with no trailing whitespace")
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
-    routing_prompt = f"""Create route.txt with exactly `{REPAIR_INITIAL}` and no trailing newline or whitespace.
+    routing_prompt = f"""Create route.txt with exactly `{ROUTING_INITIAL}` and no trailing newline or whitespace.
 If the Python Validator later requests replacement content, apply that feedback to
 the same file exactly, again with no trailing newline or whitespace, and continue until validation passes.
 """
@@ -1859,9 +1854,9 @@ the same file exactly, again with no trailing newline or whitespace, and continu
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
-    assert_completed(project, code, "route.txt", REPAIR_FINAL)
+    assert_completed(project, code, "route.txt", ROUTING_FINAL)
     state = read_state(project)
-    if marker.read_text(encoding="utf-8") != REPAIR_INITIAL or state.get("cycle", 1) < 2:
+    if marker.read_text(encoding="utf-8") != ROUTING_INITIAL or state.get("cycle", 1) < 2:
         raise RuntimeError("validator failure did not route back through another planning cycle")
     planning_prompts = stage_prompt_records(project, "planning")
     if len(planning_prompts) < 2 or not any(
