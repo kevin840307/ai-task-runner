@@ -8,20 +8,39 @@ import shutil
 from pathlib import Path
 
 def io_path(path: Path | str) -> Path:
-    """Return a Windows extended-length path when normal MAX_PATH handling is risky.
+    """Return a Windows extended-length path only when MAX_PATH handling is risky.
 
-    The caller keeps using the original logical Path for containment/relative checks;
-    this helper is only for filesystem I/O. On non-Windows platforms it is a no-op.
+    Logical paths stay human-readable and comparable. The extended prefix is an
+    I/O implementation detail used only for sufficiently long absolute paths.
     """
     value = Path(path)
     if os.name != "nt":
         return value
     text = str(value)
-    if text.startswith("\\\\?\\") or not value.is_absolute():
+    if text.startswith("\\\\?\\") or not value.is_absolute() or len(text) < 240:
         return value
     if text.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + text[2:])
     return Path("\\\\?\\" + text)
+
+
+def path_key(path: Path | str) -> str:
+    """Return a stable identity key for an existing path, including Windows aliases."""
+    value = Path(path).expanduser()
+    try:
+        stat = io_path(value.absolute()).stat()
+        inode = int(getattr(stat, "st_ino", 0) or 0)
+        device = int(getattr(stat, "st_dev", 0) or 0)
+        if inode:
+            return f"fs:{device}:{inode}"
+    except OSError:
+        pass
+    return os.path.normcase(os.path.abspath(str(value)))
+
+
+def same_path(left: Path | str, right: Path | str) -> bool:
+    """Compare filesystem identity without depending on textual path spelling."""
+    return path_key(left) == path_key(right)
 
 
 def digest(path: Path) -> str | None:
@@ -103,4 +122,4 @@ def atomic_write_text(path: Path, text: str) -> None:
             pass
 
 
-__all__ = ["atomic_write_text", "copy_ignore", "copy_path", "digest", "io_path", "remove_path"]
+__all__ = ["atomic_write_text", "copy_ignore", "copy_path", "digest", "io_path", "path_key", "remove_path", "same_path"]
