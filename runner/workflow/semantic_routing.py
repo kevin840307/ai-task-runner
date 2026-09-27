@@ -10,7 +10,8 @@ import json
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from .stages import StageContext, StageExecutor, StageResult
+from .stages.contracts import StageContext, StageResult
+from .stages.executor import StageExecutor
 
 RoutingKind = Literal["next", "recover", "restart", "replan", "stop"]
 
