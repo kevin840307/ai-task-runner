@@ -15,7 +15,7 @@ from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils.text import bounded_text
-from ..utils.files import io_path, same_path
+from ..utils.files import io_path, path_key, same_path
 from ..utils.logs import append_bounded_log
 from .heartbeat import touch_heartbeat
 
@@ -213,7 +213,7 @@ class StateStore:
     @property
     def backup_path(self) -> Path:
         key = hashlib.sha256(
-            str(self.work).lower().encode("utf-8")
+            path_key(self.work).encode("utf-8")
         ).hexdigest()[:24]
         return (
             Path(tempfile.gettempdir())
