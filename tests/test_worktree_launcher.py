@@ -146,6 +146,7 @@ def test_runner_command_uses_worktree_project_root_and_generated_script(tmp_path
     command = launcher.runner_command(config, config.jobs[0])
 
     assert command[command.index("--project-root") + 1] == str(worktree)
+    assert command[command.index("--execution-mode") + 1] == "linear"
     assert command[command.index("--script") + 1] == str(task)
 
 
