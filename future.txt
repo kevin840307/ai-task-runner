@@ -153,6 +153,10 @@ Required architecture changes before adding the two multi-agent modes
    fields). Keep those for current compatibility, but move them behind the shared
    lifecycle/progress_revision contract before enabling non-linear modes.
 
+   execution_mode must also be persisted as immutable Run identity metadata. Resume must
+   reject a request that tries to resume durable state with a different execution mode.
+   Mode-owned snapshots/state must never be interpreted by another Orchestrator.
+
 5. Give runtime graph invocations stable IDs before general graph/dynamic routing.
    Current linear Workflow commonly addresses a Stage by Stage name. This is acceptable
    for existing compatible flows, but dynamic graphs can contain repeated instances of
