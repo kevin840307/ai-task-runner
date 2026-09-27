@@ -100,7 +100,7 @@ navigation.
 - task-block restart
 - task-block completion
 
-Reducers in `rules.py` update semantic/task data only.
+Reducers in `reducers.py` update semantic/task data only.
 
 ## Durable transition context
 
@@ -192,6 +192,6 @@ These remain temporarily to avoid breaking callers:
 
 - `TaskRunner` -> `WorkflowRunner`
 - `Pipeline` -> `FlowEngine`
-- `RecoveryPolicy` -> `SemanticRoutingPolicy`
+- `RecoveryPolicy` -> `SemanticRoutingPolicy`\n- `workflow/rules.py` -> `workflow/reducers.py`
 
 New code should use the canonical names.
