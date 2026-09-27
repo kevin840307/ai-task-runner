@@ -243,6 +243,12 @@ class UIState(WorkflowBuilderMixin):
             raise ValueError("Workflow catalog is missing stage_types")
         return payload
 
+    def _supported_stage_types(self) -> set[str]:
+        tool = self.repo_root / "tool" / "workflow_catalog.py"
+        if not tool.is_file():
+            return {"base", "task", "review", "ai_validator", "command", "plan"}
+        return set(self.workflow_catalog().get("stage_types", {}))
+
     def add_project(self, path: str) -> dict:
         with self._projects_lock, project_file_lock(self.projects_file):
             resolved = Path(path).expanduser().resolve()
@@ -1610,8 +1616,7 @@ class UIState(WorkflowBuilderMixin):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
                 raise ValueError("Stage key must start with a letter/underscore and contain only letters, numbers, _ or -")
             stage_type = str(stage_type or "base").strip()
-            stage_types = self.workflow_catalog().get("stage_types", {})
-            if stage_type not in stage_types:
+            if stage_type not in self._supported_stage_types():
                 raise ValueError("Unsupported Stage type")
             data = self._load_workflow_yaml(content)
             stages = data.get("stages") if isinstance(data, dict) else None
@@ -1659,8 +1664,7 @@ class UIState(WorkflowBuilderMixin):
     def _validate_stage_editor_fields(self, fields: dict) -> None:
         stage_type = fields.get("type")
         if stage_type is not None:
-            stage_types = self.workflow_catalog().get("stage_types", {})
-            if stage_type not in stage_types:
+            if stage_type not in self._supported_stage_types():
                 raise ValueError("Unsupported Stage type")
         mode = fields.get("mode")
         if mode not in (None, "", "readonly", "write"):
