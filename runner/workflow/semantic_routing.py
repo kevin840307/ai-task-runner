@@ -12,10 +12,10 @@ from typing import Literal, Protocol
 
 from .stages import StageContext, StageExecutor, StageResult
 
-RecoveryKind = Literal["next", "recover", "restart", "replan", "stop"]
+RoutingKind = Literal["next", "recover", "restart", "replan", "stop"]
 
 
-class RecoveryNode(Protocol):
+class RoutingNode(Protocol):
     stage: object
     recover: tuple[dict, ...]
     restart_at: str | None
@@ -28,8 +28,8 @@ class RecoveryNode(Protocol):
 
 
 @dataclass(frozen=True)
-class RecoveryAction:
-    kind: RecoveryKind
+class RoutingAction:
+    kind: RoutingKind
     limit_reached: bool = False
 
 
@@ -39,7 +39,7 @@ class SemanticRoutingPolicy:
     def __init__(self, context: StageContext) -> None:
         self.context = context
 
-    def pending_recovery(self, node: RecoveryNode) -> StageResult | None:
+    def pending_recovery(self, node: RoutingNode) -> StageResult | None:
         repeat = node.repeat
         if repeat is None:
             return None
@@ -58,7 +58,7 @@ class SemanticRoutingPolicy:
             data=saved.get("data"),
         )
 
-    def pending_bounded_recovery(self, node: RecoveryNode) -> StageResult | None:
+    def pending_bounded_recovery(self, node: RoutingNode) -> StageResult | None:
         if node.max_attempts is None:
             return None
         state = self.context.state
@@ -77,7 +77,7 @@ class SemanticRoutingPolicy:
             data=saved.get("data"),
         )
 
-    def complete_bounded_recovery(self, node: RecoveryNode) -> None:
+    def complete_bounded_recovery(self, node: RoutingNode) -> None:
         if node.max_attempts is None:
             return
         state = self.context.state
@@ -87,17 +87,17 @@ class SemanticRoutingPolicy:
 
     def decide(
         self,
-        node: RecoveryNode,
+        node: RoutingNode,
         result: StageResult,
         executor: StageExecutor,
-    ) -> RecoveryAction:
+    ) -> RoutingAction:
         limit_reached = self._record_repeat(node, result)
         exhausted = self._record_bounded_attempt(node, result)
         if exhausted:
             self.clear_bounded_attempt(node)
             self.clear_semantic_failure(node)
             self.clear_repeat(node)
-            return RecoveryAction(
+            return RoutingAction(
                 "next" if node.on_exhausted == "continue" else "stop",
                 True,
             )
@@ -105,27 +105,27 @@ class SemanticRoutingPolicy:
         self._observe_semantic_failure(node, result, executor)
 
         if result.status == "replan":
-            return RecoveryAction("replan", limit_reached)
+            return RoutingAction("replan", limit_reached)
         if result.status == "fail" and node.restart_at is not None:
-            return RecoveryAction("restart", limit_reached)
+            return RoutingAction("restart", limit_reached)
         if result.status == "fail" and node.recover:
-            return RecoveryAction("recover", limit_reached)
+            return RoutingAction("recover", limit_reached)
         if (
             result.status == "error"
             and result.kind == "task"
             and result.changed_files
         ):
-            return RecoveryAction("next", limit_reached)
+            return RoutingAction("next", limit_reached)
         if result.status in {"fail", "error"}:
-            return RecoveryAction("stop", limit_reached)
+            return RoutingAction("stop", limit_reached)
 
         if result.status == "pass":
             self.clear_repeat(node)
             self.clear_bounded_attempt(node)
             self.clear_semantic_failure(node)
-        return RecoveryAction("next", limit_reached)
+        return RoutingAction("next", limit_reached)
 
-    def clear_repeat(self, node: RecoveryNode) -> None:
+    def clear_repeat(self, node: RoutingNode) -> None:
         if node.repeat is None:
             return
         state = self.context.state
@@ -135,7 +135,7 @@ class SemanticRoutingPolicy:
             state.flow_result_previous = {}
 
 
-    def clear_bounded_attempt(self, node: RecoveryNode) -> None:
+    def clear_bounded_attempt(self, node: RoutingNode) -> None:
         if node.max_attempts is None:
             return
         state = self.context.state
@@ -146,7 +146,7 @@ class SemanticRoutingPolicy:
             self.context.save_state()
 
     def _record_bounded_attempt(
-        self, node: RecoveryNode, result: StageResult
+        self, node: RoutingNode, result: StageResult
     ) -> bool:
         max_attempts = node.max_attempts
         if max_attempts is None or result.status != "fail":
@@ -168,7 +168,7 @@ class SemanticRoutingPolicy:
         self.context.save_state()
         return state.recovery_attempt_count >= max_attempts
 
-    def clear_semantic_failure(self, node: RecoveryNode) -> None:
+    def clear_semantic_failure(self, node: RoutingNode) -> None:
         if self._semantic_threshold(node) is None:
             return
         state = self.context.state
@@ -178,7 +178,7 @@ class SemanticRoutingPolicy:
             state.semantic_failure_count = 0
             self.context.save_state()
 
-    def _record_repeat(self, node: RecoveryNode, result: StageResult) -> bool:
+    def _record_repeat(self, node: RoutingNode, result: StageResult) -> bool:
         repeat = node.repeat
         if repeat is None or result.status not in {"pass", "fail"}:
             return False
@@ -202,7 +202,7 @@ class SemanticRoutingPolicy:
 
     def _observe_semantic_failure(
         self,
-        node: RecoveryNode,
+        node: RoutingNode,
         result: StageResult,
         executor: StageExecutor,
     ) -> None:
@@ -227,7 +227,7 @@ class SemanticRoutingPolicy:
             self.clear_semantic_failure(node)
 
     @staticmethod
-    def _semantic_threshold(node: RecoveryNode) -> int | None:
+    def _semantic_threshold(node: RoutingNode) -> int | None:
         if node.fresh_after_same_failures is not None:
             return node.fresh_after_same_failures
         if not node.recover:
@@ -235,7 +235,7 @@ class SemanticRoutingPolicy:
         value = getattr(node.stage, "semantic_failure_threshold", None)
         return int(value) if value is not None else None
 
-    def _key(self, node: RecoveryNode) -> str:
+    def _key(self, node: RoutingNode) -> str:
         task = getattr(self.context, "task", None)
         if task is None:
             state = self.context.state
@@ -270,4 +270,4 @@ class SemanticRoutingPolicy:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-__all__ = ["RecoveryAction", "RecoveryKind", "RecoveryNode", "SemanticRoutingPolicy"]
+__all__ = ["RoutingAction", "RoutingKind", "RoutingNode", "SemanticRoutingPolicy"]
