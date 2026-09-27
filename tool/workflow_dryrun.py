@@ -251,6 +251,11 @@ def _result_payload(
         "valid": True,
         "completed": completed,
         "workflow": str(workflow_path),
+        "coverage": {
+            "semantic_pipeline_routing": true,
+            "technical_stage_retry": false,
+            "real_ai_or_commands": false,
+        },
         "scenario": str(scenario_path) if scenario_path else None,
         "workflow_position": ctx.state.workflow_position,
         "workflow_size": len(flow),
@@ -267,6 +272,7 @@ def _result_payload(
 
 def _print_result(workflow_path: Path, scenario_path: Path | None, flow: list[dict[str, Any]], ctx: DryRunContext, executor: MockStageExecutor, error: str) -> int:
     print(f"Workflow: {workflow_path}")
+    print("Scope: semantic Pipeline routing only; technical StageExecutor retry and real AI/commands are not executed.")
     if scenario_path:
         print(f"Scenario: {scenario_path}")
     print("\nTransitions:")
@@ -506,6 +512,11 @@ def matrix_payload(workflow_path: Path, max_steps: int) -> dict[str, Any]:
         "valid": True,
         "closed": passed == len(cases),
         "workflow": str(workflow_path),
+        "coverage": {
+            "semantic_pipeline_routing": true,
+            "technical_stage_retry": false,
+            "real_ai_or_commands": false,
+        },
         "features": _workflow_features(flow),
         "paths_passed": passed,
         "paths_total": len(cases),
@@ -519,7 +530,8 @@ def run_matrix(workflow_path: Path, max_steps: int, *, json_output: bool = False
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if payload["closed"] else 1
 
-    print(f"Workflow Dry Run Matrix\nWorkflow: {workflow_path}\n")
+    print(f"Workflow Dry Run Matrix\nWorkflow: {workflow_path}")
+    print("Scope: semantic Pipeline routing only; technical StageExecutor retry and real AI/commands are not executed.\n")
     results = payload["cases"]
     width = max(len(str(item["name"])) for item in results)
     for item in results:
@@ -560,7 +572,7 @@ def run_dryrun(
         _close_context(ctx)
 
 def parser() -> argparse.ArgumentParser:
-    value = argparse.ArgumentParser(description="Validate workflow.yaml closure with mock Stage results.")
+    value = argparse.ArgumentParser(description="Validate semantic workflow routing/closure with mock Stage results; technical StageExecutor retries and real AI/commands are not executed.")
     value.add_argument("workflow", type=Path, help="Workflow YAML to validate")
     value.add_argument("--scenario", type=Path, help="Optional dry-run scenario YAML")
     value.add_argument("--max-steps", type=int, default=100, help="Stop non-converging workflows after N Stage executions")
