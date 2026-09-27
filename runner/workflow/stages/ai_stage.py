@@ -14,7 +14,6 @@ class TaskStageSpec(BaseStageSpec):
     mode: str = MODE_WRITE
     actor: str = "executor"
     prompt: str = "stages/execution.md"
-    continuation_prompt: str = "stages/execution_continue.md"
     track_changes: bool = True
 
 
@@ -29,7 +28,6 @@ class ReviewStageSpec(BaseStageSpec):
     mode: str = MODE_READONLY
     actor: str = "ai"
     prompt: str = "stages/review.md"
-    continuation_prompt: str = "stages/review_continue.md"
     skip_on_error: bool = True
 
 
