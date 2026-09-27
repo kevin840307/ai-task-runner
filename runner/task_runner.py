@@ -17,12 +17,12 @@ from .workflow.snapshot import (
     load_run_resource,
     load_snapshot,
 )
-from .workflow.pipeline import build_pipeline
+from .workflow.pipeline import build_flow_engine
 from .workflow.stages import StageContext, StageExecutor
 
 
-class TaskRunner:
-    """Run one task request until the configured Workflow completes."""
+class WorkflowRunner:
+    """Run one Workflow request through the shared Stage/Flow runtime."""
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
@@ -91,7 +91,9 @@ class TaskRunner:
             save_state=self._save_state,
             set_stage=self._set_stage,
         )
-        self.pipeline = build_pipeline(self.context)
+        self.flow_engine = build_flow_engine(self.context)
+        # Compatibility attribute for older extensions/tests.
+        self.pipeline = self.flow_engine
         self.stage_executor = StageExecutor()
 
 
@@ -121,7 +123,7 @@ class TaskRunner:
         if self.config.plan_only and self.state.tasks:
             progress.set_status("Plan ready", "plan-only completed without execution")
             return 0
-        return self.pipeline.run(self.stage_executor, plan_only=self.config.plan_only)
+        return self.flow_engine.run(self.stage_executor, plan_only=self.config.plan_only)
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir() or (
@@ -135,3 +137,10 @@ class TaskRunner:
     def _set_stage(self, stage: str, detail: str = "") -> None:
         set_stage(self.state, stage, detail)
         self._save_state()
+
+
+# Backward-compatible public name.
+TaskRunner = WorkflowRunner
+
+
+__all__ = ["TaskRunner", "WorkflowRunner"]
