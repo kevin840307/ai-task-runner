@@ -99,7 +99,7 @@ def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
         progress.set_status("Review PASS", task.title)
     elif result.status == "fail":
         task.status = "pending"
-        progress.set_status("任務未完成，進入 Repair", result.output)
+        progress.set_status("任務未完成，返回 Execute", result.output)
     return result
 
 
@@ -147,7 +147,7 @@ def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
         ctx.state.validator_failure_count = 1
     ctx.set_stage("validator_failed", result.output)
     invalidate_plan(ctx, reset_workflow=False)
-    progress.set_status("驗證失敗，保留修改並進入 Recovery", result.stage)
+    progress.set_status("驗證失敗，返回 Planning", result.stage)
 
 
 
