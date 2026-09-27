@@ -11,7 +11,7 @@ from ..errors import RunnerError
 from .recovery import SemanticRoutingPolicy
 from .registry import create_stage
 from .routing import LinearRouting
-from .rules import finish_run, finish_task, prepare_replan
+from .reducers import finish_run, finish_task, prepare_replan
 from .stages import Stage, StageContext, StageExecutor, StageResult
 
 
