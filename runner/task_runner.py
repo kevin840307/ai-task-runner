@@ -57,6 +57,7 @@ class TaskRunner:
             self.config.goal,
             resume=self.config.resume,
             force_new=self.config.force_new,
+            execution_mode=self.config.execution_mode,
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
