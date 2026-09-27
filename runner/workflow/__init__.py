@@ -1,1 +1,1 @@
-"""Workflow definitions, rules, pipeline, and stages."""
+"""Workflow definitions, FlowEngine routing, reducers, and Stage primitives."""
