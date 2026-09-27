@@ -499,7 +499,7 @@ def test_repeated_semantic_failures_freshen_review_without_resetting_recover_ses
 
 def test_system_prompts_optimize_for_fewer_complete_handoffs():
     prompt_root = ROOT / "runner" / "prompts" / "stages"
-    planning = (prompt_root / "planning_rules.md").read_text(encoding="utf-8")
+    planning = (prompt_root / "planning.md").read_text(encoding="utf-8")
     execution = (prompt_root / "execution.md").read_text(encoding="utf-8")
     review = (prompt_root / "review.md").read_text(encoding="utf-8")
     validator = (prompt_root / "ai_validator.md").read_text(encoding="utf-8")
