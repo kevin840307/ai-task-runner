@@ -30,9 +30,10 @@ def test_plan_defaults_to_optional_readonly_filesystem_inspection():
 
     assert PlanStageSpec(name="planning").allow_project_read is True
     root = Path(__file__).resolve().parents[1]
-    rules = (root / "runner" / "prompts" / "stages" / "planning_rules.md").read_text(encoding="utf-8")
-    fresh = (root / "runner" / "prompts" / "stages" / "plan_finalize.md").read_text(encoding="utf-8")
-    assert "any readable path" in rules
-    assert "outside the current Project" in rules
-    assert "Do not use more tools" not in fresh
-    assert "only when" in fresh
+    planning = (root / "runner" / "prompts" / "stages" / "planning.md").read_text(encoding="utf-8")
+    assert "any readable path" in planning
+    assert "outside the current Project" in planning
+    assert "Do not use more tools" not in planning
+    assert "only when" in planning
+    assert not (root / "runner" / "prompts" / "stages" / "planning_rules.md").exists()
+    assert not (root / "runner" / "prompts" / "stages" / "plan_finalize.md").exists()
