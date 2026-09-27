@@ -1601,3 +1601,24 @@ def test_transition_context_must_be_object(tmp_path):
 
     with pytest.raises(ValueError, match="transition_previous"):
         RunState.load(payload)
+
+
+def test_transition_context_waits_for_routing_checkpoint_before_save(tmp_path):
+    workflow = [{"name": "one", "_workflow_index": 0}]
+    state = RunState("run", "goal", str(tmp_path))
+    saves = 0
+    context = _context(tmp_path, workflow, state)
+
+    def save():
+        nonlocal saves
+        saves += 1
+
+    context.save_state = save
+    engine = CanonicalFlowEngine(context, workflow)
+    engine._remember_transition(
+        StageResult("one", "pass", output="done", data={"ok": True}, kind="generic")
+    )
+
+    assert saves == 0
+    assert state.transition_previous["stage"] == "one"
+    assert state.transition_previous["status"] == "pass"
