@@ -27,6 +27,7 @@ from runner.config.defaults import (
 )
 from runner.errors import ConfigurationError
 from runner.extensions import discover_extensions
+from runner.execution_modes import execution_mode_names
 from runner.plugins.registry import add_plugin_arguments
 from runner.runtime.supervisor import supervise_cli
 from runner.version import __version__
@@ -42,6 +43,12 @@ def parser() -> argparse.ArgumentParser:
     )
     command_parser.add_argument("--project-root", default=".")
     command_parser.add_argument("--project-name", default="", help="optional UI display name for this project")
+    command_parser.add_argument(
+        "--execution-mode",
+        choices=execution_mode_names(),
+        default="linear",
+        help="top-level orchestration mode; existing behavior uses linear",
+    )
     command_parser.add_argument("--script", help="YAML array of prompt + validator items")
     command_parser.add_argument(
         "--workflow",
