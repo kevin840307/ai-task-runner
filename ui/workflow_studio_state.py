@@ -1375,8 +1375,8 @@ class WorkflowStudioMixin:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    @staticmethod
-    def _normalize_workflow_folder(folder: str) -> str:
+    @classmethod
+    def _normalize_workflow_folder(cls, folder: str) -> str:
         raw = str(folder or "").strip().replace("\\", "/")
         if not raw:
             raise ValueError("Workflow folder is required")
@@ -1388,7 +1388,7 @@ class WorkflowStudioMixin:
             raise ValueError("Workflow folder contains an invalid path segment")
         if raw == "common" or raw.startswith("common/"):
             raise ValueError("The common folder is reserved and cannot own a Workflow")
-        if any(self._is_technical_folder_part(part) for part in parts):
+        if any(cls._is_technical_folder_part(part) for part in parts):
             raise ValueError("Workflow folder contains a reserved technical directory")
         if not all(re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
             raise ValueError("Workflow folder contains unsupported characters")
