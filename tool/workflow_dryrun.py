@@ -324,7 +324,7 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
 
     Recoverable semantic FAIL paths must converge. A FAIL with no configured
     recovery and every technical ERROR must stop safely instead of being routed
-    through semantic repair. This makes matrix mode verify both recovery and
+    through semantic routing. This makes matrix mode verify both recovery and
     fail-closed behavior without executing real commands or AI calls.
     """
     cases: list[MatrixCase] = [MatrixCase("happy path", Scenario())]
@@ -350,10 +350,7 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
             and ("max_attempts", name) not in added
         ):
             added.add(("max_attempts", name))
-            first_recovery = str(definition["recover"][0].get("name", ""))
             expected = {name: max_attempts}
-            if first_recovery:
-                expected[first_recovery] = max_attempts - 1
             continue_after = definition.get("on_exhausted") == "continue"
             cases.append(MatrixCase(
                 f"{name} FAIL x{max_attempts} -> exhausted -> {definition.get('on_exhausted', 'fail')}",
