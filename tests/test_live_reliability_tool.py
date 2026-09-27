@@ -800,21 +800,22 @@ def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
 
-def test_review_failure_routing_probe_workflow_forces_seed_before_review(tmp_path: Path):
+def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_before_review(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
     workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
 
     assert [node["name"] for node in workflow] == [
-        "planning", "seed", "execute", "review", "validate_file"
+        "planning", "execute", "seed", "review", "validate_file"
     ]
     assert workflow[1]["scope"] == "task"
-    assert workflow[1]["type"] == "command"
+    assert workflow[1]["type"] == "task"
     assert workflow[2]["scope"] == "task"
-    assert workflow[2]["type"] == "task"
+    assert workflow[2]["type"] == "command"
     assert workflow[3]["scope"] == "task"
     assert workflow[3]["restart_at"] == "execute"
     assert workflow[4]["restart_at"] == "execute"
+    assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
 
     compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
 
