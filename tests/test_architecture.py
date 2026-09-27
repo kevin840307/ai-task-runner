@@ -28,12 +28,17 @@ def test_core_ownership_is_obvious():
         assert (ROOT / "runner" / package).is_dir()
 
 
-def test_task_runner_uses_stage_executor_and_never_concrete_stage_types():
-    source = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
+def test_workflow_runner_uses_shared_stage_executor_and_flow_engine():
+    source = (ROOT / "runner/workflow_runner.py").read_text(encoding="utf-8")
     assert "StageExecutor" in source
-    assert "build_pipeline" in source
+    assert "build_flow_engine" in source
     for name in ("BaseStage", "PlanStage", "ReviewStage", "ValidateStage"):
         assert name not in source
+
+    compat = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
+    assert "from .workflow_runner import WorkflowRunner" in compat
+    assert "StageExecutor" not in compat
+    assert "build_pipeline" not in compat
 
 
 def test_stage_executor_is_only_hook_boundary():
