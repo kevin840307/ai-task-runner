@@ -41,7 +41,7 @@ def test_custom_stage_registration_is_type_to_class_only():
 
 
 def test_routing_metadata_is_not_copied_to_stage():
-    stage = create_stage({"name": "write", "status": "Write", "recover": [{"name": "repair"}], "restart_at": "write", "label": "Concrete work"})
+    stage = create_stage({"name": "write", "status": "Write", "recover": [{"name": "execute"}], "restart_at": "write", "label": "Concrete work"})
     assert not hasattr(stage, "recover")
     assert not hasattr(stage, "workflow")
     assert not hasattr(stage, "restart_at")
