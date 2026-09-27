@@ -1123,7 +1123,7 @@ class WorkflowStudioTests(unittest.TestCase):
         opened = self.state.studio_read(item["id"], self.project)
         original = self.workflow.read_text(encoding="utf-8")
         failed = subprocess.CompletedProcess(args=[], returncode=1, stdout='{"closed":false,"valid":true}', stderr="")
-        with patch("ui.server.subprocess.run", return_value=failed):
+        with patch("ui.workflow_studio_state.subprocess.run", return_value=failed):
             with self.assertRaisesRegex(ValueError, "Workflow validation failed"):
                 self.state.studio_save(item["id"], original + "# invalid closure\n", opened["hash"], self.project)
         self.assertEqual(self.workflow.read_text(encoding="utf-8"), original)
@@ -1131,7 +1131,7 @@ class WorkflowStudioTests(unittest.TestCase):
     def test_validate_runs_existing_dryrun_tool_without_importing_core(self) -> None:
         item = self._workflow_item()
         fake = subprocess.CompletedProcess(args=[], returncode=0, stdout='{"closed":true,"valid":true,"paths_passed":1,"paths_total":1}', stderr="")
-        with patch("ui.server.subprocess.run", return_value=fake) as run:
+        with patch("ui.workflow_studio_state.subprocess.run", return_value=fake) as run:
             result = self.state.studio_validate(item["id"], self.project)
         self.assertTrue(result["ok"])
         command = run.call_args.args[0]
