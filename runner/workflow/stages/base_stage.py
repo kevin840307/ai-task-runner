@@ -304,6 +304,7 @@ class BaseStage:
 
         lines = [
             "RUNNER_SHARED_STAGE_CONTROL",
+            f"stage: {self.name}",
             f"mode: {mode}",
             f"attempt: {ctx.execution.attempt}",
             f"same_session: {'true' if same_session else 'false'}",
