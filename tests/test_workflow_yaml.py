@@ -577,9 +577,7 @@ def test_file_only_flow_completes_when_top_level_workflow_reaches_end(tmp_path):
     assert context.state.workflow_position == len(workflow)
 
 
-def test_validator_failure_resume_uses_yaml_repair_plan(tmp_path):
-    from runner.workflow.pipeline import Pipeline
-
+def test_validator_failure_routes_directly_back_to_planning(tmp_path):
     workflow = load_workflow(SYSTEM_WORKFLOWS["file"])
     context = _context(tmp_path, workflow)
     context.state.workflow_position = len(workflow) - 1
@@ -589,7 +587,8 @@ def test_validator_failure_resume_uses_yaml_repair_plan(tmp_path):
     )
 
     assert context.state.stage == "validator_failed"
-    assert workflow[-1]["recover"][0]["name"] == "repair_plan"
+    assert workflow[-1]["restart_at"] == "planning"
+    assert "recover" not in workflow[-1]
 
 def test_workflow_fingerprint_changes_with_yaml_semantics():
     workflow = load_workflow()
@@ -767,19 +766,18 @@ def test_workflow_yaml_examples_reference_existing_prompt_assets():
             assert path.is_file(), (example, ref)
 
 
-def test_custom_workflow_resolves_local_continuation_prompt(tmp_path):
+def test_custom_workflow_rejects_removed_continuation_prompt(tmp_path):
     workflow = tmp_path / "workflow.yaml"
     skills = tmp_path / "skills"
     skills.mkdir()
     (skills / "full.md").write_text("full", encoding="utf-8")
     (skills / "continue.md").write_text("continue", encoding="utf-8")
     workflow.write_text(
-        "stages:\n  work:\n    status: Work\n    prompt: skills/full.md\n    continuation_prompt: skills/continue.md\n  validate:\n    validator: ai\n    status: Validate\n    prompt: skills/full.md\n    parser: validation\n    result_status: validation\nflow: [work, validate]\n",
+        "stages:\n  work:\n    status: Work\n    prompt: skills/full.md\n    continuation_prompt: skills/continue.md\nflow: [work]\n",
         encoding="utf-8",
     )
-    flow = load_workflow(workflow)
-    assert Path(flow[0]["prompt"]) == (skills / "full.md").resolve()
-    assert Path(flow[0]["continuation_prompt"]) == (skills / "continue.md").resolve()
+    with pytest.raises(RunnerError, match="unknown options: continuation_prompt"):
+        load_workflow(workflow)
 
 
 def test_flow_node_repeat_is_normalized(tmp_path):
@@ -1175,7 +1173,7 @@ flow:
     assert [item["name"] for item in explicit_flow] == [
         "planning", "execute", "review", "validate"
     ]
-    assert simplified_flow[2]["recover"][0]["name"] == "__plan_repair__"
+    assert simplified_flow[2]["restart_at"] == "__plan_task__"
     assert workflow_fingerprint(simplified_flow) != workflow_fingerprint(explicit_flow)
 
 
@@ -1377,15 +1375,16 @@ flow: [planning, done]
     assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "done"]
     assert workflow[1]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
     assert workflow[2]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
-    assert workflow[2]["recover"][0]["name"] == "__plan_repair__"
+    assert workflow[2]["restart_at"] == "__plan_task__"
 
 
-def test_execution_prompts_do_not_hardcode_repair_stage_name():
+def test_execution_prompt_delegates_continue_retry_recover_to_shared_control():
     root = Path(__file__).resolve().parents[1] / "runner" / "prompts" / "stages"
-    for name in ("execution.md", "execution_continue.md"):
-        text = (root / name).read_text(encoding="utf-8")
-        assert 'stage == "repair"' not in text
-        assert "task.last_review" in text or "validation.feedback" in text
+    text = (root / "execution.md").read_text(encoding="utf-8")
+    assert "Runner shared control" in text
+    assert "repair stage" not in text.lower()
+    assert "task.last_review" not in text
+    assert "validation.feedback" not in text
 
 
 def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
