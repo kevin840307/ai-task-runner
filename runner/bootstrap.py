@@ -8,7 +8,7 @@ from pathlib import Path
 from .config.runtime import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
-from .execution_modes import execute_execution_mode
+from .execution_modes import execution_mode_spec
 from .errors import ConfigurationError
 from .runtime import events
 from .runtime.events import EventBus
@@ -90,7 +90,9 @@ def execute(args: RuntimeConfig) -> int:
                 )
             from .script_runner import execute_script
             return execute_script(args, execute)
-        return execute_execution_mode(args)
+        execution_mode_spec(args.execution_mode)
+        from .workflow_runner import WorkflowRunner
+        return WorkflowRunner(args).run()
 
 
 __all__ = ["Runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]
