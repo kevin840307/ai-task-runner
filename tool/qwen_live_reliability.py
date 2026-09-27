@@ -1714,60 +1714,71 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
             )
 
 
-REVIEW_REPAIR_PROMPT = """Make review.txt contain exactly these two logical lines:
+REVIEW_ROUTING_PROMPT = """Make review.txt contain exactly these two logical lines:
 READY
 REVIEW_REQUIRED
 
 A standard final newline is allowed.
-The available write Stage deterministically seeds review.txt with only READY before Review.
-Review must reject that incomplete current-TODO result, and Repair must preserve READY and add REVIEW_REQUIRED.
-Modify review.txt only; do not modify protected files.
+The command Stage deterministically seeds review.txt with only READY.
+The first Execute must leave that seeded file unchanged so Review observes a real failure.
+After Review FAIL routes back to Execute, continue in the same execution session,
+preserve READY, add REVIEW_REQUIRED, and modify review.txt only.
 """
 
-REVIEW_REPAIR_SEED = '''from pathlib import Path
+REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
+On the first execution, before any Review feedback exists, do not modify review.txt.
+Return a short factual summary and let Review inspect the seeded incomplete state.
+When Runner shared control later provides Review feedback that REVIEW_REQUIRED is missing,
+modify only review.txt so it contains READY and REVIEW_REQUIRED as two logical lines.
+Preserve already-correct content and do not touch protected files.
+"""
+
+REVIEW_ROUTING_SEED = '''from pathlib import Path
 Path("review.txt").write_text("READY\\n", encoding="utf-8")
 '''
 
-REVIEW_REPAIR_WORKFLOW = '''stages:
+REVIEW_ROUTING_WORKFLOW = '''stages:
   planning:
     type: plan
-    status: Planning deterministic Review/Repair probe
+    status: Planning deterministic Review failure-routing probe
 
   seed:
     type: command
-    status: Seeding incomplete Review/Repair state
+    status: Seeding incomplete Review state
     run_state: executing
     command: "{python} seed_review.py"
+
+  execute:
+    type: task
+    status: Executing Review feedback
+    prompt: review_execute.md
 
   review:
     type: review
     status: Reviewing deterministic incomplete state
     prompt: stages/review.md
-    continuation_prompt: stages/review_continue.md
     skip_on_error: false
-    recover: [repair]
-
-  repair:
-    type: task
-    status: Repairing deterministic Review gap
 
   validate_file:
     type: command
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
-    status: Validating deterministic Review/Repair probe
+    status: Validating deterministic Review routing probe
 
 flow:
   - planning
   - stage: seed
     scope: task
+  - stage: execute
+    scope: task
   - stage: review
     scope: task
+    restart_at: execute
   - stage: validate_file
-    recover: [repair]
+    restart_at: execute
 '''
 
-REVIEW_REPAIR_VALIDATOR = '''from __future__ import annotations
+REVIEW_ROUTING_VALIDATOR = '''from __future__ import annotations
 import argparse
 from pathlib import Path
 p = argparse.ArgumentParser()
@@ -1783,16 +1794,19 @@ print("VALIDATION_PASSED")
 '''
 
 
-def review_repair_prompt_probe(settings: Settings, root: Path) -> None:
+def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     project = create_project(
         root,
-        "review-repair-prompt-probe",
-        REVIEW_REPAIR_PROMPT,
-        REVIEW_REPAIR_VALIDATOR,
+        "review-failure-routing-probe",
+        REVIEW_ROUTING_PROMPT,
+        REVIEW_ROUTING_VALIDATOR,
     )
-    (project / "seed_review.py").write_text(REVIEW_REPAIR_SEED, encoding="utf-8")
+    (project / "seed_review.py").write_text(REVIEW_ROUTING_SEED, encoding="utf-8")
+    (project / "review_execute.md").write_text(
+        REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
+    )
     workflow = project / "workflow.yaml"
-    workflow.write_text(REVIEW_REPAIR_WORKFLOW, encoding="utf-8")
+    workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
     code = run_command(
         runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
@@ -1800,20 +1814,22 @@ def review_repair_prompt_probe(settings: Settings, root: Path) -> None:
     )
     assert_state_completed(project, code)
     if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
-        raise RuntimeError("review repair probe produced unexpected logical lines")
+        raise RuntimeError("review failure-routing probe produced unexpected logical lines")
     if not observed_stage_result(project, "review", "fail"):
-        raise RuntimeError("review probe did not exercise Review FAIL")
-    repairs = stage_prompt_records(project, "repair")
-    if not repairs or not any(
-        "Latest review:" in record.text and "missing_items" in record.text
-        for record in repairs
+        raise RuntimeError("review routing probe did not exercise Review FAIL")
+    executes = stage_prompt_records(project, "execute")
+    if len(executes) < 2 or not any(
+        "RUNNER_SHARED_STAGE_CONTROL" in record.text
+        and "mode: continue" in record.text
+        and "Review missing_items:" in record.text
+        for record in executes[1:]
     ):
-        raise RuntimeError("Repair prompt did not receive bounded Review feedback")
+        raise RuntimeError("Review FAIL did not route feedback back to Execute shared control")
     assert_prompt_transport_contract(project)
 
 
-def validator_repair_probe(settings: Settings, root: Path) -> None:
-    marker = root / "_harness-control" / "repair-first-value.txt"
+def validator_failure_routing_probe(settings: Settings, root: Path) -> None:
+    marker = root / "_harness-control" / "validator-first-value.txt"
     validator = f'''from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -1822,45 +1838,46 @@ p = argparse.ArgumentParser()
 p.add_argument("--project-root", required=True)
 p.add_argument("--state-file", required=True)
 a = p.parse_args()
-target = Path(a.project_root).resolve() / "repair.txt"
+target = Path(a.project_root).resolve() / "route.txt"
 marker = Path({str(marker)!r})
 if not marker.exists():
     if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_INITIAL!r}:
-        print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_INITIAL} with no trailing whitespace")
+        print("VALIDATION_FAILED: route.txt must contain exactly {REPAIR_INITIAL} with no trailing whitespace")
         raise SystemExit(1)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
-    print("VALIDATION_FAILED: replace repair.txt content with exactly {REPAIR_FINAL}")
+    print("VALIDATION_FAILED: replace route.txt content with exactly {REPAIR_FINAL}")
     raise SystemExit(1)
 if not target.is_file() or target.read_text(encoding="utf-8") != {REPAIR_FINAL!r}:
-    print("VALIDATION_FAILED: repair.txt must contain exactly {REPAIR_FINAL} with no trailing whitespace")
+    print("VALIDATION_FAILED: route.txt must contain exactly {REPAIR_FINAL} with no trailing whitespace")
     raise SystemExit(1)
 print("VALIDATION_PASSED")
 '''
-    project = create_project(root, "validator-repair-probe", REPAIR_PROMPT, validator)
+    routing_prompt = f"""Create route.txt with exactly `{REPAIR_INITIAL}` and no trailing newline or whitespace.
+If the Python Validator later requests replacement content, apply that feedback to
+the same file exactly, again with no trailing newline or whitespace, and continue until validation passes.
+"""
+    project = create_project(
+        root, "validator-failure-routing-probe", routing_prompt, validator
+    )
     code = run_command(
         runner_command(settings, project),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
     )
-    assert_completed(project, code, "repair.txt", REPAIR_FINAL)
+    assert_completed(project, code, "route.txt", REPAIR_FINAL)
     state = read_state(project)
     if marker.read_text(encoding="utf-8") != REPAIR_INITIAL or state.get("cycle", 1) < 2:
-        raise RuntimeError("validator failure did not drive an observed repair cycle")
-    planning_sessions = stage_result_sessions(project, "planning")
-    repair_sessions = stage_result_sessions(project, "repair_plan")
-    repair_prompts = stage_prompt_records(project, "repair_plan")
-    if (
-        not planning_sessions
-        or not repair_sessions
-        or planning_sessions[-1] == repair_sessions[-1]
-        or not repair_prompts
-        or not any(
-            "Goal:" in record.text and "VALIDATION_FAILED" in record.text
-            for record in repair_prompts
-        )
+        raise RuntimeError("validator failure did not route back through another planning cycle")
+    planning_prompts = stage_prompt_records(project, "planning")
+    if len(planning_prompts) < 2 or not any(
+        "RUNNER_SHARED_STAGE_CONTROL" in record.text
+        and "mode: continue" in record.text
+        and "Validator:" in record.text
+        and "VALIDATION_FAILED" in record.text
+        for record in planning_prompts[1:]
     ):
-        raise RuntimeError("validator repair plan did not use fresh necessary context")
+        raise RuntimeError("validator failure did not reach Planning through shared feedback control")
     assert_prompt_transport_contract(project)
 
 
@@ -2868,10 +2885,10 @@ def main() -> int:
             print(f"PASS system/{workflow} topology + prompt contract probe", flush=True)
         custom_task_producer_probe(settings, run_root)
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
-        review_repair_prompt_probe(settings, run_root)
-        print("PASS Review FAIL/Repair feedback prompt probe", flush=True)
-        validator_repair_probe(settings, run_root)
-        print("PASS validator-fail/repair probe", flush=True)
+        review_failure_routing_probe(settings, run_root)
+        print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
+        validator_failure_routing_probe(settings, run_root)
+        print("PASS validator FAIL -> Planning shared-feedback routing probe", flush=True)
         file_protection_probe(settings, run_root)
         print("PASS protected-file policy probe", flush=True)
         transient_observed = api_recovery_probe(settings, run_root)
@@ -2958,8 +2975,8 @@ def main() -> int:
         "loop_detection_contract_preflight": True,
         "system_workflow_contracts": ["file", "ai", "mixed"],
         "custom_task_producer_probe": True,
-        "review_repair_prompt_probe": True,
-        "validator_repair_prompt_contract": True,
+        "review_failure_routing_probe": True,
+        "validator_failure_routing_probe": True,
         "yaml_list_resume_probe": True,
         "yaml_list_item_runtime_options_probe": True,
         "yaml_list_final_ai_quorum_probe": True,
