@@ -1495,10 +1495,11 @@ time.sleep(3)
 '''
 
 RESUME_PROBE_WORKFLOW = '''stages:
-  planning:
-    type: plan
-    readonly_safety: observe
-    status: Planning resume probe
+  discover:
+    type: command
+    status: Creating deterministic resume TODO
+    command: "{python} task_producer.py"
+    produces: tasks
 
   execute_first:
     type: task
@@ -1519,7 +1520,7 @@ RESUME_PROBE_WORKFLOW = '''stages:
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
 
 flow:
-  - planning
+  - discover
   - stage: execute_first
     scope: task
   - stage: pause
@@ -1532,6 +1533,7 @@ flow:
 
 def resume_probe(settings: Settings, root: Path) -> None:
     project = create_project(root, "resume-probe")
+    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
     (project / "resume_pause.py").write_text(RESUME_PROBE_PAUSE, encoding="utf-8")
     workflow = project / "resume-workflow.yaml"
     workflow.write_text(RESUME_PROBE_WORKFLOW, encoding="utf-8")
