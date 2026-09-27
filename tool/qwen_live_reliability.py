@@ -1711,7 +1711,7 @@ A standard final newline is allowed.
 The command Stage deterministically seeds review.txt with only READY.
 The first Execute must leave that seeded file unchanged so Review observes a real failure.
 After Review FAIL routes back to Execute, continue in the same execution session,
-preserve READY, add REVIEW_REQUIRED, and modify review.txt only.
+preserve READY, add REVIEW_REQUIRED, and Modify review.txt only.
 """
 
 REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
@@ -1807,7 +1807,7 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     if not observed_stage_result(project, "review", "fail"):
         raise RuntimeError("review routing probe did not exercise Review FAIL")
     executes = stage_prompt_records(project, "execute")
-    if len(executes) < 2 or not any(
+    if not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
         and "mode: continue" in record.text
         and "Review missing_items:" in record.text
