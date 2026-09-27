@@ -1765,11 +1765,13 @@ def test_process_snapshot_windows_branch_has_csv_import():
 
 class WorkflowRequirementCacheContractTests(unittest.TestCase):
     def test_workflow_requirements_cache_tracks_file_version(self):
-        source = Path(__file__).resolve().parents[1] / "server.py"
-        text = source.read_text(encoding="utf-8")
-        self.assertIn("_workflow_requirement_cache", text)
-        self.assertIn("stat.st_mtime_ns", text)
-        self.assertIn('item["version"]', text)
+        ui_root = Path(__file__).resolve().parents[1]
+        server = (ui_root / "server.py").read_text(encoding="utf-8")
+        studio = (ui_root / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+        self.assertIn("_workflow_requirement_cache", server)
+        self.assertIn("stat.st_mtime_ns", studio)
+        self.assertIn('item["version"]', studio)
 
 
 class ModelSelectionContractTests(unittest.TestCase):
