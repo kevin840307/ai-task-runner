@@ -118,6 +118,31 @@ Chat / CLI / API
 - 少量、責任清楚的模組，優於大量 20~50 行小 class / 小檔案。
 
 
+目前實作進度（2026-09-27）
+========================
+
+已完成第一輪結構重構（尚待完整 pytest / live / 24H 驗證）：
+- [x] 新增 canonical `WorkflowRunner`：`runner/workflow_runner.py`
+- [x] 舊 `TaskRunner` 保留 compatibility re-export，不再承載 runtime 實作
+- [x] 新增 canonical `FlowEngine`：`runner/workflow/flow_engine.py`
+- [x] 舊 `Pipeline` 保留 compatibility re-export
+- [x] 新增 `LinearRouting`，開始集中 `workflow_position/task_step` ownership
+- [x] reducers 不再直接重設 Linear routing cursor
+- [x] `RecoveryPolicy` canonical 名稱改為 `SemanticRoutingPolicy`，舊名保留 alias
+- [x] 新增 durable `transition_previous`，Resume 可恢復上一個 Stage context
+- [x] 舊 state.json 缺少 `transition_previous` 時保持 backward compatible
+- [x] 新增 `architecture.md`，固定主要閱讀路徑與 ownership
+- [x] 新增 compatibility / routing ownership / transition migration contract tests
+
+仍未宣告完成：
+- [ ] Full pytest
+- [ ] deterministic workflow dry-run matrix
+- [ ] real-Qwen resume / closed-loop probes
+- [ ] 24H high-density soak
+- [ ] 全 repo 搜尋確認沒有其他 module 偷改 Linear cursor
+- [ ] Resume semantic equivalence 的 kill-at-every-boundary 完整測試
+- [ ] RunState 欄位 grouping / routing_state schema 後續瘦身
+
 P0 - 現在優先重構
 =================
 
