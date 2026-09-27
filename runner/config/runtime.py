@@ -100,7 +100,7 @@ class RuntimeConfig:
             raise ValueError("project_name is too long")
         if not self.script and not self.resume and not self.goal.strip():
             raise ValueError("goal is required unless script or resume is used")
-        if not self.script and not self.workflow_explicit and not (
+        if mode_spec.requires_workflow and not self.script and not self.workflow_explicit and not (
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script or explicit workflow is used")
