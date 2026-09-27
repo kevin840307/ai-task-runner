@@ -1365,7 +1365,12 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     resumed_workflow = Path(resumed[resumed.index("--workflow") + 1])
     assert first_workflow == resumed_workflow
     text = first_workflow.read_text(encoding="utf-8")
+    assert "type: plan" not in text
+    assert "produces: tasks" in text
     assert "execute_first" in text
     assert "pause" in text
     assert "execute_second" in text
+    producer = first_workflow.parent / "task_producer.py"
+    assert producer.is_file()
+    assert '"tasks"' in producer.read_text(encoding="utf-8")
     assert "--resume" in resumed
