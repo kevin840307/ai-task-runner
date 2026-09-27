@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..errors import RunnerError
-from .recovery import SemanticRoutingPolicy
+from .semantic_routing import SemanticRoutingPolicy
 from .registry import create_stage
 from .routing import LinearRouting
 from .reducers import finish_run, finish_task, prepare_replan
