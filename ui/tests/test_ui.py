@@ -1771,3 +1771,23 @@ def test_remote_ui_requires_explicit_opt_in_helper():
     assert is_loopback_host("::1")
     assert is_loopback_host("localhost")
     assert not is_loopback_host("0.0.0.0")
+
+
+    def test_workflow_catalog_is_loaded_through_standalone_tool(self) -> None:
+        payload = {
+            "stage_types": {
+                "dynamic_agent": {
+                    "type": "dynamic_agent",
+                    "options": [{"name": "prompt", "type": "str", "required": False}],
+                }
+            },
+            "flow_options": {"restart_at": {"type": "stage"}},
+        }
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+        )
+        with patch("ui.server.subprocess.run", return_value=completed) as run:
+            result = self.state.workflow_catalog()
+        self.assertIn("dynamic_agent", result["stage_types"])
+        command = run.call_args.args[0]
+        self.assertIn("workflow_catalog.py", " ".join(map(str, command)))
