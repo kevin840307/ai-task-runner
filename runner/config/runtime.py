@@ -39,6 +39,7 @@ class RuntimeConfig:
     goal_file: str | None = None
     project_root: str = "."
     project_name: str = ""
+    execution_mode: str = "linear"
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -84,12 +85,16 @@ class RuntimeConfig:
     def validate(self) -> None:
         """Validate the one execution contract shared by API, CLI, and YAML."""
         from ..backends.registry import backend_names, sandbox_supported
+        from ..execution_modes import execution_mode_spec
         from ..plugins.registry import normalize_plugin_config
 
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
         if not isinstance(self.project_name, str):
             raise ValueError("project_name must be a string")
+        if not isinstance(self.execution_mode, str):
+            raise ValueError("execution_mode must be a string")
+        mode_spec = execution_mode_spec(self.execution_mode)
         self.project_name = " ".join(self.project_name.split())
         if len(self.project_name) > 120:
             raise ValueError("project_name is too long")
@@ -154,21 +159,25 @@ class RuntimeConfig:
             raise ValueError("readonly_safety must be 'restore' or 'observe'")
         if not isinstance(self.plugins, dict):
             raise ValueError("plugins must be an object")  # noqa: TRY004
-        if not isinstance(self.workflow, list) or not self.workflow:
-            raise ValueError("workflow must be a non-empty list")
+        if not isinstance(self.workflow, list):
+            raise ValueError("workflow must be a list")
+        if mode_spec.requires_workflow and not self.workflow:
+            raise ValueError("workflow must be a non-empty list for this execution mode")
         if not isinstance(self.workflow_explicit, bool):
             raise ValueError("workflow_explicit must be a boolean")  # noqa: TRY004
         from ..workflow.loader import workflow_has_task_producer, workflow_validators
 
-        has_file_validation, has_ai_validation = workflow_validators(self.workflow)
-        if self.validator:
+        has_file_validation, has_ai_validation = workflow_validators(self.workflow) if self.workflow else (False, False)
+        if mode_spec.requires_workflow and self.validator:
             validator_is_ai = self.validator.lower() == "ai"
             if not validator_is_ai and not has_file_validation:
                 raise ValueError("file validator workflow requires validate_file")
             if (validator_is_ai or self.ai_validator_prompt.strip()) and not has_ai_validation:
                 raise ValueError("AI validation workflow requires validate_ai")
-        if self.plan_only and not workflow_has_task_producer(self.workflow):
-            raise ValueError("plan_only requires a task-producing stage")
+        if self.plan_only and (
+            not mode_spec.requires_workflow or not workflow_has_task_producer(self.workflow)
+        ):
+            raise ValueError("plan_only requires a task-producing linear workflow")
         self.plugins = normalize_plugin_config(self.plugins)
 
 
