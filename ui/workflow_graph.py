@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 
 
-_ROUTING_KEYS = ("recover", "retry", "on_exhausted", "restart_at", "max_attempts", "repeat")
+_ROUTING_KEYS = ("recover", "retry", "on_exhausted", "restart_at", "max_attempts", "repeat", "fresh_after_same_failures")
 
 
 def _target_name(value: Any) -> str:
