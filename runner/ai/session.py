@@ -8,7 +8,9 @@ SESSION_INVALID_MARKERS = (
 SESSION_RESET_MARKERS = ("loop detection halted the run",)
 TRANSIENT_SERVICE_MARKERS = (
     "connection", "rate limit", "too many requests",
-    "service unavailable", "bad gateway", "gateway timeout", "http 429", "http 502",
+    "service unavailable", "temporarily unavailable", "try again later",
+    "overloaded", "server overloaded", "upstream unavailable", "upstream connect error",
+    "bad gateway", "gateway timeout", "http 429", "http 502",
     "http 503", "http 504",
 )
 DETERMINISTIC_SERVICE_MARKERS = (
