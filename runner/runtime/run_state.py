@@ -293,7 +293,7 @@ class StateStore:
         loaded = self._read_state(self.path, strict=True)
         assert loaded is not None
         _, state = loaded
-        if Path(state.project_root).resolve() != self.root:
+        if not same_path(state.project_root, self.root):
             raise ConfigurationError("resume state belongs to a different project_root")
         state.validator_output = bounded_text(
             state.validator_output,
