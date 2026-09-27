@@ -39,7 +39,6 @@ class RuntimeConfig:
     goal_file: str | None = None
     project_root: str = "."
     project_name: str = ""
-    execution_mode: str = "linear"
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -81,6 +80,7 @@ class RuntimeConfig:
     event_callback: EventHandler | None = None
     script_index: int | None = None
     script_total: int | None = None
+    execution_mode: str = "linear"
 
     def validate(self) -> None:
         """Validate the one execution contract shared by API, CLI, and YAML."""
