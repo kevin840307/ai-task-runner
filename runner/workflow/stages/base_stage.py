@@ -252,22 +252,101 @@ class BaseStage:
         return client
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
-        mode = ctx.execution.retry_mode
-        if (
-            mode == "initial"
-            and self.spec.continuation_prompt
-            and self._prompt_seen(ctx, client)
-        ):
-            values = build_stage_prompt_context(ctx, self.spec.name, previous)
-            values["instructions"] = self.spec.instructions
-            rendered = render_prompt(self.spec.continuation_prompt, values)
-            return self._with_immutable_protocol(self._augment_rendered_prompt(ctx, rendered))
         original = self._original_prompt(ctx, previous)
-        if mode == "initial":
+        control = self._shared_control_prompt(ctx, previous, client)
+        if not control:
             return original
-        if mode == "same" and getattr(client, "session_id", ""):
-            return self._same_session_prompt(ctx)
-        return self._fresh_session_prompt(original)
+        return original.rstrip() + "\n\n" + control
+
+    def _shared_control_prompt(
+        self,
+        ctx: StageContext,
+        previous: StageResult | None,
+        client,
+    ) -> str:
+        """Return one Runner-owned execution envelope shared by every AI Stage.
+
+        Stage templates define role-specific behavior. Retry/continue/repair/recover
+        semantics live here so semantic Stage types do not need parallel prompt files.
+        """
+        retry_mode = str(ctx.execution.retry_mode or "initial")
+        same_session = bool(getattr(client, "session_id", ""))
+        prompt_seen = self._prompt_seen(ctx, client)
+        feedback = self._control_feedback(ctx, previous)
+        if retry_mode == "same":
+            mode = "retry"
+        elif retry_mode == "fresh":
+            mode = "recover"
+        elif feedback:
+            mode = "repair"
+        elif prompt_seen:
+            mode = "continue"
+        else:
+            mode = "initial"
+        if mode == "initial":
+            return ""
+
+        lines = [
+            "RUNNER_SHARED_STAGE_CONTROL",
+            f"mode: {mode}",
+            f"attempt: {ctx.execution.attempt}",
+            f"same_session: {'true' if same_session else 'false'}",
+            f"source_stage: {getattr(previous, 'stage', '') or self.name}",
+        ]
+        if mode == "continue":
+            lines.append(
+                "Continue this Stage from current session/project evidence. "
+                "Do not restart discovery or repeat unchanged successful work."
+            )
+        elif mode == "retry":
+            lines.append(
+                "Retry only the failed part of this Stage. Preserve valid existing work "
+                "and do not repeat the exact failed action without new evidence."
+            )
+        elif mode == "repair":
+            lines.append(
+                "Repair only concrete gaps from Review/Validator/current evidence. "
+                "Preserve correct work and fix the shared root cause when applicable."
+            )
+        else:
+            lines.append(
+                "Recover this same Stage in the fresh/current session. Inspect current "
+                "durable project state first and preserve valid existing work."
+            )
+
+        error = str(ctx.execution.previous_error or "").strip()
+        if error:
+            lines.append("previous_error: " + error[-2000:])
+        if feedback:
+            lines.append("feedback:\n" + feedback[-3000:])
+        lines.append(
+            "The original Stage prompt and immutable output protocol remain authoritative."
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _control_feedback(
+        ctx: StageContext,
+        previous: StageResult | None,
+    ) -> str:
+        parts: list[str] = []
+        task = ctx.task
+        review = getattr(task, "last_review", None) if task is not None else None
+        if isinstance(review, dict) and review.get("completed") is False:
+            reason = str(review.get("reason") or "").strip()
+            missing = review.get("missing_items")
+            if reason:
+                parts.append("Review: " + reason)
+            if missing:
+                parts.append("Review missing_items: " + json.dumps(missing, ensure_ascii=False))
+        validator = str(getattr(ctx.state, "validator_output", "") or "").strip()
+        if validator:
+            parts.append("Validator: " + validator[-2000:])
+        if previous is not None and previous.status in {"fail", "error", "replan"}:
+            detail = str(previous.error or previous.output or "").strip()
+            if detail:
+                parts.append(f"{previous.stage}: {detail[-2000:]}")
+        return "\n".join(parts)
 
     def _prompt_seen(self, ctx: StageContext, client) -> bool:
         session = str(getattr(client, "session_id", "") or "")
