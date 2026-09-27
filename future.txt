@@ -137,11 +137,21 @@ Required architecture changes before adding the two multi-agent modes
    Shared envelope should contain at least:
      run_id
      execution_mode
-     lifecycle status
+     lifecycle: running | completed | failed | stopped
      current owner/actor
-     resumable/completed/failed
-     timestamps/progress
+     resumable
+     progress_revision
+     timestamps
      mode_state reference/version
+
+   progress_revision must increase only on meaningful durable semantic progress. The
+   outer unattended recovery loop should compare this generic revision instead of
+   understanding Workflow position, TODO counters, handoff count or discussion rounds.
+
+   Today RunResult completion/no-progress detection still contains linear Workflow
+   assumptions (for example completed/skipped Stage state and Workflow-oriented progress
+   fields). Keep those for current compatibility, but move them behind the shared
+   lifecycle/progress_revision contract before enabling non-linear modes.
 
 5. Give runtime graph invocations stable IDs before general graph/dynamic routing.
    Current linear Workflow commonly addresses a Stage by Stage name. This is acceptable
