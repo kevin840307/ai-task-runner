@@ -324,6 +324,23 @@ class BaseStage:
             )
 
         error = str(ctx.execution.previous_error or "").strip()
+        task = ctx.task
+        if task is not None and mode == "continue":
+            lines.append(
+                "current_task: "
+                + json.dumps(
+                    {
+                        "title": getattr(task, "title", ""),
+                        "description": getattr(task, "description", ""),
+                        "deliverable": getattr(task, "deliverable", ""),
+                        "acceptance_criteria": getattr(task, "acceptance_criteria", []),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            last_output = str(getattr(task, "last_output", "") or "").strip()
+            if last_output:
+                lines.append("executor_evidence:\n" + last_output[-2500:])
         if error:
             lines.append("previous_error: " + error[-2000:])
         if feedback:
