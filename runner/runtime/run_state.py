@@ -68,6 +68,7 @@ class RunState:
     run_id: str
     goal: str
     project_root: str
+    execution_mode: str = "linear"
     cycle: int = 1
     current: int = 0
     tasks: list[Task] = field(default_factory=list)
@@ -102,7 +103,7 @@ class RunState:
         return asdict(self)
 
     def validate(self) -> None:
-        for name in ("run_id", "goal", "project_root"):
+        for name in ("run_id", "goal", "project_root", "execution_mode"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"state.{name} must be a non-empty string")
@@ -224,14 +225,25 @@ class StateStore:
         *,
         resume: bool,
         force_new: bool,
+        execution_mode: str = "linear",
     ) -> RunState:
         if resume:
             try:
-                return self._load_resume_state()
+                state = self._load_resume_state()
+                if state.execution_mode != execution_mode:
+                    raise ConfigurationError(
+                        f"resume state execution_mode is {state.execution_mode!r}, not {execution_mode!r}"
+                    )
+                return state
             except ConfigurationError as primary_error:
                 if not self.restore_backup():
                     raise primary_error
-                return self._load_resume_state()
+                state = self._load_resume_state()
+                if state.execution_mode != execution_mode:
+                    raise ConfigurationError(
+                        f"resume state execution_mode is {state.execution_mode!r}, not {execution_mode!r}"
+                    )
+                return state
         if not goal:
             raise RunnerError("--goal is required")
         if io_path(self.path).exists() and not force_new:
@@ -240,6 +252,7 @@ class StateStore:
             run_id=str(uuid.uuid4()),
             goal=goal,
             project_root=str(self.root),
+            execution_mode=execution_mode,
         )
 
     def save(self, state: RunState) -> None:
