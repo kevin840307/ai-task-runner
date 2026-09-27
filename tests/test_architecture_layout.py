@@ -44,3 +44,16 @@ def test_workflow_runtime_has_clear_canonical_modules():
     assert (workflow / "routing.py").is_file()
     assert (workflow / "recovery.py").is_file()
     assert (workflow / "rules.py").is_file()
+
+
+def test_ui_workflow_studio_domain_is_not_implemented_in_server():
+    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+    studio = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+    assert "class WorkflowStudioMixin:" in studio
+    assert "class UIState(WorkflowStudioMixin, WorkflowBuilderMixin):" in server
+    assert "    def studio_files(" not in server
+    assert "    def studio_save(" not in server
+    assert "    def studio_visual_save(" not in server
+    assert "    def studio_stage_save(" not in server
+    assert "    def studio_validate(" not in server
