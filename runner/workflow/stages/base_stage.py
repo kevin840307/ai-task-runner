@@ -20,7 +20,6 @@ class BaseStageSpec:
     name: str
     status: str = "AI Stage"
     prompt: str = ""
-    continuation_prompt: str = ""
     instructions: str = ""
     detail: str = ""
     run_state: str = ""
@@ -202,7 +201,13 @@ class BaseStage:
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
         client.session_id = ""
         original = self._original_prompt(ctx, previous)
-        prompt = self._fresh_session_prompt(original)
+        original_mode = ctx.execution.retry_mode
+        try:
+            ctx.execution.retry_mode = "recover"
+            control = self._shared_control_prompt(ctx, previous, client)
+        finally:
+            ctx.execution.retry_mode = original_mode
+        prompt = original.rstrip() + ("\n\n" + control if control else "")
         return self._ask(ctx, client, self._with_immutable_protocol(prompt))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
@@ -274,13 +279,11 @@ class BaseStage:
         same_session = bool(getattr(client, "session_id", ""))
         prompt_seen = self._prompt_seen(ctx, client)
         feedback = self._control_feedback(ctx, previous)
-        if retry_mode == "same":
+        if retry_mode == "retry":
             mode = "retry"
-        elif retry_mode == "fresh":
+        elif retry_mode == "recover":
             mode = "recover"
-        elif feedback:
-            mode = "repair"
-        elif prompt_seen:
+        elif feedback or prompt_seen:
             mode = "continue"
         else:
             mode = "initial"
@@ -303,11 +306,6 @@ class BaseStage:
             lines.append(
                 "Retry only the failed part of this Stage. Preserve valid existing work "
                 "and do not repeat the exact failed action without new evidence."
-            )
-        elif mode == "repair":
-            lines.append(
-                "Repair only concrete gaps from Review/Validator/current evidence. "
-                "Preserve correct work and fix the shared root cause when applicable."
             )
         else:
             lines.append(
@@ -380,45 +378,6 @@ class BaseStage:
     def _with_immutable_protocol(self, prompt: str) -> str:
         """Append Runner-owned wire contract after editable Stage instructions."""
         return append_stage_protocol(prompt, self.result_kind)
-
-    def _retry_stage_label(self) -> str:
-        """Return a semantic retry label without leaking internal Stage ids."""
-        kind = str(getattr(self, "result_kind", "") or "")
-        return {
-            "tasks": "planning",
-            "task": "task",
-            "review": "review",
-            "validation": "validation",
-        }.get(kind, self.name)
-
-    def _same_session_prompt(self, ctx: StageContext) -> str:
-        error = ctx.execution.previous_error.strip()
-        stage_label = self._retry_stage_label()
-        readonly = (
-            " This is read-only: do not modify project files, run shell/write/edit tools, search for tools, or ask for unavailable tools; the previous attempt was restored if it changed files."
-            if self.spec.mode == MODE_READONLY
-            else ""
-        )
-        loop_note = (
-            " Do not repeat the exact failed action; if a read returned content or Unchanged, use that evidence and return the required structured result."
-            if "loop" in error.lower()
-            else ""
-        )
-        return (
-            f"Continue the same {stage_label} stage. Fix only the previous failure and preserve valid existing work."
-            f"{readonly}{loop_note}\n"
-            + (f"Previous failure: {error[-2000:]}\n" if error else "")
-            + "Return the result required by the original stage instructions; do not restart unrelated work.\n"
-        )
-
-    def _fresh_session_prompt(self, original: str) -> str:
-        stage_label = self._retry_stage_label()
-        return (
-            f"Continue the same {stage_label} stage in a fresh session. "
-            "Inspect the CURRENT project state first and preserve valid existing work.\n\n"
-            f"Stage instructions:\n{original}"
-        )
-
 
 
 BaseStage.spec_class = BaseStageSpec
