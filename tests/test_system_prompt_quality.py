@@ -21,7 +21,7 @@ def test_core_rules_cover_decomposition_large_projects_tests_and_evidence():
 
 
 def test_planner_splits_complex_work_without_overplanning_simple_work():
-    rules = _text(STAGES / "planning_rules.md")
+    rules = _text(STAGES / "planning.md")
     from runner.prompts.protocols import PLAN_PROTOCOL
     assert "A simple coherent change may be one TODO" in rules
     assert "Complex work should be split" in rules
@@ -83,7 +83,7 @@ def test_converged_prompts_control_scope_and_validation_cost():
 
 
 def test_converged_planner_uses_meaningful_boundaries_and_limited_context_todos():
-    rules = _text(STAGES / "planning_rules.md")
+    rules = _text(STAGES / "planning.md")
     from runner.prompts.protocols import PLAN_PROTOCOL
     assert "responsibility, dependency, risk, or verification boundaries" in rules
     assert "limited-context model" in rules
@@ -129,7 +129,7 @@ def test_plan_protocol_bounds_greenfield_and_repeated_discovery():
 
 def test_small_model_prompts_have_explicit_stop_rules():
     core = _text(SYSTEM / "rules.md")
-    planning = _text(STAGES / "planning_rules.md")
+    planning = _text(STAGES / "planning.md")
     execution = _text(STAGES / "execution.md")
     validator = _text(STAGES / "ai_validator.md")
     assert "stop exploring" in core
@@ -141,7 +141,7 @@ def test_small_model_prompts_have_explicit_stop_rules():
 def test_editable_prompt_word_budgets_stay_bounded_for_small_models():
     limits = {
         SYSTEM / "rules.md": 260,
-        STAGES / "planning_rules.md": 280,
+        STAGES / "planning.md": 280,
         STAGES / "execution.md": 440,
         STAGES / "review.md": 170,
         STAGES / "ai_validator.md": 320,
@@ -163,3 +163,13 @@ def test_execution_and_review_require_minimal_coherent_architecture_without_over
     assert "smallest coherent solution" in review
     assert "unnecessary abstraction" in review
     assert "not stylistic preferences" in review
+
+
+def test_planning_has_one_editable_prompt_asset():
+    planning = STAGES / "planning.md"
+    assert planning.is_file()
+    assert not (STAGES / "planning_rules.md").exists()
+    assert not (STAGES / "plan_finalize.md").exists()
+
+    from runner.workflow.stages.plan_stage import PlanStageSpec
+    assert PlanStageSpec(name="planning").prompt == "stages/planning.md"
