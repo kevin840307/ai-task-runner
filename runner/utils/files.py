@@ -9,6 +9,19 @@ from pathlib import Path
 
 from project_registry import path_key
 
+def _windows_extended_path(path: Path | str) -> Path:
+    """Return an extended-length Windows path without changing logical identity."""
+    value = Path(path)
+    if os.name != "nt" or not value.is_absolute():
+        return value
+    text = str(value)
+    if text.startswith("\\\\?\\"):
+        return value
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
+
+
 def io_path(path: Path | str) -> Path:
     """Return a Windows extended-length path only when MAX_PATH handling is risky.
 
@@ -21,9 +34,7 @@ def io_path(path: Path | str) -> Path:
     text = str(value)
     if text.startswith("\\\\?\\") or not value.is_absolute() or len(text) < 240:
         return value
-    if text.startswith("\\\\"):
-        return Path("\\\\?\\UNC\\" + text[2:])
-    return Path("\\\\?\\" + text)
+    return _windows_extended_path(value)
 
 
 def same_path(left: Path | str, right: Path | str) -> bool:
@@ -65,11 +76,18 @@ def digest(path: Path) -> str | None:
 
 
 def remove_path(path: Path) -> None:
-    value = io_path(path)
+    logical = Path(path)
+    value = io_path(logical)
     if value.is_symlink() or value.is_file():
         value.unlink(missing_ok=True)
-    elif value.exists():
-        shutil.rmtree(value)
+        return
+
+    # rmtree walks descendants. A short root can contain children beyond
+    # traditional MAX_PATH, so Windows must start the traversal through an
+    # extended-length root even when the root itself is short.
+    tree = _windows_extended_path(logical.absolute()) if os.name == "nt" else value
+    if tree.exists():
+        shutil.rmtree(tree)
 
 
 def copy_path(source: Path, target: Path) -> None:
