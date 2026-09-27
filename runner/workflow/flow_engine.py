@@ -236,7 +236,7 @@ class FlowEngine:
         return None, previous, False
 
     def _restore_transition(self) -> StageResult | None:
-        saved = self.context.state.transition_previous
+        saved = getattr(self.context.state, "transition_previous", {})
         if not saved:
             return None
         status = str(saved.get("status", "pass"))
