@@ -56,7 +56,7 @@ class _IndentedSafeDumper(yaml.SafeDumper):
 
 class UIState(WorkflowBuilderMixin):
     def __init__(self, repo_root: Path) -> None:
-        self.repo_root = Path(repo_root).expanduser().absolute()
+        self.repo_root = Path(repo_root).expanduser().resolve()
         self.ui_root = self.repo_root / "ui"
         self.static_root = self.ui_root / "static"
         self.projects_file = self.ui_root / "data" / "projects.json"
@@ -83,7 +83,7 @@ class UIState(WorkflowBuilderMixin):
 
     @staticmethod
     def _project_display_path(path: str | Path) -> str:
-        return str(Path(path).expanduser().absolute())
+        return str(Path(path).expanduser().resolve())
 
     def projects_payload(self) -> dict:
         # Runtime status is live process/state data. Do not cache it using only
@@ -276,7 +276,7 @@ class UIState(WorkflowBuilderMixin):
 
     def add_project(self, path: str) -> dict:
         with self._projects_lock, project_file_lock(self.projects_file):
-            resolved = Path(path).expanduser().absolute()
+            resolved = Path(path).expanduser().resolve()
             if not resolved.is_dir():
                 raise ValueError("Project folder does not exist")
             key = self._project_path_key(resolved)
@@ -982,7 +982,7 @@ class UIState(WorkflowBuilderMixin):
         text = str(message or "").strip()
         if not text:
             raise ValueError("Message is empty")
-        workflow_path = Path(workflow).expanduser().absolute() if workflow else None
+        workflow_path = Path(workflow).expanduser().resolve() if workflow else None
         if workflow_path is not None:
             allowed = {path_key(path) for path in self._known_workflow_paths(project)}
             if path_key(workflow_path) not in allowed:
