@@ -66,19 +66,6 @@ class Pipeline:
         previous: StageResult | None = None
         stop = False
 
-        # A previous final-validator failure resumes by running that validator's
-        # configured repair plan before returning to the static task SOP.
-        if state.stage == "validator_failed" and state.workflow_position < len(self.workflow):
-            definition = self.workflow[state.workflow_position]
-            recover = tuple(definition.get("recover", ()))
-            if recover:
-                generation = self._task_generation
-                _, previous, stop = self._run_steps(recover, executor, plan_only, previous)
-                if stop:
-                    return 0
-                if self._task_generation != generation and self._has_pending_task():
-                    self._restart_task_sop()
-
         while (
             state.workflow_position < len(self.workflow)
             and not stop
