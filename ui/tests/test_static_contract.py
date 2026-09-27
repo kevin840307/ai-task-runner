@@ -60,7 +60,10 @@ class StaticContractTests(unittest.TestCase):
         for removed in ("stagePromptPathInput", "stagePromptLibrarySelect", "stagePromptTextarea", "saveStagePrompt"):
             self.assertNotIn(removed, self.js)
         self.assertIn('t("stage.prompt_desc"', self.js)
-        self.assertIn('stageSupportsPrompt(type) { return ["base", "task", "review", "ai_validator"].includes(type); }', self.js)
+        self.assertIn('function stageTypeNames()', self.js)
+        self.assertIn('function stageHasOption(type, name)', self.js)
+        self.assertIn('stageHasOption(type, "prompt")', self.js)
+        self.assertIn('/api/workflow/catalog', self.js)
 
     def test_prompt_editor_is_first_class_and_has_runtime_param_chips(self):
         for token in ('id="promptEditorPanel"', 'id="studioPromptTextarea"', 'id="studioPromptParamList"', "Available Params"):
