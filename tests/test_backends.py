@@ -99,6 +99,8 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
 def test_transient_service_classifier_excludes_qwen_sandbox_docker_failures():
     assert is_transient_service_error("HTTP 503 Service Unavailable")
     assert is_transient_service_error("connection reset by peer")
+    assert is_transient_service_error("provider overloaded; try again later")
+    assert is_transient_service_error("upstream temporarily unavailable")
     assert not is_transient_service_error(
         "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine"
     )
