@@ -741,6 +741,10 @@ def assert_prompt_transport_contract(project: Path) -> None:
     for record in records:
         text = record.text
         if text.startswith("RUNNER_SHARED_STAGE_CONTROL"):
+            if "mode: recover" in text:
+                raise RuntimeError(
+                    f"fresh recover omitted stage instructions: {record.stage}"
+                )
             if record.session_mode != "resume":
                 raise RuntimeError(
                     f"shared same-session control did not resume existing session: {record.stage}"
