@@ -159,7 +159,6 @@ def install_plan(
     state.tasks = list(tasks)
     state.current = 0
     state.replan_feedback = ""
-    state.task_step = 0
 
 
 def complete_task(state: RunState, task: Task, session_id: str) -> None:
@@ -185,7 +184,6 @@ def complete_run(state: RunState) -> None:
     state.ai_session_id = ""
     state.replan_feedback = ""
     state.transition_previous = {}
-    state.task_step = 0
     state.completed = True
 
 
