@@ -38,3 +38,22 @@ def test_on_exhausted_fail_has_terminal_edge():
     })
     assert any(e["kind"] == "exhausted" and e["to"] == "__failed__:gate" for e in graph["edges"])
     assert any(n["id"] == "__failed__:gate" and n["virtual"] for n in graph["nodes"])
+
+
+def test_flow_map_node_routing_includes_fresh_after_same_failures():
+    graph = build_workflow_graph(
+        {
+            "stages": {
+                "gate": {
+                    "type": "review",
+                    "fresh_after_same_failures": 2,
+                    "recover": ["repair"],
+                },
+                "repair": {"type": "task"},
+            },
+            "flow": ["gate"],
+        }
+    )
+
+    gate = next(node for node in graph["nodes"] if node["id"] == "gate")
+    assert gate["routing"]["fresh_after_same_failures"] == 2
