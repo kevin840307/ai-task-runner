@@ -1377,3 +1377,14 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     assert producer.is_file()
     assert '"tasks"' in producer.read_text(encoding="utf-8")
     assert "--resume" in resumed
+
+
+def test_live_reliability_main_includes_complete_closed_loop_probe():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    main = source[source.index("def main() -> int:"):]
+    assert "complete_closed_loop_probe(settings, run_root)" in main
+    assert (
+        main.index("review_failure_routing_probe(settings, run_root)")
+        < main.index("complete_closed_loop_probe(settings, run_root)")
+        < main.index("validator_failure_routing_probe(settings, run_root)")
+    )
