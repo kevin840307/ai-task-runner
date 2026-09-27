@@ -121,7 +121,7 @@ Chat / CLI / API
 目前實作進度（2026-09-27）
 ========================
 
-已完成第一輪結構重構（尚待完整 pytest / live / 24H 驗證）：
+Linear 核心架構第一輪已完成；Windows + Ubuntu fast CI 已通過。real-Qwen / 24H 仍需本機驗證：
 - [x] 新增 canonical `WorkflowRunner`：`runner/workflow_runner.py`
 - [x] 舊 `TaskRunner` 保留 compatibility re-export，不再承載 runtime 實作
 - [x] 新增 canonical `FlowEngine`：`runner/workflow/flow_engine.py`
@@ -143,23 +143,41 @@ Chat / CLI / API
 - [x] Windows command placeholder path 正規化，避免 `\\` / `/` 混用
 - [x] Workflow catalog JSON stdout 改成 ASCII-safe，避免 cp1252 UnicodeEncodeError
 - [x] CI 加入 concurrency，後續 push 自動取消舊 SHA 測試
+- [x] `execution_mode` 收斂為相容 metadata；production bootstrap 永遠進同一個 `WorkflowRunner`
+- [x] 移除 mode -> alternate Runner 註冊路徑；未來差異改由 `RoutingStrategy` 承擔
+- [x] deterministic Resume semantic-equivalence：每個 durable checkpoint 模擬 process death + reload
+- [x] static contract：`workflow_position/task_step` 寫入只允許 `linear_routing.py`
+- [x] complete closed-loop live probe 改為 deterministic Review FAIL + deterministic Validator FAIL
+- [x] Review/Validator probe control markers 移至 `.ai-task-runner` work area
 
-仍未宣告完成：
-- [ ] Full pytest（Ubuntu 已 1029 passed；Windows path 修正後等待最新 main CI）
-- [ ] deterministic workflow dry-run matrix
-- [ ] real-Qwen resume / closed-loop probes
+Fast gate 已完成：
+- [x] Windows Python 3.11 compile + full pytest：1033 passed / 1 skipped / 3 subtests passed
+- [x] Ubuntu Python 3.11 compile + full pytest：1033 passed / 1 skipped / 3 subtests passed
+- [x] deterministic workflow dry-run matrix（由 full pytest 覆蓋）
+- [x] compound recoverable FAILs -> closure（由 full pytest 覆蓋）
+- [x] Linear cursor ownership static contract
+- [x] Resume semantic equivalence deterministic checkpoint matrix
+
+仍需本機真實環境驗證：
+- [ ] real-Qwen resume / Review FAIL / Validator FAIL / full closed-loop probes
+- [ ] API 429/502/503 + 3-minute disconnect live probes
+- [ ] YAML List resume / multi-TODO resume live probes
 - [ ] 24H high-density soak
-- [ ] 全 repo 搜尋確認沒有其他 module 偷改 Linear cursor
-- [ ] Resume semantic equivalence 的 kill-at-every-boundary 完整測試
-- [ ] RunState 欄位 grouping / routing_state schema 後續瘦身
+
+刻意延後，不視為目前 Linear blocker：
+- [ ] RunState nested grouping / routing_state schema migration：維持單一 state.json，等第二種 RoutingStrategy 前再評估
+- [ ] Workflow/Profile routing_strategy/editor metadata：等第二種 RoutingStrategy 前實作
+- [ ] `ui/server.py` domain split：獨立 maintainability phase，不與本次 Linear runtime refactor 混改
+- [ ] `qwen_live_reliability.py` probe module split：保留單一 CLI，後續按 probe category 拆
 
 P0 - 現在優先重構
 =================
 
-[ ] 1. 收斂成 Single WorkflowRunner
-現況：
-- TaskRunner 已經不只是 task executor，而是實際 Linear workflow bootstrap/runtime owner。
-- execution_modes.py 目前仍偏向 mode -> 不同 runner。
+[x] 1. 收斂成 Single WorkflowRunner
+完成狀態：
+- canonical runtime 已是 `WorkflowRunner`。
+- `TaskRunner` 只剩 compatibility re-export。
+- `execution_modes.py` 只保留目前 `linear` 的相容 metadata，不再持有 runner callback。
 
 方向：
 - TaskRunner 逐步收斂/改名為 WorkflowRunner。
@@ -174,12 +192,12 @@ P0 - 現在優先重構
 - mode 差異主要放在 RoutingStrategy。
 
 驗收：
-- 現有 Linear behavior 不變。
-- mock Dynamic Routing 可接入相同 WorkflowRunner。
-- 新 routing strategy 不需要複製 bootstrap / state / retry / session code。
+- 現有 Linear behavior 由跨平台 full pytest 保護。
+- production bootstrap 只有一條 `WorkflowRunner` runtime path。
+- 第二種 RoutingStrategy 尚未實作；未來不得複製 bootstrap / state / retry / session code。
 
 
-[ ] 2. 集中 Flow / Cursor 修改權
+[x] 2. 集中 Flow / Cursor 修改權
 現況：
 - Pipeline、RecoveryPolicy、rules.py 都會不同程度影響 workflow_position / task_step / replan / restart。
 - 人讀 code 時需要在多個檔案拼出完整流程。
@@ -202,7 +220,7 @@ P0 - 現在優先重構
 全部可從 routing code 一路看懂。
 
 
-[ ] 3. 明確區分 Technical Recovery 與 Semantic Routing
+[x] 3. 明確區分 Technical Recovery 與 Semantic Routing
 Technical Recovery（所有 routing strategy 共用）：
 - API 429/502/503
 - timeout
@@ -229,7 +247,7 @@ Semantic Routing（FlowEngine 負責）：
 - tests/live 明確分成 technical fault 與 semantic FAIL。
 
 
-[ ] 4. Durable Transition Context / Resume Semantic Equivalence
+[x] 4. Durable Transition Context / Resume Semantic Equivalence
 現況：
 - workflow_position / task_step durable。
 - Pipeline 啟動時 previous StageResult 重新從 None 開始。
@@ -254,7 +272,7 @@ Semantic Routing（FlowEngine 負責）：
 - state 不會無限膨脹。
 
 
-[ ] 5. 整理 RunState，但不要過度 class 化
+[ ] 5. 整理 RunState，但不要過度 class 化（刻意延後 schema migration）
 現況：
 - RunState 同時放：
   lifecycle
@@ -284,7 +302,7 @@ Semantic Routing（FlowEngine 負責）：
 - execution/routing strategy mismatch fail closed。
 
 
-[ ] 6. Stage Contract 統一
+[x] 6. Stage Contract 統一
 方向：
 - Plan / Execute / Review / Validator / Agent 都遵守同一 Stage contract。
 - Stage.run/context -> StageResult。
@@ -308,7 +326,7 @@ StageResult 原則：
 - Stage 不直接 mutate workflow_position。
 
 
-[ ] 7. Workflow Asset / UI Switching Contract
+[ ] 7. Workflow Asset / UI Switching Contract（第二種 RoutingStrategy 前）
 目標：
 未來 UI 能簡單切換不同 Workflow 類型，但 Chat 操作仍只有「選 Workflow」。
 
@@ -339,7 +357,7 @@ UI 行為：
 - 未來新增第四種 RoutingStrategy 時不需要改 Chat entry flow。
 
 
-[ ] 8. 重新整理 execution_modes.py
+[x] 8. 重新整理 execution_modes.py
 方向：
 - execution_mode/routing strategy 的角色重新確認。
 - 如果 mode 本質只剩 routing semantics，可逐步收斂：
@@ -356,7 +374,7 @@ UI 行為：
 P0 - Human Maintainability / Code Readability
 ============================================
 
-[ ] 9. 過長檔案與過長函式瘦身
+[ ] 9. 過長檔案與過長函式瘦身（核心已完成；UI/live harness 待獨立 phase）
 目的：
 不是追求行數漂亮，而是降低閱讀時需要同時記住的事情。
 
@@ -391,7 +409,7 @@ P0 - Human Maintainability / Code Readability
 - 不需要在 8~10 個 module 之間來回拼 execution flow。
 
 
-[ ] 10. 命名與檔案 responsibility 清理
+[x] 10. 命名與檔案 responsibility 清理
 重點：
 - rules.py 名稱過泛，評估改成更精準名稱或拆出 reducer responsibility。
 - RecoveryPolicy 名稱需避免 technical recovery / semantic recovery 混淆。
@@ -405,7 +423,7 @@ P0 - Human Maintainability / Code Readability
 - 不使用 manager/helper/utils 作為大型 domain class 名稱，除非真的只是 generic helper。
 
 
-[ ] 11. 刪除 legacy / duplicate paths
+[x] 11. 刪除 legacy / duplicate paths
 方向：
 - 每次新 abstraction 穩定後移除舊 path。
 - 不長期保留：
@@ -420,7 +438,7 @@ P0 - Human Maintainability / Code Readability
 - contract tests 防止 legacy path 被重新使用。
 
 
-[ ] 12. 文件跟著 code structure 走
+[x] 12. 文件跟著 code structure 走
 新增簡短 architecture.md 或 README section：
 - 1 張核心資料流圖。
 - 4 個核心概念：
@@ -572,9 +590,9 @@ Discussion 不建立另一套 Agent execution runtime。
 
 每個 P0 refactor 必須維持：
 
-[ ] Full pytest
-[ ] workflow_dryrun file/ai/mixed matrix closure
-[ ] compound recoverable FAILs -> closure
+[x] Full pytest（Windows + Ubuntu）
+[x] workflow_dryrun file/ai/mixed matrix closure
+[x] compound recoverable FAILs -> closure
 [ ] Review FAIL -> Execute deterministic/live
 [ ] Validator FAIL -> configurable Stage deterministic/live
 [ ] complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure
@@ -596,25 +614,26 @@ Discussion 不建立另一套 Agent execution runtime。
 
 新增架構 Gate：
 
-[ ] Resume semantic equivalence
-不中斷與每個 Stage boundary kill/resume 的 routing / feedback / final artifact 等價。
+[x] Resume semantic equivalence（deterministic checkpoint matrix）
+不中斷與每個 durable checkpoint crash/resume 的 Stage trace / routing / transition context 等價。
+real-Qwen process restart 仍保留在 live gate。
 
-[ ] Routing ownership
-Stage / reducer / validator 不直接修改 workflow destination。
+[x] Routing ownership
+Stage / reducer / validator 不直接修改 workflow destination；cursor mutation 有 static contract。
 
-[ ] Shared resilience
-Linear 與 mock Dynamic strategy 共用同一 StageExecutor retry/timeout/session recovery。
+[x] Shared resilience（目前 Linear）
+technical retry/timeout/session recovery 全由同一 StageExecutor owner。
 
-[ ] Strategy isolation
-新增 mock Dynamic RoutingStrategy 不需要複製 WorkflowRunner。
+[ ] Strategy isolation（第二種 RoutingStrategy 前）
+新增 Dynamic RoutingStrategy 時必須共用 WorkflowRunner/StageExecutor，不得註冊另一個 Runner。
 
 [ ] UI switching contract
 同一 workflow catalog 可依 metadata 載入不同 routing/editor capabilities。
 
-[ ] Human readability
+[x] Human readability（核心 runtime）
 核心正常流程可從：
-WorkflowRunner -> FlowEngine -> StageExecutor -> StateStore
-順著讀完，不需追蹤大量隱性 side effect。
+WorkflowRunner -> FlowEngine -> LinearRouting/SemanticRoutingPolicy -> StageExecutor -> StateStore
+順著讀完；canonical production core files 目前皆 < 400 lines。
 
 
 建議執行順序
