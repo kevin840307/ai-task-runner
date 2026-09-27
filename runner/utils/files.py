@@ -7,6 +7,8 @@ import os
 import shutil
 from pathlib import Path
 
+from project_registry import path_key
+
 def io_path(path: Path | str) -> Path:
     """Return a Windows extended-length path only when MAX_PATH handling is risky.
 
@@ -22,20 +24,6 @@ def io_path(path: Path | str) -> Path:
     if text.startswith("\\\\"):
         return Path("\\\\?\\UNC\\" + text[2:])
     return Path("\\\\?\\" + text)
-
-
-def path_key(path: Path | str) -> str:
-    """Return a stable identity key for an existing path, including Windows aliases."""
-    value = Path(path).expanduser()
-    try:
-        stat = io_path(value.absolute()).stat()
-        inode = int(getattr(stat, "st_ino", 0) or 0)
-        device = int(getattr(stat, "st_dev", 0) or 0)
-        if inode:
-            return f"fs:{device}:{inode}"
-    except OSError:
-        pass
-    return os.path.normcase(os.path.abspath(str(value)))
 
 
 def same_path(left: Path | str, right: Path | str) -> bool:
