@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+import runner.workflow.flow_engine as flow_engine_module
+
 from runner.api import RunRequest
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
@@ -1622,3 +1624,139 @@ def test_transition_context_waits_for_routing_checkpoint_before_save(tmp_path):
     assert saves == 0
     assert state.transition_previous["stage"] == "one"
     assert state.transition_previous["status"] == "pass"
+
+
+def test_resume_semantic_equivalence_at_every_linear_checkpoint(tmp_path, monkeypatch):
+    from runner.runtime.run_state import set_stage
+
+    class ProbeStage:
+        def __init__(self, name: str):
+            self.name = name
+
+    monkeypatch.setattr(
+        flow_engine_module,
+        "create_stage",
+        lambda definition: ProbeStage(str(definition["name"])),
+    )
+
+    workflow = [
+        {"name": "execute", "_workflow_index": 0},
+        {"name": "review", "restart_at": "execute", "_workflow_index": 1},
+        {"name": "final", "_workflow_index": 2},
+    ]
+
+    class ProbeExecutor:
+        def __init__(self, trace):
+            self.trace = trace
+
+        def run(self, stage, ctx, previous=None, *, label=""):
+            previous_fact = (
+                previous.stage,
+                previous.status,
+                previous.output,
+            ) if previous is not None else None
+            self.trace.append((stage.name, previous_fact))
+
+            if stage.name == "execute":
+                fixed = (
+                    previous is not None
+                    and previous.stage == "review"
+                    and previous.status == "fail"
+                )
+                return StageResult(
+                    "execute",
+                    "pass",
+                    output="fixed" if fixed else "initial",
+                )
+
+            if stage.name == "review":
+                passed = (
+                    previous is not None
+                    and previous.stage == "execute"
+                    and previous.output == "fixed"
+                )
+                return StageResult(
+                    "review",
+                    "pass" if passed else "fail",
+                    output="review-ok" if passed else "missing-fix",
+                    data={
+                        "completed": passed,
+                        "missing_items": [] if passed else ["fix"],
+                    },
+                    kind="review",
+                )
+
+            return StageResult(
+                "final",
+                "pass",
+                output=f"final-after:{previous.stage}:{previous.status}:{previous.output}",
+            )
+
+        def fresh_session(self, stage, ctx):
+            return None
+
+    class SimulatedCrash(BaseException):
+        def __init__(self, payload):
+            super().__init__("simulated process death after durable checkpoint")
+            self.payload = payload
+
+    def run_case(crash_at=None):
+        trace = []
+        state = RunState("run", "goal", str(tmp_path))
+        save_count = 0
+        crashed = False
+
+        while True:
+            def save_state():
+                nonlocal save_count, crashed
+                save_count += 1
+                payload = state.dump()
+                if crash_at == save_count and not crashed:
+                    crashed = True
+                    raise SimulatedCrash(payload)
+
+            def mark_stage(stage: str, detail: str = ""):
+                set_stage(state, stage, detail)
+                save_state()
+
+            context = StageContext(
+                config=RuntimeConfig(workflow=workflow),
+                root=tmp_path,
+                work=tmp_path / ".ai-task-runner",
+                state=state,
+                ai_client=FakeAI(),
+                state_file=tmp_path / "state.json",
+                validator_path=None,
+                validator_is_ai=True,
+                save_state=save_state,
+                set_stage=mark_stage,
+            )
+
+            try:
+                code = CanonicalFlowEngine(context, workflow).run(
+                    ProbeExecutor(trace)
+                )
+            except SimulatedCrash as exc:
+                state = RunState.load(exc.payload)
+                continue
+
+            return code, trace, state.dump(), save_count
+
+    baseline_code, baseline_trace, baseline_state, checkpoints = run_case()
+    assert baseline_code == 0
+    assert baseline_trace == [
+        ("execute", None),
+        ("review", ("execute", "pass", "initial")),
+        ("execute", ("review", "fail", "missing-fix")),
+        ("review", ("execute", "pass", "fixed")),
+        ("final", ("review", "pass", "review-ok")),
+    ]
+
+    for crash_at in range(1, checkpoints + 1):
+        code, trace, state, _ = run_case(crash_at)
+        assert code == baseline_code, crash_at
+        assert trace == baseline_trace, crash_at
+        assert state["completed"] == baseline_state["completed"], crash_at
+        assert state["workflow_position"] == baseline_state["workflow_position"], crash_at
+        assert state["task_step"] == baseline_state["task_step"], crash_at
+        assert state["transition_previous"] == baseline_state["transition_previous"], crash_at
