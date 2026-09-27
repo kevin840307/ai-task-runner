@@ -1,4 +1,4 @@
-# Grill may FAIL -> Repair Plan -> Grill again at most three times.
+# Grill may FAIL -> Planning -> Grill again at most three times.
 # The third FAIL is accepted and the workflow continues to final validation.
 # If a later routing step brings execution back to Grill, the counter starts at 1 again.
 stages:
@@ -10,19 +10,19 @@ stages:
     prompt: ../../runner/prompts/stages/grill.md
     fresh_session_on_start: true
     retry: 0
-    recover: [repair_plan]
+    recover: [planning]
     max_attempts: 3
     on_exhausted: continue
 
-  repair_plan:
+  planning:
     type: plan
-    repair_plan: true
+    planning: true
     fresh_session_on_start: true
 
   validate_ai:
     type: ai_validator
     validator: ai
-    recover: [repair_plan]
+    recover: [planning]
 
 flow:
   - planning
