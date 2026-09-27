@@ -1,331 +1,311 @@
-AI Task Runner - Future Execution Modes
-=======================================
+AI Task Runner - Future Architecture
+====================================
 
 Purpose
 -------
-The product should support multiple orchestration modes behind the same Chat/UI/run lifecycle.
-The user-facing contract stays simple for every mode: select one Workflow from Chat,
-enter one prompt, and start a Run. The selected Workflow/profile determines its
-execution_mode internally; Chat must not require a second mode selector.
-Do not force every future mode into the current linear Pipeline.
+Keep one reliable runtime and let future workflow interaction models change only
+routing semantics.
 
-Target modes
-------------
-1. Linear Workflow with Rollback / Loop
-   - Current primary mode.
-   - Deterministic/declarative Stage graph with next, recover, retry, restart_at,
-     bounded loop, max_attempts, on_exhausted, fresh session and validation gates.
-   - Best fit for unattended coding/regression/automation where the control path
-     should be inspectable and reproducible.
-
-2. Multi-Agent with Dynamic Handoff
-   - Multiple named/dynamic agents can transfer ownership to another agent at runtime.
-   - The next agent is chosen from runtime facts, not only a predeclared linear edge.
-   - Handoff must carry a bounded structured envelope rather than replaying the entire
-     transcript:
-       goal / task
-       current owner
-       target role
-       reason
-       facts/evidence
-       artifacts/changed files
-       unresolved items
-       constraints
-       suggested next action
-   - Must support bounded handoff count, loop detection, fresh-session policy,
-     fail-closed behavior, watchdog, resume, and durable state.
-   - UI should show agent ownership and dynamic edges as runtime events.
-
-3. Multi-Agent Group Chat / Discussion
-   - Several agents participate in one bounded discussion.
-   - Roles may include implementer, reviewer, tester, architect, validator, etc.
-   - A coordinator/policy chooses speakers and decides when discussion is sufficient.
-   - Discussion must not become an unbounded transcript.
-   - Persist structured summaries/decisions/evidence; keep raw history bounded.
-   - Termination policy must be explicit, for example:
-       max rounds
-       consensus / required votes
-       moderator decision
-       validator PASS
-       no-new-evidence threshold
-   - Write-capable execution should still occur through explicit controlled capabilities,
-     not by allowing every discussion participant to edit concurrently.
-
-Architecture direction
-----------------------
-Keep one stable outer Run contract and separate orchestration engines inside it.
-
-Recommended shape:
+The user-facing contract stays:
 
   Chat / CLI / API
-        |
-        v
-  RunRequest
-    execution_mode: linear | dynamic_handoff | group_chat
-        |
-        v
-  ExecutionModeRegistry
-        |
-        +--> LinearWorkflowOrchestrator
-        |      -> Pipeline -> FlowNode -> StageExecutor -> Stage
-        |
-        +--> DynamicHandoffOrchestrator
-        |      -> AgentRegistry / HandoffPolicy / shared capabilities
-        |
-        +--> GroupChatOrchestrator
-               -> ParticipantRegistry / SpeakerPolicy / DiscussionState
-                  / shared capabilities
+        ->
+  select Workflow/Profile
+        ->
+  enter Prompt
+        ->
+  Run
 
-Shared capabilities should remain reusable:
-  - Backend registry and model/session handling
-  - Prompt/resource snapshots
-  - Stage/capability registry
-  - validators
-  - protected-path / Git safety
-  - subprocess timeout/cleanup
-  - API transient retry
-  - watchdog / worker supervision
-  - durable state / resume
-  - bounded logs/debug history
-  - runtime events
-  - UI project ownership / stop / resume
-  - tool/plugin boundary
+Chat must not require a separate Linear / Dynamic / Discussion mode selector.
+The selected Workflow/Profile carries its own routing/editor metadata.
 
-Do NOT implement dynamic handoff or group chat merely as another Stage type.
-A Stage can be used as a leaf capability inside those modes, but orchestration ownership
-belongs to the selected ExecutionMode/Orchestrator.
+Core design rule
+----------------
+Stage is the only execution unit.
 
-Current architecture readiness
-------------------------------
-Linear Workflow:
-  Readiness: HIGH
-  The current Pipeline, FlowNode, StageExecutor, semantic recovery, restart_at,
-  max_attempts, dry-run and Flow Map already match this mode well.
+Plan, Execute, Review, Validator, Command, Coder, Reviewer, Architect,
+Researcher and Moderator are all Stages.
 
-Dynamic Handoff:
-  Readiness: MEDIUM
-  Reusable pieces already exist: backend/session handling, Stage registry, durable state,
-  retry/recovery, events, watchdog, snapshots and UI runtime shell.
-  Main missing abstraction: the top-level runtime is still effectively TaskRunner ->
-  Workflow/Pipeline. Add ExecutionModeRegistry before implementing handoff behavior.
+An Agent is not a second runtime abstraction. It is normally an AI Stage with
+role / prompt / session_key / tools / safety configuration.
 
-Group Chat:
-  Readiness: MEDIUM-LOW
-  Shared runtime safety is reusable, but discussion needs new first-class concepts:
-  Participant/Agent identity, speaker selection, bounded conversation state,
-  decision/consensus policy and termination policy.
-  Do not reuse Workflow retry/recover semantics as conversation semantics.
+The runtime stays:
 
-Required architecture changes before adding the two multi-agent modes
----------------------------------------------------------------------
-1. Introduce execution_mode without breaking existing requests.
-   - Default must remain "linear".
-   - Existing CLI/YAML/API/UI behavior must remain compatible.
-   - Do not require old workflow files to add a mode field.
+  WorkflowRunner
+    |-- FlowEngine
+    |    '-- RoutingStrategy
+    |         |-- Linear
+    |         |-- Dynamic
+    |         '-- Discussion
+    |
+    |-- StageExecutor
+    |    |-- technical retry
+    |    |-- timeout
+    |    |-- API transient recovery
+    |    |-- same-session retry
+    |    |-- fresh-session escalation
+    |    |-- watchdog integration
+    |    '-- safety/hooks
+    |
+    '-- StateStore
+         |-- durable state
+         |-- checkpoint
+         '-- resume
 
-2. Add an ExecutionModeRegistry.
-   Each mode should expose a small common contract such as:
-     validate(config)
-     run(context)
-     resume(context)
-     describe() / catalog metadata
+Do NOT create separate full runtimes such as:
+- LinearWorkflowOrchestrator
+- DynamicHandoffOrchestrator
+- GroupChatOrchestrator
 
-3. Remove RuntimeConfig's architectural assumption that every mode requires a non-empty
-   linear workflow.
-   - Linear mode keeps the current requirement.
-   - Other modes validate their own configuration.
+Future strategies must reuse WorkflowRunner, StageExecutor, StateStore,
+backend/session handling, protected-path safety, diagnostics and resume.
 
-4. Keep orchestration state mode-owned but preserve a shared RunState envelope.
-   Shared envelope should contain at least:
-     run_id
-     execution_mode
-     lifecycle: running | completed | failed | stopped
-     current owner/actor
-     resumable
-     progress_revision
-     timestamps
-     mode_state reference/version
+Target routing strategies
+-------------------------
 
-   progress_revision must increase only on meaningful durable semantic progress. The
-   outer unattended recovery loop should compare this generic revision instead of
-   understanding Workflow position, TODO counters, handoff count or discussion rounds.
+1. Linear Workflow with Rollback / Loop
+   Current production strategy.
 
-   Today RunResult completion/no-progress detection still contains linear Workflow
-   assumptions (for example completed/skipped Stage state and Workflow-oriented progress
-   fields). Keep those for current compatibility, but move them behind the shared
-   lifecycle/progress_revision contract before enabling non-linear modes.
+   Flow is declarative and inspectable:
+   - next
+   - restart_at
+   - recover edge
+   - repeat
+   - max_attempts
+   - on_exhausted
+   - task scope
+   - validation rollback
 
-   execution_mode must also be persisted as immutable Run identity metadata. Resume must
-   reject a request that tries to resume durable state with a different execution mode.
-   Mode-owned snapshots/state must never be interpreted by another Orchestrator.
+   Technical retry/recovery remains outside Linear routing.
 
-5. Give runtime graph invocations stable IDs before general graph/dynamic routing.
-   Current linear Workflow commonly addresses a Stage by Stage name. This is acceptable
-   for existing compatible flows, but dynamic graphs can contain repeated instances of
-   the same Stage/Agent. Future graph edges should target invocation/node IDs rather than
-   relying only on Stage names.
+2. Dynamic Handoff
+   Future strategy.
 
-6. Keep event schema generic.
-   Common event types should support:
-     run_started / run_finished
-     node_started / node_finished
-     status/progress
-     retry/recover
-     agent_started / agent_finished
-     handoff
-     discussion_message
-     decision
-     validation
-   UI should render unknown future event types safely instead of crashing.
+   Multiple role-based AI Stages may hand work to another Stage at runtime.
 
-7. Keep Chat Workflow-driven while making the selected asset mode-aware.
-   Chat remains the universal entry point and must keep the same user flow:
-     select Workflow
-     enter Prompt
-     Run
+   Example:
 
-   A selectable Workflow entry is a user-facing orchestration asset. Internally it may be:
-     Linear -> current Workflow YAML
-     Dynamic Handoff -> Handoff profile/team
-     Group Chat -> Discussion profile/team
+     Planner
+        ->
+     Coder
+        ->
+     Reviewer
+        |-- code problem ------> Coder
+        |-- architecture issue -> Architect
+        |-- missing evidence --> Researcher
+        '-- PASS -------------> Validator
 
-   Each catalog entry must expose its execution_mode metadata so UI/server can dispatch
-   correctly without asking the user to choose the mode separately. The main UI shell,
-   project list, messages, runtime state, stop/resume and diagnostics stay shared.
-   The editor/visualizer opened for the selected asset is chosen from its mode:
-     Linear -> Workflow graph/editor
-     Dynamic Handoff -> agent graph + runtime handoff edges
-     Group Chat -> participant/team editor + discussion timeline/decision view
+   The Stage may return bounded structured routing intent, for example:
+     target
+     reason
+     evidence/context reference
 
-8. Add a mode catalog similar to the current Stage catalog, but keep it an internal
-   capability/editor registry rather than a required Chat selector.
-   UI/server may use it to discover supported modes and editor/config metadata instead
-   of hardcoding future mode names.
+   FlowEngine validates that intent and the Dynamic RoutingStrategy decides the
+   next Stage.
 
-Current YAML batch boundary
+   Dynamic Handoff must not create its own retry/session/watchdog runtime.
+
+3. Discussion / Group Chat
+   Future strategy.
+
+   Participants are still Stages.
+
+   Example:
+
+     Architect -> Coder -> Reviewer -> Security
+              discussion round
+                    |
+              next round?
+               /       \
+             yes       no
+              |         |
+          next round   Judge
+                         |
+                      Execute
+
+   Discussion-specific state may include:
+   - round
+   - active speaker
+   - participant order/policy
+   - bounded discussion summary
+   - judge/moderator decision
+
+   Raw transcript must remain bounded.
+
+   Discussion must reuse the same Stage execution reliability and project write
+   safety.
+
+Shared runtime capabilities
 ---------------------------
-The existing --script YAML List runner is part of the Linear execution surface today.
-It batches Linear Workflow runs and must fail fast if paired with a non-linear
-execution_mode. This avoids bypassing ExecutionModeRegistry with ambiguous semantics.
+The following are mode-neutral and must remain shared:
 
-Future Dynamic Handoff / Group Chat batching should be introduced only with an explicit
-mode-aware asset/batch contract. Do not silently reinterpret the current YAML List format
-or add per-item execution_mode overrides until resume identity, mode-owned state, and
-completion/progress contracts are generic.
+- StageExecutor
+- backend/model selection
+- AI session handling
+- API transient classification
+- same-session retry
+- fresh-session escalation
+- timeout
+- watchdog
+- process ownership
+- subprocess cleanup
+- protected-path / Git safety
+- durable save
+- checkpoint/resume
+- bounded diagnostics/logging
+- prompt/resource snapshots
+- validators
+- plugin/tool boundary
 
-Dry-run / validation direction
-------------------------------
-Do not claim one dry-run engine validates every mode.
+Mode-specific semantics
+-----------------------
+These belong to RoutingStrategy, not StageExecutor:
 
 Linear:
-  - Current semantic Workflow dry-run remains.
-  - Technical StageExecutor retry is tested separately.
+- workflow_position
+- task_step
+- restart_at
+- rollback
+- recover edge
+- repeat
 
-Dynamic Handoff:
-  - Add deterministic handoff-policy simulation.
-  - Verify bounded hops, allowed targets, loop stop, unavailable agent behavior,
-    resume and fail-closed paths.
+Dynamic:
+- current owner
+- handoff target
+- handoff budget
+- allowed target policy
 
-Group Chat:
-  - Add discussion-policy simulation.
-  - Verify speaker/round bounds, termination policy, no-new-evidence stop,
-    moderator/validator behavior and transcript bounds.
+Discussion:
+- round
+- next speaker
+- moderator/judge
+- termination rule
 
-24H unattended requirements for every mode
-------------------------------------------
-Every mode must preserve:
-  - bounded retry/recovery/round/handoff behavior
-  - no infinite loop
-  - worker hang watchdog
-  - subprocess cleanup
-  - resumable durable state
-  - crash-loop protection
-  - bounded logs/transcripts
-  - API outage recovery
-  - explicit completion condition
-  - fail closed when invariants cannot be proven
-  - no concurrent writers without an ownership/write policy
-  - UI state must reflect durable runtime state, not optimistic client-only state
+State direction
+---------------
+Keep one authoritative durable RunState / state.json commit point.
 
-Multi-agent write safety
-------------------------
-Dynamic/group modes must avoid uncontrolled concurrent edits.
+Conceptually separate:
+- common lifecycle
+- Stage/session state
+- latest transition context
+- routing_state
 
-Preferred rule:
-  - many agents may read/reason/review concurrently;
-  - one write owner at a time per project/worktree unless the mode explicitly allocates
-    isolated worktrees;
-  - handoff transfers write ownership explicitly;
-  - merge/reconcile is a first-class controlled operation if parallel worktrees are used.
+Do not prematurely create three large state class hierarchies.
 
-Compatibility rules
--------------------
-- Existing linear Workflow YAML remains valid.
-- Existing Stage registry remains useful and must not be replaced.
-- Existing system/custom workflows stay runnable without migration.
-- execution_mode defaults to linear.
-- UI should continue to select Workflow + Prompt exactly as today for every mode.
-- The selected catalog entry owns execution_mode metadata; do not require a separate Chat
-  mode selector.
-- Future modes may add their own profile/config files, but should reuse prompts/backends/
-  validators/plugins rather than duplicate those systems.
-- Recovery/retry/watchdog logic that is truly generic belongs in shared runtime services;
-  mode-specific control logic stays inside each Orchestrator.
+Future routing_state examples:
 
-Suggested implementation order
-------------------------------
-Phase 1 - Architecture boundary only
-  - Add ExecutionMode protocol/registry.
-  - Register current Linear mode as the default adapter around existing TaskRunner.
-  - Add mode catalog for UI.
-  - No behavior change to existing workflows.
+Linear:
+  strategy: linear
+  position: ...
+  task_step: ...
 
-Phase 2 - Dynamic Handoff
-  - Agent/profile registry.
-  - Durable HandoffState and stable agent/node IDs.
-  - Bounded HandoffPolicy.
-  - Runtime events + UI graph support.
-  - Deterministic handoff dry-run.
+Dynamic:
+  strategy: dynamic
+  current_stage: ...
+  handoff_count: ...
 
-Phase 3 - Group Chat
-  - Participant/team profile.
-  - DiscussionState and bounded transcript/summary.
-  - Speaker/termination/decision policies.
-  - Write-owner policy.
-  - Discussion simulation and UI timeline.
+Discussion:
+  strategy: discussion
+  round: ...
+  active_speaker: ...
 
-Phase 4 - Optional composition
-  - Allow one mode to invoke a bounded child mode as a capability only when needed.
-  - Example: a Linear Workflow Stage may invoke one bounded Group Chat review and return
-    a structured result.
-  - Avoid arbitrary recursive orchestration by default.
+Only introduce structural schema migration after ownership is stable and resume
+compatibility is covered by tests.
 
-Current implementation status
------------------------------
-Phase 1 foundation is now partially implemented:
-  - public RunRequest/RuntimeConfig support execution_mode with backward-compatible
-    default "linear";
-  - bootstrap dispatches through ExecutionModeRegistry instead of importing TaskRunner;
-  - current TaskRunner is registered as the linear execution-mode adapter;
-  - modes declare whether they require a Workflow;
-  - a standalone execution-mode catalog exists for detached UI discovery;
-  - UI server exposes the execution-mode catalog without importing Runner Core;
-  - existing linear CLI/UI behavior remains the default and requires no migration.
+UI direction
+------------
+Use one Workflow/Profile catalog and preferably one Graph Designer.
 
-Still intentionally NOT implemented:
-  - Non-linear Workflow/profile catalog entries that resolve execution_mode automatically;
-  - DynamicHandoffOrchestrator;
-  - GroupChatOrchestrator;
-  - stable runtime node/invocation IDs for general dynamic graphs;
-  - agent/team profile schema;
-  - handoff/discussion state and policy;
-  - dynamic/group dry-run simulators.
+Node:
+  Stage
 
-The next multi-agent implementation should build on this boundary rather than adding
-special cases to TaskRunner/Pipeline.
+Edge:
+  routing
 
-Design rule
------------
-Keep the current reliable linear engine simple.
-Add new orchestration modes beside it, not inside it.
-Share infrastructure; do not share control-flow semantics that are fundamentally different.
+Workflow/Profile metadata should eventually expose:
+- id
+- name
+- routing_strategy
+- editor_kind
+- schema_version
+- capabilities
+- source/location
+
+Chat remains:
+  select Workflow -> Prompt -> Run
+
+Editor behavior may vary by metadata:
+- Linear: normal/restart/recover edges
+- Dynamic: handoff targets / runtime dynamic edges
+- Discussion: participant/group/round properties
+
+Do not build three unrelated UI products unless real requirements prove it is
+necessary.
+
+Write ownership
+---------------
+Future multi-agent strategies must not allow uncontrolled concurrent writes.
+
+Default rule:
+- many Stages may read/reason/review;
+- only one write owner per project/worktree at a time;
+- handoff explicitly transfers write ownership;
+- parallel writers require isolated worktrees plus controlled merge/reconcile.
+
+Compatibility
+-------------
+- Existing Linear Workflow YAML remains valid.
+- Existing Stage registry remains the execution catalog.
+- execution_mode defaults to linear while the public compatibility field exists.
+- YAML List remains Linear-only until a mode-aware batching contract is designed.
+- Existing Chat/UI workflow selection remains unchanged.
+- Old compatibility module/class names may remain as re-exports, but no new
+  runtime behavior may be added to them.
+
+Implementation order
+--------------------
+
+Current:
+1. Finish Linear architecture cleanup.
+2. Keep WorkflowRunner / FlowEngine / LinearRouting / StageExecutor boundaries.
+3. Prove deterministic closure and resume equivalence.
+4. Pass Windows + Ubuntu fast CI.
+5. Pass real-Qwen closed-loop probes.
+6. Pass 24H high-density soak.
+
+Before the second routing strategy:
+7. Define the smallest RoutingStrategy protocol from the real Linear code.
+8. Add workflow/profile routing metadata used by runtime and UI.
+9. Keep the same WorkflowRunner and StageExecutor.
+
+Dynamic:
+10. Implement one minimal Dynamic RoutingStrategy prototype.
+11. Use existing AI Stage configurations for Coder/Reviewer/Architect roles.
+12. Add bounded handoff state and deterministic simulation.
+
+Discussion:
+13. Build on the same Stage/runtime contract.
+14. Add only discussion-specific round/speaker/termination state.
+15. Add deterministic discussion simulation before live use.
+
+Avoid premature abstractions
+----------------------------
+Do not introduce until real second-strategy requirements prove they are needed:
+- UniversalAgent
+- GenericEverything
+- multiple full Orchestrators
+- arbitrary expression language in edges
+- unlimited DAG semantics
+- large AgentMessage hierarchy
+- separate runtime per interaction model
+
+Final rule
+----------
+Workflow defines the work.
+Stage performs one responsibility.
+StageExecutor makes Stage execution reliable.
+FlowEngine decides what happens next through RoutingStrategy.
+
+Agent is a Stage.
+Routing is what changes between Linear, Dynamic and Discussion.
