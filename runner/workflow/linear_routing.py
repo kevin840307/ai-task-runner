@@ -11,7 +11,7 @@ from typing import Any
 
 from ..errors import RunnerError
 from .registry import stage_result_kind
-from .stages import StageContext, StageResult
+from .stages.contracts import StageContext, StageResult
 
 
 class LinearRouting:
