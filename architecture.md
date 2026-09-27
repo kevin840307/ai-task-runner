@@ -6,6 +6,16 @@ The current production routing strategy is **Linear Workflow with rollback/loop*
 Dynamic handoff and discussion routing are future extensions only; they must reuse
 this runtime instead of creating separate runners.
 
+### execution_mode compatibility
+
+The public `execution_mode` request/state field currently accepts only `linear`.
+It is compatibility/identity metadata, not a registry for alternate Runner
+implementations.
+
+Production bootstrap always enters `WorkflowRunner`. Future Dynamic/Discussion
+behavior must be introduced as RoutingStrategy behavior behind `FlowEngine`, not
+through `register_execution_mode(... runner=...)` or a second runtime.
+
 ## Core runtime
 
 ```text
