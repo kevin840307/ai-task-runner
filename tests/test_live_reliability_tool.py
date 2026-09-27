@@ -620,7 +620,7 @@ def test_prompt_records_correlate_stage_and_history(tmp_path: Path):
             {"type": "model.prompt", "call_id": "c1", "session": "s1", "session_mode": "resume"},
             {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
         ],
-        {"c1": "Continue the same execute stage.\nPrevious failure: x\n"},
+        {"c1": "RUNNER_SHARED_STAGE_CONTROL\nmode: retry\nprevious_error: x\n"},
     )
 
     records = live.prompt_records(project)
@@ -628,7 +628,7 @@ def test_prompt_records_correlate_stage_and_history(tmp_path: Path):
     assert len(records) == 1
     assert records[0].stage == "execute"
     assert records[0].session == "s1"
-    assert records[0].text.startswith("Continue the same execute stage")
+    assert records[0].text.startswith("RUNNER_SHARED_STAGE_CONTROL")
 
 
 def test_prompt_contract_rejects_static_context_on_same_session_retry(tmp_path: Path):
@@ -640,7 +640,7 @@ def test_prompt_contract_rejects_static_context_on_same_session_retry(tmp_path: 
         ],
         {
             "c1": (
-                "Continue the same execute stage.\n"
+                "RUNNER_SHARED_STAGE_CONTROL\nmode: retry\n"
                 "Previous failure: x\n"
                 "Goal (context/global constraints only): repeated\n"
             )
@@ -658,7 +658,7 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
             {"type": "runner.stage", "action": "start", "stage": "execute"},
             {"type": "model.prompt", "call_id": "c1", "session": "", "session_mode": "new"},
         ],
-        {"c1": "Continue the same execute stage in a fresh session.\n"},
+        {"c1": "RUNNER_SHARED_STAGE_CONTROL\nmode: recover\n"},
     )
 
     with pytest.raises(RuntimeError, match="omitted stage instructions"):
@@ -694,12 +694,12 @@ def test_system_topology_contract(tmp_path: Path, workflow: str, validators: lis
     live.assert_system_topology(project, workflow)
 
 @pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
-def test_review_repair_validator_accepts_two_logical_lines_with_optional_final_newline(
+def test_review_failure_routing_validator_accepts_two_logical_lines_with_optional_final_newline(
     tmp_path: Path,
     content: str,
 ):
     validator = tmp_path / "validation.py"
-    validator.write_text(live.REVIEW_REPAIR_VALIDATOR, encoding="utf-8")
+    validator.write_text(live.REVIEW_ROUTING_VALIDATOR, encoding="utf-8")
     (tmp_path / "review.txt").write_text(content, encoding="utf-8")
     state = tmp_path / "state.json"
     state.write_text("{}", encoding="utf-8")
@@ -715,9 +715,9 @@ def test_review_repair_validator_accepts_two_logical_lines_with_optional_final_n
     assert "VALIDATION_PASSED" in result.stdout
 
 
-def test_review_repair_validator_failure_points_only_to_review_file(tmp_path: Path):
+def test_review_failure_routing_validator_failure_points_only_to_review_file(tmp_path: Path):
     validator = tmp_path / "validation.py"
-    validator.write_text(live.REVIEW_REPAIR_VALIDATOR, encoding="utf-8")
+    validator.write_text(live.REVIEW_ROUTING_VALIDATOR, encoding="utf-8")
     (tmp_path / "review.txt").write_text("READY\n", encoding="utf-8")
     state = tmp_path / "state.json"
     state.write_text("{}", encoding="utf-8")
@@ -734,21 +734,21 @@ def test_review_repair_validator_failure_points_only_to_review_file(tmp_path: Pa
     assert "validation.py" not in result.stdout
 
 
-def test_review_repair_probe_contract_does_not_require_exact_eof_bytes():
-    assert "A standard final newline is allowed." in live.REVIEW_REPAIR_PROMPT
-    assert "Modify review.txt only" in live.REVIEW_REPAIR_PROMPT
-    assert "splitlines()" in live.REVIEW_REPAIR_VALIDATOR
+def test_review_failure_routing_probe_contract_does_not_require_exact_eof_bytes():
+    assert "A standard final newline is allowed." in live.REVIEW_ROUTING_PROMPT
+    assert "Modify review.txt only" in live.REVIEW_ROUTING_PROMPT
+    assert "splitlines()" in live.REVIEW_ROUTING_VALIDATOR
 
 
-def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
+def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
         project = Path(command[command.index("--project-root") + 1])
         workflow = Path(command[command.index("--workflow") + 1])
         assert workflow == project / "workflow.yaml"
-        assert workflow.read_text(encoding="utf-8") == live.REVIEW_REPAIR_WORKFLOW
-        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_REPAIR_SEED
+        assert workflow.read_text(encoding="utf-8") == live.REVIEW_ROUTING_WORKFLOW
+        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_SEED
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
         history.mkdir(parents=True)
@@ -758,20 +758,20 @@ def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
         events = [
             {"type": "runner.stage", "action": "start", "stage": "review"},
             {"type": "runner.stage", "action": "finish", "stage": "review", "result": "fail"},
-            {"type": "runner.stage", "action": "start", "stage": "repair"},
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
             {
                 "type": "model.prompt",
-                "call_id": "repair-1",
+                "call_id": "execute-2",
                 "session": "execute-session",
                 "session_mode": "resume",
             },
-            {"type": "runner.stage", "action": "finish", "stage": "repair", "result": "pass"},
+            {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
         ]
         (work / "log.txt").write_text(
             "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
         )
-        (history / "repair-1-prompt.txt").write_text(
-            'Continue normal task execution in this same session.\nLatest review: {"missing_items":["REVIEW_REQUIRED"]}\n',
+        (history / "execute-2-prompt.txt").write_text(
+            'RUNNER_SHARED_STAGE_CONTROL\nmode: continue\nfeedback:\nReview missing_items: ["REVIEW_REQUIRED"]\n',
             encoding="utf-8",
         )
         (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
@@ -783,37 +783,40 @@ def test_review_repair_probe_uses_state_completion_and_semantic_repair_path(
 
     monkeypatch.setattr(live, "run_command", fake_run)
 
-    live.review_repair_prompt_probe(settings(tmp_path), tmp_path)
+    live.review_failure_routing_probe(settings(tmp_path), tmp_path)
 
     # This probe owns review.txt, not the generic health.txt contract.
     assert not (tmp_path / "review-repair-prompt-probe" / "health.txt").exists()
 
 
-def test_review_repair_probe_uses_deterministic_seed_stage():
-    assert "deterministically seeds review.txt with only READY" in live.REVIEW_REPAIR_PROMPT
-    assert 'type: command' in live.REVIEW_REPAIR_WORKFLOW
-    assert 'command: "{python} seed_review.py"' in live.REVIEW_REPAIR_WORKFLOW
-    assert 'skip_on_error: false' in live.REVIEW_REPAIR_WORKFLOW
-    assert 'recover: [repair]' in live.REVIEW_REPAIR_WORKFLOW
-    assert 'READY\\n' in live.REVIEW_REPAIR_SEED
-    assert "intentionally write only READY" not in live.REVIEW_REPAIR_PROMPT
+def test_review_failure_routing_probe_uses_deterministic_seed_stage():
+    assert "deterministically seeds review.txt with only READY" in live.REVIEW_ROUTING_PROMPT
+    assert 'type: command' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'command: "{python} seed_review.py"' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'skip_on_error: false' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'restart_at: execute' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'continuation_prompt' not in live.REVIEW_ROUTING_WORKFLOW
+    assert 'READY\\n' in live.REVIEW_ROUTING_SEED
+    assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
 
-def test_review_repair_probe_workflow_forces_seed_before_review(tmp_path: Path):
+def test_review_failure_routing_probe_workflow_forces_seed_before_review(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
-    workflow_path.write_text(live.REVIEW_REPAIR_WORKFLOW, encoding="utf-8")
+    workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
 
     assert [node["name"] for node in workflow] == [
-        "planning", "seed", "review", "validate_file"
+        "planning", "seed", "execute", "review", "validate_file"
     ]
     assert workflow[1]["scope"] == "task"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["scope"] == "task"
-    assert workflow[2]["recover"][0]["name"] == "repair"
-    assert workflow[3]["recover"][0]["name"] == "repair"
+    assert workflow[2]["type"] == "task"
+    assert workflow[3]["scope"] == "task"
+    assert workflow[3]["restart_at"] == "execute"
+    assert workflow[4]["restart_at"] == "execute"
 
-    compile(live.REVIEW_REPAIR_SEED, "seed_review.py", "exec")
+    compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
 
 
 def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
