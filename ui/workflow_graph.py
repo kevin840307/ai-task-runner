@@ -67,8 +67,48 @@ def build_workflow_graph(data: dict[str, Any]) -> dict:
         add_node(name, cfg)
         flow_nodes.append((name, cfg))
 
-    for index in range(len(flow_nodes) - 1):
-        edges.append({"from": flow_nodes[index][0], "to": flow_nodes[index + 1][0], "kind": "normal", "label": "next"})
+    # Mirror Loader's implicit Plan -> Task -> Review lifecycle for visualization.
+    # These nodes are explanatory/virtual only; YAML stays compact and runtime
+    # remains owned by runner.workflow.loader._expand_plan_task_flow().
+    display_flow: list[str] = []
+    for index, (name, cfg) in enumerate(flow_nodes):
+        display_flow.append(name)
+        next_is_explicit_task_scope = (
+            index + 1 < len(flow_nodes)
+            and str(flow_nodes[index + 1][1].get("scope") or "") == "task"
+        )
+        if str(cfg.get("type") or "") != "plan" or next_is_explicit_task_scope:
+            continue
+        task_id = f"__plan_task__:{index}:{name}"
+        review_id = f"__plan_review__:{index}:{name}"
+        nodes[task_id] = {
+            "id": task_id,
+            "label": "Execute · built-in",
+            "type": "task",
+            "prompt": "stages/execution.md",
+            "virtual": True,
+            "runtime_stage": "__plan_task__",
+            "routing": {},
+        }
+        nodes[review_id] = {
+            "id": review_id,
+            "label": "Review · built-in",
+            "type": "review",
+            "prompt": "stages/review.md",
+            "virtual": True,
+            "runtime_stage": "__plan_review__",
+            "routing": {"restart_at": task_id},
+        }
+        display_flow.extend([task_id, review_id])
+        edges.append({
+            "from": review_id,
+            "to": task_id,
+            "kind": "restart",
+            "label": "FAIL → Execute",
+        })
+
+    for index in range(len(display_flow) - 1):
+        edges.append({"from": display_flow[index], "to": display_flow[index + 1], "kind": "normal", "label": "next"})
 
     normal_successor = {flow_nodes[i][0]: flow_nodes[i + 1][0] for i in range(len(flow_nodes) - 1)}
 
