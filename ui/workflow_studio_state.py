@@ -124,7 +124,7 @@ class WorkflowStudioMixin:
                 continue
             path = f"{prefix}.{key_node.value}" if prefix else key_node.value
             result.append(path)
-            result.extend(UIState._ast_dict_paths(value_node, path))
+            result.extend(WorkflowStudioMixin._ast_dict_paths(value_node, path))
         return result
 
     @staticmethod
@@ -1164,14 +1164,14 @@ class WorkflowStudioMixin:
                         if isinstance(item, str) and item == stage_name:
                             refs.append(item_path)
                         elif isinstance(item, (dict, list)):
-                            refs.extend(UIState._stage_reference_paths(item, stage_name, item_path))
+                            refs.extend(WorkflowStudioMixin._stage_reference_paths(item, stage_name, item_path))
                     continue
                 if isinstance(child, (dict, list)):
-                    refs.extend(UIState._stage_reference_paths(child, stage_name, current))
+                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, current))
         elif isinstance(value, list):
             for index, child in enumerate(value):
                 if isinstance(child, (dict, list)):
-                    refs.extend(UIState._stage_reference_paths(child, stage_name, f"{path}[{index}]"))
+                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, f"{path}[{index}]"))
         return refs
 
     @staticmethod
