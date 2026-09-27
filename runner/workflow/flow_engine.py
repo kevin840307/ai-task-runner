@@ -270,6 +270,9 @@ class FlowEngine:
                 "text": bounded_text(data_json, MAX_VALIDATOR_OUTPUT_CHARS),
             }
         )
+        # Do not save here. The transition context must commit together with
+        # the next routing/cursor checkpoint; otherwise a crash could persist
+        # a new previous result while leaving the cursor on the same Stage.
         self.context.state.transition_previous = {
             "stage": result.stage,
             "status": result.status,
@@ -279,7 +282,6 @@ class FlowEngine:
             "data": data,
             "kind": result.kind,
         }
-        self.context.save_state()
 
     def _advance(self, node: FlowNode) -> None:
         self.routing.advance(node.workflow_index)
