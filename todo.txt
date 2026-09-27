@@ -136,9 +136,12 @@ Chat / CLI / API
 - [x] `recovery.py` canonical 實作移至 `semantic_routing.py`，technical/semantic recovery 名詞分離
 - [x] durable transition output/data 加上 bounded persistence，避免長跑 state 膨脹
 - [x] 新增 compatibility / routing ownership / transition migration contract tests
+- [x] `routing.py` canonical 實作移至 `linear_routing.py`，為未來 RoutingStrategy 保留乾淨命名空間
+- [x] Review FAIL live probe 改成 deterministic one-shot seed，不再依賴模型第一次故意不完成
+- [x] 新增 Windows + Ubuntu fast CI：compileall + full pytest（不執行 real-Qwen live）
 
 仍未宣告完成：
-- [ ] Full pytest
+- [ ] Full pytest（GitHub CI 已啟動，等待當前 main run 結果）
 - [ ] deterministic workflow dry-run matrix
 - [ ] real-Qwen resume / closed-loop probes
 - [ ] 24H high-density soak
