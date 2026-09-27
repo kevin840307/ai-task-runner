@@ -786,7 +786,7 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
     live.review_failure_routing_probe(settings(tmp_path), tmp_path)
 
     # This probe owns review.txt, not the generic health.txt contract.
-    assert not (tmp_path / "review-repair-prompt-probe" / "health.txt").exists()
+    assert not (tmp_path / "review-failure-routing-probe" / "health.txt").exists()
 
 
 def test_review_failure_routing_probe_uses_deterministic_seed_stage():
