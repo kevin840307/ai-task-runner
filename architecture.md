@@ -192,6 +192,6 @@ These remain temporarily to avoid breaking callers:
 
 - `TaskRunner` -> `WorkflowRunner`
 - `Pipeline` -> `FlowEngine`
-- `RecoveryPolicy` -> `SemanticRoutingPolicy`\n- `workflow/rules.py` -> `workflow/reducers.py`
+- `RecoveryPolicy` -> `SemanticRoutingPolicy`\n- `workflow/rules.py` -> `workflow/reducers.py`\n- `workflow/recovery.py` -> `workflow/semantic_routing.py`
 
 New code should use the canonical names.
