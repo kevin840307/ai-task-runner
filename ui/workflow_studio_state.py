@@ -44,6 +44,11 @@ EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
 SYSTEM_SCOPES = {"system"}
 
 
+class _IndentedSafeDumper(yaml.SafeDumper):
+    def increase_indent(self, flow=False, indentless=False):  # noqa: ANN001
+        return super().increase_indent(flow, False)
+
+
 class WorkflowStudioMixin:
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
