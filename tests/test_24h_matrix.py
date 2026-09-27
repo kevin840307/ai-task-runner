@@ -140,4 +140,4 @@ def test_live_review_routing_probe_forces_first_review_failure_deterministically
     assert block.index("- stage: execute") < block.index("- stage: seed")
     assert block.index("- stage: seed") < block.index("- stage: review")
     assert 'Path(".ai-task-runner") / "review-seeded-once"' in source
-    assert "one-shot command Stage deliberately forces the first Review" in source
+    assert "one-shot command Stage deterministically seeds review.txt with only READY" in source
