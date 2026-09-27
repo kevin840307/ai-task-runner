@@ -269,14 +269,15 @@ def test_multi_task_same_session_sends_only_new_todo_context(tmp_path, monkeypat
     assert execute[0]["resumed"] is True
     assert "Goal (global constraints only):" in execute[0]["prompt"]
     assert execute[1]["resumed"] is True
-    assert execute[1]["prompt"].startswith("Continue the CURRENT TODO in this same execution session.")
+    assert execute[1]["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert "mode: continue" in execute[1]["prompt"]
     assert '"title": "Create second marker"' in execute[1]["prompt"]
     assert "Goal (global constraints only):" not in execute[1]["prompt"]
     assert "Hard rules:" not in execute[1]["prompt"]
     assert execute[1]["chars"] < execute[0]["chars"] // 2
 
 
-def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatch):
+def test_review_failure_same_session_sends_only_new_evidence(tmp_path, monkeypatch):
     state_dir = tmp_path.parent / f"{tmp_path.name}-review-context-state"
     monkeypatch.setenv("SCENARIO", "review_retry")
     monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
@@ -301,13 +302,15 @@ def test_review_repair_same_session_sends_only_new_evidence(tmp_path, monkeypatc
     executes = [record for record in records if record["stage"] == "execute"]
     assert len(reviews) == 2
     assert reviews[1]["resumed"] is True
-    assert "same read-only session" in reviews[1]["prompt"]
-    assert "Do not reuse the previous verdict" in reviews[1]["prompt"]
+    assert reviews[1]["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert "mode: continue" in reviews[1]["prompt"]
+    assert "executor_evidence:" in reviews[1]["prompt"]
     assert "Evidence order:" not in reviews[1]["prompt"]
     assert "Decision:" not in reviews[1]["prompt"]
     assert any(
-        record["prompt"].startswith("Continue the CURRENT TODO in this same execution session.")
-        and "Latest review:" in record["prompt"]
+        record["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+        and "mode: continue" in record["prompt"]
+        and "Review missing_items:" in record["prompt"]
         for record in executes
     )
 
@@ -409,10 +412,6 @@ def _semantic_fresh_workflow(tmp_path: Path) -> Path:
     (tmp_path / "review.md").write_text(
         "Review only. You are a read-only task reviewer. Return review JSON.\n", encoding="utf-8"
     )
-    (tmp_path / "review_continue.md").write_text(
-        "Re-review CURRENT result after repair in this same read-only review session. Return one review JSON decision.\n",
-        encoding="utf-8",
-    )
     (tmp_path / "fix.md").write_text(
         "Workflow Stage instructions:\nApply the previous review feedback only.\n",
         encoding="utf-8",
@@ -435,7 +434,6 @@ def _semantic_fresh_workflow(tmp_path: Path) -> Path:
     client_cache_key: review_client
     parser: review
     result_status: completed
-    continuation_prompt: review_continue.md
     skip_on_error: false
   final:
     status: Final validation
@@ -493,7 +491,8 @@ def test_repeated_semantic_failures_freshen_review_without_resetting_recover_ses
     assert [record["resumed"] for record in reviews] == [False, True, False]
     assert len(fixes) == 2
     assert fixes[1]["resumed"] is True
-    assert "Re-review CURRENT result after repair" in reviews[1]["prompt"]
+    assert reviews[1]["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert "mode: continue" in reviews[1]["prompt"]
     assert "Review only. You are a read-only task reviewer" in reviews[2]["prompt"]
 
 
