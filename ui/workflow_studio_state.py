@@ -19,6 +19,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, meta
 
+from project_registry import path_key
+
 try:
     from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from .workflow_graph import build_workflow_graph
