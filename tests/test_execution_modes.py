@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -96,7 +97,7 @@ def test_legacy_state_without_execution_mode_resumes_as_linear(tmp_path: Path):
     work = tmp_path / ".runner"
     work.mkdir()
     (work / "state.json").write_text(
-        '{"run_id":"legacy","goal":"g","project_root":' + repr(str(tmp_path)).replace("'", '"') + '}',
+        json.dumps({"run_id": "legacy", "goal": "g", "project_root": str(tmp_path)}),
         encoding="utf-8",
     )
     store = StateStore(tmp_path, work)
