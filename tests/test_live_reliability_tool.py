@@ -1389,3 +1389,14 @@ def test_live_reliability_main_includes_complete_closed_loop_probe():
         < main.index("complete_closed_loop_probe(settings, run_root)")
         < main.index("validator_failure_routing_probe(settings, run_root)")
     )
+
+
+def test_long_path_preflight_cleanup_uses_runner_remove_path():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    start = source.index("def _long_path_temp_root")
+    end = source.index("\ndef runtime_long_path_preflight", start)
+    block = source[start:end]
+
+    assert "remove_path(base)" in block
+    assert "TemporaryDirectory" not in block
+    assert "shutil.rmtree(base)" not in block
