@@ -394,3 +394,21 @@ def test_custom_ralphy_ai_validate_dryrun_closes():
     recovery = next(case for case in data["cases"] if case["name"] == "validate_ai FAIL -> recover -> closure")
     assert recovery["stage_calls"] == {"ralphy": 2, "validate_ai": 2}
     assert recovery["completed"] is True
+
+
+def test_dryrun_json_declares_semantic_only_coverage():
+    result = run("runner/workflow/system/ai.yaml", "--matrix", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["coverage"] == {
+        "semantic_pipeline_routing": True,
+        "technical_stage_retry": False,
+        "real_ai_or_commands": False,
+    }
+
+
+def test_dryrun_text_does_not_claim_technical_retry_execution():
+    result = run("runner/workflow/system/ai.yaml", "--matrix")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "semantic Pipeline routing only" in result.stdout
+    assert "technical StageExecutor retry" in result.stdout
