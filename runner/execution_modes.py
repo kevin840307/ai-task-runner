@@ -80,7 +80,7 @@ def execute_execution_mode(config: "RuntimeConfig") -> int:
 
 
 def _run_linear(config: "RuntimeConfig") -> int:
-    from .task_runner import WorkflowRunner
+    from .workflow_runner import WorkflowRunner
 
     return WorkflowRunner(config).run()
 
