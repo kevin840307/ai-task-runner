@@ -85,9 +85,9 @@ def test_dryrun_matrix_covers_system_recovery_paths():
     result = run("runner/workflow/system/mixed.yaml", "--matrix")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "WORKFLOW_CLOSED" in result.stdout
-    assert "__plan_review__ FAIL -> recover -> closure" in result.stdout
-    assert "validate_file FAIL -> recover -> closure" in result.stdout
-    assert "validate_ai FAIL -> recover -> closure" in result.stdout
+    assert "__plan_review__ FAIL -> restart_at -> closure" in result.stdout
+    assert "validate_file FAIL -> restart_at -> closure" in result.stdout
+    assert "validate_ai FAIL -> restart_at -> closure" in result.stdout
 
 
 def test_dryrun_matrix_covers_custom_recovery_paths():
