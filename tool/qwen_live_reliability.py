@@ -404,6 +404,7 @@ def runner_command(
         "--backend", "qwen",
         "--command", settings.command,
         "--project-root", str(project),
+        "--execution-mode", "linear",
         "--retry-wait", "0" if timeout_probe else "2",
         "--retry-max-wait", "30",
         "--json-events",
