@@ -28,6 +28,8 @@ def prompt_stage(prompt: str) -> PromptStage:
     """Classify Runner prompts by stable workflow contract, in one test helper."""
     if "plan quality judge" in prompt:
         return "plan_judge"
+    if "[RUNNER_IMMUTABLE_PLAN_PROTOCOL]" in prompt:
+        return "plan_finalize"
     if "Continue the existing planning work" in prompt:
         return "plan_refine"
     if (
@@ -43,6 +45,8 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "review"
     if "[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]" in prompt:
         return "validator"
+    if "RUNNER_SHARED_STAGE_CONTROL" in prompt:
+        return "execute"
     if (
         "Review only. You are a read-only task reviewer" in prompt
         or "Review only. Read-only: do not modify project files." in prompt
@@ -65,7 +69,6 @@ def prompt_stage(prompt: str) -> PromptStage:
             "Continue the CURRENT TODO in this same execution session.",
             "Continue the current task. Fix the previous failure and finish it.",
             "Continue the same execute stage.",
-            "Continue the same repair stage.",
             "Continue the same task stage.",
             "Continue normal task execution in this same session.",
             "Workflow Stage instructions:",
