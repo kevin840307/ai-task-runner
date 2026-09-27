@@ -1735,9 +1735,10 @@ Preserve already-correct content and do not touch protected files.
 """
 
 REVIEW_ROUTING_SEED = '''from pathlib import Path
-marker = Path(".review-seeded-once")
+marker = Path(".ai-task-runner") / "review-seeded-once"
 if not marker.exists():
     Path("review.txt").write_text("READY\\n", encoding="utf-8")
+    marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("seeded\\n", encoding="utf-8")
 '''
 
