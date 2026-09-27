@@ -1569,3 +1569,10 @@ def test_run_state_transition_context_round_trips(tmp_path):
     loaded = RunState.load(state.dump())
 
     assert loaded.transition_previous == state.transition_previous
+
+
+def test_result_reducers_do_not_own_linear_cursor():
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "runner" / "workflow" / "rules.py").read_text(encoding="utf-8")
+    assert "state.workflow_position =" not in text
+    assert "state.task_step =" not in text
