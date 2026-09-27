@@ -1,7 +1,8 @@
-"""Top-level orchestration mode registry.
+"""Compatibility registry for workflow execution modes.
 
-Execution modes own control-flow semantics. Shared Stage/backend/plugin/runtime
-capabilities stay below this boundary.
+The current production runtime is Linear. Shared execution lives in
+WorkflowRunner; routing semantics should evolve behind FlowEngine rather than
+copying runners per mode.
 """
 from __future__ import annotations
 
@@ -79,9 +80,9 @@ def execute_execution_mode(config: "RuntimeConfig") -> int:
 
 
 def _run_linear(config: "RuntimeConfig") -> int:
-    from .task_runner import TaskRunner
+    from .task_runner import WorkflowRunner
 
-    return TaskRunner(config).run()
+    return WorkflowRunner(config).run()
 
 
 register_execution_mode(
