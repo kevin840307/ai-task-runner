@@ -12,7 +12,7 @@ from ..errors import RunnerError
 from ..utils.text import bounded_text
 from .semantic_routing import SemanticRoutingPolicy
 from .registry import create_stage
-from .routing import LinearRouting
+from .linear_routing import LinearRouting
 from .reducers import finish_run, finish_task, prepare_replan
 from .stages import Stage, StageContext, StageExecutor, StageResult
 
