@@ -17,7 +17,7 @@ from .workflow.snapshot import (
     load_run_resource,
     load_snapshot,
 )
-from .workflow.pipeline import build_flow_engine
+from .workflow.flow_engine import build_flow_engine
 from .workflow.stages import StageContext, StageExecutor
 
 
