@@ -1278,3 +1278,94 @@ def test_record_resource_snapshot_writes_jsonl(tmp_path):
     assert record["run_number"] == 3
     assert record["rss_bytes"] == 10
     assert "timestamp" in record
+
+
+def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured = {}
+
+    class FakeProcess:
+        pid = 4321
+
+        def __init__(self, command, **options):
+            project = Path(command[command.index("--project-root") + 1])
+            work = project / ".ai-task-runner"
+            work.mkdir(parents=True, exist_ok=True)
+            (work / "state.json").write_text(
+                json.dumps({
+                    "run_id": "resume-probe",
+                    "goal": "goal",
+                    "project_root": str(project.resolve()),
+                    "completed": False,
+                    "stage": "executing",
+                    "task_step": 1,
+                    "ai_session_id": "session-resume",
+                    "tasks": [{
+                        "id": "t1",
+                        "title": "task",
+                        "description": "task",
+                        "status": "pending",
+                    }],
+                }),
+                encoding="utf-8",
+            )
+            captured["first_command"] = command
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+    def fake_terminate(process):
+        process.returncode = 130
+
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        debug = work / "debug"
+        debug.mkdir(parents=True, exist_ok=True)
+        (work / "state.json").write_text(
+            json.dumps({
+                "completed": True,
+                "stage": "completed",
+                "ai_session_id": "session-resume",
+                "tasks": [{"status": "completed"}],
+            }),
+            encoding="utf-8",
+        )
+        (work / "log.txt").write_text(
+            json.dumps({
+                "type": "model.prompt",
+                "session": "session-resume",
+                "session_mode": "resume",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (debug / "last-prompt.txt").write_text("prompt", encoding="utf-8")
+        (debug / "last-result.txt").write_text("result", encoding="utf-8")
+        (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("", encoding="utf-8")
+        captured["resume_command"] = command
+        if observe:
+            observe()
+        return 0
+
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
+    monkeypatch.setattr(live, "terminate", fake_terminate)
+    monkeypatch.setattr(live, "run_command", fake_run)
+    monkeypatch.setattr(live.time, "sleep", lambda _: None)
+
+    live.resume_probe(settings(tmp_path), tmp_path)
+
+    first = captured["first_command"]
+    resumed = captured["resume_command"]
+    first_workflow = Path(first[first.index("--workflow") + 1])
+    resumed_workflow = Path(resumed[resumed.index("--workflow") + 1])
+    assert first_workflow == resumed_workflow
+    text = first_workflow.read_text(encoding="utf-8")
+    assert "execute_first" in text
+    assert "pause" in text
+    assert "execute_second" in text
+    assert "--resume" in resumed
