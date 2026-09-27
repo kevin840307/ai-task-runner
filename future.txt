@@ -4,7 +4,9 @@ AI Task Runner - Future Execution Modes
 Purpose
 -------
 The product should support multiple orchestration modes behind the same Chat/UI/run lifecycle.
-Users still select a mode/workflow from Chat, enter one prompt, and start a Run.
+The user-facing contract stays simple for every mode: select one Workflow from Chat,
+enter one prompt, and start a Run. The selected Workflow/profile determines its
+execution_mode internally; Chat must not require a second mode selector.
 Do not force every future mode into the current linear Pipeline.
 
 Target modes
@@ -176,25 +178,29 @@ Required architecture changes before adding the two multi-agent modes
      validation
    UI should render unknown future event types safely instead of crashing.
 
-7. Make UI mode-driven, not Workflow-only.
-   Chat remains the universal entry point.
-   Suggested UI flow:
-     select Execution Mode
-       Linear Workflow -> select Workflow
-       Dynamic Handoff -> select Handoff profile/team
-       Group Chat -> select Discussion profile/team
+7. Keep Chat Workflow-driven while making the selected asset mode-aware.
+   Chat remains the universal entry point and must keep the same user flow:
+     select Workflow
      enter Prompt
      Run
 
-   The main UI shell, project list, messages, runtime state, stop/resume and diagnostics
-   stay shared. The center editor/visualizer is selected by mode:
+   A selectable Workflow entry is a user-facing orchestration asset. Internally it may be:
+     Linear -> current Workflow YAML
+     Dynamic Handoff -> Handoff profile/team
+     Group Chat -> Discussion profile/team
+
+   Each catalog entry must expose its execution_mode metadata so UI/server can dispatch
+   correctly without asking the user to choose the mode separately. The main UI shell,
+   project list, messages, runtime state, stop/resume and diagnostics stay shared.
+   The editor/visualizer opened for the selected asset is chosen from its mode:
      Linear -> Workflow graph/editor
      Dynamic Handoff -> agent graph + runtime handoff edges
      Group Chat -> participant/team editor + discussion timeline/decision view
 
-8. Add a mode catalog similar to the current Stage catalog.
-   UI must discover modes and their editor/config metadata from Core rather than hardcode
-   future mode names.
+8. Add a mode catalog similar to the current Stage catalog, but keep it an internal
+   capability/editor registry rather than a required Chat selector.
+   UI/server may use it to discover supported modes and editor/config metadata instead
+   of hardcoding future mode names.
 
 Dry-run / validation direction
 ------------------------------
@@ -247,7 +253,9 @@ Compatibility rules
 - Existing Stage registry remains useful and must not be replaced.
 - Existing system/custom workflows stay runnable without migration.
 - execution_mode defaults to linear.
-- UI should continue to select Workflow + Prompt exactly as today for linear mode.
+- UI should continue to select Workflow + Prompt exactly as today for every mode.
+- The selected catalog entry owns execution_mode metadata; do not require a separate Chat
+  mode selector.
 - Future modes may add their own profile/config files, but should reuse prompts/backends/
   validators/plugins rather than duplicate those systems.
 - Recovery/retry/watchdog logic that is truly generic belongs in shared runtime services;
@@ -294,7 +302,7 @@ Phase 1 foundation is now partially implemented:
   - existing linear CLI/UI behavior remains the default and requires no migration.
 
 Still intentionally NOT implemented:
-  - Chat execution-mode selector;
+  - Non-linear Workflow/profile catalog entries that resolve execution_mode automatically;
   - DynamicHandoffOrchestrator;
   - GroupChatOrchestrator;
   - stable runtime node/invocation IDs for general dynamic graphs;
