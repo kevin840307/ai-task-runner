@@ -954,22 +954,13 @@ def test_yaml_api_treats_durable_max_cycle_skip_as_completed(tmp_path, monkeypat
 
 
 def test_run_request_preserves_execution_mode_in_runtime_config(tmp_path):
-    from runner.execution_modes import execution_mode_names, register_execution_mode
-
-    name = "test_api_dynamic_mode"
-    if name not in execution_mode_names():
-        register_execution_mode(
-            name,
-            lambda config: 0,
-            requires_workflow=False,
-            description="test-only API mode",
-        )
-
     request = RunRequest(
         goal="x",
         project_root=str(tmp_path),
-        execution_mode=name,
+        validator="ai",
+        execution_mode="linear",
     )
     config = request.normalized_config()
-    assert config.execution_mode == name
-    assert config.workflow == []
+
+    assert config.execution_mode == "linear"
+    assert config.workflow
