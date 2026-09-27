@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..errors import RunnerError
-from .recovery import RecoveryPolicy
+from .recovery import SemanticRoutingPolicy
 from .registry import create_stage
 from .routing import LinearRouting
 from .rules import finish_run, finish_task, prepare_replan
@@ -55,7 +55,7 @@ class FlowEngine:
             for index, item in enumerate(flow)
         ]
         self.routing = LinearRouting(context, self.workflow)
-        self.recovery = RecoveryPolicy(context)
+        self.recovery = SemanticRoutingPolicy(context)
         self._task_generation = 0
 
     def run(self, executor: StageExecutor, *, plan_only: bool = False) -> int:
