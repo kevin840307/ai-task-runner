@@ -8,6 +8,7 @@ from pathlib import Path
 from .config.runtime import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
+from .execution_modes import execute_execution_mode
 from .runtime import events
 from .runtime.events import EventBus
 
@@ -53,9 +54,10 @@ def _create_runtime(config: RuntimeConfig) -> Runtime:
     )
 
 
-def _event_context(config: RuntimeConfig) -> dict[str, int]:
+def _event_context(config: RuntimeConfig) -> dict[str, object]:
     return {
         key: value for key, value in {
+            "execution_mode": config.execution_mode,
             "script_index": config.script_index,
             "script_total": config.script_total,
         }.items() if value is not None
@@ -83,8 +85,7 @@ def execute(args: RuntimeConfig) -> int:
         if args.script:
             from .script_runner import execute_script
             return execute_script(args, execute)
-        from .task_runner import TaskRunner
-        return TaskRunner(args).run()
+        return execute_execution_mode(args)
 
 
 __all__ = ["Runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]
