@@ -1,0 +1,434 @@
+AI Task Runner Refactor TODO
+===========================
+
+目標
+----
+在不破壞目前 Linear Workflow、24H 無人值守、Resume、YAML List、UI/CLI 相容性的前提下，
+把架構整理成可長期支援：
+1. Linear Workflow with Rollback / Loop
+2. Multi-Agent with Dynamic Handoff
+3. Multi-Agent Group Chat / Discussion
+
+共同產品入口維持不變：
+Chat / CLI / API -> 選 Workflow/Profile -> 輸入 Prompt -> Run
+execution_mode 由所選 Workflow/Profile 內部決定，不新增第二個 Chat mode selector。
+
+核心原則
+--------
+- Stage 只負責執行與回傳 StageResult，不決定流程目的地。
+- Retry / Recover / Resume / Session rotation 都是 Runner infrastructure，不是特殊 Stage。
+- Flow / Router 決定 PASS / FAIL 後去哪裡。
+- execution_mode 決定使用哪一個 Orchestrator。
+- 共用 lifecycle 與 mode-specific state 分離。
+- 先保護 Linear 行為，再抽象；不要為尚未存在的 Group Chat 過度設計。
+- 每次重構都必須先通過 deterministic tests，再進 real-Qwen live probes，再跑 24H soak。
+
+P0 - 現在應該重構
+===================
+
+[ ] 1. 拆分共用 Run Lifecycle 與 Linear-specific Durable State
+現況：
+- RunState 同時包含共用欄位與大量 Linear 專用欄位：
+  run_id / goal / project_root / execution_mode / completed
+  workflow_position / task_step / current / tasks
+  flow_result_* / semantic_failure_* / recovery_attempt_*
+- 未來 Dynamic Handoff / Group Chat 不應被迫理解 task_step、workflow_position。
+
+方向：
+- 保留一個共用 RunState / RunLifecycleState：
+  run_id
+  goal
+  project_root
+  execution_mode
+  completed
+  stage/status
+  timestamps
+  last_error
+  shared session/resource identity
+- Linear 專用狀態收斂成 LinearState：
+  cycle
+  tasks/current
+  workflow_position
+  task_step
+  workflow_fingerprint
+  validator feedback
+  semantic/recovery counters
+- StateStore 仍保留單一 durable commit point，避免多檔 transaction 問題。
+- 建議 state.json 外層：
+  {
+    "run": {...common...},
+    "mode": {...linear state...}
+  }
+  或等價 typed serialization。
+- 必須支援舊 state.json migration / backward compatibility。
+
+驗收：
+- 舊 Linear resume state 可載入。
+- 新 state 可正常 resume。
+- execution_mode mismatch 仍 fail closed。
+- 24H resume / YAML List resume 不退步。
+
+
+[ ] 2. 集中 Linear Cursor / Routing State 的修改權
+現況：
+- Pipeline、RecoveryPolicy、rules.py 都會不同程度修改：
+  workflow_position
+  task_step
+  cycle
+  task completion
+  replan state
+- 最近已把 Validator FAIL destination 從 reducer 移回 Flow，方向正確，但責任仍可再集中。
+
+方向：
+- 建立 LinearRouter / FlowRuntime（名稱可調整）。
+- 只有這一層能直接修改：
+  workflow_position
+  task_step
+  restart target
+  replan transition
+  task-block restart
+- RecoveryPolicy 只回傳 decision，不直接擁有 cursor。
+- reducers 只更新語意資料：
+  task result
+  review evidence
+  validator feedback
+  TODO data
+- Pipeline 逐步變成執行 loop，不再同時負責太多 state mutation。
+
+驗收：
+- grep / contract test 可證明 cursor 欄位只有指定模組寫入。
+- Review FAIL -> Execute、Validator FAIL -> 任意普通 Stage、Validator FAIL -> Planning 都有 test。
+- compound closed-loop deterministic matrix PASS。
+
+
+[ ] 3. 補 Durable Previous Stage Result / Resume Semantic Equivalence
+現況：
+- Pipeline.run() 啟動時 previous = None。
+- workflow_position / task_step 有 durable persistence，但 process restart 後 previous StageResult 不一定保留。
+- 這代表「Resume 後可繼續跑」不一定等於「不中斷執行的 Stage context 完全一致」。
+
+方向：
+- 定義真正需要 durable 的 transition context，不要直接永久保存任意大型 StageResult。
+- 最小保存：
+  source_stage
+  status
+  bounded output
+  bounded structured data
+  result kind
+- 下一個 Stage 在 resume 後取得與不中斷流程等價的 previous context。
+- 清楚定義何時清除 transition context，避免 stale feedback。
+
+驗收：
+- deterministic test：
+  uninterrupted execution
+  ==
+  kill at every Stage boundary + resume
+  在 routing / prompt control / final artifact 上等價。
+- real-Qwen resume probe 同樣驗證。
+- 不因 previous result persistence 造成 state 無限膨脹。
+
+
+[ ] 4. 將 TaskRunner 明確改名/收斂為 Linear Orchestrator
+現況：
+- execution_modes.py 已有 registry。
+- linear mode 仍直接進 TaskRunner。
+- TaskRunner 現在同時做：
+  resource binding
+  workflow snapshot
+  state load
+  AI client setup
+  StageContext
+  Pipeline
+  lifecycle setup
+
+方向：
+- 明確建立 LinearWorkflowOrchestrator（可先包住現有 TaskRunner，再逐步搬移）。
+- execution_modes.py 只做：
+  execution_mode -> orchestrator factory/runner
+- 共用 runtime bootstrap 移到共用 RunRuntime / RunContext builder。
+- Linear-specific workflow snapshot / fingerprint / Pipeline 留在 Linear orchestrator。
+
+驗收：
+- linear execution behavior 完全不變。
+- 第二個 mock execution mode 可註冊而不 import Linear Pipeline。
+- UI/API/CLI 不需要知道 LinearWorkflowOrchestrator 類別。
+
+
+[ ] 5. 分離 Stage Execution Policy 與 Semantic Routing Policy
+現況：
+- StageExecutor 負責 technical retry、same-session retry、fresh session、hooks/watchdog。
+- RecoveryPolicy 負責 semantic fail / recover / restart。
+- 邊界已有雛形，但命名與 durable counters 還混在同一 RunState。
+
+方向：
+- TechnicalExecutionPolicy：
+  API transient retry
+  Agent timeout
+  same-session retry
+  fresh-session escalation
+  unexpected exception policy
+- SemanticRoutingPolicy：
+  PASS / FAIL
+  restart_at
+  recover
+  repeat
+  max_attempts
+  on_exhausted
+  semantic same-failure threshold
+- 不讓 semantic FAIL 被 technical retry 誤吃掉。
+- 不讓 API/Agent transient error觸發 workflow semantic rollback。
+
+驗收：
+- test matrix 清楚分為 technical fault 與 semantic FAIL。
+- 同一錯誤最多自動恢復 N 次的定義不與 Review FAIL 混淆。
+- live API 429/502/503/disconnect 與 Review/Validator fail 各自走正確路徑。
+
+
+[ ] 6. 建立統一 Orchestration Asset Contract
+現況：
+- Linear 使用 Workflow YAML。
+- 未來 Dynamic Handoff / Group Chat 會需要不同資料結構。
+- Chat 必須仍然只看到「Workflow/Profile」。
+
+方向：
+- 建立 user-facing asset metadata：
+  id
+  name
+  execution_mode
+  editor_kind
+  version/schema
+  source/location
+- Linear asset payload = 現有 stages + flow YAML。
+- Dynamic Handoff asset payload 未來可為 agents + handoff rules。
+- Group Chat asset payload 未來可為 participants + discussion policy。
+- 不把 execution_mode 塞進目前 Linear YAML root，除非正式升級 schema。
+
+驗收：
+- Chat selection 不新增 mode selector。
+- UI 能依 asset.execution_mode 開正確 editor。
+- Runtime 能從 asset resolve execution_mode。
+- Current system/custom Linear workflow 完全相容。
+
+
+P1 - 第二種 execution mode 前完成
+===============================
+
+[ ] 7. 建立 Mode-owned Progress Contract
+問題：
+- 現在 UI/API progress 容易依賴 Linear 欄位：
+  current
+  tasks
+  workflow_position
+  cycle
+- Dynamic Handoff / Group Chat 不適用。
+
+方向：
+- 共用 progress envelope：
+  lifecycle
+  status
+  detail
+  progress_revision
+  execution_mode
+  mode_progress
+- mode_progress 由各 Orchestrator 自己定義。
+- UI common shell 只看共用欄位；mode-specific panel 才解讀 mode_progress。
+
+驗收：
+- Linear UI 顯示不退步。
+- mock non-linear mode 可回 progress 而不需要偽造 task_step/tasks。
+
+
+[ ] 8. 統一 Runtime Resource / Resume Identity
+方向：
+- workflow/profile snapshot
+- goal resource
+- validator prompt resource
+- mode asset fingerprint
+- execution_mode
+- resume compatibility
+應該由共用 RunRuntime 管理，不散落於不同 orchestrator。
+
+驗收：
+- Resume 明確拒絕：
+  execution_mode 改變
+  orchestration asset fingerprint 改變
+  project_root 不同
+- 舊 Linear behavior 相容。
+
+
+[ ] 9. 建立 Orchestrator Protocol，而不是 Generic Everything
+最小介面即可，例如：
+- prepare()
+- run()
+- resume()
+- progress()
+- close()/cleanup()
+
+不要現在抽象：
+- GenericNode
+- GenericConversation
+- GenericAgentGraph
+- GenericUniversalState
+
+等 Dynamic Handoff 真正實作後，再從兩個 mode 的真實重複抽共用介面。
+
+
+[ ] 10. UI Editor 與 Runtime Catalog 解耦
+方向：
+- Stage catalog 只屬 Linear editor。
+- Execution mode catalog 是 runtime/editor capability registry。
+- Chat 不直接顯示 mode catalog。
+- Workflow/Profile catalog entry 帶 execution_mode/editor_kind。
+
+驗收：
+- 現有 Linear Workflow Designer 不退步。
+- future non-linear asset 不會被硬塞進 stages/flow editor。
+
+
+P2 - 有第二種模式後再決定是否抽
+===============================
+
+[ ] 11. Session Manager 是否抽成共用 AgentSessionPool
+只有 Dynamic Handoff 實作後，如果真的出現：
+- 多 agent session identity
+- fresh/resume/expire
+- per-agent session cache
+才抽共用 manager。
+目前不要為 Linear 單一需求提前複雜化。
+
+
+[ ] 12. Shared Agent Message / Handoff Envelope
+等 Dynamic Handoff 與 Group Chat 都有 prototype 後，再決定是否共用：
+- sender
+- receiver
+- role
+- evidence
+- decision
+- handoff reason
+不要現在預設所有 Agent 模式都使用同一 message schema。
+
+
+[ ] 13. 通用 Graph Engine
+目前 Linear 只需要：
+- ordered flow
+- rollback to self/earlier stage
+- recover branch
+- bounded loop
+- one contiguous task block
+
+不要現在直接改成完全 generic DAG engine。
+等 Dynamic Handoff 有真正 forward/dynamic edge 需求後，再決定：
+- 是否擴充現有 LinearRouter
+- 或獨立 DynamicHandoffRouter
+
+
+目前不要大改
+============
+
+[ ] BaseStage / TaskStage / ReviewStage / AIValidatorStage 類別階層
+理由：
+- 現在責任相對清楚。
+- Stage registry/UI catalog 已依 spec_class 工作。
+- 重寫效益低、風險高。
+
+[ ] 現有 Linear YAML schema 的 stages + flow
+理由：
+- 已有 UI、dry-run、system workflows、custom workflows、tests。
+- 目前足夠描述 Linear 閉環。
+- 不為 execution_mode 強塞新 root key。
+
+[ ] YAML List
+理由：
+- 目前明確屬於 Linear batch surface。
+- 非 Linear mode 已 fail-fast。
+- 等 mode-owned batch/resume identity 設計成熟後再泛化。
+
+[ ] 完全自由 forward graph / arbitrary condition expression
+理由：
+- 現在需求沒有證明必要。
+- 會大幅增加 closure analysis、resume、UI、dry-run 複雜度。
+
+
+測試 / Reliability 重構門檻
+=========================
+
+每個 P0 refactor 必須維持以下 Gate：
+
+[ ] Full pytest
+[ ] workflow_dryrun system file/ai/mixed matrix closure
+[ ] compound recoverable FAILs -> closure
+[ ] Review FAIL -> Execute live probe
+[ ] Validator FAIL -> routing live probe
+[ ] complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure live probe
+[ ] process kill/resume probe
+[ ] stop.request/resume probe
+[ ] multi-TODO checkpoint resume
+[ ] YAML List resume + completed-item no replay
+[ ] API 429/502/503 transient recovery
+[ ] 3-minute disconnect recovery
+[ ] timeout/recovery-budget
+[ ] session expiry -> Fresh Session
+[ ] loop detection -> bounded retry/Fresh Session
+[ ] protected-path safety
+[ ] >MAX_PATH state/resource/snapshot tests
+[ ] ownership lock + orphan cleanup
+[ ] Final AI quorum
+[ ] real example smoke matrix
+[ ] 24H high-density soak
+
+新增重要 Gate：
+
+[ ] Resume semantic equivalence：
+不中斷與每個 Stage boundary kill/resume 的 routing / feedback / final artifact 等價。
+
+[ ] State migration：
+舊 Linear state.json -> 新 common + mode state 可安全 resume。
+
+[ ] Routing ownership：
+validator/review/stage reducer 不得直接決定 workflow destination。
+
+[ ] Non-linear isolation：
+註冊 mock second execution_mode 不需要 import Pipeline / LinearState。
+
+
+建議執行順序
+============
+
+Phase A - 先鎖死目前行為
+1. Full pytest + dry-run + complete closed-loop live probe
+2. 修掉目前 resume probe failure，取得乾淨 baseline
+3. 保留 24H gate 作為 regression baseline
+
+Phase B - 小步重構 Linear 內部
+4. Durable previous transition context
+5. 集中 cursor/routing mutation
+6. 分離 common RunState / LinearState
+7. TaskRunner -> LinearWorkflowOrchestrator
+8. 共用 RunRuntime / asset snapshot identity
+
+Phase C - 為第二模式準備邊界
+9. Orchestration Asset Contract
+10. Mode-owned Progress Contract
+11. mock second execution mode isolation test
+
+Phase D - 才開始 Dynamic Handoff
+12. 實作最小 DynamicHandoffOrchestrator
+13. 比較 Linear 與 Dynamic Handoff 的真實重複
+14. 只抽真正重複部分
+
+Phase E - Group Chat
+15. 實作最小 Discussion orchestrator
+16. 再決定 Session/Message/Agent 抽象是否值得共用
+
+
+完成定義
+========
+Linear v1 可以封版的條件：
+- Stage destination 完全由 Flow/Router 決定。
+- Technical retry 與 Semantic rollback 完全分離。
+- Resume 與 uninterrupted execution 在 Stage boundary 上語意等價。
+- Durable state 有清楚 common/mode ownership。
+- UI/CLI/API 都只透過 orchestration asset 啟動。
+- deterministic + real-Qwen compound closed-loop PASS。
+- 24H high-density soak PASS。
+- 第二 execution mode 可以接入而不修改 Linear Pipeline 核心。
