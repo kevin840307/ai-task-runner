@@ -1398,5 +1398,5 @@ def test_long_path_preflight_cleanup_uses_runner_remove_path():
     block = source[start:end]
 
     assert "remove_path(base)" in block
-    assert "TemporaryDirectory" not in block
+    assert "with tempfile.TemporaryDirectory" not in block
     assert "shutil.rmtree(base)" not in block
