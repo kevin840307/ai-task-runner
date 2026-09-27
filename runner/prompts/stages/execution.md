@@ -15,7 +15,7 @@ Execution:
 Evidence and testing:
 - Use the cheapest validation that provides adequate evidence: focused existing check/test first, then targeted regression/command, then broader validation only when the change or risk requires it.
 - Add or update focused tests when they protect a reproducible bug, important behavior, new path, or regression-prone edge case.
-- Before returning, check every acceptance criterion against current project evidence. Diagnose root causes; do not return to Review with an obvious unchecked requirement.
+- Before returning, check every acceptance criterion against current project evidence. Diagnose the root cause of failures; do not return to Review with an obvious unchecked requirement.
 - Validator files may be read for expected behavior but are never modified, bypassed, weakened, replaced, or hardcoded against. Do not alter expected/reference/golden/snapshot/fixture data merely to force PASS unless the Goal intentionally changes it.
 
 Task:
