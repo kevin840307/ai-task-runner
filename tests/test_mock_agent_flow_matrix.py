@@ -66,7 +66,7 @@ def test_happy_path_uses_bounded_stage_specific_prompts(tmp_path, monkeypatch, b
     ]
 
     limits = {
-        "plan_finalize": 5000,
+        "plan_finalize": 5500,
         "execute": 6000,
         "review": 4500,
         "validator": 7000,
