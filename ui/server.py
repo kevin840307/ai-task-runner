@@ -710,6 +710,7 @@ class UIState(WorkflowBuilderMixin):
             "backend": str(request.get("backend") or ""),
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),
+            "execution_mode": str(request.get("execution_mode") or "linear"),
             "validator": str(request.get("validator") or ""),
         }
 
@@ -864,6 +865,7 @@ class UIState(WorkflowBuilderMixin):
                     model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
+                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -894,6 +896,7 @@ class UIState(WorkflowBuilderMixin):
                 self.launch(
                     project, None, mode="run", backend=backend, model=request["model"],
                     validator=request["validator"], workflow=request["workflow"],
+                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -913,6 +916,7 @@ class UIState(WorkflowBuilderMixin):
         model: str = "",
         validator: str = "",
         workflow: str = "",
+        execution_mode: str = "linear",
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
@@ -933,6 +937,7 @@ class UIState(WorkflowBuilderMixin):
                     raise ValueError("Goal is required")
                 if mode == "rerun":
                     command.append("--force-new")
+            command += ["--execution-mode", str(execution_mode or "linear")]
             if backend:
                 command += ["--backend", backend]
             command += self._model_cli_args(model)
@@ -1038,6 +1043,7 @@ class UIState(WorkflowBuilderMixin):
             "backend": backend or "",
             "model": model_value,
             "mode": request_mode,
+            "execution_mode": "linear",
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
             "validator": validator_value,
@@ -1904,6 +1910,8 @@ class UIState(WorkflowBuilderMixin):
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
                 raise ValueError("Workflow validation returned invalid JSON") from exc
+            if payload.get("execution_mode") != "linear":
+                raise ValueError("Workflow validation used an incompatible execution mode")
             if not payload.get("closed"):
                 raise ValueError("Workflow validation matrix did not reach closure")
             return {"ok": True, "output": output, "payload": payload}
@@ -2554,6 +2562,7 @@ class UIState(WorkflowBuilderMixin):
         except OSError:
             item["version"] = ""
         if kind == "workflow":
+            item["execution_mode"] = "linear"
             item.update(self._workflow_requirements(resolved))
             key = os.path.normcase(os.path.abspath(str(resolved)))
             item["hidden"] = bool(workflow_visibility.get(key, False)) if workflow_visibility is not None else self.workflow_hidden(resolved)
@@ -2866,6 +2875,7 @@ class Handler(SimpleHTTPRequestHandler):
                     model=str(request.get("model") or ""),
                     validator=str(request.get("validator") or ""),
                     workflow=str(request.get("workflow") or ""),
+                    execution_mode=str(request.get("execution_mode") or "linear"),
                     readonly_safety=str(request.get("readonly_safety") or "restore"),
                 )
                 return self._json({"ok": True})
