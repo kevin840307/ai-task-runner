@@ -19,10 +19,13 @@ from runner.workflow.loader import (
     workflow_fingerprint,
     workflow_validators,
 )
-from runner.workflow.pipeline import FlowNode
+from runner.workflow.pipeline import FlowEngine, FlowNode, Pipeline
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
+from runner.workflow.recovery import RecoveryPolicy, SemanticRoutingPolicy
+from runner.workflow.routing import LinearRouting
 from runner.workflow.rules import handle_validation_result
 from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.task_runner import TaskRunner, WorkflowRunner
 python = "{python}"
 validator = "{validator}"
 project_root = "{project_root}"
@@ -1481,3 +1484,88 @@ def test_validator_restart_to_ordinary_stage_does_not_replan(tmp_path):
     assert context.state.completed is True
     assert context.state.cycle == 1
     assert (tmp_path / "fix-count.txt").read_text(encoding="utf-8") == "2"
+
+
+def test_runtime_names_keep_backward_compatible_aliases():
+    assert Pipeline is FlowEngine
+    assert RecoveryPolicy is SemanticRoutingPolicy
+    assert TaskRunner is WorkflowRunner
+
+
+def test_linear_routing_is_only_cursor_owner_for_basic_transitions(tmp_path):
+    workflow = [
+        {"name": "first", "_workflow_index": 0},
+        {"name": "task_a", "scope": "task", "_workflow_index": 1},
+        {"name": "task_b", "scope": "task", "_workflow_index": 2},
+        {"name": "last", "_workflow_index": 3},
+    ]
+    state = RunState("run", "goal", str(tmp_path))
+    context = _context(tmp_path, workflow, state)
+    routing = LinearRouting(context, workflow)
+
+    routing.advance(0)
+    assert state.workflow_position == 1
+
+    routing.advance_task_step()
+    assert state.task_step == 1
+
+    routing.complete_task_block(3)
+    assert state.workflow_position == 3
+    assert state.task_step == 0
+
+    restarted = routing.restart(
+        "task_b",
+        StageResult("gate", "fail", output="go back"),
+    )
+    assert state.workflow_position == 1
+    assert state.task_step == 1
+    assert restarted[0]["name"] == "task_a"
+
+
+def test_flow_engine_restores_durable_previous_transition(tmp_path):
+    workflow = [{"name": "one", "_workflow_index": 0}]
+    state = RunState(
+        "run",
+        "goal",
+        str(tmp_path),
+        transition_previous={
+            "stage": "review",
+            "status": "fail",
+            "output": "missing acceptance evidence",
+            "changed_files": ["a.py"],
+            "skipped": False,
+            "data": {"missing_items": ["proof"]},
+            "kind": "review",
+        },
+    )
+    context = _context(tmp_path, workflow, state)
+    restored = FlowEngine(context, workflow)._restore_transition()
+
+    assert restored is not None
+    assert restored.stage == "review"
+    assert restored.status == "fail"
+    assert restored.kind == "review"
+    assert restored.output == "missing acceptance evidence"
+    assert restored.data == {"missing_items": ["proof"]}
+    assert restored.changed_files == ["a.py"]
+
+
+def test_run_state_transition_context_round_trips(tmp_path):
+    state = RunState(
+        "run",
+        "goal",
+        str(tmp_path),
+        transition_previous={
+            "stage": "execute",
+            "status": "pass",
+            "output": "done",
+            "changed_files": ["main.py"],
+            "skipped": False,
+            "data": {"ok": True},
+            "kind": "task",
+        },
+    )
+
+    loaded = RunState.load(state.dump())
+
+    assert loaded.transition_previous == state.transition_previous
