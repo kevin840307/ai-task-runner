@@ -1720,22 +1720,25 @@ READY
 REVIEW_REQUIRED
 
 A standard final newline is allowed.
-The command Stage deterministically seeds review.txt with only READY.
-The first Execute must leave that seeded file unchanged so Review observes a real failure.
-After Review FAIL routes back to Execute, continue in the same execution session,
-preserve READY, add REVIEW_REQUIRED, and Modify review.txt only.
+A one-shot command Stage deliberately forces the first Review to observe only READY,
+regardless of what the first Execute attempted.
+After Review FAIL routes back to Execute, preserve READY, add REVIEW_REQUIRED,
+and modify review.txt only.
 """
 
 REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
-On the first execution, before any Review feedback exists, do not modify review.txt.
-Return a short factual summary and let Review inspect the seeded incomplete state.
-When Runner shared control later provides Review feedback that REVIEW_REQUIRED is missing,
+Before Review feedback exists, no special action is required; a later one-shot seed Stage
+will deterministically force the first Review to see the incomplete state.
+When Runner shared control provides Review feedback that REVIEW_REQUIRED is missing,
 modify only review.txt so it contains READY and REVIEW_REQUIRED as two logical lines.
 Preserve already-correct content and do not touch protected files.
 """
 
 REVIEW_ROUTING_SEED = '''from pathlib import Path
-Path("review.txt").write_text("READY\\n", encoding="utf-8")
+marker = Path(".review-seeded-once")
+if not marker.exists():
+    Path("review.txt").write_text("READY\\n", encoding="utf-8")
+    marker.write_text("seeded\\n", encoding="utf-8")
 '''
 
 REVIEW_ROUTING_WORKFLOW = '''stages:
@@ -1768,9 +1771,9 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
 
 flow:
   - planning
-  - stage: seed
-    scope: task
   - stage: execute
+    scope: task
+  - stage: seed
     scope: task
   - stage: review
     scope: task
