@@ -139,9 +139,13 @@ Chat / CLI / API
 - [x] `routing.py` canonical 實作移至 `linear_routing.py`，為未來 RoutingStrategy 保留乾淨命名空間
 - [x] Review FAIL live probe 改成 deterministic one-shot seed，不再依賴模型第一次故意不完成
 - [x] 新增 Windows + Ubuntu fast CI：compileall + full pytest（不執行 real-Qwen live）
+- [x] Windows path identity 統一：State/UI 不再把 8.3 short path、long path、`\\?\\` I/O path 當不同 Project
+- [x] Windows command placeholder path 正規化，避免 `\\` / `/` 混用
+- [x] Workflow catalog JSON stdout 改成 ASCII-safe，避免 cp1252 UnicodeEncodeError
+- [x] CI 加入 concurrency，後續 push 自動取消舊 SHA 測試
 
 仍未宣告完成：
-- [ ] Full pytest（GitHub CI 已啟動，等待當前 main run 結果）
+- [ ] Full pytest（Ubuntu 已 1029 passed；Windows path 修正後等待最新 main CI）
 - [ ] deterministic workflow dry-run matrix
 - [ ] real-Qwen resume / closed-loop probes
 - [ ] 24H high-density soak
