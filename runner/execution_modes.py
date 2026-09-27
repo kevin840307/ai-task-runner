@@ -1,52 +1,28 @@
-"""Compatibility registry for workflow execution modes.
+"""Compatibility metadata for workflow execution modes.
 
-The current production runtime is Linear. Shared execution lives in
-WorkflowRunner; routing semantics should evolve behind FlowEngine rather than
-copying runners per mode.
+The production runtime is intentionally single-runner. The public execution_mode
+field remains for backward-compatible request/state identity, while future
+behavioral variation belongs behind FlowEngine as RoutingStrategy.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .config.runtime import RuntimeConfig
-
-ExecutionRunner = Callable[["RuntimeConfig"], int]
 
 
 @dataclass(frozen=True)
 class ExecutionModeSpec:
     name: str
-    runner: ExecutionRunner
     requires_workflow: bool = True
     description: str = ""
 
 
-_MODES: dict[str, ExecutionModeSpec] = {}
-
-
-def register_execution_mode(
-    name: str,
-    runner: ExecutionRunner,
-    *,
-    requires_workflow: bool = True,
-    description: str = "",
-    replace: bool = False,
-) -> None:
-    key = str(name or "").strip()
-    if not key:
-        raise ValueError("execution mode name is required")
-    if not callable(runner):
-        raise TypeError("execution mode runner must be callable")
-    if key in _MODES and not replace:
-        raise ValueError(f"execution mode already registered: {key}")
-    _MODES[key] = ExecutionModeSpec(
-        name=key,
-        runner=runner,
-        requires_workflow=bool(requires_workflow),
-        description=str(description or "").strip(),
-    )
+_MODES: dict[str, ExecutionModeSpec] = {
+    "linear": ExecutionModeSpec(
+        name="linear",
+        requires_workflow=True,
+        description="Linear Workflow with rollback/recovery/loop routing.",
+    ),
+}
 
 
 def execution_mode_names() -> tuple[str, ...]:
@@ -75,29 +51,9 @@ def execution_mode_catalog() -> dict[str, dict[str, object]]:
     }
 
 
-def execute_execution_mode(config: "RuntimeConfig") -> int:
-    return execution_mode_spec(config.execution_mode).runner(config)
-
-
-def _run_linear(config: "RuntimeConfig") -> int:
-    from .workflow_runner import WorkflowRunner
-
-    return WorkflowRunner(config).run()
-
-
-register_execution_mode(
-    "linear",
-    _run_linear,
-    requires_workflow=True,
-    description="Linear Workflow with rollback/recovery/loop routing.",
-)
-
-
 __all__ = [
     "ExecutionModeSpec",
-    "execute_execution_mode",
     "execution_mode_catalog",
     "execution_mode_names",
     "execution_mode_spec",
-    "register_execution_mode",
 ]
