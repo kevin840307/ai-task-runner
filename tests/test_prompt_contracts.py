@@ -47,16 +47,15 @@ def test_strict_undefined_fails_fast(tmp_path):
         render_prompt(str(template), {})
 
 
-def test_review_prompts_keep_behavior_delta_while_protocol_owns_invariants():
+def test_review_prompt_and_protocol_split_role_from_shared_control():
     from runner.prompts.protocols import REVIEW_PROTOCOL
 
     review = (PROMPT_ROOT / "stages" / "review.md").read_text(encoding="utf-8")
-    continuation = (PROMPT_ROOT / "stages" / "review_continue.md").read_text(encoding="utf-8")
 
     assert "current TODO only" in review
     assert "adequate evidence" in review
-    assert "Do not reuse the previous verdict" in continuation
-    assert "Do not repeat a previous missing item if it is now satisfied" in continuation
+    assert "Runner shared control" in review
+    assert "Do not repeat a previous missing item if it is now satisfied" in review
     assert "Do not modify, repair, write, edit" in REVIEW_PROTOCOL
     assert "Do not inspect workflow, Runner state, prompts, or validator implementation" in REVIEW_PROTOCOL
     assert "Do not repeat the same successful read/tool call" in REVIEW_PROTOCOL
