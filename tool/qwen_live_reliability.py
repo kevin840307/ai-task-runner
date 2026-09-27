@@ -1823,6 +1823,113 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     assert_prompt_transport_contract(project)
 
 
+FULL_LOOP_EXECUTION_PROMPT = """This Stage proves a complete semantic closed loop.
+The project starts with loop.txt containing only READY.
+- On the initial execution, before Review or Validator feedback exists, leave loop.txt unchanged.
+- When Review feedback says REVIEW_OK is missing, preserve READY and add REVIEW_OK as its own logical line. Do not add VALIDATOR_OK yet.
+- Only when Validator feedback says VALIDATOR_OK is missing, preserve existing lines and add VALIDATOR_OK as its own logical line.
+Modify loop.txt only. Do not anticipate later feedback.
+"""
+
+FULL_LOOP_REVIEW_PROMPT = """Inspect loop.txt only.
+PASS when logical lines READY and REVIEW_OK are both present.
+VALIDATOR_OK may be present and must not cause failure.
+FAIL only when READY or REVIEW_OK is missing, and name the missing logical line.
+"""
+
+FULL_LOOP_SEED = '''from pathlib import Path
+Path("loop.txt").write_text("READY\\n", encoding="utf-8")
+'''
+
+FULL_LOOP_WORKFLOW = '''stages:
+  seed:
+    type: command
+    command: "{python} seed_loop.py"
+
+  execute:
+    type: task
+    prompt: full_loop_execute.md
+
+  review:
+    type: review
+    prompt: full_loop_review.md
+    skip_on_error: false
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} full_loop_validator.py"
+
+flow:
+  - seed
+  - execute
+  - stage: review
+    restart_at: execute
+  - stage: validate_file
+    restart_at: execute
+'''
+
+FULL_LOOP_VALIDATOR = '''from pathlib import Path
+root = Path(".").resolve()
+target = root / "loop.txt"
+marker = root / ".validator-failed-once"
+lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+if "READY" not in lines or "REVIEW_OK" not in lines:
+    print("VALIDATION_FAILED: READY and REVIEW_OK must already be present")
+    raise SystemExit(1)
+if not marker.exists():
+    marker.write_text("1", encoding="utf-8")
+    print("VALIDATION_FAILED: add VALIDATOR_OK as its own logical line; preserve READY and REVIEW_OK")
+    raise SystemExit(1)
+if "VALIDATOR_OK" not in lines:
+    print("VALIDATION_FAILED: VALIDATOR_OK is missing; add it and preserve existing lines")
+    raise SystemExit(1)
+print("VALIDATION_PASSED")
+'''
+
+
+def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
+    """Exercise Review FAIL and Validator FAIL in one real-Qwen linear run."""
+    project = create_project(root, "complete-closed-loop-probe")
+    (project / "seed_loop.py").write_text(FULL_LOOP_SEED, encoding="utf-8")
+    (project / "full_loop_execute.md").write_text(
+        FULL_LOOP_EXECUTION_PROMPT, encoding="utf-8"
+    )
+    (project / "full_loop_review.md").write_text(
+        FULL_LOOP_REVIEW_PROMPT, encoding="utf-8"
+    )
+    (project / "full_loop_validator.py").write_text(
+        FULL_LOOP_VALIDATOR, encoding="utf-8"
+    )
+    workflow = project / "workflow.yaml"
+    workflow.write_text(FULL_LOOP_WORKFLOW, encoding="utf-8")
+    code = run_command(
+        runner_command(settings, project, workflow=workflow),
+        console_log(project, "console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_state_completed(project, code)
+    lines = (project / "loop.txt").read_text(encoding="utf-8").splitlines()
+    if lines != ["READY", "REVIEW_OK", "VALIDATOR_OK"]:
+        raise RuntimeError(f"complete closed-loop probe produced unexpected lines: {lines}")
+    if not observed_stage_result(project, "review", "fail"):
+        raise RuntimeError("complete closed-loop probe did not exercise Review FAIL")
+    if not observed_stage_result(project, "validate_file", "fail"):
+        raise RuntimeError("complete closed-loop probe did not exercise Validator FAIL")
+    starts = [
+        event.get("stage")
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    if starts.count("execute") < 3 or starts.count("review") < 2 or starts.count("validate_file") < 2:
+        raise RuntimeError(
+            "complete closed-loop probe did not traverse the expected repeated stages: "
+            f"execute={starts.count('execute')}, review={starts.count('review')}, "
+            f"validate_file={starts.count('validate_file')}"
+        )
+    assert_prompt_transport_contract(project)
+
+
 def validator_failure_routing_probe(settings: Settings, root: Path) -> None:
     marker = root / "_harness-control" / "validator-first-value.txt"
     validator = f'''from __future__ import annotations
@@ -2882,6 +2989,8 @@ def main() -> int:
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
         review_failure_routing_probe(settings, run_root)
         print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
+        complete_closed_loop_probe(settings, run_root)
+        print("PASS complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure probe", flush=True)
         validator_failure_routing_probe(settings, run_root)
         print("PASS validator FAIL -> Planning shared-feedback routing probe", flush=True)
         file_protection_probe(settings, run_root)
