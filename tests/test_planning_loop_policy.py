@@ -86,10 +86,10 @@ def context(tmp_path: Path) -> StageContext:
     )
 
 
-def test_planning_loop_caps_same_session_retry_to_one():
+def test_planning_loop_caps_retry_to_one():
     stage = PlanningStage()
     error = planning_loop_error("loop", "consecutive_identical_tool_calls")
-    assert StageExecutor._same_session_retry_limit(stage, error, 5) == 1
+    assert StageExecutor._retry_limit(stage, error, 5) == 1
 
 
 def test_planning_loop_failure_key_ignores_dynamic_backend_noise(tmp_path: Path):
@@ -106,10 +106,10 @@ def test_non_planning_stage_keeps_generic_retry_budget():
     stage = PlanningStage()
     stage.result_kind = "review"
     error = planning_loop_error("loop", "consecutive_identical_tool_calls")
-    assert StageExecutor._same_session_retry_limit(stage, error, 5) == 5
+    assert StageExecutor._retry_limit(stage, error, 5) == 5
 
 
-def test_planning_repeated_loop_rotates_fresh_after_one_same_session_retry(tmp_path: Path):
+def test_planning_repeated_loop_rotates_fresh_after_one_retry(tmp_path: Path):
     stage = PlanningStage()
     ctx = context(tmp_path)
     fresh_sessions: list[str] = []
@@ -123,7 +123,7 @@ def test_planning_repeated_loop_rotates_fresh_after_one_same_session_retry(tmp_p
 
     assert result.status == "pass"
     assert stage.calls == 3
-    assert stage.retry_modes == ["initial", "same", "fresh"]
+    assert stage.retry_modes == ["initial", "retry", "recover"]
     assert fresh_sessions == ["planning-session-1"]
 
 
@@ -137,7 +137,7 @@ class AlwaysLoopPlanningStage(PlanningStage):
         )
 
 
-def test_planning_loop_stops_after_same_then_fresh_instead_of_replanning_forever(tmp_path: Path):
+def test_planning_loop_stops_after_retry_then_recover_instead_of_replanning_forever(tmp_path: Path):
     stage = AlwaysLoopPlanningStage()
     ctx = context(tmp_path)
     executor = StageExecutor(Hooks())
@@ -146,6 +146,6 @@ def test_planning_loop_stops_after_same_then_fresh_instead_of_replanning_forever
 
     assert result.status == "error"
     assert stage.calls == 3
-    assert stage.retry_modes == ["initial", "same", "fresh"]
+    assert stage.retry_modes == ["initial", "retry", "recover"]
     assert ctx.state.fresh_session_round == 1
     assert ctx.state.same_failures == 3
