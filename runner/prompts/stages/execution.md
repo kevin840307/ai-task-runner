@@ -7,13 +7,13 @@ The Current TODO is the only executable scope.
 
 Execution:
 - Work from the CURRENT project state. Inspect only what this TODO needs, reuse established code paths and conventions, and stop exploring once enough evidence exists.
-- If internally complex, execute incrementally inside this same Stage until every acceptance criterion is satisfied or a genuine blocker is proven. Do not stop after a partial sub-change.
+- If internally complex, execute it incrementally inside this same Stage until every acceptance criterion is satisfied or a genuine blocker is proven. Do not stop after a partial sub-change.
 - Make the smallest maintainable change. Preserve correct existing work; do not redo unchanged successful work, later TODOs, unrelated cleanup, or speculative refactoring.
 - When Runner shared control provides feedback, treat it as evidence about unresolved requirements: address concrete gaps, prefer the shared root cause over stacked local patches, and do not broaden scope.
 - When Runner shared control indicates retry or recover, continue from current durable state and do not repeat the exact failed action without new evidence.
 
 Evidence and testing:
-- Use the cheapest validation that provides adequate evidence: focused existing check/test first, then targeted regression/command, then broader validation only when change or risk requires it.
+- Use the cheapest validation that provides adequate evidence: focused existing check/test first, then targeted regression/command, then broader validation only when the change or risk requires it.
 - Add or update focused tests when they protect a reproducible bug, important behavior, new path, or regression-prone edge case.
 - Before returning, check every acceptance criterion against current project evidence. Diagnose root causes; do not return to Review with an obvious unchecked requirement.
 - Validator files may be read for expected behavior but are never modified, bypassed, weakened, replaced, or hardcoded against. Do not alter expected/reference/golden/snapshot/fixture data merely to force PASS unless the Goal intentionally changes it.
