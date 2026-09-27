@@ -22,7 +22,6 @@ class PlanStageSpec(BaseStageSpec):
     run_state: str = "planning"
     prompt: str = "stages/plan_finalize.md"
     min_tasks: int = MIN_PLANNED_TASKS
-    repair_plan: bool = False
 
 
 class PlanStage(BaseStage):
@@ -37,11 +36,10 @@ class PlanStage(BaseStage):
         super().__init__(replace(spec, parser=parser))
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
-        repair = self.spec.repair_plan
-        values = build_stage_prompt_context(ctx, "repair_plan" if repair else "planning")
+        values = build_stage_prompt_context(ctx, "planning")
         planning = dict(values["planning"])
-        planning["inspection_summary"] = (
-            "" if repair else bounded_text(previous.output if previous else "", 12000)
+        planning["inspection_summary"] = bounded_text(
+            previous.output if previous else "", 12000
         )
         values["planning"] = planning
         prompt = render_prompt(self.spec.prompt, values)
