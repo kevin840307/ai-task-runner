@@ -21,7 +21,7 @@ function rememberValidator(workflow, value) { if (!state.project || !workflow) r
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, flow_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -691,6 +691,20 @@ async function refreshBackends() {
   try { const data = await api("/api/backends", { timeoutMs: 15000 }); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
   catch (_) { state.backends = ["qwen", "opencode"]; state.defaultBackend = "qwen"; renderBackendPicker(); }
 }
+async function refreshWorkflowCatalog() {
+  try {
+    const data = await api("/api/workflow/catalog", { timeoutMs: 15000 });
+    state.workflowCatalog = data && typeof data === "object" ? data : { stage_types: {}, flow_options: {} };
+    const add = $("addStageType");
+    if (add) {
+      const selected = add.value || "task";
+      add.innerHTML = stageTypesOptions(selected);
+      if (![...add.options].some((o) => o.value === selected)) add.value = add.options[0]?.value || "";
+    }
+  } catch (_) {
+    state.workflowCatalog = { stage_types: {}, flow_options: {} };
+  }
+}
 function closeBackendDropdown() {
   const menu = $("backendDropdownMenu"), picker = $("backendPicker"), button = $("backendDropdownButton"); if (!menu || !picker || !button) return;
   menu.hidden = true; menu.classList.remove("backend-dropdown-portal"); menu.removeAttribute("style"); if (menu.parentElement !== picker) picker.appendChild(menu); button.setAttribute("aria-expanded", "false");
@@ -1103,7 +1117,11 @@ async function checkPromptSyntax() {
 // ------------------------------ Stage Editor ------------------------------
 function fieldValue(id) { return $(id)?.value ?? ""; }
 function checked(id) { return Boolean($(id)?.checked); }
-function stageTypesOptions(selected) { return ["base", "task", "review", "plan", "ai_validator", "command"].map((v) => `<option value="${v}" ${v === selected ? "selected" : ""}>${v}</option>`).join(""); }
+function stageTypeCatalog() { return state.workflowCatalog?.stage_types && typeof state.workflowCatalog.stage_types === "object" ? state.workflowCatalog.stage_types : {}; }
+function stageTypeNames() { const names = Object.keys(stageTypeCatalog()); return names.length ? names : ["base", "task", "review", "plan", "ai_validator", "command"]; }
+function stageTypeOptions(type) { return Array.isArray(stageTypeCatalog()?.[type]?.options) ? stageTypeCatalog()[type].options : []; }
+function stageHasOption(type, name) { return stageTypeOptions(type).some((item) => item?.name === name); }
+function stageTypesOptions(selected) { const names = stageTypeNames(); if (selected && !names.includes(selected)) names.push(selected); return names.map((v) => `<option value="${escapeHtml(v)}" ${v === selected ? "selected" : ""}>${escapeHtml(v)}</option>`).join(""); }
 function parserOptions(selected) { return [["", "Stage default"], ["review", "review"], ["validation", "validation"]].map(([value, label]) => `<option value="${value}" ${value === (selected || "") ? "selected" : ""}>${label}</option>`).join(""); }
 function flowStageOptions(selected) {
   const max = Math.max(0, state.selectedFlowIndex); const seen = new Set(); const rows = ['<option value="">None</option>'];
@@ -1127,8 +1145,8 @@ function promptOptionRows(current) {
   if (current && !matched) rows.push(`<option value="${escapeHtml(current)}" selected>Current · ${escapeHtml(current)}</option>`);
   return rows.join("");
 }
-function stageSupportsPrompt(type) { return ["base", "task", "review", "ai_validator"].includes(type); }
-function stageSupportsParser(type) { return !["command", "plan"].includes(type); }
+function stageSupportsPrompt(type) { const catalog = stageTypeCatalog(); return Object.keys(catalog).length ? stageHasOption(type, "prompt") : ["base", "task", "review", "ai_validator"].includes(type); }
+function stageSupportsParser(type) { const catalog = stageTypeCatalog(); return Object.keys(catalog).length ? stageHasOption(type, "parser") : !["command", "plan"].includes(type); }
 function currentStageModal() { return document.querySelector(".designer-step-modal-box"); }
 function markStageEditorDirty() { state.stageEditorDirty = true; }
 async function openStageEditor(index = state.selectedFlowIndex) {
@@ -1911,7 +1929,7 @@ window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
+}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) Promise.allSettled([refreshRuntime(), refreshProjectStatuses(), refreshStudioGuard()]); });
 
 $("newWorkflowDestination").onchange = () => syncCustomFolderVisibility("workflow");
