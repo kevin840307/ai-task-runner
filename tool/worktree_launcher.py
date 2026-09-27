@@ -296,6 +296,8 @@ def runner_command(config: LaunchConfig, job: Job, *, require_script: bool = Tru
         str(config.runner),
         "--project-root",
         str(job.worktree),
+        "--execution-mode",
+        "linear",
         "--script",
         str(job.task_yaml),
     ]
