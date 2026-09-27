@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from project_registry import project_file_lock
+from runner.utils.files import path_key
 
 try:
     from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
@@ -56,7 +57,7 @@ class _IndentedSafeDumper(yaml.SafeDumper):
 
 class UIState(WorkflowBuilderMixin):
     def __init__(self, repo_root: Path) -> None:
-        self.repo_root = repo_root.resolve()
+        self.repo_root = Path(repo_root).expanduser().absolute()
         self.ui_root = self.repo_root / "ui"
         self.static_root = self.ui_root / "static"
         self.projects_file = self.ui_root / "data" / "projects.json"
@@ -79,11 +80,11 @@ class UIState(WorkflowBuilderMixin):
     # ------------------------------ projects/runtime/chat ------------------------------
     @staticmethod
     def _project_path_key(path: str | Path) -> str:
-        return os.path.normcase(os.path.abspath(str(path)))
+        return path_key(path)
 
     @staticmethod
     def _project_display_path(path: str | Path) -> str:
-        return str(Path(path).expanduser().resolve())
+        return str(Path(path).expanduser().absolute())
 
     def projects_payload(self) -> dict:
         # Runtime status is live process/state data. Do not cache it using only
@@ -2047,9 +2048,12 @@ class UIState(WorkflowBuilderMixin):
                 for path in root.rglob(suffix):
                     if "prompts" not in path.parts:
                         paths.append(path.resolve())
-        known_projects = [Path(row["path"]).resolve() for row in self.projects() if row.get("exists")]
-        if project is not None and project.resolve() not in known_projects:
-            known_projects.append(project.resolve())
+        known_projects = [Path(row["path"]).absolute() for row in self.projects() if row.get("exists")]
+        if project is not None:
+            project_path = Path(project).absolute()
+            known_keys = {path_key(path) for path in known_projects}
+            if path_key(project_path) not in known_keys:
+                known_projects.append(project_path)
         for root in known_projects:
             for _folder, _package_root, workflow_dir, _prompt_dir in (iter_project_packages(root) or ()):
                 for suffix in ("*.yaml", "*.yml"):
@@ -2057,9 +2061,10 @@ class UIState(WorkflowBuilderMixin):
         result: list[Path] = []
         seen: set[str] = set()
         for path in paths:
-            key = os.path.normcase(str(path))
+            key = path_key(path)
             if key not in seen:
-                seen.add(key); result.append(path)
+                seen.add(key)
+                result.append(path)
         return result
 
     def _prompt_usages(self, prompt_path: Path, project: Path | None = None) -> list[str]:
