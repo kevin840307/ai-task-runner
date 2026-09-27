@@ -1200,6 +1200,40 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(data["flow"][1]["repeat"], 2)
         self.assertEqual(data["flow"][1]["fresh_after_same_failures"], 1)
 
+    def test_stage_save_can_override_recover_per_flow_invocation(self) -> None:
+        self.workflow.write_text(
+            "stages:\n"
+            "  review:\n"
+            "    type: review\n"
+            "    recover: [fallback]\n"
+            "  fallback:\n"
+            "    type: task\n"
+            "  targeted:\n"
+            "    type: task\n"
+            "flow:\n"
+            "  - review\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_save(
+            item["id"],
+            "review",
+            {},
+            opened["hash"],
+            self.project,
+            flow_index=0,
+            flow_fields={
+                "recover": ["targeted"],
+                "max_attempts": 2,
+                "on_exhausted": "fail",
+            },
+        )
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertEqual(data["stages"]["review"]["recover"], ["fallback"])
+        self.assertEqual(data["flow"][0]["recover"], ["targeted"])
+        self.assertEqual(data["flow"][0]["max_attempts"], 2)
+
     def test_stage_save_supports_bounded_recovery_flow_fields(self) -> None:
         self.workflow.write_text(
             "stages:\n  review:\n    type: review\n    recover: [review]\nflow:\n  - review\n", encoding="utf-8"
