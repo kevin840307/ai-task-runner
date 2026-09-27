@@ -218,6 +218,31 @@ class UIState(WorkflowBuilderMixin):
             names.add(default)
         return {"default": default, "backends": sorted(names)}
 
+    def execution_mode_catalog(self) -> dict:
+        """Return the Runner-owned top-level orchestration catalog."""
+        tool = self.repo_root / "tool" / "execution_mode_catalog.py"
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(tool)],
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Execution mode catalog unavailable: {exc}") from exc
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise ValueError("Execution mode catalog failed: " + detail[-2000:])
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Execution mode catalog returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Execution mode catalog must be an object")
+        return payload
+
     def workflow_catalog(self) -> dict:
         """Return the Runner-owned Stage/editor contract without importing Core."""
         tool = self.repo_root / "tool" / "workflow_catalog.py"
@@ -2746,6 +2771,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.backend_catalog())
             if parsed.path == "/api/workflow/catalog":
                 return self._json(self.state.workflow_catalog())
+            if parsed.path == "/api/execution-modes":
+                return self._json(self.state.execution_mode_catalog())
             if parsed.path == "/api/environment/check":
                 return self._json(self.state.environment_check())
             if parsed.path == "/api/studio/files":
