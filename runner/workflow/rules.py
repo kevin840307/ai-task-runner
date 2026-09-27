@@ -184,6 +184,7 @@ def complete_run(state: RunState) -> None:
     state.validator_failure_count = 0
     state.ai_session_id = ""
     state.replan_feedback = ""
+    state.transition_previous = {}
     state.task_step = 0
     state.completed = True
 
