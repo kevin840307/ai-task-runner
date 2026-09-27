@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -60,7 +61,7 @@ class FlowEngine:
 
     def run(self, executor: StageExecutor, *, plan_only: bool = False) -> int:
         state = self.context.state
-        previous: StageResult | None = None
+        previous = self._restore_transition()
         stop = False
 
         while (
@@ -184,6 +185,7 @@ class FlowEngine:
                     if node.label
                     else executor.run(node.stage, self.context, previous)
                 )
+                self._remember_transition(result)
                 if result.status == "pass" and result.kind == "tasks":
                     self._task_generation += 1
                 action = self.recovery.decide(node, result, executor)
@@ -230,6 +232,45 @@ class FlowEngine:
 
             previous = result
         return None, previous, False
+
+    def _restore_transition(self) -> StageResult | None:
+        saved = self.context.state.transition_previous
+        if not saved:
+            return None
+        status = str(saved.get("status", "pass"))
+        if status not in {"pass", "fail", "error", "replan"}:
+            return None
+        kind = str(saved.get("kind", "generic"))
+        if kind not in {"generic", "tasks", "task", "review", "validation"}:
+            kind = "generic"
+        changed_files = saved.get("changed_files", [])
+        if not isinstance(changed_files, list):
+            changed_files = []
+        return StageResult(
+            stage=str(saved.get("stage", "stage")),
+            status=status,
+            output=str(saved.get("output", "")),
+            changed_files=[
+                str(item) for item in changed_files if isinstance(item, str)
+            ],
+            skipped=bool(saved.get("skipped", False)),
+            data=saved.get("data"),
+            kind=kind,
+        )
+
+    def _remember_transition(self, result: StageResult) -> None:
+        self.context.state.transition_previous = {
+            "stage": result.stage,
+            "status": result.status,
+            "output": result.output,
+            "changed_files": list(result.changed_files),
+            "skipped": result.skipped,
+            "data": json.loads(
+                json.dumps(result.data, ensure_ascii=False, default=str)
+            ),
+            "kind": result.kind,
+        }
+        self.context.save_state()
 
     def _advance(self, node: FlowNode) -> None:
         self.routing.advance(node.workflow_index)
