@@ -4,431 +4,657 @@ AI Task Runner Refactor TODO
 目標
 ----
 在不破壞目前 Linear Workflow、24H 無人值守、Resume、YAML List、UI/CLI 相容性的前提下，
-把架構整理成可長期支援：
+把核心整理成「Stage-centric + Single WorkflowRunner + Pluggable RoutingStrategy」。
+
+未來長期支援：
 1. Linear Workflow with Rollback / Loop
 2. Multi-Agent with Dynamic Handoff
 3. Multi-Agent Group Chat / Discussion
 
 共同產品入口維持不變：
 Chat / CLI / API -> 選 Workflow/Profile -> 輸入 Prompt -> Run
-execution_mode 由所選 Workflow/Profile 內部決定，不新增第二個 Chat mode selector。
 
-核心原則
---------
-- Stage 只負責執行與回傳 StageResult，不決定流程目的地。
-- Retry / Recover / Resume / Session rotation 都是 Runner infrastructure，不是特殊 Stage。
-- Flow / Router 決定 PASS / FAIL 後去哪裡。
-- execution_mode 決定使用哪一個 Orchestrator。
-- 共用 lifecycle 與 mode-specific state 分離。
-- 先保護 Linear 行為，再抽象；不要為尚未存在的 Group Chat 過度設計。
-- 每次重構都必須先通過 deterministic tests，再進 real-Qwen live probes，再跑 24H soak。
+使用者不需要另外選 execution mode。
+Workflow/Profile 自己描述 routing / execution semantics，UI 依 metadata 自動切換合適編輯方式。
 
-P0 - 現在應該重構
-===================
 
-[ ] 1. 拆分共用 Run Lifecycle 與 Linear-specific Durable State
+最終核心模型
+============
+
+只保留少量、容易理解的核心概念：
+
+1. Workflow
+   - 定義有哪些 Stage
+   - 定義 Edge / Routing 規則
+   - 指定 RoutingStrategy
+   - 保存 UI/editor metadata
+
+2. Stage
+   - 唯一執行單位
+   - Plan / Execute / Review / Validator / Command / Tool / Agent 本質上都是 Stage
+   - Agent 只是帶 role / prompt / session / tools 的 Stage
+   - Stage 只執行工作並回 StageResult，不直接修改流程目的地
+
+3. StageExecutor
+   - 負責如何可靠執行一個 Stage
+   - technical retry
+   - timeout
+   - watchdog
+   - API transient recovery
+   - same-session retry
+   - fresh-session escalation
+   - unexpected exception handling
+   - protected-path safety
+   - hooks / diagnostics
+
+4. FlowEngine
+   - 負責 StageResult 出來後下一步去哪裡
+   - 使用 RoutingStrategy
+   - 不執行 Agent 本身
+
+5. RoutingStrategy
+   - Linear
+   - Dynamic
+   - Discussion
+   - 只處理 routing semantics，不複製 Runner / retry / session / watchdog
+
+6. StateStore
+   - durable state
+   - checkpoint
+   - resume
+   - state migration
+   - 保持單一 authoritative commit point
+
+
+目標架構
+========
+
+Chat / CLI / API
+       |
+       v
+   Workflow/Profile
+       |
+       v
+   WorkflowRunner
+   |-- FlowEngine
+   |    '-- RoutingStrategy
+   |         |-- Linear
+   |         |-- Dynamic
+   |         '-- Discussion
+   |
+   |-- StageExecutor
+   |    |-- Retry / Recover
+   |    |-- Timeout / Watchdog
+   |    |-- Session handling
+   |    |-- API transient recovery
+   |    '-- Safety / Hooks
+   |
+   |-- StageRegistry
+   |    |-- AI Stage
+   |    |-- Review Stage
+   |    |-- Validator Stage
+   |    |-- Command Stage
+   |    '-- Tool Stage
+   |
+   '-- StateStore
+        |-- Run state
+        |-- Stage state
+        '-- routing_state
+
+
+重要原則
+========
+
+- Stage 是唯一執行單位。
+- Agent 不建立另一套平行 runtime；Agent 本質上就是 Stage。
+- Stage 不決定 destination。
+- Stage 可以回傳 routing intent / metadata，但 FlowEngine 最終決定是否允許及跳去哪裡。
+- Retry / technical recover / timeout / watchdog / session recovery 是共用 Runtime 能力。
+- Review FAIL / Validator FAIL / rollback / handoff / discussion round 是 Routing semantics。
+- 不為 Linear、Dynamic、Discussion 各複製一套 Runner。
+- 不建立 GenericEverything / UniversalGraph / UniversalAgent 等過度抽象。
+- 先用第二種模式驗證抽象，再抽真正重複的部分。
+- 優先讓人容易讀懂，再追求 pattern 漂亮。
+- 少量、責任清楚的模組，優於大量 20~50 行小 class / 小檔案。
+
+
+P0 - 現在優先重構
+=================
+
+[ ] 1. 收斂成 Single WorkflowRunner
 現況：
-- RunState 同時包含共用欄位與大量 Linear 專用欄位：
-  run_id / goal / project_root / execution_mode / completed
-  workflow_position / task_step / current / tasks
-  flow_result_* / semantic_failure_* / recovery_attempt_*
-- 未來 Dynamic Handoff / Group Chat 不應被迫理解 task_step、workflow_position。
+- TaskRunner 已經不只是 task executor，而是實際 Linear workflow bootstrap/runtime owner。
+- execution_modes.py 目前仍偏向 mode -> 不同 runner。
 
 方向：
-- 保留一個共用 RunState / RunLifecycleState：
-  run_id
-  goal
-  project_root
-  execution_mode
-  completed
-  stage/status
-  timestamps
-  last_error
-  shared session/resource identity
-- Linear 專用狀態收斂成 LinearState：
-  cycle
-  tasks/current
-  workflow_position
-  task_step
-  workflow_fingerprint
-  validator feedback
-  semantic/recovery counters
-- StateStore 仍保留單一 durable commit point，避免多檔 transaction 問題。
-- 建議 state.json 外層：
-  {
-    "run": {...common...},
-    "mode": {...linear state...}
-  }
-  或等價 typed serialization。
-- 必須支援舊 state.json migration / backward compatibility。
-
-驗收：
-- 舊 Linear resume state 可載入。
-- 新 state 可正常 resume。
-- execution_mode mismatch 仍 fail closed。
-- 24H resume / YAML List resume 不退步。
-
-
-[ ] 2. 集中 Linear Cursor / Routing State 的修改權
-現況：
-- Pipeline、RecoveryPolicy、rules.py 都會不同程度修改：
-  workflow_position
-  task_step
-  cycle
-  task completion
-  replan state
-- 最近已把 Validator FAIL destination 從 reducer 移回 Flow，方向正確，但責任仍可再集中。
-
-方向：
-- 建立 LinearRouter / FlowRuntime（名稱可調整）。
-- 只有這一層能直接修改：
-  workflow_position
-  task_step
-  restart target
-  replan transition
-  task-block restart
-- RecoveryPolicy 只回傳 decision，不直接擁有 cursor。
-- reducers 只更新語意資料：
-  task result
-  review evidence
-  validator feedback
-  TODO data
-- Pipeline 逐步變成執行 loop，不再同時負責太多 state mutation。
-
-驗收：
-- grep / contract test 可證明 cursor 欄位只有指定模組寫入。
-- Review FAIL -> Execute、Validator FAIL -> 任意普通 Stage、Validator FAIL -> Planning 都有 test。
-- compound closed-loop deterministic matrix PASS。
-
-
-[ ] 3. 補 Durable Previous Stage Result / Resume Semantic Equivalence
-現況：
-- Pipeline.run() 啟動時 previous = None。
-- workflow_position / task_step 有 durable persistence，但 process restart 後 previous StageResult 不一定保留。
-- 這代表「Resume 後可繼續跑」不一定等於「不中斷執行的 Stage context 完全一致」。
-
-方向：
-- 定義真正需要 durable 的 transition context，不要直接永久保存任意大型 StageResult。
-- 最小保存：
-  source_stage
-  status
-  bounded output
-  bounded structured data
-  result kind
-- 下一個 Stage 在 resume 後取得與不中斷流程等價的 previous context。
-- 清楚定義何時清除 transition context，避免 stale feedback。
-
-驗收：
-- deterministic test：
-  uninterrupted execution
-  ==
-  kill at every Stage boundary + resume
-  在 routing / prompt control / final artifact 上等價。
-- real-Qwen resume probe 同樣驗證。
-- 不因 previous result persistence 造成 state 無限膨脹。
-
-
-[ ] 4. 將 TaskRunner 明確改名/收斂為 Linear Orchestrator
-現況：
-- execution_modes.py 已有 registry。
-- linear mode 仍直接進 TaskRunner。
-- TaskRunner 現在同時做：
+- TaskRunner 逐步收斂/改名為 WorkflowRunner。
+- WorkflowRunner 共用：
   resource binding
-  workflow snapshot
-  state load
+  state load/save
   AI client setup
   StageContext
-  Pipeline
-  lifecycle setup
-
-方向：
-- 明確建立 LinearWorkflowOrchestrator（可先包住現有 TaskRunner，再逐步搬移）。
-- execution_modes.py 只做：
-  execution_mode -> orchestrator factory/runner
-- 共用 runtime bootstrap 移到共用 RunRuntime / RunContext builder。
-- Linear-specific workflow snapshot / fingerprint / Pipeline 留在 Linear orchestrator。
+  StageExecutor
+  FlowEngine
+- 不建立 LinearWorkflowOrchestrator / DynamicHandoffOrchestrator / DiscussionOrchestrator 三套厚 runtime。
+- mode 差異主要放在 RoutingStrategy。
 
 驗收：
-- linear execution behavior 完全不變。
-- 第二個 mock execution mode 可註冊而不 import Linear Pipeline。
-- UI/API/CLI 不需要知道 LinearWorkflowOrchestrator 類別。
+- 現有 Linear behavior 不變。
+- mock Dynamic Routing 可接入相同 WorkflowRunner。
+- 新 routing strategy 不需要複製 bootstrap / state / retry / session code。
 
 
-[ ] 5. 分離 Stage Execution Policy 與 Semantic Routing Policy
+[ ] 2. 集中 Flow / Cursor 修改權
 現況：
-- StageExecutor 負責 technical retry、same-session retry、fresh session、hooks/watchdog。
-- RecoveryPolicy 負責 semantic fail / recover / restart。
-- 邊界已有雛形，但命名與 durable counters 還混在同一 RunState。
+- Pipeline、RecoveryPolicy、rules.py 都會不同程度影響 workflow_position / task_step / replan / restart。
+- 人讀 code 時需要在多個檔案拼出完整流程。
 
 方向：
-- TechnicalExecutionPolicy：
-  API transient retry
-  Agent timeout
-  same-session retry
-  fresh-session escalation
-  unexpected exception policy
-- SemanticRoutingPolicy：
-  PASS / FAIL
-  restart_at
-  recover
-  repeat
-  max_attempts
-  on_exhausted
-  semantic same-failure threshold
-- 不讓 semantic FAIL 被 technical retry 誤吃掉。
-- 不讓 API/Agent transient error觸發 workflow semantic rollback。
+- 建立 FlowEngine（可從現有 Pipeline 漸進重構）。
+- FlowEngine / RoutingStrategy 是唯一能決定 workflow destination 的地方。
+- reducers 只更新 business/semantic state。
+- StageExecutor 不決定 semantic destination。
+- RecoveryPolicy 如果保留，只輸出 decision，不直接擁有 cursor。
 
 驗收：
-- test matrix 清楚分為 technical fault 與 semantic FAIL。
-- 同一錯誤最多自動恢復 N 次的定義不與 Review FAIL 混淆。
-- live API 429/502/503/disconnect 與 Review/Validator fail 各自走正確路徑。
+- workflow_position / task_step / next-stage mutation 只有 FlowEngine/RoutingStrategy owner。
+- Review FAIL -> Execute
+- Validator FAIL -> ordinary Stage
+- Validator FAIL -> Planning
+- recover edge
+- repeat
+- max_attempts
+全部可從 routing code 一路看懂。
 
 
-[ ] 6. 建立統一 Orchestration Asset Contract
+[ ] 3. 明確區分 Technical Recovery 與 Semantic Routing
+Technical Recovery（所有 routing strategy 共用）：
+- API 429/502/503
+- timeout
+- Agent/CLI transient failure
+- same-session retry
+- fresh-session escalation
+- expired session
+- watchdog
+- unexpected Python exception recovery
+- bounded technical failure budget
+
+Semantic Routing（FlowEngine 負責）：
+- PASS / FAIL destination
+- restart_at
+- rollback
+- recover edge
+- replan
+- handoff target
+- discussion next speaker / next round
+
+驗收：
+- technical error 不會誤觸 Review/Validator semantic rollback。
+- semantic FAIL 不會被 technical retry 當作 API failure 重試。
+- tests/live 明確分成 technical fault 與 semantic FAIL。
+
+
+[ ] 4. Durable Transition Context / Resume Semantic Equivalence
 現況：
-- Linear 使用 Workflow YAML。
-- 未來 Dynamic Handoff / Group Chat 會需要不同資料結構。
-- Chat 必須仍然只看到「Workflow/Profile」。
+- workflow_position / task_step durable。
+- Pipeline 啟動時 previous StageResult 重新從 None 開始。
+- process restart 後的 context 可能與不中斷執行不完全等價。
 
 方向：
-- 建立 user-facing asset metadata：
-  id
-  name
-  execution_mode
-  editor_kind
-  version/schema
-  source/location
-- Linear asset payload = 現有 stages + flow YAML。
-- Dynamic Handoff asset payload 未來可為 agents + handoff rules。
-- Group Chat asset payload 未來可為 participants + discussion policy。
-- 不把 execution_mode 塞進目前 Linear YAML root，除非正式升級 schema。
-
-驗收：
-- Chat selection 不新增 mode selector。
-- UI 能依 asset.execution_mode 開正確 editor。
-- Runtime 能從 asset resolve execution_mode。
-- Current system/custom Linear workflow 完全相容。
-
-
-P1 - 第二種 execution mode 前完成
-===============================
-
-[ ] 7. 建立 Mode-owned Progress Contract
-問題：
-- 現在 UI/API progress 容易依賴 Linear 欄位：
-  current
-  tasks
-  workflow_position
-  cycle
-- Dynamic Handoff / Group Chat 不適用。
-
-方向：
-- 共用 progress envelope：
-  lifecycle
+- 保存最小必要 transition context：
+  source_stage
   status
-  detail
-  progress_revision
-  execution_mode
-  mode_progress
-- mode_progress 由各 Orchestrator 自己定義。
-- UI common shell 只看共用欄位；mode-specific panel 才解讀 mode_progress。
+  kind
+  bounded output
+  bounded structured data
+- 不永久保存無限大的 StageResult。
+- 定義 transition context clear rules，避免 stale feedback。
 
 驗收：
-- Linear UI 顯示不退步。
-- mock non-linear mode 可回 progress 而不需要偽造 task_step/tasks。
+- uninterrupted execution
+  ==
+  每個 Stage boundary kill + resume
+  在 routing / control prompt / final artifact 上語意等價。
+- real-Qwen resume probe 驗證。
+- state 不會無限膨脹。
 
 
-[ ] 8. 統一 Runtime Resource / Resume Identity
+[ ] 5. 整理 RunState，但不要過度 class 化
+現況：
+- RunState 同時放：
+  lifecycle
+  tasks
+  linear cursor
+  validator feedback
+  flow counters
+  recovery counters
+  session data
+
 方向：
+- 保持一個 durable state commit point。
+- 邏輯上至少分成：
+  common run state
+  stage state
+  routing_state
+- routing_state 允許 strategy-specific data：
+  Linear: position / task_step / task cursor
+  Dynamic: current_stage / handoff counters
+  Discussion: round / speaker / discussion state
+- 不急著做三套大型 State class。
+- serialization shape 等 ownership 穩定後再 migration。
+
+驗收：
+- 人看 state schema 能清楚知道欄位 owner。
+- 舊 Linear state 可 migrate/resume。
+- execution/routing strategy mismatch fail closed。
+
+
+[ ] 6. Stage Contract 統一
+方向：
+- Plan / Execute / Review / Validator / Agent 都遵守同一 Stage contract。
+- Stage.run/context -> StageResult。
+- Agent role/profile 不一定需要額外 subclass：
+  role
+  prompt
+  session_key
+  tools
+  readonly/safety
+可以由 AI Stage spec 配置。
+- 避免 CoderAgentStage / ReviewerAgentStage / ArchitectAgentStage 無限制增加 class。
+
+StageResult 原則：
+- status 保持少量、穩定：
+  pass / fail / error（必要時保留現有 replan 相容層）
+- dynamic handoff intent 放 structured result/data。
+- FlowEngine 驗證 routing intent 是否合法。
+
+驗收：
+- 新增一個新角色 Agent 通常只需要 config/spec，不需新增 runtime class。
+- Stage 不直接 mutate workflow_position。
+
+
+[ ] 7. Workflow Asset / UI Switching Contract
+目標：
+未來 UI 能簡單切換不同 Workflow 類型，但 Chat 操作仍只有「選 Workflow」。
+
+Workflow/Profile metadata 至少描述：
+- id
+- name
+- routing_strategy
+- editor_kind
+- schema_version
+- capabilities
+- source/location
+
+UI 行為：
+- 選 Linear workflow -> 開 Graph/Linear editor
+- 選 Dynamic workflow -> 同一 Graph editor + dynamic routing controls
+- 選 Discussion workflow -> Graph editor + discussion/group properties
+- Chat 本身不要增加 mode selector。
+
+重要：
+- UI 優先共用同一個 Graph Designer。
+- 差異透過 node/edge property panel 與 strategy-specific settings 呈現。
+- 不建立三套完全分離的 editor，除非未來 UI 證明真的需要。
+
+驗收：
+- workflow 切換只依 asset metadata。
+- UI 不 hardcode system workflow 名稱。
+- runtime/UI 使用同一 schema/catalog source。
+- 未來新增第四種 RoutingStrategy 時不需要改 Chat entry flow。
+
+
+[ ] 8. 重新整理 execution_modes.py
+方向：
+- execution_mode/routing strategy 的角色重新確認。
+- 如果 mode 本質只剩 routing semantics，可逐步收斂：
+  WorkflowRunner + RoutingStrategyRegistry
+- 保留相容層，不一次破壞現有 CLI/UI。
+- execution_mode 可作舊 API alias / high-level metadata，內部真正使用 routing_strategy。
+
+驗收：
+- 不再需要 mode -> completely separate TaskRunner。
+- mock strategy 可由 registry 註冊。
+- 現有 linear config 正常載入。
+
+
+P0 - Human Maintainability / Code Readability
+============================================
+
+[ ] 9. 過長檔案與過長函式瘦身
+目的：
+不是追求行數漂亮，而是降低閱讀時需要同時記住的事情。
+
+優先檢查：
+- runner/workflow/pipeline.py
+- runner/workflow/stages.py
+- runner/runtime/run_state.py
+- runner/task_runner.py
+- tool/qwen_live_reliability.py
+- UI 大型 component / API module
+
+拆分原則：
+- 一個檔案只有一個主要 domain responsibility。
+- 一個函式只做一段可命名流程。
+- 超長測試工具可以按 probe/category 拆 module，但保留單一 CLI entry。
+- 不要拆成大量只有 20~30 行、彼此跳來跳去的小檔案。
+
+建議警戒線（不是硬性 lint）：
+- production file > ~500 行：review 是否混了多個 responsibility。
+- function > ~80 行：review 是否能抽明確 helper。
+- class 同時處理 >=3 個 domain：優先檢查。
+- nested branch >3~4 層：優先 early return / decision object。
+- 相同 state mutation 出現在 >=2 modules：重新定義 owner。
+
+驗收：
+- 新人主要看 3~5 個核心檔案，可以理解：
+  normal flow
+  semantic rollback
+  technical retry
+  resume
+  state save
+- 不需要在 8~10 個 module 之間來回拼 execution flow。
+
+
+[ ] 10. 命名與檔案 responsibility 清理
+重點：
+- rules.py 名稱過泛，評估改成更精準名稱或拆出 reducer responsibility。
+- RecoveryPolicy 名稱需避免 technical recovery / semantic recovery 混淆。
+- TaskRunner 名稱與實際 workflow responsibility 不一致。
+- Pipeline 最終若成為 FlowEngine，名稱應跟責任一致。
+
+命名原則：
+- technical retry/recovery 明確標 Technical。
+- semantic routing/rollback 明確標 Routing/Transition。
+- persistence 明確標 StateStore。
+- 不使用 manager/helper/utils 作為大型 domain class 名稱，除非真的只是 generic helper。
+
+
+[ ] 11. 刪除 legacy / duplicate paths
+方向：
+- 每次新 abstraction 穩定後移除舊 path。
+- 不長期保留：
+  old + new routing
+  old + new state mutation
+  old + new prompt loading
+  old + new mode dispatch
+- compatibility layer 必須有 planned removal point。
+
+驗收：
+- 一件事情只有一條 production code path。
+- contract tests 防止 legacy path 被重新使用。
+
+
+[ ] 12. 文件跟著 code structure 走
+新增簡短 architecture.md 或 README section：
+- 1 張核心資料流圖。
+- 4 個核心概念：
+  Workflow / Stage / StageExecutor / FlowEngine。
+- Technical failure vs Semantic failure。
+- Resume/checkpoint contract。
+- 如何新增 Stage。
+- 如何新增 RoutingStrategy。
+
+要求：
+- 文件能從程式碼 class/module 名稱直接對應。
+- 不寫與實際 code 分離的理想架構圖。
+
+
+P1 - 第二種 RoutingStrategy 前完成
+=================================
+
+[ ] 13. RoutingStrategy Protocol
+保持最小：
+- initial/current stage resolution
+- apply StageResult
+- next transition
+- completion/stop
+- serialize routing_state / validate resume
+
+不要加入尚未證明必要的：
+- GenericAgent
+- GenericConversation
+- UniversalGraph node inheritance
+- arbitrary expression engine
+
+
+[ ] 14. Mode/Strategy-owned Progress Contract
+共用 progress：
+- lifecycle
+- status
+- detail
+- progress_revision
+- workflow/profile id
+- routing strategy
+
+strategy_progress：
+- Linear: task/current/stage
+- Dynamic: active stage / latest handoff
+- Discussion: round / active speaker
+
+UI shell 只依賴共用欄位。
+
+
+[ ] 15. 共用 Runtime Resource / Resume Identity
+集中：
 - workflow/profile snapshot
 - goal resource
 - validator prompt resource
-- mode asset fingerprint
-- execution_mode
+- workflow fingerprint
+- routing strategy
+- schema version
 - resume compatibility
-應該由共用 RunRuntime 管理，不散落於不同 orchestrator。
 
-驗收：
-- Resume 明確拒絕：
-  execution_mode 改變
-  orchestration asset fingerprint 改變
-  project_root 不同
-- 舊 Linear behavior 相容。
+Resume fail closed：
+- project_root 不同
+- workflow asset identity 不同
+- incompatible schema
+- routing strategy 改變
 
 
-[ ] 9. 建立 Orchestrator Protocol，而不是 Generic Everything
-最小介面即可，例如：
-- prepare()
-- run()
-- resume()
-- progress()
-- close()/cleanup()
+[ ] 16. Dynamic Routing 最小 prototype
+不要先做完整 multi-agent platform。
 
-不要現在抽象：
-- GenericNode
-- GenericConversation
-- GenericAgentGraph
-- GenericUniversalState
+最小案例：
+Planner Stage
+ -> Coder Stage
+ -> Reviewer Stage
+Reviewer Stage 可回 routing intent：
+- coder
+- architect
+- validator
 
-等 Dynamic Handoff 真正實作後，再從兩個 mode 的真實重複抽共用介面。
+FlowEngine 驗證 target 與 budget 後決定 next Stage。
 
-
-[ ] 10. UI Editor 與 Runtime Catalog 解耦
-方向：
-- Stage catalog 只屬 Linear editor。
-- Execution mode catalog 是 runtime/editor capability registry。
-- Chat 不直接顯示 mode catalog。
-- Workflow/Profile catalog entry 帶 execution_mode/editor_kind。
-
-驗收：
-- 現有 Linear Workflow Designer 不退步。
-- future non-linear asset 不會被硬塞進 stages/flow editor。
+目的：
+用真實第二 strategy 驗證目前 abstraction 是否正確。
 
 
-P2 - 有第二種模式後再決定是否抽
-===============================
+P2 - Dynamic 實作後再決定
+=========================
 
-[ ] 11. Session Manager 是否抽成共用 AgentSessionPool
-只有 Dynamic Handoff 實作後，如果真的出現：
-- 多 agent session identity
-- fresh/resume/expire
-- per-agent session cache
-才抽共用 manager。
-目前不要為 Linear 單一需求提前複雜化。
+[ ] 17. 是否需要多 Session Registry
+只有真的需要多 Agent 各自 persistent session 才抽：
+- session_key -> session
+- expire
+- fresh
+- resume
 
-
-[ ] 12. Shared Agent Message / Handoff Envelope
-等 Dynamic Handoff 與 Group Chat 都有 prototype 後，再決定是否共用：
-- sender
-- receiver
-- role
-- evidence
-- decision
-- handoff reason
-不要現在預設所有 Agent 模式都使用同一 message schema。
+StageExecutor 仍是唯一 session execution owner。
 
 
-[ ] 13. 通用 Graph Engine
-目前 Linear 只需要：
-- ordered flow
-- rollback to self/earlier stage
-- recover branch
-- bounded loop
-- one contiguous task block
+[ ] 18. Shared Handoff Envelope
+等 Dynamic 有真實需求後再決定最小欄位：
+- target
+- reason
+- evidence/context reference
 
-不要現在直接改成完全 generic DAG engine。
-等 Dynamic Handoff 有真正 forward/dynamic edge 需求後，再決定：
-- 是否擴充現有 LinearRouter
-- 或獨立 DynamicHandoffRouter
+不要現在建立大型 AgentMessage model。
+
+
+[ ] 19. Discussion Routing
+在 Dynamic routing 穩定後，再加入：
+- speakers
+- round
+- moderator/judge
+- round budget
+- stop/consensus rule
+
+每個 participant 仍是 Stage。
+Discussion 不建立另一套 Agent execution runtime。
+
+
+[ ] 20. Generic Graph 能力
+只有 UI/runtime 真正需要時才增加：
+- forward conditional edge
+- dynamic edge
+- group/container node
+- parallel stage
+
+不要為了「看起來像 LangGraph」提前加入 arbitrary DAG complexity。
 
 
 目前不要大改
 ============
 
-[ ] BaseStage / TaskStage / ReviewStage / AIValidatorStage 類別階層
-理由：
-- 現在責任相對清楚。
-- Stage registry/UI catalog 已依 spec_class 工作。
-- 重寫效益低、風險高。
+[ ] BaseStage / TaskStage / ReviewStage / AIValidatorStage 階層
+除非 Stage contract 統一過程證明有重複，否則不為漂亮重寫。
 
-[ ] 現有 Linear YAML schema 的 stages + flow
-理由：
-- 已有 UI、dry-run、system workflows、custom workflows、tests。
-- 目前足夠描述 Linear 閉環。
-- 不為 execution_mode 強塞新 root key。
+[ ] 現有 Linear YAML stages + flow
+已有 UI / dry-run / system workflows / tests，先以 backward compatible 方式演進。
 
 [ ] YAML List
-理由：
-- 目前明確屬於 Linear batch surface。
-- 非 Linear mode 已 fail-fast。
-- 等 mode-owned batch/resume identity 設計成熟後再泛化。
+維持現有穩定語意。
+先不要讓 Dynamic / Discussion 共用 Linear task cursor。
 
-[ ] 完全自由 forward graph / arbitrary condition expression
-理由：
-- 現在需求沒有證明必要。
-- 會大幅增加 closure analysis、resume、UI、dry-run 複雜度。
+[ ] 完全自由 condition expression / scripting in edges
+先使用 declarative routing。
+避免把 workflow YAML 變成另一套程式語言。
 
 
 測試 / Reliability 重構門檻
 =========================
 
-每個 P0 refactor 必須維持以下 Gate：
+每個 P0 refactor 必須維持：
 
 [ ] Full pytest
-[ ] workflow_dryrun system file/ai/mixed matrix closure
+[ ] workflow_dryrun file/ai/mixed matrix closure
 [ ] compound recoverable FAILs -> closure
-[ ] Review FAIL -> Execute live probe
-[ ] Validator FAIL -> routing live probe
-[ ] complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure live probe
-[ ] process kill/resume probe
-[ ] stop.request/resume probe
+[ ] Review FAIL -> Execute deterministic/live
+[ ] Validator FAIL -> configurable Stage deterministic/live
+[ ] complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure
+[ ] process kill/resume
+[ ] stop.request/resume
 [ ] multi-TODO checkpoint resume
 [ ] YAML List resume + completed-item no replay
 [ ] API 429/502/503 transient recovery
-[ ] 3-minute disconnect recovery
-[ ] timeout/recovery-budget
-[ ] session expiry -> Fresh Session
-[ ] loop detection -> bounded retry/Fresh Session
+[ ] 3-minute API disconnect recovery
+[ ] timeout/recovery budget
+[ ] expired session -> fresh session
+[ ] loop detection -> bounded recovery
 [ ] protected-path safety
-[ ] >MAX_PATH state/resource/snapshot tests
+[ ] >MAX_PATH state/resource/snapshot
 [ ] ownership lock + orphan cleanup
 [ ] Final AI quorum
 [ ] real example smoke matrix
 [ ] 24H high-density soak
 
-新增重要 Gate：
+新增架構 Gate：
 
-[ ] Resume semantic equivalence：
+[ ] Resume semantic equivalence
 不中斷與每個 Stage boundary kill/resume 的 routing / feedback / final artifact 等價。
 
-[ ] State migration：
-舊 Linear state.json -> 新 common + mode state 可安全 resume。
+[ ] Routing ownership
+Stage / reducer / validator 不直接修改 workflow destination。
 
-[ ] Routing ownership：
-validator/review/stage reducer 不得直接決定 workflow destination。
+[ ] Shared resilience
+Linear 與 mock Dynamic strategy 共用同一 StageExecutor retry/timeout/session recovery。
 
-[ ] Non-linear isolation：
-註冊 mock second execution_mode 不需要 import Pipeline / LinearState。
+[ ] Strategy isolation
+新增 mock Dynamic RoutingStrategy 不需要複製 WorkflowRunner。
+
+[ ] UI switching contract
+同一 workflow catalog 可依 metadata 載入不同 routing/editor capabilities。
+
+[ ] Human readability
+核心正常流程可從：
+WorkflowRunner -> FlowEngine -> StageExecutor -> StateStore
+順著讀完，不需追蹤大量隱性 side effect。
 
 
 建議執行順序
 ============
 
-Phase A - 先鎖死目前行為
-1. Full pytest + dry-run + complete closed-loop live probe
-2. 修掉目前 resume probe failure，取得乾淨 baseline
-3. 保留 24H gate 作為 regression baseline
+Phase A - 鎖死現況
+1. Full pytest / dry-run / live closed-loop。
+2. 修完目前 resume probe。
+3. 取得乾淨 Linear baseline。
+4. 24H gate 保留為 regression baseline。
 
-Phase B - 小步重構 Linear 內部
-4. Durable previous transition context
-5. 集中 cursor/routing mutation
-6. 分離 common RunState / LinearState
-7. TaskRunner -> LinearWorkflowOrchestrator
-8. 共用 RunRuntime / asset snapshot identity
+Phase B - 先改善可讀性與 ownership
+5. 集中 routing/cursor mutation。
+6. Technical Recovery vs Semantic Routing 分離。
+7. Durable transition context。
+8. TaskRunner/Pipeline/RecoveryPolicy 命名與 responsibility 收斂。
+9. 拆過長 production function/file，但避免碎片化。
 
-Phase C - 為第二模式準備邊界
-9. Orchestration Asset Contract
-10. Mode-owned Progress Contract
-11. mock second execution mode isolation test
+Phase C - 收斂單一 runtime
+10. WorkflowRunner。
+11. FlowEngine。
+12. RoutingStrategy protocol。
+13. 整理 RunState/routing_state。
+14. 統一 asset/runtime metadata。
 
-Phase D - 才開始 Dynamic Handoff
-12. 實作最小 DynamicHandoffOrchestrator
-13. 比較 Linear 與 Dynamic Handoff 的真實重複
-14. 只抽真正重複部分
+Phase D - UI / extensibility contract
+15. workflow catalog 帶 routing_strategy/editor_kind/capabilities。
+16. UI Graph Designer 根據 metadata 切換 property panel / routing controls。
+17. Chat 維持只選 Workflow/Profile。
 
-Phase E - Group Chat
-15. 實作最小 Discussion orchestrator
-16. 再決定 Session/Message/Agent 抽象是否值得共用
+Phase E - 用第二種模式驗證
+18. 最小 Dynamic Routing prototype。
+19. 共用同一 StageExecutor / WorkflowRunner。
+20. 發現真實重複後才抽 session/handoff primitives。
+
+Phase F - Discussion
+21. Discussion RoutingStrategy。
+22. participant 仍使用既有 Stage。
+23. 需要時才加入 round/speaker/group UI。
 
 
-完成定義
-========
-Linear v1 可以封版的條件：
-- Stage destination 完全由 Flow/Router 決定。
-- Technical retry 與 Semantic rollback 完全分離。
-- Resume 與 uninterrupted execution 在 Stage boundary 上語意等價。
-- Durable state 有清楚 common/mode ownership。
-- UI/CLI/API 都只透過 orchestration asset 啟動。
-- deterministic + real-Qwen compound closed-loop PASS。
+最終完成定義
+============
+
+架構：
+- 只有一套 WorkflowRunner。
+- Stage 是唯一執行單位。
+- Agent 只是 Stage 的配置/角色。
+- StageExecutor 共用 retry/recover/timeout/session/watchdog。
+- FlowEngine + RoutingStrategy 決定下一步。
+- Linear / Dynamic / Discussion 不複製 runtime。
+
+可維護性：
+- 正常執行、rollback、technical retry、resume 都有單一清楚 owner。
+- production code 沒有長期 old/new 雙路徑。
+- 大型檔案只在確實需要時存在；超長函式被拆成有 domain 意義的步驟。
+- 新人看 3~5 個核心 module 能理解主要 runtime。
+- 名稱對應責任，不靠隱性 conventions。
+
+可擴充性：
+- 新增一般 Agent 角色，多數只需新增 Stage config/spec。
+- 新增 Stage type 不需要修改 FlowEngine。
+- 新增 RoutingStrategy 不需要複製 WorkflowRunner/StageExecutor。
+- 未來新增第四種 workflow interaction model 時，優先新增 strategy/capability，而不是新 runtime。
+
+UI：
+- Chat 永遠：選 Workflow/Profile -> Prompt -> Run。
+- Workflow/Profile metadata 決定 routing strategy 與 editor capability。
+- 優先使用同一 Graph Designer。
+- Linear / Dynamic / Discussion 透過 properties/edges/group settings 呈現差異。
+- 切換 Workflow 不需要切換另一套產品入口或手動 mode selector。
+
+Reliability：
+- deterministic closure tests PASS。
+- real-Qwen full-loop probes PASS。
+- resume semantic equivalence PASS。
 - 24H high-density soak PASS。
-- 第二 execution mode 可以接入而不修改 Linear Pipeline 核心。
+- 所有新 strategy 直接繼承現有 technical resilience，而不是重寫。
