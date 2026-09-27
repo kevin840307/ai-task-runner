@@ -202,7 +202,8 @@ class BaseStage:
     def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
         client.session_id = ""
         original = self._original_prompt(ctx, previous)
-        return self._ask(ctx, client, self._fresh_session_prompt(original))
+        prompt = self._fresh_session_prompt(original)
+        return self._ask(ctx, client, self._with_immutable_protocol(prompt))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
@@ -252,11 +253,11 @@ class BaseStage:
         return client
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
-        original = self._original_prompt(ctx, previous)
+        body = self._original_prompt(ctx, previous)
         control = self._shared_control_prompt(ctx, previous, client)
-        if not control:
-            return original
-        return original.rstrip() + "\n\n" + control
+        if control:
+            body = body.rstrip() + "\n\n" + control
+        return self._with_immutable_protocol(body)
 
     def _shared_control_prompt(
         self,
@@ -365,7 +366,7 @@ class BaseStage:
         values = build_stage_prompt_context(ctx, self.spec.name, previous)
         values["instructions"] = self.spec.instructions
         rendered = render_prompt(self.spec.prompt, values)
-        return self._with_immutable_protocol(self._augment_rendered_prompt(ctx, rendered))
+        return self._augment_rendered_prompt(ctx, rendered)
 
     def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
         """Allow semantic Stage types to guarantee run-level instructions are visible.
