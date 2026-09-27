@@ -8,7 +8,8 @@ from typing import Any
 
 from ..errors import RunnerError
 from .recovery import RecoveryPolicy
-from .registry import create_stage, stage_result_kind
+from .registry import create_stage
+from .routing import LinearRouting
 from .rules import finish_run, finish_task, prepare_replan
 from .stages import Stage, StageContext, StageExecutor, StageResult
 
@@ -44,8 +45,8 @@ class FlowNode:
         )
 
 
-class Pipeline:
-    """Run static top-level stages and repeat task-scoped stages for every TODO."""
+class FlowEngine:
+    """Run the current Linear Workflow while delegating cursor ownership."""
 
     def __init__(self, context: StageContext, flow: Iterable[dict[str, Any]]) -> None:
         self.context = context
@@ -53,11 +54,7 @@ class Pipeline:
             {**item, "_workflow_index": item.get("_workflow_index", index)}
             for index, item in enumerate(flow)
         ]
-        self.positions = {
-            item["name"]: index
-            for index, item in enumerate(self.workflow)
-            if item.get("name")
-        }
+        self.routing = LinearRouting(context, self.workflow)
         self.recovery = RecoveryPolicy(context)
         self._task_generation = 0
 
@@ -75,7 +72,7 @@ class Pipeline:
             definition = self.workflow[position]
 
             if definition.get("scope") == "task":
-                end = self._task_block_end(position)
+                end = self.routing.task_block_end(position)
                 replacement, previous, stop = self._run_task_block(
                     position, end, executor, plan_only, previous
                 )
@@ -83,8 +80,7 @@ class Pipeline:
                     continue
                 if stop:
                     break
-                state.workflow_position = end
-                state.task_step = 0
+                self.routing.complete_task_block(end)
                 self.context.save_state()
                 continue
 
@@ -134,11 +130,11 @@ class Pipeline:
                 )
                 if replacement is not None or stop:
                     return replacement, previous, stop
-                state.task_step += 1
+                self.routing.advance_task_step()
                 self.context.save_state()
 
             finish_task(self.context)
-            state.task_step = 0
+            self.routing.reset_task_step()
             self.context.save_state()
         return None, previous, False
 
@@ -169,7 +165,7 @@ class Pipeline:
                     self.recovery.complete_bounded_recovery(node)
                     previous = recovered or bounded_pending
                     if self._task_generation != generation and self._has_pending_task():
-                        return self._restart_task_sop(bounded_pending), previous, False
+                        return self.routing.restart_task_sop(bounded_pending), previous, False
                     continue
 
                 pending = self.recovery.pending_recovery(node)
@@ -194,14 +190,14 @@ class Pipeline:
 
                 if action.kind == "replan":
                     prepare_replan(self.context, result)
-                    return self._restart(node.restart_at, result), result, False
+                    return self.routing.restart(node.restart_at, result), result, False
                 if action.kind == "restart":
                     if (
                         result.kind == "validation"
-                        and self._restart_target_produces_tasks(node.restart_at)
+                        and self.routing.restart_target_produces_tasks(node.restart_at)
                     ):
                         prepare_replan(self.context, result)
-                    return self._restart(node.restart_at, result), result, False
+                    return self.routing.restart(node.restart_at, result), result, False
                 if action.kind == "stop":
                     return None, result, True
                 if action.kind == "recover":
@@ -214,7 +210,7 @@ class Pipeline:
                     self.recovery.complete_bounded_recovery(node)
                     previous = recovered or result
                     if self._task_generation != generation and self._has_pending_task():
-                        return self._restart_task_sop(result), previous, False
+                        return self.routing.restart_task_sop(result), previous, False
                     if action.limit_reached:
                         result = previous
                         self.recovery.clear_repeat(node)
@@ -236,74 +232,28 @@ class Pipeline:
         return None, previous, False
 
     def _advance(self, node: FlowNode) -> None:
-        if node.workflow_index is not None:
-            self.context.state.workflow_position = max(
-                self.context.state.workflow_position, node.workflow_index + 1
-            )
-
-    def _task_block_end(self, start: int) -> int:
-        end = start
-        while end < len(self.workflow) and self.workflow[end].get("scope") == "task":
-            end += 1
-        return end
-
-    def _task_block_start(self, position: int) -> int:
-        start = position
-        while start > 0 and self.workflow[start - 1].get("scope") == "task":
-            start -= 1
-        return start
-
-    def _first_task_scope(self) -> int | None:
-        for index, definition in enumerate(self.workflow):
-            if definition.get("scope") == "task":
-                return self._task_block_start(index)
-        return None
-
-    def _restart_task_sop(self, result: StageResult | None = None) -> tuple[dict[str, Any], ...]:
-        start = self._first_task_scope()
-        if start is None:
-            raise RunnerError("task-producing recovery requires at least one task-scoped Stage")
-        state = self.context.state
-        state.workflow_position = start
-        state.task_step = 0
-        if result is not None:
-            self.context.set_stage("workflow_restart", result.output)
-        self.context.save_state()
-        return tuple(self.workflow[start:])
+        self.routing.advance(node.workflow_index)
 
     def _has_pending_task(self) -> bool:
         return self.context.state.current < len(self.context.state.tasks)
 
-    def _restart_target_produces_tasks(self, target: str | None) -> bool:
-        target = target or next(iter(self.positions), "")
-        position = self.positions.get(target)
-        if position is None:
-            return False
-        return stage_result_kind(self.workflow[position]) == "tasks"
-
-    def _restart(
-        self, target: str | None, result: StageResult
-    ) -> tuple[dict[str, Any], ...]:
-        target = target or next(iter(self.positions), "")
-        if target not in self.positions:
-            raise ValueError(f"restart target is not a top-level Stage: {target}")
-        position = self.positions[target]
-        state = self.context.state
-        if self.workflow[position].get("scope") == "task":
-            start = self._task_block_start(position)
-            state.workflow_position = start
-            state.task_step = position - start
-            position = start
-        else:
-            state.workflow_position = position
-            state.task_step = 0
-        self.context.set_stage("workflow_restart", result.output)
-        self.context.save_state()
-        return tuple(self.workflow[position:])
+# Compatibility aliases keep existing imports stable while clearer names become
+# the primary runtime API.
+Pipeline = FlowEngine
 
 
-def build_pipeline(context: StageContext) -> Pipeline:
-    return Pipeline(context, context.config.workflow)
+def build_flow_engine(context: StageContext) -> FlowEngine:
+    return FlowEngine(context, context.config.workflow)
 
 
-__all__ = ["FlowNode", "Pipeline", "build_pipeline"]
+def build_pipeline(context: StageContext) -> FlowEngine:
+    return build_flow_engine(context)
+
+
+__all__ = [
+    "FlowEngine",
+    "FlowNode",
+    "Pipeline",
+    "build_flow_engine",
+    "build_pipeline",
+]
