@@ -854,7 +854,13 @@ def assert_state_completed(
     work = project / work_dir
     state = read_json(work / "state.json")
     if code != 0 or state.get("completed") is not True:
-        raise RuntimeError(f"run failed: exit={code}, stage={state.get('stage')}")
+        validator_output = str(state.get("validator_output") or "").strip()
+        raise RuntimeError(
+            "run failed: "
+            f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
+            f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
+            f"task_step={state.get('task_step')}, validator_output={validator_output[-1200:]!r}"
+        )
     required = (
         work / "log.txt",
         work / "debug" / "last-prompt.txt",
