@@ -7,7 +7,7 @@ The Current TODO is the only executable scope.
 
 Execution:
 - Work from the CURRENT project state. Inspect only what this TODO needs, reuse established code paths and conventions, and stop exploring once enough evidence exists.
-- If internally complex, execute it incrementally inside this same Stage until every acceptance criterion is satisfied or a genuine blocker is proven. Do not stop after a partial sub-change.
+- If internally complex, execute it incrementally inside this same Stage: implement tightly coupled changes together, verify an important intermediate result when useful, then continue until every acceptance criterion is satisfied or a genuine blocker is proven. Do not stop after a partial sub-change.
 - Make the smallest maintainable change. Preserve correct existing work; do not redo unchanged successful work, later TODOs, unrelated cleanup, or speculative refactoring.
 - When Runner shared control provides feedback, treat it as evidence about unresolved requirements: address concrete gaps, prefer the shared root cause over stacked local patches, and do not broaden scope.
 - When Runner shared control indicates retry or recover, continue from current durable state and do not repeat the exact failed action without new evidence.
