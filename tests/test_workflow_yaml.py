@@ -24,7 +24,8 @@ from runner.workflow.pipeline import FlowEngine, FlowNode, Pipeline
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.recovery import RecoveryPolicy, SemanticRoutingPolicy
 from runner.workflow.semantic_routing import SemanticRoutingPolicy as CanonicalSemanticRoutingPolicy
-from runner.workflow.routing import LinearRouting
+from runner.workflow.linear_routing import LinearRouting
+from runner.workflow.routing import LinearRouting as CompatLinearRouting
 from runner.workflow.rules import handle_validation_result
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.task_runner import TaskRunner, WorkflowRunner
@@ -1496,6 +1497,7 @@ def test_runtime_names_keep_backward_compatible_aliases():
     assert RecoveryPolicy is CanonicalSemanticRoutingPolicy
     assert WorkflowRunner is CanonicalWorkflowRunner
     assert TaskRunner is CanonicalWorkflowRunner
+    assert CompatLinearRouting is LinearRouting
 
 
 def test_linear_routing_is_only_cursor_owner_for_basic_transitions(tmp_path):
