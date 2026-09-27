@@ -48,7 +48,7 @@ class StageExecution:
 
     change_detected: Callable[[], bool] | None = None
     attempt: int = 1
-    retry_mode: Literal["initial", "same", "fresh"] = "initial"
+    retry_mode: Literal["initial", "retry", "recover"] = "initial"
     previous_error: str = ""
     label: str = ""
 
