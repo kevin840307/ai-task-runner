@@ -4,13 +4,11 @@ stages:
 
   review:
     type: review
-    continuation_prompt: skills/review_continue.md
     skip_on_error: false
 
   grill_ai:
     type: review
     session_key: grill_client
-    continuation_prompt: skills/grill_continue.md
     skip_on_error: false
 
   final_validate:
