@@ -9,6 +9,7 @@ from .config.runtime import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
 from .execution_modes import execute_execution_mode
+from .errors import ConfigurationError
 from .runtime import events
 from .runtime.events import EventBus
 
@@ -83,6 +84,10 @@ def runtime_scope(config: RuntimeConfig):
 def execute(args: RuntimeConfig) -> int:
     with runtime_scope(args):
         if args.script:
+            if args.execution_mode != "linear":
+                raise ConfigurationError(
+                    "YAML script batching currently supports execution_mode='linear' only"
+                )
             from .script_runner import execute_script
             return execute_script(args, execute)
         return execute_execution_mode(args)
