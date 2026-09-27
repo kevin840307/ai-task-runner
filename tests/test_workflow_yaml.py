@@ -19,6 +19,7 @@ from runner.workflow.loader import (
     workflow_fingerprint,
     workflow_validators,
 )
+from runner.workflow.flow_engine import FlowEngine as CanonicalFlowEngine
 from runner.workflow.pipeline import FlowEngine, FlowNode, Pipeline
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.recovery import RecoveryPolicy, SemanticRoutingPolicy
@@ -26,6 +27,7 @@ from runner.workflow.routing import LinearRouting
 from runner.workflow.rules import handle_validation_result
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.task_runner import TaskRunner, WorkflowRunner
+from runner.workflow_runner import WorkflowRunner as CanonicalWorkflowRunner
 python = "{python}"
 validator = "{validator}"
 project_root = "{project_root}"
@@ -1487,9 +1489,11 @@ def test_validator_restart_to_ordinary_stage_does_not_replan(tmp_path):
 
 
 def test_runtime_names_keep_backward_compatible_aliases():
-    assert Pipeline is FlowEngine
+    assert FlowEngine is CanonicalFlowEngine
+    assert Pipeline is CanonicalFlowEngine
     assert RecoveryPolicy is SemanticRoutingPolicy
-    assert TaskRunner is WorkflowRunner
+    assert WorkflowRunner is CanonicalWorkflowRunner
+    assert TaskRunner is CanonicalWorkflowRunner
 
 
 def test_linear_routing_is_only_cursor_owner_for_basic_transitions(tmp_path):
@@ -1576,3 +1580,20 @@ def test_result_reducers_do_not_own_linear_cursor():
     text = (root / "runner" / "workflow" / "rules.py").read_text(encoding="utf-8")
     assert "state.workflow_position =" not in text
     assert "state.task_step =" not in text
+
+
+def test_legacy_run_state_without_transition_context_still_loads(tmp_path):
+    payload = RunState("run", "goal", str(tmp_path)).dump()
+    payload.pop("transition_previous")
+
+    loaded = RunState.load(payload)
+
+    assert loaded.transition_previous == {}
+
+
+def test_transition_context_must_be_object(tmp_path):
+    payload = RunState("run", "goal", str(tmp_path)).dump()
+    payload["transition_previous"] = "bad"
+
+    with pytest.raises(ValueError, match="transition_previous"):
+        RunState.load(payload)
