@@ -64,6 +64,7 @@ def test_visual_ui_covers_current_flow_routing_parameters() -> None:
     routing = {
         "scope": "stageScope",
         "label": "stageFlowLabel",
+        "recover": "stageRecover",
         "restart_at": "stageRestartAt",
         "repeat": "stageRepeat",
         "max_attempts": "stageMaxAttempts",
