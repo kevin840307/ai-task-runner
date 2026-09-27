@@ -55,6 +55,7 @@ class RunRequest:
     goal_file: str | None = None
     project_root: str = "."
     project_name: str = ""
+    execution_mode: str = "linear"
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -103,6 +104,7 @@ class RunRequest:
             goal_file=args.goal_file,
             project_root=args.project_root,
             project_name=getattr(args, "project_name", ""),
+            execution_mode=getattr(args, "execution_mode", "linear"),
             script=args.script,
             validator=args.validator,
             validator_prompt=args.validator_prompt,
@@ -193,16 +195,23 @@ class RunRequest:
             if frozen_run
             else None
         )
+        from .execution_modes import execution_mode_spec
+        mode_spec = execution_mode_spec(self.execution_mode)
         workflow = frozen or (
             load_workflow(self.workflow_file)
             if self.workflow_file
-            else load_default_workflow(self.validator, ai_validator_prompt)
+            else (
+                load_default_workflow(self.validator, ai_validator_prompt)
+                if mode_spec.requires_workflow
+                else []
+            )
         )
         return RuntimeConfig(
             goal=goal,
             goal_file=goal_file,
             project_root=self.project_root,
             project_name=self.project_name,
+            execution_mode=self.execution_mode,
             script=self.script,
             validator=self.validator,
             validator_prompt=self.validator_prompt,
@@ -268,6 +277,8 @@ class RunRequest:
             raise ValueError("project_root must be a non-empty string")
         if not isinstance(self.project_name, str):
             raise ValueError("project_name must be a string")
+        if not isinstance(self.execution_mode, str):
+            raise ValueError("execution_mode must be a string")
         if len(" ".join(self.project_name.split())) > 120:
             raise ValueError("project_name is too long")
         if self.goal and self.goal_file:
@@ -280,7 +291,7 @@ class RunRequest:
             and not self._effective_goal().strip()
         ):
             raise ValueError("goal or goal_file is required unless script or resume is used")
-        if not self.script and not self.workflow_file and not (
+        if self.execution_mode == "linear" and not self.script and not self.workflow_file and not (
             isinstance(self.validator, str) and self.validator.strip()
         ):
             raise ValueError("validator is required unless script or workflow_file is used")
