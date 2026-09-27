@@ -146,8 +146,7 @@ def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
         ctx.state.validator_failure_key = key
         ctx.state.validator_failure_count = 1
     ctx.set_stage("validator_failed", result.output)
-    invalidate_plan(ctx, reset_workflow=False)
-    progress.set_status("驗證失敗，返回 Planning", result.stage)
+    progress.set_status("驗證失敗，依 Workflow routing 處理", result.stage)
 
 
 
