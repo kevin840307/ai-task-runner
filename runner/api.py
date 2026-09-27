@@ -55,7 +55,6 @@ class RunRequest:
     goal_file: str | None = None
     project_root: str = "."
     project_name: str = ""
-    execution_mode: str = "linear"
     script: str | None = None
     validator: str | None = None
     validator_prompt: str = ""
@@ -95,6 +94,7 @@ class RunRequest:
     human_output: bool = False
     json_events: bool = False
     auto_register_ui_project: bool = False
+    execution_mode: str = "linear"
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> RunRequest:
