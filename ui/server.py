@@ -1565,7 +1565,7 @@ class UIState(WorkflowBuilderMixin):
                 row["stage"] = stage_name
                 updates = dict(flow_fields or {})
                 updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
+                allowed_flow = {"scope", "label", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
                 unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
                 if unknown_flow:
                     raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
@@ -1714,7 +1714,11 @@ class UIState(WorkflowBuilderMixin):
         on_exhausted = updates.get("on_exhausted")
         if on_exhausted not in (None, "continue", "fail"):
             raise ValueError("Flow on_exhausted must be continue or fail")
-        recover = stage.get("recover") if isinstance(stage, dict) else None
+        recover = updates.get("recover")
+        if recover is None and isinstance(stage, dict):
+            recover = stage.get("recover")
+        if recover is not None and not isinstance(recover, (list, tuple)):
+            raise ValueError("Flow recover must be a Stage list")
         if updates.get("fresh_after_same_failures") is not None and not recover:
             raise ValueError("fresh_after_same_failures requires recover stages")
         if isinstance(updates.get("repeat"), int) and updates["repeat"] > 1 and not recover:
