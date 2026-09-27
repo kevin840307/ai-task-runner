@@ -2,9 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import runner.workflow.pipeline as pipeline_module
+import runner.workflow.flow_engine as flow_engine_module
 from runner.runtime.run_state import Task
-from runner.workflow.pipeline import Pipeline
+from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.stages.contracts import StageResult
 
 
@@ -22,7 +22,7 @@ class Stage:
 @pytest.fixture(autouse=True)
 def stage_factory(monkeypatch):
     monkeypatch.setattr(
-        pipeline_module, "create_stage", lambda item: Stage(item["name"])
+        flow_engine_module, "create_stage", lambda item: Stage(item["name"])
     )
 
 
@@ -66,6 +66,7 @@ def context(workflow, tasks=None):
         recovery_attempt_key="",
         recovery_attempt_count=0,
         recovery_attempt_previous={},
+        transition_previous={},
     )
     return SimpleNamespace(
         state=state,
@@ -81,7 +82,7 @@ def test_pipeline_passes_optional_flow_label_without_changing_stage():
     workflow = [item("a", label="Project Documentation", _workflow_index=0)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["a"]
     assert executor.labels == ["Project Documentation"]
 
@@ -90,7 +91,7 @@ def test_pipeline_runs_stage_list_in_order():
     workflow = [item("a", _workflow_index=0), item("b", _workflow_index=1)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["a", "b"]
     assert ctx.state.workflow_position == 2
 
@@ -109,7 +110,7 @@ def test_recover_is_flow_node_routing_and_retries_original_stage():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["review", "repair", "review"]
 
 
@@ -131,7 +132,7 @@ def test_recover_receives_failed_stage_structured_data():
             assert previous.data["missing_items"] == ["A"]
         return StageResult(stage.name, "pass")
 
-    Pipeline(ctx, workflow).run(Executor(callback))
+    FlowEngine(ctx, workflow).run(Executor(callback))
 
 
 def test_restart_at_is_owned_by_flow_node():
@@ -150,7 +151,7 @@ def test_restart_at_is_owned_by_flow_node():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["repair", "validate", "repair", "validate"]
 
 
@@ -174,7 +175,7 @@ def test_task_scoped_stages_run_for_each_planned_todo():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == [
         "planning",
         "execute", "review",
@@ -209,7 +210,7 @@ def test_task_error_with_changed_files_continues_to_review_gate():
         return StageResult(stage.name, "pass", kind="validation")
 
     executor = Executor(callback)
-    code = Pipeline(ctx, workflow).run(executor)
+    code = FlowEngine(ctx, workflow).run(executor)
 
     assert executor.seen == ["execute", "review", "validate"]
     assert ctx.state.current == 1
@@ -228,7 +229,7 @@ def test_task_error_without_changed_files_stops_before_review_gate():
         lambda stage, *_: StageResult(stage.name, "error", kind="task")
     )
 
-    code = Pipeline(ctx, workflow).run(executor)
+    code = FlowEngine(ctx, workflow).run(executor)
 
     assert executor.seen == ["execute"]
     assert ctx.state.current == 0
@@ -249,7 +250,7 @@ def test_repeat_is_opt_in_and_default_recovery_is_unchanged():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["review", "repair"] * 3 + ["review"]
     assert ctx.state.flow_result_count == 0
 
@@ -270,7 +271,7 @@ def test_repeat_counts_only_semantic_results_and_stops_after_final_recover():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert calls == 3
     assert executor.seen == ["grill", "fix", "grill", "fix", "grill", "fix", "next"]
     assert ctx.state.workflow_position == 2
@@ -282,7 +283,7 @@ def test_repeat_pass_finishes_immediately():
     workflow = [item("grill", repeat=3, recover=[item("fix")], _workflow_index=0)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill"]
     assert ctx.state.flow_result_count == 0
 
@@ -305,7 +306,7 @@ def test_repeat_survives_crash_and_resume():
         return StageResult(stage.name, "pass")
 
     with pytest.raises(KeyboardInterrupt):
-        Pipeline(ctx, workflow).run(Executor(first))
+        FlowEngine(ctx, workflow).run(Executor(first))
     assert ctx.state.flow_result_count == 1
     assert ctx.state.flow_result_key == "workflow:0"
 
@@ -318,7 +319,7 @@ def test_repeat_survives_crash_and_resume():
         return StageResult(stage.name, "pass")
 
     executor = Executor(resumed)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert grill_calls == 2
     assert executor.seen == ["grill", "fix", "grill", "fix", "next"]
     assert ctx.state.flow_result_count == 0
@@ -331,7 +332,7 @@ def test_repeat_does_not_count_non_semantic_error_result():
     ]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "error"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill"]
     assert ctx.state.flow_result_key == ""
     assert ctx.state.flow_result_count == 0
@@ -348,7 +349,7 @@ def test_repeat_does_not_count_exception_before_semantic_result():
         raise RuntimeError("transport failure")
 
     with pytest.raises(RuntimeError, match="transport failure"):
-        Pipeline(ctx, workflow).run(Executor(callback))
+        FlowEngine(ctx, workflow).run(Executor(callback))
     assert ctx.state.flow_result_key == ""
     assert ctx.state.flow_result_count == 0
 
@@ -380,7 +381,7 @@ def test_repeat_resume_after_final_failure_retries_recover_not_challenge():
         return StageResult(stage.name, "pass")
 
     with pytest.raises(KeyboardInterrupt):
-        Pipeline(ctx, workflow).run(Executor(first))
+        FlowEngine(ctx, workflow).run(Executor(first))
     assert grill_calls == 3
     assert ctx.state.flow_result_count == 3
     assert ctx.state.flow_result_previous["data"] == {"missing_items": ["gap-3"]}
@@ -397,7 +398,7 @@ def test_repeat_resume_after_final_failure_retries_recover_not_challenge():
         return StageResult(stage.name, "pass")
 
     executor = Executor(resumed)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert resumed_grills == 0
     assert executor.seen == ["fix", "next"]
     assert recovered_feedback == [{"missing_items": ["gap-3"]}]
@@ -434,7 +435,7 @@ def test_repeated_same_semantic_failure_freshens_only_when_opted_in():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == [
         "review", "repair", "review", "fresh:review", "repair", "review"
     ]
@@ -454,7 +455,7 @@ def test_semantic_fresh_is_opt_in_and_different_failures_reset_count():
         return next(results) if stage.name == "review" else StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert not any(name.startswith("fresh:") for name in executor.seen)
     assert ctx.state.semantic_failure_count == 0
 
@@ -466,7 +467,7 @@ def test_semantic_fresh_is_opt_in_and_different_failures_reset_count():
         StageResult("review", "pass"),
     ])
     executor = Executor(lambda stage, *_: next(results) if stage.name == "review" else StageResult(stage.name, "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert not any(name.startswith("fresh:") for name in executor.seen)
 
 
@@ -480,7 +481,7 @@ def test_semantic_failure_count_survives_crash_before_next_review():
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):
-        Pipeline(ctx, workflow).run(Executor(first))
+        FlowEngine(ctx, workflow).run(Executor(first))
     assert ctx.state.semantic_failure_count == 1
 
     reviews = 0
@@ -493,7 +494,7 @@ def test_semantic_failure_count_survives_crash_before_next_review():
         return StageResult(stage.name, "pass")
 
     executor = Executor(resumed)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert "fresh:review" in executor.seen
     assert ctx.state.semantic_failure_count == 0
 
@@ -523,7 +524,7 @@ def test_recovery_restarts_task_sop_only_after_actual_tasks_result():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
 
     assert executor.seen == ["execute", "validate", "generate", "execute", "validate"]
     assert ctx.state.current == 1
@@ -553,7 +554,7 @@ def test_recovery_does_not_restart_from_task_producer_declaration_alone():
         return StageResult(stage.name, "pass")
 
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
 
     assert executor.seen == ["execute", "validate", "generate", "validate"]
     assert ctx.state.current == 1
@@ -572,7 +573,7 @@ def test_max_attempts_is_opt_in_and_legacy_recovery_is_unchanged():
             return StageResult("review", "fail")
         return StageResult(stage.name, "pass")
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["review", "repair"] * 4 + ["review"]
 
 
@@ -584,7 +585,7 @@ def test_max_attempts_continue_skips_final_recovery_and_moves_forward():
             return StageResult("grill", "fail", data={"missing_items": ["gap"]})
         return StageResult(stage.name, "pass")
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill", "repair", "grill", "repair", "grill", "next"]
     assert ctx.state.recovery_attempt_key == ""
     assert ctx.state.recovery_attempt_count == 0
@@ -601,7 +602,7 @@ def test_max_attempts_pass_before_exhaustion_moves_forward_and_resets():
             return StageResult("grill", "fail" if grills == 1 else "pass")
         return StageResult(stage.name, "pass")
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill", "repair", "grill", "next"]
     assert ctx.state.recovery_attempt_count == 0
 
@@ -610,7 +611,7 @@ def test_max_attempts_fail_policy_stops_without_final_recovery():
     workflow = [item("gate", max_attempts=2, on_exhausted="fail", recover=[item("repair")], _workflow_index=0), item("next", _workflow_index=1)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "fail" if stage.name == "gate" else "pass"))
-    code = Pipeline(ctx, workflow).run(executor)
+    code = FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["gate", "repair", "gate"]
     assert ctx.state.workflow_position == 0
     assert code == 1
@@ -621,7 +622,7 @@ def test_unrecovered_failure_returns_nonzero_without_advancing():
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "fail"))
 
-    code = Pipeline(ctx, workflow).run(executor)
+    code = FlowEngine(ctx, workflow).run(executor)
 
     assert executor.seen == ["validate"]
     assert ctx.state.workflow_position == 0
@@ -642,7 +643,7 @@ def test_max_attempts_resets_after_forward_progress_then_later_restart():
             return StageResult("later", "fail" if later_calls == 1 else "pass")
         return StageResult(stage.name, "pass")
     executor = Executor(callback)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill", "repair", "grill", "later", "grill", "repair", "grill", "later"]
     assert ctx.state.recovery_attempt_count == 0
 
@@ -661,7 +662,7 @@ def test_max_attempts_pending_recovery_survives_crash_and_resume():
             raise KeyboardInterrupt
         return StageResult(stage.name, "pass")
     with pytest.raises(KeyboardInterrupt):
-        Pipeline(ctx, workflow).run(Executor(first))
+        FlowEngine(ctx, workflow).run(Executor(first))
     assert ctx.state.recovery_attempt_key == "workflow:0"
     assert ctx.state.recovery_attempt_count == 1
     assert ctx.state.recovery_attempt_previous["data"] == {"missing_items": ["A"]}
@@ -676,7 +677,7 @@ def test_max_attempts_pending_recovery_survives_crash_and_resume():
             return StageResult("grill", "pass")
         return StageResult(stage.name, "pass")
     executor = Executor(resumed)
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["repair", "grill", "next"]
     assert grill_calls == 1
     assert ctx.state.recovery_attempt_count == 0
@@ -687,7 +688,7 @@ def test_max_attempts_does_not_count_technical_error():
     workflow = [item("grill", max_attempts=3, on_exhausted="continue", recover=[item("repair")], _workflow_index=0)]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "error"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["grill"]
     assert ctx.state.recovery_attempt_count == 0
 
@@ -699,6 +700,6 @@ def test_max_attempts_defaults_to_fail_when_on_exhausted_is_omitted():
     ]
     ctx = context(workflow)
     executor = Executor(lambda stage, *_: StageResult(stage.name, "fail" if stage.name == "gate" else "pass"))
-    Pipeline(ctx, workflow).run(executor)
+    FlowEngine(ctx, workflow).run(executor)
     assert executor.seen == ["gate"]
     assert ctx.state.workflow_position == 0
