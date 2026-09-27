@@ -20,7 +20,7 @@ class PlanStageSpec(BaseStageSpec):
     # including paths outside the current project root.
     allow_project_read: bool = True
     run_state: str = "planning"
-    prompt: str = "stages/plan_finalize.md"
+    prompt: str = "stages/planning.md"
     min_tasks: int = MIN_PLANNED_TASKS
 
 
