@@ -65,3 +65,45 @@ def test_bootstrap_does_not_own_linear_task_runner():
     )
     assert "TaskRunner" not in source
     assert "execute_execution_mode" in source
+
+
+def test_durable_run_state_rejects_execution_mode_change_on_resume(tmp_path: Path):
+    from runner.errors import ConfigurationError
+    from runner.runtime.run_state import StateStore
+
+    work = tmp_path / ".runner"
+    store = StateStore(tmp_path, work)
+    state = store.load_or_create(
+        "goal",
+        resume=False,
+        force_new=False,
+        execution_mode="linear",
+    )
+    store.save(state)
+
+    with pytest.raises(ConfigurationError, match="execution_mode"):
+        store.load_or_create(
+            "goal",
+            resume=True,
+            force_new=False,
+            execution_mode="test_dynamic_handoff_mode",
+        )
+
+
+def test_legacy_state_without_execution_mode_resumes_as_linear(tmp_path: Path):
+    from runner.runtime.run_state import StateStore
+
+    work = tmp_path / ".runner"
+    work.mkdir()
+    (work / "state.json").write_text(
+        '{"run_id":"legacy","goal":"g","project_root":' + repr(str(tmp_path)).replace("'", '"') + '}',
+        encoding="utf-8",
+    )
+    store = StateStore(tmp_path, work)
+    state = store.load_or_create(
+        "goal",
+        resume=True,
+        force_new=False,
+        execution_mode="linear",
+    )
+    assert state.execution_mode == "linear"
