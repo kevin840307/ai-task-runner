@@ -121,7 +121,6 @@ def build_stage_prompt_context(
         },
         "project": {"root": str(ctx.root)},
         "planning": {
-            "mode": "initial" if state.cycle == 1 else "repair",
             "inspection_summary": "",
             "progress": {
                 "cycle": state.cycle,
