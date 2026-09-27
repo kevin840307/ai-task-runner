@@ -132,6 +132,9 @@ Chat / CLI / API
 - [x] 新增 durable `transition_previous`，Resume 可恢復上一個 Stage context
 - [x] 舊 state.json 缺少 `transition_previous` 時保持 backward compatible
 - [x] 新增 `architecture.md`，固定主要閱讀路徑與 ownership
+- [x] `rules.py` canonical 實作移至 `reducers.py`，舊檔只保留 compatibility re-export
+- [x] `recovery.py` canonical 實作移至 `semantic_routing.py`，technical/semantic recovery 名詞分離
+- [x] durable transition output/data 加上 bounded persistence，避免長跑 state 膨脹
 - [x] 新增 compatibility / routing ownership / transition migration contract tests
 
 仍未宣告完成：
