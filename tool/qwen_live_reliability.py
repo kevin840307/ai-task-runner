@@ -733,6 +733,7 @@ def assert_prompt_transport_contract(project: Path) -> None:
         raise RuntimeError("prompt audit found no model.prompt history")
     static_markers = (
         "Goal (global constraints only):",
+        "Goal (context/global constraints only):",
         "Current TODO is the only executable scope.",
         "Evidence order:",
         "Decision:",
@@ -1815,7 +1816,7 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
         and "mode: continue" in record.text
         and "Review missing_items:" in record.text
-        for record in executes[1:]
+        for record in executes
     ):
         raise RuntimeError("Review FAIL did not route feedback back to Execute shared control")
     assert_prompt_transport_contract(project)
