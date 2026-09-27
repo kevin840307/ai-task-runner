@@ -1,8 +1,7 @@
-"""Small shared primitives for the local UI project registry.
+"""Small shared filesystem/project primitives used by UI and Runner.
 
 This module intentionally has no Runner/UI dependencies so both processes can
-coordinate updates to ``ui/data/projects.json`` without crossing architecture
-boundaries.
+share path identity and registry locking without crossing architecture boundaries.
 """
 from __future__ import annotations
 
@@ -16,8 +15,23 @@ LOCK_POLL_SECONDS = 0.05
 STALE_LOCK_SECONDS = 60.0
 
 
+def path_key(path: str | Path) -> str:
+    """Return one filesystem identity for equivalent path spellings when possible."""
+    value = Path(path).expanduser()
+    try:
+        stat = value.absolute().stat()
+        inode = int(getattr(stat, "st_ino", 0) or 0)
+        device = int(getattr(stat, "st_dev", 0) or 0)
+        if inode:
+            return f"fs:{device}:{inode}"
+    except OSError:
+        pass
+    return os.path.normcase(os.path.abspath(str(value)))
+
+
 def project_path_key(path: str | Path) -> str:
-    return os.path.normcase(os.path.abspath(str(path)))
+    """Backward-compatible project registry name for the shared path identity."""
+    return path_key(path)
 
 
 @contextmanager
@@ -58,4 +72,4 @@ def _remove_stale_lock(lock: Path) -> None:
         pass
 
 
-__all__ = ["project_file_lock", "project_path_key"]
+__all__ = ["path_key", "project_file_lock", "project_path_key"]
