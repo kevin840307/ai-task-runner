@@ -12,7 +12,12 @@ def write(path, text):
 
 def role():
     low = prompt.lower()
-    if "final independent read-only validation" in low: return "final"
+    if "[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]" in prompt or "final independent read-only validation" in low:
+        return "final"
+    if "[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]" in prompt:
+        if "Required demo checks only" in prompt or "read-only adversarial" in low or "read-only grill" in low:
+            return "grill"
+        return "review"
     if "read-only adversarial" in low or "read-only grill" in low: return "grill"
     if "read-only review" in low: return "review"
     return "writer"
