@@ -24,3 +24,23 @@ def test_workflow_has_one_minimal_type_registry():
         "command": CommandStage,
         "plan": PlanStage,
     }
+
+
+def test_workflow_runtime_has_clear_canonical_modules():
+    workflow = ROOT / "runner" / "workflow"
+    for name in (
+        "flow_engine.py",
+        "linear_routing.py",
+        "semantic_routing.py",
+        "reducers.py",
+    ):
+        assert (workflow / name).is_file()
+
+    # Compatibility shims may remain, but canonical runtime behavior belongs in
+    # the responsibility-matched modules above.
+    assert (ROOT / "runner" / "workflow_runner.py").is_file()
+    assert (ROOT / "runner" / "task_runner.py").is_file()
+    assert (workflow / "pipeline.py").is_file()
+    assert (workflow / "routing.py").is_file()
+    assert (workflow / "recovery.py").is_file()
+    assert (workflow / "rules.py").is_file()
