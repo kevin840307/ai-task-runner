@@ -115,12 +115,11 @@ def _expand_plan_task_flow(
     stages: dict[str, dict[str, Any]],
     source: Path,
 ) -> list[dict[str, Any]]:
-    """Attach Plan's built-in per-TODO task/review/repair lifecycle.
+    """Attach Plan's built-in per-TODO task/review lifecycle.
 
     A normal PlanStage is intentionally self-contained: it produces TODOs and
-    every TODO runs through built-in Task -> Review -> Repair(on FAIL) -> Review.
-    The lifecycle does not depend on external YAML stage names such as
-    ``execute``, ``review`` or ``repair``.
+    every TODO runs through built-in Task -> Review. Review failure routes
+    directly back to Task; there is no separate repair Stage.
 
     Advanced/custom task producers can still declare an explicit contiguous
     ``scope: task`` SOP immediately after the producer; in that case the
@@ -129,7 +128,7 @@ def _expand_plan_task_flow(
     result: list[dict[str, Any]] = []
     for index, node in enumerate(flow):
         result.append(node)
-        if node.get("type") != "plan" or node.get("repair_plan"):
+        if node.get("type") != "plan":
             continue
         if index + 1 < len(flow) and flow[index + 1].get("scope") == "task":
             continue
@@ -146,11 +145,6 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
     )
     task["scope"] = "task"
 
-    repair = _normalize_stage(
-        "__plan_repair__",
-        {"type": "task", "status": "AI 正在修復目前任務"},
-        source,
-    )
     review = _normalize_stage(
         "__plan_review__",
         {
@@ -161,7 +155,7 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
         source,
     )
     review["scope"] = "task"
-    review["recover"] = [repair]
+    review["restart_at"] = "__plan_task__"
     return [task, review]
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:
@@ -278,7 +272,7 @@ def _read_text(value: Any, source: Path, name: str) -> str:
 
 
 def _resolve_local_prompts(values: dict[str, Any], source: Path) -> None:
-    for key in ("prompt", "continuation_prompt"):
+    for key in ("prompt",):
         value = values.get(key)
         if not isinstance(value, str) or not value.strip():
             continue
