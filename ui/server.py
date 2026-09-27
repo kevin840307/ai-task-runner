@@ -251,12 +251,6 @@ class UIState(WorkflowStudioMixin, WorkflowBuilderMixin):
             raise ValueError("Workflow catalog is missing stage_types")
         return payload
 
-    def _supported_stage_types(self) -> set[str]:
-        tool = self.repo_root / "tool" / "workflow_catalog.py"
-        if not tool.is_file():
-            return {"base", "task", "review", "ai_validator", "command", "plan"}
-        return set(self.workflow_catalog().get("stage_types", {}))
-
     def add_project(self, path: str) -> dict:
         with self._projects_lock, project_file_lock(self.projects_file):
             resolved = Path(path).expanduser().resolve()
@@ -1070,90 +1064,6 @@ class UIState(WorkflowStudioMixin, WorkflowBuilderMixin):
             except OSError as exc:
                 raise ValueError(f"Cannot reset runtime artifact {child.name}: {exc}") from exc
         return sorted(removed)
-
-    def _custom_asset_root(self, kind: str) -> Path:
-        kind = str(kind or "").strip().lower()
-        if kind == "workflow":
-            return (self.repo_root / "runner" / "workflow" / "custom").resolve()
-        if kind == "prompt":
-            return (self.repo_root / "runner" / "prompts" / "custom").resolve()
-        raise ValueError("Custom asset kind must be workflow or prompt")
-
-    @staticmethod
-    def _is_technical_folder_part(part: str) -> bool:
-        value = str(part or "").strip().lower()
-        return (
-            not value
-            or value.startswith(".")
-            or value in {"__pycache__", "__pypackages__", "node_modules"}
-            or value.endswith(".egg-info")
-        )
-
-    @staticmethod
-    def _normalize_custom_folder(folder: str) -> str:
-        raw = str(folder or "").strip().replace("\\", "/")
-        if not raw or raw in {".", "/"}:
-            return ""
-        if raw.startswith("/") or re.match(r"^[A-Za-z]:", raw):
-            raise ValueError("Custom folder must be relative to the Custom root")
-        parts = [part.strip() for part in raw.split("/") if part.strip()]
-        if not parts or any(part in {".", ".."} for part in parts):
-            raise ValueError("Custom folder cannot contain . or ..")
-        if any(UIState._is_technical_folder_part(part) for part in parts):
-            raise ValueError("Custom folder contains a reserved technical directory")
-        if any(not re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
-            raise ValueError("Custom folder contains unsupported characters")
-        return "/".join(parts)
-
-    def studio_custom_folders(self, kind: str) -> list[str]:
-        root = self._custom_asset_root(kind)
-        root.mkdir(parents=True, exist_ok=True)
-        folders = [""]
-        for path in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: str(p).lower()):
-            rel = path.relative_to(root).as_posix()
-            if rel and not any(self._is_technical_folder_part(part) for part in Path(rel).parts):
-                folders.append(rel)
-        return folders
-
-    def studio_custom_folder_create(self, kind: str, folder: str) -> dict:
-        with self._edit_lock:
-            self._require_editable()
-            rel = self._normalize_custom_folder(folder)
-            if not rel:
-                raise ValueError("Folder name is required")
-            root = self._custom_asset_root(kind)
-            target = (root / Path(rel)).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Custom folder is outside the Custom root")
-            target.mkdir(parents=True, exist_ok=True)
-            return {"ok": True, "folder": rel, "folders": self.studio_custom_folders(kind)}
-
-
-    def _workflow_visibility(self) -> dict[str, bool]:
-        try:
-            raw = json.loads(self.workflow_visibility_file.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-        if not isinstance(raw, dict):
-            return {}
-        return {os.path.normcase(os.path.abspath(str(path))): bool(hidden) for path, hidden in raw.items() if str(path).strip()}
-
-    def workflow_hidden(self, path: Path) -> bool:
-        return bool(self._workflow_visibility().get(os.path.normcase(os.path.abspath(str(path.resolve()))), False))
-
-    def studio_set_workflow_hidden(self, file_id: str, hidden: bool, project: Path | None = None) -> dict:
-        with self._edit_lock:
-            path, kind, scope = self._resolve_studio_file(file_id, project)
-            if kind != "workflow":
-                raise ValueError("Visibility can only be changed for Workflow files")
-            values = self._workflow_visibility()
-            key = os.path.normcase(os.path.abspath(str(path.resolve())))
-            if hidden:
-                values[key] = True
-            else:
-                values.pop(key, None)
-            self._atomic_json(self.workflow_visibility_file, values)
-            return self._studio_item(path, scope, kind)
 
     # ------------------------------ live stream helpers ------------------------------
     @classmethod
