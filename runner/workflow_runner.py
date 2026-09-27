@@ -10,6 +10,7 @@ from .project.files import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .ui_projects import register_ui_project
+from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
 from .workflow.snapshot import (
     freeze_run_resource,
@@ -17,7 +18,6 @@ from .workflow.snapshot import (
     load_run_resource,
     load_snapshot,
 )
-from .workflow.flow_engine import build_flow_engine
 from .workflow.stages import StageContext, StageExecutor
 
 
@@ -26,33 +26,61 @@ class WorkflowRunner:
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        if not self.config.validator and not self.config.workflow_explicit:
-            raise RunnerError("--validator is required unless an explicit workflow is used")
+        self._validate_request()
+        self._prepare_paths()
+        self._bind_run_resources()
+        self._bind_workflow_snapshot()
+        self._prepare_state()
+        self._prepare_ai_client()
+        self._finalize_state()
+        self.context = self._build_context()
+        self.flow_engine = build_flow_engine(self.context)
 
+        # Compatibility attribute for older extensions/tests.
+        self.pipeline = self.flow_engine
+        self.stage_executor = StageExecutor()
+
+    def _validate_request(self) -> None:
+        if not self.config.validator and not self.config.workflow_explicit:
+            raise RunnerError(
+                "--validator is required unless an explicit workflow is used"
+            )
+
+    def _prepare_paths(self) -> None:
         self.root = Path(self.config.project_root).resolve()
         if self.config.auto_register_ui_project:
             register_ui_project(self.root, project_name=self.config.project_name)
-        self.validator_is_ai = bool(self.config.validator) and self.config.validator.lower() == "ai"
+
+        self.validator_is_ai = (
+            bool(self.config.validator)
+            and self.config.validator.lower() == "ai"
+        )
         self.validator_path = (
             None
             if not self.config.validator or self.validator_is_ai
             else Path(self.config.validator).resolve()
         )
         self.work = self.root / self.config.work_dir
-        self._bind_run_resources()
+        self.state_store = StateStore(self.root, self.work)
+        self.state_file = self.state_store.path
+
+        self._validate_paths()
+        cleanup_stale_artifacts(self.work)
+
+    def _bind_workflow_snapshot(self) -> None:
         if self.config.resume and not self.config.force_new:
             frozen = load_snapshot(self.root, self.config.work_dir)
             if frozen is not None:
                 self.config.workflow = frozen
-        else:
-            self.config.workflow = freeze_workflow(
-                self.config.workflow, self.root, self.config.work_dir
-            )
-        self.state_store = StateStore(self.root, self.work)
-        self.state_file = self.state_store.path
-        self._validate_paths()
-        cleanup_stale_artifacts(self.work)
+            return
 
+        self.config.workflow = freeze_workflow(
+            self.config.workflow,
+            self.root,
+            self.config.work_dir,
+        )
+
+    def _prepare_state(self) -> None:
         self.state = self.state_store.load_or_create(
             self.config.goal,
             resume=self.config.resume,
@@ -61,9 +89,13 @@ class WorkflowRunner:
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
-            raise ConfigurationError("resume workflow differs from the saved workflow")
-        new_fingerprint = not self.state.workflow_fingerprint
+            raise ConfigurationError(
+                "resume workflow differs from the saved workflow"
+            )
+        self._new_workflow_fingerprint = not self.state.workflow_fingerprint
         self.state.workflow_fingerprint = fingerprint
+
+    def _prepare_ai_client(self) -> None:
         self.ai_client = create_ai_client(
             self.config,
             self.root,
@@ -73,13 +105,16 @@ class WorkflowRunner:
         )
         self.ai_client.prepare_project()
         self.ai_client.update_goal_reference(self.config.goal_file)
-        if not self.config.resume or new_fingerprint:
+
+    def _finalize_state(self) -> None:
+        if not self.config.resume or self._new_workflow_fingerprint:
             self._save_state()
         if normalize_state(self.state):
             self._save_state()
         progress.bind(self.state)
 
-        self.context = StageContext(
+    def _build_context(self) -> StageContext:
+        return StageContext(
             config=self.config,
             root=self.root,
             work=self.work,
@@ -91,16 +126,15 @@ class WorkflowRunner:
             save_state=self._save_state,
             set_stage=self._set_stage,
         )
-        self.flow_engine = build_flow_engine(self.context)
-        # Compatibility attribute for older extensions/tests.
-        self.pipeline = self.flow_engine
-        self.stage_executor = StageExecutor()
-
 
     def _bind_run_resources(self) -> None:
         resources = (
             ("goal_file", "goal", "goal"),
-            ("ai_validator_prompt_file", "ai_validator_prompt", "ai_validator_prompt"),
+            (
+                "ai_validator_prompt_file",
+                "ai_validator_prompt",
+                "ai_validator_prompt",
+            ),
         )
         for file_attr, content_attr, name in resources:
             value = (
@@ -121,13 +155,20 @@ class WorkflowRunner:
 
     def run(self) -> int:
         if self.config.plan_only and self.state.tasks:
-            progress.set_status("Plan ready", "plan-only completed without execution")
+            progress.set_status(
+                "Plan ready",
+                "plan-only completed without execution",
+            )
             return 0
-        return self.flow_engine.run(self.stage_executor, plan_only=self.config.plan_only)
+        return self.flow_engine.run(
+            self.stage_executor,
+            plan_only=self.config.plan_only,
+        )
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir() or (
-            self.validator_path is not None and not self.validator_path.is_file()
+            self.validator_path is not None
+            and not self.validator_path.is_file()
         ):
             raise ConfigurationError("invalid project root or validator")
 
