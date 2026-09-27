@@ -983,10 +983,10 @@ class UIState(WorkflowBuilderMixin):
         text = str(message or "").strip()
         if not text:
             raise ValueError("Message is empty")
-        workflow_path = Path(workflow).expanduser().resolve() if workflow else None
+        workflow_path = Path(workflow).expanduser().absolute() if workflow else None
         if workflow_path is not None:
-            allowed = {os.path.normcase(str(path)) for path in self._known_workflow_paths(project)}
-            if os.path.normcase(str(workflow_path)) not in allowed:
+            allowed = {path_key(path) for path in self._known_workflow_paths(project)}
+            if path_key(workflow_path) not in allowed:
                 raise ValueError("Selected Workflow is outside the allowed System / Custom / Project workflow roots")
             if not workflow_path.is_file():
                 raise ValueError(f"Workflow not found: {workflow_path}")
