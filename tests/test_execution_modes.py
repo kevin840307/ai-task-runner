@@ -108,3 +108,29 @@ def test_legacy_state_without_execution_mode_resumes_as_linear(tmp_path: Path):
         execution_mode="linear",
     )
     assert state.execution_mode == "linear"
+
+
+def test_yaml_batch_rejects_non_linear_execution_mode(tmp_path: Path):
+    from runner.errors import ConfigurationError
+
+    name = "test_batch_non_linear_mode"
+    if name not in execution_mode_names():
+        register_execution_mode(
+            name,
+            lambda config: 0,
+            requires_workflow=False,
+            description="test-only non-linear mode",
+        )
+
+    script = tmp_path / "tasks.yaml"
+    script.write_text("- prompt: x\n  validator: ai\n", encoding="utf-8")
+    config = RuntimeConfig(
+        project_root=str(tmp_path),
+        script=str(script),
+        execution_mode=name,
+        workflow=[],
+        human_output=False,
+    )
+
+    with pytest.raises(ConfigurationError, match="YAML script batching.*linear"):
+        execute(config)
