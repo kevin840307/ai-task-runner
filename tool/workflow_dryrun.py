@@ -451,7 +451,15 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
         for definition, source in _walk_definitions(flow)
         if source == "flow"
         and definition.get("name")
-        and (definition.get("recover") or definition.get("restart_at"))
+        and (
+            definition.get("recover")
+            or definition.get("restart_at")
+            or (
+                isinstance(definition.get("routes"), dict)
+                and str(definition["routes"].get("fail", "") or "").strip()
+                not in {"", "stop"}
+            )
+        )
         and not (
             definition.get("max_attempts") == 1
             and definition.get("on_exhausted") != "continue"
