@@ -44,11 +44,11 @@ class StaticContractTests(unittest.TestCase):
     def test_stage_modal_has_real_editable_contract_fields(self):
         for token in (
             "stageStatus", "stageRunState", "stageScope", "stageActor", "stageMode", "stageTimeout",
-            "stageProduces", "stageSessionKey", "stageDetail", "stageRetry",
+            "stageProduces", "stageSessionKey", "stageDetail",
             "stageStructuredRetries", "stageStructuredFreshRetries",
             "stageFreshOnStart", "stageFreshEachRun", "stageTrackChanges", "stageTolerateRestored",
             "stageAllowProjectRead", "stageCleanWork", "stageCommand", "stageResultKind", "stageCwd",
-            "stageMinTasks", "stageRepairPlan", "stageValidator", "stageRuns", "stageRequiredPasses",
+            "stageMinTasks", "stageValidator", "stageRuns", "stageRequiredPasses",
             "stageParser", "stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError",
         ):
             self.assertIn(token, self.js)
@@ -82,9 +82,10 @@ class StaticContractTests(unittest.TestCase):
             self.assertIn(token, self.html)
         self.assertIn("/api/studio/workflow/create", self.js)
 
-    def test_stage_editor_exposes_result_edges_and_keeps_retry_separate(self):
-        for token in ("Result edges", "Retry & structured output", "Session & safety", "stage-help"):
+    def test_stage_editor_exposes_result_edges_and_shared_runtime_retry(self):
+        for token in ("Result edges", "Structured output", "Session & safety", "stage-help"):
             self.assertIn(token, self.js)
+        self.assertNotIn("stageRetry", self.js)
         for removed in ("Recovery gate", "stageRecover", "stageMaxAttempts", "stageRestartAt", "stageRouteReplan"):
             self.assertNotIn(removed, self.js)
 
@@ -212,10 +213,10 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".studio-workflow-editor{grid-template-rows:autoautominmax(0,1fr);gap:8px}", css)
         self.assertNotIn(".studio-workflow-editor{grid-template-rows:autominmax(0,1fr)auto;gap:8px}", css)
 
-    def test_retry_editor_matches_core_minus_one_contract(self):
-        self.assertIn('id="stageRetry"', self.js)
-        self.assertIn('min="-1"', self.js)
-        self.assertIn('-1 = keep retrying until PASS', self.js)
+    def test_stage_retry_is_runner_owned_not_node_owned(self):
+        self.assertNotIn('id="stageRetry"', self.js)
+        self.assertNotIn('-1 = keep retrying until PASS', self.js)
+        self.assertIn("Technical Stage retry/session recovery is global Runner behavior.", self.js)
 
     def test_flow_routing_fields_are_editable_in_stage_modal(self):
         for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError", "routes: routeMapOrNull()"):
@@ -711,21 +712,20 @@ class StudioFolderGroupingContractTests(unittest.TestCase):
             self.assertIn(token, html)
         self.assertNotIn("duplicate-asset-card", html)
 
-    def test_custom_assets_render_as_collapsible_folder_groups(self):
-        for token in ("appendStudioFolderGroup", "studio-folder-header", "studio-folder-items", "aria-expanded", "STUDIO_FOLDER_STATE_KEY"):
-            self.assertIn(token, self.js)
-        self.assertIn(".studio-folder-header", self.css)
-        self.assertIn(".studio-folder-items", self.css)
+    def test_assets_render_as_flat_global_project_groups(self):
+        self.assertNotIn("appendStudioFolderGroup", self.js)
+        self.assertNotIn("STUDIO_FOLDER_STATE_KEY", self.js)
+        self.assertIn('for (const scope of ["global", "project"])', self.js)
+        self.assertIn('heading.textContent = scope === "project" ? "Project" : "Global"', self.js)
 
     def test_search_uses_relative_display_name_and_expands_matches(self):
         self.assertIn("item.display_name", self.support)
         self.assertIn("if (studioSearchQuery()) return false", self.js)
 
-    def test_system_group_is_collapsible_and_defaults_closed(self):
-        self.assertIn('label: "SYSTEM"', self.js)
-        self.assertIn('stateKey: "@system"', self.js)
-        self.assertIn('defaultCollapsed: true', self.js)
-        self.assertIn('system-group', self.js)
+    def test_system_custom_asset_groups_are_removed(self):
+        self.assertNotIn('label: "SYSTEM"', self.js)
+        self.assertNotIn('stateKey: "@system"', self.js)
+        self.assertNotIn('heading.textContent = "Custom"', self.js)
 
     def test_folder_caret_uses_centered_css_chevron(self):
         self.assertIn('.studio-folder-caret::before', self.css)
@@ -957,9 +957,9 @@ def test_workflow_generator_yaml_editor_has_single_scroll_owner():
     assert "min-height: 440px" not in css
 
 
-def test_studio_custom_scope_badge_is_compact():
+def test_studio_global_scope_badge_is_compact():
     css = (Path(__file__).resolve().parents[1] / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
-    assert ".studio-list-scope.custom {" in css
+    assert ".studio-list-scope.global {" in css
     assert "min-height: 18px;" in css
     assert "padding-inline: 6px;" in css
     assert "font-size: 8px;" in css
