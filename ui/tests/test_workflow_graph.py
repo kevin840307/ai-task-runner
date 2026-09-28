@@ -2,102 +2,80 @@ from ui.workflow_graph import build_workflow_graph
 
 
 def _edges(graph, kind):
-    return {(e["from"], e["to"], e["label"]) for e in graph["edges"] if e["kind"] == kind}
+    return {
+        (edge["from"], edge["to"], edge["label"])
+        for edge in graph["edges"]
+        if edge["kind"] == kind
+    }
 
 
-def test_stage_routing_becomes_edges_and_recovery_returns():
+def test_graph_renders_stage_nodes_normal_flow_and_result_edges():
     graph = build_workflow_graph({
         "stages": {
-            "grill": {"type": "review", "recover": ["repair"], "retry": 2, "max_attempts": 3, "on_exhausted": "continue"},
-            "repair": {"type": "task"},
-            "validate": {"type": "ai_validator", "restart_at": "grill"},
+            "execute": {"type": "task"},
+            "review": {"type": "review", "routes": {"fail": "execute"}},
+            "validate": {"type": "ai_validator", "routes": {"fail": "execute"}},
         },
-        "flow": ["grill", "validate"],
+        "flow": ["execute", "review", "validate"],
     })
-    assert ("grill", "repair", "FAIL → recover") in _edges(graph, "recover")
-    assert ("repair", "grill", "retry after recovery") in _edges(graph, "recovery_return")
-    assert ("grill", "grill", "retry ×2") in _edges(graph, "retry")
-    assert ("grill", "validate", "attempts exhausted → continue") in _edges(graph, "exhausted")
-    assert ("validate", "grill", "FAIL → restart_at") in _edges(graph, "restart")
+
+    assert [node["id"] for node in graph["nodes"] if not node["virtual"]] == [
+        "execute", "review", "validate"
+    ]
+    assert ("execute", "review", "PASS → next") in _edges(graph, "normal")
+    assert ("review", "validate", "PASS → next") in _edges(graph, "normal")
+    assert ("review", "execute", "FAIL → execute") in _edges(graph, "result")
+    assert ("validate", "execute", "FAIL → execute") in _edges(graph, "result")
 
 
-def test_recovery_sequence_returns_from_last_step():
+def test_graph_uses_unique_flow_node_name_for_reused_stage_template():
     graph = build_workflow_graph({
-        "stages": {"review": {"recover": ["repair_plan", "repair"]}, "repair_plan": {}, "repair": {}},
-        "flow": ["review"],
+        "stages": {
+            "worker": {"type": "task"},
+        },
+        "flow": [
+            {"stage": "worker", "name": "first", "label": "First"},
+            {"stage": "worker", "name": "second", "label": "Second", "routes": {"fail": "first"}},
+        ],
     })
-    assert ("review", "repair_plan", "FAIL → recover") in _edges(graph, "recover")
-    assert ("repair_plan", "repair", "recovery next") in _edges(graph, "recovery_step")
-    assert ("repair", "review", "retry after recovery") in _edges(graph, "recovery_return")
+
+    assert [node["id"] for node in graph["nodes"]] == ["first", "second"]
+    assert [node["label"] for node in graph["nodes"]] == ["First", "Second"]
+    assert ("first", "second", "PASS → next") in _edges(graph, "normal")
+    assert ("second", "first", "FAIL → first") in _edges(graph, "result")
 
 
-def test_on_exhausted_fail_has_terminal_edge():
+def test_graph_renders_done_and_stop_as_terminal_nodes():
     graph = build_workflow_graph({
-        "stages": {"gate": {"recover": ["repair"], "max_attempts": 2, "on_exhausted": "fail"}, "repair": {}},
+        "stages": {
+            "gate": {
+                "type": "review",
+                "routes": {"pass": "done", "fail": "stop"},
+            },
+        },
         "flow": ["gate"],
     })
-    assert any(e["kind"] == "exhausted" and e["to"] == "__failed__:gate" for e in graph["edges"])
-    assert any(n["id"] == "__failed__:gate" and n["virtual"] for n in graph["nodes"])
+
+    assert any(node["id"] == "__done__:gate" and node["virtual"] for node in graph["nodes"])
+    assert any(node["id"] == "__stop__:gate" and node["virtual"] for node in graph["nodes"])
+    assert ("gate", "__done__:gate", "PASS → done") in _edges(graph, "result")
+    assert ("gate", "__stop__:gate", "FAIL → stop") in _edges(graph, "result")
 
 
-def test_flow_map_node_routing_includes_fresh_after_same_failures():
-    graph = build_workflow_graph(
-        {
-            "stages": {
-                "gate": {
-                    "type": "review",
-                    "fresh_after_same_failures": 2,
-                    "recover": ["repair"],
-                },
-                "repair": {"type": "task"},
-            },
-            "flow": ["gate"],
-        }
-    )
+def test_graph_does_not_inject_hidden_plan_nodes_or_retry_edges():
+    graph = build_workflow_graph({
+        "stages": {
+            "planning": {"type": "plan"},
+            "execute": {"type": "task"},
+            "review": {"type": "review", "routes": {"fail": "execute"}},
+        },
+        "flow": [
+            "planning",
+            {"stage": "execute", "scope": "task"},
+            {"stage": "review", "scope": "task"},
+        ],
+    })
 
-    gate = next(node for node in graph["nodes"] if node["id"] == "gate")
-    assert gate["routing"]["fresh_after_same_failures"] == 2
-
-
-def test_flow_map_mirrors_implicit_plan_task_review_lifecycle():
-    graph = build_workflow_graph(
-        {
-            "stages": {
-                "planning": {"type": "plan"},
-                "validate_ai": {"type": "ai_validator", "restart_at": "planning"},
-            },
-            "flow": ["planning", "validate_ai"],
-        }
-    )
-
-    task = next(node for node in graph["nodes"] if node.get("runtime_stage") == "__plan_task__")
-    review = next(node for node in graph["nodes"] if node.get("runtime_stage") == "__plan_review__")
-    assert task["virtual"] is True and task["type"] == "task"
-    assert review["virtual"] is True and review["type"] == "review"
-    normal = _edges(graph, "normal")
-    assert ("planning", task["id"], "next") in normal
-    assert (task["id"], review["id"], "next") in normal
-    assert (review["id"], "validate_ai", "next") in normal
-    assert (review["id"], task["id"], "FAIL → Execute") in _edges(graph, "result")
-
-
-def test_flow_map_does_not_inject_builtin_task_lifecycle_when_plan_has_explicit_task_scope():
-    graph = build_workflow_graph(
-        {
-            "stages": {
-                "planning": {"type": "plan"},
-                "custom_task": {"type": "task"},
-                "custom_review": {"type": "review"},
-                "validate_ai": {"type": "ai_validator"},
-            },
-            "flow": [
-                "planning",
-                {"stage": "custom_task", "scope": "task"},
-                {"stage": "custom_review", "scope": "task"},
-                "validate_ai",
-            ],
-        }
-    )
-
-    assert not any(node.get("runtime_stage") == "__plan_task__" for node in graph["nodes"])
-    assert not any(node.get("runtime_stage") == "__plan_review__" for node in graph["nodes"])
+    ids = {node["id"] for node in graph["nodes"]}
+    assert ids == {"planning", "execute", "review"}
+    assert all(edge["kind"] in {"normal", "result"} for edge in graph["edges"])
