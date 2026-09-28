@@ -20,7 +20,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
     "command": CommandStage,
     "plan": PlanStage,
 }
-FLOW_FIELDS = frozenset({"validator", "routes", "label", "scope", "_workflow_index"})
+NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "_workflow_index"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -79,7 +79,7 @@ def create_stage(definition: dict[str, Any]):
     values = deepcopy(definition)
     stage_type = str(values.pop("type", "base"))
     name = str(values.get("name", ""))
-    for field in FLOW_FIELDS:
+    for field in NODE_FIELDS:
         values.pop(field, None)
 
     try:
