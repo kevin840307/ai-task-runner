@@ -1,38 +1,40 @@
-# Workflow Builder Skill
+# Workflow Builder
 
-You are generating an AI Task Runner Workflow package.
+Generate the smallest explicit AI Task Runner Workflow for this goal:
 
-Goal:
 {{ goal }}
 
+Use this graph contract:
 
-Required Workflow shape:
 ```yaml
 stages:
-  planning:
-    type: plan
+  work:
+    type: base
+    prompt: work.md
+
+  review:
+    type: review
+    routes:
+      fail: work
 
 flow:
-  - planning
+  - work
+  - review
 ```
 
-Schema rules:
-- `stages` MUST be a YAML mapping/object keyed by Stage id. Never emit `stages` as a list and never use `- name: ...` Stage entries.
-- Every `flow` item must reference a Stage id defined under `stages`.
-- Recovery targets must reference defined Stage ids.
-- Use only fields supported by the Runner Workflow schema.
-
 Rules:
-- Create only the draft Workflow and Prompt files requested by the goal.
-- Do not edit application source code or Runner source code.
-- Keep the Workflow small and explicit. Prefer Stage defaults over repeated YAML options.
+- One `stages.<name>` entry is exactly one graph/UI node.
+- `flow` is only the ordered list of unique Stage names. Never emit flow objects or aliases.
+- Routing is only `routes.pass`, `routes.fail`, or `routes.error` to `next`, `done`, `stop`, or another Stage name.
+- Never emit recover, restart_at, repeat, max_attempts, on_exhausted, replan, repair, or per-Stage retry fields.
+- Technical retry, Same Session continuation, Fresh Session recovery, API delay, watchdog, and resume are Runner-owned; do not model them in Workflow YAML.
 - Use only supported Stage types: base, task, review, plan, ai_validator, command.
-- A standard top-level plan automatically expands the default per-task execute/review SOP; do not duplicate that task flow unless the requested SOP explicitly needs a custom task producer or task-scoped stages.
-- Python validation is a command Stage with `result_kind: validation` and the standard `{validator}` command contract when requested.
-- AI validation is an `ai_validator` Stage with a Prompt reference when custom instructions are needed.
-- Every Prompt reference must point to a Prompt file that you actually create in the requested draft Prompt directory.
-- Validation Stages are ordinary top-level gates: multiple File/AI validators may appear where the requested SOP needs them, and ordinary Stages may follow validation. Do not put validators inside `scope: task`.
-- Never create fake Prompt references, missing files, unsupported fields, or placeholder TODO content.
-- Before finishing, read the generated Workflow and Prompt files back and self-check paths, Stage order, recover targets, and validation topology.
+- If a Plan produces tasks, add explicit task-scoped execute/review Stages with `scope: task`; there are no hidden Plan Stages.
+- Validators are ordinary nodes. Route semantic FAIL explicitly when repair is required.
+- Workflow YAML and generated Prompt Markdown files publish into one flat asset folder. Prompt references must be simple Markdown file names such as `review_code.md`.
+- Create every referenced Prompt file. Do not create nested Prompt folders.
+- Keep YAML small. Prefer Stage defaults.
+- Do not edit Runner source code.
+- Before finishing, read back the generated YAML/Prompts and ensure every route target and Prompt reference exists.
 
-The external workflow-builder validator will reject missing files and will run the real `tool/workflow_dryrun.py` contract. Keep repairing the draft until that validator passes.
+The external validator runs the real Workflow loader and Dry Run matrix. Keep repairing the draft until it passes.
