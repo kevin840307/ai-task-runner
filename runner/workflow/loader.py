@@ -155,7 +155,7 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
         source,
     )
     review["scope"] = "task"
-    review["restart_at"] = "__plan_task__"
+    review["routes"] = {"fail": "__plan_task__"}
     return [task, review]
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:
