@@ -810,84 +810,6 @@
 .stage-behavior-preview::before { content:"Behavior · "; color:var(--text); font-weight:800; }
 .stage-command-safety { grid-column:1 / -1; }
 
-/* Custom assets are grouped by their relative folder and can be collapsed independently. */
-.studio-folder-group {
-  display: grid;
-  gap: 6px;
-  margin: 2px 0 6px;
-}
-.studio-folder-header {
-  width: 100%;
-  min-height: 30px;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 7px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary, var(--muted));
-  text-align: left;
-  cursor: pointer;
-}
-.studio-folder-header:hover,
-.studio-folder-header:focus-visible {
-  background: var(--panel-2);
-  color: var(--text-primary, var(--text));
-}
-.studio-folder-caret {
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-.studio-folder-caret::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-right: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  transform: rotate(45deg) translate(-1px, -1px);
-  transform-origin: center;
-  transition: transform 120ms ease;
-}
-.studio-folder-group.collapsed .studio-folder-caret::before {
-  transform: rotate(-45deg) translate(-1px, 1px);
-}
-.studio-folder-group.system-group .studio-folder-label {
-  text-transform: uppercase;
-  letter-spacing: .055em;
-}
-.studio-folder-label {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: .015em;
-}
-.studio-folder-count {
-  min-width: 22px;
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 800;
-  text-align: center;
-}
-.studio-folder-items {
-  display: grid;
-  gap: 7px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-}
-.studio-folder-items[hidden] { display: none; }
-
 /* Hidden Workflow state stays visible while editing, not only in the asset list. */
 .designer-card-main-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .studio-visibility-badge { font-size:11px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
@@ -951,14 +873,14 @@
   letter-spacing: .055em;
   white-space: nowrap;
 }
-.studio-scope-badge.custom,
-.studio-list-scope.custom {
+.studio-scope-badge.global,
+.studio-list-scope.global {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
   background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
-.studio-list-scope.custom {
+.studio-list-scope.global {
   min-height: 18px;
   padding-inline: 6px;
   font-size: 8px;
@@ -968,12 +890,6 @@
   border-color: color-mix(in srgb, var(--blue) 20%, var(--line));
   background: color-mix(in srgb, #eaf1ff 74%, var(--panel));
   color: var(--blue);
-}
-.studio-scope-badge.system,
-.studio-scope-badge.readonly,
-.studio-list-scope.system {
-  background: var(--panel-2);
-  color: var(--muted);
 }
 .studio-visibility-badge {
   border: 1px solid color-mix(in srgb, #b7791f 28%, var(--line));
