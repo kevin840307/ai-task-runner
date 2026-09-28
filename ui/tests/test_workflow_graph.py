@@ -78,7 +78,7 @@ def test_flow_map_mirrors_implicit_plan_task_review_lifecycle():
     assert ("planning", task["id"], "next") in normal
     assert (task["id"], review["id"], "next") in normal
     assert (review["id"], "validate_ai", "next") in normal
-    assert (review["id"], task["id"], "FAIL → Execute") in _edges(graph, "restart")
+    assert (review["id"], task["id"], "FAIL → Execute") in _edges(graph, "result")
 
 
 def test_flow_map_does_not_inject_builtin_task_lifecycle_when_plan_has_explicit_task_scope():
