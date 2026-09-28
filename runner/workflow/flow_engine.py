@@ -303,9 +303,12 @@ class FlowEngine:
         an ``error`` result reaches this point. Workflow routing therefore stays a
         small state-machine concern: result status -> next target.
         """
-        if not node.routes or result.status not in node.routes:
+        if node.routes is None:
             return None
-        target = node.routes[result.status]
+        target = node.routes.get(
+            result.status,
+            "next" if result.status == "pass" else "stop",
+        )
         if target == "next":
             return None, False
         if target == "stop":
