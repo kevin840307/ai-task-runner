@@ -1,4 +1,5 @@
-"""Durable task/run state plus atomic state persistence."""
+"""Durable Workflow state plus atomic persistence."""
+
 from __future__ import annotations
 
 import hashlib
@@ -14,9 +15,9 @@ from typing import Any
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
-from ..utils.text import bounded_text
 from ..utils.files import io_path, same_path
 from ..utils.logs import append_bounded_log
+from ..utils.text import bounded_text
 from .heartbeat import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
@@ -33,8 +34,6 @@ class Task:
     attempts: int = 0
     last_output: str = ""
     last_review: dict[str, Any] | None = None
-    review_skipped: bool = False
-    review_skip_reason: str = ""
     changed_files: list[str] = field(default_factory=list)
 
     def validate(self, index: int) -> None:
@@ -50,17 +49,13 @@ class Task:
             raise ValueError(f"{prefix}.acceptance_criteria must be strings")
         if self.status not in VALID_TASK_STATUSES:
             raise ValueError(f"{prefix}.status is invalid")
-        if not isinstance(self.review_skipped, bool):
-            raise ValueError(f"{prefix}.review_skipped must be boolean")
-        if not isinstance(self.review_skip_reason, str):
-            raise ValueError(f"{prefix}.review_skip_reason must be a string")
+        if not is_integer(self.attempts) or self.attempts < 0:
+            raise ValueError(f"{prefix}.attempts must be non-negative")
         if not isinstance(self.changed_files, list) or any(
             not isinstance(item, str) or not item.strip()
             for item in self.changed_files
         ):
             raise ValueError(f"{prefix}.changed_files must be strings")
-        if not is_integer(self.attempts) or self.attempts < 0:
-            raise ValueError(f"{prefix}.attempts must be non-negative")
 
 
 @dataclass
@@ -68,7 +63,6 @@ class RunState:
     run_id: str
     goal: str
     project_root: str
-    execution_mode: str = "linear"
     cycle: int = 1
     current: int = 0
     tasks: list[Task] = field(default_factory=list)
@@ -79,112 +73,81 @@ class RunState:
     stage_started_at: float = 0.0
     last_activity_at: float = 0.0
     last_error: str = ""
-    validator_failure_key: str = ""
-    validator_failure_count: int = 0
-    replan_feedback: str = ""
-    failure_scope: str = ""
-    failure_key: str = ""
-    same_failures: int = 0
-    fresh_session_round: int = 0
     workflow_position: int = 0
-    workflow_fingerprint: str = ""
-    flow_result_key: str = ""
-    flow_result_count: int = 0
-    flow_result_previous: dict[str, Any] = field(default_factory=dict)
-    semantic_failure_key: str = ""
-    semantic_failure_fingerprint: str = ""
-    semantic_failure_count: int = 0
-    recovery_attempt_key: str = ""
-    recovery_attempt_count: int = 0
-    recovery_attempt_previous: dict[str, Any] = field(default_factory=dict)
-    transition_previous: dict[str, Any] = field(default_factory=dict)
     task_step: int = 0
+    workflow_fingerprint: str = ""
+    transition_previous: dict[str, Any] = field(default_factory=dict)
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
 
     def validate(self) -> None:
-        for name in ("run_id", "goal", "project_root", "execution_mode"):
+        for name in ("run_id", "goal", "project_root"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"state.{name} must be a non-empty string")
-        if not is_integer(self.cycle) or self.cycle < 1:
-            raise ValueError("state.cycle must be a positive integer")
-        if not is_integer(self.current) or not 0 <= self.current <= len(self.tasks):
+        for name in ("cycle", "current", "workflow_position", "task_step"):
+            value = getattr(self, name)
+            if not is_integer(value) or value < 0:
+                raise ValueError(f"state.{name} must be non-negative")
+        if self.cycle < 1:
+            raise ValueError("state.cycle must be positive")
+        if self.current > len(self.tasks):
             raise ValueError("state.current is outside the task list")
         if not isinstance(self.completed, bool):
             raise ValueError("state.completed must be boolean")
-        for name in (
-            "stage",
-            "last_error",
-            "validator_failure_key",
-            "replan_feedback",
-            "failure_scope",
-            "failure_key",
-            "workflow_fingerprint",
-            "flow_result_key",
-            "semantic_failure_key",
-            "semantic_failure_fingerprint",
-            "recovery_attempt_key",
-        ):
-            value = getattr(self, name)
-            if not isinstance(value, str):
+        for name in ("stage", "last_error", "workflow_fingerprint"):
+            if not isinstance(getattr(self, name), str):
                 raise ValueError(f"state.{name} must be a string")
         for name in ("stage_started_at", "last_activity_at"):
             value = getattr(self, name)
             if not is_number(value) or value < 0:
                 raise ValueError(f"state.{name} must be a non-negative number")
-        for name in ("validator_failure_count", "same_failures", "fresh_session_round", "flow_result_count", "semantic_failure_count", "recovery_attempt_count"):
-            value = getattr(self, name)
-            if not is_integer(value) or value < 0:
-                raise ValueError(f"state.{name} must be non-negative")
-        if not is_integer(self.workflow_position) or self.workflow_position < 0:
-            raise ValueError("state.workflow_position must be non-negative")
-        if not isinstance(self.flow_result_previous, dict):
-            raise ValueError("state.flow_result_previous must be an object")
-        if not isinstance(self.recovery_attempt_previous, dict):
-            raise ValueError("state.recovery_attempt_previous must be an object")
         if not isinstance(self.transition_previous, dict):
             raise ValueError("state.transition_previous must be an object")
-        if not is_integer(self.task_step) or self.task_step < 0:
-            raise ValueError("state.task_step must be non-negative")
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):
             raise ValueError("completed state contains pending tasks")
 
     @classmethod
-    def load(cls, data: dict[str, Any]) -> RunState:
+    def load(cls, data: dict[str, Any]) -> "RunState":
         if not isinstance(data, dict):
             raise ValueError("state must be a JSON object")
-        values = dict(data)
-        if "ai_session_id" not in values:
-            values["ai_session_id"] = values.pop("model_session_id", values.pop("agent_session_id", ""))
-        # Legacy dynamic-workflow state is intentionally ignored.
-        # The slim runner resumes the current TODO through the static task-scoped SOP.
-        raw_tasks = values.get("tasks", [])
+
+        allowed_state = {item.name for item in fields(cls)}
+        unknown_state = sorted(set(data) - allowed_state)
+        if unknown_state:
+            raise ValueError("state contains removed fields: " + ", ".join(unknown_state))
+
+        raw_tasks = data.get("tasks", [])
         if not isinstance(raw_tasks, list):
             raise ValueError("state.tasks must be an array")
+        allowed_task = {item.name for item in fields(Task)}
         tasks: list[Task] = []
         for index, item in enumerate(raw_tasks, 1):
             if not isinstance(item, dict):
                 raise ValueError(f"tasks[{index}] must be an object")
-            allowed = {field.name for field in fields(Task)}
-            tasks.append(Task(**{key: value for key, value in item.items() if key in allowed}))
+            unknown_task = sorted(set(item) - allowed_task)
+            if unknown_task:
+                raise ValueError(
+                    f"tasks[{index}] contains removed fields: "
+                    + ", ".join(unknown_task)
+                )
+            tasks.append(Task(**item))
+
+        values = dict(data)
         values["tasks"] = tasks
-        allowed_state = {item.name for item in fields(cls)}
-        state = cls(**{key: value for key, value in values.items() if key in allowed_state})
+        state = cls(**values)
         state.validate()
         return state
 
 
-# ---- Persistence ---------------------------------------------------------
 JSON_WRITE_RETRIES = 10
 JSON_WRITE_RETRY_DELAY = 0.05
 
 
 def _write_json(path: Path, data: Any) -> None:
-    """Atomically write indented UTF-8 JSON with Windows lock tolerance."""
     io_path(path.parent).mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     io_path(temporary).write_text(
@@ -212,15 +175,8 @@ class StateStore:
 
     @property
     def backup_path(self) -> Path:
-        key = hashlib.sha256(
-            str(self.work).lower().encode("utf-8")
-        ).hexdigest()[:24]
-        return (
-            Path(tempfile.gettempdir())
-            / "ai-task-runner-state"
-            / key
-            / "state.json"
-        )
+        key = hashlib.sha256(str(self.work).lower().encode("utf-8")).hexdigest()[:24]
+        return Path(tempfile.gettempdir()) / "ai-task-runner-state" / key / "state.json"
 
     def load_or_create(
         self,
@@ -228,25 +184,14 @@ class StateStore:
         *,
         resume: bool,
         force_new: bool,
-        execution_mode: str = "linear",
     ) -> RunState:
         if resume:
             try:
-                state = self._load_resume_state()
-                if state.execution_mode != execution_mode:
-                    raise ConfigurationError(
-                        f"resume state execution_mode is {state.execution_mode!r}, not {execution_mode!r}"
-                    )
-                return state
+                return self._load_resume_state()
             except ConfigurationError as primary_error:
                 if not self.restore_backup():
                     raise primary_error
-                state = self._load_resume_state()
-                if state.execution_mode != execution_mode:
-                    raise ConfigurationError(
-                        f"resume state execution_mode is {state.execution_mode!r}, not {execution_mode!r}"
-                    )
-                return state
+                return self._load_resume_state()
         if not goal:
             raise RunnerError("--goal is required")
         if io_path(self.path).exists() and not force_new:
@@ -255,14 +200,10 @@ class StateStore:
             run_id=str(uuid.uuid4()),
             goal=goal,
             project_root=str(self.root),
-            execution_mode=execution_mode,
         )
 
     def save(self, state: RunState) -> None:
         data = state.dump()
-        # state.json is the authoritative commit point. Once it is durable, a
-        # recovery-copy failure must not make the caller repeat an already
-        # committed workflow action.
         _write_json(self.path, data)
         touch_heartbeat()
         try:
@@ -272,7 +213,7 @@ class StateStore:
                 self.work / "state-backup-warning.log",
                 (
                     f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-                    f"WARNING state backup failed; primary state remains authoritative; "
+                    "WARNING state backup failed; primary state remains authoritative; "
                     f"backup={self.backup_path}; {type(error).__name__}: {error}\n"
                 ),
             )
@@ -296,8 +237,7 @@ class StateStore:
         if not same_path(state.project_root, self.root):
             raise ConfigurationError("resume state belongs to a different project_root")
         state.validator_output = bounded_text(
-            state.validator_output,
-            MAX_VALIDATOR_OUTPUT_CHARS,
+            state.validator_output, MAX_VALIDATOR_OUTPUT_CHARS
         )
         for task in state.tasks:
             task.last_output = task.last_output[-MAX_TASK_OUTPUT_CHARS:]
@@ -311,15 +251,20 @@ class StateStore:
     ) -> tuple[dict[str, Any], RunState] | None:
         try:
             payload = json.loads(io_path(path).read_text(encoding="utf-8"))
-            state = RunState.load(payload)
-            return payload, state
+            return payload, RunState.load(payload)
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
             if strict:
                 raise ConfigurationError(f"invalid resume state: {error}") from error
             return None
 
 
-def set_stage(state: RunState, stage: str, detail: str = "", *, now: float | None = None) -> None:
+def set_stage(
+    state: RunState,
+    stage: str,
+    detail: str = "",
+    *,
+    now: float | None = None,
+) -> None:
     timestamp = time.time() if now is None else now
     if state.stage != stage:
         state.stage = stage
@@ -337,10 +282,14 @@ def normalize_state(state: RunState) -> bool:
         state.current = len(state.tasks)
         changed = True
     if state.current < len(state.tasks) and state.tasks[state.current].status == "completed":
-        pending = next((i for i, task in enumerate(state.tasks) if task.status != "completed"), len(state.tasks))
+        pending = next(
+            (i for i, task in enumerate(state.tasks) if task.status != "completed"),
+            len(state.tasks),
+        )
         if pending != state.current:
             state.current = pending
             changed = True
     return changed
+
 
 __all__ = ["RunState", "StateStore", "Task", "normalize_state", "set_stage"]
