@@ -43,12 +43,6 @@ def parser() -> argparse.ArgumentParser:
     )
     command_parser.add_argument("--project-root", default=".")
     command_parser.add_argument("--project-name", default="", help="optional UI display name for this project")
-    command_parser.add_argument(
-        "--execution-mode",
-        choices=execution_mode_names(),
-        default="linear",
-        help="top-level orchestration mode; existing behavior uses linear",
-    )
     command_parser.add_argument("--script", help="YAML array of prompt + validator items")
     command_parser.add_argument(
         "--workflow",
@@ -124,22 +118,10 @@ def parser() -> argparse.ArgumentParser:
         help="seconds without Runner progress before the Supervisor restarts the worker; 0 disables it",
     )
     command_parser.add_argument(
-        "--max-attempts",
+        "--stage-retries",
         type=int,
-        default=DEFAULT_MAX_ATTEMPTS,
-        help="same-session retries before fresh recovery; -1 retries until PASS, 0 disables same-session retry",
-    )
-    command_parser.add_argument(
-        "--review-retries",
-        type=int,
-        default=DEFAULT_REVIEW_RETRIES,
-        help="AI Review retries before skip; -1 retries until PASS, 0 disables retry",
-    )
-    command_parser.add_argument(
-        "--max-cycles",
-        type=int,
-        default=DEFAULT_MAX_CYCLES,
-        help="maximum workflow/replan cycles; -1 means unlimited (default), 0 disables replan",
+        default=DEFAULT_STAGE_RETRIES,
+        help="technical Stage retries; -1 keeps retrying with periodic fresh sessions",
     )
     command_parser.add_argument("--retry-delay", type=float, default=2, help="logical task retry delay")
     command_parser.add_argument("--retry-wait", type=float, default=5, help="initial model-call retry wait")
@@ -180,11 +162,6 @@ def parser() -> argparse.ArgumentParser:
     command_parser.add_argument("--json-events", action="store_true", help="emit JSON Lines progress events")
     command_parser.add_argument("--resume", action="store_true")
     command_parser.add_argument("--force-new", action="store_true")
-    command_parser.add_argument(
-        "--plan-only",
-        action="store_true",
-        help="create or refresh the TODO plan, save state, then exit before execution",
-    )
     return command_parser
 
 
