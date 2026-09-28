@@ -690,8 +690,84 @@ def test_system_topology_contract(tmp_path: Path, workflow: str, validators: lis
         "".join(json.dumps(event) + "\n" for event in events),
         encoding="utf-8",
     )
+    (work / "state.json").write_text(
+        json.dumps({"tasks": [{"title": "one", "status": "completed"}]}),
+        encoding="utf-8",
+    )
 
     live.assert_system_topology(project, workflow)
+
+
+def test_system_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
+    project = tmp_path
+    work = project / ".ai-task-runner"
+    work.mkdir()
+    stages = [
+        "planning",
+        "__plan_task__", "__plan_review__",
+        "__plan_task__", "__plan_review__",
+        "__plan_task__", "__plan_review__",
+        "validate_file", "validate_ai",
+    ]
+    events = [
+        event
+        for stage in stages
+        for event in (
+            {"type": "runner.stage", "action": "start", "stage": stage},
+            {"type": "runner.stage", "action": "finish", "stage": stage, "result": "pass"},
+        )
+    ]
+    (work / "log.txt").write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    (work / "state.json").write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {"title": "one", "status": "completed"},
+                    {"title": "two", "status": "completed"},
+                    {"title": "three", "status": "completed"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    live.assert_system_topology(project, "mixed")
+
+
+def test_system_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
+    project = tmp_path
+    work = project / ".ai-task-runner"
+    work.mkdir()
+    stages = ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"]
+    events = [
+        event
+        for stage in stages
+        for event in (
+            {"type": "runner.stage", "action": "start", "stage": stage},
+            {"type": "runner.stage", "action": "finish", "stage": stage, "result": "pass"},
+        )
+    ]
+    (work / "log.txt").write_text(
+        "".join(json.dumps(event) + "\n" for event in events),
+        encoding="utf-8",
+    )
+    (work / "state.json").write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {"title": "one", "status": "completed"},
+                    {"title": "two", "status": "completed"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="durable_tasks=2"):
+        live.assert_system_topology(project, "mixed")
 
 @pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
 def test_review_failure_routing_validator_accepts_two_logical_lines_with_optional_final_newline(
