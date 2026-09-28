@@ -1,310 +1,388 @@
-AI Task Runner - Future Architecture
-====================================
+AI Task Runner - Future Direction
+=================================
 
-Purpose
--------
-Keep one reliable runtime and let future workflow interaction models change only
-routing semantics.
-
-The user-facing contract stays:
-
-  Chat / CLI / API
-        ->
-  select Workflow/Profile
-        ->
-  enter Prompt
-        ->
-  Run
-
-Chat must not require a separate Linear / Dynamic / Discussion mode selector.
-The selected Workflow/Profile carries its own routing/editor metadata.
-
-Core design rule
-----------------
-Stage is the only execution unit.
-
-Plan, Execute, Review, Validator, Command, Coder, Reviewer, Architect,
-Researcher and Moderator are all Stages.
-
-An Agent is not a second runtime abstraction. It is normally an AI Stage with
-role / prompt / session_key / tools / safety configuration.
-
-The runtime stays:
-
-  WorkflowRunner
-    |-- FlowEngine
-    |    '-- RoutingStrategy
-    |         |-- Linear
-    |         |-- Dynamic
-    |         '-- Discussion
-    |
-    |-- StageExecutor
-    |    |-- technical retry
-    |    |-- timeout
-    |    |-- API transient recovery
-    |    |-- same-session retry
-    |    |-- fresh-session escalation
-    |    |-- watchdog integration
-    |    '-- safety/hooks
-    |
-    '-- StateStore
-         |-- durable state
-         |-- checkpoint
-         '-- resume
-
-Do NOT create separate full runtimes such as:
-- LinearWorkflowOrchestrator
-- DynamicHandoffOrchestrator
-- GroupChatOrchestrator
-
-Future strategies must reuse WorkflowRunner, StageExecutor, StateStore,
-backend/session handling, protected-path safety, diagnostics and resume.
-
-Target routing strategies
--------------------------
-
-1. Linear Workflow with Rollback / Loop
-   Current production strategy.
-
-   Preferred flow contract is a small state machine:
-   - implicit PASS -> next
-   - routes.pass -> explicit Stage / done / stop
-   - routes.fail -> explicit Stage / done / stop
-   - routes.error -> explicit Stage / done / stop
-   - routes.replan -> explicit Stage / done / stop
-   - task scope for Plan/custom task producers
-
-   Legacy restart_at/recover/repeat/max_attempts remain compatibility syntax
-   until existing workflows and reliability probes have migrated.
-
-   Technical retry/recovery remains outside Linear routing.
-
-2. Dynamic Handoff
-   Future strategy.
-
-   Multiple role-based AI Stages may hand work to another Stage at runtime.
-
-   Example:
-
-     Planner
-        ->
-     Coder
-        ->
-     Reviewer
-        |-- code problem ------> Coder
-        |-- architecture issue -> Architect
-        |-- missing evidence --> Researcher
-        '-- PASS -------------> Validator
-
-   The Stage may return bounded structured routing intent, for example:
-     target
-     reason
-     evidence/context reference
-
-   FlowEngine validates that intent and the Dynamic RoutingStrategy decides the
-   next Stage.
-
-   Dynamic Handoff must not create its own retry/session/watchdog runtime.
-
-3. Discussion / Group Chat
-   Future strategy.
-
-   Participants are still Stages.
-
-   Example:
-
-     Architect -> Coder -> Reviewer -> Security
-              discussion round
-                    |
-              next round?
-               /       \
-             yes       no
-              |         |
-          next round   Judge
-                         |
-                      Execute
-
-   Discussion-specific state may include:
-   - round
-   - active speaker
-   - participant order/policy
-   - bounded discussion summary
-   - judge/moderator decision
-
-   Raw transcript must remain bounded.
-
-   Discussion must reuse the same Stage execution reliability and project write
-   safety.
-
-Shared runtime capabilities
----------------------------
-The following are mode-neutral and must remain shared:
-
-- StageExecutor
-- backend/model selection
-- AI session handling
-- API transient classification
-- same-session retry
-- fresh-session escalation
-- timeout
-- watchdog
-- process ownership
-- subprocess cleanup
-- protected-path / Git safety
-- durable save
-- checkpoint/resume
-- bounded diagnostics/logging
-- prompt/resource snapshots
-- validators
-- plugin/tool boundary
-
-Mode-specific semantics
------------------------
-These belong to RoutingStrategy, not StageExecutor:
-
-Linear:
-- workflow_position
-- task_step
-- result edge target
-- legacy recovery counters only while compatibility syntax remains
-
-Dynamic:
-- current owner
-- handoff target
-- handoff budget
-- allowed target policy
-
-Discussion:
-- round
-- next speaker
-- moderator/judge
-- termination rule
-
-State direction
----------------
-Keep one authoritative durable RunState / state.json commit point.
-
-Conceptually separate:
-- common lifecycle
-- Stage/session state
-- latest transition context
-- routing_state
-
-Do not prematurely create three large state class hierarchies.
-
-Future routing_state examples:
-
-Linear:
-  strategy: linear
-  position: ...
-  task_step: ...
-
-Dynamic:
-  strategy: dynamic
-  current_stage: ...
-  handoff_count: ...
-
-Discussion:
-  strategy: discussion
-  round: ...
-  active_speaker: ...
-
-Only introduce structural schema migration after ownership is stable and resume
-compatibility is covered by tests.
-
-UI direction
+Primary goal
 ------------
-Use one Workflow/Profile catalog and preferably one Graph Designer.
+Keep the runtime intentionally small while preserving:
+
+- 24H unattended execution
+- durable resume
+- closed-loop Stage routing
+- custom Stages
+- Plan/custom task producers
+- n8n-style visual Workflow editing
+- CLI execution
+- YAML List batch execution
+- future Dynamic/Parallel agents built from Stage
+
+User-facing model
+-----------------
+
+All entry surfaces use the same Workflow model:
+
+  n8n-style UI
+       |
+  CLI / API
+       |
+  YAML List
+       |
+       v
+  RunRequest
+       |
+       v
+  WorkflowRunner
+       |
+       v
+  FlowEngine
+     /      \
+StageExecutor StateStore
+     |
+   Stage
+
+UI, CLI and YAML List are adapters only.
+They must never own their own routing or recovery semantics.
+
+Core Workflow contract
+----------------------
+
+StageResult statuses:
+
+  pass
+  fail
+  error
+
+Default routing:
+
+  pass  -> next
+  fail  -> stop
+  error -> stop
+
+Optional result edge:
+
+  routes:
+    fail: execute
+
+Targets:
+
+  next
+  done
+  stop
+  another unique Stage
+
+Removed concepts must not return:
+
+- execution_mode
+- RoutingStrategy framework
+- RecoveryPolicy
+- SemanticRoutingPolicy
+- LinearRouting compatibility wrapper
+- TaskRunner alias
+- Pipeline alias
+- recover
+- restart_at
+- repeat
+- max_attempts
+- on_exhausted
+- fresh_after_same_failures
+- repair Stage as a runtime concept
+- replan StageResult
+- hidden __plan_task__ / __plan_review__
+- plan_only runtime mode
+- review-specific retry policy
+- YAML List skip_on_max_cycles state
+
+Stage model
+-----------
+
+Stage is the only execution/agent unit.
+
+Built-ins remain small:
+- base
+- plan
+- task
+- review
+- ai_validator
+- command
+
+Extensions use:
+
+  register_stage(...)
+
+Plan is simply a Stage that produces Task[].
+
+Any custom Stage may also use:
+
+  produces: tasks
+
+No hidden Stage injection is allowed.
+
+24H unattended contract
+-----------------------
+
+StageExecutor owns technical execution reliability:
+
+- hooks / safety
+- timeout
+- backend execution
+- same-session retry
+- Fresh Session rotation
+- changed-file tracking
+
+One public retry concept:
+
+  stage_retries: -1
+
+Default -1 means:
+- keep retrying technical Stage failures
+- keep one Session bounded
+- rotate Fresh Session periodically
+- preserve current durable Workflow position
+
+Deterministic configuration/state errors fail closed.
+
+Outer run supervisor owns:
+- transient service/backend restart
+- resume from state.json
+- unexpected Python exception logging
+- repeated identical Python error fail-closed behavior
+
+StateStore owns:
+- one authoritative state.json
+- atomic writes
+- backup restore
+- durable Workflow cursor
+- task cursor
+- latest StageResult
+- completion state
+
+No durable recovery state machine.
+
+n8n-style UI
+------------
+
+The UI must be a visual editor for the exact runtime Workflow graph.
 
 Node:
   Stage
 
-Edge:
-  routing
+Normal edge:
+  PASS -> next
 
-Workflow/Profile metadata should eventually expose:
-- id
-- name
-- routing_strategy
-- editor_kind
-- schema_version
-- capabilities
-- source/location
+Explicit result edge:
+  routes.pass
+  routes.fail
+  routes.error
 
-Chat remains:
-  select Workflow -> Prompt -> Run
+Node settings:
+- Stage type
+- prompt/instructions
+- role/session/tool/safety options
+- scope: task
+- validator/command options
 
-Editor behavior may vary by metadata:
-- Linear: PASS/FAIL/ERROR/REPLAN result edges; legacy restart/recover edges during migration
-- Dynamic: handoff targets / runtime dynamic edges
-- Discussion: participant/group/round properties
+Edge settings:
+- result status
+- target Stage / done / stop
 
-Do not build three unrelated UI products unless real requirements prove it is
-necessary.
+Required behavior:
+- drag Stage from catalog
+- connect Stage nodes
+- delete/reconnect edge
+- edit node parameters in side panel
+- System workflows read-only
+- Custom/Project workflows editable
+- save only after real loader/schema validation
+- Dry Run uses the real FlowEngine
+- no hidden nodes
+- no retry/recovery edges
 
-Write ownership
----------------
-Future multi-agent strategies must not allow uncontrolled concurrent writes.
+The UI and YAML are two views of the same graph.
+A UI change must serialize to normal Workflow YAML.
+A YAML change must render back to the same graph.
 
-Default rule:
-- many Stages may read/reason/review;
-- only one write owner per project/worktree at a time;
-- handoff explicitly transfers write ownership;
-- parallel writers require isolated worktrees plus controlled merge/reconcile.
+CLI
+---
 
-Compatibility
--------------
-- Existing Linear Workflow YAML remains valid.
-- Existing Stage registry remains the execution catalog.
-- execution_mode defaults to linear while the public compatibility field exists.
-- YAML List remains Linear-only until a mode-aware batching contract is designed.
-- Existing Chat/UI workflow selection remains unchanged.
-- Old compatibility module/class names may remain as re-exports, but no new
-  runtime behavior may be added to them.
+CLI remains a thin adapter.
 
-Implementation order
+Expected usage:
+
+  select project
+  select/provide workflow
+  provide goal/prompt
+  optional backend/runtime overrides
+  run
+
+No mode selector.
+
+CLI must not contain routing behavior.
+It creates RunRequest and calls the shared runtime.
+
+YAML List
+---------
+
+YAML List is only a batch of RunRequests.
+
+Each item may override:
+- goal
+- project_root / project_name
+- workflow/workflow_file
+- validator
+- backend
+- Stage retry/runtime timeout settings
+- plugins
+
+Each child uses:
+- same Workflow loader
+- same FlowEngine
+- same StageExecutor
+- same StateStore
+
+YAML List does not get:
+- custom routing semantics
+- custom recovery state
+- skip markers
+- max-cycle policy
+
+Future Dynamic Agent
 --------------------
 
-Current:
-1. Finish Linear architecture cleanup.
-2. Keep WorkflowRunner / FlowEngine / LinearRouting / StageExecutor boundaries.
-3. Prove deterministic closure and resume equivalence.
-4. Pass Windows + Ubuntu fast CI.
-5. Pass real-Qwen closed-loop probes.
-6. Pass 24H high-density soak.
+Do not build it yet.
 
-Before the second routing strategy:
-7. Define the smallest RoutingStrategy protocol from the real Linear code.
-8. Add workflow/profile routing metadata used by runtime and UI.
-9. Keep the same WorkflowRunner and StageExecutor.
+When required, keep Stage unchanged.
 
-Dynamic:
-10. Implement one minimal Dynamic RoutingStrategy prototype.
-11. Use existing AI Stage configurations for Coder/Reviewer/Architect roles.
-12. Add bounded handoff state and deterministic simulation.
+Possible future scheduler:
 
-Discussion:
-13. Build on the same Stage/runtime contract.
-14. Add only discussion-specific round/speaker/termination state.
-15. Add deterministic discussion simulation before live use.
+  current Stage
+      |
+  StageResult + bounded handoff intent
+      |
+  DynamicScheduler
+      |
+  target Stage
 
-Avoid premature abstractions
-----------------------------
-Do not introduce until real second-strategy requirements prove they are needed:
+Examples:
+- Planner -> Coder
+- Reviewer -> Coder
+- Reviewer -> Architect
+- Reviewer -> Researcher
+- Validator -> done
+
+Dynamic scheduling must reuse:
+- StageExecutor
+- StateStore
+- Stage registry
+- backend/session logic
+- protected-file safety
+- UI Stage catalog
+
+Do not create a second Orchestrator.
+
+UI direction for Dynamic:
+- same Stage nodes
+- allowed handoff edges/policies
+- runtime current-owner highlight
+- no separate product/editor
+
+Future Parallel Agent
+---------------------
+
+Parallel execution also reuses Stage.
+
+Default safety:
+- read-only Stages may run concurrently
+- only one writer per project/worktree
+- parallel writers require isolated worktrees
+- merge/reconcile is explicit
+
+A future ParallelScheduler may coordinate ready Stages, but it must reuse the
+same StageExecutor and StateStore.
+
+UI direction for Parallel:
+- same Stage nodes
+- parallel branches
+- write-ownership indication
+- branch/join only when real requirements justify it
+
+Do not pre-build a generic DAG engine now.
+
+TODO
+----
+
+Phase A - finish minimal runtime cleanup
+1. Remove every remaining reference to deleted legacy routing/recovery fields.
+2. Remove tests that exist only for removed compatibility behavior.
+3. Update necessary tests to PASS/FAIL/ERROR + routes.
+4. Update all built-in/example/tool workflows to explicit Stage nodes.
+5. Ensure Plan/custom task producer uses explicit task-scope Stage blocks.
+6. Ensure UI Graph Designer reads/writes only Stage + routes.
+7. Ensure CLI exposes only current RuntimeConfig fields.
+8. Ensure YAML List uses only current RunRequest/RuntimeConfig fields.
+9. Ensure Dry Run imports FlowEngine directly and has no second routing model.
+10. Pass Windows + Ubuntu CI.
+
+Phase B - reliability proof
+11. Deterministic closed-loop tests.
+12. Kill/resume equivalence at committed Stage boundaries.
+13. Custom Stage registration test.
+14. Custom produces: tasks test.
+15. n8n UI round-trip: YAML -> graph -> YAML.
+16. CLI smoke test.
+17. YAML List multi-item resume test.
+18. Real Qwen closed-loop reliability probes.
+19. API 429/502/503/disconnect recovery probes.
+20. 24H high-density soak.
+
+Phase C - code-size review
+21. Measure production runtime LOC.
+22. Review every core file over ~300-400 lines for mixed responsibility.
+23. Remove helpers/fields that exist only for old behavior.
+24. Keep the main runtime reading path short:
+      workflow_runner.py
+      workflow/flow_engine.py
+      workflow/stages/executor.py
+      runtime/run_state.py
+25. Update project.bundle.txt after architecture stabilizes.
+
+Phase D - Dynamic Agent only after A/B/C are stable
+26. Derive the smallest DynamicScheduler contract from a real use case.
+27. Reuse Stage and StageExecutor unchanged.
+28. Add bounded handoff intent only if required.
+29. Add deterministic dynamic scheduling tests.
+30. Extend the same Graph Designer with allowed handoff edges.
+
+Phase E - Parallel Agent only after a real use case
+31. Define read-only parallel scheduling first.
+32. Add single-writer ownership enforcement.
+33. Use isolated worktrees before allowing parallel writers.
+34. Add deterministic branch/join tests.
+35. Extend the same Graph Designer; do not create another UI.
+
+Non-goals
+---------
+
+Do not introduce unless a proven requirement needs them:
 - UniversalAgent
-- GenericEverything
 - multiple full Orchestrators
-- arbitrary expression language in edges
+- execution mode registries
+- generic RoutingStrategy hierarchy
+- arbitrary expression language
 - unlimited DAG semantics
 - large AgentMessage hierarchy
-- separate runtime per interaction model
+- separate UI per agent model
+- duplicate CLI/YAML/UI runtimes
 
 Final rule
 ----------
-Workflow defines the work.
-Stage performs one responsibility.
-StageExecutor makes Stage execution reliable.
-FlowEngine decides what happens next through RoutingStrategy.
 
-Agent is a Stage.
-Routing is what changes between Linear, Dynamic and Discussion.
+Workflow defines Stage nodes and result edges.
+Stage performs one responsibility.
+StageExecutor makes one Stage reliable.
+FlowEngine moves through the graph.
+StateStore makes progress resumable.
+
+UI edits that graph.
+CLI runs that graph.
+YAML List batches runs of that graph.
+
+Future Dynamic/Parallel behavior must reuse Stage.
