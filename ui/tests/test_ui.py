@@ -744,7 +744,7 @@ class UIStateTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-class HTTPServerSmokeTestsclass HTTPServerSmokeTests(unittest.TestCase):
+class HTTPServerSmokeTests(unittest.TestCase):
     def test_server_serves_projects_api_and_static_index(self) -> None:
         import threading
         import urllib.request
