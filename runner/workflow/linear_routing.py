@@ -86,15 +86,25 @@ class LinearRouting:
         self.context.save_state()
         return tuple(self.workflow[start:])
 
-    def restart_target_produces_tasks(self, target: str | None) -> bool:
+    def target_produces_tasks(self, target: str | None) -> bool:
         position = self._target_position(target)
         return stage_result_kind(self.workflow[position]) == "tasks"
 
-    def restart(
+    # Compatibility name for legacy restart_at callers.
+    restart_target_produces_tasks = target_produces_tasks
+
+    def route_to(
         self,
-        target: str | None,
+        target: str,
         result: StageResult,
     ) -> tuple[dict[str, Any], ...]:
+        """Move the durable cursor to one explicit result-edge target."""
+        if target == "done":
+            state = self.context.state
+            state.workflow_position = len(self.workflow)
+            state.task_step = 0
+            self.context.save_state()
+            return ()
         position = self._target_position(target)
         state = self.context.state
 
@@ -107,9 +117,20 @@ class LinearRouting:
             state.workflow_position = position
             state.task_step = 0
 
-        self.context.set_stage("workflow_restart", result.output)
+        self.context.set_stage("workflow_route", result.output)
         self.context.save_state()
         return tuple(self.workflow[position:])
+
+    def restart(
+        self,
+        target: str | None,
+        result: StageResult,
+    ) -> tuple[dict[str, Any], ...]:
+        resolved = target or next(iter(self.positions), "")
+        routed = self.route_to(resolved, result)
+        self.context.set_stage("workflow_restart", result.output)
+        self.context.save_state()
+        return routed
 
     def _target_position(self, target: str | None) -> int:
         resolved = target or next(iter(self.positions), "")
