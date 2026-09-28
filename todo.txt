@@ -149,17 +149,24 @@ Linear 核心架構第一輪已完成；Windows + Ubuntu fast CI 已通過。rea
 - [x] static contract：`workflow_position/task_step` 寫入只允許 `linear_routing.py`
 - [x] complete closed-loop live probe 改為 deterministic Review FAIL + deterministic Validator FAIL
 - [x] Review/Validator probe control markers 移至 `.ai-task-runner` work area
+- [x] Windows long-path tree cleanup：短 root + >MAX_PATH descendants 透過 extended-length root 刪除
+- [x] Review routing live probe 移除 Planning/task-scope，只保留 top-level Execute -> Review rollback 閉環
+- [x] `restart_at + max_attempts`：支援 bounded rollback，耗盡可 fail closed
+- [x] bounded restart attempt 與 cursor/transition 一起 durable commit，避免 process restart 原子性問題
+- [x] semantic live probe 使用獨立 bounded timeout，超時附 state + console tail 診斷
+- [x] dry-run matrix 覆蓋 bounded restart exhaustion
+- [x] `ui/server.py` 拆為 composition/HTTP transport；ProjectRuntime/WorkflowStudio 各自獨立 owner
 
 Fast gate 已完成：
-- [x] Windows Python 3.11 compile + full pytest：1033 passed / 1 skipped / 3 subtests passed
-- [x] Ubuntu Python 3.11 compile + full pytest：1033 passed / 1 skipped / 3 subtests passed
+- [x] Windows Python 3.11 compile + full pytest：1043 passed / 1 skipped / 3 subtests passed
+- [x] Ubuntu Python 3.11 compile + full pytest：1043 passed / 1 skipped / 3 subtests passed
 - [x] deterministic workflow dry-run matrix（由 full pytest 覆蓋）
 - [x] compound recoverable FAILs -> closure（由 full pytest 覆蓋）
 - [x] Linear cursor ownership static contract
 - [x] Resume semantic equivalence deterministic checkpoint matrix
 
 仍需本機真實環境驗證：
-- [ ] real-Qwen resume / Review FAIL / Validator FAIL / full closed-loop probes
+- [ ] real-Qwen resume / Review FAIL / Validator FAIL / full closed-loop probes（Review probe 已修 bounded routing；仍需本機真實 Qwen 重跑）
 - [ ] API 429/502/503 + 3-minute disconnect live probes
 - [ ] YAML List resume / multi-TODO resume live probes
 - [ ] 24H high-density soak
@@ -167,7 +174,7 @@ Fast gate 已完成：
 刻意延後，不視為目前 Linear blocker：
 - [ ] RunState nested grouping / routing_state schema migration：維持單一 state.json，等第二種 RoutingStrategy 前再評估
 - [ ] Workflow/Profile routing_strategy/editor metadata：等第二種 RoutingStrategy 前實作
-- [ ] `ui/server.py` domain split：獨立 maintainability phase，不與本次 Linear runtime refactor 混改
+- [x] `ui/server.py` domain split：完成第一刀，server 僅保留 composition + HTTP transport；ProjectRuntime/WorkflowStudio 已獨立
 - [ ] `qwen_live_reliability.py` probe module split：保留單一 CLI，後續按 probe category 拆
 
 P0 - 現在優先重構
@@ -374,7 +381,7 @@ UI 行為：
 P0 - Human Maintainability / Code Readability
 ============================================
 
-[ ] 9. 過長檔案與過長函式瘦身（核心已完成；UI/live harness 待獨立 phase）
+[x] 9. 過長檔案與過長函式瘦身（核心 + UI server 第一輪完成；live harness 模組化延後）
 目的：
 不是追求行數漂亮，而是降低閱讀時需要同時記住的事情。
 
