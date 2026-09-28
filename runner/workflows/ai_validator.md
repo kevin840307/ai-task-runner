@@ -22,9 +22,4 @@ If a material requirement cannot be verified, report the exact blocking uncertai
 {% if instructions %}Workflow validation instructions:
 {{ instructions }}
 {% endif %}
-{% set skipped = tasks | selectattr("review_skipped") | list %}
-{% if skipped %}Independently verify these TODOs because Review was unavailable:
-{% for item in skipped[-20:] %}- {{ item.id }}: {{ item.title }} — {{ item.review_skip_reason }}
-{% endfor %}
-{% endif %}
 Do not ask questions. Runner appends the immutable validation output protocol automatically.
