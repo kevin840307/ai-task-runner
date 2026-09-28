@@ -354,7 +354,7 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
             isinstance(max_attempts, int)
             and not isinstance(max_attempts, bool)
             and max_attempts > 0
-            and definition.get("recover")
+            and (definition.get("recover") or definition.get("restart_at"))
             and ("max_attempts", name) not in added
         ):
             added.add(("max_attempts", name))
