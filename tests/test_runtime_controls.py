@@ -123,7 +123,7 @@ class _SessionModel:
 
     def ask(self, prompt, **kwargs):
         self.calls.append(self.session_id)
-        if len(self.calls) == 1:
+        if len(self.calls) <= 2:
             raise RunnerError('Loop detection halted the run: consecutive_identical_tool_calls')
         self.session_id = 'session-B'
         return 'ok'
@@ -138,7 +138,6 @@ class _ModelStage:
     actor = 'model'
     status = 'understand'
     detail = ''
-    retry = 0
     run_state = 'planning'
     tolerate_restored_changes = False
 
@@ -155,7 +154,7 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
     model = _SessionModel()
     saves = []
     ctx = StageContext(
-        config=RuntimeConfig(stage_retries=1, stage_retry_delay=0),
+        config=RuntimeConfig(stage_retries=2, retry_delay=0),
         root=tmp_path,
         work=tmp_path / '.work',
         state=state,
@@ -170,7 +169,7 @@ def test_fresh_recovery_really_drops_old_session_and_accepts_new_session(tmp_pat
     result = StageExecutor(_Hooks()).run(_ModelStage(), ctx)
 
     assert result.status == 'pass'
-    assert model.calls == ['session-A', '']  # second call cannot resume A
+    assert model.calls == ['session-A', 'session-A', '']  # Fresh Session only after two same-session failures
     assert model.session_id == state.ai_session_id == 'session-B'
 
 
