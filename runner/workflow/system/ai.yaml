@@ -6,10 +6,12 @@ stages:
 
   execute:
     type: task
+    scope: task
     status: AI 正在處理目前任務
 
   review:
     type: review
+    scope: task
     status: AI 正在確認任務是否完成
     readonly_safety: observe
     routes:
@@ -30,8 +32,6 @@ stages:
 
 flow:
   - planning
-  - stage: execute
-    scope: task
-  - stage: review
-    scope: task
+  - execute
+  - review
   - validate_ai
