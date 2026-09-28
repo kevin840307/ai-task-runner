@@ -28,16 +28,13 @@ class ReviewStageSpec(BaseStageSpec):
     mode: str = MODE_READONLY
     actor: str = "ai"
     prompt: str = "stages/review.md"
-    skip_on_error: bool = True
 
 
 class ReviewStage(BaseStage):
     result_kind = "review"
-    semantic_failure_threshold = 2
     parser_name = "review"
     backend_mode = "review"
     timeout_config_attr = "planning_timeout"
-    retry_config_attr = "review_retries"
     client_cache_key = "review_client"
     result_flag = "completed"
 
