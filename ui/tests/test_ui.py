@@ -1016,42 +1016,55 @@ class WorkflowStudioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside allowed"):
             self.state.studio_read(file_id, self.project)
 
-    def test_visual_designer_reads_stages_and_flow(self) -> None:
+    def test_visual_designer_reads_one_stage_per_node(self) -> None:
         self.workflow.write_text(
-            "stages:\n  planning:\n    type: plan\n    prompt: stages/planning.md\n  review:\n    type: review\nflow:\n  - planning\n  - stage: review\n    scope: task\n",
+            "stages:\n"
+            "  planning:\n"
+            "    type: plan\n"
+            "    prompt: stages/planning.md\n"
+            "  review:\n"
+            "    type: review\n"
+            "    scope: task\n"
+            "flow:\n"
+            "  - planning\n"
+            "  - review\n",
             encoding="utf-8",
         )
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
-        self.assertEqual([stage["name"] for stage in visual["stages"]], ["planning", "review"])
-        self.assertEqual([row["stage"] for row in visual["flow"]], ["planning", "review"])
-        self.assertEqual(visual["flow"][1]["scope"], "task")
+        self.assertEqual(
+            [stage["name"] for stage in visual["stages"]],
+            ["planning", "review"],
+        )
+        self.assertEqual(visual["flow"], ["planning", "review"])
+        review = next(stage for stage in visual["stages"] if stage["name"] == "review")
+        self.assertEqual(review["scope"], "task")
 
-    def test_visual_flow_status_and_prompt_override_round_trip(self) -> None:
+    def test_visual_stage_settings_round_trip_on_the_node(self) -> None:
         self.workflow.write_text(
-            "stages:\n  run_prompt:\n    type: task\n    status: Default status\n    prompt: stages/execution.md\nflow:\n  - stage: run_prompt\n    status: Flow status\n    prompt: stages/continue.md\n",
+            "stages:\n"
+            "  run_prompt:\n"
+            "    type: base\n"
+            "    status: Default status\n"
+            "    prompt: stages/execution.md\n"
+            "flow:\n"
+            "  - run_prompt\n",
             encoding="utf-8",
         )
         item = self._workflow_item()
-        visual = self.state.studio_visual(item["id"], self.project)
-        stage = visual["stages"][0]
-        flow = visual["flow"][0]
-        self.assertEqual(stage["status"], "Default status")
-        self.assertEqual(stage["prompt"], "stages/execution.md")
-        self.assertEqual(flow["status"], "Flow status")
-        self.assertEqual(flow["prompt"], "stages/continue.md")
-
         opened = self.state.studio_read(item["id"], self.project)
         result = self.state.studio_stage_save(
-            item["id"], "run_prompt", {}, opened["hash"], self.project,
-            flow_index=0, scope="",
-            flow_fields={"status": "Changed flow status", "prompt": "stages/execution.md"},
+            item["id"],
+            "run_prompt",
+            {"status": "Changed status", "label": "Work", "routes": {"error": "stop"}},
+            opened["hash"],
+            self.project,
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertEqual(data["stages"]["run_prompt"]["status"], "Default status")
-        self.assertEqual(data["stages"]["run_prompt"]["prompt"], "stages/execution.md")
-        self.assertEqual(data["flow"][0]["status"], "Changed flow status")
-        self.assertEqual(data["flow"][0]["prompt"], "stages/execution.md")
+        self.assertEqual(data["stages"]["run_prompt"]["status"], "Changed status")
+        self.assertEqual(data["stages"]["run_prompt"]["label"], "Work")
+        self.assertEqual(data["stages"]["run_prompt"]["routes"], {"error": "stop"})
+        self.assertEqual(data["flow"], ["run_prompt"])
 
     def test_stage_draft_validation_does_not_write_workflow(self) -> None:
         self.workflow.write_text(
@@ -1062,8 +1075,12 @@ class WorkflowStudioTests(unittest.TestCase):
         opened = self.state.studio_read(item["id"], self.project)
         original = self.workflow.read_text(encoding="utf-8")
         result = self.state.studio_stage_save(
-            item["id"], "review", {"status": "Draft only"}, opened["hash"], self.project,
-            flow_index=0, scope="", validate_only=True,
+            item["id"],
+            "review",
+            {"status": "Draft only"},
+            opened["hash"],
+            self.project,
+            validate_only=True,
         )
         self.assertTrue(result["ok"])
         self.assertEqual(self.workflow.read_text(encoding="utf-8"), original)
@@ -1171,8 +1188,6 @@ class WorkflowStudioTests(unittest.TestCase):
             },
             opened["hash"],
             self.project,
-            flow_index=0,
-            scope="",
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
         stage = data["stages"]["review"]
@@ -1214,7 +1229,7 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(stage["retry"], -1)
         self.assertEqual(stage["parser"], "review")
 
-    def test_stage_save_updates_result_routes_without_polluting_stage_definition(self) -> None:
+    def test_stage_save_updates_result_routes_on_the_stage_node(self) -> None:
         self.workflow.write_text(
             "stages:\n"
             "  work:\n"
@@ -1232,23 +1247,20 @@ class WorkflowStudioTests(unittest.TestCase):
         result = self.state.studio_stage_save(
             item["id"],
             "review",
-            {},
-            opened["hash"],
-            self.project,
-            flow_index=1,
-            flow_fields={
+            {
                 "label": "Review result",
                 "routes": {"fail": "work", "error": "stop"},
             },
+            opened["hash"],
+            self.project,
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertNotIn("label", data["stages"]["review"])
-        self.assertNotIn("routes", data["stages"]["review"])
-        self.assertEqual(data["flow"][1]["label"], "Review result")
+        self.assertEqual(data["stages"]["review"]["label"], "Review result")
         self.assertEqual(
-            data["flow"][1]["routes"],
+            data["stages"]["review"]["routes"],
             {"fail": "work", "error": "stop"},
         )
+        self.assertEqual(data["flow"], ["work", "review"])
 
     def test_stage_save_rejects_removed_legacy_flow_fields(self) -> None:
         self.workflow.write_text(
@@ -1257,15 +1269,13 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "Unsupported Flow field"):
+        with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
             self.state.studio_stage_save(
                 item["id"],
                 "work",
-                {},
+                {"restart_at": "work"},
                 opened["hash"],
                 self.project,
-                flow_index=0,
-                flow_fields={"restart_at": "work"},
             )
 
     def test_stage_save_rejects_unknown_result_route_target(self) -> None:
@@ -1275,15 +1285,13 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "unknown Flow stage"):
+        with self.assertRaisesRegex(ValueError, "unknown Stage"):
             self.state.studio_stage_save(
                 item["id"],
                 "review",
-                {},
+                {"routes": {"fail": "missing"}},
                 opened["hash"],
                 self.project,
-                flow_index=0,
-                flow_fields={"routes": {"fail": "missing"}},
             )
 
     def test_stage_save_null_removes_direct_field(self) -> None:
@@ -1485,21 +1493,38 @@ flow: [validate]
     def test_stage_definition_delete_removes_selected_flow_and_definition_preserving_other_text(self) -> None:
         self.workflow.write_text("# keep header\nstages:\n  work:\n    type: task\n    status: Working\n  review:\n    type: review\n\nflow:\n  - work\n  - review\n", encoding="utf-8")
         item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        result = self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
+        result = self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project)
         data = __import__("yaml").safe_load(result["file"]["content"])
         self.assertNotIn("work", data["stages"]); self.assertEqual(data["flow"], ["review"])
         self.assertIn("# keep header", result["file"]["content"]); self.assertIn("review:", result["file"]["content"])
 
-    def test_stage_definition_delete_is_blocked_by_other_flow_or_recovery_reference(self) -> None:
-        self.workflow.write_text("stages:\n  work:\n    type: task\n  review:\n    type: review\n    recover: [work]\nflow:\n  - work\n  - review\n", encoding="utf-8")
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+    def test_stage_definition_delete_is_blocked_by_result_edge_reference(self) -> None:
+        self.workflow.write_text(
+            "stages:\n"
+            "  work:\n"
+            "    type: base\n"
+            "    prompt: stages/execution.md\n"
+            "  review:\n"
+            "    type: review\n"
+            "    routes:\n"
+            "      fail: work\n"
+            "flow:\n"
+            "  - work\n"
+            "  - review\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
         with self.assertRaisesRegex(ValueError, "still referenced"):
-            self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
-        self.assertIn("work", __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))["stages"])
-        self.workflow.write_text("stages:\n  work:\n    type: task\nflow:\n  - work\n  - work\n", encoding="utf-8")
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "still referenced"):
-            self.state.studio_stage_delete(item["id"], "work", opened["hash"], self.project, flow_index=0)
+            self.state.studio_stage_delete(
+                item["id"], "work", opened["hash"], self.project
+            )
+        self.assertIn(
+            "work",
+            __import__("yaml").safe_load(
+                self.workflow.read_text(encoding="utf-8")
+            )["stages"],
+        )
 
     def test_import_workflow_rejects_missing_prompt_and_accepts_existing_prompt(self) -> None:
         bad = "stages:\n  work:\n    type: task\n    prompt: prompts/missing.md\nflow: [work]\n"
