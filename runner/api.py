@@ -14,7 +14,6 @@ from .bootstrap import execute
 from .config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
-    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
@@ -64,13 +63,11 @@ class RunRequest:
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
-    api_wait_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     stage_retries: int = DEFAULT_STAGE_RETRIES
-    retry_delay: float = 2
-    retry_wait: float = 5
-    retry_max_wait: float = 300
+    retry_delay: float = 5
+    retry_max_delay: float = 300
 
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
@@ -108,13 +105,11 @@ class RunRequest:
             agent_timeout=args.agent_timeout,
             planning_timeout=args.planning_timeout,
             agent_idle_after_change_timeout=args.agent_idle_after_change_timeout,
-            api_wait_timeout=args.api_wait_timeout,
             watchdog_interval=args.watchdog_interval,
             worker_hang_timeout=args.worker_hang_timeout,
             stage_retries=args.stage_retries,
             retry_delay=args.retry_delay,
-            retry_wait=args.retry_wait,
-            retry_max_wait=args.retry_max_wait,
+            retry_max_delay=args.retry_max_delay,
             final_ai_validations=args.final_ai_validations,
             final_ai_required_passes=args.final_ai_required_passes,
             ai_validator_yolo=args.ai_validator_yolo,
@@ -196,13 +191,11 @@ class RunRequest:
             agent_timeout=self.agent_timeout,
             planning_timeout=self.planning_timeout,
             agent_idle_after_change_timeout=self.agent_idle_after_change_timeout,
-            api_retry_timeout=self.api_wait_timeout,
             watchdog_interval=self.watchdog_interval,
             worker_hang_timeout=self.worker_hang_timeout,
             stage_retries=self.stage_retries,
-            stage_retry_delay=self.retry_delay,
-            api_retry_wait=self.retry_wait,
-            api_retry_max_wait=self.retry_max_wait,
+            retry_delay=self.retry_delay,
+            retry_max_delay=self.retry_max_delay,
             final_ai_validations=self.final_ai_validations,
             final_ai_required_passes=self.final_ai_required_passes,
             ai_validator_yolo=self.ai_validator_yolo,
@@ -333,8 +326,8 @@ def run(
                 f"({unexpected_repeats}/2 automatic recoveries)",
             )
 
-        if config.stage_retry_delay:
-            sleep_with_heartbeat(config.stage_retry_delay)
+        if config.retry_delay:
+            sleep_with_heartbeat(config.retry_delay)
 
 
 def state_files(request: RunRequest | Mapping[str, Any]) -> tuple[str, ...]:
