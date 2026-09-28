@@ -75,13 +75,14 @@ class StageExecutor:
         if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(ctx):
             self._fresh_session(stage, ctx)
 
-        retry_limit = self._retry_limit(stage, ctx)
+        retry_limit = int(ctx.config.stage_retries)
         unlimited = retry_limit == -1
         retries_used = 0
         failures_in_session = 0
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
+        service_delay = float(ctx.config.retry_delay)
 
         run_state = str(getattr(stage, "run_state", "") or "")
         if run_state:
@@ -103,18 +104,26 @@ class StageExecutor:
             error = result.error or RunnerError(result.output or "stage error")
             if isinstance(error, ConfigurationError):
                 raise error
-            if is_transient_error(error):
-                progress.service_wait_exhausted(stage.name, str(error)[-1000:])
-                raise error
             if result.changed_files:
                 break
             if not unlimited and retries_used >= retry_limit:
                 break
 
             retries_used += 1
-            failures_in_session += 1
             previous_error = str(error)
 
+            if is_transient_error(error):
+                retry_mode = "retry" if self._has_session(ctx) else "recover"
+                self._sleep(ctx, service_delay)
+                if service_delay:
+                    service_delay = min(
+                        float(ctx.config.retry_max_delay),
+                        max(float(ctx.config.retry_delay), service_delay * 2),
+                    )
+                continue
+
+            failures_in_session += 1
+            service_delay = float(ctx.config.retry_delay)
             if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
                 self._fresh_session(stage, ctx)
                 failures_in_session = 0
@@ -122,7 +131,7 @@ class StageExecutor:
             else:
                 retry_mode = "retry" if self._has_session(ctx) else "recover"
 
-            self._sleep(ctx)
+            self._sleep(ctx, float(ctx.config.retry_delay))
 
         try:
             result = stage.finish(ctx, result)
@@ -203,14 +212,6 @@ class StageExecutor:
             )
         return result
 
-    @staticmethod
-    def _retry_limit(stage: Stage, ctx: StageContext) -> int:
-        value = getattr(stage, "retry_limit", None)
-        configured = value(ctx) if callable(value) else getattr(stage, "retry", None)
-        if configured is None:
-            configured = ctx.config.stage_retries
-        return int(configured)
-
     def _fresh_session(self, stage: Stage, ctx: StageContext) -> None:
         reset = getattr(stage, "reset_session", None)
         if callable(reset):
@@ -227,9 +228,9 @@ class StageExecutor:
         )
 
     @staticmethod
-    def _sleep(ctx: StageContext) -> None:
-        if ctx.config.stage_retry_delay:
-            sleep_with_heartbeat(ctx.config.stage_retry_delay)
+    def _sleep(ctx: StageContext, seconds: float) -> None:
+        if seconds > 0:
+            sleep_with_heartbeat(seconds)
 
 
 __all__ = ["StageAction", "StageExecutor"]
