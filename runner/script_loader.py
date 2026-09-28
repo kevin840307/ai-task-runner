@@ -37,6 +37,16 @@ SCRIPT_ITEM_RUNTIME_ALIASES = {
     "ai_validator_yolo": "ai_validator_yolo",
     "readonly_safety": "readonly_safety",
 }
+REMOVED_SCRIPT_FIELDS = frozenset({
+    "max_attempts",
+    "max_cycles",
+    "review_retries",
+    "api_wait_timeout",
+    "retry_wait",
+    "retry_max_wait",
+    "skip_on_max_cycles",
+})
+
 
 def _string_value(item: dict[str, Any], index: int, field_name: str) -> str:
     value = item.get(field_name, "")
@@ -164,6 +174,11 @@ def _parse_item(
 ) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise RunnerError(f"script item {index} must be an object")
+    removed = sorted(set(item) & REMOVED_SCRIPT_FIELDS)
+    if removed:
+        raise RunnerError(
+            f"script item {index} uses removed options: " + ", ".join(removed)
+        )
     goal, goal_file = _goal(script, item, index, allow_missing=allow_missing_files)
     validator = item.get("validator")
     explicit_workflow = bool(item.get("workflow_file") or item.get("workflow"))
