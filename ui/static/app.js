@@ -1175,13 +1175,8 @@ function routeTargetOptions(selected, emptyLabel = "Default") {
   return rows.join("");
 }
 function pathWithSlashes(value) { return String(value || "").replaceAll("\\", "/").replace(/^\.\//, ""); }
-function promptRef(item) {
-  const original = pathWithSlashes(item.path); const lowered = original.toLowerCase();
-  if (item.scope === "system") { const marker = "/runner/prompts/"; const at = lowered.lastIndexOf(marker); if (at >= 0) return original.slice(at + marker.length); }
-  if (item.scope === "custom") { const marker = "/runner/prompts/custom/"; const at = lowered.lastIndexOf(marker); if (at >= 0) return `custom/${original.slice(at + marker.length)}`; }
-  if (item.scope === "project") { const marker = "/prompts/"; const at = lowered.lastIndexOf(marker); if (at >= 0) return `prompts/${original.slice(at + marker.length)}`; }
-  return item.name;
-}
+function promptRef(item) { return item?.name || ""; }
+
 function promptOptionRows(current) {
   const rows = [`<option value="">No prompt</option>`]; let matched = !current;
   for (const item of state.studioFiles.prompts || []) {
@@ -1512,9 +1507,9 @@ function updateDirtyState() {
   const saveNeeded = state.studioFile?.kind === "prompt" ? state.studioDirty : (state.studioMode === "visual" ? state.visualDirty : state.studioDirty);
   $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = !state.studioFile; $("validateStudioButton").disabled = !state.studioFile; $("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow"; if ($("flowMapButton")) $("flowMapButton").disabled = !state.studioFile || state.studioFile.kind !== "workflow";
   const workflowSource = state.studioSourceKind === "workflow";
-  $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable; $("importAssetButton").textContent = workflowSource ? "Import Folder" : "Import";
-  $("exportStudioButton").textContent = state.studioFile?.kind === "workflow" ? "Export Folder" : "Export";
-  $("exportStudioButton").disabled = !state.studioFile || (state.studioFile.kind === "workflow" && state.studioFile.scope !== "custom"); $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
+  $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable; $("importAssetButton").textContent = "Import";
+  $("exportStudioButton").textContent = "Export";
+  $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
   $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Tasks" : "Hide from Tasks"; }
 }
 function renderStudioGuard() {
@@ -1603,119 +1598,195 @@ async function confirmDiscardStudio() {
 }
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
-function fillFolderInput(kind, inputId, selected = "", destination = "custom") {
-  const input = $(inputId); if (!input) return;
-  const listId = input.getAttribute("list"), list = listId ? $(listId) : null;
-  const folders = destination === "project" ? (state.studioFiles?.project_folders || []) : (state.studioFiles?.custom_folders?.[kind] || []);
-  if (list) {
-    list.innerHTML = "";
-    if (destination === "custom") { const root = document.createElement("option"); root.value = ""; root.label = "Custom root"; list.appendChild(root); }
-    folders.filter(Boolean).forEach((folder) => { const option = document.createElement("option"); option.value = folder; list.appendChild(option); });
-  }
-  input.value = selected || "";
-  input.placeholder = destination === "project" ? "workflow-folder" : "e2e/regression";
-}
-function syncCustomFolderVisibility(kind) {
-  const workflow = kind === "workflow"; const destination = $(workflow ? "newWorkflowDestination" : "newPromptDestination")?.value || "custom";
-  const row = $(workflow ? "newWorkflowFolderRow" : "newPromptFolderRow");
-  if (row) row.hidden = false;
-  fillFolderInput(kind, workflow ? "newWorkflowFolder" : "newPromptFolder", "", destination);
-  const label = row?.querySelector(".designer-label"); if (label) label.textContent = destination === "project" ? "Workflow folder" : "Custom folder";
-}
 function openNewWorkflowModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Workflow.", true);
-  state.newWorkflowDirty = false; $("newWorkflowName").value = ""; $("newWorkflowDestination").value = "custom"; syncCustomFolderVisibility("workflow"); $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project; $("newWorkflowHint").textContent = ""; $("newWorkflowHint").classList.remove("error"); $("newWorkflowBackdrop").hidden = false; setTimeout(() => $("newWorkflowName").focus(), 0);
+  state.newWorkflowDirty = false;
+  $("newWorkflowName").value = "";
+  $("newWorkflowDestination").value = "global";
+  $("newWorkflowDestination").querySelector('option[value="project"]').disabled = !state.project;
+  $("newWorkflowHint").textContent = "";
+  $("newWorkflowHint").classList.remove("error");
+  $("newWorkflowBackdrop").hidden = false;
+  setTimeout(() => $("newWorkflowName").focus(), 0);
 }
-async function closeNewWorkflowModal(force = false) { if ($("newWorkflowBackdrop").hidden) return true; if (!force && state.newWorkflowDirty) { const ok = await confirmDialog({ title: "Discard new Workflow?", message: "Discard this unsaved Workflow draft?", confirmLabel: "Discard Workflow", danger: true }); if (!ok) return false; } $("newWorkflowBackdrop").hidden = true; state.newWorkflowDirty = false; return true; }
+async function closeNewWorkflowModal(force = false) {
+  if ($("newWorkflowBackdrop").hidden) return true;
+  if (!force && state.newWorkflowDirty) {
+    const ok = await confirmDialog({ title: "Discard new Workflow?", message: "Discard this unsaved Workflow draft?", confirmLabel: "Discard Workflow", danger: true });
+    if (!ok) return false;
+  }
+  $("newWorkflowBackdrop").hidden = true;
+  state.newWorkflowDirty = false;
+  return true;
+}
 async function confirmNewWorkflow() {
-  const name = $("newWorkflowName").value.trim(); if (!name) { $("newWorkflowHint").textContent = "Workflow name is required."; $("newWorkflowHint").classList.add("error"); return; }
-  try { const result = await api("/api/studio/workflow/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newWorkflowDestination").value, folder: $("newWorkflowFolder").value }) }); closeNewWorkflowModal(true); state.studioSourceKind = "workflow"; await refreshStudioFiles({ force: true }); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Workflow ${result.file.name} created`); }
-  catch (error) { $("newWorkflowHint").textContent = error.message; $("newWorkflowHint").classList.add("error"); showActionError(error.message, "Workflow creation failed"); }
+  const name = $("newWorkflowName").value.trim();
+  if (!name) {
+    $("newWorkflowHint").textContent = "Workflow name is required.";
+    $("newWorkflowHint").classList.add("error");
+    return;
+  }
+  try {
+    const result = await api("/api/studio/workflow/create", {
+      method: "POST",
+      body: JSON.stringify({
+        project: state.project?.path || "",
+        name,
+        destination: $("newWorkflowDestination").value,
+      }),
+    });
+    await closeNewWorkflowModal(true);
+    state.studioSourceKind = "workflow";
+    await refreshStudioFiles({ force: true });
+    const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item;
+    if (item) await openStudioFile(item);
+    showToast(`Workflow ${result.file.name} created`);
+  } catch (error) {
+    $("newWorkflowHint").textContent = error.message;
+    $("newWorkflowHint").classList.add("error");
+    showActionError(error.message, "Workflow creation failed");
+  }
 }
 function openNewPromptModal() {
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before creating Prompt.", true);
-  state.newPromptDirty = false; $("newPromptName").value = ""; $("newPromptDestination").value = "custom"; syncCustomFolderVisibility("prompt"); $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project; $("newPromptHint").textContent = ""; $("newPromptHint").classList.remove("error"); $("newPromptBackdrop").hidden = false; setTimeout(() => $("newPromptName").focus(), 0);
+  state.newPromptDirty = false;
+  $("newPromptName").value = "";
+  $("newPromptDestination").value = "global";
+  $("newPromptDestination").querySelector('option[value="project"]').disabled = !state.project;
+  $("newPromptHint").textContent = "";
+  $("newPromptHint").classList.remove("error");
+  $("newPromptBackdrop").hidden = false;
+  setTimeout(() => $("newPromptName").focus(), 0);
 }
-async function closeNewPromptModal(force = false) { if ($("newPromptBackdrop").hidden) return true; if (!force && state.newPromptDirty) { const ok = await confirmDialog({ title: "Discard new Prompt?", message: "Discard this unsaved Prompt draft?", confirmLabel: "Discard Prompt", danger: true }); if (!ok) return false; } $("newPromptBackdrop").hidden = true; state.newPromptDirty = false; return true; }
+async function closeNewPromptModal(force = false) {
+  if ($("newPromptBackdrop").hidden) return true;
+  if (!force && state.newPromptDirty) {
+    const ok = await confirmDialog({ title: "Discard new Prompt?", message: "Discard this unsaved Prompt draft?", confirmLabel: "Discard Prompt", danger: true });
+    if (!ok) return false;
+  }
+  $("newPromptBackdrop").hidden = true;
+  state.newPromptDirty = false;
+  return true;
+}
 async function confirmNewPrompt() {
-  const name = $("newPromptName").value.trim(); if (!name) { $("newPromptHint").textContent = "Prompt name is required."; $("newPromptHint").classList.add("error"); return; }
-  try { const result = await api("/api/studio/prompt/create", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", name, destination: $("newPromptDestination").value, folder: $("newPromptFolder").value }) }); closeNewPromptModal(true); state.studioSourceKind = "prompt"; await refreshStudioFiles({ force: true }); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Prompt ${result.file.name} created`); }
-  catch (error) { $("newPromptHint").textContent = error.message; $("newPromptHint").classList.add("error"); showActionError(error.message, "Prompt creation failed"); }
-}
-function bytesToBase64(bytes) {
-  let binary = ""; const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
-  return btoa(binary);
+  const name = $("newPromptName").value.trim();
+  if (!name) {
+    $("newPromptHint").textContent = "Prompt name is required.";
+    $("newPromptHint").classList.add("error");
+    return;
+  }
+  try {
+    const result = await api("/api/studio/prompt/create", {
+      method: "POST",
+      body: JSON.stringify({
+        project: state.project?.path || "",
+        name,
+        destination: $("newPromptDestination").value,
+      }),
+    });
+    await closeNewPromptModal(true);
+    state.studioSourceKind = "prompt";
+    await refreshStudioFiles({ force: true });
+    const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item;
+    if (item) await openStudioFile(item);
+    showToast(`Prompt ${result.file.name} created`);
+  } catch (error) {
+    $("newPromptHint").textContent = error.message;
+    $("newPromptHint").classList.add("error");
+    showActionError(error.message, "Prompt creation failed");
+  }
 }
 function openImportAssetModal() {
   if (!state.studioGuard.editable) return showActionError("Stop active Runtime before importing.", "Import unavailable");
-  const workflowFolderMode = state.studioSourceKind === "workflow";
-  state.importAssetDirty = false; state.importFolderInfo = null;
-  $("importAssetTitle").textContent = workflowFolderMode ? "Import Workflow Folder" : "Import Prompt";
-  $("importAssetDescription").textContent = workflowFolderMode ? "Import a portable Workflow folder ZIP. The matching Custom Workflow and owned Prompt folders are replaced together." : "Import a Prompt as a Custom or Project asset.";
-  $("importAssetName").value = ""; $("importAssetContent").value = ""; $("importAssetFile").value = ""; $("importAssetFileName").textContent = "No file selected";
-  $("importAssetFile").accept = workflowFolderMode ? ".zip,application/zip" : ".json,.md,application/json,text/markdown,text/plain";
-  $("importAssetNameRow").hidden = workflowFolderMode; $("importAssetDestinationRow").hidden = workflowFolderMode; $("importAssetContentRow").hidden = workflowFolderMode;
-  $("importAssetDestination").value = "custom"; $("importAssetDestination").querySelector('option[value="project"]').disabled = !state.project;
-  $("importAssetFolderRow").hidden = workflowFolderMode; if (!workflowFolderMode) syncImportPromptFolder();
-  $("importAssetHint").textContent = workflowFolderMode ? "Choose a .workflow-folder.zip file. common/system Prompts are dependencies only and are never overwritten." : "";
-  $("importAssetHint").classList.remove("error"); $("importAssetPreview").textContent = workflowFolderMode ? "No Workflow folder selected." : "Choose a file or paste content."; $("importAssetBackdrop").hidden = false;
+  state.importAssetDirty = false;
+  const kind = state.studioSourceKind === "workflow" ? "workflow" : "prompt";
+  $("importAssetTitle").textContent = `Import ${kind === "workflow" ? "Workflow" : "Prompt"}`;
+  $("importAssetDescription").textContent = "Import one editable Global or Project asset.";
+  $("importAssetName").value = "";
+  $("importAssetContent").value = "";
+  $("importAssetFile").value = "";
+  $("importAssetFileName").textContent = "No file selected";
+  $("importAssetFile").accept = kind === "workflow" ? ".yaml,.yml,text/yaml,text/plain" : ".md,text/markdown,text/plain";
+  $("importAssetDestination").value = "global";
+  $("importAssetDestination").querySelector('option[value="project"]').disabled = !state.project;
+  $("importAssetHint").textContent = "";
+  $("importAssetHint").classList.remove("error");
+  $("importAssetPreview").textContent = "Choose a file or paste content.";
+  $("importAssetBackdrop").hidden = false;
 }
-async function closeImportAssetModal(force = false) { if ($("importAssetBackdrop").hidden) return true; if (!force && state.importAssetDirty) { const ok = await confirmDialog({ title: "Discard import?", message: "Discard the selected import package?", confirmLabel: "Discard Import", danger: true }); if (!ok) return false; } $("importAssetBackdrop").hidden = true; state.importAssetDirty = false; state.importFolderInfo = null; return true; }
+async function closeImportAssetModal(force = false) {
+  if ($("importAssetBackdrop").hidden) return true;
+  if (!force && state.importAssetDirty) {
+    const ok = await confirmDialog({ title: "Discard import?", message: "Discard the selected import?", confirmLabel: "Discard Import", danger: true });
+    if (!ok) return false;
+  }
+  $("importAssetBackdrop").hidden = true;
+  state.importAssetDirty = false;
+  return true;
+}
 function parseImportedText(text, fallbackName) {
-  const trimmed = String(text || "").trim(); if (!trimmed) return { name: fallbackName || "", content: "" };
-  try { const parsed = JSON.parse(trimmed); if (parsed && typeof parsed === "object" && ["workflow", "prompt"].includes(parsed.kind) && typeof parsed.content === "string") return { name: parsed.name || fallbackName || "", content: parsed.content, kind: parsed.kind }; } catch (_) {}
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return { name: fallbackName || "", content: "" };
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && ["workflow", "prompt"].includes(parsed.kind) && typeof parsed.content === "string") {
+      return { name: parsed.name || fallbackName || "", content: parsed.content, kind: parsed.kind };
+    }
+  } catch (_) {}
   return { name: fallbackName || "", content: text };
 }
 async function readImportAssetFile() {
-  const file = $("importAssetFile").files?.[0]; if (!file) return;
-  $("importAssetFileName").textContent = file.name; state.importAssetDirty = true;
-  if (state.studioSourceKind === "workflow") {
-    $("importAssetHint").classList.remove("error"); $("importAssetHint").textContent = "Reading and inspecting Workflow folder…"; $("importAssetPreview").textContent = "Inspecting package…";
-    if (!file.name.toLowerCase().endsWith(".zip")) { $("importAssetHint").textContent = "Workflow import supports folder ZIP packages only."; $("importAssetHint").classList.add("error"); return; }
-    try {
-      const content = bytesToBase64(new Uint8Array(await file.arrayBuffer())); $("importAssetContent").value = content;
-      const info = await api("/api/studio/import/inspect", { method: "POST", body: JSON.stringify({ content }) }); state.importFolderInfo = info;
-      $("importAssetHint").classList.remove("error"); $("importAssetHint").textContent = `Folder: ${info.workflow_path} · Owned Prompts: ${info.prompt_path}`;
-      $("importAssetPreview").textContent = `${info.workflow_count} Workflow YAML · ${info.total_file_count} total owned file(s) · Import restores both matching Custom folders.`;
-    } catch (error) { state.importFolderInfo = null; $("importAssetHint").textContent = error.message; $("importAssetHint").classList.add("error"); $("importAssetPreview").textContent = "Invalid Workflow folder package."; showActionError(error.message, "Import package invalid"); }
-    return;
-  }
-  const text = await file.text(); const parsed = parseImportedText(text, file.name); $("importAssetName").value = parsed.name || file.name; $("importAssetContent").value = parsed.content; $("importAssetHint").textContent = "File loaded. Import will validate the Prompt before writing."; $("importAssetPreview").textContent = `${(parsed.content || "").split("\n").length} lines ready to validate.`;
-}
-function syncImportPromptFolder() {
-  if (state.studioSourceKind === "workflow") return; const destination = $("importAssetDestination")?.value || "custom";
-  fillFolderInput("prompt", "importAssetFolder", currentStudioFolder(state.studioFile), destination);
-  $("importAssetFolderLabel").textContent = destination === "project" ? "Workflow folder" : "Custom folder";
+  const file = $("importAssetFile").files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  const parsed = parseImportedText(text, file.name);
+  $("importAssetFileName").textContent = file.name;
+  $("importAssetName").value = parsed.name || file.name;
+  $("importAssetContent").value = parsed.content;
+  state.importAssetDirty = true;
+  $("importAssetPreview").textContent = `${(parsed.content || "").split("\n").length} lines ready to validate.`;
 }
 async function confirmImportAsset() {
-  const importButton = $("importAssetConfirm"); if (importButton?.disabled) return; importButton.disabled = true; importButton.setAttribute("aria-busy", "true"); const importLabel = importButton.textContent; importButton.textContent = "Importing…";
-  try {
-  if (state.studioSourceKind === "workflow") {
-    if (!state.importFolderInfo || !$("importAssetContent").value) { $("importAssetHint").textContent = "Choose a valid Workflow folder ZIP first."; $("importAssetHint").classList.add("error"); return; }
-    const info = state.importFolderInfo;
-    const ok = await confirmDialog({ title: "Replace Workflow folder?", message: `Delete and replace '${info.workflow_path}' and '${info.prompt_path}'? custom/common and system Prompts are not modified.`, confirmLabel: "Replace & Import", danger: true }); if (!ok) return;
-    try { const result = await api("/api/studio/import", { method: "POST", body: JSON.stringify({ kind: "workflow_folder", content: $("importAssetContent").value }) }); closeImportAssetModal(true); await refreshStudioFiles({ force: true }); const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast(`Workflow folder '${result.folder}' imported`); }
-    catch (error) { $("importAssetHint").textContent = error.message; $("importAssetHint").classList.add("error"); showActionError(error.message, "Workflow folder import failed"); }
+  const kind = state.studioSourceKind === "workflow" ? "workflow" : "prompt";
+  const parsed = parseImportedText($("importAssetContent").value, $("importAssetName").value.trim());
+  if (!parsed.content?.trim()) {
+    $("importAssetHint").textContent = "Import content is empty.";
+    $("importAssetHint").classList.add("error");
     return;
   }
-  const parsed = parseImportedText($("importAssetContent").value, $("importAssetName").value.trim());
-  const importDestination = $("importAssetDestination").value; const importFolder = $("importAssetFolder").value;
-  if (importDestination === "project" && !importFolder) { $("importAssetHint").textContent = "Select a Project Workflow folder before importing a Project Prompt."; $("importAssetHint").classList.add("error"); return; }
-  try { const result = await api("/api/studio/import", { method: "POST", body: JSON.stringify({ project: state.project?.path || "", kind: "prompt", name: parsed.name || $("importAssetName").value.trim(), content: parsed.content, destination: importDestination, folder: importFolder }) }); closeImportAssetModal(true); await refreshStudioFiles({ force: true }); const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item; if (item) await openStudioFile(item); showToast("Prompt imported"); }
-  catch (error) { $("importAssetHint").textContent = error.message; $("importAssetHint").classList.add("error"); showActionError(error.message, "Import failed"); }
-  } finally { if (importButton) { importButton.disabled = false; importButton.removeAttribute("aria-busy"); importButton.textContent = importLabel; } }
+  try {
+    const result = await api("/api/studio/import", {
+      method: "POST",
+      body: JSON.stringify({
+        project: state.project?.path || "",
+        kind,
+        name: parsed.name || $("importAssetName").value.trim(),
+        content: parsed.content,
+        destination: $("importAssetDestination").value,
+      }),
+    });
+    await closeImportAssetModal(true);
+    await refreshStudioFiles({ force: true });
+    const list = kind === "workflow" ? state.studioFiles.workflows : state.studioFiles.prompts;
+    const item = (list || []).find((row) => row.id === result.item.id) || result.item;
+    if (item) await openStudioFile(item);
+    showToast(`${kind === "workflow" ? "Workflow" : "Prompt"} imported`);
+  } catch (error) {
+    $("importAssetHint").textContent = error.message;
+    $("importAssetHint").classList.add("error");
+    showActionError(error.message, "Import failed");
+  }
 }
+
 async function exportStudioAsset() {
   if (!state.studioFile) return;
   const button = $("exportStudioButton");
   await withButtonBusy(button, "Exporting…", async () => {
     try {
       const data = await api(`/api/studio/export?id=${encodeURIComponent(state.studioFile.id)}${projectQuery()}`); const name = String(data.name || "export.dat"); let blob;
-      if (data.kind === "workflow_folder" && data.encoding === "base64") { const binary = atob(String(data.content || "")); const bytes = new Uint8Array(binary.length); for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i); blob = new Blob([bytes], { type: data.mime || "application/zip" }); }
-      else { const ext = name.toLowerCase().split(".").pop(); const mime = ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8"; blob = new Blob([String(data.content ?? "")], { type: mime }); }
+      const ext = name.toLowerCase().split(".").pop(); const mime = ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8"; blob = new Blob([String(data.content ?? "")], { type: mime });
       const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      if (data.kind === "workflow_folder") showToast(`Folder exported · ${data.workflow_path}`); else showToast("Prompt exported");
+      showToast(`${data.kind === "workflow" ? "Workflow" : "Prompt"} exported`);
     } catch (error) { showActionError(error.message, "Export failed"); }
   });
 }
@@ -1749,39 +1820,28 @@ async function renameStudioAsset() {
   try { const result = await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} renamed`); }
   catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} rename failed`); }
 }
-function currentStudioFolder(item) {
-  if (!item) return "";
-  if (item.scope === "custom") return customFolderForItem(item);
-  if (item.scope === "project") {
-    const path = String(item.path || "").replaceAll("\\", "/");
-    const marker = "/.ai-task-runner/workflows/", at = path.indexOf(marker);
-    if (at >= 0) return path.slice(at + marker.length).split("/workflow/")[0].split("/prompts/")[0];
-  }
-  return "";
-}
-function fillDuplicateFolderInput(item) {
-  const input = $("duplicateAssetFolder"); if (!input || !item) return;
-  const targetScope = item.scope === "system" || item.readonly ? "custom" : item.scope;
-  const current = targetScope === "custom" && item.scope !== "custom" ? "" : currentStudioFolder(item);
-  fillFolderInput(item.kind, "duplicateAssetFolder", current, targetScope);
-  $("duplicateAssetFolderLabel").textContent = targetScope === "project" ? "Workflow folder" : "Custom folder";
-  $("duplicateAssetFolderHint").textContent = targetScope === "project"
-    ? (item.kind === "workflow" ? "Type a new folder or choose an existing Project Workflow folder." : "Type or choose an existing Project Workflow folder.")
-    : "Type a folder path or choose an existing suggestion.";
-}
 async function duplicateStudioAsset() {
-  closeStudioAssetMenu(); const current = state.studioFile; if (!current || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
-  const label = current.kind === "prompt" ? "Prompt" : "Workflow", destination = window.StudioSupport.duplicateDestination(current);
-  $("duplicateAssetTitle").textContent = `Duplicate ${label}`; $("duplicateAssetIcon").textContent = label[0]; $("duplicateAssetIcon").className = `modal-title-icon ${current.kind}`;
-  $("duplicateAssetDescription").textContent = `Create an independent ${destination} copy. The source file is not modified.`;
-  $("duplicateAssetName").value = window.StudioSupport.duplicateName(current.name); $("duplicateAssetHint").textContent = ""; $("duplicateAssetHint").classList.remove("error");
-  fillDuplicateFolderInput(current); $("duplicateAssetBackdrop").hidden = false; setTimeout(() => $("duplicateAssetName").focus(), 0);
+  closeStudioAssetMenu();
+  const current = state.studioFile;
+  if (!current || !state.studioGuard.editable) return;
+  if (!(await confirmDiscardStudio())) return;
+  const label = current.kind === "prompt" ? "Prompt" : "Workflow";
+  $("duplicateAssetTitle").textContent = `Duplicate ${label}`;
+  $("duplicateAssetIcon").textContent = label[0];
+  $("duplicateAssetIcon").className = `modal-title-icon ${current.kind}`;
+  $("duplicateAssetDescription").textContent = `Create an independent ${window.StudioSupport.duplicateDestination(current)} copy in the same asset root.`;
+  $("duplicateAssetName").value = window.StudioSupport.duplicateName(current.name);
+  $("duplicateAssetHint").textContent = "";
+  $("duplicateAssetHint").classList.remove("error");
+  $("duplicateAssetBackdrop").hidden = false;
+  setTimeout(() => $("duplicateAssetName").focus(), 0);
 }
+
 function closeDuplicateAssetModal() { $("duplicateAssetBackdrop").hidden = true; }
 async function confirmDuplicateAsset() {
   const current = state.studioFile; if (!current) return closeDuplicateAssetModal(); const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = $("duplicateAssetName").value.trim(); if (!name) { $("duplicateAssetHint").textContent = `${label} name is required.`; $("duplicateAssetHint").classList.add("error"); return; }
   const button = $("duplicateAssetConfirm"); await withButtonBusy(button, "Duplicating…", async () => {
-    try { const result = await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name, folder: $("duplicateAssetFolder").value }) }); closeDuplicateAssetModal(); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} duplicated · ${result.item.display_name || result.item.name}`); }
+    try { const result = await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); closeDuplicateAssetModal(); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} duplicated · ${result.item.display_name || result.item.name}`); }
     catch (error) { $("duplicateAssetHint").textContent = error.message; $("duplicateAssetHint").classList.add("error"); showActionError(error.message, `${label} duplicate failed`); }
   });
 }
