@@ -84,7 +84,7 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     assert [stage["name"] for stage in workflow] == ["ralphy", "validate_ai"]
     assert workflow[0]["fresh_session_on_start"] is True
     assert workflow[1]["fresh_session_on_start"] is True
-    assert workflow[1]["recover"][0]["name"] == "ralphy"
+    assert workflow[1]["routes"] == {"fail": "ralphy"}
     assert data[10]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
     assert data[10]["validator"] == "ai"
     assert (EXAMPLES / data[10]["workflow_file"]).is_file()
