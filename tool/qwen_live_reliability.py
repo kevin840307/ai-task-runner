@@ -820,10 +820,35 @@ def assert_system_topology(project: Path, workflow: str) -> None:
     validators = {name for name in starts if name.startswith("validate_")}
     task_runs = starts.count("__plan_task__")
     review_runs = starts.count("__plan_review__")
-    if missing or validators != expected_validators or task_runs != 1 or review_runs != 1:
+
+    state = read_state(project)
+    tasks = state.get("tasks")
+    task_count = len(tasks) if isinstance(tasks, list) else 0
+    incomplete = (
+        [
+            str(item.get("title") or item.get("id") or index)
+            for index, item in enumerate(tasks)
+            if isinstance(item, dict) and item.get("status") != "completed"
+        ]
+        if isinstance(tasks, list)
+        else ["<missing durable tasks>"]
+    )
+
+    # Planning is intentionally free to decompose the same goal into one or more
+    # bounded TODOs. The topology contract therefore follows durable task count
+    # instead of assuming the model will always emit exactly one TODO. Retries
+    # or replans may legitimately make task/review stage counts larger.
+    invalid_task_loop = (
+        task_count < 1
+        or task_runs < task_count
+        or review_runs < task_count
+        or bool(incomplete)
+    )
+    if missing or validators != expected_validators or invalid_task_loop:
         raise RuntimeError(
             f"system/{workflow} topology mismatch: missing={missing}, "
-            f"validators={sorted(validators)}, task_runs={task_runs}, review_runs={review_runs}"
+            f"validators={sorted(validators)}, durable_tasks={task_count}, "
+            f"incomplete={incomplete}, task_runs={task_runs}, review_runs={review_runs}"
         )
 
 
