@@ -1799,15 +1799,6 @@ READY and REVIEW_REQUIRED as two logical lines, then return immediately.
 Do not inspect unrelated files and do not touch protected files.
 """
 
-REVIEW_ROUTING_FORCE_FAIL_PROMPT = """This is the controlled first Review pass for a routing reliability probe.
-Do not inspect files and do not use tools.
-You MUST return a FAIL Review verdict immediately:
-- completed: false
-- reason: REVIEW_REQUIRED is intentionally missing on the first pass.
-- missing_items: ["REVIEW_REQUIRED"]
-Do not return PASS on this first controlled Review pass.
-"""
-
 REVIEW_ROUTING_REVIEW_PROMPT = """Inspect review.txt only, at most once.
 PASS only when its logical lines are exactly READY and REVIEW_REQUIRED, in that order.
 Otherwise FAIL and identify REVIEW_REQUIRED as missing when it is absent.
@@ -1818,7 +1809,9 @@ REVIEW_ROUTING_POLICY = """protected_paths:
   - prompt.md
   - validation.py
   - seed_review.py
+  - review_gate.py
   - review_execute.md
+  - review_check.md
   - workflow.yaml
 instructions:
   always: Work only inside this project root. Modify review.txt only for this probe.
@@ -1826,15 +1819,22 @@ instructions:
 
 REVIEW_ROUTING_SEED = '''from pathlib import Path
 marker = Path(".ai-task-runner") / "review-seeded-once"
-prompt = Path("review_check.md")
 if not marker.exists():
     Path("review.txt").write_text("READY\\n", encoding="utf-8")
-    prompt.write_text(%FORCE_FAIL%, encoding="utf-8")
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("seeded\\n", encoding="utf-8")
-else:
-    prompt.write_text(%NORMAL_REVIEW%, encoding="utf-8")
 '''
+
+REVIEW_ROUTING_GATE = '''from pathlib import Path
+marker = Path(".ai-task-runner") / "review-gate-failed-once"
+if not marker.exists():
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("failed\\n", encoding="utf-8")
+    print("REVIEW_REQUIRED is intentionally missing; add REVIEW_REQUIRED to review.txt")
+    raise SystemExit(1)
+print("REVIEW_GATE_PASSED")
+'''
+
 
 REVIEW_ROUTING_WORKFLOW = '''stages:
   seed:
@@ -1849,8 +1849,14 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     prompt: review_execute.md
 
   review:
+    type: command
+    status: Forcing deterministic first Review routing failure
+    run_state: reviewing
+    command: "{python} review_gate.py"
+
+  review_verify:
     type: review
-    status: Reviewing deterministic incomplete state
+    status: Reviewing repaired state with Qwen
     prompt: review_check.md
     skip_on_error: false
 
@@ -1867,11 +1873,13 @@ flow:
     restart_at: execute
     max_attempts: 3
     on_exhausted: fail
+  - review_verify
   - stage: validate_file
     restart_at: execute
     max_attempts: 2
     on_exhausted: fail
 '''
+
 
 REVIEW_ROUTING_VALIDATOR = '''from __future__ import annotations
 import argparse
@@ -1905,9 +1913,8 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         REVIEW_ROUTING_VALIDATOR,
         policy=REVIEW_ROUTING_POLICY,
     )
-    (project / "seed_review.py").write_text(
-        review_routing_seed_script(), encoding="utf-8"
-    )
+    (project / "seed_review.py").write_text(REVIEW_ROUTING_SEED, encoding="utf-8")
+    (project / "review_gate.py").write_text(REVIEW_ROUTING_GATE, encoding="utf-8")
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
     )
@@ -1934,15 +1941,17 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
         raise RuntimeError("review failure-routing probe produced unexpected logical lines")
     if not observed_stage_result(project, "review", "fail"):
-        raise RuntimeError("review routing probe did not exercise Review FAIL")
+        raise RuntimeError("review routing probe did not exercise deterministic Review gate FAIL")
+    if not observed_stage_result(project, "review_verify", "pass"):
+        raise RuntimeError("review routing probe Qwen Review did not PASS repaired state")
     executes = stage_prompt_records(project, "execute")
     if not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
         and "mode: continue" in record.text
-        and "Review missing_items:" in record.text
+        and "REVIEW_REQUIRED" in record.text
         for record in executes
     ):
-        raise RuntimeError("Review FAIL did not route feedback back to Execute shared control")
+        raise RuntimeError("deterministic Review gate FAIL did not route feedback back to Execute shared control")
     assert_prompt_transport_contract(project)
 
 
