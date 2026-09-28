@@ -25,8 +25,8 @@ from .config.defaults import (
 )
 from .config.runtime import EventHandler, RuntimeConfig
 from .errors import ConfigurationError, RunnerError, is_transient_error
-from .extensions import discover_extensions
 from .plugins.registry import (
+    discover_plugins,
     merge_plugin_config,
     plugin_config_from_namespace,
     plugin_config_from_request,
@@ -141,7 +141,7 @@ class RunRequest:
                 "use either ai_validator_prompt or ai_validator_prompt_file, not both"
             )
 
-        discover_extensions()
+        discover_plugins()
         frozen_run = self.resume and not self.script and not self.force_new
         frozen_goal = (
             load_run_resource(self.project_root, self.work_dir, "goal")
