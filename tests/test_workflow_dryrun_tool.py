@@ -85,9 +85,9 @@ def test_dryrun_matrix_covers_system_recovery_paths():
     result = run("runner/workflow/system/mixed.yaml", "--matrix")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "WORKFLOW_CLOSED" in result.stdout
-    assert "__plan_review__ FAIL -> restart_at -> closure" in result.stdout
-    assert "validate_file FAIL -> restart_at -> closure" in result.stdout
-    assert "validate_ai FAIL -> restart_at -> closure" in result.stdout
+    assert "__plan_review__ FAIL -> __plan_task__ -> closure" in result.stdout
+    assert "validate_file FAIL -> planning -> closure" in result.stdout
+    assert "validate_ai FAIL -> planning -> closure" in result.stdout
     assert "compound recoverable FAILs -> closure" in result.stdout
 
 
@@ -126,6 +126,42 @@ def test_dryrun_supports_generic_task_producer():
     assert payload["completed"] is True
     assert [item["stage"] for item in payload["transitions"]] == [
         "discover_tasks", "execute", "review", "done"
+    ]
+
+
+def test_simple_result_edges_form_a_closed_loop(tmp_path: Path):
+    workflow = tmp_path / "routes.yaml"
+    workflow.write_text(
+        """stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: command
+    command: [python, -c, "print('REVIEW')"]
+    routes:
+      fail: execute
+  done:
+    type: command
+    command: [python, -c, "print('DONE')"]
+flow: [execute, review, done]
+""",
+        encoding="utf-8",
+    )
+    scenario = tmp_path / "routes_scenario.yaml"
+    scenario.write_text(
+        """default: pass
+stages:
+  review: [fail, pass]
+""",
+        encoding="utf-8",
+    )
+    result = run(str(workflow), "--scenario", str(scenario), "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["completed"] is True
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "execute", "review", "execute", "review", "done"
     ]
 
 
@@ -293,7 +329,7 @@ def test_system_custom_ralphy_ai_validate_linear_dryrun_closes():
     assert payload["closed"] is True
     assert payload["features"]["task_scope"] is False
     assert payload["features"]["task_producer"] is False
-    assert any("validate_ai FAIL -> recover -> closure" in case["name"] for case in payload["cases"])
+    assert any("validate_ai FAIL -> ralphy -> closure" in case["name"] for case in payload["cases"])
 
 
 def test_dryrun_matrix_verifies_unrecovered_fail_and_error_stop_safely(tmp_path: Path):
@@ -430,7 +466,7 @@ def test_custom_ralphy_ai_validate_dryrun_closes():
     assert result.returncode == 0, result.stdout + result.stderr
     data = json.loads(result.stdout)
     assert data["closed"] is True
-    recovery = next(case for case in data["cases"] if case["name"] == "validate_ai FAIL -> recover -> closure")
+    recovery = next(case for case in data["cases"] if case["name"] == "validate_ai FAIL -> ralphy -> closure")
     assert recovery["stage_calls"] == {"ralphy": 2, "validate_ai": 2}
     assert recovery["completed"] is True
 
