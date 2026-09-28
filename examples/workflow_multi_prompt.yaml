@@ -12,22 +12,27 @@ stages:
 
 flow:
   - stage: run_prompt
+    name: step_a
     prompt: prompts/step_a.md
 
   - stage: review
+    name: review_a
     prompt: prompts/review_a.md
     routes:
-      fail: run_prompt
+      fail: step_a
 
   - stage: run_prompt
+    name: step_b
     prompt: prompts/step_b.md
 
   - stage: review
+    name: review_b
     prompt: prompts/review_b.md
     routes:
-      fail: run_prompt
+      fail: step_b
 
   - stage: run_prompt
+    name: step_c
     prompt: prompts/step_c.md
 
   - validate_file
