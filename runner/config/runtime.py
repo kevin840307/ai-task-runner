@@ -1,4 +1,4 @@
-"""Validated internal settings used by the running workflow."""
+"""Validated settings for one Workflow run."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -13,10 +13,8 @@ from .defaults import (
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
-    DEFAULT_MAX_ATTEMPTS,
-    DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
-    DEFAULT_REVIEW_RETRIES,
+    DEFAULT_STAGE_RETRIES,
     DEFAULT_VALIDATOR_TIMEOUT,
     DEFAULT_WATCHDOG_INTERVAL,
     DEFAULT_WORKER_HANG_TIMEOUT,
@@ -27,13 +25,12 @@ EventHandler = Callable[[dict[str, Any]], None]
 
 def _default_workflow() -> list[dict[str, Any]]:
     from ..workflow.loader import load_workflow
-
     return load_workflow()
 
 
 @dataclass
 class RuntimeConfig:
-    """Canonical, validated settings used by the running workflow."""
+    """One canonical execution contract shared by CLI, API, UI and YAML List."""
 
     goal: str = ""
     goal_file: str | None = None
@@ -44,12 +41,14 @@ class RuntimeConfig:
     validator_prompt: str = ""
     ai_validator_prompt: str = ""
     ai_validator_prompt_file: str | None = None
+
     backend: str = DEFAULT_BACKEND
     command: str | None = None
     sandbox: bool = False
     agent_args: list[str] = field(default_factory=list)
     validator_args: list[str] = field(default_factory=list)
     protect_files: list[str] = field(default_factory=list)
+
     validator_timeout: int = DEFAULT_VALIDATOR_TIMEOUT
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
@@ -57,57 +56,56 @@ class RuntimeConfig:
     api_retry_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
-    same_session_retries: int = DEFAULT_MAX_ATTEMPTS
-    review_retries: int = DEFAULT_REVIEW_RETRIES
-    max_cycles: int = DEFAULT_MAX_CYCLES
+    stage_retries: int = DEFAULT_STAGE_RETRIES
     stage_retry_delay: float = 2
     api_retry_wait: float = 5
     api_retry_max_wait: float = 300
+
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
     ai_validator_yolo: bool = False
     readonly_safety: str = "restore"
+
     workflow: list[dict[str, Any]] = field(default_factory=_default_workflow)
     workflow_explicit: bool = False
     plugins: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     work_dir: str = ".ai-task-runner"
     resume: bool = False
     force_new: bool = False
-    plan_only: bool = False
     human_output: bool = True
     json_events: bool = False
     auto_register_ui_project: bool = False
     event_callback: EventHandler | None = None
     script_index: int | None = None
     script_total: int | None = None
-    execution_mode: str = "linear"
 
     def validate(self) -> None:
-        """Validate the one execution contract shared by API, CLI, and YAML."""
         from ..backends.registry import backend_names, sandbox_supported
-        from ..execution_modes import execution_mode_spec
         from ..plugins.registry import normalize_plugin_config
+        from ..workflow.loader import workflow_validators
 
         if not isinstance(self.project_root, str) or not self.project_root.strip():
             raise ValueError("project_root must be a non-empty string")
         if not isinstance(self.project_name, str):
             raise ValueError("project_name must be a string")
-        if not isinstance(self.execution_mode, str):
-            raise ValueError("execution_mode must be a string")
-        mode_spec = execution_mode_spec(self.execution_mode)
         self.project_name = " ".join(self.project_name.split())
         if len(self.project_name) > 120:
             raise ValueError("project_name is too long")
+
         if not self.script and not self.resume and not self.goal.strip():
             raise ValueError("goal is required unless script or resume is used")
-        if mode_spec.requires_workflow and not self.script and not self.workflow_explicit and not (
-            isinstance(self.validator, str) and self.validator.strip()
+        if (
+            not self.script
+            and not self.workflow_explicit
+            and not isinstance(self.validator, str)
         ):
             raise ValueError("validator is required unless script or explicit workflow is used")
+
         if self.backend not in backend_names():
             raise ValueError(f"unsupported backend: {self.backend}")
         if not isinstance(self.sandbox, bool):
-            raise ValueError("sandbox must be a boolean")  # noqa: TRY004
+            raise ValueError("sandbox must be a boolean")
         if self.sandbox and not sandbox_supported(self.backend):
             raise ValueError(f"backend does not support sandbox mode: {self.backend}")
         if self.resume and self.force_new:
@@ -116,6 +114,7 @@ class RuntimeConfig:
         work = Path(self.work_dir)
         if not self.work_dir or work.is_absolute() or ".." in work.parts:
             raise ValueError("work_dir must stay inside project_root")
+
         for name in ("agent_args", "validator_args", "protect_files"):
             values = getattr(self, name)
             if not isinstance(values, list) or any(
@@ -124,13 +123,9 @@ class RuntimeConfig:
                 raise ValueError(f"{name} must be a list of non-empty strings")
 
         _positive_integer(self, "validator_timeout")
-        for name in (
-            "agent_timeout",
-            "planning_timeout",
-        ):
-            _non_negative(self, name, integer=True)
-        for name in ("same_session_retries", "review_retries", "max_cycles"):
-            _retry_limit(self, name)
+        _non_negative(self, "agent_timeout", integer=True)
+        _non_negative(self, "planning_timeout", integer=True)
+        _retry_limit(self, "stage_retries")
         for name in (
             "agent_idle_after_change_timeout",
             "api_retry_timeout",
@@ -140,10 +135,11 @@ class RuntimeConfig:
             "worker_hang_timeout",
         ):
             _non_negative(self, name)
+
         if not is_number(self.watchdog_interval) or self.watchdog_interval <= 0:
             raise ValueError("watchdog_interval must be a positive number")
         if self.api_retry_max_wait < self.api_retry_wait:
-            raise ValueError("api_retry_max_wait must be greater than or equal to api_retry_wait")
+            raise ValueError("api_retry_max_wait must be >= api_retry_wait")
 
         _positive_integer(self, "final_ai_validations")
         if (
@@ -151,33 +147,27 @@ class RuntimeConfig:
             or not 0 <= self.final_ai_required_passes <= self.final_ai_validations
         ):
             raise ValueError(
-                "final_ai_required_passes must be 0 or between 1 and final_ai_validations"
+                "final_ai_required_passes must be 0 or <= final_ai_validations"
             )
         if not isinstance(self.ai_validator_yolo, bool):
-            raise ValueError("ai_validator_yolo must be a boolean")  # noqa: TRY004
+            raise ValueError("ai_validator_yolo must be a boolean")
         if self.readonly_safety not in {"restore", "observe"}:
             raise ValueError("readonly_safety must be 'restore' or 'observe'")
         if not isinstance(self.plugins, dict):
-            raise ValueError("plugins must be an object")  # noqa: TRY004
-        if not isinstance(self.workflow, list):
-            raise ValueError("workflow must be a list")
-        if mode_spec.requires_workflow and not self.workflow:
-            raise ValueError("workflow must be a non-empty list for this execution mode")
+            raise ValueError("plugins must be an object")
+        if not isinstance(self.workflow, list) or not self.workflow:
+            raise ValueError("workflow must be a non-empty list")
         if not isinstance(self.workflow_explicit, bool):
-            raise ValueError("workflow_explicit must be a boolean")  # noqa: TRY004
-        from ..workflow.loader import workflow_has_task_producer, workflow_validators
+            raise ValueError("workflow_explicit must be a boolean")
 
-        has_file_validation, has_ai_validation = workflow_validators(self.workflow) if self.workflow else (False, False)
-        if mode_spec.requires_workflow and self.validator:
+        has_file_validation, has_ai_validation = workflow_validators(self.workflow)
+        if self.validator:
             validator_is_ai = self.validator.lower() == "ai"
             if not validator_is_ai and not has_file_validation:
                 raise ValueError("file validator workflow requires validate_file")
             if (validator_is_ai or self.ai_validator_prompt.strip()) and not has_ai_validation:
                 raise ValueError("AI validation workflow requires validate_ai")
-        if self.plan_only and (
-            not mode_spec.requires_workflow or not workflow_has_task_producer(self.workflow)
-        ):
-            raise ValueError("plan_only requires a task-producing linear workflow")
+
         self.plugins = normalize_plugin_config(self.plugins)
 
 
