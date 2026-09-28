@@ -560,7 +560,7 @@ def _tail_text(text: str, limit: int = 1200) -> str:
 
 def semantic_probe_timeout(settings: Settings) -> float:
     """Bound semantic routing probes independently from the 24H harness timeout."""
-    estimated = (settings.agent_timeout * 3) + (settings.planning_timeout * 2) + 120
+    estimated = (settings.agent_timeout * 3) + (settings.planning_timeout * 3) + 120
     return min(settings.run_timeout, max(1200.0, min(3600.0, estimated)))
 
 
@@ -1762,11 +1762,29 @@ Modify review.txt only.
 """
 
 REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
-Before Review feedback exists, no special action is required; a later one-shot seed Stage
-will deterministically force the first Review to see the incomplete state.
-When Runner shared control provides Review feedback that REVIEW_REQUIRED is missing,
-modify only review.txt so it contains READY and REVIEW_REQUIRED as two logical lines.
-Preserve already-correct content and do not touch protected files.
+If Runner shared control does not contain Review feedback, do not inspect files, do not use
+tools, do not modify anything, and return immediately. A later one-shot seed Stage will
+deterministically force the first Review to see the incomplete state.
+When Review feedback says REVIEW_REQUIRED is missing, modify only review.txt so it contains
+READY and REVIEW_REQUIRED as two logical lines, then return immediately.
+Do not inspect unrelated files and do not touch protected files.
+"""
+
+REVIEW_ROUTING_REVIEW_PROMPT = """Inspect review.txt only, at most once.
+PASS only when its logical lines are exactly READY and REVIEW_REQUIRED, in that order.
+Otherwise FAIL and identify REVIEW_REQUIRED as missing when it is absent.
+Do not inspect any other file, do not modify anything, and return the Review verdict immediately.
+"""
+
+REVIEW_ROUTING_POLICY = """protected_paths:
+  - prompt.md
+  - validation.py
+  - seed_review.py
+  - review_execute.md
+  - review_check.md
+  - workflow.yaml
+instructions:
+  always: Work only inside this project root. Modify review.txt only for this probe.
 """
 
 REVIEW_ROUTING_SEED = '''from pathlib import Path
@@ -1792,7 +1810,7 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
   review:
     type: review
     status: Reviewing deterministic incomplete state
-    prompt: stages/review.md
+    prompt: review_check.md
     skip_on_error: false
 
   validate_file:
@@ -1836,10 +1854,14 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         "review-failure-routing-probe",
         REVIEW_ROUTING_PROMPT,
         REVIEW_ROUTING_VALIDATOR,
+        policy=REVIEW_ROUTING_POLICY,
     )
     (project / "seed_review.py").write_text(REVIEW_ROUTING_SEED, encoding="utf-8")
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
+    )
+    (project / "review_check.md").write_text(
+        REVIEW_ROUTING_REVIEW_PROMPT, encoding="utf-8"
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
