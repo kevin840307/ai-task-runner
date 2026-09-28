@@ -1,9 +1,9 @@
-"""Durable semantic-state reducers for Stage results."""
+"""Small durable effects applied after a Stage result."""
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
+
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..runtime import progress
@@ -13,17 +13,19 @@ from .stages.contracts import StageContext, StageResult
 from .task_output import decode_tasks
 
 
-
-def prepare_replan(ctx: StageContext, result: StageResult) -> StageResult:
-    """Invalidate plan semantics; FlowEngine owns all cursor/routing changes."""
-    feedback = str(result.error or result.output)[-4000:]
-    invalidate_plan(ctx, feedback)
-    ctx.reset_sessions()
-    progress.set_status("相同失敗持續，重新規劃", result.stage)
+def reduce_result(ctx: StageContext, result: StageResult) -> StageResult:
+    if result.kind == "tasks":
+        return _tasks(ctx, result)
+    if result.kind == "task":
+        return _task(ctx, result)
+    if result.kind == "review":
+        return _review(ctx, result)
+    if result.kind == "validation":
+        return _validation(ctx, result)
     return result
 
 
-def handle_tasks_result(ctx: StageContext, result: StageResult) -> StageResult:
+def _tasks(ctx: StageContext, result: StageResult) -> StageResult:
     if result.status != "pass":
         return result
     source = result.data if result.data is not None else result.output
@@ -33,121 +35,42 @@ def handle_tasks_result(ctx: StageContext, result: StageResult) -> StageResult:
     return result
 
 
-def handle_task_result(ctx: StageContext, result: StageResult) -> StageResult:
+def _task(ctx: StageContext, result: StageResult) -> StageResult:
     task = ctx.task
     if task is None:
-        # A task-profile Stage may also be used as a normal top-level linear
-        # Workflow step with a custom prompt. In that mode there is no durable
-        # TODO to mutate; keep only the AI session continuity. Task-scoped SOPs
-        # still always have a pending TODO and use the reducer below.
         ctx.save_session()
         return result
-
     task.attempts += 1
-    task.changed_files = list(
-        dict.fromkeys([*task.changed_files, *result.changed_files])
+    task.changed_files = list(dict.fromkeys([*task.changed_files, *result.changed_files]))
+    task.last_output = bounded_text(
+        result.output if result.status == "pass" else str(result.error or result.output),
+        MAX_TASK_OUTPUT_CHARS,
     )
-    if result.status == "pass":
-        task.last_output = bounded_text(result.output, MAX_TASK_OUTPUT_CHARS)
-    elif result.error is not None:
-        task.last_output = bounded_text(str(result.error), MAX_TASK_OUTPUT_CHARS)
     ctx.save_session()
     return result
 
 
-def handle_review_result(ctx: StageContext, result: StageResult) -> StageResult:
+def _review(ctx: StageContext, result: StageResult) -> StageResult:
     task = ctx.task
-    review = result.data if isinstance(result.data, dict) else None
-
-    if task is None:
-        # Linear review stages are valid without a TODO. Their PASS/FAIL result
-        # is consumed by RecoveryPolicy; there is simply no per-task review
-        # record to persist. Keep review-client lifecycle/status behavior.
-        if result.skipped or result.status == "pass":
-            ctx.scratch.pop("review_client", None)
-        if result.skipped:
-            progress.set_status(
-                "Review 異常，暫時跳過", "final validator will decide"
-            )
-        elif result.status == "pass":
-            progress.set_status("Review PASS", result.stage)
-        elif result.status == "fail":
-            progress.set_status("Review 未通過，進入 Recovery", result.output)
-        return result
-
-    if review is not None:
-        task.last_review = review
-
-    if result.skipped:
-        reason = str(result.error or result.output)[-1000:]
-        task.last_review = {
-            "completed": True,
-            "reason": reason,
-            "missing_items": [],
-            "review_skipped": True,
-        }
-        task.review_skipped = True
-        task.review_skip_reason = reason
-        ctx.scratch.pop("review_client", None)
-        progress.set_status(
-            "Review 異常，暫時跳過", f"{task.title} · final validator will decide"
-        )
-        return result
-
+    if task is not None and isinstance(result.data, dict):
+        task.last_review = result.data
     if result.status == "pass":
         ctx.scratch.pop("review_client", None)
-        progress.set_status("Review PASS", task.title)
+        progress.set_status("Review PASS", task.title if task else result.stage)
     elif result.status == "fail":
-        task.status = "pending"
-        progress.set_status("任務未完成，返回 Execute", result.output)
+        progress.set_status("Review 未通過，依 routes 返回", result.output)
     return result
 
 
-def handle_validation_result(ctx: StageContext, result: StageResult) -> StageResult:
-    if result.status not in {"pass", "fail"}:
-        return result
-    ctx.state.validator_output = bounded_text(result.output, MAX_VALIDATOR_OUTPUT_CHARS)
-    if result.status == "fail":
-        _record_validator_failure(ctx, result)
+def _validation(ctx: StageContext, result: StageResult) -> StageResult:
+    if result.status in {"pass", "fail"}:
+        ctx.state.validator_output = bounded_text(
+            result.output, MAX_VALIDATOR_OUTPUT_CHARS
+        )
+        if result.status == "fail":
+            ctx.set_stage("validator_failed", result.output)
+            progress.set_status("驗證失敗，依 routes 處理", result.stage)
     return result
-
-
-def reduce_result(ctx: StageContext, result: StageResult) -> StageResult:
-    """Apply the one durable-state reducer selected by StageResult.kind."""
-    if result.kind == "tasks":
-        return handle_tasks_result(ctx, result)
-    if result.kind == "task":
-        return handle_task_result(ctx, result)
-    if result.kind == "review":
-        return handle_review_result(ctx, result)
-    if result.kind == "validation":
-        return handle_validation_result(ctx, result)
-    return result
-
-
-def finish_run(ctx: StageContext) -> None:
-    """Mark the run complete after the top-level flow succeeds end-to-end."""
-    if any(task.status != "completed" for task in ctx.state.tasks):
-        raise ConfigurationError("workflow ended with pending planned tasks")
-    complete_run(ctx.state)
-    ctx.ai_client.session_id = ""
-    ctx.set_stage("completed", "")
-    progress.set_status("全部完成", "Workflow PASS")
-
-
-def _record_validator_failure(ctx: StageContext, result: StageResult) -> None:
-    normalized = "\n".join(
-        line.strip() for line in result.output.splitlines() if line.strip()
-    )
-    key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-    if key == ctx.state.validator_failure_key:
-        ctx.state.validator_failure_count += 1
-    else:
-        ctx.state.validator_failure_key = key
-        ctx.state.validator_failure_count = 1
-    ctx.set_stage("validator_failed", result.output)
-    progress.set_status("驗證失敗，依 Workflow routing 處理", result.stage)
-
 
 
 def install_plan(
@@ -158,57 +81,30 @@ def install_plan(
     state.ai_session_id = session_id
     state.tasks = list(tasks)
     state.current = 0
-    state.replan_feedback = ""
-
-
-def complete_task(state: RunState, task: Task, session_id: str) -> None:
-    task.status = "completed"
-    task.last_output = ""
-    state.ai_session_id = session_id
-    state.current += 1
+    state.completed = False
 
 
 def finish_task(ctx: StageContext) -> None:
-    """Complete the current TODO after its task-scoped SOP succeeds."""
     state = ctx.state
     if state.current >= len(state.tasks):
-        raise ConfigurationError("task-scoped workflow has no pending task to complete")
+        raise ConfigurationError("task-scoped workflow has no pending task")
     task = state.tasks[state.current]
-    complete_task(state, task, ctx.ai_client.session_id)
+    task.status = "completed"
+    task.last_output = ""
+    state.ai_session_id = ctx.ai_client.session_id
+    state.current += 1
     progress.set_status("任務完成", task.title)
 
 
-def complete_run(state: RunState) -> None:
-    state.validator_failure_key = ""
-    state.validator_failure_count = 0
-    state.ai_session_id = ""
-    state.replan_feedback = ""
-    state.transition_previous = {}
-    state.completed = True
+def finish_run(ctx: StageContext) -> None:
+    if any(task.status != "completed" for task in ctx.state.tasks):
+        raise ConfigurationError("workflow ended with pending planned tasks")
+    ctx.state.ai_session_id = ""
+    ctx.state.transition_previous = {}
+    ctx.state.completed = True
+    ctx.ai_client.session_id = ""
+    ctx.set_stage("completed", "")
+    progress.set_status("全部完成", "Workflow PASS")
 
 
-def invalidate_plan(
-    ctx: StageContext,
-    feedback: str = "",
-    *,
-    reset_workflow: bool = True,
-) -> None:
-    state = ctx.state
-    limit = ctx.config.max_cycles
-    if limit >= 0 and state.cycle >= limit:
-        raise ConfigurationError(f"max cycles reached: {limit}")
-    state.cycle += 1
-    state.current = len(state.tasks)
-    state.completed = False
-    # reset_workflow is retained for API compatibility only. Cursor ownership
-    # belongs to FlowEngine/LinearRouting, never to result reducers.
-    _ = reset_workflow
-    state.replan_feedback = feedback[-4000:]
-
-
-__all__ = [
-    "finish_run",
-    "finish_task",
-    "prepare_replan",
-    "reduce_result",
-]
+__all__ = ["finish_run", "finish_task", "reduce_result"]
