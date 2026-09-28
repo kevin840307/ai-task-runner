@@ -35,10 +35,9 @@ def config_from_namespace(namespace) -> dict[str, object]:
 
 
 def config_from_request(request) -> dict[str, object]:
-    return {
-        "enabled": request.loop_context_compress,
-        "threshold": request.loop_context_compress_threshold,
-    }
+    # Python API callers use the generic plugins mapping. CLI/YAML convenience
+    # fields stay in their adapters instead of growing RunRequest/RuntimeConfig.
+    return {}
 
 
 def config_from_yaml(item) -> dict[str, object]:
