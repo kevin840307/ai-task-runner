@@ -182,14 +182,21 @@ class ReviewStage:
     def finish(self,c,r): return r
 
 
-def test_review_default_is_one_retry_then_skip(tmp_path):
-    assert DEFAULT_REVIEW_RETRIES == 1
-    model=FakeAI([RunnerError('x'), RunnerError('x')])
-    c=ctx(tmp_path, model, review_retries=1)
-    result=StageExecutor(Hooks()).run(ReviewStage(), c)
+def test_review_default_is_unlimited_and_finite_skip_is_opt_in(tmp_path):
+    assert DEFAULT_REVIEW_RETRIES == -1
+
+    unlimited_model=FakeAI([RunnerError('x'), RunnerError('x'), None])
+    unlimited=ctx(tmp_path, unlimited_model, review_retries=-1)
+    result=StageExecutor(Hooks()).run(ReviewStage(), unlimited)
+    assert result.status == 'pass' and not result.skipped
+    assert len(unlimited_model.calls) == 3
+
+    finite_model=FakeAI([RunnerError('x'), RunnerError('x')])
+    finite=ctx(tmp_path, finite_model, review_retries=1)
+    result=StageExecutor(Hooks()).run(ReviewStage(), finite)
     assert result.status == 'pass' and result.skipped
-    assert len(model.calls) == 2
-    assert c.state.same_failures == 0
+    assert len(finite_model.calls) == 2
+    assert finite.state.same_failures == 0
 
 
 def test_review_zero_disables_skip_and_uses_normal_recovery(tmp_path):
