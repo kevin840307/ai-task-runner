@@ -1550,10 +1550,13 @@ def test_review_routing_probe_protects_control_assets():
         "validation.py",
         "seed_review.py",
         "review_execute.md",
-        "review_check.md",
         "workflow.yaml",
     ):
         assert f"  - {name}" in policy
+
+    # review_check.md is intentionally mutable by the deterministic seed Stage:
+    # first pass forces FAIL, second pass restores the normal Review prompt.
+    assert "  - review_check.md" not in policy
     assert "Modify review.txt only" in policy
 
 
