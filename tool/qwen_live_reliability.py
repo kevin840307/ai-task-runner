@@ -1806,7 +1806,6 @@ flow:
   - seed
   - stage: review
     restart_at: execute
-    fresh_after_same_failures: 2
     max_attempts: 3
     on_exhausted: fail
   - stage: validate_file
@@ -1920,7 +1919,6 @@ flow:
   - seed
   - stage: review
     restart_at: execute
-    fresh_after_same_failures: 2
     max_attempts: 3
     on_exhausted: fail
   - stage: validate_file
