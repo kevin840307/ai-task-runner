@@ -18,7 +18,6 @@ class ExtensionSpec:
     name: str
     status: str = "Extension"
     message: str = "OK"
-    retry: int | None = 0
 
 
 class ExtensionStage:
@@ -38,7 +37,6 @@ class ExtensionStage:
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
-        self.retry = spec.retry
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         return StageResult(self.name, "pass", output=self.spec.message)
@@ -66,7 +64,7 @@ def _context(tmp_path: Path, workflow: list[dict]) -> StageContext:
         workflow=workflow,
         workflow_explicit=True,
         stage_retries=0,
-        stage_retry_delay=0,
+        retry_delay=0,
     )
     return StageContext(
         config=config,
@@ -101,7 +99,7 @@ flow:
 
         catalog = stage_catalog()
         assert name in catalog
-        assert {item["name"] for item in catalog[name]["options"]} >= {"status", "message", "retry"}
+        assert {item["name"] for item in catalog[name]["options"]} >= {"status", "message"}
 
         workflow = load_workflow(workflow_file)
         stage = create_stage(workflow[0])
@@ -183,8 +181,7 @@ stages:
     message: TASK_CONSUMED
 flow:
   - discover
-  - stage: execute
-    scope: task
+  - execute
 """.lstrip(),
             encoding="utf-8",
         )
