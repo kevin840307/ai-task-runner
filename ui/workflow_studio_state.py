@@ -294,7 +294,7 @@ class WorkflowStudioMixin:
                 raise ValueError("Workflow destination must be project or custom")
             if target.exists():
                 raise ValueError(f"Workflow already exists: {target.name}")
-            content = "stages:\n  work:\n    type: task\n\nflow:\n  - work\n"
+            content = "stages:\n  start:\n    type: base\n    prompt: stages/execution.md\n\nflow:\n  - start\n"
             self._validate_workflow_before_write(target, content)
             try:
                 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
