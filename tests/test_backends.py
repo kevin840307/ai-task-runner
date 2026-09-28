@@ -317,6 +317,52 @@ def test_qwen_stream_json_uses_final_result_event(tmp_path):
     assert decoded.text == "final answer"
 
 
+def test_qwen_stream_json_api_error_envelope_raises_backend_error(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+
+    backend = QwenBackend(sys.executable, tmp_path, [])
+    raw = "\n".join([
+        '{"type":"system","session_id":"session-1"}',
+        '{"type":"result","session_id":"session-1","result":"[API Error: Connection error. (cause: UND_ERR_SOCKET: other side closed)]"}',
+    ])
+    monkeypatch.setattr(
+        backend,
+        "_run",
+        lambda *args, **kwargs: ProcessResult(raw, 0),
+    )
+
+    with pytest.raises(BackendError, match="UND_ERR_SOCKET") as captured:
+        backend.ask("x", session_id="session-1")
+
+    error = captured.value
+    assert error.session_id == "session-1"
+    assert error.recovery_key == "qwen:api-error-envelope"
+    assert error.diagnostics["api_error_envelope"] is True
+
+
+def test_ai_client_marks_qwen_api_error_envelope_transient(tmp_path, monkeypatch):
+    from runner.runtime.process_runner import ProcessResult
+
+    client = AIClient("qwen", sys.executable, tmp_path, [])
+    client.session_id = "session-1"
+    raw = "\n".join([
+        '{"type":"system","session_id":"session-1"}',
+        '{"type":"result","session_id":"session-1","result":"[API Error: Connection error. (cause: UND_ERR_SOCKET: other side closed)]"}',
+    ])
+    monkeypatch.setattr(
+        client._backend,
+        "_run",
+        lambda *args, **kwargs: ProcessResult(raw, 0),
+    )
+
+    with pytest.raises(AIError, match="UND_ERR_SOCKET") as captured:
+        client.ask("x")
+
+    assert captured.value.transient is True
+    assert captured.value.recovery_key == "qwen:api-error-envelope"
+    assert client.session_id == "session-1"
+
+
 def test_qwen_stream_json_summarizes_error_output(tmp_path):
     backend = QwenBackend(sys.executable, tmp_path, [])
     raw = "\n".join([
