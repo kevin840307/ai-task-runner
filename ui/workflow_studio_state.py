@@ -796,32 +796,30 @@ class WorkflowStudioMixin:
             raise ValueError("Workflow references missing Prompt(s): " + "; ".join(missing[:12]))
 
     def _known_workflow_paths(self, project: Path | None = None) -> list[Path]:
-        roots = [self.repo_root / "runner" / "workflow" / "system", self.repo_root / "runner" / "workflow" / "custom"]
-        paths: list[Path] = []
+        roots = [self._global_asset_root()]
+        known_projects = [
+            Path(row["path"]).absolute()
+            for row in self.projects()
+            if row.get("exists")
+        ]
+        if project is not None:
+            project_path = Path(project).absolute()
+            if all(path_key(project_path) != path_key(item) for item in known_projects):
+                known_projects.append(project_path)
+        roots.extend(project_workflow_root(item) for item in known_projects)
+
+        result: list[Path] = []
+        seen: set[str] = set()
         for root in roots:
             if not root.is_dir():
                 continue
-            for suffix in ("*.yaml", "*.yml"):
-                for path in root.rglob(suffix):
-                    if "prompts" not in path.parts:
-                        paths.append(path.resolve())
-        known_projects = [Path(row["path"]).absolute() for row in self.projects() if row.get("exists")]
-        if project is not None:
-            project_path = Path(project).absolute()
-            known_keys = {path_key(path) for path in known_projects}
-            if path_key(project_path) not in known_keys:
-                known_projects.append(project_path)
-        for root in known_projects:
-            for _folder, _package_root, workflow_dir, _prompt_dir in (iter_project_packages(root) or ()):
-                for suffix in ("*.yaml", "*.yml"):
-                    paths.extend(path.resolve() for path in workflow_dir.rglob(suffix))
-        result: list[Path] = []
-        seen: set[str] = set()
-        for path in paths:
-            key = path_key(path)
-            if key not in seen:
-                seen.add(key)
-                result.append(path)
+            for pattern in ("*.yaml", "*.yml"):
+                for path in root.glob(pattern):
+                    resolved = path.resolve()
+                    key = path_key(resolved)
+                    if key not in seen:
+                        seen.add(key)
+                        result.append(resolved)
         return result
 
     def _prompt_usages(self, prompt_path: Path, project: Path | None = None) -> list[str]:
@@ -838,44 +836,24 @@ class WorkflowStudioMixin:
                     usages.append(f"{workflow.name} · {stage}")
         return sorted(set(usages))
 
-    def studio_prompt_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
+    def studio_prompt_create(
+        self,
+        name: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
             self._require_editable()
-            raw = str(name or "").strip()
-            if not raw:
-                raise ValueError("Prompt name is required")
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Prompt name must be a file name, not a path")
-            if not raw.lower().endswith(".md"):
-                raw += ".md"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", raw, re.IGNORECASE):
-                raise ValueError("Prompt file name contains unsupported characters")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before creating a Project Prompt")
-                rel_folder = self._normalize_workflow_folder(folder)
-                if rel_folder not in project_package_folders(project):
-                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
-                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True); scope = "project"
-            elif destination == "custom":
-                root = self._custom_asset_root("prompt"); root.mkdir(parents=True, exist_ok=True); scope = "custom"
-                rel_folder = self._normalize_custom_folder(folder)
-                if rel_folder:
-                    root = (root / Path(rel_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root("prompt")):
-                        raise ValueError("Prompt folder is outside the Custom Prompt folder")
-                    root.mkdir(parents=True, exist_ok=True)
-            else:
-                raise ValueError("Prompt destination must be project or custom")
+            raw = self._normalize_studio_asset_name("prompt", name)
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root(scope, project)
+            root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Prompt path is outside the selected Prompt folder")
             if target.exists():
                 raise ValueError(f"Prompt already exists: {target.name}")
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                handle.write("# Prompt\n\n{{goal}}\n")
+                handle.write("# Prompt\n\n{{ goal }}\n")
             item = self._studio_item(target, scope, "prompt")
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
@@ -914,40 +892,33 @@ class WorkflowStudioMixin:
             raise ValueError("Unsupported Studio asset kind")
         return raw
 
-    def _studio_scope_root(self, kind: str, scope: str, project: Path | None) -> Path:
-        if scope == "custom":
-            root = self.repo_root / "runner" / ("workflow" if kind == "workflow" else "prompts") / "custom"
-        elif scope == "project":
-            raise ValueError("Project asset root must be resolved from its Workflow-owned package")
-        else:
-            raise ValueError("System assets cannot be renamed in place")
-        root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
+    def _studio_scope_root(
+        self, kind: str, scope: str, project: Path | None
+    ) -> Path:
+        del kind
+        root = self._asset_root(scope, project)
+        root.mkdir(parents=True, exist_ok=True)
         return root
 
-    def studio_rename(self, file_id: str, name: str, project: Path | None = None) -> dict:
-        """Rename one writable Studio asset without changing its scope or content."""
+    def studio_rename(
+        self,
+        file_id: str,
+        name: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
             self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
-            self._require_studio_writable(scope)
             if kind == "prompt":
                 usages = self._prompt_usages(path, project)
                 if usages:
-                    raise ValueError("Prompt is still referenced; update Workflow references before rename: " + "; ".join(usages[:12]))
+                    raise ValueError(
+                        "Prompt is still referenced; update Workflow references before rename: "
+                        + "; ".join(usages[:12])
+                    )
             raw = self._normalize_studio_asset_name(kind, name)
-            if scope == "project":
-                if project is None:
-                    raise ValueError("Select a Project before modifying a Project asset")
-                package = project_package_for_asset(project, path)
-                if package is None:
-                    raise ValueError("Project asset is outside a Workflow-owned package")
-                _folder, _package_root, workflow_dir, prompt_dir = package
-                root = workflow_dir if kind == "workflow" else prompt_dir
-            else:
-                root = self._studio_scope_root(kind, scope, project)
+            root = self._asset_root(scope, project)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Renamed asset path is outside the allowed scope")
             if target == path:
                 item = self._studio_item(path, scope, kind)
                 return {"item": item, "file": self.studio_read(item["id"], project)}
@@ -958,60 +929,23 @@ class WorkflowStudioMixin:
                 self._validate_workflow_before_write(target, content)
             else:
                 self._validate_prompt_before_write(target, content)
-            try:
-                path.rename(target)
-            except OSError as exc:
-                raise ValueError(f"Cannot rename {kind}: {exc}") from exc
+            path.rename(target)
             item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
-    def studio_duplicate(self, file_id: str, name: str, project: Path | None = None, folder: str = "") -> dict:
-        """Create an independent copy in an explicitly selected folder.
-
-        System assets still duplicate into Custom.  Custom assets may target any
-        Custom subfolder; Project assets may target any existing owned Workflow
-        package.  An empty folder keeps the previous/default location.
-        """
+    def studio_duplicate(
+        self,
+        file_id: str,
+        name: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
             self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
-            target_scope = "custom" if scope in SYSTEM_SCOPES else scope
             raw = self._normalize_studio_asset_name(kind, name)
-            if target_scope == "project":
-                if project is None:
-                    raise ValueError("Select a Project before duplicating a Project asset")
-                package = project_package_for_asset(project, path)
-                if package is None:
-                    raise ValueError("Project asset is outside a Workflow-owned package")
-                source_folder, _package_root, _workflow_dir, _prompt_dir = package
-                selected_folder = self._normalize_workflow_folder(folder or source_folder)
-                existing_folders = project_package_folders(project)
-                if kind == "prompt" and selected_folder not in existing_folders:
-                    raise ValueError("Project Prompt duplicates must use an existing Project Workflow folder")
-                root = project_package_workflow_dir(project, selected_folder) if kind == "workflow" else project_package_prompt_dir(project, selected_folder)
-                root.mkdir(parents=True, exist_ok=True)
-            else:
-                root = self._custom_asset_root(kind)
-                root.mkdir(parents=True, exist_ok=True)
-                # System assets default to Custom root.  Existing Custom assets
-                # default to their current folder, while the UI may override it.
-                default_folder = ""
-                if scope == "custom":
-                    try:
-                        default_folder = path.resolve().parent.relative_to(root).as_posix()
-                        if default_folder == ".":
-                            default_folder = ""
-                    except ValueError:
-                        default_folder = ""
-                selected_folder = self._normalize_custom_folder(folder if folder != "" else default_folder)
-                if selected_folder:
-                    root = (root / Path(selected_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root(kind)):
-                        raise ValueError("Duplicated asset folder is outside the Custom root")
-                    root.mkdir(parents=True, exist_ok=True)
+            root = self._asset_root(scope, project)
+            root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Duplicated asset path is outside the allowed scope")
             if target.exists():
                 raise ValueError(f"{kind.title()} already exists: {target.name}")
             content = path.read_text(encoding="utf-8")
@@ -1019,16 +953,14 @@ class WorkflowStudioMixin:
                 self._validate_workflow_before_write(target, content)
             else:
                 self._validate_prompt_before_write(target, content)
-            try:
-                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-                with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                    handle.write(content)
-            except FileExistsError as exc:
-                raise ValueError(f"{kind.title()} already exists: {target.name}") from exc
-            item = self._studio_item(target, target_scope, kind)
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
+            item = self._studio_item(target, scope, kind)
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
     @staticmethod
+    def _stage_reference_paths    @staticmethod
     def _stage_reference_paths(value, stage_name: str, path: str = "workflow") -> list[str]:
         refs: list[str] = []
         if isinstance(value, dict):
@@ -1135,12 +1067,6 @@ class WorkflowStudioMixin:
 
     def studio_export(self, file_id: str, project: Path | None = None) -> dict:
         path, kind, scope = self._resolve_studio_file(file_id, project)
-        if kind == "workflow":
-            if scope != "custom":
-                raise ValueError("Workflow folder export is available only for Custom Workflows")
-            package = export_folder_package(path, self.repo_root)
-            package["scope"] = scope
-            return package
         return {
             "schema_version": 1,
             "kind": kind,
@@ -1156,59 +1082,24 @@ class WorkflowStudioMixin:
         data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
         return build_workflow_graph(data)
 
-    def studio_folder_inspect(self, content: str) -> dict:
-        return inspect_folder_package(content)
-
-    def studio_folder_import(self, content: str) -> dict:
-        with self._edit_lock:
-            self._require_editable()
-            folder, workflows = import_folder_package(content, self.repo_root, self._validate_workflow_before_write, self._validate_prompt_before_write)
-            if not workflows:
-                raise ValueError("Imported Workflow folder contains no Workflow YAML")
-            item = self._studio_item(workflows[0], "custom", "workflow")
-            return {"folder": folder, "item": item, "file": self.studio_read(item["id"], None)}
-
-    def studio_import(self, kind: str, name: str, content: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
+    def studio_import(
+        self,
+        kind: str,
+        name: str,
+        content: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
         with self._edit_lock:
             self._require_editable()
             kind = str(kind or "").strip().lower()
             if kind not in {"workflow", "prompt"}:
                 raise ValueError("Import kind must be workflow or prompt")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before importing to Project")
-                if kind == "workflow":
-                    raise ValueError("Project Workflow import uses Workflow-owned folder packages")
-                rel_folder = self._normalize_workflow_folder(folder)
-                if rel_folder not in project_package_folders(project):
-                    raise ValueError("Select an existing Project Workflow folder for this Prompt")
-                root = project_package_prompt_dir(project, rel_folder); root.mkdir(parents=True, exist_ok=True)
-                scope = "project"
-            elif destination == "custom":
-                root = self._custom_asset_root(kind)
-                root.mkdir(parents=True, exist_ok=True); scope = "custom"
-                rel_folder = self._normalize_custom_folder(folder)
-                if rel_folder:
-                    root = (root / Path(rel_folder)).resolve()
-                    if not self._is_within(root, self._custom_asset_root(kind)):
-                        raise ValueError("Import folder is outside the Custom root")
-                    root.mkdir(parents=True, exist_ok=True)
-            else:
-                raise ValueError("Import destination must be project or custom")
-            raw = str(name or "").strip()
-            suffix = ".yaml" if kind == "workflow" else ".md"
-            if not raw:
-                raw = f"imported-{kind}{suffix}"
-            if kind == "workflow" and not raw.lower().endswith((".yaml", ".yml")):
-                raw += ".yaml"
-            if kind == "prompt" and not raw.lower().endswith(".md"):
-                raw += ".md"
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Imported asset name must be a file name")
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root(scope, project)
+            root.mkdir(parents=True, exist_ok=True)
+            raw = self._normalize_studio_asset_name(kind, name or f"imported-{kind}")
             target = (root / raw).resolve()
-            if not self._is_within(target, root):
-                raise ValueError("Import path is outside the destination folder")
             if target.exists():
                 raise ValueError(f"Asset already exists: {target.name}")
             text = str(content or "")
@@ -1217,10 +1108,7 @@ class WorkflowStudioMixin:
             if kind == "workflow":
                 self._validate_workflow_before_write(target, text)
             else:
-                try:
-                    self._validate_prompt_before_write(target, text)
-                except ValueError as exc:
-                    raise ValueError("Invalid Prompt template: " + str(exc).removeprefix("Prompt validation failed: ")) from exc
+                self._validate_prompt_before_write(target, text)
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
                 handle.write(text)
