@@ -14,7 +14,8 @@ stages:
     required_passes: 2
     ai_validator_yolo: true
     readonly_safety: observe
-    restart_at: planning
+    routes:
+      fail: planning
 
 flow:
   - planning
