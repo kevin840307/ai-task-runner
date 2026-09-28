@@ -294,7 +294,7 @@ class WorkflowStudioMixin:
                 raise ValueError("Workflow destination must be project or custom")
             if target.exists():
                 raise ValueError(f"Workflow already exists: {target.name}")
-            content = "stages:\n  planning:\n    type: plan\n\nflow:\n  - planning\n"
+            content = "stages:\n  work:\n    type: task\n\nflow:\n  - work\n"
             self._validate_workflow_before_write(target, content)
             try:
                 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
@@ -362,7 +362,6 @@ class WorkflowStudioMixin:
                 "type": str(config.get("type") or "base"),
                 "status": str(config.get("status") or ""),
                 "prompt": str(config.get("prompt") or ""),
-                "recover": config.get("recover") if isinstance(config.get("recover"), list) else [],
             })
         flow_raw = data.get("flow") or []
         flow = []
@@ -450,10 +449,10 @@ class WorkflowStudioMixin:
                 "continuation_prompt", "instructions", "detail", "produces",
                 "session_key", "parser", "cwd", "result_kind", "validator", "command",
                 "allow_project_read", "track_changes", "tolerate_restored_changes",
-                "fresh_session_each_run", "fresh_session_on_start", "skip_on_error",
+                "fresh_session_each_run", "fresh_session_on_start",
                 "repair_plan", "structured_retries", "structured_fresh_retries",
                 "retry", "runs", "required_passes", "min_tasks", "timeout",
-                "recover", "clean_work",
+                "clean_work",
             }
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
@@ -1133,22 +1132,32 @@ class WorkflowStudioMixin:
         if isinstance(value, dict):
             for key, child in value.items():
                 current = f"{path}.{key}"
-                if key in {"stage", "restart_at"} and isinstance(child, str) and child == stage_name:
+                if key == "stage" and isinstance(child, str) and child == stage_name:
                     refs.append(current)
-                if key in {"recover", "flow"} and isinstance(child, list):
-                    for index, item in enumerate(child):
-                        item_path = f"{current}[{index}]"
-                        if isinstance(item, str) and item == stage_name:
-                            refs.append(item_path)
-                        elif isinstance(item, (dict, list)):
-                            refs.extend(WorkflowStudioMixin._stage_reference_paths(item, stage_name, item_path))
                     continue
-                if isinstance(child, (dict, list)):
-                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, current))
+                if key == "routes" and isinstance(child, dict):
+                    for status, target in child.items():
+                        if isinstance(target, str) and target == stage_name:
+                            refs.append(f"{current}.{status}")
+                    continue
+                refs.extend(
+                    WorkflowStudioMixin._stage_reference_paths(
+                        child, stage_name, current
+                    )
+                    if isinstance(child, (dict, list))
+                    else []
+                )
         elif isinstance(value, list):
             for index, child in enumerate(value):
-                if isinstance(child, (dict, list)):
-                    refs.extend(WorkflowStudioMixin._stage_reference_paths(child, stage_name, f"{path}[{index}]"))
+                current = f"{path}[{index}]"
+                if isinstance(child, str) and child == stage_name:
+                    refs.append(current)
+                elif isinstance(child, (dict, list)):
+                    refs.extend(
+                        WorkflowStudioMixin._stage_reference_paths(
+                            child, stage_name, current
+                        )
+                    )
         return refs
 
     @staticmethod
