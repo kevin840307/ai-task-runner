@@ -625,8 +625,6 @@ def test_prompt_records_correlate_stage_and_history(tmp_path: Path):
             {"type": "runner.stage", "action": "start", "stage": "execute"},
             {"type": "model.prompt", "call_id": "c1", "session": "s1", "session_mode": "resume"},
             {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
-            {"type": "runner.stage", "action": "start", "stage": "review_verify"},
-            {"type": "runner.stage", "action": "finish", "stage": "review_verify", "result": "pass"},
         ],
         {"c1": "RUNNER_SHARED_STAGE_CONTROL\nmode: retry\nprevious_error: x\n"},
     )
@@ -852,6 +850,8 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
                 "session_mode": "resume",
             },
             {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+            {"type": "runner.stage", "action": "start", "stage": "review_verify"},
+            {"type": "runner.stage", "action": "finish", "stage": "review_verify", "result": "pass"},
         ]
         (work / "log.txt").write_text(
             "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
