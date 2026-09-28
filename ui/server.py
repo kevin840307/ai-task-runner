@@ -185,19 +185,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_generate_validate(str(body.get("job_id", "")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/save":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("folder", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "custom")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
+                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("folder", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "global")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/cancel":
                 return self._json(self.state.studio_generate_cancel(str(body.get("job_id", ""))))
             if parsed.path == "/api/studio/generate/discard":
                 return self._json(self.state.studio_generate_discard(str(body.get("job_id", ""))))
-            if parsed.path == "/api/studio/custom-folder/create":
-                return self._json(self.state.studio_custom_folder_create(str(body.get("kind", "")), str(body.get("folder", ""))))
             if parsed.path == "/api/studio/workflow/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_workflow_create(str(body.get("name", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/prompt/create":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_prompt_create(str(body.get("name", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/delete":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_delete(str(body.get("id", "")), project))
@@ -206,14 +204,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.studio_rename(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/duplicate":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project, str(body.get("folder", ""))))
-            if parsed.path == "/api/studio/import/inspect":
-                return self._json(self.state.studio_folder_inspect(str(body.get("content", ""))))
+                return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/import":
                 if str(body.get("kind", "")).strip().lower() == "workflow_folder":
                     return self._json(self.state.studio_folder_import(str(body.get("content", ""))))
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "custom")), project, str(body.get("folder", ""))))
+                return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/prompt/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_prompt_check(str(body.get("id", "")), str(body.get("content", "")), project))
