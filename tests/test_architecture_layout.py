@@ -51,7 +51,7 @@ def test_ui_workflow_studio_domain_is_not_implemented_in_server():
     studio = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
 
     assert "class WorkflowStudioMixin:" in studio
-    assert "class UIState(WorkflowStudioMixin, WorkflowBuilderMixin):" in server
+    assert "class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):" in server
     assert "    def studio_files(" not in server
     assert "    def studio_save(" not in server
     assert "    def studio_visual_save(" not in server
