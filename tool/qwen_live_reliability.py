@@ -558,6 +558,41 @@ def _tail_text(text: str, limit: int = 1200) -> str:
     return text[-limit:]
 
 
+def semantic_probe_timeout(settings: Settings) -> float:
+    """Bound semantic routing probes independently from the 24H harness timeout."""
+    estimated = (settings.agent_timeout * 3) + (settings.planning_timeout * 2) + 120
+    return min(settings.run_timeout, max(1200.0, min(3600.0, estimated)))
+
+
+def probe_timeout_diagnostic(project: Path, log: Path) -> str:
+    state_path = project / ".ai-task-runner" / "state.json"
+    state_summary = ""
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state_summary = json.dumps(
+            {
+                "stage": state.get("stage"),
+                "stage_detail": state.get("stage_detail"),
+                "cycle": state.get("cycle"),
+                "current": state.get("current"),
+                "workflow_position": state.get("workflow_position"),
+                "task_step": state.get("task_step"),
+                "transition_previous": state.get("transition_previous"),
+                "validator_output": _tail_text(str(state.get("validator_output") or ""), 800),
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+    except (OSError, json.JSONDecodeError):
+        state_summary = "state unavailable"
+
+    try:
+        console_tail = _tail_text(log.read_text(encoding="utf-8", errors="replace"), 2400)
+    except OSError:
+        console_tail = "console unavailable"
+    return f"state={state_summary}; console_tail={console_tail}"
+
+
 def qwen_sandbox_required(settings: Settings, hours: float = 0) -> bool:
     return settings.sandbox or (hours > 0 and settings.soak_sandbox_every > 0)
 
@@ -1743,10 +1778,6 @@ if not marker.exists():
 '''
 
 REVIEW_ROUTING_WORKFLOW = '''stages:
-  planning:
-    type: plan
-    status: Planning deterministic Review failure-routing probe
-
   seed:
     type: command
     status: Seeding incomplete Review state
@@ -1771,13 +1802,9 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     status: Validating deterministic Review routing probe
 
 flow:
-  - planning
-  - stage: execute
-    scope: task
-  - stage: seed
-    scope: task
+  - execute
+  - seed
   - stage: review
-    scope: task
     restart_at: execute
   - stage: validate_file
     restart_at: execute
@@ -1812,11 +1839,20 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
-    code = run_command(
-        runner_command(settings, project, workflow=workflow),
-        console_log(project, "console.jsonl"),
-        settings.run_timeout,
-    )
+    log = console_log(project, "console.jsonl")
+    try:
+        code = run_command(
+            runner_command(settings, project, workflow=workflow),
+            log,
+            semantic_probe_timeout(settings),
+        )
+    except RuntimeError as exc:
+        if "runner exceeded harness timeout" not in str(exc):
+            raise
+        raise RuntimeError(
+            "review failure-routing probe exceeded bounded semantic timeout; "
+            + probe_timeout_diagnostic(project, log)
+        ) from exc
     assert_state_completed(project, code)
     if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
         raise RuntimeError("review failure-routing probe produced unexpected logical lines")
@@ -1933,11 +1969,20 @@ def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(FULL_LOOP_WORKFLOW, encoding="utf-8")
-    code = run_command(
-        runner_command(settings, project, workflow=workflow),
-        console_log(project, "console.jsonl"),
-        settings.run_timeout,
-    )
+    log = console_log(project, "console.jsonl")
+    try:
+        code = run_command(
+            runner_command(settings, project, workflow=workflow),
+            log,
+            semantic_probe_timeout(settings),
+        )
+    except RuntimeError as exc:
+        if "runner exceeded harness timeout" not in str(exc):
+            raise
+        raise RuntimeError(
+            "complete closed-loop probe exceeded bounded semantic timeout; "
+            + probe_timeout_diagnostic(project, log)
+        ) from exc
     assert_state_completed(project, code)
     lines = (project / "loop.txt").read_text(encoding="utf-8").splitlines()
     if lines != ["READY", "REVIEW_OK", "VALIDATOR_OK"]:
