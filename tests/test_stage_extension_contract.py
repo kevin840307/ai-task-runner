@@ -192,7 +192,7 @@ flow:
 
         workflow = load_workflow(workflow_file)
         ctx = _context(tmp_path, workflow)
-        Pipeline(ctx, workflow).run(StageExecutor(Hooks()))
+        FlowEngine(ctx).run(StageExecutor(Hooks()))
 
         assert ctx.state.completed is True
         assert len(ctx.state.tasks) == 1
