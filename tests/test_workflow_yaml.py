@@ -988,7 +988,7 @@ flow:
     assert workflow[0]["fresh_after_same_failures"] == 2
 
 
-def test_flow_node_fresh_after_same_failures_can_bound_restart_at(tmp_path):
+def test_flow_node_fresh_after_same_failures_requires_recover(tmp_path):
     path = tmp_path / "workflow.yaml"
     path.write_text(
         """
@@ -1005,10 +1005,9 @@ flow:
 """,
         encoding="utf-8",
     )
-    workflow = load_workflow(path)
 
-    assert workflow[1]["restart_at"] == "execute"
-    assert workflow[1]["fresh_after_same_failures"] == 2
+    with pytest.raises(RunnerError, match="fresh_after_same_failures requires recover"):
+        load_workflow(path)
 
 
 @pytest.mark.parametrize("value", [0, -1, True, "2"])
@@ -1835,3 +1834,63 @@ def test_restart_at_max_attempts_fails_closed_after_bound(tmp_path, monkeypatch)
     ]
     assert context.state.completed is False
     assert context.state.recovery_attempt_count == 0
+
+
+def test_bounded_restart_attempt_commits_with_restart_cursor(tmp_path, monkeypatch):
+    class Stage:
+        def __init__(self, name: str):
+            self.name = name
+
+    monkeypatch.setattr(
+        flow_engine_module,
+        "create_stage",
+        lambda definition: Stage(str(definition["name"])),
+    )
+
+    workflow = [
+        {"name": "execute", "_workflow_index": 0},
+        {
+            "name": "review",
+            "restart_at": "execute",
+            "max_attempts": 3,
+            "on_exhausted": "fail",
+            "_workflow_index": 1,
+        },
+    ]
+    state = RunState("run", "goal", str(tmp_path))
+    state.workflow_position = 1
+    snapshots: list[dict] = []
+    context = StageContext(
+        config=RuntimeConfig(workflow=workflow),
+        root=tmp_path,
+        work=tmp_path / ".ai-task-runner",
+        state=state,
+        ai_client=FakeAI(),
+        state_file=tmp_path / "state.json",
+        validator_path=None,
+        validator_is_ai=True,
+        save_state=lambda: snapshots.append(state.dump()),
+        set_stage=lambda *_: None,
+    )
+    engine = CanonicalFlowEngine(context, workflow)
+    node = FlowNode.from_definition(workflow[1])
+    result = StageResult(
+        "review",
+        "fail",
+        output="missing",
+        data={"completed": False, "missing_items": ["fix"]},
+        kind="review",
+    )
+
+    action = engine.recovery.decide(node, result, type("E", (), {"fresh_session": lambda *args: None})())
+
+    assert action.kind == "restart"
+    assert snapshots == []
+    assert state.recovery_attempt_count == 1
+
+    engine.routing.restart("execute", result)
+
+    assert snapshots
+    committed = snapshots[-1]
+    assert committed["workflow_position"] == 0
+    assert committed["recovery_attempt_count"] == 1
