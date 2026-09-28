@@ -135,13 +135,9 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} fresh_after_same_failures must be a positive integer"
         )
-    if (
-        fresh_after_same_failures is not None
-        and not values.get("recover")
-        and values.get("restart_at") is None
-    ):
+    if fresh_after_same_failures is not None and not values.get("recover"):
         raise RunnerError(
-            f"workflow stage {name} fresh_after_same_failures requires recover or restart_at"
+            f"workflow stage {name} fresh_after_same_failures requires recover"
         )
     repeat = values.get("repeat")
     if repeat is not None and (
