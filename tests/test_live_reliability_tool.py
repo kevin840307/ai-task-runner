@@ -625,6 +625,8 @@ def test_prompt_records_correlate_stage_and_history(tmp_path: Path):
             {"type": "runner.stage", "action": "start", "stage": "execute"},
             {"type": "model.prompt", "call_id": "c1", "session": "s1", "session_mode": "resume"},
             {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+            {"type": "runner.stage", "action": "start", "stage": "review_verify"},
+            {"type": "runner.stage", "action": "finish", "stage": "review_verify", "result": "pass"},
         ],
         {"c1": "RUNNER_SHARED_STAGE_CONTROL\nmode: retry\nprevious_error: x\n"},
     )
@@ -830,7 +832,8 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
         workflow = Path(command[command.index("--workflow") + 1])
         assert workflow == project / "workflow.yaml"
         assert workflow.read_text(encoding="utf-8") == live.REVIEW_ROUTING_WORKFLOW
-        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.review_routing_seed_script()
+        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_SEED
+        assert (project / "review_gate.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_GATE
         assert (project / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
@@ -854,7 +857,7 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
             "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
         )
         (history / "execute-2-prompt.txt").write_text(
-            'RUNNER_SHARED_STAGE_CONTROL\nmode: continue\nfeedback:\nReview missing_items: ["REVIEW_REQUIRED"]\n',
+            'RUNNER_SHARED_STAGE_CONTROL\nmode: continue\nfeedback:\nreview: REVIEW_REQUIRED is intentionally missing; add REVIEW_REQUIRED to review.txt\n',
             encoding="utf-8",
         )
         (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
@@ -882,7 +885,7 @@ def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert 'restart_at: execute' in live.REVIEW_ROUTING_WORKFLOW
     assert 'continuation_prompt' not in live.REVIEW_ROUTING_WORKFLOW
     assert 'READY\\n' in live.REVIEW_ROUTING_SEED
-    assert "controlled first Review pass" in live.REVIEW_ROUTING_FORCE_FAIL_PROMPT
+    assert "REVIEW_REQUIRED is intentionally missing" in live.REVIEW_ROUTING_GATE
     assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
     assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
@@ -893,24 +896,23 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     workflow = load_workflow(workflow_path)
 
     assert [node["name"] for node in workflow] == [
-        "execute", "seed", "review", "validate_file"
+        "execute", "seed", "review", "review_verify", "validate_file"
     ]
     assert workflow[0]["type"] == "task"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["restart_at"] == "execute"
     assert workflow[2]["max_attempts"] == 3
     assert workflow[2]["on_exhausted"] == "fail"
-    assert workflow[3]["restart_at"] == "execute"
-    assert workflow[3]["max_attempts"] == 2
-    assert workflow[3]["on_exhausted"] == "fail"
+    assert workflow[3]["type"] == "review"
+    assert workflow[4]["restart_at"] == "execute"
+    assert workflow[4]["max_attempts"] == 2
+    assert workflow[4]["on_exhausted"] == "fail"
     assert all("scope" not in node for node in workflow)
     assert "planning" not in {node["name"] for node in workflow}
     assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
 
-    seed = live.review_routing_seed_script()
-    assert "%FORCE_FAIL%" not in seed
-    assert "%NORMAL_REVIEW%" not in seed
-    compile(seed, "seed_review.py", "exec")
+    compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
+    compile(live.REVIEW_ROUTING_GATE, "review_gate.py", "exec")
 
 
 def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
@@ -1549,41 +1551,39 @@ def test_review_routing_probe_protects_control_assets():
         "prompt.md",
         "validation.py",
         "seed_review.py",
+        "review_gate.py",
         "review_execute.md",
+        "review_check.md",
         "workflow.yaml",
     ):
         assert f"  - {name}" in policy
 
-    # review_check.md is intentionally mutable by the deterministic seed Stage:
-    # first pass forces FAIL, second pass restores the normal Review prompt.
-    assert "  - review_check.md" not in policy
     assert "Modify review.txt only" in policy
 
 
-def test_review_seed_switches_from_forced_fail_prompt_to_normal_review(tmp_path: Path):
-    seed = tmp_path / "seed_review.py"
-    seed.write_text(live.review_routing_seed_script(), encoding="utf-8")
-    (tmp_path / "review_check.md").write_text("initial", encoding="utf-8")
+def test_review_gate_fails_once_then_passes(tmp_path: Path):
+    gate = tmp_path / "review_gate.py"
+    gate.write_text(live.REVIEW_ROUTING_GATE, encoding="utf-8")
 
     import subprocess
 
     first = subprocess.run(
-        [sys.executable, str(seed)],
+        [sys.executable, str(gate)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert first.returncode == 0, first.stderr
-    assert (tmp_path / "review.txt").read_text(encoding="utf-8") == "READY\n"
-    assert (tmp_path / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_FORCE_FAIL_PROMPT
+    assert first.returncode == 1
+    assert "REVIEW_REQUIRED" in first.stdout
 
     second = subprocess.run(
-        [sys.executable, str(seed)],
+        [sys.executable, str(gate)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert second.returncode == 0, second.stderr
-    assert (tmp_path / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
+    assert second.returncode == 0
+    assert "REVIEW_GATE_PASSED" in second.stdout
+
