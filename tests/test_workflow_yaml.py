@@ -649,8 +649,9 @@ def test_validator_failure_routes_directly_back_to_planning(tmp_path):
     )
 
     assert context.state.stage == "validator_failed"
-    assert workflow[-1]["restart_at"] == "planning"
+    assert workflow[-1]["routes"] == {"fail": "planning"}
     assert "recover" not in workflow[-1]
+    assert "restart_at" not in workflow[-1]
 
 def test_workflow_fingerprint_changes_with_yaml_semantics():
     workflow = load_workflow()
@@ -786,7 +787,8 @@ def test_ralphy_ai_validate_custom_workflow_is_fresh_and_mandatory():
     assert all(item["fresh_session_on_start"] is True for item in workflow)
     assert workflow[1]["type"] == "ai_validator"
     assert workflow[1]["required_passes"] == 1
-    assert workflow[1]["recover"][0]["name"] == "ralphy"
+    assert workflow[1]["routes"] == {"fail": "ralphy"}
+    assert "recover" not in workflow[1]
     assert workflow[0]["prompt"] == "custom/common/ralphy.md"
 
 def test_workflow_yaml_examples_reference_existing_prompt_assets():
@@ -1257,7 +1259,7 @@ flow:
     assert [item["name"] for item in explicit_flow] == [
         "planning", "execute", "review", "validate"
     ]
-    assert simplified_flow[2]["restart_at"] == "__plan_task__"
+    assert simplified_flow[2]["routes"] == {"fail": "__plan_task__"}
     assert workflow_fingerprint(simplified_flow) != workflow_fingerprint(explicit_flow)
 
 
@@ -1459,7 +1461,7 @@ flow: [planning, done]
     assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "done"]
     assert workflow[1]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
     assert workflow[2]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
-    assert workflow[2]["restart_at"] == "__plan_task__"
+    assert workflow[2]["routes"] == {"fail": "__plan_task__"}
 
 
 def test_execution_prompt_delegates_continue_retry_recover_to_shared_control():
@@ -1487,7 +1489,8 @@ def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
     assert validator["fresh_session_on_start"] is True
     assert validator["runs"] == 1
     assert validator["required_passes"] == 1
-    assert validator["recover"] == ["ralphy"]
+    assert validator["routes"] == {"fail": "ralphy"}
+    assert "recover" not in validator
     assert "max_attempts" not in validator
     assert "on_exhausted" not in validator
     text = prompt.read_text(encoding="utf-8")
