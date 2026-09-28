@@ -1889,6 +1889,14 @@ print("VALIDATION_PASSED")
 '''
 
 
+def review_routing_seed_script() -> str:
+    return (
+        REVIEW_ROUTING_SEED
+        .replace("%FORCE_FAIL%", repr(REVIEW_ROUTING_FORCE_FAIL_PROMPT))
+        .replace("%NORMAL_REVIEW%", repr(REVIEW_ROUTING_REVIEW_PROMPT))
+    )
+
+
 def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     project = create_project(
         root,
@@ -1897,12 +1905,9 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         REVIEW_ROUTING_VALIDATOR,
         policy=REVIEW_ROUTING_POLICY,
     )
-    seed_script = (
-        REVIEW_ROUTING_SEED
-        .replace("%FORCE_FAIL%", repr(REVIEW_ROUTING_FORCE_FAIL_PROMPT))
-        .replace("%NORMAL_REVIEW%", repr(REVIEW_ROUTING_REVIEW_PROMPT))
+    (project / "seed_review.py").write_text(
+        review_routing_seed_script(), encoding="utf-8"
     )
-    (project / "seed_review.py").write_text(seed_script, encoding="utf-8")
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
     )
