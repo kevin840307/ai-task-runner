@@ -1806,8 +1806,13 @@ flow:
   - seed
   - stage: review
     restart_at: execute
+    fresh_after_same_failures: 2
+    max_attempts: 3
+    on_exhausted: fail
   - stage: validate_file
     restart_at: execute
+    max_attempts: 2
+    on_exhausted: fail
 '''
 
 REVIEW_ROUTING_VALIDATOR = '''from __future__ import annotations
@@ -1915,8 +1920,13 @@ flow:
   - seed
   - stage: review
     restart_at: execute
+    fresh_after_same_failures: 2
+    max_attempts: 3
+    on_exhausted: fail
   - stage: validate_file
     restart_at: execute
+    max_attempts: 2
+    on_exhausted: fail
 '''
 
 FULL_LOOP_POLICY = """protected_paths:
