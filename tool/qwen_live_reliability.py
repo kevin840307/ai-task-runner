@@ -894,7 +894,11 @@ def assert_state_completed(
             "run failed: "
             f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
             f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
-            f"task_step={state.get('task_step')}, validator_output={validator_output[-1200:]!r}"
+            f"task_step={state.get('task_step')}, "
+            f"recovery_attempt_key={state.get('recovery_attempt_key')!r}, "
+            f"recovery_attempt_count={state.get('recovery_attempt_count')}, "
+            f"transition_previous={state.get('transition_previous')!r}, "
+            f"validator_output={validator_output[-1200:]!r}"
         )
     required = (
         work / "log.txt",
