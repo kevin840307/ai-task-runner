@@ -1,60 +1,24 @@
 from __future__ import annotations
-import csv
 
-import ast
 import json
-import os
-import re
-import shutil
 import subprocess
-import sys
-import time
 import threading
-import uuid
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from project_registry import path_key, project_file_lock
 
 try:
-    from .project_runtime_state import (
-        CHAT_STATE_FILE,
-        LAUNCH_RESERVATION_GRACE,
-        LAUNCH_STATE_FILE,
-        MESSAGES_FILE,
-        PROJECTS_PAYLOAD_CACHE_SECONDS,
-        ProjectRuntimeMixin,
-        RUNTIME_DIR,
-        UI_STATE_DIR,
-    )
+    from .project_runtime_state import ProjectRuntimeMixin
     from .workflow_builder_state import WorkflowBuilderMixin
     from .workflow_studio_state import WorkflowStudioMixin
     from .server_support import is_loopback_host
 except ImportError:
-    from project_runtime_state import (
-        CHAT_STATE_FILE,
-        LAUNCH_RESERVATION_GRACE,
-        LAUNCH_STATE_FILE,
-        MESSAGES_FILE,
-        PROJECTS_PAYLOAD_CACHE_SECONDS,
-        ProjectRuntimeMixin,
-        RUNTIME_DIR,
-        UI_STATE_DIR,
-    )
+    from project_runtime_state import ProjectRuntimeMixin
     from workflow_builder_state import WorkflowBuilderMixin
     from workflow_studio_state import WorkflowStudioMixin
     from server_support import is_loopback_host
-
-UI_STATE_DIR = ".ai-task-runner/ui"
-MESSAGES_FILE = "messages.jsonl"
-CHAT_STATE_FILE = "chat-state.json"
-LAUNCH_STATE_FILE = "launching.json"
-LAUNCH_RESERVATION_GRACE = 30.0
-RUNTIME_DIR = ".ai-task-runner"
-PROJECTS_PAYLOAD_CACHE_SECONDS = 1.5
-
 
 
 class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
