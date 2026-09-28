@@ -218,7 +218,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('-1 = keep retrying until PASS', self.js)
 
     def test_flow_routing_fields_are_editable_in_stage_modal(self):
-        for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError", "flow_fields: changedFlowFields(item)"):
+        for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError", "routes: routeMapOrNull()"):
             self.assertIn(token, self.js)
 
     def test_stage_editor_is_modal_but_workflow_studio_is_page(self):
