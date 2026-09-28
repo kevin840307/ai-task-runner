@@ -40,12 +40,17 @@ def test_custom_stage_registration_is_type_to_class_only():
     assert stage.spec.value == 7
 
 
-def test_routing_metadata_is_not_copied_to_stage():
-    stage = create_stage({"name": "write", "status": "Write", "recover": [{"name": "execute"}], "restart_at": "write", "label": "Concrete work"})
-    assert not hasattr(stage, "recover")
-    assert not hasattr(stage, "workflow")
-    assert not hasattr(stage, "restart_at")
+def test_graph_metadata_is_not_copied_to_stage_behavior():
+    stage = create_stage({
+        "name": "write",
+        "status": "Write",
+        "label": "Concrete work",
+        "scope": "task",
+        "routes": {"error": "stop"},
+    })
     assert not hasattr(stage, "label")
+    assert not hasattr(stage, "scope")
+    assert not hasattr(stage, "routes")
 
 
 def test_yaml_references_expose_only_structured_parsers():
