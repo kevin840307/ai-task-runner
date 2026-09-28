@@ -34,9 +34,9 @@ def register_stage(name: str, stage_class: type[Any]) -> None:
 
 
 def stage_catalog() -> dict[str, dict[str, Any]]:
-    from ..extensions import discover_extensions
+    from ..plugins.registry import discover_plugins
 
-    discover_extensions()
+    discover_plugins()
     return {
         name: {
             "type": name,
