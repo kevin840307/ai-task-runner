@@ -86,6 +86,8 @@ def test_default_workflow_plan_uses_static_task_scope():
     assert [item.get("scope") for item in workflow] == [
         None, "task", "task", None, None
     ]
+    assert workflow[0]["routes"] == {"replan": "planning", "error": "stop"}
+    assert workflow[1]["routes"] == {"error": "next"}
     assert workflow[2]["routes"] == {"fail": "__plan_task__"}
     assert workflow[3]["routes"] == {"fail": "planning"}
     assert workflow[4]["routes"] == {"fail": "planning"}
@@ -138,6 +140,27 @@ flow: [execute]
         encoding="utf-8",
     )
     with pytest.raises(RunnerError, match="routes.fail references unknown"):
+        load_workflow(workflow_file)
+
+
+def test_result_routes_reject_mixed_legacy_routing(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: review
+    routes:
+      fail: execute
+    restart_at: execute
+flow: [execute, review]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="cannot be combined with legacy routing"):
         load_workflow(workflow_file)
 
 
@@ -253,6 +276,8 @@ stages:
     type: probe
     status: Probe
     value: configured
+    routes:
+      pass: validate
   validate:
     type: command
     result_kind: validation
@@ -270,6 +295,8 @@ flow:
         STAGE_REGISTRY.pop("probe", None)
     assert isinstance(stage, ProbeStage)
     assert stage.spec.value == "configured"
+    workflow = load_workflow(workflow_file)
+    assert workflow[0]["routes"] == {"pass": "validate"}
 
 
 def test_topology_uses_stage_type_validator_and_task_scope(tmp_path):
@@ -1461,6 +1488,7 @@ flow: [planning, done]
     assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "done"]
     assert workflow[1]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
     assert workflow[2]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
+    assert workflow[1]["routes"] == {"error": "next"}
     assert workflow[2]["routes"] == {"fail": "__plan_task__"}
 
 
@@ -1483,6 +1511,7 @@ def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
     assert data["stages"]["ralphy"]["type"] == "task"
     assert data["stages"]["ralphy"]["fresh_session_on_start"] is True
     assert data["stages"]["ralphy"]["prompt"] == "custom/common/ralphy.md"
+    assert data["stages"]["ralphy"]["routes"] == {"error": "next"}
     validator = data["stages"]["validate_ai"]
     assert validator["type"] == "ai_validator"
     assert validator["validator"] == "ai"
