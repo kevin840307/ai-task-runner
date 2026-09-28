@@ -289,11 +289,12 @@ def test_workflow_catalog_tool_is_json_process_boundary():
 
 
 def test_ui_keeps_linear_workflow_mode_identity_explicit():
-    server = Path("ui/server.py").read_text(encoding="utf-8")
+    runtime = Path("ui/project_runtime_state.py").read_text(encoding="utf-8")
     studio = Path("ui/workflow_studio_state.py").read_text(encoding="utf-8")
+    server = Path("ui/server.py").read_text(encoding="utf-8")
     assert 'item["execution_mode"] = "linear"' in studio
-    assert 'command += ["--execution-mode", str(execution_mode or "linear")]' in server
-    assert '"execution_mode": "linear"' in server
+    assert 'command += ["--execution-mode", str(execution_mode or "linear")]' in runtime
+    assert '"execution_mode": "linear"' in runtime
     assert 'execution_mode=str(request.get("execution_mode") or "linear")' in server
 
 
