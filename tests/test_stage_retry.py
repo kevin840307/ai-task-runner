@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from runner.config.defaults import (
-    DEFAULT_PER_SESSION_ATTEMPTS,
-    DEFAULT_STAGE_RETRIES,
-)
+from runner.config.defaults import DEFAULT_PER_SESSION_ATTEMPTS, DEFAULT_STAGE_RETRIES
 from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState
@@ -23,78 +20,57 @@ class Hooks:
         return []
 
     def change_detector(self, action, tokens, fallback):
-        return fallback
+        return fallback()
 
 
 class Model:
     root = Path(".")
     extra_args = []
 
-    def __init__(self, failures):
+    def __init__(self):
         self.session_id = "session-A"
-        self.failures = list(failures)
-        self.calls = []
-
-    def ask(self, prompt, **kwargs):
-        self.calls.append(self.session_id)
-        if self.failures:
-            error = self.failures.pop(0)
-            if error is not None:
-                raise error
-        if not self.session_id:
-            self.session_id = "session-B"
-        return "ok"
 
 
-class AskStage:
-    name = "execute"
-    mode = "write"
-    actor = "executor"
-    status = "execute"
+class Stage:
+    name = "work"
+    mode = "readonly"
+    actor = "test"
+    status = "work"
     detail = ""
-    run_state = "executing"
-    retry = None
-    tolerate_restored_changes = False
+    run_state = ""
     track_changes = False
+    tolerate_restored_changes = False
     fresh_session_on_start = False
 
+    def __init__(self, results):
+        self.results = list(results)
+        self.calls: list[str] = []
+
     def run(self, ctx, previous=None):
-        return StageResult(self.name, "pass", output=ctx.ai_client.ask("work"))
+        self.calls.append(ctx.ai_client.session_id)
+        value = self.results.pop(0)
+        if isinstance(value, BaseException):
+            raise value
+        return StageResult(self.name, value)
 
     def finish(self, ctx, result):
-        if result.status == "pass":
-            ctx.save_session()
         return result
 
 
-class NoRetryStage(AskStage):
-    retry = 0
-
-
-class ThreeRetryStage(AskStage):
-    retry = 3
-
-
-class ChangedErrorStage(AskStage):
+class ConfigStage(Stage):
     def run(self, ctx, previous=None):
-        return StageResult(
-            self.name,
-            "error",
-            output="changed then failed",
-            error=RunnerError("changed then failed"),
-            changed_files=["x.txt"],
-        )
+        raise ConfigurationError("fixed configuration error")
 
 
-class ConfigErrorStage(AskStage):
-    def run(self, ctx, previous=None):
-        raise ConfigurationError("invalid fixed configuration")
-
-
-def context(tmp_path: Path, model, *, retries=DEFAULT_STAGE_RETRIES) -> StageContext:
+def context(tmp_path: Path, *, retries=DEFAULT_STAGE_RETRIES, delay=0, max_delay=0):
     state = RunState("run", "goal", str(tmp_path))
+    model = Model()
     return StageContext(
-        config=RuntimeConfig(stage_retries=retries, stage_retry_delay=0),
+        config=RuntimeConfig(
+            stage_retries=retries,
+            retry_delay=delay,
+            retry_max_delay=max_delay,
+        ),
         root=tmp_path,
         work=tmp_path / ".work",
         state=state,
@@ -107,84 +83,84 @@ def context(tmp_path: Path, model, *, retries=DEFAULT_STAGE_RETRIES) -> StageCon
     )
 
 
-def test_unattended_default_is_unlimited():
+def test_unattended_default_is_unlimited_with_two_same_session_attempts():
     assert DEFAULT_STAGE_RETRIES == -1
     assert DEFAULT_PER_SESSION_ATTEMPTS == 2
 
 
-def test_unlimited_retry_rotates_fresh_session_and_eventually_passes(tmp_path):
-    model = Model([
-        RunnerError("temporary"),
-        RunnerError("temporary"),
-        RunnerError("temporary"),
-        None,
+def test_global_retry_rotates_session_without_stage_retry_field(tmp_path):
+    stage = Stage([
+        RunnerError("one"),
+        RunnerError("two"),
+        RunnerError("three"),
+        "pass",
     ])
-    result = StageExecutor(Hooks()).run(AskStage(), context(tmp_path, model))
+    ctx = context(tmp_path)
+
+    result = StageExecutor(Hooks()).run(stage, ctx)
 
     assert result.status == "pass"
-    assert model.calls == ["session-A", "session-A", "", ""]
-    assert model.session_id == "session-B"
+    assert stage.calls == ["session-A", "session-A", "", ""]
 
 
-def test_zero_retry_means_one_attempt_only(tmp_path):
-    model = Model([RunnerError("temporary"), None])
-    result = StageExecutor(Hooks()).run(
-        NoRetryStage(),
-        context(tmp_path, model),
-    )
-
+def test_zero_global_retries_means_one_attempt(tmp_path):
+    stage = Stage([RunnerError("no retry")])
+    result = StageExecutor(Hooks()).run(stage, context(tmp_path, retries=0))
     assert result.status == "error"
-    assert model.calls == ["session-A"]
+    assert len(stage.calls) == 1
 
 
-def test_finite_retry_budget_counts_total_retries(tmp_path):
-    model = Model([
+def test_finite_global_retry_budget_is_retries_after_first_attempt(tmp_path):
+    stage = Stage([
         RunnerError("one"),
         RunnerError("two"),
         RunnerError("three"),
         RunnerError("four"),
-        None,
     ])
-    result = StageExecutor(Hooks()).run(
-        ThreeRetryStage(),
-        context(tmp_path, model),
-    )
-
+    result = StageExecutor(Hooks()).run(stage, context(tmp_path, retries=2))
     assert result.status == "error"
-    assert len(model.calls) == 4
-    assert model.calls[:2] == ["session-A", "session-A"]
-    assert model.calls[2:] == ["", ""]
+    assert len(stage.calls) == 3
 
 
 def test_configuration_error_fails_closed_without_retry(tmp_path):
-    model = Model([])
-    with pytest.raises(ConfigurationError, match="invalid fixed configuration"):
-        StageExecutor(Hooks()).run(
-            ConfigErrorStage(),
-            context(tmp_path, model),
-        )
+    with pytest.raises(ConfigurationError, match="fixed configuration"):
+        StageExecutor(Hooks()).run(ConfigStage([]), context(tmp_path))
 
 
-def test_transient_service_error_escapes_to_outer_supervisor(tmp_path):
-    error = RunnerError("HTTP 503 service unavailable")
-    error.transient = True
-    model = Model([error])
-
-    with pytest.raises(RunnerError, match="503"):
-        StageExecutor(Hooks()).run(
-            AskStage(),
-            context(tmp_path, model),
-        )
-
-    assert model.calls == ["session-A"]
-
-
-def test_changed_error_is_not_blindly_retried(tmp_path):
-    model = Model([])
-    result = StageExecutor(Hooks()).run(
-        ChangedErrorStage(),
-        context(tmp_path, model),
+def test_transient_service_errors_stay_in_same_session_and_backoff_in_seconds(
+    tmp_path, monkeypatch
+):
+    sleeps = []
+    monkeypatch.setattr(
+        "runner.workflow.stages.executor.sleep_with_heartbeat",
+        lambda seconds: sleeps.append(seconds),
     )
+    failures = []
+    for code in (429, 502, 503):
+        error = RunnerError(f"HTTP {code}")
+        error.transient = True
+        failures.append(error)
+    stage = Stage([*failures, "pass"])
+    ctx = context(tmp_path, retries=-1, delay=1, max_delay=4)
 
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == ["session-A"] * 4
+    assert sleeps == [1, 2, 4]
+
+
+def test_error_after_project_change_is_not_blindly_retried(tmp_path):
+    class Changed(Stage):
+        def run(self, ctx, previous=None):
+            return StageResult(
+                self.name,
+                "error",
+                error=RunnerError("partial side effect"),
+                changed_files=["x.txt"],
+            )
+
+    stage = Changed([])
+    result = StageExecutor(Hooks()).run(stage, context(tmp_path))
     assert result.status == "error"
     assert result.changed_files == ["x.txt"]
