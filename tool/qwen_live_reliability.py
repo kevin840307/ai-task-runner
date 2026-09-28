@@ -1794,8 +1794,9 @@ REVIEW_ROUTING_EXECUTION_PROMPT = """This Stage exercises failure routing.
 If Runner shared control does not contain Review feedback, do not inspect files, do not use
 tools, do not modify anything, and return immediately. A later one-shot seed Stage will
 deterministically force the first Review to see the incomplete state.
-When Review feedback says REVIEW_REQUIRED is missing, modify only review.txt so it contains
-READY and REVIEW_REQUIRED as two logical lines, then return immediately.
+When Runner shared control feedback from stage review says REVIEW_REQUIRED is missing,
+modify only review.txt so it contains READY and REVIEW_REQUIRED as two logical lines,
+then return immediately.
 Do not inspect unrelated files and do not touch protected files.
 """
 
