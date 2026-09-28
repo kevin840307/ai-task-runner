@@ -108,13 +108,18 @@ def _bridge_for(state: UIState):
                     )
                 elif path == "/api/studio/stage/save":
                     data = state.studio_stage_save(
-                        body.get("id", ""), body.get("stage", ""), body.get("fields", {}), body.get("hash", ""), None,
-                        flow_index=body.get("flow_index"), scope=body.get("scope", ""), flow_fields=body.get("flow_fields", {}),
+                        body.get("id", ""),
+                        body.get("stage", ""),
+                        body.get("fields", {}),
+                        body.get("hash", ""),
+                        None,
                     )
                 elif path == "/api/studio/stage/delete":
                     data = state.studio_stage_delete(
-                        body.get("id", ""), body.get("stage", ""), body.get("hash", ""), None,
-                        flow_index=body.get("flow_index"),
+                        body.get("id", ""),
+                        body.get("stage", ""),
+                        body.get("hash", ""),
+                        None,
                     )
                 elif path == "/api/studio/duplicate":
                     data = state.studio_duplicate(body.get("id", ""), body.get("name", ""), None, body.get("folder", ""))
@@ -241,7 +246,7 @@ def test_browser_crud_journey_covers_prompt_workflow_stage_search_rename_duplica
             cards.nth(1).click()
             page.locator('[data-flow-action="toggle"]').click()
             page.locator('[data-flow-action="remove"]').click()
-            page.get_by_role("button", name="Delete Definition Too").click()
+            page.get_by_role("button", name="Delete Stage").click()
             page.wait_for_timeout(150)
             assert page.locator("#visualFlowList .visual-flow-card").count() == 1
 
