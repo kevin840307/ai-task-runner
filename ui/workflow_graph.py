@@ -41,12 +41,19 @@ def build_workflow_graph(data: dict[str, Any]) -> dict[str, Any]:
         })
 
     for index in range(len(names) - 1):
-        edges.append({
-            "from": names[index],
-            "to": names[index + 1],
-            "kind": "normal",
-            "label": "PASS → next",
-        })
+        source = names[index]
+        routes = configs[source].get("routes")
+        explicit_pass = (
+            isinstance(routes, dict)
+            and str(routes.get("pass") or "").strip()
+        )
+        if not explicit_pass:
+            edges.append({
+                "from": source,
+                "to": names[index + 1],
+                "kind": "normal",
+                "label": "PASS → next",
+            })
 
     terminals: set[str] = set()
     for name, cfg in configs.items():
