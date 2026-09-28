@@ -13,7 +13,6 @@ from runner.backends.registry import backend_names
 from runner.config.defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
-    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
@@ -63,9 +62,6 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     )
     value.add_argument(
-        "--api-wait-timeout", type=float, default=DEFAULT_API_WAIT_TIMEOUT
-    )
-    value.add_argument(
         "--watchdog-interval", type=float, default=DEFAULT_WATCHDOG_INTERVAL
     )
     value.add_argument(
@@ -77,9 +73,8 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_STAGE_RETRIES,
         help="technical Stage retries; -1 keeps retrying with Fresh Session rotation",
     )
-    value.add_argument("--retry-delay", type=float, default=2)
-    value.add_argument("--retry-wait", type=float, default=5)
-    value.add_argument("--retry-max-wait", type=float, default=300)
+    value.add_argument("--retry-delay", type=float, default=5, help="seconds before retrying a technical failure")
+    value.add_argument("--retry-max-delay", type=float, default=300, help="maximum seconds between transient service retries")
 
     value.add_argument(
         "--final-ai-validations",
