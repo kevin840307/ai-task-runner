@@ -3,16 +3,15 @@ stages:
     mode: write
 
   check:
-    fresh_after_same_failures: 2
-    repeat: 3
-    recover: [fix]
-
-  fix:
-    mode: write
+    type: review
+    routes:
+      fail: work
 
   final:
     type: ai_validator
     validator: ai
+    routes:
+      fail: work
 
 flow:
   - work
