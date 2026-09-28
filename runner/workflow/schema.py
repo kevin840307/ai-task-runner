@@ -135,9 +135,13 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} fresh_after_same_failures must be a positive integer"
         )
-    if fresh_after_same_failures is not None and not values.get("recover"):
+    if (
+        fresh_after_same_failures is not None
+        and not values.get("recover")
+        and values.get("restart_at") is None
+    ):
         raise RunnerError(
-            f"workflow stage {name} fresh_after_same_failures requires recover"
+            f"workflow stage {name} fresh_after_same_failures requires recover or restart_at"
         )
     repeat = values.get("repeat")
     if repeat is not None and (
@@ -155,15 +159,17 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} max_attempts must be a positive integer"
         )
-    if max_attempts is not None and not values.get("recover"):
-        raise RunnerError(f"workflow stage {name} max_attempts requires recover")
+    if (
+        max_attempts is not None
+        and not values.get("recover")
+        and values.get("restart_at") is None
+    ):
+        raise RunnerError(
+            f"workflow stage {name} max_attempts requires recover or restart_at"
+        )
     if max_attempts is not None and repeat is not None:
         raise RunnerError(
             f"workflow stage {name} cannot combine max_attempts with repeat"
-        )
-    if max_attempts is not None and values.get("restart_at") is not None:
-        raise RunnerError(
-            f"workflow stage {name} cannot combine max_attempts with restart_at"
         )
     on_exhausted = values.get("on_exhausted")
     if on_exhausted not in {None, "continue", "fail"}:
