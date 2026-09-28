@@ -119,7 +119,6 @@ flow:
 class TaskProducerSpec:
     name: str
     status: str = "Task Producer"
-    retry: int | None = 0
     produces: str = "tasks"
 
 
@@ -140,7 +139,6 @@ class TaskProducerStage:
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
-        self.retry = spec.retry
 
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         return StageResult(
@@ -179,6 +177,7 @@ stages:
   execute:
     type: {consumer_name}
     message: TASK_CONSUMED
+    scope: task
 flow:
   - discover
   - execute
