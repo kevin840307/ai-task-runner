@@ -364,13 +364,10 @@ class WorkflowStudioMixin:
                 "prompt": str(config.get("prompt") or ""),
             })
         flow_raw = data.get("flow") or []
-        flow = []
-        if isinstance(flow_raw, list):
-            for item in flow_raw:
-                if isinstance(item, str):
-                    flow.append({"stage": item})
-                elif isinstance(item, dict):
-                    flow.append(dict(item))
+        flow = [
+            item for item in flow_raw
+            if isinstance(item, str) and item.strip()
+        ] if isinstance(flow_raw, list) else []
         return {
             "id": file_id,
             "name": path.name,
@@ -401,14 +398,11 @@ class WorkflowStudioMixin:
                 raise ValueError(f"Workflow YAML is invalid: {exc}") from exc
             if not isinstance(data, dict):
                 raise ValueError("Workflow YAML root must be a mapping")
-            normalized = []
-            for item in flow if isinstance(flow, list) else []:
-                if isinstance(item, str) and item.strip():
-                    normalized.append(item.strip())
-                elif isinstance(item, dict) and str(item.get("stage", "")).strip():
-                    clean = dict(item)
-                    clean["stage"] = str(clean["stage"]).strip()
-                    normalized.append(clean if len(clean) > 1 else clean["stage"])
+            normalized = [
+                item.strip()
+                for item in flow if isinstance(flow, list)
+                if isinstance(item, str) and item.strip()
+            ]
             # Reuse the canonical Flow block writer instead of emitting an
             # indentless sequence here.  The Visual editor must never turn a
             # valid Workflow into malformed YAML merely by reordering Stages.
@@ -425,18 +419,16 @@ class WorkflowStudioMixin:
         expected_hash: str,
         project: Path | None = None,
         *,
-        flow_index: int | None = None,
-        scope: str = "",
-        flow_fields: dict | None = None,
         validate_only: bool = False,
     ) -> dict:
-        """Patch or validate direct Stage/Flow fields without rewriting unrelated YAML/comments."""
+        """Patch or validate one n8n-style Stage node."""
         with self._edit_lock:
             self._require_editable()
             path, kind, scope_name = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope_name)
             if kind != "workflow":
                 raise ValueError("Stage editor is available only for workflow YAML")
+
             content = path.read_text(encoding="utf-8")
             self._require_hash(content, expected_hash)
             data = self._load_workflow_yaml(content)
@@ -452,53 +444,41 @@ class WorkflowStudioMixin:
                 "fresh_session_each_run", "fresh_session_on_start",
                 "structured_retries", "structured_fresh_retries",
                 "retry", "runs", "required_passes", "min_tasks", "timeout",
-                "clean_work",
+                "clean_work", "label", "scope", "routes",
             }
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
-            clean: dict = {}
+            clean = {}
             for key, value in fields.items():
                 if key not in allowed:
                     raise ValueError(f"Unsupported Stage field: {key}")
                 clean[key] = value
-            self._validate_stage_editor_fields(clean)
-            updated = self._patch_stage_fields(content, stage_name, clean)
-            parsed_after_fields = self._load_workflow_yaml(updated)
-            final_stage = (parsed_after_fields.get("stages") or {}).get(stage_name, {}) if isinstance(parsed_after_fields, dict) else {}
-            if isinstance(final_stage, dict) and final_stage.get("type") == "command" and not final_stage.get("command"):
-                raise ValueError("Command Stage requires a command")
 
-            if flow_index is not None:
-                parsed = self._load_workflow_yaml(updated)
-                flow = parsed.get("flow") if isinstance(parsed, dict) else None
-                if not isinstance(flow, list) or not 0 <= flow_index < len(flow):
-                    raise ValueError("Flow step no longer exists; reload Workflow Studio")
-                current = flow[flow_index]
-                current_name = current if isinstance(current, str) else str(current.get("stage", "")) if isinstance(current, dict) else ""
-                if current_name != stage_name:
-                    raise ValueError("Flow changed on disk; reload Workflow Studio")
-                row = dict(current) if isinstance(current, dict) else {"stage": stage_name}
-                row["stage"] = stage_name
-                updates = dict(flow_fields or {})
-                updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "routes", "status", "prompt", "name"}
-                unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
-                if unknown_flow:
-                    raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
-                self._validate_flow_editor_fields(updates, flow, flow_index, final_stage)
-                for key, value in updates.items():
-                    if value in (None, ""):
-                        row.pop(key, None)
-                    else:
-                        row[key] = value
-                flow[flow_index] = row if len(row) > 1 else stage_name
-                updated = self._replace_flow_block(updated, flow)
+            self._validate_stage_editor_fields(clean)
+            self._validate_node_editor_fields(clean, data)
+            updated = self._patch_stage_fields(content, stage_name, clean)
+
+            parsed = self._load_workflow_yaml(updated)
+            final_stage = (parsed.get("stages") or {}).get(stage_name, {})
+            if (
+                isinstance(final_stage, dict)
+                and final_stage.get("type") == "command"
+                and not final_stage.get("command")
+            ):
+                raise ValueError("Command Stage requires a command")
 
             validation = self._validate_workflow_before_write(path, updated)
             if validate_only:
-                return {"ok": True, "summary": "Validation passed", "output": validation.get("output", "")[-20000:]}
+                return {
+                    "ok": True,
+                    "summary": "Validation passed",
+                    "output": validation.get("output", "")[-20000:],
+                }
             self._atomic_write(path, updated)
-            return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
+            return {
+                "file": self.studio_read(file_id, project),
+                "visual": self.studio_visual(file_id, project),
+            }
 
     def studio_stage_add(
         self,
@@ -599,44 +579,35 @@ class WorkflowStudioMixin:
             raise ValueError("Stage timeout must be a non-negative number")
 
     @staticmethod
-    def _validate_flow_editor_fields(updates: dict, flow: list, index: int, stage: dict) -> None:
+    def _validate_node_editor_fields(updates: dict, workflow: dict) -> None:
         scope = updates.get("scope")
         if scope not in (None, "", "task"):
-            raise ValueError("Flow scope must be task when specified")
-        for key in ("label", "status", "prompt", "name"):
-            value = updates.get(key)
-            if value is not None and (not isinstance(value, str) or not value.strip()):
-                raise ValueError(f"Flow {key} must be a non-empty string")
+            raise ValueError("Stage scope must be task when specified")
+        label = updates.get("label")
+        if label is not None and (not isinstance(label, str) or not label.strip()):
+            raise ValueError("Stage label must be a non-empty string")
 
         routes = updates.get("routes")
         if routes is None:
             return
         if not isinstance(routes, dict) or not routes:
-            raise ValueError("Flow routes must be a non-empty object")
+            raise ValueError("Stage routes must be a non-empty object")
         unknown = sorted(str(key) for key in routes if key not in {"pass", "fail", "error"})
         if unknown:
             raise ValueError(
-                "Flow routes supports only pass/fail/error; unknown: "
+                "Stage routes supports only pass/fail/error; unknown: "
                 + ", ".join(unknown)
             )
 
-        allowed_targets = {"next", "done", "stop"}
-        for item in flow:
-            if isinstance(item, str):
-                name = item
-            elif isinstance(item, dict):
-                name = str(item.get("name") or item.get("stage") or "")
-            else:
-                name = ""
-            if name:
-                allowed_targets.add(name)
-
+        stages = workflow.get("stages") if isinstance(workflow, dict) else {}
+        targets = set(stages) if isinstance(stages, dict) else set()
+        targets.update({"next", "done", "stop"})
         for status, target in routes.items():
             if not isinstance(target, str) or not target.strip():
-                raise ValueError(f"Flow routes.{status} must be a non-empty target")
-            if target not in allowed_targets:
+                raise ValueError(f"Stage routes.{status} must be a non-empty target")
+            if target not in targets:
                 raise ValueError(
-                    f"Flow routes.{status} references unknown Flow stage: {target}"
+                    f"Stage routes.{status} references unknown Stage: {target}"
                 )
 
     def _require_editable(self) -> None:
