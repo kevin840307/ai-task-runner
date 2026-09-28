@@ -104,7 +104,7 @@ class UIStateTests(unittest.TestCase):
             args=[], returncode=0,
             stdout=json.dumps({"ok": True, "status": "pass", "checks": []}), stderr=""
         )
-        with patch("ui.server.subprocess.run", return_value=completed) as run:
+        with patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
             result = self.state.environment_check()
         self.assertTrue(result["ok"])
         command = run.call_args.args[0]
@@ -118,7 +118,7 @@ class UIStateTests(unittest.TestCase):
             stdout='"python.exe","123","Console","1","10,000 K"\n"qwen.exe","456","Console","1","20,000 K"\n',
             stderr="",
         )
-        with patch("ui.server.os.name", "nt"), patch("ui.server.subprocess.run", return_value=completed) as run:
+        with patch("ui.project_runtime_state.os.name", "nt"), patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
             pids = self.state._process_snapshot()
         self.assertEqual(pids, {123, 456})
         run.assert_called_once()
@@ -1606,7 +1606,7 @@ flow: [validate]
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(workflow.read_text(encoding="utf-8"), encoding="utf-8")
             return subprocess.CompletedProcess(args=[], returncode=0, stdout='{"ok":true}', stderr="")
-        with patch.object(self.state, "_builder_validate_draft", return_value={"ok": True, "output": "PASS"}), patch("ui.server.subprocess.run", side_effect=fake_publish):
+        with patch.object(self.state, "_builder_validate_draft", return_value={"ok": True, "output": "PASS"}), patch("ui.project_runtime_state.subprocess.run", side_effect=fake_publish):
             saved = self.state.studio_generate_save(None, job_id, "generated", "generated", "custom")
         self.assertTrue(target.is_file()); self.assertEqual(saved["item"]["group"], "Custom"); self.assertFalse(root.exists())
         self.assertFalse((self.root / "ui" / "data" / "workflow-builder" / "active.json").exists())
@@ -1622,7 +1622,7 @@ flow: [validate]
         (root / "status.json").write_text(json.dumps({"state": "ready", "result": result, "runtime_cleared": True}), encoding="utf-8")
         self.state._builder_set_active(job_id)
         target = self.root / "runner" / "workflow" / "custom" / "generated-fail" / "generated-fail.workflow.yaml"
-        with patch.object(self.state, "_builder_validate_draft", side_effect=ValueError("Workflow draft validation failed: workflow dry-run failed")), patch("ui.server.subprocess.run") as publish:
+        with patch.object(self.state, "_builder_validate_draft", side_effect=ValueError("Workflow draft validation failed: workflow dry-run failed")), patch("ui.project_runtime_state.subprocess.run") as publish:
             with self.assertRaisesRegex(ValueError, "dry-run failed"):
                 self.state.studio_generate_save(None, job_id, "generated-fail", "generated-fail", "custom")
         self.assertFalse(target.exists())
@@ -1707,7 +1707,7 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
 
     def test_project_list_uses_one_process_snapshot_for_all_projects(self) -> None:
         with patch.object(self.state, "_process_snapshot", return_value={111, 222}) as snapshot, \
-             patch("ui.server.subprocess.run") as process_run:
+             patch("ui.project_runtime_state.subprocess.run") as process_run:
             rows = self.state.projects()
         snapshot.assert_called_once_with()
         process_run.assert_not_called()
@@ -1740,19 +1740,19 @@ def test_windows_pid_probe_failure_does_not_report_process_dead(monkeypatch):
     def fail(*args, **kwargs):
         raise subprocess.TimeoutExpired(args[0] if args else "tasklist", 2)
 
-    monkeypatch.setattr("ui.server.os.name", "nt", raising=False)
-    monkeypatch.setattr("ui.server.subprocess.run", fail)
+    monkeypatch.setattr("ui.project_runtime_state.os.name", "nt", raising=False)
+    monkeypatch.setattr("ui.project_runtime_state.subprocess.run", fail)
 
     assert UIState._pid_alive(12345) is True
 
 
 def test_process_snapshot_windows_branch_has_csv_import():
-    """Regression: Windows process snapshot must not fail with NameError for csv."""
+    """Regression: Windows process snapshot owner must import csv."""
     import ast
     from pathlib import Path
 
-    server_path = Path(__file__).resolve().parents[1] / "server.py"
-    source = server_path.read_text(encoding="utf-8")
+    runtime_path = Path(__file__).resolve().parents[1] / "project_runtime_state.py"
+    source = runtime_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     imported = set()
     for node in tree.body:
@@ -1760,7 +1760,7 @@ def test_process_snapshot_windows_branch_has_csv_import():
             imported.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module)
-    assert "csv" in imported, "ui/server.py uses csv in Windows process snapshot but does not import csv"
+    assert "csv" in imported, "ui/project_runtime_state.py uses csv in Windows process snapshot but does not import csv"
 
 
 class WorkflowRequirementCacheContractTests(unittest.TestCase):
@@ -1827,7 +1827,7 @@ def test_workflow_catalog_is_loaded_through_standalone_tool(tmp_path):
     completed = subprocess.CompletedProcess(
         args=[], returncode=0, stdout=json.dumps(payload), stderr=""
     )
-    with patch("ui.server.subprocess.run", return_value=completed) as run:
+    with patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
         result = state.workflow_catalog()
     assert "dynamic_agent" in result["stage_types"]
     command = run.call_args.args[0]
@@ -1851,7 +1851,7 @@ def test_execution_mode_catalog_is_loaded_through_standalone_tool(tmp_path):
     completed = subprocess.CompletedProcess(
         args=[], returncode=0, stdout=json.dumps(payload), stderr=""
     )
-    with patch("ui.server.subprocess.run", return_value=completed) as run:
+    with patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
         result = state.execution_mode_catalog()
     assert "dynamic_handoff" in result
     command = run.call_args.args[0]
