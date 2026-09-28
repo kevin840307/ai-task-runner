@@ -8,8 +8,8 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-FLOW_FIELDS = frozenset({"routes", "label", "scope"})
-META_FIELDS = frozenset({"name", "type", "validator", *FLOW_FIELDS})
+NODE_FIELDS = frozenset({"routes", "label", "scope"})
+META_FIELDS = frozenset({"name", "type", "validator", *NODE_FIELDS})
 
 
 def validate_stage(name: str, values: dict[str, Any]) -> None:
