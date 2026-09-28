@@ -1,233 +1,319 @@
 # AI Task Runner Architecture
 
-## Current production scope
+## Goal
 
-The current production routing strategy is **Linear Workflow with rollback/loop**.
-Dynamic handoff and discussion routing are future extensions only; they must reuse
-this runtime instead of creating separate runners.
+Keep the runtime small enough to understand end-to-end while still supporting:
 
-### execution_mode compatibility
+- 24H unattended execution
+- durable resume
+- semantic closed loops
+- custom Stages
+- Plan/custom task producers
+- n8n-style visual Stage wiring
+- CLI execution
+- YAML List batch execution
+- future dynamic or parallel agent scheduling
 
-The public `execution_mode` request/state field currently accepts only `linear`.
-It is compatibility/identity metadata, not a registry for alternate Runner
-implementations.
-
-Production bootstrap always enters `WorkflowRunner`. Future Dynamic/Discussion
-behavior must be introduced as RoutingStrategy behavior behind `FlowEngine`, not
-through `register_execution_mode(... runner=...)` or a second runtime.
-
-## Core runtime
+The core runtime is intentionally small:
 
 ```text
-Chat / CLI / API
-       |
-       v
- Workflow/Profile
-       |
-       v
- WorkflowRunner
-   |-- FlowEngine
-   |    '-- LinearRouting
-   |         '-- result edge: status -> target
-   |
-   |-- StageExecutor
-   |    |-- technical retry
-   |    |-- timeout / watchdog integration
-   |    |-- same-session retry
-   |    '-- fresh-session recovery
-   |
-   '-- StateStore
-        |-- durable state
-        |-- checkpoint
-        '-- resume
+                     Workflow Graph
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+       n8n UI           CLI          YAML List
+          │              │              │
+          └──────────────┴──────────────┘
+                         │
+                  same RunRequest
+                         │
+                  WorkflowRunner
+                         │
+                  FlowEngine
+                   /       \
+                  /         \
+         StageExecutor     StateStore
+               │
+             Stage
 ```
 
-The main reading path for runtime behavior should remain:
+UI, CLI and YAML List are adapters only. They must not own routing/runtime logic.
 
-1. `runner/workflow_runner.py`
-2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/linear_routing.py`
-4. `runner/workflow/stages/executor.py`
-5. `runner/runtime/run_state.py`
+## Workflow model
 
-Compatibility modules such as `task_runner.py` and `workflow/pipeline.py` should
-contain re-exports only and no new runtime behavior.
+A Workflow contains Stage nodes and result edges.
 
-## Stage is the execution unit
+A Stage returns exactly one status:
 
-Plan, Execute, Review, Validator, Command and future role-based Agents are all
-Stages.
+- `pass`
+- `fail`
+- `error`
 
-A Stage:
-- receives `StageContext`
-- performs one responsibility
-- returns `StageResult`
-- does not decide the final workflow destination
-- does not directly mutate the Linear routing cursor
+Routing rules:
 
-Future Coder/Reviewer/Architect/Moderator agents should normally be AI Stage
-configurations with different role/prompt/session/tool settings, not separate
-runtime frameworks.
-
-## Reliability ownership
-
-### StageExecutor: technical execution
-
-`StageExecutor` owns failures of **how a Stage was executed**:
-
-- transient AI/API/CLI failure
-- same-session retry
-- timeout handling
-- Fresh Session escalation
-- hooks and protected-path enforcement
-- technical failure bookkeeping
-
-A technical retry attempts the same logical Stage. It does not choose another
-workflow Stage. The unattended default is unlimited overall recovery (`-1`),
-while one Session remains bounded to two attempts before Fresh Session rotation.
-Deterministic configuration/state failures still fail closed.
-
-### FlowEngine: semantic workflow result
-
-`FlowEngine` owns **what happens after a Stage produced a semantic result**.
-
-The canonical contract is intentionally small:
-
-- PASS -> next (implicit) or an explicit `routes.pass`
-- FAIL -> `routes.fail`
-- ERROR -> `routes.error` only after StageExecutor exhausts technical recovery
-- REPLAN -> `routes.replan`
-- `done` / `stop` are terminal targets
+- PASS defaults to the next Stage.
+- FAIL defaults to stop.
+- ERROR defaults to stop.
+- `routes` may override a result with `next`, `done`, `stop`, or another Stage.
 
 Example:
 
 ```yaml
-review:
-  type: review
-  routes:
-    fail: execute
+stages:
+  execute:
+    type: task
+
+  review:
+    type: review
+    routes:
+      fail: execute
+
+flow:
+  - execute
+  - review
 ```
 
-Legacy `recover` / `restart_at` / `repeat` remain compatibility syntax while
-existing workflows migrate. New simple closed loops should prefer `routes`.
-`SemanticRoutingPolicy` is therefore a compatibility policy, not the preferred
-new workflow model.
+There is no separate runtime concept for:
+- repair
+- recover
+- restart_at
+- repeat
+- max_attempts
+- on_exhausted
+- replan
+- execution_mode
 
-### LinearRouting: cursor/navigation
+## n8n-style UI contract
 
-`LinearRouting` is the only owner of Linear cursor mutation:
+The Graph Designer edits the same Workflow graph used by CLI/runtime.
 
-- `workflow_position`
-- `task_step`
-- restart target
-- task-block restart
-- task-block completion
+UI concepts:
 
-Reducers in `reducers.py` update semantic/task data only.
+- Stage = node
+- normal flow order = PASS -> next
+- `routes` = explicit result edge
+- node panel = Stage properties
+- edge editor = pass/fail/error target
+- task scope = node invocation property
+- technical retry is not drawn as an edge
 
-## Durable transition context
+The UI should support:
+- drag Stage from catalog
+- connect nodes
+- edit Stage parameters
+- edit result edges
+- delete node/edge
+- save only after real loader/schema validation
+- load System/Custom/Project workflows through one format
 
-The previous Stage result needed by the next Stage is persisted in
-`RunState.transition_previous`.
+The UI must not invent a second graph model.
 
-This is intentionally a single latest transition rather than an unbounded
-history. It allows resumed execution to recover the previous Stage context
-instead of always restarting with `previous=None`.
+## CLI contract
 
-Completion clears this transition context.
+CLI selects:
+- project
+- prompt/goal
+- workflow
+- validator/backend/runtime overrides
 
-The long-term correctness target is:
+CLI then creates one `RunRequest` and uses the same runtime as UI/API.
+
+There is no mode selector.
+
+Example shape:
+
+```text
+ai_task_runner.py
+  --goal ...
+  --workflow workflow.yaml
+  --stage-retries -1
+```
+
+CLI flags must map directly to RuntimeConfig or Workflow inputs. No CLI-only
+routing semantics.
+
+## YAML List contract
+
+YAML List is batch input only.
+
+Each item becomes one child RunRequest/RuntimeConfig and runs the same
+WorkflowRunner.
+
+```text
+YAML List
+   |
+item 1 -> WorkflowRunner
+item 2 -> WorkflowRunner
+item 3 -> WorkflowRunner
+```
+
+YAML List owns:
+- item ordering
+- per-item prompt/project/workflow/runtime overrides
+- child work directory
+
+It does not own:
+- routing
+- retry state machine
+- recovery policy
+- completion shortcuts
+
+## FlowEngine
+
+FlowEngine owns only Workflow progress:
+
+1. read current Stage from durable cursor
+2. execute Stage
+3. persist latest StageResult
+4. resolve result target
+5. move cursor
+6. repeat until done or stop
+
+It also owns the minimal task-scope iterator used by Plan/custom task producers.
+
+It does not own:
+- backend retry
+- session recovery
+- watchdog
+- file protection
+- subprocess policy
+- UI behavior
+
+## StageExecutor
+
+StageExecutor owns technical reliability:
+
+- hooks/safety
+- changed-file tracking
+- timeout/backend execution
+- same-session retry
+- Fresh Session rotation
+- unlimited technical recovery by default
+
+Default unattended behavior:
+
+```text
+Stage attempt
+   |
+same-session retry
+   |
+Fresh Session
+   |
+same-session retry
+   |
+Fresh Session
+   |
+...
+```
+
+`stage_retries=-1` means continue technical recovery.
+
+Deterministic configuration/state failures fail closed.
+Transient service/backend failures may escape to the outer supervisor, which
+resumes durable state.
+
+Technical retry is never a Workflow edge.
+
+## Stage
+
+Stage is the only execution/agent extension unit.
+
+Built-ins:
+- Base AI Stage
+- Plan Stage
+- Task Stage
+- Review Stage
+- AI Validator Stage
+- Command Stage
+
+Custom behavior uses `register_stage()`.
+
+Plan is simply a Stage that produces `Task[]`.
+Any custom Stage may also declare:
+
+```yaml
+produces: tasks
+```
+
+The same task-scoped Workflow executes those tasks.
+
+No hidden Plan nodes are injected.
+
+## Durable state
+
+State contains only facts required to resume useful work:
+
+- run identity / goal / project
+- tasks + current task
+- workflow position
+- task-scope position
+- AI session id
+- latest StageResult transition
+- workflow fingerprint
+- runtime status / activity timestamps
+- completion state
+
+Retry/recovery counters are attempt-local, not a second durable state machine.
+
+Correctness target:
 
 ```text
 uninterrupted run
 ==
-kill at any committed Stage boundary + resume
+crash at committed Stage boundary + resume
 ```
 
-for routing, shared-control feedback and final artifacts.
+## Future dynamic agents
 
-## State ownership
+Do not add a mode framework now.
 
-For now there is still one durable `RunState` and one authoritative
-`state.json` commit point. Do not prematurely split persistence across files.
+When Dynamic Handoff is required, reuse:
+- Stage
+- StageExecutor
+- StateStore
+- Workflow assets
+- UI Stage catalog
+- safety/session/backend infrastructure
 
-Fields should conceptually belong to:
-- common run lifecycle
-- Stage/session execution state
-- Linear cursor/task state
-- latest transition context
-- legacy recovery counters only while compatibility syntax remains
+Only scheduling changes.
 
-A later schema migration may group these fields structurally after ownership is
-stable and covered by resume tests.
-
-## UI contract
-
-The product entry remains:
+Conceptually:
 
 ```text
-select Workflow/Profile -> enter prompt -> Run
+StageResult / bounded handoff intent
+            |
+     Dynamic Scheduler
+            |
+        next Stage
 ```
 
-Do not add a separate mode selector to Chat.
+The scheduler should remain small and must not duplicate StageExecutor.
 
-The Workflow/Profile should eventually carry routing/editor metadata so the same
-Graph Designer can expose the right controls automatically.
+The same Graph Designer should represent available Stage roles and allowed
+handoff targets.
 
-Current Linear UI concepts:
-- Stage = node
-- `routes` result transitions = normal workflow edges
-- technical retry remains a StageExecutor property and is not a workflow edge
-- Stage settings = node properties
-- legacy restart/recover routing remains visible during migration
+## Future parallel agents
 
-Current UI ownership:
-- `ui/server.py`: composition + HTTP transport only
-- `ui/project_runtime_state.py`: project lifecycle, runtime/process/chat state
-- `ui/workflow_studio_state.py`: Workflow Studio assets, validation, graph/editor operations
-- `ui/workflow_builder_state.py`: AI workflow generation/builder state
+Parallel agents also reuse Stage.
 
-Do not move project/runtime or Studio implementation back into `server.py`.
-Patch/tests should target the module that owns the behavior.
+Default rules:
+- multiple read-only Stages may run concurrently
+- only one writer owns a project/worktree
+- parallel writers require isolated worktrees
+- merge/reconcile is explicit
+- parallel scheduling must not duplicate retry/session/runtime code
 
-Future routing strategies should extend these concepts before introducing a
-separate editor.
-
-## Extension rules
-
-When adding a new Stage:
-1. Prefer configuration/spec over a new runtime class when behavior is the same.
-2. Keep routing decisions out of the Stage.
-3. Reuse `StageExecutor` reliability behavior.
-4. Add deterministic routing tests.
-
-When adding a future RoutingStrategy:
-1. Reuse `WorkflowRunner`.
-2. Reuse `StageExecutor`.
-3. Reuse `StateStore`.
-4. Add only strategy-specific routing state.
-5. Do not copy Linear runtime code.
+The UI may later show parallel branches, but the node type remains Stage.
 
 ## Maintainability rules
 
-- One concept has one primary owner.
-- New production behavior goes into canonical modules, not compatibility shims.
-- Avoid long-lived old/new dual paths.
-- Prefer a few clear domain modules over many tiny manager/helper classes.
-- Review production files around 500+ lines for mixed responsibilities.
-- Review functions around 80+ lines for separable domain steps.
-- Do not split code solely to satisfy line counts.
-- Names should describe domain responsibility rather than implementation history.
-
-## Current compatibility names
-
-These remain temporarily to avoid breaking callers:
-
-- `TaskRunner` -> `WorkflowRunner`
-- `Pipeline` -> `FlowEngine`
-- `RecoveryPolicy` -> `SemanticRoutingPolicy`
-- `workflow/rules.py` -> `workflow/reducers.py`
-- `workflow/recovery.py` -> `workflow/semantic_routing.py`
-- `workflow/routing.py` -> `workflow/linear_routing.py`
-
-New code should use the canonical names.
+1. Prefer deleting concepts over compatibility.
+2. One behavior has one owner.
+3. UI/CLI/YAML List are adapters, never runtimes.
+4. No hidden Workflow nodes.
+5. No duplicate graph/routing models.
+6. No compatibility aliases for removed APIs.
+7. Keep FlowEngine focused on scheduling/cursor state.
+8. Keep StageExecutor focused on reliable Stage execution.
+9. Future agent models must reuse Stage.
+10. A new abstraction must remove more code/complexity than it adds.
