@@ -1147,23 +1147,37 @@ class WorkflowStudioTests(unittest.TestCase):
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
         result = self.state.studio_stage_save(
-            item["id"], "review",
+            item["id"],
+            "review",
             {
-                "status": "Reviewing", "run_state": "reviewing", "actor": "ai", "mode": "readonly",
-                "timeout": 45, "prompt": "stages/execution.md", "continuation_prompt": "stages/continue.md",
-                "instructions": "Be strict", "detail": "Review result", "session_key": "review_client",
-                "recover": ["repair"], "retry": 2, "structured_retries": 1, "structured_fresh_retries": 1,
-                "skip_on_error": False, "fresh_session_on_start": True, "fresh_session_each_run": True,
-                "track_changes": True, "tolerate_restored_changes": True, "allow_project_read": True,
-                "clean_work": ["validator-reports"],
+                "status": "Reviewing",
+                "run_state": "reviewing",
+                "actor": "ai",
+                "mode": "readonly",
+                "timeout": 45,
+                "prompt": "stages/execution.md",
+                "continuation_prompt": "stages/continue.md",
+                "instructions": "Be strict",
+                "detail": "Review result",
+                "session_key": "review_client",
+                "retry": 2,
+                "structured_retries": 1,
+                "structured_fresh_retries": 1,
+                "fresh_session_on_start": True,
+                "fresh_session_each_run": True,
+                "track_changes": True,
+                "tolerate_restored_changes": True,
+                "allow_project_read": True,
             },
-            opened["hash"], self.project, flow_index=0, scope="",
+            opened["hash"],
+            self.project,
+            flow_index=0,
+            scope="",
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
         stage = data["stages"]["review"]
         self.assertEqual(stage["status"], "Reviewing")
         self.assertEqual(stage["prompt"], "stages/execution.md")
-        self.assertEqual(stage["recover"], ["repair"])
         self.assertTrue(stage["fresh_session_each_run"])
         self.assertEqual(stage["structured_fresh_retries"], 1)
         self.assertEqual(data["flow"], ["review"])
@@ -1174,46 +1188,42 @@ class WorkflowStudioTests(unittest.TestCase):
             "stages:\n  review:\n    type: review\n    status: Old\n    # keep field comment\n    retry: -1\nflow:\n  - review\n",
             encoding="utf-8",
         )
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        result = self.state.studio_stage_save(item["id"], "review", {"status": "New"}, opened["hash"], self.project)
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_save(
+            item["id"], "review", {"status": "New"}, opened["hash"], self.project
+        )
         self.assertIn("    # keep field comment\n", result["file"]["content"])
         self.assertIn("    retry: -1\n", result["file"]["content"])
 
     def test_stage_save_accepts_retry_minus_one_and_parser(self) -> None:
-        self.workflow.write_text("stages:\n  review:\n    type: review\nflow:\n  - review\n", encoding="utf-8")
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        result = self.state.studio_stage_save(item["id"], "review", {"retry": -1, "parser": "review"}, opened["hash"], self.project)
-        stage = __import__("yaml").safe_load(result["file"]["content"])["stages"]["review"]
-        self.assertEqual(stage["retry"], -1); self.assertEqual(stage["parser"], "review")
-
-    def test_stage_save_updates_flow_routing_fields_without_polluting_stage_definition(self) -> None:
         self.workflow.write_text(
-            "stages:\n  review:\n    type: review\n    recover: [review]\nflow:\n  - review\n  - review\n", encoding="utf-8"
+            "stages:\n  review:\n    type: review\nflow:\n  - review\n",
+            encoding="utf-8",
         )
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
         result = self.state.studio_stage_save(
-            item["id"], "review", {}, opened["hash"], self.project, flow_index=1, scope="task",
-            flow_fields={"label": "retry review", "restart_at": "review", "repeat": 2, "fresh_after_same_failures": 1},
+            item["id"],
+            "review",
+            {"retry": -1, "parser": "review"},
+            opened["hash"],
+            self.project,
         )
-        data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertNotIn("label", data["stages"]["review"]); self.assertNotIn("repeat", data["stages"]["review"])
-        self.assertEqual(data["flow"][1]["scope"], "task")
-        self.assertEqual(data["flow"][1]["label"], "retry review")
-        self.assertEqual(data["flow"][1]["restart_at"], "review")
-        self.assertEqual(data["flow"][1]["repeat"], 2)
-        self.assertEqual(data["flow"][1]["fresh_after_same_failures"], 1)
+        stage = __import__("yaml").safe_load(result["file"]["content"])["stages"]["review"]
+        self.assertEqual(stage["retry"], -1)
+        self.assertEqual(stage["parser"], "review")
 
-    def test_stage_save_can_override_recover_per_flow_invocation(self) -> None:
+    def test_stage_save_updates_result_routes_without_polluting_stage_definition(self) -> None:
         self.workflow.write_text(
             "stages:\n"
+            "  work:\n"
+            "    type: base\n"
+            "    prompt: stages/execution.md\n"
             "  review:\n"
             "    type: review\n"
-            "    recover: [fallback]\n"
-            "  fallback:\n"
-            "    type: task\n"
-            "  targeted:\n"
-            "    type: task\n"
             "flow:\n"
+            "  - work\n"
             "  - review\n",
             encoding="utf-8",
         )
@@ -1225,48 +1235,56 @@ class WorkflowStudioTests(unittest.TestCase):
             {},
             opened["hash"],
             self.project,
-            flow_index=0,
+            flow_index=1,
             flow_fields={
-                "recover": ["targeted"],
-                "max_attempts": 2,
-                "on_exhausted": "fail",
+                "label": "Review result",
+                "routes": {"fail": "work", "error": "stop"},
             },
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertEqual(data["stages"]["review"]["recover"], ["fallback"])
-        self.assertEqual(data["flow"][0]["recover"], ["targeted"])
-        self.assertEqual(data["flow"][0]["max_attempts"], 2)
+        self.assertNotIn("label", data["stages"]["review"])
+        self.assertNotIn("routes", data["stages"]["review"])
+        self.assertEqual(data["flow"][1]["label"], "Review result")
+        self.assertEqual(
+            data["flow"][1]["routes"],
+            {"fail": "work", "error": "stop"},
+        )
 
-    def test_stage_save_supports_bounded_recovery_flow_fields(self) -> None:
+    def test_stage_save_rejects_removed_legacy_flow_fields(self) -> None:
         self.workflow.write_text(
-            "stages:\n  review:\n    type: review\n    recover: [review]\nflow:\n  - review\n", encoding="utf-8"
+            "stages:\n  work:\n    type: base\n    prompt: stages/execution.md\nflow:\n  - work\n",
+            encoding="utf-8",
         )
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        result = self.state.studio_stage_save(
-            item["id"], "review", {}, opened["hash"], self.project, flow_index=0,
-            flow_fields={"max_attempts": 3, "on_exhausted": "continue"},
-        )
-        data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertEqual(data["flow"][0]["max_attempts"], 3)
-        self.assertEqual(data["flow"][0]["on_exhausted"], "continue")
-        self.assertNotIn("max_attempts", data["stages"]["review"])
-
-    def test_stage_save_rejects_bounded_recovery_without_recover(self) -> None:
-        self.workflow.write_text("stages:\n  review:\n    type: review\nflow:\n  - review\n", encoding="utf-8")
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "max_attempts requires recover"):
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "Unsupported Flow field"):
             self.state.studio_stage_save(
-                item["id"], "review", {}, opened["hash"], self.project, flow_index=0,
-                flow_fields={"max_attempts": 3, "on_exhausted": "continue"},
+                item["id"],
+                "work",
+                {},
+                opened["hash"],
+                self.project,
+                flow_index=0,
+                flow_fields={"restart_at": "work"},
             )
 
-    def test_flow_routing_validation_rejects_future_restart_and_repeat_without_recover(self) -> None:
-        self.workflow.write_text("stages:\n  a:\n    type: task\n  b:\n    type: review\nflow:\n  - a\n  - b\n", encoding="utf-8")
-        item = self._workflow_item(); opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "restart_at"):
-            self.state.studio_stage_save(item["id"], "a", {}, opened["hash"], self.project, flow_index=0, flow_fields={"restart_at": "b"})
-        with self.assertRaisesRegex(ValueError, "requires recover"):
-            self.state.studio_stage_save(item["id"], "a", {}, opened["hash"], self.project, flow_index=0, flow_fields={"repeat": 2})
+    def test_stage_save_rejects_unknown_result_route_target(self) -> None:
+        self.workflow.write_text(
+            "stages:\n  review:\n    type: review\nflow:\n  - review\n",
+            encoding="utf-8",
+        )
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "unknown Flow stage"):
+            self.state.studio_stage_save(
+                item["id"],
+                "review",
+                {},
+                opened["hash"],
+                self.project,
+                flow_index=0,
+                flow_fields={"routes": {"fail": "missing"}},
+            )
 
     def test_stage_save_null_removes_direct_field(self) -> None:
         self.workflow.write_text(
@@ -1834,25 +1852,3 @@ def test_workflow_catalog_is_loaded_through_standalone_tool(tmp_path):
     assert "workflow_catalog.py" in " ".join(map(str, command))
 
 
-def test_execution_mode_catalog_is_loaded_through_standalone_tool(tmp_path):
-    state = UIState(tmp_path)
-    payload = {
-        "linear": {
-            "name": "linear",
-            "requires_workflow": True,
-            "description": "Linear Workflow",
-        },
-        "dynamic_handoff": {
-            "name": "dynamic_handoff",
-            "requires_workflow": False,
-            "description": "Dynamic handoff",
-        },
-    }
-    completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout=json.dumps(payload), stderr=""
-    )
-    with patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
-        result = state.execution_mode_catalog()
-    assert "dynamic_handoff" in result
-    command = run.call_args.args[0]
-    assert "execution_mode_catalog.py" in " ".join(map(str, command))
