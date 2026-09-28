@@ -4,8 +4,6 @@ stages:
     status: Ralphy 正在執行任務
     prompt: custom/common/ralphy.md
     fresh_session_on_start: true
-    routes:
-      error: next
 
   validate_ai:
     type: ai_validator
