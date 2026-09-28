@@ -27,8 +27,8 @@ Chat / CLI / API
        v
  WorkflowRunner
    |-- FlowEngine
-   |    |-- LinearRouting
-   |    '-- SemanticRoutingPolicy
+   |    '-- LinearRouting
+   |         '-- result edge: status -> target
    |
    |-- StageExecutor
    |    |-- technical retry
@@ -89,16 +89,27 @@ workflow Stage.
 
 `FlowEngine` owns **what happens after a Stage produced a semantic result**.
 
-Examples:
-- Review FAIL -> Execute
-- Validator FAIL -> configured restart target
-- replan -> Planning
-- recover edge -> recovery Stage sequence
-- PASS -> next Stage
-- unrecoverable result -> stop
+The canonical contract is intentionally small:
 
-`SemanticRoutingPolicy` classifies the result. It does not own cursor
-navigation.
+- PASS -> next (implicit) or an explicit `routes.pass`
+- FAIL -> `routes.fail`
+- ERROR -> `routes.error` only after StageExecutor exhausts technical recovery
+- REPLAN -> `routes.replan`
+- `done` / `stop` are terminal targets
+
+Example:
+
+```yaml
+review:
+  type: review
+  routes:
+    fail: execute
+```
+
+Legacy `recover` / `restart_at` / `repeat` remain compatibility syntax while
+existing workflows migrate. New simple closed loops should prefer `routes`.
+`SemanticRoutingPolicy` is therefore a compatibility policy, not the preferred
+new workflow model.
 
 ### LinearRouting: cursor/navigation
 
@@ -163,9 +174,10 @@ Graph Designer can expose the right controls automatically.
 
 Current Linear UI concepts:
 - Stage = node
-- normal/restart/recover routing = edge
+- `routes` result transitions = normal workflow edges
+- technical retry remains a StageExecutor property and is not a workflow edge
 - Stage settings = node properties
-- routing settings = edge/flow properties
+- legacy restart/recover routing remains visible during migration
 
 Current UI ownership:
 - `ui/server.py`: composition + HTTP transport only
