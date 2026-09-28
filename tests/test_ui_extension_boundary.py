@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from runner.errors import RunnerError
-from runner.extensions import discover_extensions
+from runner.plugins.registry import discover_plugins
 from runner.prompts.loader import save_prompt
 from runner.resources import read_text
 from runner.workflow.loader import load_workflow, save_workflow
@@ -35,12 +35,13 @@ def test_stage_catalog_uses_registered_spec_as_single_schema_source():
     catalog = stage_catalog()
     assert {"base", "command", "plan"} <= set(catalog)
     command_fields = {item["name"] for item in catalog["command"]["options"]}
-    assert {"status", "command", "cwd", "result_kind", "clean_work", "retry"} <= command_fields
+    assert {"status", "command", "cwd", "result_kind", "clean_work"} <= command_fields
+    assert "retry" not in command_fields
     assert "name" not in command_fields
     contract = workflow_catalog()
     assert "command" in contract["stage_types"]
     assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "plan", "review", "task"}
-    assert contract["flow_options"]["scope"]["values"] == ["task"]
+    assert contract["node_options"]["scope"]["values"] == ["task"]
 
 
 def test_workflow_save_validates_then_atomically_replaces(tmp_path):
@@ -109,8 +110,8 @@ def test_command_stage_runs_python_out_of_process(tmp_path):
     assert (tmp_path / "marker.txt").read_text(encoding="utf-8") == "ok"
 
 
-def test_extension_registration_happens_before_catalog_validation(monkeypatch):
-    import runner.extensions as extension_module
+def test_plugin_setup_registration_happens_before_catalog_validation(monkeypatch):
+    import runner.plugins.registry as plugin_registry
 
     @dataclass(frozen=True)
     class Spec:
@@ -124,25 +125,34 @@ def test_extension_registration_happens_before_catalog_validation(monkeypatch):
             self.spec = spec
             self.name = spec.name
 
+    class ExternalPlugin:
+        PLUGIN_NAME = "test"
+
+        @staticmethod
+        def setup():
+            register_stage("external_test", CustomStage)
+
     class Point:
         name = "test"
 
         @staticmethod
         def load():
-            return lambda: register_stage("external_test", CustomStage)
+            return ExternalPlugin
 
     class Points(list):
         def select(self, *, group):
-            return self if group == extension_module.EXTENSION_GROUP else []
+            return self if group == plugin_registry.PLUGIN_ENTRYPOINT_GROUP else []
 
-    extension_module.discover_extensions.cache_clear()
-    monkeypatch.setattr(extension_module, "entry_points", lambda: Points([Point()]))
+    plugin_registry.plugin_modules.cache_clear()
+    plugin_registry.discover_plugins.cache_clear()
+    monkeypatch.setattr(plugin_registry, "entry_points", lambda: Points([Point()]))
     try:
-        assert discover_extensions() == ("test",)
+        assert "test" in discover_plugins()
         assert "external_test" in stage_catalog()
     finally:
         STAGE_REGISTRY.pop("external_test", None)
-        extension_module.discover_extensions.cache_clear()
+        plugin_registry.discover_plugins.cache_clear()
+        plugin_registry.plugin_modules.cache_clear()
 
 
 def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path):
@@ -282,23 +292,7 @@ def test_workflow_catalog_tool_is_json_process_boundary():
     payload = json.loads(result.stdout)
     assert set(payload["stage_types"]) == {"ai_validator", "base", "command", "plan", "review", "task"}
     assert "command" in payload["stage_types"]
-    assert payload["flow_options"]["scope"]["values"] == ["task"]
-    assert payload["flow_options"]["repeat"]["minimum"] == 1
-    assert payload["flow_options"]["max_attempts"]["minimum"] == 1
-    assert payload["flow_options"]["on_exhausted"]["values"] == ["continue", "fail"]
+    assert payload["node_options"]["scope"]["values"] == ["task"]
+    assert set(payload["node_options"]) == {"scope", "label", "routes"}
 
 
-def test_ui_keeps_linear_workflow_mode_identity_explicit():
-    runtime = Path("ui/project_runtime_state.py").read_text(encoding="utf-8")
-    studio = Path("ui/workflow_studio_state.py").read_text(encoding="utf-8")
-    server = Path("ui/server.py").read_text(encoding="utf-8")
-    assert 'item["execution_mode"] = "linear"' in studio
-    assert 'command += ["--execution-mode", str(execution_mode or "linear")]' in runtime
-    assert '"execution_mode": "linear"' in runtime
-    assert 'execution_mode=str(request.get("execution_mode") or "linear")' in server
-
-
-def test_ui_workflow_validation_requires_matching_linear_dryrun_mode():
-    source = Path("ui/workflow_studio_state.py").read_text(encoding="utf-8")
-    assert 'payload.get("execution_mode", "linear") != "linear"' in source
-    assert "incompatible execution mode" in source
