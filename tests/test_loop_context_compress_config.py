@@ -32,7 +32,12 @@ def test_loop_context_compression_threshold_is_bounded():
         RunRequest(
             goal="x",
             validator="ai",
-            loop_context_compress_threshold=101,
+            plugins={
+                "context_compression": {
+                    "enabled": True,
+                    "threshold": 101,
+                }
+            },
         ).validate()
 
 
