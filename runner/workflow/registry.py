@@ -23,6 +23,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
 ROUTING_FIELDS = frozenset(
     {
         "validator",
+        "routes",
         "recover",
         "restart_at",
         "repeat",
@@ -114,6 +115,10 @@ def workflow_catalog() -> dict[str, Any]:
         "flow_options": {
             "scope": {"type": "enum", "values": ["task"]},
             "label": {"type": "string"},
+            "routes": {
+                "type": "object",
+                "description": "Result edges: pass/fail/error/replan -> next, done, stop, or a top-level Stage.",
+            },
             "recover": {"type": "stage[]"},
             "restart_at": {"type": "stage"},
             "repeat": {"type": "integer", "minimum": 1},
