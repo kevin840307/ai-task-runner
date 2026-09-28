@@ -9,7 +9,6 @@ from typing import Any
 from .defaults import (
     DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT,
     DEFAULT_AGENT_TIMEOUT,
-    DEFAULT_API_WAIT_TIMEOUT,
     DEFAULT_BACKEND,
     DEFAULT_FINAL_AI_REQUIRED_PASSES,
     DEFAULT_FINAL_AI_VALIDATIONS,
@@ -53,13 +52,11 @@ class RuntimeConfig:
     agent_timeout: int = DEFAULT_AGENT_TIMEOUT
     planning_timeout: int = DEFAULT_PLANNING_TIMEOUT
     agent_idle_after_change_timeout: float = DEFAULT_AGENT_IDLE_AFTER_CHANGE_TIMEOUT
-    api_retry_timeout: float = DEFAULT_API_WAIT_TIMEOUT
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     stage_retries: int = DEFAULT_STAGE_RETRIES
-    stage_retry_delay: float = 2
-    api_retry_wait: float = 5
-    api_retry_max_wait: float = 300
+    retry_delay: float = 5
+    retry_max_delay: float = 300
 
     final_ai_validations: int = DEFAULT_FINAL_AI_VALIDATIONS
     final_ai_required_passes: int = DEFAULT_FINAL_AI_REQUIRED_PASSES
@@ -128,18 +125,16 @@ class RuntimeConfig:
         _retry_limit(self, "stage_retries")
         for name in (
             "agent_idle_after_change_timeout",
-            "api_retry_timeout",
-            "stage_retry_delay",
-            "api_retry_wait",
-            "api_retry_max_wait",
+            "retry_delay",
+            "retry_max_delay",
             "worker_hang_timeout",
         ):
             _non_negative(self, name)
 
         if not is_number(self.watchdog_interval) or self.watchdog_interval <= 0:
             raise ValueError("watchdog_interval must be a positive number")
-        if self.api_retry_max_wait < self.api_retry_wait:
-            raise ValueError("api_retry_max_wait must be >= api_retry_wait")
+        if self.retry_max_delay < self.retry_delay:
+            raise ValueError("retry_max_delay must be >= retry_delay")
 
         _positive_integer(self, "final_ai_validations")
         if (
