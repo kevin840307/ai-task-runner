@@ -136,7 +136,6 @@ class TaskProducerStage:
     run_state = ""
     track_changes = False
     tolerate_restored_changes = False
-    skip_on_error = False
     fresh_session_on_start = False
 
     def __init__(self, spec: TaskProducerSpec) -> None:
