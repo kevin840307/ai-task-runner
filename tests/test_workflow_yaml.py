@@ -331,13 +331,13 @@ flow:
         encoding="utf-8",
     )
     try:
-        stage = create_stage(load_workflow(workflow_file)[0])
+        workflow = load_workflow(workflow_file)
+        stage = create_stage(workflow[0])
+        assert isinstance(stage, ProbeStage)
+        assert stage.spec.value == "configured"
+        assert workflow[0]["routes"] == {"pass": "validate"}
     finally:
         STAGE_REGISTRY.pop("probe", None)
-    assert isinstance(stage, ProbeStage)
-    assert stage.spec.value == "configured"
-    workflow = load_workflow(workflow_file)
-    assert workflow[0]["routes"] == {"pass": "validate"}
 
 
 def test_topology_uses_stage_type_validator_and_task_scope(tmp_path):
