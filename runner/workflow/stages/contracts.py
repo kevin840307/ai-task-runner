@@ -1,4 +1,4 @@
-"""Small Stage contract shared by every pipeline item."""
+"""Small Stage contract shared by every Workflow node."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from ...config.runtime import RuntimeConfig
 from ...errors import RunnerError
 from ...runtime.run_state import RunState, Task
 
-StageStatus = Literal["pass", "fail", "error", "replan"]
+StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
 StageResultKind = Literal["generic", "tasks", "task", "review", "validation"]
 MODE_READONLY: StageMode = "readonly"
@@ -28,23 +28,18 @@ class StageResult:
     output: str = ""
     error: RunnerError | None = None
     changed_files: list[str] = field(default_factory=list)
-    skipped: bool = False
     data: object | None = None
     kind: StageResultKind = "generic"
 
     @classmethod
-    def error_result(cls, stage: str, error: BaseException) -> StageResult:
-        runner_error = (
-            error if isinstance(error, RunnerError) else RunnerError(str(error))
-        )
-        return cls(
-            stage=stage, status="error", output=str(runner_error), error=runner_error
-        )
+    def error_result(cls, stage: str, error: BaseException) -> "StageResult":
+        runner_error = error if isinstance(error, RunnerError) else RunnerError(str(error))
+        return cls(stage, "error", output=str(runner_error), error=runner_error)
 
 
 @dataclass
 class StageExecution:
-    """Attempt-local execution facts supplied by StageExecutor."""
+    """Attempt-local facts supplied by StageExecutor."""
 
     change_detected: Callable[[], bool] | None = None
     attempt: int = 1
@@ -87,13 +82,11 @@ class StageContext:
         self.save_state()
 
     def reset_sessions(self) -> None:
-        """Drop cached AI sessions so the next call starts fresh."""
         for value in (self.ai_client, *self.scratch.values()):
             if hasattr(value, "session_id"):
                 value.session_id = ""
         self.state.ai_session_id = ""
         self.save_state()
-
 
 
 class Stage(Protocol):
@@ -107,6 +100,7 @@ class Stage(Protocol):
     def run(
         self, ctx: StageContext, previous: StageResult | None = None
     ) -> StageResult: ...
+
     def finish(self, ctx: StageContext, result: StageResult) -> StageResult: ...
 
 
