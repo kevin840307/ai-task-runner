@@ -84,22 +84,22 @@ YAML task 也可設定 `loop_context_compress: true` 與 `loop_context_compress_
 
 ## Flow Engine 架構
 
-Runner 使用精簡的 YAML-driven Flow Pipeline。`StageExecutor` 統一處理 retry、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。`recover`、`restart_at`、`scope` 這類 routing 屬於 `FlowNode`。`PlanStage` 是內建 Task Producer，並會自動進入內建 `Task -> Review -> Repair（FAIL 時）-> Review` 逐 TODO lifecycle，因此一般 Plan-driven YAML 不需要重複寫這兩個 flow node。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。`task` / `review` profile 也可以在自訂 Prompt 不依賴 TODO 資料時當作一般 top-level linear Stage；此模式不會修改 durable TODO state。
+Runner 使用精簡的 YAML-driven state machine。`StageExecutor` 統一負責技術 retry/session recovery、Hook、semantic progress 與 exception；每個 Stage 只做自己的工作並回傳 `StageResult` facts/effects。新的閉環優先使用 `routes`，把 `pass` / `fail` / `error` / `replan` 對應到 `next`、`done`、`stop` 或另一個 top-level Stage；舊的 `recover`、`restart_at`、`repeat` 與 bounded recovery 在遷移期間仍相容。`PlanStage` 是內建 Task Producer，會自動進入 `Task -> Review` 逐 TODO lifecycle；Review FAIL 直接用 edge 回到 Task，不再需要獨立 Repair Stage 或 Repair Prompt。其他 Stage 仍可用 `produces: tasks` 產生 Task；只有進階／自訂 Producer 或自訂逐 Task SOP 才需要顯式 `scope: task` block。
 
 橫切功能不進 Flow：Status Event 提供 UI / Logging / Diagnostics 訂閱；Git 限制、檔案保護、ReadOnly 與可選的 Loop context 壓縮都透過 Plugin 註冊。Core Stage 與 AI Client 不 import 這些具體 Plugin；Workflow 也不依賴 raw event schema。
 
 
 ## Stage 執行架構
 
-`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> recovery / next FlowNode`
+`YAML FlowNode -> StageExecutor -> Stage.run() -> StageResult -> routes[status] -> next Stage`
 
 統一執行規則：
 - API／服務異常由 AI client 做指數退避，每個等待視窗預設最多 1 小時；不計入 Stage failure。視窗用盡後，正式 `runner.api.run()` 會從 direct/YAML durable state 自動 resume 並開啟下一個視窗，直到任務 PASS。
 - 真實 failure 先使用 same-session 的短 Stage-aware 續跑 prompt，只補 Stage 身分、新 failure evidence 與下一步；達到 retry 次數（預設 2）後由 StageExecutor 建立 fresh session。
-- fresh session 仍持續同一 failure 時回傳 `replan`，預設 flow 會啟動 Fresh Planning Session 並重新產生 plan；Stage 也可用共用的 1-based YAML `restart_at` 改從目前或更前面的指定頂層 Stage 開始；failure 不同則重新計數。
+- fresh session 仍持續同一技術 failure 時可回傳 `replan`；新的 workflow 優先用 `routes.replan` / `routes.fail` 指定閉環目標，舊 `restart_at` 保留相容。failure 不同則 StageExecutor failure streak 重新計數。
 - write attempt 只要有實際 project change 就視為有 progress，不累積 failure，直接交給下一個 review／validation Stage 判斷。
 - Review retry 用盡後可 skip；skip 會留下 evidence，Final Validator 仍是唯一完成 gate。
-- Task Producer 只保存 durable TODO 內容（`title`、`description`、`deliverable`、`acceptance_criteria`）。`PlanStage` 是內建 Producer；`command` 或未來 Stage 也可用 `produces: tasks` 產生相同效果。Plan-driven flow 由 Loader 內部展開內建 `Task -> Review -> Repair（FAIL 時）-> Review` task lifecycle，`workflow_position` 仍是 durable cursor；顯式 `scope: task` 保留給進階／自訂 Task Producer 或自訂逐 Task SOP。
+- Task Producer 只保存 durable TODO 內容（`title`、`description`、`deliverable`、`acceptance_criteria`）。`PlanStage` 是內建 Producer；`command` 或未來 Stage 也可用 `produces: tasks` 產生相同效果。Plan-driven flow 由 Loader 內部展開 `Task -> Review` task lifecycle，`Review FAIL -> Task` 是一般 result edge，`workflow_position` 仍是 durable cursor；顯式 `scope: task` 保留給進階／自訂 Task Producer 或自訂逐 Task SOP。
 
 
 Stage 一次只做一個 attempt。Hook/semantic progress/change tracking 由 `StageExecutor` 統一處理；Retry 與下一步路由只屬於 Flow。一般行為共用 `BaseStage`，Plan 等 AI 特殊語意使用專用 Stage；所有 subprocess 工作統一使用 `CommandStage`。
@@ -170,7 +170,7 @@ python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix
 python tool\workflow_dryrun.py runner\workflow\system\mixed.yaml --matrix --json
 ```
 
-`--matrix` 會依正式 Workflow 的 `recover`、`repeat`、`restart_at`、`fresh_after_same_failures` 產生 deterministic happy / semantic FAIL / technical ERROR cases。可恢復的 FAIL 必須收斂；沒有 recover 的 FAIL 與 technical ERROR 必須安全停止，不能誤進 semantic repair；Recovery-only Stage 也會透過「父 Stage FAIL → recovery Stage ERROR」的實際可達路徑驗證。semantic failure 的 Fresh Session 門檻也會確認真的有觸發。JSON contract 會回報每個 case 的 expected/completed outcome，以及 task producer/task scope/review/validation 等 feature，可直接供 CI、UI Save/Import gate、Workflow Builder publish 與 reliability preflight 使用。非法 Workflow 參數仍由正式 Workflow Loader/schema 先擋下，Dry Run 不維護第二套 schema。
+`--matrix` 會依正式 Workflow 的 canonical `routes`，以及舊 `recover`、`repeat`、`restart_at`、`fresh_after_same_failures` 產生 deterministic happy / semantic FAIL / technical ERROR cases。可恢復的 FAIL 必須收斂；沒有 recover 的 FAIL 與 technical ERROR 必須安全停止，不能誤進 semantic repair；Recovery-only Stage 也會透過「父 Stage FAIL → recovery Stage ERROR」的實際可達路徑驗證。semantic failure 的 Fresh Session 門檻也會確認真的有觸發。JSON contract 會回報每個 case 的 expected/completed outcome，以及 task producer/task scope/review/validation 等 feature，可直接供 CI、UI Save/Import gate、Workflow Builder publish 與 reliability preflight 使用。非法 Workflow 參數仍由正式 Workflow Loader/schema 先擋下，Dry Run 不維護第二套 schema。
 
 
 
