@@ -806,15 +806,14 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     workflow = load_workflow(workflow_path)
 
     assert [node["name"] for node in workflow] == [
-        "planning", "execute", "seed", "review", "validate_file"
+        "execute", "seed", "review", "validate_file"
     ]
-    assert workflow[1]["scope"] == "task"
-    assert workflow[1]["type"] == "task"
-    assert workflow[2]["scope"] == "task"
-    assert workflow[2]["type"] == "command"
-    assert workflow[3]["scope"] == "task"
+    assert workflow[0]["type"] == "task"
+    assert workflow[1]["type"] == "command"
+    assert workflow[2]["restart_at"] == "execute"
     assert workflow[3]["restart_at"] == "execute"
-    assert workflow[4]["restart_at"] == "execute"
+    assert all("scope" not in node for node in workflow)
+    assert "planning" not in {node["name"] for node in workflow}
     assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
 
     compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
@@ -1400,3 +1399,50 @@ def test_long_path_preflight_cleanup_uses_runner_remove_path():
     assert "remove_path(base)" in block
     assert "with tempfile.TemporaryDirectory" not in block
     assert "shutil.rmtree(base)" not in block
+
+
+def test_semantic_live_probe_timeout_is_bounded_below_global_harness_timeout(tmp_path: Path):
+    configured = settings(tmp_path)
+    configured = replace(
+        configured,
+        run_timeout=14400,
+        agent_timeout=600,
+        planning_timeout=600,
+    )
+
+    assert live.semantic_probe_timeout(configured) == 3120
+
+
+def test_review_probe_timeout_reports_state_and_console_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
+        project = Path(command[command.index("--project-root") + 1])
+        work = project / ".ai-task-runner"
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "state.json").write_text(
+            json.dumps({
+                "stage": "reviewing",
+                "cycle": 2,
+                "workflow_position": 2,
+                "task_step": 0,
+                "transition_previous": {
+                    "stage": "execute",
+                    "status": "pass",
+                    "output": "initial",
+                },
+            }),
+            encoding="utf-8",
+        )
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("last live console line\n", encoding="utf-8")
+        raise RuntimeError(f"runner exceeded harness timeout: {timeout:g}s")
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+
+    with pytest.raises(RuntimeError) as exc:
+        live.review_failure_routing_probe(settings(tmp_path), tmp_path)
+
+    message = str(exc.value)
+    assert "review failure-routing probe exceeded bounded semantic timeout" in message
+    assert '"stage": "reviewing"' in message
+    assert '"workflow_position": 2' in message
+    assert "last live console line" in message
