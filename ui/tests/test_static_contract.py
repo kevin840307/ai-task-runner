@@ -24,9 +24,9 @@ class StaticContractTests(unittest.TestCase):
             self.assertNotIn(token, html)
 
     def test_expected_runtime_contract_names_remain_visible(self):
-        server = (self.root / "server.py").read_text(encoding="utf-8")
+        runtime = (self.root / "project_runtime_state.py").read_text(encoding="utf-8")
         for token in ("state.json", "runner-process.json", "stream.log", "stop.request"):
-            self.assertIn(token, server)
+            self.assertIn(token, runtime)
 
     def test_workflow_studio_keeps_only_user_facing_controls(self):
         for token in ("Workflow Studio", "Workflows", "Visual", "YAML", "Validate", "Generate with AI", "Workflow Steps"):
@@ -881,23 +881,24 @@ def test_runtime_elapsed_footer_and_started_at_contract():
     base = Path(__file__).resolve().parents[1]
     script = base.joinpath("static", "app.js").read_text(encoding="utf-8")
     html = base.joinpath("static", "index.html").read_text(encoding="utf-8")
-    server = base.joinpath("server.py").read_text(encoding="utf-8")
+    runtime = base.joinpath("project_runtime_state.py").read_text(encoding="utf-8")
     assert 'id="elapsedTimeText"' in html
     assert 'cli-runtime-elapsed' in script
     assert 'runtime-live-indicator' in script
     assert 'function updateRuntimeElapsed()' in script
     assert 'setInterval(updateRuntimeFreshness, 1000)' in script
-    assert '"started_at": marker.get("started_at") or launch.get("created_at") or 0' in server
+    assert '"started_at": marker.get("started_at") or launch.get("created_at") or 0' in runtime
 
 def test_running_project_sidebar_shows_stage_and_progress_contract():
-    script = Path(__file__).resolve().parents[1].joinpath("static", "app.js").read_text(encoding="utf-8")
-    server = Path(__file__).resolve().parents[1].joinpath("server.py").read_text(encoding="utf-8")
+    base = Path(__file__).resolve().parents[1]
+    script = base.joinpath("static", "app.js").read_text(encoding="utf-8")
+    runtime = base.joinpath("project_runtime_state.py").read_text(encoding="utf-8")
     assert 'project.runtime_stage' in script
     assert 'project.runtime_completed_count' in script
     assert 'project.runtime_total' in script
-    assert '"runtime_stage"' in server
-    assert '"runtime_completed_count"' in server
-    assert '"runtime_total"' in server
+    assert '"runtime_stage"' in runtime
+    assert '"runtime_completed_count"' in runtime
+    assert '"runtime_total"' in runtime
 
 
 def test_motion_defaults_full_and_system_reduction_is_scoped():
