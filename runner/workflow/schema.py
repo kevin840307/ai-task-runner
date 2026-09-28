@@ -73,6 +73,23 @@ def _validate_routes(name: str, values: dict[str, Any]) -> None:
             raise RunnerError(
                 f"workflow stage {name} routes.{status} must be a non-empty target"
             )
+    legacy = [
+        field
+        for field in (
+            "recover",
+            "restart_at",
+            "repeat",
+            "max_attempts",
+            "on_exhausted",
+            "fresh_after_same_failures",
+        )
+        if values.get(field) is not None
+    ]
+    if legacy:
+        raise RunnerError(
+            f"workflow stage {name} routes cannot be combined with legacy routing: "
+            + ", ".join(legacy)
+        )
 
 
 def validate_restart_targets(result: list[dict[str, Any]], top_level: bool) -> None:
