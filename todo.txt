@@ -156,12 +156,14 @@ Linear 核心架構第一輪已完成；Windows + Ubuntu fast CI 已通過。rea
 - [x] semantic live probe 使用獨立 bounded timeout，超時附 state + console tail 診斷
 - [x] top-level structured Review/Validator feedback transport：即使 StageResult.output 為空，也會從 data 傳 reason/missing_items 回 rollback target
 - [x] Review routing probe root cause 修復：Execute 現在能收到 `Review missing_items`，不再連續無資訊 FAIL 到 max_attempts
+- [x] full closed-loop repair 改為 durable-state deterministic executor：Review gate/Validator FAIL 均透過 state feedback 驅動修正
+- [x] full closed-loop 保留真 Qwen `review_verify`，但不再把 rollback 成敗綁在模型是否服從 repair prompt
 - [x] dry-run matrix 覆蓋 bounded restart exhaustion
 - [x] `ui/server.py` 拆為 composition/HTTP transport；ProjectRuntime/WorkflowStudio 各自獨立 owner
 
 Fast gate 已完成：
-- [x] Windows Python 3.11 compile + full pytest：1045 passed / 1 skipped / 3 subtests passed
-- [x] Ubuntu Python 3.11 compile + full pytest：1045 passed / 1 skipped / 3 subtests passed
+- [x] Windows Python 3.11 compile + full pytest：1054 passed / 1 skipped / 3 subtests passed
+- [x] Ubuntu Python 3.11 compile + full pytest：1054 passed / 1 skipped / 3 subtests passed
 - [x] deterministic workflow dry-run matrix（由 full pytest 覆蓋）
 - [x] compound recoverable FAILs -> closure（由 full pytest 覆蓋）
 - [x] Linear cursor ownership static contract
