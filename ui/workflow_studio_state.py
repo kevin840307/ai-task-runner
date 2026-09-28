@@ -450,7 +450,7 @@ class WorkflowStudioMixin:
                 "session_key", "parser", "cwd", "result_kind", "validator", "command",
                 "allow_project_read", "track_changes", "tolerate_restored_changes",
                 "fresh_session_each_run", "fresh_session_on_start",
-                "repair_plan", "structured_retries", "structured_fresh_retries",
+                "structured_retries", "structured_fresh_retries",
                 "retry", "runs", "required_passes", "min_tasks", "timeout",
                 "clean_work",
             }
