@@ -22,7 +22,7 @@ from .config.defaults import (
     DEFAULT_FINAL_AI_VALIDATIONS,
     DEFAULT_LOOP_CONTEXT_COMPRESS,
     DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD,
-    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_STAGE_RETRIES,
     DEFAULT_MAX_CYCLES,
     DEFAULT_PLANNING_TIMEOUT,
     DEFAULT_REVIEW_RETRIES,
@@ -200,11 +200,7 @@ class RunRequest:
         workflow = frozen or (
             load_workflow(self.workflow_file)
             if self.workflow_file
-            else (
-                load_default_workflow(self.validator, ai_validator_prompt)
-                if mode_spec.requires_workflow
-                else []
-            )
+            else load_default_workflow(self.validator, ai_validator_prompt)
         )
         return RuntimeConfig(
             goal=goal,
@@ -340,7 +336,7 @@ def run(
     request: RunRequest | Mapping[str, Any],
     on_event: EventHandler | None = None,
 ) -> RunResult:
-    """Run until the selected Workflow completes (or plan-only)."""
+    """Run until the selected Workflow completes."""
     if not isinstance(request, RunRequest):
         request = RunRequest.from_mapping(request)
 
@@ -405,25 +401,11 @@ def run(
 
 def _result(request: RunRequest, exit_code: int) -> RunResult:
     state_files = _state_files(request)
-    script_items = _script_items(request) if request.script else []
-    states_list: list[dict[str, Any]] = []
-    for index, path in enumerate(state_files):
-        skip_marker = path.parent / "script-item-skipped.json"
-        item = script_items[index] if index < len(script_items) else None
-        if (
-            request.script
-            and isinstance(item, dict)
-            and item.get("skip_on_max_cycles") is True
-            and _valid_skip_marker(skip_marker, item)
-        ):
-            states_list.append({
-                "completed": True,
-                "stage": "skipped",
-                "skipped": True,
-                "skip_reason": _read_skip_reason(skip_marker),
-            })
-        elif path.is_file():
-            states_list.append(_read_state(path))
+    states_list = [
+        _read_state(path)
+        for path in state_files
+        if path.is_file()
+    ]
     states = tuple(states_list)
     return RunResult(
         exit_code=exit_code,
@@ -559,14 +541,6 @@ def _state_files(request: RunRequest) -> list[Path]:
 
 def _read_state(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _read_skip_reason(path: Path) -> str:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return "max cycles reached"
-    return str(data.get("reason") or "max cycles reached") if isinstance(data, dict) else "max cycles reached"
 
 
 __all__ = [
