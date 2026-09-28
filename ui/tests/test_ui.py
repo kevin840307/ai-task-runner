@@ -60,9 +60,9 @@ class UIStateTests(unittest.TestCase):
         (self.root / "ui" / "data").mkdir(parents=True)
         self.project = self.root / "project"
         self.project.mkdir()
-        custom = self.root / "runner" / "workflow" / "custom"
-        custom.mkdir(parents=True)
-        self.workflow = custom / "task.workflow.yaml"
+        assets = self.root / "runner" / "workflows"
+        assets.mkdir(parents=True)
+        self.workflow = assets / "task.workflow.yaml"
         self.workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
         backends = self.root / "runner" / "backends"; backends.mkdir(parents=True)
         (backends / "qwen.py").write_text("class QwenBackend:\n    name = 'qwen'\n", encoding="utf-8")
@@ -696,58 +696,55 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"), "stop\n")
 
 
-    def test_workflow_builder_system_workflow_is_hidden_from_studio_files(self) -> None:
-        system_dir = self.root / "runner" / "workflow" / "system"
-        system_dir.mkdir(parents=True, exist_ok=True)
-        (system_dir / "workflow_builder.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
-        (system_dir / "file.yaml").write_text("stages: {}\nflow: []\n", encoding="utf-8")
-        names = [item["name"] for item in self.state.studio_files()["workflows"]]
-        assert "workflow_builder.yaml" not in names
-        assert "file.yaml" in names
+    def test_global_workflows_are_visible_and_editable(self) -> None:
+        assets = self.root / "runner" / "workflows"
+        (assets / "workflow_builder.yaml").write_text(
+            "stages:\n  planning:\n    type: plan\nflow:\n  - planning\n",
+            encoding="utf-8",
+        )
+        rows = self.state.studio_files(self.project)["workflows"]
+        item = next(row for row in rows if row["name"] == "workflow_builder.yaml")
+        self.assertEqual(item["scope"], "global")
+        self.assertFalse(item["readonly"])
 
-    def test_custom_workflow_and_prompt_can_be_created_in_nested_folders(self):
-        workflow_folder = self.state.studio_custom_folder_create("workflow", "e2e/regression")
-        self.assertIn("e2e/regression", workflow_folder["folders"])
+    def test_global_workflow_and_prompt_share_one_flat_root(self):
         original_validate = self.state._validate_workflow_before_write
         self.state._validate_workflow_before_write = lambda path, content: {"ok": True}
         try:
-            created_workflow = self.state.studio_workflow_create("nested", "custom", self.project, "e2e/regression")
+            workflow = self.state.studio_workflow_create("nested", "global", self.project)
         finally:
             self.state._validate_workflow_before_write = original_validate
-        self.assertTrue(Path(created_workflow["file"]["path"]).is_file())
-        self.assertEqual(created_workflow["item"]["display_name"], "e2e/regression/nested.workflow.yaml")
+        prompt = self.state.studio_prompt_create("review", "global", self.project)
 
-        prompt_folder = self.state.studio_custom_folder_create("prompt", "e2e")
-        self.assertIn("e2e", prompt_folder["folders"])
-        created_prompt = self.state.studio_prompt_create("review", "custom", self.project, "e2e")
-        self.assertTrue(Path(created_prompt["file"]["path"]).is_file())
-        self.assertEqual(created_prompt["item"]["display_name"], "e2e/review.md")
+        self.assertEqual(
+            Path(workflow["item"]["path"]).parent,
+            (self.root / "runner" / "workflows").resolve(),
+        )
+        self.assertEqual(
+            Path(prompt["item"]["path"]).parent,
+            (self.root / "runner" / "workflows").resolve(),
+        )
+        self.assertEqual(workflow["item"]["group"], "Global")
+        self.assertEqual(prompt["item"]["group"], "Global")
 
-    def test_custom_folder_discovery_hides_and_rejects_technical_directories(self):
-        root = self.root / "runner" / "workflow" / "custom"
-        (root / "e2e" / "nested").mkdir(parents=True, exist_ok=True)
-        (root / "__pycache__" / "nested").mkdir(parents=True, exist_ok=True)
-        (root / ".pytest_cache" / "nested").mkdir(parents=True, exist_ok=True)
-        (root / "node_modules" / "pkg").mkdir(parents=True, exist_ok=True)
-        folders = self.state.studio_custom_folders("workflow")
-        self.assertIn("e2e", folders)
-        self.assertIn("e2e/nested", folders)
-        self.assertFalse(any("__pycache__" in value for value in folders))
-        self.assertFalse(any(".pytest_cache" in value for value in folders))
-        self.assertFalse(any("node_modules" in value for value in folders))
-        for bad in ("__pycache__", "e2e/__pycache__", ".pytest_cache", "node_modules"):
-            with self.assertRaises(ValueError):
-                self.state.studio_custom_folder_create("workflow", bad)
-
-    def test_custom_folder_rejects_path_escape(self):
-        for bad in ("../escape", "e2e/../escape", "/absolute", "C:/absolute"):
-            with self.assertRaises(ValueError):
-                self.state.studio_custom_folder_create("workflow", bad)
+    def test_project_assets_use_the_same_flat_shape(self):
+        original_validate = self.state._validate_workflow_before_write
+        self.state._validate_workflow_before_write = lambda path, content: {"ok": True}
+        try:
+            workflow = self.state.studio_workflow_create("project_job", "project", self.project)
+        finally:
+            self.state._validate_workflow_before_write = original_validate
+        prompt = self.state.studio_prompt_create("project_review", "project", self.project)
+        root = (self.project / ".ai-task-runner" / "workflows").resolve()
+        self.assertEqual(Path(workflow["item"]["path"]).parent, root)
+        self.assertEqual(Path(prompt["item"]["path"]).parent, root)
+        self.assertEqual(workflow["item"]["group"], "Project")
+        self.assertEqual(prompt["item"]["group"], "Project")
 
 if __name__ == "__main__":
     unittest.main()
 
-class HTTPServerSmokeTests(unittest.TestCase):
+class HTTPServerSmokeTestsclass HTTPServerSmokeTests(unittest.TestCase):
     def test_server_serves_projects_api_and_static_index(self) -> None:
         import threading
         import urllib.request
