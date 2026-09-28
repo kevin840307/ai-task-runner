@@ -125,6 +125,47 @@ flow: [execute, review, done]
     assert workflow[2]["routes"] == {"pass": "done"}
 
 
+def test_result_routes_use_state_machine_defaults_at_runtime(tmp_path, monkeypatch):
+    class Stage:
+        def __init__(self, name: str):
+            self.name = name
+
+    monkeypatch.setattr(
+        flow_engine_module,
+        "create_stage",
+        lambda definition: Stage(str(definition["name"])),
+    )
+    workflow = [
+        {"name": "first", "routes": {"error": "stop"}, "_workflow_index": 0},
+        {"name": "second", "_workflow_index": 1},
+    ]
+
+    class Executor:
+        def __init__(self, first_status: str):
+            self.first_status = first_status
+            self.calls = []
+
+        def run(self, stage, ctx, previous=None, *, label=""):
+            self.calls.append(stage.name)
+            status = self.first_status if stage.name == "first" else "pass"
+            return StageResult(stage.name, status, output=status)
+
+        def fresh_session(self, stage, ctx):
+            return None
+
+    passing = Executor("pass")
+    passing_context = _context(tmp_path, workflow)
+    assert CanonicalFlowEngine(passing_context, workflow).run(passing) == 0
+    assert passing.calls == ["first", "second"]
+    assert passing_context.state.completed is True
+
+    failing = Executor("fail")
+    failing_context = _context(tmp_path, workflow)
+    assert CanonicalFlowEngine(failing_context, workflow).run(failing) == 1
+    assert failing.calls == ["first"]
+    assert failing_context.state.completed is False
+
+
 def test_result_routes_reject_unknown_target(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(
