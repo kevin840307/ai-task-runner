@@ -830,7 +830,7 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
         workflow = Path(command[command.index("--workflow") + 1])
         assert workflow == project / "workflow.yaml"
         assert workflow.read_text(encoding="utf-8") == live.REVIEW_ROUTING_WORKFLOW
-        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_SEED
+        assert (project / "seed_review.py").read_text(encoding="utf-8") == live.review_routing_seed_script()
         assert (project / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
@@ -882,6 +882,8 @@ def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert 'restart_at: execute' in live.REVIEW_ROUTING_WORKFLOW
     assert 'continuation_prompt' not in live.REVIEW_ROUTING_WORKFLOW
     assert 'READY\\n' in live.REVIEW_ROUTING_SEED
+    assert "controlled first Review pass" in live.REVIEW_ROUTING_FORCE_FAIL_PROMPT
+    assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
     assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
 
@@ -905,7 +907,10 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     assert "planning" not in {node["name"] for node in workflow}
     assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
 
-    compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
+    seed = live.review_routing_seed_script()
+    assert "%FORCE_FAIL%" not in seed
+    assert "%NORMAL_REVIEW%" not in seed
+    compile(seed, "seed_review.py", "exec")
 
 
 def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
@@ -1550,3 +1555,32 @@ def test_review_routing_probe_protects_control_assets():
     ):
         assert f"  - {name}" in policy
     assert "Modify review.txt only" in policy
+
+
+def test_review_seed_switches_from_forced_fail_prompt_to_normal_review(tmp_path: Path):
+    seed = tmp_path / "seed_review.py"
+    seed.write_text(live.review_routing_seed_script(), encoding="utf-8")
+    (tmp_path / "review_check.md").write_text("initial", encoding="utf-8")
+
+    import subprocess
+
+    first = subprocess.run(
+        [sys.executable, str(seed)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    assert (tmp_path / "review.txt").read_text(encoding="utf-8") == "READY\n"
+    assert (tmp_path / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_FORCE_FAIL_PROMPT
+
+    second = subprocess.run(
+        [sys.executable, str(seed)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert second.returncode == 0, second.stderr
+    assert (tmp_path / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
