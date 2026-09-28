@@ -90,9 +90,21 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     assert (EXAMPLES / data[10]["workflow_file"]).is_file()
     regression = build_script_item_config(config, items[10], 11).workflow
     assert [stage["name"] for stage in regression] == [
-        "run_prompt", "review", "run_prompt", "grill_ai", "review",
-        "run_prompt", "grill_ai", "review", "run_prompt", "review",
-        "run_prompt", "review", "run_prompt", "review", "final_validate",
+        "project_discovery",
+        "review_project_discovery",
+        "project_documentation",
+        "grill_project_documentation",
+        "review_project_documentation",
+        "e2e_spec_generation",
+        "grill_e2e_spec",
+        "review_e2e_spec",
+        "verification_design",
+        "review_verification_design",
+        "regression_dsl_generation",
+        "review_regression_dsl",
+        "execution_qualification",
+        "review_execution_qualification",
+        "final_ai_validation",
     ]
     assert [stage.get("label", "") for stage in regression] == [
         "Project Discovery", "Review Project Discovery",
@@ -103,13 +115,20 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         "Regression Execution & Qualification", "Review Execution & Qualification",
         "Final AI Validation",
     ]
-    reviews = [stage for stage in regression if stage["name"] == "review"]
-    grills = [stage for stage in regression if stage["name"] == "grill_ai"]
-    assert reviews and all(stage["skip_on_error"] is False for stage in reviews)
-    assert all("fresh_after_same_failures" not in stage for stage in reviews)
-    assert len(grills) == 2
-    assert all(stage["skip_on_error"] is False for stage in grills)
-    assert all(stage["repeat"] == 3 for stage in grills)
+    routed = {
+        stage["name"]: stage.get("routes", {})
+        for stage in regression
+        if stage.get("routes")
+    }
+    assert routed["review_project_discovery"] == {"fail": "project_discovery"}
+    assert routed["grill_project_documentation"] == {"fail": "project_documentation"}
+    assert routed["review_project_documentation"] == {"fail": "project_documentation"}
+    assert routed["grill_e2e_spec"] == {"fail": "e2e_spec_generation"}
+    assert routed["review_e2e_spec"] == {"fail": "e2e_spec_generation"}
+    assert routed["review_verification_design"] == {"fail": "verification_design"}
+    assert routed["review_regression_dsl"] == {"fail": "regression_dsl_generation"}
+    assert routed["review_execution_qualification"] == {"fail": "execution_qualification"}
+    assert routed["final_ai_validation"] == {"fail": "execution_qualification"}
 
 
 def test_latest_custom_workflow_uses_python_task_producer():
@@ -138,9 +157,9 @@ def test_validation_modes_example_maps_to_system_workflows():
     ]
 
     assert workflows == [
-        ["planning", "__plan_task__", "__plan_review__", "validate_file"],
-        ["planning", "__plan_task__", "__plan_review__", "validate_ai"],
-        ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"],
+        ["planning", "execute", "review", "validate_file"],
+        ["planning", "execute", "review", "validate_ai"],
+        ["planning", "execute", "review", "validate_file", "validate_ai"],
     ]
     assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 
