@@ -60,7 +60,9 @@ class SemanticRoutingPolicy:
         )
 
     def pending_bounded_recovery(self, node: RoutingNode) -> StageResult | None:
-        if node.max_attempts is None:
+        # This checkpoint is only for explicit recover blocks. restart_at uses
+        # the normal durable workflow cursor/transition checkpoint instead.
+        if node.max_attempts is None or not node.recover:
             return None
         state = self.context.state
         if (
@@ -79,7 +81,7 @@ class SemanticRoutingPolicy:
         )
 
     def complete_bounded_recovery(self, node: RoutingNode) -> None:
-        if node.max_attempts is None:
+        if node.max_attempts is None or not node.recover:
             return
         state = self.context.state
         if state.recovery_attempt_key == self._key(node):
