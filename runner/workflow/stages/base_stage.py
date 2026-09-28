@@ -79,7 +79,7 @@ class BaseStage:
     def run(self, ctx: StageContext, previous: StageResult | None = None) -> StageResult:
         """Perform one Stage attempt. Retry/Hook/Event are owned by StageExecutor."""
         if not self.enabled(ctx):
-            return StageResult(self.name, "pass", output="STAGE_SKIPPED", skipped=True)
+            return StageResult(self.name, "pass", output="STAGE_DISABLED")
 
         runs = self._configured_int(ctx, self.spec.runs, self.runs_config_attr, 1)
         required = self._configured_int(
@@ -373,7 +373,7 @@ class BaseStage:
         # Structured AI stages keep their semantic verdict in StageResult.data.
         # Their output may intentionally be empty, so top-level rollback must
         # transport reason/missing_items from data instead of relying on output.
-        if previous is not None and previous.status in {"fail", "replan"}:
+        if previous is not None and previous.status == "fail":
             data = previous.data if isinstance(previous.data, dict) else {}
             if previous.kind == "review" and data.get("completed") is False:
                 reason = str(data.get("reason") or "").strip()
@@ -396,7 +396,7 @@ class BaseStage:
                         + json.dumps(missing, ensure_ascii=False)[-2500:]
                     )
 
-        if previous is not None and previous.status in {"fail", "error", "replan"}:
+        if previous is not None and previous.status in {"fail", "error"}:
             detail = str(previous.error or previous.output or "").strip()
             if detail:
                 parts.append(f"{previous.stage}: {detail[-2000:]}")
