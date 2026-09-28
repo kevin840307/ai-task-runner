@@ -16,11 +16,10 @@ from .contracts import StageContext, StageResult
 @dataclass(frozen=True)
 class PlanStageSpec(BaseStageSpec):
     status: str = "AI 正在產生任務規劃"
-    # Backward-compatible field name: for Plan this means read-only filesystem access,
-    # including paths outside the current project root.
     allow_project_read: bool = True
     run_state: str = "planning"
     prompt: str = "stages/planning.md"
+    fresh_session_on_start: bool = True
     min_tasks: int = MIN_PLANNED_TASKS
 
 
