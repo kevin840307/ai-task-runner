@@ -193,6 +193,7 @@ CUSTOM_TASK_WORKFLOW = '''stages:
 
   execute:
     type: task
+    scope: task
 
   validate_file:
     type: command
@@ -201,8 +202,7 @@ CUSTOM_TASK_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - stage: execute
-    scope: task
+  - execute
   - validate_file
 '''
 
@@ -404,9 +404,8 @@ def runner_command(
         "--backend", "qwen",
         "--command", settings.command,
         "--project-root", str(project),
-        "--execution-mode", "linear",
-        "--retry-wait", "0" if timeout_probe else "2",
-        "--retry-max-wait", "30",
+        "--retry-delay", "0" if timeout_probe else "2",
+        "--retry-max-delay", "30",
         "--json-events",
         "--no-ui-project-register",
     ]
@@ -432,8 +431,7 @@ def runner_command(
         command.extend([
             "--planning-timeout", "1",
             "--agent-timeout", "1",
-            "--max-attempts", "1",
-            "--max-cycles", "1",
+            "--stage-retries", "1",
         ])
     if final_ai:
         command.extend([
@@ -572,7 +570,6 @@ def probe_timeout_diagnostic(project: Path, log: Path) -> str:
         state_summary = json.dumps(
             {
                 "stage": state.get("stage"),
-                "stage_detail": state.get("stage_detail"),
                 "cycle": state.get("cycle"),
                 "current": state.get("current"),
                 "workflow_position": state.get("workflow_position"),
@@ -920,8 +917,6 @@ def assert_state_completed(
             f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
             f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
             f"task_step={state.get('task_step')}, "
-            f"recovery_attempt_key={state.get('recovery_attempt_key')!r}, "
-            f"recovery_attempt_count={state.get('recovery_attempt_count')}, "
             f"transition_previous={state.get('transition_previous')!r}, "
             f"validator_output={validator_output[-1200:]!r}"
         )
@@ -1171,10 +1166,9 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
         *WORKFLOWS.values(),
-        ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml",
+        ROOT / "runner" / "workflows" / "ralphy_ai_validate.yaml",
         ROOT / "examples" / "custom_workflow_latest.yaml",
-        ROOT / "tool" / "workflow" / "08_bounded_grill_continue.yaml",
-        ROOT / "tool" / "workflow" / "10_bounded_gate_reentry_reset.yaml",
+        ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
         ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
     ]
     tool = ROOT / "tool" / "workflow_dryrun.py"
