@@ -1,335 +1,212 @@
-"""Linear FlowEngine over reusable Stage execution primitives."""
+"""Minimal durable Workflow state machine."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 import json
-from dataclasses import dataclass
 from typing import Any
 
 from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
-from ..errors import RunnerError
+from ..errors import ConfigurationError
 from ..utils.text import bounded_text
-from .semantic_routing import SemanticRoutingPolicy
-from .registry import create_stage
-from .linear_routing import LinearRouting
-from .reducers import finish_run, finish_task, prepare_replan
-from .stages import Stage, StageContext, StageExecutor, StageResult
-
-
-@dataclass(frozen=True)
-class FlowNode:
-    """One Stage plus routing/runtime facts owned by the workflow engine."""
-
-    stage: Stage
-    routes: dict[str, str] | None = None
-    recover: tuple[dict[str, Any], ...] = ()
-    restart_at: str | None = None
-    repeat: int | None = None
-    max_attempts: int | None = None
-    on_exhausted: str | None = None
-    fresh_after_same_failures: int | None = None
-    label: str = ""
-    scope: str = ""
-    workflow_index: int | None = None
-
-    @classmethod
-    def from_definition(cls, definition: dict[str, Any]) -> "FlowNode":
-        return cls(
-            create_stage(definition),
-            dict(definition.get("routes", {})) or None,
-            tuple(definition.get("recover", ())),
-            definition.get("restart_at"),
-            definition.get("repeat"),
-            definition.get("max_attempts"),
-            definition.get("on_exhausted"),
-            definition.get("fresh_after_same_failures"),
-            str(definition.get("label", "") or ""),
-            str(definition.get("scope", "") or ""),
-            definition.get("_workflow_index"),
-        )
+from .reducers import finish_run, finish_task
+from .registry import create_stage, stage_result_kind
+from .stages import StageContext, StageExecutor, StageResult
 
 
 class FlowEngine:
-    """Run the current Linear Workflow while delegating cursor ownership."""
+    """Run Stage -> Result -> Route until completion or stop.
 
-    def __init__(self, context: StageContext, flow: Iterable[dict[str, Any]]) -> None:
+    Workflow semantics are intentionally small:
+    - PASS defaults to the next Stage.
+    - FAIL/ERROR default to stop.
+    - routes may override a result with next/done/stop/or another Stage.
+    - contiguous scope: task nodes repeat once per durable Task.
+
+    Technical retry/session recovery belongs only to StageExecutor.
+    """
+
+    def __init__(self, context: StageContext) -> None:
         self.context = context
-        self.workflow = [
-            {**item, "_workflow_index": item.get("_workflow_index", index)}
-            for index, item in enumerate(flow)
-        ]
-        self.routing = LinearRouting(context, self.workflow)
-        self.recovery = SemanticRoutingPolicy(context)
-        self._task_generation = 0
+        self.workflow = context.config.workflow
+        self.positions = {
+            str(item["name"]): index
+            for index, item in enumerate(self.workflow)
+        }
 
-    def run(self, executor: StageExecutor, *, plan_only: bool = False) -> int:
+    def run(self, executor: StageExecutor) -> int:
         state = self.context.state
-        previous = self._restore_transition()
-        stop = False
+        previous = self._restore_previous()
 
-        while (
-            state.workflow_position < len(self.workflow)
-            and not stop
-            and not state.completed
-        ):
+        while state.workflow_position < len(self.workflow) and not state.completed:
             position = state.workflow_position
-            definition = self.workflow[position]
-
-            if definition.get("scope") == "task":
-                end = self.routing.task_block_end(position)
-                replacement, previous, stop = self._run_task_block(
-                    position, end, executor, plan_only, previous
+            if self.workflow[position].get("scope") == "task":
+                previous, stopped = self._run_task_block(position, executor, previous)
+            else:
+                previous, stopped = self._run_stage(
+                    position, executor, previous, task_scoped=False
                 )
-                if replacement is not None:
-                    continue
-                if stop:
-                    break
-                self.routing.complete_task_block(end)
-                self.context.save_state()
-                continue
+            if stopped:
+                return 1
 
-            replacement, previous, stop = self._run_steps(
-                [definition], executor, plan_only, previous
-            )
-            if replacement is not None:
-                continue
-            if stop:
-                break
-
-        if (
-            not plan_only
-            and not stop
-            and previous is not None
-            and previous.status == "pass"
-            and state.workflow_position >= len(self.workflow)
-        ):
+        if not state.completed and state.workflow_position >= len(self.workflow):
             finish_run(self.context)
             self.context.save_state()
-        return 1 if stop and not state.completed else 0
+        return 0
 
     def _run_task_block(
         self,
-        start: int,
-        end: int,
+        position: int,
         executor: StageExecutor,
-        plan_only: bool,
         previous: StageResult | None,
-    ) -> tuple[tuple[dict[str, Any], ...] | None, StageResult | None, bool]:
+    ) -> tuple[StageResult | None, bool]:
         state = self.context.state
-        block = self.workflow[start:end]
-        if not block:
-            raise RunnerError("task-scoped workflow block is empty")
+        start, end = self._task_block(position)
         if not state.tasks:
-            raise RunnerError(
-                "task-scoped workflow requires tasks from an earlier Stage or input"
+            raise ConfigurationError(
+                "task-scoped workflow requires tasks from an earlier Stage"
             )
+        if state.workflow_position != start:
+            state.workflow_position = start
 
         while state.current < len(state.tasks):
-            if state.task_step > len(block):
-                raise RunnerError("saved task_step is outside the task-scoped SOP")
-            while state.task_step < len(block):
-                definition = block[state.task_step]
-                replacement, previous, stop = self._run_steps(
-                    [definition], executor, plan_only, previous, advance_top_level=False
+            if not 0 <= state.task_step <= end - start:
+                raise ConfigurationError("saved task_step is outside task-scoped flow")
+
+            while state.task_step < end - start:
+                index = start + state.task_step
+                previous, stopped = self._run_stage(
+                    index, executor, previous, task_scoped=True
                 )
-                if replacement is not None or stop:
-                    return replacement, previous, stop
-                self.routing.advance_task_step()
-                self.context.save_state()
+                if stopped:
+                    return previous, True
+                if state.workflow_position != start:
+                    return previous, False
 
             finish_task(self.context)
-            self.routing.reset_task_step()
+            state.task_step = 0
+            state.transition_previous = {}
+            previous = None
             self.context.save_state()
-        return None, previous, False
 
-    def _run_steps(
+        state.workflow_position = end
+        state.task_step = 0
+        self.context.save_state()
+        return previous, False
+
+    def _run_stage(
         self,
-        flow: Iterable[dict[str, Any]],
+        index: int,
         executor: StageExecutor,
-        plan_only: bool,
         previous: StageResult | None,
         *,
-        advance_top_level: bool = True,
-    ) -> tuple[tuple[dict[str, Any], ...] | None, StageResult | None, bool]:
-        for definition in flow:
-            node = FlowNode.from_definition(definition)
-            while True:
-                bounded_pending = self.recovery.pending_bounded_recovery(node)
-                if bounded_pending is not None:
-                    generation = self._task_generation
-                    replacement, recovered, stop = self._run_steps(
-                        node.recover,
-                        executor,
-                        plan_only,
-                        bounded_pending,
-                        advance_top_level=False,
-                    )
-                    if replacement is not None or stop:
-                        return replacement, recovered or bounded_pending, stop
-                    self.recovery.complete_bounded_recovery(node)
-                    previous = recovered or bounded_pending
-                    if self._task_generation != generation and self._has_pending_task():
-                        return self.routing.restart_task_sop(bounded_pending), previous, False
-                    continue
+        task_scoped: bool,
+    ) -> tuple[StageResult, bool]:
+        definition = self.workflow[index]
+        stage = create_stage(definition)
+        label = str(definition.get("label", "") or "")
+        result = executor.run(stage, self.context, previous, label=label)
+        self._remember_previous(result)
 
-                pending = self.recovery.pending_recovery(node)
-                if pending is not None:
-                    replacement, recovered, stop = self._run_steps(
-                        node.recover, executor, plan_only, pending, advance_top_level=False
-                    )
-                    if replacement is not None or stop:
-                        return replacement, recovered or pending, stop
-                    result = recovered or pending
-                    self.recovery.clear_repeat(node)
-                    break
-
-                result = (
-                    executor.run(node.stage, self.context, previous, label=node.label)
-                    if node.label
-                    else executor.run(node.stage, self.context, previous)
-                )
-                self._remember_transition(result)
-                if result.status == "pass" and result.kind == "tasks":
-                    self._task_generation += 1
-                routed = self._route_result(node, result)
-                if routed is not None:
-                    replacement, stop = routed
-                    if replacement is not None or stop:
-                        return replacement, result, stop
-                    break
-
-                action = self.recovery.decide(node, result, executor)
-
-                if action.kind == "replan":
-                    prepare_replan(self.context, result)
-                    return self.routing.restart(node.restart_at, result), result, False
-                if action.kind == "restart":
-                    if (
-                        result.kind == "validation"
-                        and self.routing.restart_target_produces_tasks(node.restart_at)
-                    ):
-                        prepare_replan(self.context, result)
-                    return self.routing.restart(node.restart_at, result), result, False
-                if action.kind == "stop":
-                    return None, result, True
-                if action.kind == "recover":
-                    generation = self._task_generation
-                    replacement, recovered, stop = self._run_steps(
-                        node.recover, executor, plan_only, result, advance_top_level=False
-                    )
-                    if replacement is not None or stop:
-                        return replacement, recovered or result, stop
-                    self.recovery.complete_bounded_recovery(node)
-                    previous = recovered or result
-                    if self._task_generation != generation and self._has_pending_task():
-                        return self.routing.restart_task_sop(result), previous, False
-                    if action.limit_reached:
-                        result = previous
-                        self.recovery.clear_repeat(node)
-                        break
-                    continue
-                break
-
-            if advance_top_level:
-                self._advance(node)
+        target = self._target(definition, result.status)
+        if target == "stop":
             self.context.save_state()
+            return result, True
+        if target == "done":
+            finish_run(self.context)
+            self.context.save_state()
+            return result, False
+        if target == "next":
+            if task_scoped:
+                self.context.state.task_step += 1
+            else:
+                self.context.state.workflow_position = index + 1
+                self.context.state.task_step = 0
+            self.context.save_state()
+            return result, False
 
-            # Plan-only must persist the cursor *after* Planning. Otherwise a
-            # later --resume reruns PlanStage even though durable TODOs already
-            # exist instead of entering the task-scoped SOP.
-            if plan_only and result.kind == "tasks":
-                return None, result, True
+        self._route_to(target, result)
+        self.context.save_state()
+        return result, False
 
-            previous = result
-        return None, previous, False
+    @staticmethod
+    def _target(definition: dict[str, Any], status: str) -> str:
+        routes = definition.get("routes")
+        if isinstance(routes, dict) and status in routes:
+            return str(routes[status])
+        return "next" if status == "pass" else "stop"
 
-    def _restore_transition(self) -> StageResult | None:
-        saved = getattr(self.context.state, "transition_previous", {})
-        if not saved:
-            return None
-        status = str(saved.get("status", "pass"))
-        if status not in {"pass", "fail", "error", "replan"}:
-            return None
-        kind = str(saved.get("kind", "generic"))
-        if kind not in {"generic", "tasks", "task", "review", "validation"}:
-            kind = "generic"
-        changed_files = saved.get("changed_files", [])
-        if not isinstance(changed_files, list):
-            changed_files = []
-        return StageResult(
-            stage=str(saved.get("stage", "stage")),
-            status=status,
-            output=str(saved.get("output", "")),
-            changed_files=[
-                str(item) for item in changed_files if isinstance(item, str)
-            ],
-            skipped=bool(saved.get("skipped", False)),
-            data=saved.get("data"),
-            kind=kind,
-        )
+    def _route_to(self, target: str, result: StageResult) -> None:
+        position = self.positions[target]
+        state = self.context.state
 
-    def _remember_transition(self, result: StageResult) -> None:
-        data_json = json.dumps(result.data, ensure_ascii=False, default=str)
+        if (
+            result.status != "pass"
+            and stage_result_kind(self.workflow[position]) == "tasks"
+        ):
+            state.cycle += 1
+
+        if self.workflow[position].get("scope") == "task":
+            start, _ = self._task_block(position)
+            state.workflow_position = start
+            state.task_step = position - start
+        else:
+            state.workflow_position = position
+            state.task_step = 0
+
+        self.context.set_stage("workflow_route", result.output)
+
+    def _task_block(self, position: int) -> tuple[int, int]:
+        start = position
+        while start > 0 and self.workflow[start - 1].get("scope") == "task":
+            start -= 1
+        end = position
+        while end < len(self.workflow) and self.workflow[end].get("scope") == "task":
+            end += 1
+        return start, end
+
+    def _remember_previous(self, result: StageResult) -> None:
+        raw = json.dumps(result.data, ensure_ascii=False, default=str)
         data = (
-            json.loads(data_json)
-            if len(data_json) <= MAX_VALIDATOR_OUTPUT_CHARS
+            json.loads(raw)
+            if len(raw) <= MAX_VALIDATOR_OUTPUT_CHARS
             else {
                 "_truncated": True,
-                "text": bounded_text(data_json, MAX_VALIDATOR_OUTPUT_CHARS),
+                "text": bounded_text(raw, MAX_VALIDATOR_OUTPUT_CHARS),
             }
         )
-        # Do not save here. The transition context must commit together with
-        # the next routing/cursor checkpoint; otherwise a crash could persist
-        # a new previous result while leaving the cursor on the same Stage.
         self.context.state.transition_previous = {
             "stage": result.stage,
             "status": result.status,
             "output": bounded_text(result.output, MAX_VALIDATOR_OUTPUT_CHARS),
             "changed_files": list(result.changed_files),
-            "skipped": result.skipped,
             "data": data,
             "kind": result.kind,
         }
 
-    def _route_result(
-        self,
-        node: FlowNode,
-        result: StageResult,
-    ) -> tuple[tuple[dict[str, Any], ...] | None, bool] | None:
-        """Apply the canonical Ralph-like result edge when one is configured.
-
-        StageExecutor has already exhausted technical retry/session recovery before
-        an ``error`` result reaches this point. Workflow routing therefore stays a
-        small state-machine concern: result status -> next target.
-        """
-        if node.routes is None:
+    def _restore_previous(self) -> StageResult | None:
+        saved = self.context.state.transition_previous
+        if not saved:
             return None
-        target = node.routes.get(
-            result.status,
-            "next" if result.status == "pass" else "stop",
+        status = str(saved.get("status", ""))
+        if status not in {"pass", "fail", "error"}:
+            return None
+        changed = saved.get("changed_files")
+        return StageResult(
+            stage=str(saved.get("stage", "stage")),
+            status=status,
+            output=str(saved.get("output", "")),
+            changed_files=(
+                [str(item) for item in changed if isinstance(item, str)]
+                if isinstance(changed, list)
+                else []
+            ),
+            data=saved.get("data"),
+            kind=str(saved.get("kind", "generic")),
         )
-        if target == "next":
-            return None, False
-        if target == "stop":
-            return None, True
-        if target == "done":
-            return self.routing.route_to(target, result), False
-        if (
-            result.status in {"fail", "replan"}
-            and self.routing.target_produces_tasks(target)
-        ):
-            prepare_replan(self.context, result)
-        return self.routing.route_to(target, result), False
 
-    def _advance(self, node: FlowNode) -> None:
-        self.routing.advance(node.workflow_index)
-
-    def _has_pending_task(self) -> bool:
-        return self.context.state.current < len(self.context.state.tasks)
 
 def build_flow_engine(context: StageContext) -> FlowEngine:
-    return FlowEngine(context, context.config.workflow)
+    return FlowEngine(context)
 
 
-__all__ = ["FlowEngine", "FlowNode", "build_flow_engine"]
+__all__ = ["FlowEngine", "build_flow_engine"]
