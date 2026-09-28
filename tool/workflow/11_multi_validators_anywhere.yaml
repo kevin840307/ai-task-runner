@@ -21,7 +21,7 @@ stages:
 
   grill:
     type: review
-    prompt: ../../runner/prompts/stages/grill.md
+    prompt: ../../runner/workflows/grill.md
     fresh_session_on_start: true
     routes:
       fail: planning
