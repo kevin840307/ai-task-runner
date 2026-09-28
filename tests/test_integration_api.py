@@ -491,8 +491,8 @@ def test_goal_file_is_loaded_by_public_request(tmp_path):
             backend="qwen",
             command=_fake_command(),
             retry_delay=0,
-            retry_wait=0,
-            retry_max_wait=0,
+            retry_delay=0,
+            retry_max_delay=0,
         )
     )
 
@@ -585,8 +585,8 @@ def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
             "agent_args must be a list",
         ),
         (
-            RunRequest(goal="x", validator="ai", retry_wait=10, retry_max_wait=5),
-            "greater than or equal",
+            RunRequest(goal="x", validator="ai", retry_delay=10, retry_max_delay=5),
+            "retry_max_delay must be >= retry_delay",
         ),
         (
             RunRequest(goal="x", validator="ai", ai_validator_yolo="true"),
