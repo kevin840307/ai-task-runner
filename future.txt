@@ -377,61 +377,79 @@ Do not pre-build a generic DAG engine now.
 TODO
 ----
 
-Phase A - finish minimal runtime cleanup
-1. Remove every remaining reference to deleted legacy routing/recovery fields.
-2. Remove tests that exist only for removed compatibility behavior.
-3. Update necessary tests to PASS/FAIL/ERROR + routes.
-4. Update all built-in/example/tool workflows to explicit Stage nodes.
-5. Ensure Plan/custom task producer uses explicit task-scope Stage blocks.
-6. Ensure UI Graph Designer reads/writes only Stage + routes.
-7. Ensure CLI exposes only current RuntimeConfig fields.
-8. Ensure YAML List uses only current RunRequest/RuntimeConfig fields.
-9. Ensure Dry Run imports FlowEngine directly and has no second routing model.
-10. Pass Windows + Ubuntu CI.
+Phase A - destructive simplification first
+1. [IN PROGRESS] Keep exactly one graph model: one `stages.<name>` = one n8n/UI/runtime node; `flow` is only ordered unique Stage names.
+2. [IN PROGRESS] Remove every legacy routing/recovery field and test: recover/restart_at/repeat/max_attempts/on_exhausted/replan/hidden Plan nodes/invocation overrides.
+3. [NEXT] Collapse technical reliability into one shared StageExecutor policy:
+   - Stage implementations never implement retry/recover/session rotation.
+   - same-session retry and Fresh Session rotation are shared.
+   - `stage_retries=-1` means unlimited technical recovery.
+   - transient API/backend errors use bounded exponential/seconds delay and retry indefinitely when configured.
+   - deterministic configuration/state/programming errors fail closed.
+4. [NEXT] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
+5. [NEXT] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
+6. [NEXT] Replace System/Custom Workflow + separate Prompt trees with one editable Workflow asset layout:
+      runner/workflows/<workflow-name>/
+        workflow.yaml
+        *.md
+   Prompts are referenced relative to the Workflow folder. No read-only System assets.
+7. [NEXT] Keep optional project-local assets in the same package shape:
+      <project>/.ai-task-runner/workflows/<workflow-name>/
+        workflow.yaml
+        *.md
+   Global and project assets use identical loader/UI behavior and are both editable.
+8. [NEXT] Simplify Workflow Studio discovery/editor/export/import for the unified package layout; remove System/Custom scope branches and read-only guards.
+9. [NEXT] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
+10. [NEXT] Ensure Dry Run imports FlowEngine directly and has no second routing/recovery model.
+11. [NEXT] Migrate all built-in/example/tool/live-probe Workflows to the new package/node/result-edge contract.
+12. [NEXT] Pass Windows + Ubuntu CI.
 
-Phase B - reliability proof
-11. Deterministic closed-loop tests.
-12. Kill/resume equivalence at committed Stage boundaries.
-13. Custom Stage registration test.
-14. Custom produces: tasks test.
-15. n8n UI round-trip: YAML -> graph -> YAML.
-16. CLI smoke test.
-17. YAML List multi-item resume test.
-18. Real Qwen closed-loop reliability probes.
-19. API 429/502/503/disconnect recovery probes.
-20. 24H high-density soak.
+Phase B - unattended reliability proof
+13. Deterministic PASS/FAIL/ERROR closed-loop tests.
+14. Same-session retry -> Fresh Session rotation test through shared StageExecutor only.
+15. Unlimited `stage_retries=-1` test with no Stage-specific recovery code.
+16. API 429/502/503/disconnect tests with seconds-based backoff/delay.
+17. Kill/resume equivalence at committed Stage boundaries.
+18. Custom Stage registration test with zero retry/recovery code in the custom Stage.
+19. Custom `produces: tasks` test.
+20. n8n round-trip: package YAML -> graph -> edit node/edge -> YAML -> same graph.
+21. CLI smoke test.
+22. YAML List multi-item + resume test.
+23. Real Qwen closed-loop reliability probes.
+24. 24H high-density soak.
 
-Phase C - code-size review
-21. Measure production runtime LOC.
-22. Review every core file over ~300-400 lines for mixed responsibility.
-23. Remove helpers/fields that exist only for old behavior.
-24. Keep the main runtime reading path short:
+Phase C - code-size/owner cleanup
+25. Measure production runtime LOC after migration.
+26. Remove helpers/config/state fields that only served deleted behavior.
+27. Review every core file over ~300-400 lines for mixed responsibility; split only when it reduces concepts.
+28. Keep the main runtime reading path short:
       workflow_runner.py
       workflow/flow_engine.py
       workflow/stages/executor.py
       runtime/run_state.py
-25. Update project.bundle.txt after architecture stabilizes.
+29. Regenerate project.bundle.txt only after architecture and asset layout stabilize.
+30. Update README / README.zh-TW / architecture / DevFollow to exactly match the reduced runtime.
 
-Phase D - Dynamic Handoff only after A/B/C are stable
-26. Derive the smallest DynamicScheduler contract from a real use case.
-27. Reuse Stage and StageExecutor unchanged.
-28. Add bounded handoff intent only if required.
-29. Add deterministic dynamic scheduling tests.
-30. Extend the same Graph Designer with allowed handoff edges.
+Phase D - future UI family: Dynamic Handoff
+31. Do not implement until A/B/C are stable.
+32. Reuse the exact same Stage node, StageExecutor, StateStore, plugin boundary, Workflow package layout and Graph Designer.
+33. Add only the smallest scheduler/handoff metadata proven by a real use case.
 
-Phase E - Discussion / Group Chat after a real use case
-31. Derive the smallest DiscussionScheduler from a real use case.
-32. Reuse Stage and StageExecutor unchanged.
-33. Add only bounded round/participant/moderator state.
-34. Add deterministic discussion termination tests.
-35. Extend the same Graph Designer; do not create another UI.
+Phase E - future UI family: Discussion / Group Chat
+34. Do not implement until A/B/C are stable.
+35. Reuse the exact same Stage node/runtime/package/plugin/UI foundations.
+36. Add only bounded round/participant/moderator/termination state when required.
 
-Phase F - Parallel Agent only after a real use case
-36. Define read-only parallel scheduling first.
-37. Add single-writer ownership enforcement.
-38. Use isolated worktrees before allowing parallel writers.
-39. Add deterministic branch/join tests.
-40. Extend the same Graph Designer; do not create another UI.
+Final acceptance
+----------------
+The refactor is complete only when:
+- adding a new Stage requires implementing its work/result only, with no retry/recover/session code;
+- Linear rollback/loop is only a result edge;
+- API/service failures can retry indefinitely with seconds-based delay without losing durable progress;
+- Workflow/Prompt assets share one editable package layout;
+- UI, CLI and YAML List execute the exact same runtime graph;
+- Plugin registration is small and isolated;
+- Windows + Ubuntu CI, real Qwen probes and 24H soak pass.
 
 Non-goals
 ---------
