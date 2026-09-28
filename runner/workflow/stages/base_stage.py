@@ -371,6 +371,33 @@ class BaseStage:
         validator = str(getattr(ctx.state, "validator_output", "") or "").strip()
         if validator:
             parts.append("Validator: " + validator[-2000:])
+
+        # Structured AI stages keep their semantic verdict in StageResult.data.
+        # Their output may intentionally be empty, so top-level rollback must
+        # transport reason/missing_items from data instead of relying on output.
+        if previous is not None and previous.status in {"fail", "replan"}:
+            data = previous.data if isinstance(previous.data, dict) else {}
+            if previous.kind == "review" and data.get("completed") is False:
+                reason = str(data.get("reason") or "").strip()
+                missing = data.get("missing_items")
+                if reason:
+                    parts.append("Review: " + reason[-2000:])
+                if isinstance(missing, list) and missing:
+                    parts.append(
+                        "Review missing_items: "
+                        + json.dumps(missing, ensure_ascii=False)[-2500:]
+                    )
+            elif previous.kind == "validation" and data.get("passed") is False:
+                reason = str(data.get("reason") or "").strip()
+                missing = data.get("missing_items")
+                if reason:
+                    parts.append("Validator: " + reason[-2000:])
+                if isinstance(missing, list) and missing:
+                    parts.append(
+                        "Validator missing_items: "
+                        + json.dumps(missing, ensure_ascii=False)[-2500:]
+                    )
+
         if previous is not None and previous.status in {"fail", "error", "replan"}:
             detail = str(previous.error or previous.output or "").strip()
             if detail:
