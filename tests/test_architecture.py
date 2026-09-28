@@ -34,11 +34,7 @@ def test_workflow_runner_uses_shared_stage_executor_and_flow_engine():
     assert "build_flow_engine" in source
     for name in ("BaseStage", "PlanStage", "ReviewStage", "ValidateStage"):
         assert name not in source
-
-    compat = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
-    assert "from .workflow_runner import WorkflowRunner" in compat
-    assert "StageExecutor" not in compat
-    assert "build_pipeline" not in compat
+    assert not (ROOT / "runner/task_runner.py").exists()
 
 
 def test_stage_executor_is_only_hook_boundary():
@@ -82,11 +78,13 @@ def test_root_python_files_stay_minimal():
     assert {path.name for path in ROOT.glob("*.py")} == {"ai_task_runner.py", "ai_task_runner_validator.py", "project_registry.py"}
 
 
-def test_recovery_is_centralized_in_stage_executor():
+def test_technical_retry_is_centralized_in_stage_executor():
     assert not (ROOT / "runner/utils/recovery.py").exists()
     source = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
-    for token in ("same_failures", "fresh_session_round", "is_transient_error", "_fresh_session"):
+    for token in ("stage_retries", "is_transient_error", "_fresh_session", "retry_max_delay"):
         assert token in source
+    for legacy in ("same_failures", "fresh_session_round", "retry_limit("):
+        assert legacy not in source
 
 
 def test_ai_contracts_are_separate_from_backend_implementations():
@@ -174,22 +172,21 @@ def test_public_capabilities_use_owner_modules_without_reexport_only_facades():
         assert not any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree)), relative
 
 
-def test_linear_cursor_writes_are_owned_by_linear_routing_only():
-    roots = [ROOT / "runner" / "workflow", ROOT / "runner" / "runtime", ROOT / "runner"]
-    checked: set[Path] = set()
-    offenders: list[str] = []
-    patterns = ("state.workflow_position =", "state.task_step =", "self.context.state.task_step =")
-
-    for root in roots:
+def test_workflow_cursor_writes_are_owned_by_flow_engine():
+    allowed = ROOT / "runner" / "workflow" / "flow_engine.py"
+    patterns = (
+        "state.workflow_position =",
+        "state.task_step =",
+        "self.context.state.task_step +=",
+        "self.context.state.workflow_position =",
+    )
+    offenders = []
+    for root in (ROOT / "runner" / "workflow", ROOT / "runner" / "runtime", ROOT / "runner"):
         for path in root.rglob("*.py"):
-            if path in checked:
-                continue
-            checked.add(path)
-            if path.name == "linear_routing.py":
+            if path == allowed:
                 continue
             text = path.read_text(encoding="utf-8")
             for pattern in patterns:
                 if pattern in text:
                     offenders.append(f"{path.relative_to(ROOT)}: {pattern}")
-
     assert offenders == []
