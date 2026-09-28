@@ -1531,8 +1531,8 @@ class WorkflowStudioMixin:
             or value.endswith(".egg-info")
         )
 
-    @staticmethod
-    def _normalize_custom_folder(folder: str) -> str:
+    @classmethod
+    def _normalize_custom_folder(cls, folder: str) -> str:
         raw = str(folder or "").strip().replace("\\", "/")
         if not raw or raw in {".", "/"}:
             return ""
@@ -1541,7 +1541,7 @@ class WorkflowStudioMixin:
         parts = [part.strip() for part in raw.split("/") if part.strip()]
         if not parts or any(part in {".", ".."} for part in parts):
             raise ValueError("Custom folder cannot contain . or ..")
-        if any(UIState._is_technical_folder_part(part) for part in parts):
+        if any(cls._is_technical_folder_part(part) for part in parts):
             raise ValueError("Custom folder contains a reserved technical directory")
         if any(not re.fullmatch(r"[A-Za-z0-9_. -]+", part) for part in parts):
             raise ValueError("Custom folder contains unsupported characters")
