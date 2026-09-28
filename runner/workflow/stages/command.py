@@ -23,8 +23,6 @@ class CommandStageSpec:
     mode: StageMode = MODE_WRITE
     actor: str = "command"
     timeout: float | None = None
-    retry: int | None = None
-    skip_on_error: bool = False
     track_changes: bool = False
     tolerate_restored_changes: bool = False
     produces: str = ""
@@ -39,7 +37,6 @@ class CommandStage:
 
     spec_class = CommandStageSpec
     timeout_config_attr = "agent_timeout"
-    retry_config_attr = ""
 
     def __init__(self, spec: CommandStageSpec) -> None:
         if isinstance(spec.command, str):
@@ -63,16 +60,9 @@ class CommandStage:
         self.run_state = spec.run_state
         self.mode = spec.mode
         self.actor = spec.actor
-        self.retry = spec.retry
-        self.skip_on_error = spec.skip_on_error
         self.track_changes = spec.track_changes
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.result_kind = spec.result_kind
-
-    def retry_limit(self, ctx: StageContext) -> int | None:
-        if self.spec.retry is not None:
-            return self.spec.retry
-        return int(getattr(ctx.config, self.retry_config_attr)) if self.retry_config_attr else None
 
     def timeout(self, ctx: StageContext) -> float:
         if self.spec.timeout is not None:
