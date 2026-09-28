@@ -106,6 +106,14 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         _normalize_invocation(item, stages, source)
         for item in raw_flow
     ]
+    names = [str(node.get("name") or "") for node in result]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise RunnerError(
+            "workflow flow node names must be unique; duplicate: "
+            + ", ".join(duplicates)
+        )
+
     for index, node in enumerate(result):
         node["_workflow_index"] = index
 
