@@ -4,9 +4,11 @@ stages:
 
   execute:
     type: task
+    scope: task
 
   review:
     type: review
+    scope: task
     routes:
       fail: execute
 
@@ -22,8 +24,6 @@ stages:
 
 flow:
   - planning
-  - stage: execute
-    scope: task
-  - stage: review
-    scope: task
+  - execute
+  - review
   - validate_file
