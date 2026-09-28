@@ -1,0 +1,35 @@
+stages:
+  planning:
+    type: plan
+    status: AI 正在依任務複雜度建立可驗證 TODO
+    readonly_safety: observe
+
+  execute:
+    type: task
+    scope: task
+    status: AI 正在處理目前任務
+
+  review:
+    type: review
+    scope: task
+    status: AI 正在確認任務是否完成
+    readonly_safety: observe
+    routes:
+      fail: execute
+      error: stop
+
+  validate_file:
+    type: command
+    status: 正在執行 Python Validator
+    run_state: validating
+    actor: validator
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    routes:
+      fail: planning
+
+flow:
+  - planning
+  - execute
+  - review
+  - validate_file
