@@ -12,7 +12,8 @@ stages:
     fresh_session_on_start: true
     runs: 1
     required_passes: 1
-    recover: [ralphy]
+    routes:
+      fail: ralphy
 
 flow:
   - ralphy
