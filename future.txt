@@ -388,14 +388,14 @@ Phase A - destructive simplification first
    - deterministic configuration/state/programming errors fail closed.
 4. [NEXT] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
 5. [NEXT] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
-6. [NEXT] Replace System/Custom Workflow + separate Prompt trees with one editable Workflow asset layout:
-      runner/workflows/<workflow-name>/
-        workflow.yaml
+6. [IN PROGRESS] Replace System/Custom Workflow + separate Prompt trees with one editable asset folder:
+      runner/workflows/
+        *.yaml
         *.md
-   Prompts are referenced relative to the Workflow folder. No read-only System assets.
-7. [NEXT] Keep optional project-local assets in the same package shape:
-      <project>/.ai-task-runner/workflows/<workflow-name>/
-        workflow.yaml
+   Workflow YAML and Prompt Markdown are peers in the same folder. Shared prompts are not duplicated. No read-only System assets.
+7. [NEXT] Keep optional project-local assets in the identical flat shape:
+      <project>/.ai-task-runner/workflows/
+        *.yaml
         *.md
    Global and project assets use identical loader/UI behavior and are both editable.
 8. [NEXT] Simplify Workflow Studio discovery/editor/export/import for the unified package layout; remove System/Custom scope branches and read-only guards.
