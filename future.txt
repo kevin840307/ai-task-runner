@@ -46,6 +46,10 @@ They must never own their own routing or recovery semantics.
 Core Workflow contract
 ----------------------
 
+One `stages.<name>` entry is one UI/runtime node.
+`flow` contains only the ordered unique Stage names.
+There is no reusable Stage-template + invocation-override layer.
+
 StageResult statuses:
 
   pass
