@@ -85,7 +85,20 @@ There is no separate runtime concept for:
 
 ## n8n-style UI contract
 
-The Graph Designer edits the same Workflow graph used by CLI/runtime.
+The product has one Graph Designer and three Workflow families:
+
+1. **Linear Workflow with Rollback / Loop** - current production family.
+2. **Dynamic Handoff** - future.
+3. **Discussion / Group Chat** - future.
+
+"Workflow family" is UI/asset semantics, not a public `execution_mode` switch
+and not a reason to create three Runner implementations.
+
+Today every executable Workflow is Linear. When Dynamic/Discussion is actually
+implemented, add only the smallest Workflow metadata and scheduler state that
+the real use case requires.
+
+The Graph Designer edits the same Workflow asset used by CLI/runtime.
 
 UI concepts:
 
@@ -107,6 +120,48 @@ The UI should support:
 - load System/Custom/Project workflows through one format
 
 The UI must not invent a second graph model.
+
+### Linear Workflow with Rollback / Loop
+
+Current implementation.
+
+The graph is explicit Stage nodes plus result edges:
+
+- PASS -> next
+- FAIL -> another Stage / stop
+- ERROR -> another Stage / stop
+
+A rollback/loop is simply an edge back to an earlier Stage. There is no separate
+Recovery object.
+
+### Dynamic Handoff
+
+Future UI family.
+
+The same Stage nodes remain. The editor may additionally show:
+
+- allowed handoff targets
+- role/ownership metadata
+- current runtime owner
+- bounded handoff reason/context
+
+Dynamic handoff must reuse StageExecutor and StateStore. Do not create another
+agent runtime.
+
+### Discussion / Group Chat
+
+Future UI family.
+
+Participants are still Stages. The same editor may additionally show:
+
+- participant membership/order
+- moderator/judge Stage
+- round/termination settings
+- bounded discussion summary
+
+Discussion must reuse the same Stage execution/session/safety runtime. Do not
+create a separate chat orchestrator unless a proven requirement cannot be
+expressed by a small scheduler.
 
 ## CLI contract
 
@@ -291,6 +346,25 @@ The scheduler should remain small and must not duplicate StageExecutor.
 
 The same Graph Designer should represent available Stage roles and allowed
 handoff targets.
+
+## Future Discussion / Group Chat
+
+Discussion is a scheduling policy over Stage participants, not a new execution
+unit.
+
+Conceptually:
+
+```text
+Stage A -> Stage B -> Stage C
+          discussion round
+                |
+          moderator/judge
+                |
+          next round / done
+```
+
+Only discussion-specific scheduling state should be added when implemented.
+Stage execution remains unchanged.
 
 ## Future parallel agents
 
