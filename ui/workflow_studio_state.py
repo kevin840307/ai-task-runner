@@ -1158,14 +1158,21 @@ class WorkflowStudioMixin:
         del lines[start:end]
         return "".join(lines)
 
-    def studio_stage_delete(self, file_id: str, stage_name: str, expected_hash: str, project: Path | None = None, *, flow_index: int | None = None) -> dict:
-        """Atomically remove one Flow invocation and its Stage definition when no other references remain."""
+    def studio_stage_delete(
+        self,
+        file_id: str,
+        stage_name: str,
+        expected_hash: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Delete one Stage node after proving no result edge still targets it."""
         with self._edit_lock:
             self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             self._require_studio_writable(scope)
             if kind != "workflow":
                 raise ValueError("Stage definitions exist only in Workflow YAML")
+
             content = path.read_text(encoding="utf-8")
             self._require_hash(content, expected_hash)
             data = self._load_workflow_yaml(content)
@@ -1173,24 +1180,27 @@ class WorkflowStudioMixin:
             flow = data.get("flow") if isinstance(data, dict) else None
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
-            if not isinstance(flow, list):
-                flow = []
-            if flow_index is None or flow_index < 0 or flow_index >= len(flow):
-                raise ValueError("A valid Flow invocation is required to delete the Stage definition")
-            selected = flow[flow_index]
-            selected_name = selected if isinstance(selected, str) else str(selected.get("stage", "")) if isinstance(selected, dict) else ""
-            if selected_name != stage_name:
-                raise ValueError("Selected Flow invocation no longer matches the Stage")
-            next_flow = list(flow); del next_flow[flow_index]
-            next_data = dict(data); next_stages = dict(stages); next_stages.pop(stage_name, None); next_data["stages"] = next_stages; next_data["flow"] = next_flow
+            if not isinstance(flow, list) or stage_name not in flow:
+                raise ValueError("Stage is not present in Workflow flow")
+
+            next_flow = [name for name in flow if name != stage_name]
+            next_stages = dict(stages)
+            next_stages.pop(stage_name, None)
+            next_data = {**data, "stages": next_stages, "flow": next_flow}
             refs = self._stage_reference_paths(next_data, stage_name)
             if refs:
-                raise ValueError("Stage definition is still referenced by: " + ", ".join(refs[:8]))
+                raise ValueError(
+                    "Stage definition is still referenced by: " + ", ".join(refs[:8])
+                )
+
             without_stage = self._remove_stage_definition_block(content, stage_name)
             updated = self._replace_flow_block(without_stage, next_flow)
             self._validate_workflow_before_write(path, updated)
             self._atomic_write(path, updated)
-            return {"file": self.studio_read(file_id, project), "visual": self.studio_visual(file_id, project)}
+            return {
+                "file": self.studio_read(file_id, project),
+                "visual": self.studio_visual(file_id, project),
+            }
 
     def studio_export(self, file_id: str, project: Path | None = None) -> dict:
         path, kind, scope = self._resolve_studio_file(file_id, project)
