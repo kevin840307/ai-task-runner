@@ -108,10 +108,10 @@ Cross-cutting features stay outside the flow: status events feed UI/logging/diag
 
 Unified execution rules:
 - API/service failures use exponential backoff inside the AI client for one configured wait window (default 1 hour) and do not count as Stage failures. If a window is exhausted, canonical `runner.api.run()` resumes durable direct/YAML state and opens another window until the task passes.
-- Real failures retry in the same session using a short stage-aware continuation prompt containing only the stage identity, new failure evidence, and required next action; after the configured retry count (default 2), StageExecutor starts a fresh session.
+- Recoverable technical Stage failures retry indefinitely by default (`retry: -1` / CLI `--max-attempts -1`). Runner keeps each session bounded: after 2 same-session attempts it rotates to a Fresh Session and continues. Deterministic configuration/state errors remain fail-closed and never enter this loop.
 - Repeated identical technical failures may still return `replan`; the preferred workflow response is an explicit `routes.replan` or `routes.fail` edge. `restart_at` remains supported for existing workflows. Different failures reset the StageExecutor failure streak.
 - A write attempt that changed project files counts as progress and is handed to the next review/validation Stage instead of being retried as a failure.
-- Review may skip after its retry budget is exhausted; the skip is recorded and Final Validator remains the completion gate.
+- Review technical recovery is also unlimited by default. A Workflow may opt into a finite `retry` budget; only then can `skip_on_error` turn an exhausted Review technical error into a recorded skip. Semantic Review FAIL still follows the Workflow result edge.
 - Task producers store only durable TODO content (`title`, `description`, `deliverable`, `acceptance_criteria`). `PlanStage` is one built-in producer; `command` or future Stage types can opt into the same effect with `produces: tasks`. For Plan-driven flows, the loader expands the built-in `Task -> Review` task lifecycle internally; `Review FAIL -> Task` is a normal result edge and `workflow_position` remains the durable execution cursor. Explicit `scope: task` is reserved for advanced/custom task producers or custom per-TODO SOPs.
 
 
