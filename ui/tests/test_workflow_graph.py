@@ -28,15 +28,17 @@ def test_graph_renders_stage_nodes_normal_flow_and_result_edges():
     assert ("validate", "execute", "FAIL → execute") in _edges(graph, "result")
 
 
-def test_graph_uses_unique_flow_node_name_for_reused_stage_template():
+def test_graph_uses_stage_definition_as_node_identity():
     graph = build_workflow_graph({
         "stages": {
-            "worker": {"type": "task"},
+            "first": {"type": "task", "label": "First"},
+            "second": {
+                "type": "review",
+                "label": "Second",
+                "routes": {"fail": "first"},
+            },
         },
-        "flow": [
-            {"stage": "worker", "name": "first", "label": "First"},
-            {"stage": "worker", "name": "second", "label": "Second", "routes": {"fail": "first"}},
-        ],
+        "flow": ["first", "second"],
     })
 
     assert [node["id"] for node in graph["nodes"]] == ["first", "second"]
