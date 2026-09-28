@@ -1,5 +1,4 @@
-# Latest custom Workflow example.
-# No PlanStage is required because discover_tasks itself produces Task[].
+# Custom task producer with an explicit per-task closed loop.
 stages:
   discover_tasks:
     type: command
@@ -11,10 +10,8 @@ stages:
 
   review:
     type: review
-    recover: [repair]
-
-  repair:
-    type: task
+    routes:
+      fail: execute
 
   done:
     type: command
