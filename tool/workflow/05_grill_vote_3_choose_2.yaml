@@ -1,8 +1,14 @@
-# Three independent Grill sessions; at least two must PASS.
-# A failed Grill vote routes through the existing Planning Stage.
 stages:
   planning:
     type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    routes:
+      fail: execute
 
   grill:
     type: review
@@ -12,14 +18,20 @@ stages:
     retry: 0
     runs: 3
     required_passes: 2
-    recover: [planning]
+    routes:
+      fail: planning
 
   validate_ai:
     type: ai_validator
     validator: ai
-    restart_at: planning
+    routes:
+      fail: planning
 
 flow:
   - planning
+  - stage: execute
+    scope: task
+  - stage: review
+    scope: task
   - grill
   - validate_ai
