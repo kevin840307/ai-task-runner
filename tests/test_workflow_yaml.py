@@ -155,7 +155,7 @@ flow:
         load_workflow(path)
 
 
-def test_reused_stage_template_can_have_unique_node_names(tmp_path):
+def test_flow_rejects_invocation_objects(tmp_path):
     path = write_workflow(
         tmp_path,
         """
@@ -165,16 +165,10 @@ stages:
 flow:
   - stage: work
     name: first
-  - stage: work
-    name: second
-    routes:
-      fail: first
 """,
     )
-    workflow = load_workflow(path)
-
-    assert [item["name"] for item in workflow] == ["first", "second"]
-    assert workflow[1]["routes"] == {"fail": "first"}
+    with pytest.raises(RunnerError, match="only Stage names"):
+        load_workflow(path)
 
 
 def test_task_scope_must_be_one_contiguous_block(tmp_path):
@@ -182,15 +176,13 @@ def test_task_scope_must_be_one_contiguous_block(tmp_path):
         tmp_path,
         """
 stages:
-  a: {type: base}
+  a: {type: base, scope: task}
   b: {type: base}
-  c: {type: base}
+  c: {type: base, scope: task}
 flow:
-  - stage: a
-    scope: task
+  - a
   - b
-  - stage: c
-    scope: task
+  - c
 """,
     )
     with pytest.raises(RunnerError, match="contiguous"):
@@ -205,9 +197,9 @@ stages:
   validate:
     type: ai_validator
     validator: ai
-flow:
-  - stage: validate
     scope: task
+flow:
+  - validate
 """,
     )
     with pytest.raises(RunnerError, match="validator stages cannot use scope"):
