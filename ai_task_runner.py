@@ -23,14 +23,13 @@ from runner.config.defaults import (
     DEFAULT_WORKER_HANG_TIMEOUT,
 )
 from runner.errors import ConfigurationError
-from runner.extensions import discover_extensions
-from runner.plugins.registry import add_plugin_arguments
+from runner.plugins.registry import add_plugin_arguments, discover_plugins
 from runner.runtime.supervisor import supervise_cli
 from runner.version import __version__
 
 
 def parser() -> argparse.ArgumentParser:
-    discover_extensions()
+    discover_plugins()
     value = argparse.ArgumentParser(description="Reusable AI task runner")
     value.add_argument("--goal")
     value.add_argument("--goal-file")
