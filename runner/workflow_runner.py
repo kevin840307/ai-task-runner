@@ -36,8 +36,6 @@ class WorkflowRunner:
         self.context = self._build_context()
         self.flow_engine = build_flow_engine(self.context)
 
-        # Compatibility attribute for older extensions/tests.
-        self.pipeline = self.flow_engine
         self.stage_executor = StageExecutor()
 
     def _validate_request(self) -> None:
@@ -85,7 +83,6 @@ class WorkflowRunner:
             self.config.goal,
             resume=self.config.resume,
             force_new=self.config.force_new,
-            execution_mode=self.config.execution_mode,
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
@@ -154,16 +151,7 @@ class WorkflowRunner:
             setattr(self.config, content_attr, text)
 
     def run(self) -> int:
-        if self.config.plan_only and self.state.tasks:
-            progress.set_status(
-                "Plan ready",
-                "plan-only completed without execution",
-            )
-            return 0
-        return self.flow_engine.run(
-            self.stage_executor,
-            plan_only=self.config.plan_only,
-        )
+        return self.flow_engine.run(self.stage_executor)
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir() or (
