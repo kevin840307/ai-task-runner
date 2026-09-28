@@ -22,6 +22,7 @@ class FlowNode:
     """One Stage plus routing/runtime facts owned by the workflow engine."""
 
     stage: Stage
+    routes: dict[str, str] | None = None
     recover: tuple[dict[str, Any], ...] = ()
     restart_at: str | None = None
     repeat: int | None = None
@@ -36,6 +37,7 @@ class FlowNode:
     def from_definition(cls, definition: dict[str, Any]) -> "FlowNode":
         return cls(
             create_stage(definition),
+            dict(definition.get("routes", {})) or None,
             tuple(definition.get("recover", ())),
             definition.get("restart_at"),
             definition.get("repeat"),
@@ -190,6 +192,13 @@ class FlowEngine:
                 self._remember_transition(result)
                 if result.status == "pass" and result.kind == "tasks":
                     self._task_generation += 1
+                routed = self._route_result(node, result)
+                if routed is not None:
+                    replacement, stop = routed
+                    if replacement is not None or stop:
+                        return replacement, result, stop
+                    break
+
                 action = self.recovery.decide(node, result, executor)
 
                 if action.kind == "replan":
@@ -282,6 +291,33 @@ class FlowEngine:
             "data": data,
             "kind": result.kind,
         }
+
+    def _route_result(
+        self,
+        node: FlowNode,
+        result: StageResult,
+    ) -> tuple[tuple[dict[str, Any], ...] | None, bool] | None:
+        """Apply the canonical Ralph-like result edge when one is configured.
+
+        StageExecutor has already exhausted technical retry/session recovery before
+        an ``error`` result reaches this point. Workflow routing therefore stays a
+        small state-machine concern: result status -> next target.
+        """
+        if not node.routes or result.status not in node.routes:
+            return None
+        target = node.routes[result.status]
+        if target == "next":
+            return None, False
+        if target == "stop":
+            return None, True
+        if target == "done":
+            return self.routing.route_to(target, result), False
+        if (
+            result.kind == "validation"
+            and self.routing.target_produces_tasks(target)
+        ):
+            prepare_replan(self.context, result)
+        return self.routing.route_to(target, result), False
 
     def _advance(self, node: FlowNode) -> None:
         self.routing.advance(node.workflow_index)
