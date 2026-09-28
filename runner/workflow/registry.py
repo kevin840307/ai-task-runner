@@ -53,7 +53,7 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
 def workflow_catalog() -> dict[str, Any]:
     return {
         "stage_types": stage_catalog(),
-        "flow_options": {
+        "node_options": {
             "scope": {"type": "enum", "values": ["task"]},
             "label": {"type": "string"},
             "routes": {
