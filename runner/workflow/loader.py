@@ -19,15 +19,15 @@ from .schema import (
     workflow_validators,
 )
 
-SYSTEM_WORKFLOW_DIR = Path(__file__).with_name("system")
-CUSTOM_WORKFLOW_DIR = Path(__file__).with_name("custom")
-SYSTEM_WORKFLOWS = {
-    "mixed": SYSTEM_WORKFLOW_DIR / "mixed.yaml",
-    "file": SYSTEM_WORKFLOW_DIR / "file.yaml",
-    "ai": SYSTEM_WORKFLOW_DIR / "ai.yaml",
-    "workflow_builder": SYSTEM_WORKFLOW_DIR / "workflow_builder.yaml",
+WORKFLOW_DIR = Path(__file__).resolve().parents[1] / "workflows"
+WORKFLOWS = {
+    "mixed": WORKFLOW_DIR / "mixed.yaml",
+    "file": WORKFLOW_DIR / "file.yaml",
+    "ai": WORKFLOW_DIR / "ai.yaml",
+    "workflow_builder": WORKFLOW_DIR / "workflow_builder.yaml",
+    "ralphy_ai_validate": WORKFLOW_DIR / "ralphy_ai_validate.yaml",
 }
-DEFAULT_WORKFLOW = SYSTEM_WORKFLOWS["mixed"]
+DEFAULT_WORKFLOW = WORKFLOWS["mixed"]
 
 
 def load_workflow(path: str | Path | None = None) -> list[dict[str, Any]]:
@@ -68,7 +68,7 @@ def load_default_workflow(
     ai_validator_prompt: str = "",
 ) -> list[dict[str, Any]]:
     return load_workflow(
-        SYSTEM_WORKFLOWS[default_workflow_name(validator, ai_validator_prompt)]
+        WORKFLOWS[default_workflow_name(validator, ai_validator_prompt)]
     )
 
 
@@ -179,10 +179,9 @@ def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
 
 
 __all__ = [
-    "CUSTOM_WORKFLOW_DIR",
     "DEFAULT_WORKFLOW",
-    "SYSTEM_WORKFLOW_DIR",
-    "SYSTEM_WORKFLOWS",
+    "WORKFLOW_DIR",
+    "WORKFLOWS",
     "default_workflow_name",
     "load_default_workflow",
     "load_workflow",
