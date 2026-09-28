@@ -1214,21 +1214,16 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
                 "    type: command",
                 f'    command: ["{{python}}", -c, "print(\'{name}\')"]',
             ])
-            if index == 5:
-                flow_lines.extend(["  - stage: s05", "    repeat: 3", "    recover: [fallback]"])
-            elif index == 9:
-                flow_lines.extend(["  - stage: s09", "    recover: [fallback]"])
-            elif index == 10:
-                flow_lines.extend(["  - stage: s10", "    restart_at: s08"])
-            else:
-                flow_lines.append(f"  - {name}")
-        stage_lines.extend([
-            "  fallback:",
-            "    type: command",
-            '    command: ["{python}", -c, "print(\'fallback\')"]',
-        ])
+            target = {5: "s03", 9: "s07", 10: "s08"}.get(index)
+            if target:
+                stage_lines.extend([
+                    "    routes:",
+                    f"      fail: {target}",
+                ])
+            flow_lines.append(f"  - {name}")
         path.write_text(
-            "stages:\n" + "\n".join(stage_lines) + "\nflow:\n" + "\n".join(flow_lines) + "\n",
+            "stages:\n" + "\n".join(stage_lines) + "\nflow:\n"
+            + "\n".join(flow_lines) + "\n",
             encoding="utf-8",
         )
         twelve = run_one(path)
@@ -1468,7 +1463,7 @@ def readonly_long_path_preflight() -> None:
 
 
 def technical_artifact_safety_preflight() -> None:
-    """Prove caches/build/IDE metadata cannot cause protected-path replans."""
+    """Prove caches/build/IDE metadata cannot cause protected-path semantic reroutes."""
     from runner.plugins.safety import restore_changed, snapshot
 
     with tempfile.TemporaryDirectory(prefix="ai-runner-safety-artifacts-") as temporary:
@@ -2031,15 +2026,9 @@ FULL_LOOP_WORKFLOW = '''stages:
 flow:
   - execute
   - seed
-  - stage: review
-    restart_at: execute
-    max_attempts: 3
-    on_exhausted: fail
+  - review
   - review_verify
-  - stage: validate_file
-    restart_at: execute
-    max_attempts: 2
-    on_exhausted: fail
+  - validate_file
 '''
 
 
