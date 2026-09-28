@@ -86,7 +86,60 @@ def test_default_workflow_plan_uses_static_task_scope():
     assert [item.get("scope") for item in workflow] == [
         None, "task", "task", None, None
     ]
+    assert workflow[2]["routes"] == {"fail": "__plan_task__"}
+    assert workflow[3]["routes"] == {"fail": "planning"}
+    assert workflow[4]["routes"] == {"fail": "planning"}
     assert "planner_stages" not in workflow[0]
+
+def test_result_routes_accept_named_stage_and_special_targets(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: review
+    routes:
+      pass: next
+      fail: execute
+      error: stop
+  done:
+    type: command
+    command: [python, -c, "print('DONE')"]
+    routes:
+      pass: done
+flow: [execute, review, done]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert workflow[1]["routes"] == {
+        "pass": "next",
+        "fail": "execute",
+        "error": "stop",
+    }
+    assert workflow[2]["routes"] == {"pass": "done"}
+
+
+def test_result_routes_reject_unknown_target(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+    routes:
+      fail: missing
+flow: [execute]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="routes.fail references unknown"):
+        load_workflow(workflow_file)
+
 
 def test_task_sop_explicitly_includes_new_stage(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
