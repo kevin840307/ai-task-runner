@@ -877,7 +877,7 @@ function appendStudioItem(root, item) {
   const button = document.createElement("button"); button.type = "button"; button.className = "studio-file-item designer-workflow-pill"; if (state.studioFile?.id === item.id) button.classList.add("active"); if (item.readonly) button.classList.add("readonly");
   const top = document.createElement("span"); top.className = "studio-file-item-top";
   const name = document.createElement("strong"); name.textContent = item.name;
-  const scope = document.createElement("span"); scope.className = `studio-list-scope ${item.readonly ? "system" : (item.scope || "custom")}`; scope.textContent = item.readonly ? "SYSTEM" : String(item.scope || "custom").toUpperCase();
+  const scope = document.createElement("span"); scope.className = `studio-list-scope ${item.scope || "global"}`; scope.textContent = String(item.scope || "global").toUpperCase();
   top.append(name, scope);
   const metaNode = document.createElement("small"); metaNode.textContent = item.readonly ? "Read only" : (item.kind === "workflow" && item.hidden ? "Hidden from Tasks" : (item.kind === "prompt" ? "Prompt" : "Available in Tasks"));
   if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
@@ -937,8 +937,8 @@ function renderStudioVisibilityBadge() {
   if (scopeBadge) {
     const scope = String(item?.scope || "").toLowerCase();
     scopeBadge.hidden = !item;
-    scopeBadge.className = `studio-scope-badge ${scope || "custom"}${item?.readonly ? " readonly" : ""}`;
-    scopeBadge.textContent = item?.readonly ? "SYSTEM · READ ONLY" : (scope === "project" ? "PROJECT" : "CUSTOM");
+    scopeBadge.className = `studio-scope-badge ${scope || "global"}`;
+    scopeBadge.textContent = scope === "project" ? "PROJECT" : "GLOBAL";
   }
 }
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
@@ -1969,7 +1969,7 @@ $("generateDraftPromptTextarea").addEventListener("input", () => { const prompt 
 $("generateWorkflowRequest").addEventListener("input", () => { if (state.generateWorkflowPhase === "form") state.generateWorkflowDirty = !!$("generateWorkflowRequest").value.trim(); });
 $("generateWorkflowBackend").addEventListener("change", () => { if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.builderBackend = $("generateWorkflowBackend").value; saveUiPreferences(); });
 for (const id of ["generateWorkflowFolder", "generateWorkflowFilename"]) $(id)?.addEventListener("input", updateGenerateWorkflowTargetPreview);
-for (const id of ["generateWorkflowSaveFolder", "generateWorkflowSaveFilename"]) $(id)?.addEventListener("input", updateGenerateWorkflowSavePreview);
+$("generateWorkflowSaveFilename")?.addEventListener("input", updateGenerateWorkflowSavePreview);
 $("generateWorkflowDestination")?.addEventListener("change", updateGenerateWorkflowSavePreview);
 $("generateWorkflowFailedCancel").onclick = () => leaveGenerateWorkflowPage();
 $("generateWorkflowRetry").onclick = async () => { const request = state.generateWorkflowRequestText || $("generateWorkflowRequest").value; if (state.generateWorkflowJobId) { try { await api("/api/studio/generate/discard", { method: "POST", body: JSON.stringify({ job_id: state.generateWorkflowJobId }) }); } catch (_) {} } resetGenerateWorkflowState({ keepRequest: true }); state.generateWorkflowRequestText = request; $("generateWorkflowRequest").value = request; fillGenerateWorkflowBackends(); setGenerateWorkflowPhase("form"); };
