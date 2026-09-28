@@ -206,8 +206,6 @@ class Handler(SimpleHTTPRequestHandler):
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_duplicate(str(body.get("id", "")), str(body.get("name", "")), project))
             if parsed.path == "/api/studio/import":
-                if str(body.get("kind", "")).strip().lower() == "workflow_folder":
-                    return self._json(self.state.studio_folder_import(str(body.get("content", ""))))
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_import(str(body.get("kind", "")), str(body.get("name", "")), str(body.get("content", "")), str(body.get("destination", "global")), project))
             if parsed.path == "/api/studio/prompt/check":
