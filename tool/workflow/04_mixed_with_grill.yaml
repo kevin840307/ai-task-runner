@@ -1,15 +1,22 @@
-# Grill + deterministic validation + final AI validation.
-# Semantic failures route back to the existing Planning Stage.
 stages:
   planning:
     type: plan
+
+  execute:
+    type: task
+
+  review:
+    type: review
+    routes:
+      fail: execute
 
   grill:
     type: review
     prompt: ../../runner/prompts/stages/grill.md
     fresh_session_on_start: true
     retry: 0
-    recover: [planning]
+    routes:
+      fail: planning
 
   validate_file:
     type: command
@@ -18,15 +25,21 @@ stages:
     actor: validator
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
-    restart_at: planning
+    routes:
+      fail: planning
 
   validate_ai:
     type: ai_validator
     validator: ai
-    restart_at: planning
+    routes:
+      fail: planning
 
 flow:
   - planning
+  - stage: execute
+    scope: task
+  - stage: review
+    scope: task
   - grill
   - validate_file
   - validate_ai
