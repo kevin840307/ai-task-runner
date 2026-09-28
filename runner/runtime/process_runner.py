@@ -122,10 +122,16 @@ def _active_process(process: subprocess.Popen[str], active: bool) -> None:
 def _process_event(kind: str, process: subprocess.Popen[str], command: Sequence[str], cwd: Path) -> None:
     try:
         from ..bootstrap import current_runtime
+
+        # Event semantics must not depend on how quickly the child exits between
+        # Popen() and publication. A start event always describes a process at
+        # launch time, so its return_code is intentionally unset. Only the exit
+        # event reports the observed terminal return code.
+        return_code = None if kind == "runner.process.start" else process.poll()
         current_runtime().events.publish({
             "type": kind,
             "pid": process.pid,
-            "return_code": process.poll(),
+            "return_code": return_code,
             "command": Path(str(command[0])).name if command else "",
             "cwd": str(cwd),
         })
