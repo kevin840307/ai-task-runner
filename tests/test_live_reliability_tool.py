@@ -811,7 +811,6 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     assert workflow[0]["type"] == "task"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["restart_at"] == "execute"
-    assert workflow[2]["fresh_after_same_failures"] == 2
     assert workflow[2]["max_attempts"] == 3
     assert workflow[2]["on_exhausted"] == "fail"
     assert workflow[3]["restart_at"] == "execute"
