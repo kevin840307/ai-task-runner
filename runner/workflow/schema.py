@@ -1,4 +1,4 @@
-"""Validation helpers for normalized Workflow definitions."""
+"""Validation for the minimal Workflow contract."""
 
 from __future__ import annotations
 
@@ -8,20 +8,21 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-ROUTING_FIELDS = frozenset({"routes", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "label", "scope"})
-META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
+FLOW_FIELDS = frozenset({"routes", "label", "scope"})
+META_FIELDS = frozenset({"name", "type", "validator", *FLOW_FIELDS})
 
 
 def validate_stage(name: str, values: dict[str, Any]) -> None:
     stage_type = values.get("type")
     if not isinstance(stage_type, str) or stage_type not in STAGE_REGISTRY:
         raise RunnerError(f"workflow stage {name} has unknown type: {stage_type}")
-    _validate_validator(name, values, stage_type)
+
     spec_fields = fields(STAGE_REGISTRY[stage_type].spec_class)
     allowed = {field.name for field in spec_fields} | META_FIELDS
     unknown = sorted(str(key) for key in values if key not in allowed)
     if unknown:
         raise RunnerError(f"workflow stage {name} unknown options: {', '.join(unknown)}")
+
     missing = [
         field.name
         for field in spec_fields
@@ -34,203 +35,32 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} missing required options: {', '.join(missing)}"
         )
+
+    if values.get("validator") not in {None, "ai"}:
+        raise RunnerError(f"workflow stage {name} validator must be ai")
+    if values.get("validator") == "ai" and stage_type != "ai_validator":
+        raise RunnerError(f"workflow stage {name} validator ai requires type: ai_validator")
+
     label = values.get("label")
     if label is not None and (not isinstance(label, str) or not label.strip()):
         raise RunnerError(f"workflow stage {name} label must be a non-empty string")
+
     scope = values.get("scope")
     if scope not in {None, "task"}:
         raise RunnerError(f"workflow stage {name} scope must be task when specified")
+
     produces = values.get("produces")
     if produces not in {None, "", "tasks"}:
         raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
-    readonly_safety = values.get("readonly_safety")
-    if readonly_safety not in {None, "", "restore", "observe"}:
-        raise RunnerError(
-            f"workflow stage {name} readonly_safety must be restore or observe"
-        )
-    for field in ("ai_validator_yolo",):
-        if field in values and values[field] is not None and not isinstance(values[field], bool):
-            raise RunnerError(f"workflow stage {name} {field} must be a boolean")
-    _validate_routes(name, values)
-    _validate_numbers(name, values)
 
-
-def _validate_routes(name: str, values: dict[str, Any]) -> None:
-    routes = values.get("routes")
-    if routes is None:
-        return
-    if not isinstance(routes, dict) or not routes:
-        raise RunnerError(f"workflow stage {name} routes must be a non-empty object")
-    allowed_statuses = {"pass", "fail", "error", "replan"}
-    unknown = sorted(str(key) for key in routes if key not in allowed_statuses)
-    if unknown:
-        raise RunnerError(
-            f"workflow stage {name} routes supports only pass/fail/error/replan; "
-            f"unknown: {', '.join(unknown)}"
-        )
-    for status, target in routes.items():
-        if not isinstance(target, str) or not target.strip():
-            raise RunnerError(
-                f"workflow stage {name} routes.{status} must be a non-empty target"
-            )
-    legacy = [
-        field
-        for field in (
-            "recover",
-            "restart_at",
-            "repeat",
-            "max_attempts",
-            "on_exhausted",
-            "fresh_after_same_failures",
-        )
-        if values.get(field) is not None
-    ]
-    if legacy:
-        raise RunnerError(
-            f"workflow stage {name} routes cannot be combined with legacy routing: "
-            + ", ".join(legacy)
-        )
-
-
-def validate_restart_targets(result: list[dict[str, Any]], top_level: bool) -> None:
-    names = {item.get("name") for item in result if item.get("name")}
-    for index, definition in enumerate(result, 1):
-        routes = definition.get("routes")
-        if routes:
-            if not top_level:
-                raise RunnerError(
-                    f"workflow stage {index} routes is only valid at top level"
-                )
-            for status, raw_target in routes.items():
-                target = str(raw_target).strip()
-                if target in {"next", "done", "stop"}:
-                    continue
-                if target not in names:
-                    raise RunnerError(
-                        f"workflow stage {index} routes.{status} references unknown "
-                        f"top-level stage: {target}"
-                    )
-        restart_at = definition.get("restart_at")
-        if restart_at is None:
-            continue
-        if not top_level:
-            raise RunnerError(f"workflow stage {index} restart_at is only valid at top level")
-        if not isinstance(restart_at, str) or not restart_at.strip():
-            raise RunnerError(
-                f"workflow stage {index} restart_at must be a non-empty stage name"
-            )
-        preceding = {item.get("name") for item in result[:index] if item.get("name")}
-        if restart_at not in preceding:
-            raise RunnerError(
-                f"workflow stage {index} restart_at must reference its own or an earlier stage name"
-            )
-
-
-def validate_topology(workflow: list[dict[str, Any]]) -> None:
-    """Validate generic flow invariants without imposing validator placement.
-
-    File and AI validators are ordinary top-level gates: any number may appear
-    anywhere in the static flow.  Only task-scoped stages remain constrained to
-    one contiguous block, because Pipeline persists one task-step cursor for
-    that block.
-    """
-    task_nodes = [index for index, item in enumerate(workflow) if item.get("scope") == "task"]
-
-    if task_nodes:
-        if task_nodes != list(range(task_nodes[0], task_nodes[-1] + 1)):
-            raise RunnerError("task-scoped workflow stages must form one contiguous block")
-        if any(
-            workflow[index].get("validator")
-            or (workflow[index].get("type") == "command" and workflow[index].get("result_kind") == "validation")
-            for index in task_nodes
-        ):
-            raise RunnerError("validator stages cannot use scope: task")
-
-
-def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
-    return bool(_file_validation_indexes(workflow)), bool(
-        _indexes(workflow, "validator", "ai")
-    )
-
-
-
-def workflow_has_task_producer(workflow: list[dict[str, Any]]) -> bool:
-    return any(stage_result_kind(definition) == "tasks" for definition in workflow)
-
-
-def _validate_validator(
-    name: str,
-    values: dict[str, Any],
-    stage_type: str,
-) -> None:
-    validator = values.get("validator")
-    if validator is None:
-        return
-    if validator != "ai":
-        raise RunnerError(f"workflow stage {name} has invalid validator: {validator}")
-    if stage_type != "ai_validator":
-        raise RunnerError(
-            f"workflow stage {name} validator ai requires type: ai_validator"
-        )
-
-
-def _validate_numbers(name: str, values: dict[str, Any]) -> None:
     retry = values.get("retry")
     if retry is not None and (
         not isinstance(retry, int) or isinstance(retry, bool) or retry < -1
     ):
         raise RunnerError(f"workflow stage {name} retry must be -1 or non-negative")
-    fresh_after_same_failures = values.get("fresh_after_same_failures")
-    if fresh_after_same_failures is not None and (
-        not isinstance(fresh_after_same_failures, int)
-        or isinstance(fresh_after_same_failures, bool)
-        or fresh_after_same_failures <= 0
-    ):
-        raise RunnerError(
-            f"workflow stage {name} fresh_after_same_failures must be a positive integer"
-        )
-    if fresh_after_same_failures is not None and not values.get("recover"):
-        raise RunnerError(
-            f"workflow stage {name} fresh_after_same_failures requires recover"
-        )
-    repeat = values.get("repeat")
-    if repeat is not None and (
-        not isinstance(repeat, int) or isinstance(repeat, bool) or repeat <= 0
-    ):
-        raise RunnerError(f"workflow stage {name} repeat must be a positive integer")
-    if repeat is not None and repeat > 1 and not values.get("recover"):
-        raise RunnerError(f"workflow stage {name} repeat requires recover")
-    max_attempts = values.get("max_attempts")
-    if max_attempts is not None and (
-        not isinstance(max_attempts, int)
-        or isinstance(max_attempts, bool)
-        or max_attempts <= 0
-    ):
-        raise RunnerError(
-            f"workflow stage {name} max_attempts must be a positive integer"
-        )
-    if (
-        max_attempts is not None
-        and not values.get("recover")
-        and values.get("restart_at") is None
-    ):
-        raise RunnerError(
-            f"workflow stage {name} max_attempts requires recover or restart_at"
-        )
-    if max_attempts is not None and repeat is not None:
-        raise RunnerError(
-            f"workflow stage {name} cannot combine max_attempts with repeat"
-        )
-    on_exhausted = values.get("on_exhausted")
-    if on_exhausted not in {None, "continue", "fail"}:
-        raise RunnerError(
-            f"workflow stage {name} on_exhausted must be continue or fail"
-        )
-    if on_exhausted is not None and max_attempts is None:
-        raise RunnerError(
-            f"workflow stage {name} on_exhausted requires max_attempts"
-        )
-    runs, required = values.get("runs"), values.get("required_passes")
+
+    runs = values.get("runs")
+    required = values.get("required_passes")
     if runs is not None and (
         not isinstance(runs, int) or isinstance(runs, bool) or runs <= 0
     ):
@@ -242,24 +72,68 @@ def _validate_numbers(name: str, values: dict[str, Any]) -> None:
     if isinstance(runs, int) and isinstance(required, int) and required > runs:
         raise RunnerError(f"workflow stage {name} required_passes cannot exceed runs")
 
+    _validate_routes(name, values.get("routes"))
 
-def _file_validation_indexes(workflow: list[dict[str, Any]]) -> list[int]:
-    return [
-        index
-        for index, definition in enumerate(workflow)
-        if definition.get("type") == "command"
-        and definition.get("result_kind") == "validation"
+
+def _validate_routes(name: str, routes: Any) -> None:
+    if routes is None:
+        return
+    if not isinstance(routes, dict) or not routes:
+        raise RunnerError(f"workflow stage {name} routes must be a non-empty object")
+    unknown = sorted(str(key) for key in routes if key not in {"pass", "fail", "error"})
+    if unknown:
+        raise RunnerError(
+            f"workflow stage {name} routes supports only pass/fail/error; "
+            f"unknown: {', '.join(unknown)}"
+        )
+    for status, target in routes.items():
+        if not isinstance(target, str) or not target.strip():
+            raise RunnerError(
+                f"workflow stage {name} routes.{status} must be a non-empty target"
+            )
+
+
+def validate_routes(workflow: list[dict[str, Any]]) -> None:
+    names = {str(item["name"]) for item in workflow}
+    for definition in workflow:
+        for status, target in (definition.get("routes") or {}).items():
+            if target not in {"next", "done", "stop"} and target not in names:
+                raise RunnerError(
+                    f"workflow stage {definition['name']} routes.{status} "
+                    f"references unknown stage: {target}"
+                )
+
+
+def validate_topology(workflow: list[dict[str, Any]]) -> None:
+    task_nodes = [
+        index for index, item in enumerate(workflow) if item.get("scope") == "task"
     ]
+    if not task_nodes:
+        return
+    if task_nodes != list(range(task_nodes[0], task_nodes[-1] + 1)):
+        raise RunnerError("task-scoped workflow stages must form one contiguous block")
+    if any(stage_result_kind(workflow[index]) == "validation" for index in task_nodes):
+        raise RunnerError("validator stages cannot use scope: task")
 
 
-def _indexes(workflow: list[dict[str, Any]], field: str, value: str) -> list[int]:
-    return [
-        index for index, definition in enumerate(workflow) if definition.get(field) == value
-    ]
+def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
+    file_validation = any(
+        item.get("type") == "command" and item.get("result_kind") == "validation"
+        for item in workflow
+    )
+    ai_validation = any(
+        item.get("type") == "ai_validator" and item.get("validator") == "ai"
+        for item in workflow
+    )
+    return file_validation, ai_validation
+
+
+def workflow_has_task_producer(workflow: list[dict[str, Any]]) -> bool:
+    return any(stage_result_kind(item) == "tasks" for item in workflow)
 
 
 __all__ = [
-    "validate_restart_targets",
+    "validate_routes",
     "validate_stage",
     "validate_topology",
     "workflow_has_task_producer",
