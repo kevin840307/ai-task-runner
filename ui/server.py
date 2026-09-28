@@ -234,22 +234,33 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/studio/stage/validate":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_save(
-                    str(body.get("id", "")), str(body.get("stage", "")), body.get("fields", {}), str(body.get("hash", "")), project,
-                    flow_index=body.get("flow_index"), scope=str(body.get("scope", "")), flow_fields=body.get("flow_fields", {}), validate_only=True,
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    body.get("fields", {}),
+                    str(body.get("hash", "")),
+                    project,
+                    validate_only=True,
                 ))
             if parsed.path == "/api/studio/stage/save":
                 project = self._optional_project(str(body.get("project", "")))
-                flow_index = body.get("flow_index")
-                flow_index = int(flow_index) if flow_index is not None else None
-                return self._json(self.state.studio_stage_save(str(body.get("id", "")), str(body.get("stage", "")), body.get("fields", {}), str(body.get("hash", "")), project, flow_index=flow_index, scope=str(body.get("scope", "")), flow_fields=body.get("flow_fields", {})))
+                return self._json(self.state.studio_stage_save(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    body.get("fields", {}),
+                    str(body.get("hash", "")),
+                    project,
+                ))
             if parsed.path == "/api/studio/stage/add":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_add(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("type", "base")), str(body.get("hash", "")), project, status=str(body.get("status", "")), prompt=str(body.get("prompt", "")), command=str(body.get("command", "")), add_to_flow=bool(body.get("add_to_flow", True))))
             if parsed.path == "/api/studio/stage/delete":
                 project = self._optional_project(str(body.get("project", "")))
-                flow_index = body.get("flow_index")
-                flow_index = int(flow_index) if flow_index is not None else None
-                return self._json(self.state.studio_stage_delete(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("hash", "")), project, flow_index=flow_index))
+                return self._json(self.state.studio_stage_delete(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("hash", "")),
+                    project,
+                ))
             if parsed.path == "/api/studio/check":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_check(str(body.get("id", "")), str(body.get("content", "")), project))
