@@ -4,33 +4,18 @@ from typing import Any
 
 
 def build_workflow_graph(data: dict[str, Any]) -> dict[str, Any]:
-    """Render the same minimal Stage + result-edge model used by runtime."""
+    """Render the same one-Stage-one-node graph used by runtime."""
     stages = data.get("stages") if isinstance(data, dict) else {}
     flow = data.get("flow") if isinstance(data, dict) else []
     stages = stages if isinstance(stages, dict) else {}
     flow = flow if isinstance(flow, list) else []
 
-    nodes: list[dict[str, Any]] = []
+    names = [item for item in flow if isinstance(item, str) and item in stages]
+    nodes = []
     edges: list[dict[str, str]] = []
-    names: list[str] = []
-    configs: dict[str, dict[str, Any]] = {}
 
-    for item in flow:
-        if isinstance(item, str):
-            ref, overrides = item, {}
-        elif isinstance(item, dict):
-            ref = str(item.get("stage") or "")
-            overrides = {k: v for k, v in item.items() if k != "stage"}
-        else:
-            continue
-        base = stages.get(ref)
-        if not ref or not isinstance(base, dict):
-            continue
-        cfg = {**base, **overrides}
-        name = str(cfg.get("name") or ref)
-        cfg["name"] = name
-        names.append(name)
-        configs[name] = cfg
+    for name in names:
+        cfg = stages.get(name) if isinstance(stages.get(name), dict) else {}
         nodes.append({
             "id": name,
             "label": str(cfg.get("label") or name),
@@ -41,22 +26,16 @@ def build_workflow_graph(data: dict[str, Any]) -> dict[str, Any]:
         })
 
     for index in range(len(names) - 1):
-        source = names[index]
-        routes = configs[source].get("routes")
-        explicit_pass = (
-            isinstance(routes, dict)
-            and str(routes.get("pass") or "").strip()
-        )
-        if not explicit_pass:
-            edges.append({
-                "from": source,
-                "to": names[index + 1],
-                "kind": "normal",
-                "label": "PASS → next",
-            })
+        edges.append({
+            "from": names[index],
+            "to": names[index + 1],
+            "kind": "normal",
+            "label": "PASS → next",
+        })
 
     terminals: set[str] = set()
-    for name, cfg in configs.items():
+    for name in names:
+        cfg = stages.get(name) if isinstance(stages.get(name), dict) else {}
         routes = cfg.get("routes")
         if not isinstance(routes, dict):
             continue
