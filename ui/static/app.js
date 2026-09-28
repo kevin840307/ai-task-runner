@@ -1282,9 +1282,8 @@ function renderStageEditorContent(cfg, item) {
       <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Route unrecovered Stage error. Default is stop."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop (default)")}</select></label>
     </div>
 
-    <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Technical Stage retry is separate from semantic result routing."))}</span></div></div>
+    <div class="stage-section-head"><div><strong>Structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Technical Stage retry/session recovery is global Runner behavior."))}</span></div></div>
     <div class="stage-form-two-col">
-      <label class="designer-form-row">${fieldLabel("Retry", t("stage.help.retry", "Technical Stage retry. Workflow FAIL routing is configured by result edges."))}<input id="stageRetry" class="designer-input" type="number" min="-1" value="${cfg.retry ?? ""}" placeholder="Stage default" ${disabled} /><span class="designer-form-hint">${escapeHtml(t("stage.retry_hint", "-1 = keep retrying until PASS; 0 = no retry."))}</span></label>
       <label id="stageStructuredRetriesRow" class="designer-form-row">${fieldLabel("Structured retries", t("stage.help.structured_retries", "Retry malformed structured output in the current Session."))}<input id="stageStructuredRetries" class="designer-input" type="number" min="0" value="${cfg.structured_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
       <label id="stageStructuredFreshRetriesRow" class="designer-form-row">${fieldLabel("Structured fresh retries", t("stage.help.structured_fresh_retries", "Retry malformed structured output in a Fresh Session after current-Session retries are exhausted."))}<input id="stageStructuredFreshRetries" class="designer-input" type="number" min="0" value="${cfg.structured_fresh_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
     </div>
@@ -1356,7 +1355,6 @@ function changedFields(cfg) {
     timeout: numberOrNull("stageTimeout"),
     produces: valueOrNull("stageProduces"),
     detail: valueOrNull("stageDetail"),
-    retry: numberOrNull("stageRetry"),
     track_changes: checked("stageTrackChanges"),
     tolerate_restored_changes: checked("stageTolerateRestored"),
   };
