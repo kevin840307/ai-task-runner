@@ -20,8 +20,8 @@ stages:
       - "--state-file"
       - "{state_file}"
       - "{validator_args}"
-    recover: [build_workflow]
-    fresh_after_same_failures: 2
+    routes:
+      fail: build_workflow
 
 flow:
   - build_workflow
