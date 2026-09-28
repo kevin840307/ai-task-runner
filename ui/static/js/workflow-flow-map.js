@@ -88,7 +88,7 @@
     const allEdges = Array.isArray(graph?.edges) ? graph.edges : [];
     const dense = allNodes.length > 20 || allEdges.length > 28;
     const effectiveMode = mode === "auto" ? (dense ? "core" : "all") : mode;
-    const coreKinds = new Set(["normal", "recover", "recovery_step", "restart"]);
+    const coreKinds = new Set(["normal", "result"]);
     const nodes = effectiveMode === "core" ? allNodes.filter((n) => !n.virtual) : allNodes;
     const nodeIds = new Set(nodes.map((n) => n.id));
     const edges = effectiveMode === "core"
@@ -101,20 +101,12 @@
 
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const { coords, width, height, nodeW, nodeH } = buildLayout(nodes, edges);
-    const defs = `<defs>
-      <marker id="flowArrowNormal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowRecover" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowRestart" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowRetry" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowExhausted" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowRecovery_return" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-      <marker id="flowArrowRecovery_step" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>
-    </defs>`;
+    const defs = `<defs>\n      <marker id="flowArrowNormal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>\n      <marker id="flowArrowResult" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>\n    </defs>`;
 
     const lines = edges.map((e) => {
       const a = coords.get(e.from), b = coords.get(e.to);
       if (!a || !b) return "";
-      const cls = ["recover","recovery_step","recovery_return","restart","retry","exhausted"].includes(e.kind) ? e.kind : "normal";
+      const cls = e.kind === "result" ? "result" : "normal";
       const path = edgePath(a, b, nodeW, nodeH, cls);
       const marker = `flowArrow${cls[0].toUpperCase() + cls.slice(1)}`;
       return `<g class="flow-map-edge ${cls}">
@@ -136,12 +128,8 @@
     root.innerHTML = `
       <div class="flow-map-toolbar">
         <div class="flow-map-legend" aria-label="Flow map legend">
-          <span><i class="normal"></i>Normal</span>
-          <span><i class="recover"></i>Recover</span>
-          <span><i class="recovery_return"></i>Recovery return</span>
-          <span><i class="retry"></i>Retry</span>
-          <span><i class="restart"></i>Restart</span>
-          <span><i class="exhausted"></i>Exhausted</span>
+          <span><i class="normal"></i>PASS → next</span>
+          <span><i class="result"></i>Result route</span>
         </div>
         <div class="flow-map-toolbar-actions">
           <span class="flow-map-count">${effectiveMode === "core" ? "Core view · " : ""}${nodes.length} stages · ${edges.length}${effectiveMode === "core" ? ` / ${allEdges.length}` : ""} routes</span>
