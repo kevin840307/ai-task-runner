@@ -1,19 +1,14 @@
 """Public AI client API and session/recovery coordination."""
 from __future__ import annotations
 
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import NoReturn, TypeVar
+from typing import NoReturn
 
 from ..errors import RunnerError, diagnostic_detail
-from ..runtime import events
-from ..runtime.heartbeat import sleep_with_heartbeat
 from .diagnostics import error_result, prepare_session_recovery
 from .errors import AIError, BackendError
 from .session import is_session_invalid_error, is_transient_service_error
-
-T = TypeVar("T")
 
 class AIClient:
     def __init__(
@@ -42,24 +37,6 @@ class AIClient:
         self.session_id = session_id
         self.timeout = timeout
         self.debug_dir = debug_dir
-
-    def run_with_retry(
-        self,
-        call,
-        status: str,
-        detail: str,
-        initial_wait: float,
-        max_wait: float,
-        *,
-        max_elapsed: float = 0,
-    ):
-        """Run one AI operation with transport-only reliability.
-
-        Stage retry/session replacement is owned by StageExecutor; stages return final follow-up facts to Pipeline.
-        """
-        return _run_with_backoff(
-            call, status, detail, initial_wait, max_wait, max_elapsed=max_elapsed
-        )
 
     @property
     def name(self) -> str:
@@ -260,39 +237,6 @@ def configure_ai_client(client, config, mode, *, allow_project_read=False):
         )
 
 
-
-
-def _run_with_backoff(
-    action: Callable[[], T],
-    status: str,
-    detail: str,
-    wait: float,
-    max_wait: float,
-    *,
-    max_elapsed: float = 0,
-) -> T:
-    """Retry only transient API/service failures; StageExecutor owns every real failure."""
-    delay = max(0.0, wait)
-    started = time.monotonic()
-    retrying = False
-    while True:
-        if retrying:
-            events.start(status, detail)
-        try:
-            return action()
-        except RunnerError as error:
-            if not bool(getattr(error, "transient", False)):
-                raise
-            elapsed = time.monotonic() - started
-            if max_elapsed > 0 and elapsed >= max_elapsed:
-                raise
-            events.stop("API/服務異常，等待後重試", diagnostic_detail(error))
-            retrying = True
-            if delay:
-                sleep_for = min(delay, max_elapsed - elapsed) if max_elapsed > 0 else delay
-                if sleep_for > 0:
-                    sleep_with_heartbeat(sleep_for)
-                delay = min(max_wait, max(wait, delay * 2))
 
 
 
