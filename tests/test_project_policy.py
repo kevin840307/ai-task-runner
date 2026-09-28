@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from runner.task_runner import TaskRunner
 from runner import bootstrap
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
