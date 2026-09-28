@@ -6,9 +6,11 @@ stages:
 
   execute:
     type: task
+    scope: task
 
   review:
     type: review
+    scope: task
     routes:
       fail: execute
 
@@ -18,8 +20,6 @@ stages:
 
 flow:
   - discover_tasks
-  - stage: execute
-    scope: task
-  - stage: review
-    scope: task
+  - execute
+  - review
   - done
