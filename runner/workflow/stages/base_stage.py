@@ -29,7 +29,6 @@ class BaseStageSpec:
     parser: ResultParser | None = None
     structured_retries: int = 1
     structured_fresh_retries: int = 0
-    retry: int | None = None
     runs: int | None = None
     required_passes: int | None = None
     readonly_safety: str = ""
@@ -50,7 +49,6 @@ class BaseStage:
     parser_name = ""
     backend_mode = "runtime"
     timeout_config_attr = "agent_timeout"
-    retry_config_attr = ""
     runs_config_attr = ""
     required_passes_config_attr = ""
     client_cache_key = ""
@@ -64,7 +62,6 @@ class BaseStage:
         self.run_state = spec.run_state
         self.mode = spec.mode
         self.actor = spec.actor
-        self.retry = spec.retry
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
@@ -134,13 +131,6 @@ class BaseStage:
             return "pass"
         return "pass" if data[self.result_flag] is True else "fail"
 
-    def retry_limit(self, ctx: StageContext) -> int | None:
-        if self.spec.retry is not None:
-            return self.spec.retry
-        if self.retry_config_attr:
-            return int(getattr(ctx.config, self.retry_config_attr))
-        return None
-
     def discard_attempt_results(self) -> None:
         """Discard votes produced by an attempt rejected by execution hooks."""
         del self._completed_runs[self._attempt_checkpoint :]
@@ -172,14 +162,7 @@ class BaseStage:
                 )
                 return "", data
 
-            output, data = client.run_with_retry(
-                call,
-                spec.status,
-                ctx.execution.label or spec.detail,
-                ctx.config.api_retry_wait,
-                ctx.config.api_retry_max_wait,
-                max_elapsed=ctx.config.api_retry_timeout,
-            )
+            output, data = call()
             self._remember_prompt(ctx, client)
             status = self.result_status(data)
         finally:
