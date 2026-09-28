@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState
 from runner.workflow.loader import load_workflow
-from runner.workflow.pipeline import Pipeline
+from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage, stage_catalog
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
@@ -32,7 +32,6 @@ class ExtensionStage:
     run_state = ""
     track_changes = False
     tolerate_restored_changes = False
-    skip_on_error = False
     fresh_session_on_start = False
 
     def __init__(self, spec: ExtensionSpec) -> None:
@@ -66,7 +65,7 @@ def _context(tmp_path: Path, workflow: list[dict]) -> StageContext:
         goal="goal",
         workflow=workflow,
         workflow_explicit=True,
-        same_session_retries=0,
+        stage_retries=0,
         stage_retry_delay=0,
     )
     return StageContext(
@@ -110,7 +109,7 @@ flow:
         assert stage.spec.message == "EXTENSION_OK"
 
         ctx = _context(tmp_path, workflow)
-        Pipeline(ctx, workflow).run(StageExecutor(Hooks()))
+        FlowEngine(ctx).run(StageExecutor(Hooks()))
 
         assert ctx.state.completed is True
         assert ctx.state.workflow_position == 1
