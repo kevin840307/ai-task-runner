@@ -1,60 +1,73 @@
 # Workflow 範例
 
-這些檔案是參考 YAML，不是 system workflow。可以複製到 custom workflow 區後再依需求調整。
+這些 YAML 是目前 Runner contract 的精簡參考 graph。
 
-- `01_default_ai.yaml`：一般自動化 Plan，使用內建 Task/Review/Repair lifecycle，再進 AI Validation。
-- `02_ai_with_grill.yaml`：Final AI Validation 前增加一次獨立 Grill。
-- `03_file_validation.yaml`：固定 Python/File Validator。
-- `04_mixed_with_grill.yaml`：Grill + File Validation + Final AI Validation。
+現有範例：
+
+- `01_default_ai.yaml`：Planning -> task-scoped Execute/Review -> AI Validator。
+- `02_ai_with_grill.yaml`：增加一次 whole-result Review/Grill gate。
+- `03_file_validation.yaml`：固定 File Validator。
+- `04_mixed_with_grill.yaml`：Grill + File Validator + Final AI Validator。
 - `05_grill_vote_3_choose_2.yaml`：3 個 Fresh Grill Session，至少 2/3 PASS。
-- `06_custom_task_producer.yaml`：Command 產生 Task[]，搭配明確 `scope: task`。
-- `07_minimal_plan_only.yaml`：最小 Plan workflow，不含 final validator。
-- `08_bounded_grill_continue.yaml`：Grill 最多 3 次；前兩次 FAIL 會修復，第 3 次仍 FAIL 就放行。
-- `09_bounded_grill_fail_closed.yaml`：同樣最多 3 次，但耗盡後停止。
-- `10_bounded_gate_reentry_reset.yaml`：bounded recovery 是通用 FlowNode 能力；往下後若再 restart 回 gate，重新從第 1 次計算。
-- `11_multi_validators_anywhere.yaml`：多個 File + AI Validator 可和一般 Stage 交錯，Validator 後面也可以繼續放普通 Stage。
+- `06_custom_task_producer.yaml`：Command 產生 Task[]，搭配明確 task-scoped Execute/Review。
+- `11_multi_validators_anywhere.yaml`：多個 Validator 與一般 Stage 交錯。
 
-## 通用 Grill
+## Graph 規則
 
-Grill 不新增 Stage type，直接重用 `type: review`、既有 parser/output contract 與 recovery feedback：
+一個 `stages.<name>` 就是一個 node；`flow` 只放依序執行的 Stage 名稱。
+
+Rollback / Loop 就是一般 result edge：
+
+```yaml
+stages:
+  work:
+    type: task
+    scope: task
+
+  review:
+    type: review
+    scope: task
+    routes:
+      fail: work
+
+flow:
+  - work
+  - review
+```
+
+只使用 `routes.pass`、`routes.fail`、`routes.error`。Technical retry / Session recovery 是 Runner 全域行為，不寫進 Workflow YAML。
+
+## Grill
+
+Grill 不需要新 Stage type，直接重用 `type: review`：
 
 ```yaml
 grill:
   type: review
-  prompt: ../../runner/prompts/stages/grill.md
+  prompt: ../../runner/workflows/grill.md
   fresh_session_on_start: true
-  retry: 0
-  recover: [repair_plan]
+  routes:
+    fail: planning
 ```
 
-## Bounded semantic recovery
+若需要多個獨立意見，使用一般 Stage vote 欄位：
 
 ```yaml
-grill:
-  type: review
-  recover: [repair_plan]
-  max_attempts: 3
-  on_exhausted: continue
+runs: 3
+required_passes: 2
+fresh_session_each_run: true
 ```
 
-語意：
+## Task Producer
 
-```text
-Grill #1 FAIL -> Repair -> Grill #2
-Grill #2 FAIL -> Repair -> Grill #3
-Grill #3 FAIL -> 不再 Repair -> Continue
+`plan` 是內建 Task Producer。自訂 Stage 也可用：
+
+```yaml
+produces: tasks
 ```
 
-若任一次 PASS 就直接往下並清除計數。只要已經往下，之後流程若又回到 Grill，會重新從 #1 計算。Technical `ERROR` 不算在這個 semantic FAIL 次數內。
+產生 Task[]。逐 Task SOP 必須用連續的 `scope: task` nodes 明確表示；不存在 hidden Task/Review/Repair Stage。
 
-`max_attempts` / `on_exhausted` 都是 optional；沒有 `max_attempts` 時完全維持原本行為。`on_exhausted` 可用 `continue` 或 `fail`；省略時預設為 `fail`。`max_attempts` 必須搭配 `recover`，也不能和 `repeat` 同時使用。
+## Validator
 
-注意：這裡是 **Workflow FlowNode 層級**的 `max_attempts`；CLI/API 同名參數是 Same Session backend recovery budget，兩者用途不同。
-
-## Plan 內建 TODO lifecycle
-
-一般 `type: plan` 會在 Runner 內部執行 Task -> Review -> Repair（FAIL 時）-> Review，不依賴 YAML 裡叫做 `execute`、`review`、`repair` 的 Stage。若要自訂逐 TODO SOP，請在 Task Producer 後明確宣告連續的 `scope: task` nodes。
-
-## 多 Validator
-
-`result_kind: validation` 的 command Stage 與 `type: ai_validator` 都是一般 top-level gate；可以在 `flow` 任意位置放多個、和一般 Stage 交錯，每個 Validator 也可以有自己的 `recover`。
+`result_kind: validation` 的 Command Stage 與 `type: ai_validator` 都只是一般 graph node。Semantic FAIL 要閉環時，直接用 `routes.fail`。
