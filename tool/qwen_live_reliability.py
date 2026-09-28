@@ -1799,6 +1799,15 @@ READY and REVIEW_REQUIRED as two logical lines, then return immediately.
 Do not inspect unrelated files and do not touch protected files.
 """
 
+REVIEW_ROUTING_FORCE_FAIL_PROMPT = """This is the controlled first Review pass for a routing reliability probe.
+Do not inspect files and do not use tools.
+You MUST return a FAIL Review verdict immediately:
+- completed: false
+- reason: REVIEW_REQUIRED is intentionally missing on the first pass.
+- missing_items: ["REVIEW_REQUIRED"]
+Do not return PASS on this first controlled Review pass.
+"""
+
 REVIEW_ROUTING_REVIEW_PROMPT = """Inspect review.txt only, at most once.
 PASS only when its logical lines are exactly READY and REVIEW_REQUIRED, in that order.
 Otherwise FAIL and identify REVIEW_REQUIRED as missing when it is absent.
@@ -1810,7 +1819,6 @@ REVIEW_ROUTING_POLICY = """protected_paths:
   - validation.py
   - seed_review.py
   - review_execute.md
-  - review_check.md
   - workflow.yaml
 instructions:
   always: Work only inside this project root. Modify review.txt only for this probe.
@@ -1818,10 +1826,14 @@ instructions:
 
 REVIEW_ROUTING_SEED = '''from pathlib import Path
 marker = Path(".ai-task-runner") / "review-seeded-once"
+prompt = Path("review_check.md")
 if not marker.exists():
     Path("review.txt").write_text("READY\\n", encoding="utf-8")
+    prompt.write_text(%FORCE_FAIL%, encoding="utf-8")
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("seeded\\n", encoding="utf-8")
+else:
+    prompt.write_text(%NORMAL_REVIEW%, encoding="utf-8")
 '''
 
 REVIEW_ROUTING_WORKFLOW = '''stages:
@@ -1885,7 +1897,12 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         REVIEW_ROUTING_VALIDATOR,
         policy=REVIEW_ROUTING_POLICY,
     )
-    (project / "seed_review.py").write_text(REVIEW_ROUTING_SEED, encoding="utf-8")
+    seed_script = (
+        REVIEW_ROUTING_SEED
+        .replace("%FORCE_FAIL%", repr(REVIEW_ROUTING_FORCE_FAIL_PROMPT))
+        .replace("%NORMAL_REVIEW%", repr(REVIEW_ROUTING_REVIEW_PROMPT))
+    )
+    (project / "seed_review.py").write_text(seed_script, encoding="utf-8")
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
     )
