@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-ROUTING_FIELDS = frozenset({"recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "label", "scope"})
+ROUTING_FIELDS = frozenset({"routes", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "label", "scope"})
 META_FIELDS = frozenset({"name", "type", "validator", *ROUTING_FIELDS})
 
 
@@ -51,11 +51,65 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     for field in ("ai_validator_yolo",):
         if field in values and values[field] is not None and not isinstance(values[field], bool):
             raise RunnerError(f"workflow stage {name} {field} must be a boolean")
+    _validate_routes(name, values)
     _validate_numbers(name, values)
 
 
+def _validate_routes(name: str, values: dict[str, Any]) -> None:
+    routes = values.get("routes")
+    if routes is None:
+        return
+    if not isinstance(routes, dict) or not routes:
+        raise RunnerError(f"workflow stage {name} routes must be a non-empty object")
+    allowed_statuses = {"pass", "fail", "error", "replan"}
+    unknown = sorted(str(key) for key in routes if key not in allowed_statuses)
+    if unknown:
+        raise RunnerError(
+            f"workflow stage {name} routes supports only pass/fail/error/replan; "
+            f"unknown: {', '.join(unknown)}"
+        )
+    for status, target in routes.items():
+        if not isinstance(target, str) or not target.strip():
+            raise RunnerError(
+                f"workflow stage {name} routes.{status} must be a non-empty target"
+            )
+    legacy = [
+        field
+        for field in (
+            "recover",
+            "restart_at",
+            "repeat",
+            "max_attempts",
+            "on_exhausted",
+            "fresh_after_same_failures",
+        )
+        if values.get(field) is not None
+    ]
+    if legacy:
+        raise RunnerError(
+            f"workflow stage {name} routes cannot be combined with legacy routing: "
+            + ", ".join(legacy)
+        )
+
+
 def validate_restart_targets(result: list[dict[str, Any]], top_level: bool) -> None:
+    names = {item.get("name") for item in result if item.get("name")}
     for index, definition in enumerate(result, 1):
+        routes = definition.get("routes")
+        if routes:
+            if not top_level:
+                raise RunnerError(
+                    f"workflow stage {index} routes is only valid at top level"
+                )
+            for status, raw_target in routes.items():
+                target = str(raw_target).strip()
+                if target in {"next", "done", "stop"}:
+                    continue
+                if target not in names:
+                    raise RunnerError(
+                        f"workflow stage {index} routes.{status} references unknown "
+                        f"top-level stage: {target}"
+                    )
         restart_at = definition.get("restart_at")
         if restart_at is None:
             continue

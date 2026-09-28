@@ -66,15 +66,16 @@ Target routing strategies
 1. Linear Workflow with Rollback / Loop
    Current production strategy.
 
-   Flow is declarative and inspectable:
-   - next
-   - restart_at
-   - recover edge
-   - repeat
-   - max_attempts
-   - on_exhausted
-   - task scope
-   - validation rollback
+   Preferred flow contract is a small state machine:
+   - implicit PASS -> next
+   - routes.pass -> explicit Stage / done / stop
+   - routes.fail -> explicit Stage / done / stop
+   - routes.error -> explicit Stage / done / stop
+   - routes.replan -> explicit Stage / done / stop
+   - task scope for Plan/custom task producers
+
+   Legacy restart_at/recover/repeat/max_attempts remain compatibility syntax
+   until existing workflows and reliability probes have migrated.
 
    Technical retry/recovery remains outside Linear routing.
 
@@ -164,10 +165,8 @@ These belong to RoutingStrategy, not StageExecutor:
 Linear:
 - workflow_position
 - task_step
-- restart_at
-- rollback
-- recover edge
-- repeat
+- result edge target
+- legacy recovery counters only while compatibility syntax remains
 
 Dynamic:
 - current owner
@@ -236,7 +235,7 @@ Chat remains:
   select Workflow -> Prompt -> Run
 
 Editor behavior may vary by metadata:
-- Linear: normal/restart/recover edges
+- Linear: PASS/FAIL/ERROR/REPLAN result edges; legacy restart/recover edges during migration
 - Dynamic: handoff targets / runtime dynamic edges
 - Discussion: participant/group/round properties
 

@@ -1128,6 +1128,16 @@ function flowStageOptions(selected) {
   for (const item of (state.visual?.flow || []).slice(0, max + 1)) { const name = flowStageName(item); if (!name || seen.has(name)) continue; seen.add(name); rows.push(`<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`); }
   return rows.join("");
 }
+function routeTargetOptions(selected, emptyLabel = "Default") {
+  const rows = [`<option value="">${escapeHtml(emptyLabel)}</option>`];
+  for (const target of ["next", "done", "stop"]) rows.push(`<option value="${target}" ${target === selected ? "selected" : ""}>${target}</option>`);
+  const seen = new Set();
+  for (const item of (state.visual?.flow || [])) {
+    const name = flowStageName(item); if (!name || seen.has(name)) continue; seen.add(name);
+    rows.push(`<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)}</option>`);
+  }
+  return rows.join("");
+}
 function pathWithSlashes(value) { return String(value || "").replaceAll("\\", "/").replace(/^\.\//, ""); }
 function promptRef(item) {
   const original = pathWithSlashes(item.path); const lowered = original.toLowerCase();
@@ -1197,6 +1207,7 @@ function activateStageTab(tab) {
 }
 function renderStageEditorContent(cfg, item) {
   const box = currentStageModal(); if (!box) return; const disabled = !state.studioGuard.editable ? "disabled" : "";
+  const routes = item?.routes ?? cfg.routes ?? {};
   const settings = box.querySelector('[data-stage-panel="settings"]');
   settings.innerHTML = `
     ${!state.studioGuard.editable ? `<div class="designer-warning-box"><strong>Read only</strong><span>${escapeHtml(t("stage.readonly_desc", "Stop active Runtime before editing Workflow settings."))}</span></div>` : ''}
@@ -1228,7 +1239,15 @@ function renderStageEditorContent(cfg, item) {
 
   const control = box.querySelector('[data-stage-panel="control"]');
   control.innerHTML = `
-    <div class="stage-section-head"><div><strong>Flow</strong><span>${escapeHtml(t("stage.flow_desc", "Routing for this Flow invocation."))}</span></div></div>
+    <div class="stage-section-head"><div><strong>Result edges</strong><span>${escapeHtml(t("stage.routes_desc", "Ralph-like routing: Stage result status selects the next Stage. Technical retry stays inside StageExecutor."))}</span></div></div>
+    <div class="stage-form-two-col">
+      <label class="designer-form-row">${fieldLabel("PASS", t("stage.help.route_pass", "Default is the next Flow Stage."))}<select id="stageRoutePass" class="designer-select" ${disabled}>${routeTargetOptions(routes.pass || "", "Next (default)")}</select></label>
+      <label class="designer-form-row">${fieldLabel("FAIL", t("stage.help.route_fail", "Route semantic failure directly to a Stage or terminal target."))}<select id="stageRouteFail" class="designer-select" ${disabled}>${routeTargetOptions(routes.fail || "", "Legacy/default")}</select></label>
+      <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Used only after technical retry/session recovery is exhausted."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop/default")}</select></label>
+      <label class="designer-form-row">${fieldLabel("REPLAN", t("stage.help.route_replan", "Optional explicit target for a replan result."))}<select id="stageRouteReplan" class="designer-select" ${disabled}>${routeTargetOptions(routes.replan || "", "Legacy/default")}</select></label>
+    </div>
+
+    <div class="stage-section-head"><div><strong>Legacy routing</strong><span>${escapeHtml(t("stage.flow_desc", "Compatibility controls for existing restart/recover workflows."))}</span></div></div>
     <div class="stage-form-two-col">
       <label class="designer-form-row">${fieldLabel("Restart at", t("stage.help.restart_at", "On semantic FAIL, restart this or an earlier top-level Stage."))}<select id="stageRestartAt" class="designer-select" ${disabled}>${flowStageOptions(item?.restart_at || "")}</select></label>
       <label class="designer-form-row">${fieldLabel("Repeat", t("stage.help.repeat", "Legacy bounded recovery. Leave empty unless this Workflow already relies on repeat."))}<input id="stageRepeat" class="designer-input" type="number" min="1" value="${item?.repeat ?? ""}" placeholder="No repeat" ${disabled} /></label>
@@ -1339,7 +1358,14 @@ function changedFields(cfg, item) {
   if (aiBacked && !stageSupportsPrompt(type) && stageSupportsPrompt(cfg.type)) for (const key of ["prompt", "continuation_prompt", "instructions"]) if (cfg[key] !== undefined) result[key] = null;
   return result;
 }
-function changedFlowFields(item) { const recover = listOrNull("stageRecover"); const maxAttempts = recover ? numberOrNull("stageMaxAttempts") : null; const result = { label: valueOrNull("stageFlowLabel"), recover, restart_at: maxAttempts ? null : valueOrNull("stageRestartAt"), repeat: maxAttempts ? null : numberOrNull("stageRepeat"), max_attempts: maxAttempts, on_exhausted: maxAttempts ? valueOrNull("stageOnExhausted") : null, fresh_after_same_failures: numberOrNull("stageFreshAfterSameFailures") }; if (item && Object.prototype.hasOwnProperty.call(item, "status")) result.status = valueOrNull("stageStatus"); if (item && Object.prototype.hasOwnProperty.call(item, "prompt")) result.prompt = stageSupportsPrompt(fieldValue("stageType")) ? valueOrNull("stagePromptSelect") : null; return result; }
+function routeMapOrNull() {
+  const routes = {};
+  for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"], ["error", "stageRouteError"], ["replan", "stageRouteReplan"]]) {
+    const target = valueOrNull(id); if (target) routes[status] = target;
+  }
+  return Object.keys(routes).length ? routes : null;
+}
+function changedFlowFields(item) { const recover = listOrNull("stageRecover"); const maxAttempts = recover ? numberOrNull("stageMaxAttempts") : null; const result = { label: valueOrNull("stageFlowLabel"), routes: routeMapOrNull(), recover, restart_at: maxAttempts ? null : valueOrNull("stageRestartAt"), repeat: maxAttempts ? null : numberOrNull("stageRepeat"), max_attempts: maxAttempts, on_exhausted: maxAttempts ? valueOrNull("stageOnExhausted") : null, fresh_after_same_failures: numberOrNull("stageFreshAfterSameFailures") }; if (item && Object.prototype.hasOwnProperty.call(item, "status")) result.status = valueOrNull("stageStatus"); if (item && Object.prototype.hasOwnProperty.call(item, "prompt")) result.prompt = stageSupportsPrompt(fieldValue("stageType")) ? valueOrNull("stagePromptSelect") : null; return result; }
 async function validateStageEditor(index, name, cfg, item) {
   if (!state.studioFile || !state.studioGuard.editable) return; const status = $("stageEditorStatus"); status.textContent = "Validating draft…"; status.classList.remove("error");
   try {

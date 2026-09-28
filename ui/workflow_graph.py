@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 
 
-_ROUTING_KEYS = ("recover", "retry", "on_exhausted", "restart_at", "max_attempts", "repeat", "fresh_after_same_failures")
+_ROUTING_KEYS = ("routes", "recover", "retry", "on_exhausted", "restart_at", "max_attempts", "repeat", "fresh_after_same_failures")
 
 
 def _target_name(value: Any) -> str:
@@ -97,13 +97,13 @@ def build_workflow_graph(data: dict[str, Any]) -> dict:
             "prompt": "stages/review.md",
             "virtual": True,
             "runtime_stage": "__plan_review__",
-            "routing": {"restart_at": task_id},
+            "routing": {"routes": {"fail": task_id}},
         }
         display_flow.extend([task_id, review_id])
         edges.append({
             "from": review_id,
             "to": task_id,
-            "kind": "restart",
+            "kind": "result",
             "label": "FAIL → Execute",
         })
 
@@ -121,6 +121,30 @@ def build_workflow_graph(data: dict[str, Any]) -> dict:
 
     for name, cfg in list(effective.items()):
         add_node(name, cfg)
+
+        routes = cfg.get("routes") or {}
+        if isinstance(routes, dict):
+            for status, raw_target in routes.items():
+                target = str(raw_target or "").strip()
+                if not target or target == "next":
+                    continue
+                if target in {"done", "stop"}:
+                    terminal = f"__{target}__:{name}"
+                    add_node(terminal, virtual=True, label=target.upper())
+                    edges.append({
+                        "from": name,
+                        "to": terminal,
+                        "kind": "result",
+                        "label": f"{str(status).upper()} → {target}",
+                    })
+                    continue
+                add_node(target)
+                edges.append({
+                    "from": name,
+                    "to": target,
+                    "kind": "result",
+                    "label": f"{str(status).upper()} → {target}",
+                })
 
         recover = cfg.get("recover") or []
         if isinstance(recover, (str, dict)):

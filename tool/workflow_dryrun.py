@@ -341,8 +341,20 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
         name = str(definition.get("name", ""))
         if not name:
             continue
-        recoverable = bool(definition.get("recover") or definition.get("restart_at"))
+        routes = definition.get("routes") if isinstance(definition.get("routes"), dict) else {}
+        fail_route = str(routes.get("fail", "") or "").strip()
+        recoverable = bool(
+            definition.get("recover")
+            or definition.get("restart_at")
+            or (fail_route and fail_route != "stop")
+        )
         top_level = source == "flow"
+        if fail_route and fail_route != "stop" and ("route-fail", name) not in added:
+            added.add(("route-fail", name))
+            cases.append(MatrixCase(
+                f"{name} FAIL -> {fail_route} -> closure",
+                Scenario({"default": "pass", "stages": {name: ["fail", "pass"]}}),
+            ))
         if definition.get("recover") and ("recover", name) not in added:
             added.add(("recover", name))
             cases.append(MatrixCase(
@@ -354,7 +366,14 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
             isinstance(max_attempts, int)
             and not isinstance(max_attempts, bool)
             and max_attempts > 0
-            and (definition.get("recover") or definition.get("restart_at"))
+            and (
+            definition.get("recover")
+            or definition.get("restart_at")
+            or (
+                isinstance(definition.get("routes"), dict)
+                and definition["routes"].get("fail") not in {None, "", "stop"}
+            )
+        )
             and ("max_attempts", name) not in added
         ):
             added.add(("max_attempts", name))
@@ -406,12 +425,14 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
                 Scenario({"default": "pass", "stages": {name: "fail"}}),
                 expected_completed=False,
             ))
+        error_route = str(routes.get("error", "") or "").strip()
         if top_level and ("error-stop", name) not in added:
             added.add(("error-stop", name))
+            error_recovers = bool(error_route and error_route != "stop")
             cases.append(MatrixCase(
-                f"{name} ERROR -> safe stop",
-                Scenario({"default": "pass", "stages": {name: "error"}}),
-                expected_completed=False,
+                f"{name} ERROR -> {error_route or 'safe stop'}",
+                Scenario({"default": "pass", "stages": {name: ["error", "pass"]}}),
+                expected_completed=error_recovers,
             ))
         if source.startswith("recover:"):
             parent = source.split(":", 1)[1]
@@ -430,7 +451,15 @@ def _matrix_cases(flow: list[dict[str, Any]]) -> list[MatrixCase]:
         for definition, source in _walk_definitions(flow)
         if source == "flow"
         and definition.get("name")
-        and (definition.get("recover") or definition.get("restart_at"))
+        and (
+            definition.get("recover")
+            or definition.get("restart_at")
+            or (
+                isinstance(definition.get("routes"), dict)
+                and str(definition["routes"].get("fail", "") or "").strip()
+                not in {"", "stop"}
+            )
+        )
         and not (
             definition.get("max_attempts") == 1
             and definition.get("on_exhausted") != "continue"
@@ -455,6 +484,7 @@ def _workflow_features(flow: list[dict[str, Any]]) -> dict[str, int | bool]:
         "definitions": len(definitions),
         "task_scope": any(item.get("scope") == "task" for item in top_level),
         "task_producer": any(stage_result_kind(item) == "tasks" for item in definitions),
+        "routes": sum(bool(item.get("routes")) for item in definitions),
         "recover": sum(bool(item.get("recover")) for item in definitions),
         "nested_recover": any(
             nested.get("recover")

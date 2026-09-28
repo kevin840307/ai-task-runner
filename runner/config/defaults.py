@@ -13,9 +13,13 @@ DEFAULT_API_WAIT_TIMEOUT = 3600
 DEFAULT_WATCHDOG_INTERVAL = 15.0
 DEFAULT_WORKER_HANG_TIMEOUT = 600.0
 DEFAULT_VALIDATOR_TIMEOUT = 1200
-# Recovery defaults: bounded per session, unlimited across validation cycles.
-DEFAULT_MAX_ATTEMPTS = 2
-DEFAULT_REVIEW_RETRIES = 1
+# Technical Stage recovery is unlimited by default for unattended runs, but each
+# individual session still gets only a small bounded retry budget before Runner
+# rotates to a Fresh Session. Deterministic configuration/state errors remain
+# fail-closed and never enter this loop.
+DEFAULT_MAX_ATTEMPTS = -1
+DEFAULT_PER_SESSION_ATTEMPTS = 2
+DEFAULT_REVIEW_RETRIES = -1
 DEFAULT_MAX_CYCLES = -1
 DEFAULT_FINAL_AI_VALIDATIONS = 1
 # 0 means strict majority of configured independent AI validations.

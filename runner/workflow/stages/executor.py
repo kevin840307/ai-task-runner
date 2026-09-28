@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ...bootstrap import current_runtime
-from ...config.defaults import DEFAULT_MAX_ATTEMPTS
+from ...config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError, diagnostic_error, is_transient_error
 from ...project.files import changed_project_files, project_manifest
 from ...runtime import progress
@@ -83,7 +83,7 @@ class StageExecutor:
             ctx.config.same_session_retries if unlimited_retry else effective_retry
         )
         if per_session_retry == -1:
-            per_session_retry = DEFAULT_MAX_ATTEMPTS
+            per_session_retry = DEFAULT_PER_SESSION_ATTEMPTS
         same_retry_limit = max(0, int(per_session_retry))
         attempt = 0
         retry_mode = "initial"

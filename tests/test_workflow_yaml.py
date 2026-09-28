@@ -86,7 +86,124 @@ def test_default_workflow_plan_uses_static_task_scope():
     assert [item.get("scope") for item in workflow] == [
         None, "task", "task", None, None
     ]
+    assert workflow[0]["routes"] == {"replan": "planning", "error": "stop"}
+    assert workflow[1]["routes"] == {"error": "next"}
+    assert workflow[2]["routes"] == {"fail": "__plan_task__"}
+    assert workflow[3]["routes"] == {"fail": "planning"}
+    assert workflow[4]["routes"] == {"fail": "planning"}
     assert "planner_stages" not in workflow[0]
+
+def test_result_routes_accept_named_stage_and_special_targets(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: review
+    routes:
+      pass: next
+      fail: execute
+      error: stop
+  done:
+    type: command
+    command: [python, -c, "print('DONE')"]
+    routes:
+      pass: done
+flow: [execute, review, done]
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(workflow_file)
+    assert workflow[1]["routes"] == {
+        "pass": "next",
+        "fail": "execute",
+        "error": "stop",
+    }
+    assert workflow[2]["routes"] == {"pass": "done"}
+
+
+def test_result_routes_use_state_machine_defaults_at_runtime(tmp_path, monkeypatch):
+    class Stage:
+        def __init__(self, name: str):
+            self.name = name
+
+    monkeypatch.setattr(
+        flow_engine_module,
+        "create_stage",
+        lambda definition: Stage(str(definition["name"])),
+    )
+    workflow = [
+        {"name": "first", "routes": {"error": "stop"}, "_workflow_index": 0},
+        {"name": "second", "_workflow_index": 1},
+    ]
+
+    class Executor:
+        def __init__(self, first_status: str):
+            self.first_status = first_status
+            self.calls = []
+
+        def run(self, stage, ctx, previous=None, *, label=""):
+            self.calls.append(stage.name)
+            status = self.first_status if stage.name == "first" else "pass"
+            return StageResult(stage.name, status, output=status)
+
+        def fresh_session(self, stage, ctx):
+            return None
+
+    passing = Executor("pass")
+    passing_context = _context(tmp_path, workflow)
+    assert CanonicalFlowEngine(passing_context, workflow).run(passing) == 0
+    assert passing.calls == ["first", "second"]
+    assert passing_context.state.completed is True
+
+    failing = Executor("fail")
+    failing_context = _context(tmp_path, workflow)
+    assert CanonicalFlowEngine(failing_context, workflow).run(failing) == 1
+    assert failing.calls == ["first"]
+    assert failing_context.state.completed is False
+
+
+def test_result_routes_reject_unknown_target(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+    routes:
+      fail: missing
+flow: [execute]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="routes.fail references unknown"):
+        load_workflow(workflow_file)
+
+
+def test_result_routes_reject_mixed_legacy_routing(tmp_path):
+    workflow_file = tmp_path / "workflow.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: review
+    routes:
+      fail: execute
+    restart_at: execute
+flow: [execute, review]
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(RunnerError, match="cannot be combined with legacy routing"):
+        load_workflow(workflow_file)
+
 
 def test_task_sop_explicitly_includes_new_stage(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
@@ -200,6 +317,8 @@ stages:
     type: probe
     status: Probe
     value: configured
+    routes:
+      pass: validate
   validate:
     type: command
     result_kind: validation
@@ -212,11 +331,13 @@ flow:
         encoding="utf-8",
     )
     try:
-        stage = create_stage(load_workflow(workflow_file)[0])
+        workflow = load_workflow(workflow_file)
+        stage = create_stage(workflow[0])
+        assert isinstance(stage, ProbeStage)
+        assert stage.spec.value == "configured"
+        assert workflow[0]["routes"] == {"pass": "validate"}
     finally:
         STAGE_REGISTRY.pop("probe", None)
-    assert isinstance(stage, ProbeStage)
-    assert stage.spec.value == "configured"
 
 
 def test_topology_uses_stage_type_validator_and_task_scope(tmp_path):
@@ -596,8 +717,9 @@ def test_validator_failure_routes_directly_back_to_planning(tmp_path):
     )
 
     assert context.state.stage == "validator_failed"
-    assert workflow[-1]["restart_at"] == "planning"
+    assert workflow[-1]["routes"] == {"fail": "planning"}
     assert "recover" not in workflow[-1]
+    assert "restart_at" not in workflow[-1]
 
 def test_workflow_fingerprint_changes_with_yaml_semantics():
     workflow = load_workflow()
@@ -733,7 +855,8 @@ def test_ralphy_ai_validate_custom_workflow_is_fresh_and_mandatory():
     assert all(item["fresh_session_on_start"] is True for item in workflow)
     assert workflow[1]["type"] == "ai_validator"
     assert workflow[1]["required_passes"] == 1
-    assert workflow[1]["recover"][0]["name"] == "ralphy"
+    assert workflow[1]["routes"] == {"fail": "ralphy"}
+    assert "recover" not in workflow[1]
     assert workflow[0]["prompt"] == "custom/common/ralphy.md"
 
 def test_workflow_yaml_examples_reference_existing_prompt_assets():
@@ -1204,7 +1327,7 @@ flow:
     assert [item["name"] for item in explicit_flow] == [
         "planning", "execute", "review", "validate"
     ]
-    assert simplified_flow[2]["restart_at"] == "__plan_task__"
+    assert simplified_flow[2]["routes"] == {"fail": "__plan_task__"}
     assert workflow_fingerprint(simplified_flow) != workflow_fingerprint(explicit_flow)
 
 
@@ -1406,7 +1529,8 @@ flow: [planning, done]
     assert _names(workflow) == ["planning", "__plan_task__", "__plan_review__", "done"]
     assert workflow[1]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
     assert workflow[2]["status"] != "SHOULD_NOT_BE_IMPLICITLY_USED"
-    assert workflow[2]["restart_at"] == "__plan_task__"
+    assert workflow[1]["routes"] == {"error": "next"}
+    assert workflow[2]["routes"] == {"fail": "__plan_task__"}
 
 
 def test_execution_prompt_delegates_continue_retry_recover_to_shared_control():
@@ -1428,13 +1552,15 @@ def test_ralphy_ai_validate_workflow_is_two_stage_fresh_and_fail_closed():
     assert data["stages"]["ralphy"]["type"] == "task"
     assert data["stages"]["ralphy"]["fresh_session_on_start"] is True
     assert data["stages"]["ralphy"]["prompt"] == "custom/common/ralphy.md"
+    assert data["stages"]["ralphy"]["routes"] == {"error": "next"}
     validator = data["stages"]["validate_ai"]
     assert validator["type"] == "ai_validator"
     assert validator["validator"] == "ai"
     assert validator["fresh_session_on_start"] is True
     assert validator["runs"] == 1
     assert validator["required_passes"] == 1
-    assert validator["recover"] == ["ralphy"]
+    assert validator["routes"] == {"fail": "ralphy"}
+    assert "recover" not in validator
     assert "max_attempts" not in validator
     assert "on_exhausted" not in validator
     text = prompt.read_text(encoding="utf-8")

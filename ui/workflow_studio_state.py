@@ -482,7 +482,7 @@ class WorkflowStudioMixin:
                 row["stage"] = stage_name
                 updates = dict(flow_fields or {})
                 updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
+                allowed_flow = {"scope", "label", "routes", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
                 unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
                 if unknown_flow:
                     raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
@@ -613,6 +613,23 @@ class WorkflowStudioMixin:
         prompt = updates.get("prompt")
         if prompt is not None and (not isinstance(prompt, str) or not prompt.strip()):
             raise ValueError("Flow prompt must be a non-empty string")
+        routes = updates.get("routes")
+        if routes is not None:
+            if not isinstance(routes, dict) or not routes:
+                raise ValueError("Flow routes must be a non-empty object")
+            unknown_statuses = sorted(str(key) for key in routes if key not in {"pass", "fail", "error", "replan"})
+            if unknown_statuses:
+                raise ValueError(f"Flow routes has unsupported status: {', '.join(unknown_statuses)}")
+            allowed_targets = {"next", "done", "stop"}
+            for flow_item in flow:
+                route_name = flow_item if isinstance(flow_item, str) else flow_item.get("stage") if isinstance(flow_item, dict) else None
+                if isinstance(route_name, str) and route_name:
+                    allowed_targets.add(route_name)
+            for status_name, target in routes.items():
+                if not isinstance(target, str) or not target.strip():
+                    raise ValueError(f"Flow routes.{status_name} must be a non-empty target")
+                if target not in allowed_targets:
+                    raise ValueError(f"Flow routes.{status_name} references unknown Flow stage: {target}")
         restart_at = updates.get("restart_at")
         if restart_at:
             allowed = set()

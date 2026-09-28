@@ -3,6 +3,9 @@ stages:
     type: plan
     status: AI 正在依任務複雜度建立可驗證 TODO
     readonly_safety: observe
+    routes:
+      replan: planning
+      error: stop
 
 
   validate_ai:
@@ -14,7 +17,8 @@ stages:
     required_passes: 2
     ai_validator_yolo: true
     readonly_safety: observe
-    restart_at: planning
+    routes:
+      fail: planning
 
 flow:
   - planning

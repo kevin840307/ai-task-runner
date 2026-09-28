@@ -10,7 +10,12 @@ from ai_task_runner import parser
 from runner.backends.opencode import OpenCodeBackend
 from runner.backends.qwen import QwenBackend
 from runner.config.runtime import RuntimeConfig
-from runner.config.defaults import DEFAULT_WATCHDOG_INTERVAL, DEFAULT_WORKER_HANG_TIMEOUT
+from runner.config.defaults import (
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_REVIEW_RETRIES,
+    DEFAULT_WATCHDOG_INTERVAL,
+    DEFAULT_WORKER_HANG_TIMEOUT,
+)
 from runner.errors import ConfigurationError, RunnerError
 from runner.plugins.console import LiveUI
 from runner.workflow.rules import invalidate_plan
@@ -112,6 +117,10 @@ def test_max_cycles_minus_one_is_unlimited_and_non_negative_is_enforced(tmp_path
 
 
 def test_retry_limits_accept_only_minus_one_or_non_negative_values():
+    args = parser().parse_args(['--goal', 'x', '--validator', 'ai'])
+    assert args.max_attempts == DEFAULT_MAX_ATTEMPTS == -1
+    assert args.review_retries == DEFAULT_REVIEW_RETRIES == -1
+
     RuntimeConfig(
         goal='x',
         validator='ai',

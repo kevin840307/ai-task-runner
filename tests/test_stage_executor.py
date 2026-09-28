@@ -50,7 +50,7 @@ def context():
         work=Path("."),
         execution=SimpleNamespace(change_detected=None),
         set_stage=lambda *args: None,
-        config=SimpleNamespace(stage_retry_delay=0),
+        config=SimpleNamespace(stage_retry_delay=0, same_session_retries=2),
         task=None,
         ai_client=model,
         scratch={},
@@ -148,6 +148,38 @@ def test_executor_does_not_retry_deterministic_configuration_error():
     with pytest.raises(ConfigurationError, match="fixed validator is missing"):
         StageExecutor(Hooks()).run(stage, context())
     assert stage.calls == 1
+
+
+def test_unlimited_retry_rotates_fresh_session_and_eventually_passes():
+    class Recovering(Stage):
+        retry = -1
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls < 5:
+                return StageResult.error_result(self.name, RunnerError("temporary"))
+            return StageResult(self.name, "pass", output="recovered")
+
+    ctx = context()
+    resets = 0
+
+    def reset_sessions():
+        nonlocal resets
+        resets += 1
+        ctx.ai_client.session_id = ""
+
+    ctx.ai_client.session_id = "session-1"
+    ctx.reset_sessions = reset_sessions
+    stage = Recovering()
+
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 5
+    assert resets >= 1
 
 
 def test_executor_preserves_stage_lifecycle_events():

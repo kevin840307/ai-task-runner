@@ -140,7 +140,11 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
     """Return the reserved, YAML-independent TODO execution lifecycle."""
     task = _normalize_stage(
         "__plan_task__",
-        {"type": "task", "status": "AI 正在處理目前任務"},
+        {
+            "type": "task",
+            "status": "AI 正在處理目前任務",
+            "routes": {"error": "next"},
+        },
         source,
     )
     task["scope"] = "task"
@@ -155,7 +159,7 @@ def _builtin_plan_task_flow(source: Path) -> list[dict[str, Any]]:
         source,
     )
     review["scope"] = "task"
-    review["restart_at"] = "__plan_task__"
+    review["routes"] = {"fail": "__plan_task__"}
     return [task, review]
 
 def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]:

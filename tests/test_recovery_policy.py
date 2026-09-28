@@ -106,10 +106,10 @@ def context(tmp_path: Path, model, *, retry=2) -> StageContext:
     )
 
 
-def test_default_non_api_retry_is_two_then_fresh_session(tmp_path):
-    assert DEFAULT_MAX_ATTEMPTS == 2
+def test_unlimited_default_keeps_two_attempt_per_session_rotation(tmp_path):
+    assert DEFAULT_MAX_ATTEMPTS == -1
     model = SessionFakeAI([RunnerError('same'), RunnerError('same'), RunnerError('same'), None])
-    ctx = context(tmp_path, model)
+    ctx = context(tmp_path, model, retry=DEFAULT_MAX_ATTEMPTS)
     result = StageExecutor(Hooks()).run(AskStage(), ctx)
     assert result.status == 'pass'
     assert [session for session, _ in model.calls] == ['session-A', 'session-A', 'session-A', '']
