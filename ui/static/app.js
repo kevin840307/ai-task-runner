@@ -1014,9 +1014,9 @@ function renderVisualDesigner() {
     if (index === state.selectedFlowIndex) card.classList.add("active");
     const ix = document.createElement("span"); ix.className = "visual-flow-index designer-step-index"; ix.textContent = String(index + 1);
     const copy = document.createElement("div"); copy.className = "visual-flow-copy designer-step-card-title";
-    const displayTitle = String(item?.status ?? cfg.status ?? "").trim() || name || "Unnamed";
+    const displayTitle = String(cfg.status ?? "").trim() || name || "Unnamed";
     const strong = document.createElement("strong"); strong.textContent = displayTitle; strong.title = displayTitle;
-    const small = document.createElement("small"); small.textContent = `${name || "Unnamed"} · ${cfg.type}${item?.scope ? ` · ${item.scope}` : ""}`; small.title = small.textContent;
+    const small = document.createElement("small"); small.textContent = `${name || "Unnamed"} · ${cfg.type}${cfg.scope ? ` · ${cfg.scope}` : ""}`; small.title = small.textContent;
     copy.append(strong, small); card.append(ix, copy);
     card.addEventListener("click", () => { state.selectedFlowIndex = index; renderVisualDesigner(); });
     card.addEventListener("dblclick", async (event) => { event.preventDefault(); state.selectedFlowIndex = index; renderVisualDesigner(); await openStageEditor(index); });
@@ -1044,7 +1044,7 @@ function renderStepFloatingActions(root = $("visualFlowList")) {
   aside.innerHTML = `
     <button type="button" class="designer-action-fab designer-action-toggle" data-flow-action="toggle" aria-expanded="${state.stepActionMenuExpanded ? "true" : "false"}" title="${state.stepActionMenuExpanded ? "Collapse Stage actions" : "Expand Stage actions"}" aria-label="Stage actions"><span class="designer-action-icon" aria-hidden="true">${state.stepActionMenuExpanded ? "−" : "+"}</span></button>
     <div class="designer-floating-panel" aria-hidden="${state.stepActionMenuExpanded ? "false" : "true"}">
-      <span class="designer-floating-step-context" title="${escapeHtml(selected.name)}"><strong>${selected.index + 1} / ${selected.total}</strong><span>${escapeHtml(String(selected.item?.status ?? stageConfig(selected.name).status ?? "").trim() || selected.name || "Selected Stage")}</span></span>
+      <span class="designer-floating-step-context" title="${escapeHtml(selected.name)}"><strong>${selected.index + 1} / ${selected.total}</strong><span>${escapeHtml(String(stageConfig(selected.name).status ?? "").trim() || selected.name || "Selected Stage")}</span></span>
       <span class="designer-floating-action-buttons">
         <button type="button" class="designer-action-fab designer-floating-primary" data-flow-action="edit" title="Edit Stage" aria-label="Edit Stage"><span class="designer-action-icon" aria-hidden="true">✎</span></button>
         <button type="button" class="designer-action-fab" data-flow-action="up" title="Move up" aria-label="Move up" ${readonly || selected.index <= 0 ? "disabled" : ""}><span class="designer-action-icon" aria-hidden="true">↑</span></button>
@@ -1065,14 +1065,50 @@ function moveSelectedFlow(offset) {
   const [item] = flow.splice(index, 1); flow.splice(target, 0, item); state.selectedFlowIndex = target; state.visualDirty = true; renderVisualDesigner(); updateDirtyState();
 }
 async function removeSelectedFlow() {
-  if (!state.studioGuard.editable || state.studioFile?.readonly) return; const flow = state.visual?.flow || [], index = state.selectedFlowIndex;
-  if (index < 0 || index >= flow.length) return; const name = flowStageName(flow[index]) || "Stage";
-  const action = await choiceDialog({ title: "Remove Stage?", message: `Choose whether to remove only this ${name} Flow invocation or also delete its Stage definition. Definition deletion is blocked when other Workflow references still use it.`, choices: [{ value: "flow", label: "Remove from Flow" }, { value: "definition", label: "Delete Definition Too", danger: true }] });
-  if (!action) return;
-  if (action === "flow") { flow.splice(index, 1); state.selectedFlowIndex = flow.length ? Math.min(index, flow.length - 1) : -1; state.visualDirty = true; renderVisualDesigner(); updateDirtyState(); showToast(`${name} removed from flow`); return; }
-  if (state.visualDirty || state.studioDirty) { const ok = await saveVisualFlow(); if (!ok) return; }
-  try { const result = await api("/api/studio/stage/delete", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, flow_index: index, hash: state.studioHash }) }); invalidateStudioFileCache(state.studioFile.id); state.studioFile = result.file; state.studioOriginal = result.file.content; state.studioHash = result.file.hash; state.studioDirty = false; state.visualDirty = false; state.visual = result.visual; state.selectedFlowIndex = state.visual.flow?.length ? Math.min(index, state.visual.flow.length - 1) : -1; $("studioTextarea").value = result.file.content; updateLineNumbers(); renderVisualDesigner(); updateDirtyState(); showToast(`${name} Stage definition deleted`); }
-  catch (error) { setStudioStatus(error.message, true); showActionError(error.message, "Stage deletion failed"); }
+  if (!state.studioGuard.editable || state.studioFile?.readonly) return;
+  const flow = state.visual?.flow || [], index = state.selectedFlowIndex;
+  if (index < 0 || index >= flow.length) return;
+  const name = flowStageName(flow[index]) || "Stage";
+  const ok = await confirmDialog({
+    title: "Delete Stage?",
+    message: `Delete ${name} from this Workflow? Result edges that still reference it must be changed first.`,
+    confirmLabel: "Delete Stage",
+    danger: true,
+  });
+  if (!ok) return;
+  if (state.visualDirty || state.studioDirty) {
+    const saved = await saveVisualFlow();
+    if (!saved) return;
+  }
+  try {
+    const result = await api("/api/studio/stage/delete", {
+      method: "POST",
+      body: JSON.stringify({
+        id: state.studioFile.id,
+        project: state.project?.path || "",
+        stage: name,
+        hash: state.studioHash,
+      }),
+    });
+    invalidateStudioFileCache(state.studioFile.id);
+    state.studioFile = result.file;
+    state.studioOriginal = result.file.content;
+    state.studioHash = result.file.hash;
+    state.studioDirty = false;
+    state.visualDirty = false;
+    state.visual = result.visual;
+    state.selectedFlowIndex = state.visual.flow?.length
+      ? Math.min(index, state.visual.flow.length - 1)
+      : -1;
+    $("studioTextarea").value = result.file.content;
+    updateLineNumbers();
+    renderVisualDesigner();
+    updateDirtyState();
+    showToast(`${name} Stage deleted`);
+  } catch (error) {
+    setStudioStatus(error.message, true);
+    showActionError(error.message, "Stage deletion failed");
+  }
 }
 
 async function saveVisualFlow() {
@@ -1207,7 +1243,7 @@ function activateStageTab(tab) {
 }
 function renderStageEditorContent(cfg, item) {
   const box = currentStageModal(); if (!box) return; const disabled = !state.studioGuard.editable ? "disabled" : "";
-  const routes = item?.routes ?? cfg.routes ?? {};
+  const routes = cfg.routes ?? {};
   const settings = box.querySelector('[data-stage-panel="settings"]');
   settings.innerHTML = `
     ${!state.studioGuard.editable ? `<div class="designer-warning-box"><strong>Read only</strong><span>${escapeHtml(t("stage.readonly_desc", "Stop active Runtime before editing Workflow settings."))}</span></div>` : ''}
@@ -1215,11 +1251,11 @@ function renderStageEditorContent(cfg, item) {
     <div class="stage-section-head"><div><strong>Stage</strong><span>${escapeHtml(t("stage.section_desc", "Common settings are shown first; less-used runtime overrides are under Advanced."))}</span></div></div>
     <div class="stage-form-two-col stage-primary-fields">
       <label class="designer-form-row"><span class="designer-label">Type</span><select id="stageType" class="designer-select" ${disabled}>${stageTypesOptions(cfg.type || "base")}</select></label>
-      <label class="designer-form-row"><span class="designer-label">Status</span><input id="stageStatus" class="designer-input" value="${escapeHtml(item?.status ?? cfg.status ?? "")}" placeholder="User-facing runtime status" ${disabled} /></label>
-      <label id="stagePromptSelectRow" class="designer-form-row stage-form-wide"><span class="designer-label">Prompt</span><select id="stagePromptSelect" class="designer-select" ${disabled}>${promptOptionRows(item?.prompt ?? cfg.prompt ?? "")}</select><span class="designer-form-hint">${escapeHtml(t("stage.prompt_desc", "Edit Prompt content in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here."))}</span></label>
+      <label class="designer-form-row"><span class="designer-label">Status</span><input id="stageStatus" class="designer-input" value="${escapeHtml(cfg.status ?? "")}" placeholder="User-facing runtime status" ${disabled} /></label>
+      <label id="stagePromptSelectRow" class="designer-form-row stage-form-wide"><span class="designer-label">Prompt</span><select id="stagePromptSelect" class="designer-select" ${disabled}>${promptOptionRows(cfg.prompt ?? "")}</select><span class="designer-form-hint">${escapeHtml(t("stage.prompt_desc", "Edit Prompt content in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here."))}</span></label>
       <label class="designer-form-row"><span class="designer-label">Timeout (seconds)</span><input id="stageTimeout" class="designer-input" type="number" min="0" step="0.1" value="${cfg.timeout ?? ""}" placeholder="Stage default" ${disabled} /></label>
-      <label class="designer-form-row"><span class="designer-label">Flow scope</span><select id="stageScope" class="designer-select" ${disabled}><option value="" ${!item?.scope ? "selected" : ""}>Workflow</option><option value="task" ${item?.scope === "task" ? "selected" : ""}>Per task</option></select></label>
-      <label class="designer-form-row stage-form-wide"><span class="designer-label">Flow label</span><input id="stageFlowLabel" class="designer-input" value="${escapeHtml(item?.label || "")}" placeholder="Optional display / routing label" ${disabled} /></label>
+      <label class="designer-form-row"><span class="designer-label">Flow scope</span><select id="stageScope" class="designer-select" ${disabled}><option value="" ${!cfg.scope ? "selected" : ""}>Workflow</option><option value="task" ${cfg.scope === "task" ? "selected" : ""}>Per task</option></select></label>
+      <label class="designer-form-row stage-form-wide"><span class="designer-label">Flow label</span><input id="stageFlowLabel" class="designer-input" value="${escapeHtml(cfg.label || "")}" placeholder="Optional display / routing label" ${disabled} /></label>
       <label class="designer-form-row stage-form-wide"><span class="designer-label">Detail</span><textarea id="stageDetail" class="designer-textarea" rows="2" placeholder="Optional Stage detail / context" ${disabled}>${escapeHtml(cfg.detail || "")}</textarea></label>
     </div>
     <div id="stageTypeSpecific" class="stage-type-specific"></div>
@@ -1246,9 +1282,9 @@ function renderStageEditorContent(cfg, item) {
       <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Route unrecovered Stage error. Default is stop."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop (default)")}</select></label>
     </div>
 
-    <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Execution-level retry is separate from FAIL → Recover attempts."))}</span></div></div>
+    <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Technical Stage retry is separate from semantic result routing."))}</span></div></div>
     <div class="stage-form-two-col">
-      <label class="designer-form-row">${fieldLabel("Retry", t("stage.help.retry", "Technical Stage retry. This is separate from semantic FAIL recovery."))}<input id="stageRetry" class="designer-input" type="number" min="-1" value="${cfg.retry ?? ""}" placeholder="Stage default" ${disabled} /><span class="designer-form-hint">${escapeHtml(t("stage.retry_hint", "-1 = keep retrying until PASS; 0 = no retry."))}</span></label>
+      <label class="designer-form-row">${fieldLabel("Retry", t("stage.help.retry", "Technical Stage retry. Workflow FAIL routing is configured by result edges."))}<input id="stageRetry" class="designer-input" type="number" min="-1" value="${cfg.retry ?? ""}" placeholder="Stage default" ${disabled} /><span class="designer-form-hint">${escapeHtml(t("stage.retry_hint", "-1 = keep retrying until PASS; 0 = no retry."))}</span></label>
       <label id="stageStructuredRetriesRow" class="designer-form-row">${fieldLabel("Structured retries", t("stage.help.structured_retries", "Retry malformed structured output in the current Session."))}<input id="stageStructuredRetries" class="designer-input" type="number" min="0" value="${cfg.structured_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
       <label id="stageStructuredFreshRetriesRow" class="designer-form-row">${fieldLabel("Structured fresh retries", t("stage.help.structured_fresh_retries", "Retry malformed structured output in a Fresh Session after current-Session retries are exhausted."))}<input id="stageStructuredFreshRetries" class="designer-input" type="number" min="0" value="${cfg.structured_fresh_retries ?? ""}" placeholder="Stage default" ${disabled} /></label>
     </div>
@@ -1296,55 +1332,104 @@ function syncStageTypeUi(cfg) {
 function valueOrNull(id) { const value = fieldValue(id).trim(); return value === "" ? null : value; }
 function numberOrNull(id) { const value = fieldValue(id).trim(); return value === "" ? null : Number(value); }
 function listOrNull(id) { const values = fieldValue(id).split(",").map((x) => x.trim()).filter(Boolean); return values.length ? values : null; }
-function changedFields(cfg, item) {
-  const type = fieldValue("stageType"); const aiBacked = type !== "command"; const flowHasStatus = !!item && Object.prototype.hasOwnProperty.call(item, "status"); const flowHasPrompt = !!item && Object.prototype.hasOwnProperty.call(item, "prompt"); const candidates = {
-    type, run_state: valueOrNull("stageRunState"), actor: valueOrNull("stageActor"), mode: valueOrNull("stageMode"), readonly_safety: valueOrNull("stageReadonlySafety"), timeout: numberOrNull("stageTimeout"), produces: valueOrNull("stageProduces"), detail: valueOrNull("stageDetail"),
-    retry: numberOrNull("stageRetry"), track_changes: checked("stageTrackChanges"), tolerate_restored_changes: checked("stageTolerateRestored"),
-  };
-  if (!flowHasStatus) candidates.status = valueOrNull("stageStatus");
-  if (stageSupportsParser(type)) candidates.parser = valueOrNull("stageParser");
-  if (aiBacked) {
-    candidates.session_key = valueOrNull("stageSessionKey"); candidates.fresh_session_on_start = checked("stageFreshOnStart"); candidates.fresh_session_each_run = checked("stageFreshEachRun"); candidates.allow_project_read = checked("stageAllowProjectRead"); candidates.structured_retries = numberOrNull("stageStructuredRetries"); candidates.structured_fresh_retries = numberOrNull("stageStructuredFreshRetries");
-    if (stageSupportsPrompt(type)) { if (!flowHasPrompt) candidates.prompt = valueOrNull("stagePromptSelect"); candidates.instructions = valueOrNull("stageInstructions"); }
-    if ($("stageRuns")) candidates.runs = numberOrNull("stageRuns"); if ($("stageRequiredPasses")) candidates.required_passes = numberOrNull("stageRequiredPasses");
-  }
-  if (type === "command") { candidates.command = valueOrNull("stageCommand"); candidates.result_kind = valueOrNull("stageResultKind"); candidates.cwd = valueOrNull("stageCwd"); candidates.clean_work = listOrNull("stageCleanWork"); }
-  if (type === "plan") candidates.min_tasks = numberOrNull("stageMinTasks");
-  if (type === "ai_validator") candidates.validator = valueOrNull("stageValidator") || "ai";
-  const booleanKeys = new Set(["fresh_session_on_start", "fresh_session_each_run", "track_changes", "tolerate_restored_changes", "allow_project_read"]); const result = {};
-  for (const [key, value] of Object.entries(candidates)) {
-    const implicitBoolean = key === "allow_project_read" && type === "plan";
-    if (booleanKeys.has(key) && cfg[key] === undefined && value === implicitBoolean) continue;
-    const before = cfg[key] === undefined ? null : cfg[key]; if (JSON.stringify(before) !== JSON.stringify(value)) result[key] = value;
-  }
-  if (type !== "command" && cfg.type === "command") for (const key of ["command", "result_kind", "cwd", "clean_work"]) if (cfg[key] !== undefined) result[key] = null;
-  if (type !== "plan" && cfg.type === "plan" && cfg.min_tasks !== undefined) result.min_tasks = null;
-  if (type !== "ai_validator" && cfg.type === "ai_validator" && cfg.validator !== undefined) result.validator = null;
-  if (!aiBacked && cfg.type !== "command") for (const key of ["prompt", "continuation_prompt", "instructions", "session_key", "parser", "structured_retries", "structured_fresh_retries", "fresh_session_each_run", "fresh_session_on_start", "allow_project_read", "runs", "required_passes"]) if (cfg[key] !== undefined) result[key] = null;
-  if (aiBacked && !stageSupportsPrompt(type) && stageSupportsPrompt(cfg.type)) for (const key of ["prompt", "continuation_prompt", "instructions"]) if (cfg[key] !== undefined) result[key] = null;
-  return result;
-}
 function routeMapOrNull() {
   const routes = {};
   for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"], ["error", "stageRouteError"]]) {
-    const target = valueOrNull(id); if (target) routes[status] = target;
+    const target = valueOrNull(id);
+    if (target) routes[status] = target;
   }
   return Object.keys(routes).length ? routes : null;
 }
-function changedFlowFields(item) { const result = { label: valueOrNull("stageFlowLabel"), routes: routeMapOrNull() }; if (item && Object.prototype.hasOwnProperty.call(item, "status")) result.status = valueOrNull("stageStatus"); if (item && Object.prototype.hasOwnProperty.call(item, "prompt")) result.prompt = stageSupportsPrompt(fieldValue("stageType")) ? valueOrNull("stagePromptSelect") : null; return result; }
+function changedFields(cfg) {
+  const type = fieldValue("stageType");
+  const aiBacked = type !== "command";
+  const candidates = {
+    type,
+    status: valueOrNull("stageStatus"),
+    label: valueOrNull("stageFlowLabel"),
+    scope: valueOrNull("stageScope"),
+    routes: routeMapOrNull(),
+    run_state: valueOrNull("stageRunState"),
+    actor: valueOrNull("stageActor"),
+    mode: valueOrNull("stageMode"),
+    readonly_safety: valueOrNull("stageReadonlySafety"),
+    timeout: numberOrNull("stageTimeout"),
+    produces: valueOrNull("stageProduces"),
+    detail: valueOrNull("stageDetail"),
+    retry: numberOrNull("stageRetry"),
+    track_changes: checked("stageTrackChanges"),
+    tolerate_restored_changes: checked("stageTolerateRestored"),
+  };
+  if (stageSupportsParser(type)) candidates.parser = valueOrNull("stageParser");
+  if (aiBacked) {
+    candidates.session_key = valueOrNull("stageSessionKey");
+    candidates.fresh_session_on_start = checked("stageFreshOnStart");
+    candidates.fresh_session_each_run = checked("stageFreshEachRun");
+    candidates.allow_project_read = checked("stageAllowProjectRead");
+    candidates.structured_retries = numberOrNull("stageStructuredRetries");
+    candidates.structured_fresh_retries = numberOrNull("stageStructuredFreshRetries");
+    if (stageSupportsPrompt(type)) {
+      candidates.prompt = valueOrNull("stagePromptSelect");
+      candidates.instructions = valueOrNull("stageInstructions");
+    }
+    if ($("stageRuns")) candidates.runs = numberOrNull("stageRuns");
+    if ($("stageRequiredPasses")) candidates.required_passes = numberOrNull("stageRequiredPasses");
+  }
+  if (type === "command") {
+    candidates.command = valueOrNull("stageCommand");
+    candidates.result_kind = valueOrNull("stageResultKind");
+    candidates.cwd = valueOrNull("stageCwd");
+    candidates.clean_work = listOrNull("stageCleanWork");
+  }
+  if (type === "plan") candidates.min_tasks = numberOrNull("stageMinTasks");
+  if (type === "ai_validator") candidates.validator = valueOrNull("stageValidator") || "ai";
+
+  const booleanKeys = new Set([
+    "fresh_session_on_start", "fresh_session_each_run", "track_changes",
+    "tolerate_restored_changes", "allow_project_read",
+  ]);
+  const result = {};
+  for (const [key, value] of Object.entries(candidates)) {
+    const implicitBoolean = key === "allow_project_read" && type === "plan";
+    if (booleanKeys.has(key) && cfg[key] === undefined && value === implicitBoolean) continue;
+    const before = cfg[key] === undefined ? null : cfg[key];
+    if (JSON.stringify(before) !== JSON.stringify(value)) result[key] = value;
+  }
+  if (type !== "command" && cfg.type === "command") {
+    for (const key of ["command", "result_kind", "cwd", "clean_work"]) {
+      if (cfg[key] !== undefined) result[key] = null;
+    }
+  }
+  if (type !== "plan" && cfg.type === "plan" && cfg.min_tasks !== undefined) result.min_tasks = null;
+  if (type !== "ai_validator" && cfg.type === "ai_validator" && cfg.validator !== undefined) result.validator = null;
+  if (!aiBacked && cfg.type !== "command") {
+    for (const key of [
+      "prompt", "continuation_prompt", "instructions", "session_key", "parser",
+      "structured_retries", "structured_fresh_retries", "fresh_session_each_run",
+      "fresh_session_on_start", "allow_project_read", "runs", "required_passes",
+    ]) if (cfg[key] !== undefined) result[key] = null;
+  }
+  if (aiBacked && !stageSupportsPrompt(type) && stageSupportsPrompt(cfg.type)) {
+    for (const key of ["prompt", "continuation_prompt", "instructions"]) {
+      if (cfg[key] !== undefined) result[key] = null;
+    }
+  }
+  return result;
+}
+
 async function validateStageEditor(index, name, cfg, item) {
   if (!state.studioFile || !state.studioGuard.editable) return; const status = $("stageEditorStatus"); status.textContent = "Validating draft…"; status.classList.remove("error");
   try {
-    const fields = changedFields(cfg, item); const scope = fieldValue("stageScope");
-    const result = await api("/api/studio/stage/validate", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, fields, flow_index: index, scope, flow_fields: changedFlowFields(item), hash: state.studioHash }) });
+    const fields = changedFields(cfg);
+    const result = await api("/api/studio/stage/validate", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, fields, hash: state.studioHash }) });
     status.textContent = result.summary || "Validation passed"; showToast("Workflow validation passed");
   } catch (error) { status.textContent = error.message; status.classList.add("error"); showActionError(error.message, "Workflow validation failed"); }
 }
 async function saveStageEditor(index, name, cfg, item) {
   if (!state.studioFile || !state.studioGuard.editable) return; const status = $("stageEditorStatus"); status.textContent = "Saving…"; status.classList.remove("error");
   try {
-    const fields = changedFields(cfg, item); const scope = fieldValue("stageScope");
-    const result = await api("/api/studio/stage/save", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, fields, flow_index: index, scope, flow_fields: changedFlowFields(item), hash: state.studioHash }) });
+    const fields = changedFields(cfg);
+    const result = await api("/api/studio/stage/save", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", stage: name, fields, hash: state.studioHash }) });
     invalidateStudioFileCache(state.studioFile.id); state.studioFile = result.file; state.studioOriginal = result.file.content; state.studioHash = result.file.hash; state.studioDirty = false; state.visualDirty = false; state.visual = result.visual; $("studioTextarea").value = result.file.content; updateLineNumbers(); renderVisualDesigner(); updateDirtyState(); setStudioStatus("Stage saved"); state.stageEditorDirty = false; status.textContent = "Saved";
     showToast("Stage saved");
     setTimeout(async () => { if (currentStageModal()) { closeStageEditor(true); await openStageEditor(index); const reopened = $("stageEditorStatus"); if (reopened) reopened.textContent = "Saved"; } }, 120);
