@@ -189,6 +189,44 @@ flow:
 
 
 
+def test_dryrun_matrix_covers_bounded_restart_exhaustion(tmp_path: Path):
+    workflow = tmp_path / "bounded_restart.yaml"
+    workflow.write_text(
+        """
+stages:
+  execute:
+    type: command
+    command: [python, -c, "print('EXECUTE')"]
+  review:
+    type: review
+flow:
+  - execute
+  - stage: review
+    restart_at: execute
+    max_attempts: 3
+    on_exhausted: fail
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+    assert payload["features"]["max_attempts"] == 1
+    assert payload["features"]["restart_at"] == 1
+
+    cases = {item["name"]: item for item in payload["cases"]}
+    restart = cases["review FAIL -> restart_at -> closure"]
+    exhausted = cases["review FAIL x3 -> exhausted -> fail"]
+
+    assert restart["passed"] is True
+    assert restart["completed"] is True
+    assert exhausted["passed"] is True
+    assert exhausted["completed"] is False
+    assert exhausted["stage_calls"]["review"] == 3
+
+
 def test_dryrun_matrix_proves_fresh_session_threshold(tmp_path: Path):
     workflow = tmp_path / "fresh.yaml"
     workflow.write_text(
