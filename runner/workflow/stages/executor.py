@@ -217,7 +217,7 @@ class StageExecutor:
         value = getattr(stage, "retry_limit", None)
         configured = value(ctx) if callable(value) else getattr(stage, "retry", None)
         if configured is None:
-            configured = ctx.config.same_session_retries
+            configured = ctx.config.stage_retries
         return int(configured)
 
     def _fresh_session(self, stage: Stage, ctx: StageContext) -> None:
