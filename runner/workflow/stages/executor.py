@@ -75,13 +75,10 @@ class StageExecutor:
         if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(ctx):
             self._fresh_session(stage, ctx)
 
-        configured = self._retry_limit(stage, ctx)
-        unlimited = configured == -1
-        same_session_limit = (
-            DEFAULT_PER_SESSION_ATTEMPTS if unlimited else max(0, configured)
-        )
-        same_session_failures = 0
-        fresh_used = False
+        retry_limit = self._retry_limit(stage, ctx)
+        unlimited = retry_limit == -1
+        retries_used = 0
+        failures_in_session = 0
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
@@ -111,27 +108,21 @@ class StageExecutor:
                 raise error
             if result.changed_files:
                 break
+            if not unlimited and retries_used >= retry_limit:
+                break
 
+            retries_used += 1
+            failures_in_session += 1
             previous_error = str(error)
-            limit = max(
-                0,
-                int(getattr(error, "same_session_retry_limit", same_session_limit)),
-            )
-            if same_session_failures < limit:
-                same_session_failures += 1
-                retry_mode = "retry" if self._has_session(ctx) else "recover"
-                self._sleep(ctx)
-                continue
 
-            if unlimited or not fresh_used:
+            if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
                 self._fresh_session(stage, ctx)
-                same_session_failures = 0
-                fresh_used = True
+                failures_in_session = 0
                 retry_mode = "recover"
-                self._sleep(ctx)
-                continue
+            else:
+                retry_mode = "retry" if self._has_session(ctx) else "recover"
 
-            break
+            self._sleep(ctx)
 
         try:
             result = stage.finish(ctx, result)
