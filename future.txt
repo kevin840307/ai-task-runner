@@ -13,7 +13,8 @@ Keep the runtime intentionally small while preserving:
 - n8n-style visual Workflow editing
 - CLI execution
 - YAML List batch execution
-- future Dynamic/Parallel agents built from Stage
+- future Dynamic Handoff and Discussion / Group Chat built from Stage
+- future Parallel scheduling built from Stage when a real use case requires it
 
 User-facing model
 -----------------
@@ -160,7 +161,28 @@ No durable recovery state machine.
 n8n-style UI
 ------------
 
-The UI must be a visual editor for the exact runtime Workflow graph.
+There is one Graph Designer with three Workflow families:
+
+1. Linear Workflow with Rollback / Loop
+   - current production family
+   - explicit Stage nodes
+   - PASS/FAIL/ERROR result edges
+   - rollback/loop = edge back to an earlier Stage
+
+2. Dynamic Handoff
+   - future
+   - Stage nodes remain unchanged
+   - handoff targets/roles/ownership are additional scheduling semantics
+
+3. Discussion / Group Chat
+   - future
+   - participants/moderator/judge are still Stages
+   - round/order/termination are additional scheduling semantics
+
+Workflow family is not a CLI execution-mode selector and does not imply three
+Runner implementations.
+
+The UI must be a visual editor for the exact runtime Workflow asset.
 
 Node:
   Stage
@@ -284,6 +306,48 @@ UI direction for Dynamic:
 - runtime current-owner highlight
 - no separate product/editor
 
+Future Discussion / Group Chat
+------------------------------
+
+Do not build it yet.
+
+Discussion participants remain Stage nodes.
+
+Possible future scheduler:
+
+  participant Stage
+        |
+  discussion result / bounded summary
+        |
+  DiscussionScheduler
+        |
+  next participant / moderator / done
+
+Discussion-specific state may include only what is necessary:
+- round
+- active participant
+- moderator/judge
+- termination condition
+- bounded summary
+
+It must reuse:
+- StageExecutor
+- StateStore
+- Stage registry
+- backend/session logic
+- protected-file safety
+- the same Graph Designer
+
+Do not create a separate group-chat runtime.
+
+UI direction for Discussion:
+- same Stage nodes
+- participant/group membership
+- round/order settings
+- moderator/judge node role
+- active speaker highlighting
+- no separate product/editor
+
 Future Parallel Agent
 ---------------------
 
@@ -344,19 +408,26 @@ Phase C - code-size review
       runtime/run_state.py
 25. Update project.bundle.txt after architecture stabilizes.
 
-Phase D - Dynamic Agent only after A/B/C are stable
+Phase D - Dynamic Handoff only after A/B/C are stable
 26. Derive the smallest DynamicScheduler contract from a real use case.
 27. Reuse Stage and StageExecutor unchanged.
 28. Add bounded handoff intent only if required.
 29. Add deterministic dynamic scheduling tests.
 30. Extend the same Graph Designer with allowed handoff edges.
 
-Phase E - Parallel Agent only after a real use case
-31. Define read-only parallel scheduling first.
-32. Add single-writer ownership enforcement.
-33. Use isolated worktrees before allowing parallel writers.
-34. Add deterministic branch/join tests.
+Phase E - Discussion / Group Chat after a real use case
+31. Derive the smallest DiscussionScheduler from a real use case.
+32. Reuse Stage and StageExecutor unchanged.
+33. Add only bounded round/participant/moderator state.
+34. Add deterministic discussion termination tests.
 35. Extend the same Graph Designer; do not create another UI.
+
+Phase F - Parallel Agent only after a real use case
+36. Define read-only parallel scheduling first.
+37. Add single-writer ownership enforcement.
+38. Use isolated worktrees before allowing parallel writers.
+39. Add deterministic branch/join tests.
+40. Extend the same Graph Designer; do not create another UI.
 
 Non-goals
 ---------
@@ -385,4 +456,4 @@ UI edits that graph.
 CLI runs that graph.
 YAML List batches runs of that graph.
 
-Future Dynamic/Parallel behavior must reuse Stage.
+Future Dynamic Handoff / Discussion / Parallel behavior must reuse Stage.
