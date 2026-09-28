@@ -482,7 +482,7 @@ class WorkflowStudioMixin:
                 row["stage"] = stage_name
                 updates = dict(flow_fields or {})
                 updates["scope"] = scope or None
-                allowed_flow = {"scope", "label", "routes", "recover", "restart_at", "repeat", "max_attempts", "on_exhausted", "fresh_after_same_failures", "status", "prompt"}
+                allowed_flow = {"scope", "label", "routes", "status", "prompt", "name"}
                 unknown_flow = sorted(str(key) for key in updates if key not in allowed_flow)
                 if unknown_flow:
                     raise ValueError(f"Unsupported Flow field: {', '.join(unknown_flow)}")
@@ -604,67 +604,41 @@ class WorkflowStudioMixin:
         scope = updates.get("scope")
         if scope not in (None, "", "task"):
             raise ValueError("Flow scope must be task when specified")
-        label = updates.get("label")
-        if label is not None and (not isinstance(label, str) or not label.strip()):
-            raise ValueError("Flow label must be a non-empty string")
-        status = updates.get("status")
-        if status is not None and (not isinstance(status, str) or not status.strip()):
-            raise ValueError("Flow status must be a non-empty string")
-        prompt = updates.get("prompt")
-        if prompt is not None and (not isinstance(prompt, str) or not prompt.strip()):
-            raise ValueError("Flow prompt must be a non-empty string")
-        routes = updates.get("routes")
-        if routes is not None:
-            if not isinstance(routes, dict) or not routes:
-                raise ValueError("Flow routes must be a non-empty object")
-            unknown_statuses = sorted(str(key) for key in routes if key not in {"pass", "fail", "error", "replan"})
-            if unknown_statuses:
-                raise ValueError(f"Flow routes has unsupported status: {', '.join(unknown_statuses)}")
-            allowed_targets = {"next", "done", "stop"}
-            for flow_item in flow:
-                route_name = flow_item if isinstance(flow_item, str) else flow_item.get("stage") if isinstance(flow_item, dict) else None
-                if isinstance(route_name, str) and route_name:
-                    allowed_targets.add(route_name)
-            for status_name, target in routes.items():
-                if not isinstance(target, str) or not target.strip():
-                    raise ValueError(f"Flow routes.{status_name} must be a non-empty target")
-                if target not in allowed_targets:
-                    raise ValueError(f"Flow routes.{status_name} references unknown Flow stage: {target}")
-        restart_at = updates.get("restart_at")
-        if restart_at:
-            allowed = set()
-            for item in flow[: index + 1]:
-                name = item if isinstance(item, str) else item.get("stage") if isinstance(item, dict) else None
-                if isinstance(name, str) and name:
-                    allowed.add(name)
-            if restart_at not in allowed:
-                raise ValueError("restart_at must reference this or an earlier Flow stage")
-        for key in ("repeat", "max_attempts", "fresh_after_same_failures"):
+        for key in ("label", "status", "prompt", "name"):
             value = updates.get(key)
-            if value is None:
-                continue
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                raise ValueError(f"Flow {key} must be a positive integer")
-        on_exhausted = updates.get("on_exhausted")
-        if on_exhausted not in (None, "continue", "fail"):
-            raise ValueError("Flow on_exhausted must be continue or fail")
-        recover = updates.get("recover")
-        if recover is None and isinstance(stage, dict):
-            recover = stage.get("recover")
-        if recover is not None and not isinstance(recover, (list, tuple)):
-            raise ValueError("Flow recover must be a Stage list")
-        if updates.get("fresh_after_same_failures") is not None and not recover:
-            raise ValueError("fresh_after_same_failures requires recover stages")
-        if isinstance(updates.get("repeat"), int) and updates["repeat"] > 1 and not recover:
-            raise ValueError("repeat > 1 requires recover stages")
-        if updates.get("max_attempts") is not None and not recover:
-            raise ValueError("max_attempts requires recover stages")
-        if on_exhausted is not None and updates.get("max_attempts") is None:
-            raise ValueError("on_exhausted requires max_attempts")
-        if updates.get("max_attempts") is not None and updates.get("repeat") is not None:
-            raise ValueError("max_attempts cannot be combined with repeat")
-        if updates.get("max_attempts") is not None and updates.get("restart_at") is not None:
-            raise ValueError("max_attempts cannot be combined with restart_at")
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ValueError(f"Flow {key} must be a non-empty string")
+
+        routes = updates.get("routes")
+        if routes is None:
+            return
+        if not isinstance(routes, dict) or not routes:
+            raise ValueError("Flow routes must be a non-empty object")
+        unknown = sorted(str(key) for key in routes if key not in {"pass", "fail", "error"})
+        if unknown:
+            raise ValueError(
+                "Flow routes supports only pass/fail/error; unknown: "
+                + ", ".join(unknown)
+            )
+
+        allowed_targets = {"next", "done", "stop"}
+        for item in flow:
+            if isinstance(item, str):
+                name = item
+            elif isinstance(item, dict):
+                name = str(item.get("name") or item.get("stage") or "")
+            else:
+                name = ""
+            if name:
+                allowed_targets.add(name)
+
+        for status, target in routes.items():
+            if not isinstance(target, str) or not target.strip():
+                raise ValueError(f"Flow routes.{status} must be a non-empty target")
+            if target not in allowed_targets:
+                raise ValueError(
+                    f"Flow routes.{status} references unknown Flow stage: {target}"
+                )
 
     def _require_editable(self) -> None:
         guard = self.edit_guard()
@@ -807,8 +781,6 @@ class WorkflowStudioMixin:
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
                 raise ValueError("Workflow validation returned invalid JSON") from exc
-            if payload.get("execution_mode", "linear") != "linear":
-                raise ValueError("Workflow validation used an incompatible execution mode")
             if not payload.get("closed"):
                 raise ValueError("Workflow validation matrix did not reach closure")
             return {"ok": True, "output": output, "payload": payload}
@@ -861,10 +833,6 @@ class WorkflowStudioMixin:
             command_text = " ".join(command) if isinstance(command, list) else str(command or "")
             if stage_type == "command" and str(cfg.get("result_kind") or "") == "validation" and "{validator}" in command_text:
                 result["requires_python_validator"] = True
-            recover = cfg.get("recover")
-            if isinstance(recover, list):
-                for child in recover:
-                    visit(child)
 
         for row in flow:
             visit(row)
@@ -906,14 +874,6 @@ class WorkflowStudioMixin:
                 value = config.get(key)
                 if isinstance(value, str) and value.strip():
                     refs.append((str(name), value.strip()))
-            recover = config.get("recover")
-            if isinstance(recover, list):
-                for item in recover:
-                    if isinstance(item, dict):
-                        for key in ("prompt", "continuation_prompt"):
-                            value = item.get(key)
-                            if isinstance(value, str) and value.strip():
-                                refs.append((f"{name}.recover", value.strip()))
         if isinstance(flow, list):
             for index, item in enumerate(flow):
                 if isinstance(item, dict):
@@ -1463,7 +1423,6 @@ class WorkflowStudioMixin:
         except OSError:
             item["version"] = ""
         if kind == "workflow":
-            item["execution_mode"] = "linear"
             item.update(self._workflow_requirements(resolved))
             key = os.path.normcase(os.path.abspath(str(resolved)))
             item["hidden"] = bool(workflow_visibility.get(key, False)) if workflow_visibility is not None else self.workflow_hidden(resolved)
