@@ -21,7 +21,7 @@ function rememberValidator(workflow, value) { if (!state.project || !workflow) r
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
   projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
-  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, flow_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
+  backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
   studioFilters: { workflow: "", prompt: "" },
@@ -694,7 +694,7 @@ async function refreshBackends() {
 async function refreshWorkflowCatalog() {
   try {
     const data = await api("/api/workflow/catalog", { timeoutMs: 15000 });
-    state.workflowCatalog = data && typeof data === "object" ? data : { stage_types: {}, flow_options: {} };
+    state.workflowCatalog = data && typeof data === "object" ? data : { stage_types: {}, node_options: {} };
     const add = $("addStageType");
     if (add) {
       const selected = add.value || "task";
@@ -702,7 +702,7 @@ async function refreshWorkflowCatalog() {
       if (![...add.options].some((o) => o.value === selected)) add.value = add.options[0]?.value || "";
     }
   } catch (_) {
-    state.workflowCatalog = { stage_types: {}, flow_options: {} };
+    state.workflowCatalog = { stage_types: {}, node_options: {} };
   }
 }
 function closeBackendDropdown() {
