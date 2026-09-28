@@ -133,10 +133,6 @@ def _validate_snapshot(workflow: Any) -> None:
                 if key != "_workflow_index"
             }
             validate_stage(str(item.get("name", "")), values)
-            recover = item.get("recover")
-            if isinstance(recover, list):
-                visit(recover)
-
     visit(workflow)
     validate_topology(workflow)
 
