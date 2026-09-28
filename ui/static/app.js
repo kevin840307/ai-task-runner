@@ -1000,7 +1000,7 @@ async function setStudioSource(kind) {
   closeStageEditor(true); state.studioSourceKind = kind; clearStudioEditor(); renderStudioFiles();
 }
 function flowStageName(item) { return typeof item === "string" ? item : String(item?.stage || ""); }
-function stageConfig(name) { return (state.visual?.stages || []).find((s) => s.name === name) || { name, type: "base", status: "", prompt: "", recover: [] }; }
+function stageConfig(name) { return (state.visual?.stages || []).find((s) => s.name === name) || { name, type: "base", status: "", prompt: "" }; }
 function renderVisualDesigner() {
   const root = $("visualFlowList"); if (!root) return; root.innerHTML = ""; const flow = state.visual?.flow || [];
   flow.forEach((item, index) => {
@@ -1239,28 +1239,12 @@ function renderStageEditorContent(cfg, item) {
 
   const control = box.querySelector('[data-stage-panel="control"]');
   control.innerHTML = `
-    <div class="stage-section-head"><div><strong>Result edges</strong><span>${escapeHtml(t("stage.routes_desc", "Ralph-like routing: Stage result status selects the next Stage. Technical retry stays inside StageExecutor."))}</span></div></div>
+    <div class="stage-section-head"><div><strong>Result edges</strong><span>${escapeHtml(t("stage.routes_desc", "Workflow routing: PASS defaults to next; FAIL/ERROR default to stop. Technical retry stays inside StageExecutor."))}</span></div></div>
     <div class="stage-form-two-col">
       <label class="designer-form-row">${fieldLabel("PASS", t("stage.help.route_pass", "Default is the next Flow Stage."))}<select id="stageRoutePass" class="designer-select" ${disabled}>${routeTargetOptions(routes.pass || "", "Next (default)")}</select></label>
-      <label class="designer-form-row">${fieldLabel("FAIL", t("stage.help.route_fail", "Route semantic failure directly to a Stage or terminal target."))}<select id="stageRouteFail" class="designer-select" ${disabled}>${routeTargetOptions(routes.fail || "", "Legacy/default")}</select></label>
-      <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Used only after technical retry/session recovery is exhausted."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop/default")}</select></label>
-      <label class="designer-form-row">${fieldLabel("REPLAN", t("stage.help.route_replan", "Optional explicit target for a replan result."))}<select id="stageRouteReplan" class="designer-select" ${disabled}>${routeTargetOptions(routes.replan || "", "Legacy/default")}</select></label>
+      <label class="designer-form-row">${fieldLabel("FAIL", t("stage.help.route_fail", "Route semantic failure to another Stage or terminal target."))}<select id="stageRouteFail" class="designer-select" ${disabled}>${routeTargetOptions(routes.fail || "", "Stop (default)")}</select></label>
+      <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Route unrecovered Stage error. Default is stop."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop (default)")}</select></label>
     </div>
-
-    <div class="stage-section-head"><div><strong>Legacy routing</strong><span>${escapeHtml(t("stage.flow_desc", "Compatibility controls for existing restart/recover workflows."))}</span></div></div>
-    <div class="stage-form-two-col">
-      <label class="designer-form-row">${fieldLabel("Restart at", t("stage.help.restart_at", "On semantic FAIL, restart this or an earlier top-level Stage."))}<select id="stageRestartAt" class="designer-select" ${disabled}>${flowStageOptions(item?.restart_at || "")}</select></label>
-      <label class="designer-form-row">${fieldLabel("Repeat", t("stage.help.repeat", "Legacy bounded recovery. Leave empty unless this Workflow already relies on repeat."))}<input id="stageRepeat" class="designer-input" type="number" min="1" value="${item?.repeat ?? ""}" placeholder="No repeat" ${disabled} /></label>
-      <label class="designer-form-row">${fieldLabel("Fresh after same failures", t("stage.help.fresh_after", "After the same semantic failure repeats this many times, use a Fresh Session for recovery."))}<input id="stageFreshAfterSameFailures" class="designer-input" type="number" min="1" value="${item?.fresh_after_same_failures ?? ""}" placeholder="Default recovery policy" ${disabled} /></label>
-    </div>
-
-    <div class="stage-section-head"><div><strong>Recovery gate</strong><span>${escapeHtml(t("stage.recovery_desc", "Semantic FAIL routing and optional bounded recovery."))}</span></div></div>
-    <div class="stage-form-two-col">
-      <label class="designer-form-row stage-form-wide">${fieldLabel("Recover stages", t("stage.help.recover", "Stages to run when this Flow invocation returns semantic FAIL."))}<input id="stageRecover" class="designer-input" value="${escapeHtml(((item?.recover ?? cfg.recover) || []).join(", "))}" placeholder="recover_stage" ${disabled} /></label>
-      <label id="stageMaxAttemptsRow" class="designer-form-row">${fieldLabel("Max attempts", t("stage.help.max_attempts", "Maximum FAIL → Recover → Retry attempts in one gate cycle. Leave empty to keep the original unlimited / current recovery behavior."))}<input id="stageMaxAttempts" class="designer-input" type="number" min="1" value="${item?.max_attempts ?? ""}" placeholder="Unlimited / current behavior" ${disabled} /></label>
-      <label id="stageOnExhaustedRow" class="designer-form-row">${fieldLabel("On exhausted", t("stage.help.on_exhausted", "What happens when Max attempts is reached. Re-entering this Stage later starts again from attempt 1."))}<select id="stageOnExhausted" class="designer-select" ${disabled}><option value="" ${!item?.on_exhausted ? "selected" : ""}>Fail (default)</option><option value="fail" ${item?.on_exhausted === "fail" ? "selected" : ""}>Fail</option><option value="continue" ${item?.on_exhausted === "continue" ? "selected" : ""}>Continue</option></select></label>
-    </div>
-    <div id="stageRecoveryBehavior" class="stage-behavior-preview"></div>
 
     <div class="stage-section-head"><div><strong>Retry & structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Execution-level retry is separate from FAIL → Recover attempts."))}</span></div></div>
     <div class="stage-form-two-col">
@@ -1271,7 +1255,6 @@ function renderStageEditorContent(cfg, item) {
 
     <div class="stage-section-head"><div><strong>Session & safety</strong><span>${escapeHtml(t("stage.session_desc", "Session isolation and file / change handling."))}</span></div></div>
     <div class="stage-switch-grid">
-      ${switchRow("stageSkipOnError", "Skip on error", t("stage.help.skip_on_error", "Continue when the Stage itself errors."), cfg.skip_on_error, disabled)}
       <span id="stageFreshOnStartRow">${switchRow("stageFreshOnStart", "Fresh session on start", t("stage.help.fresh_on_start", "Start this Stage in a new AI Session."), cfg.fresh_session_on_start, disabled)}</span>
       <span id="stageFreshEachRunRow">${switchRow("stageFreshEachRun", "Fresh session each run", t("stage.help.fresh_each_run", "Use a new Session for every multi-run validation."), cfg.fresh_session_each_run, disabled)}</span>
       ${switchRow("stageTrackChanges", "Track changes", t("stage.help.track_changes", "Track project changes produced by this Stage."), cfg.track_changes, disabled)}
@@ -1281,23 +1264,6 @@ function renderStageEditorContent(cfg, item) {
     <div id="stageCleanWorkRow" class="stage-form-two-col stage-command-safety" hidden>
       <label class="designer-form-row stage-form-wide">${fieldLabel("Clean work paths", t("stage.help.clean_work", "Delete these relative paths under the Runner work directory before a Command / Validator run."))}<input id="stageCleanWork" class="designer-input" value="${escapeHtml((cfg.clean_work || []).join(", "))}" placeholder="validator-reports" ${disabled} /></label>
     </div>`;
-
-  const syncRecoveryControls = () => {
-    const recover = fieldValue("stageRecover").trim(); const max = fieldValue("stageMaxAttempts").trim();
-    const hasRecover = Boolean(recover); const hasMax = Boolean(max);
-    if ($("stageMaxAttemptsRow")) $("stageMaxAttemptsRow").hidden = !hasRecover;
-    if ($("stageOnExhaustedRow")) $("stageOnExhaustedRow").hidden = !hasRecover || !hasMax;
-    if ($("stageRepeat")) $("stageRepeat").disabled = Boolean(disabled) || hasMax;
-    if ($("stageRestartAt")) $("stageRestartAt").disabled = Boolean(disabled) || hasMax;
-    const preview = $("stageRecoveryBehavior"); if (!preview) return;
-    if (!hasRecover) { preview.hidden = true; preview.textContent = ""; return; }
-    preview.hidden = false;
-    const target = recover.split(",").map((x) => x.trim()).filter(Boolean).join(" → ") || "recovery";
-    if (!hasMax) { preview.textContent = tf("stage.behavior.unbounded", { target }, `FAIL → ${target} → Retry · no bounded attempt limit`); return; }
-    const exhausted = fieldValue("stageOnExhausted") === "continue" ? "Continue" : "Fail";
-    preview.textContent = tf("stage.behavior.bounded", { target, max, exhausted }, `FAIL → ${target} → Retry · up to ${max} attempts · then ${exhausted}. Later re-entry starts again at 1.`);
-  };
-  $("stageRecover")?.addEventListener("input", syncRecoveryControls); $("stageMaxAttempts")?.addEventListener("input", syncRecoveryControls); $("stageOnExhausted")?.addEventListener("change", syncRecoveryControls); syncRecoveryControls();
 
   $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); }); renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
 }
@@ -1333,7 +1299,7 @@ function listOrNull(id) { const values = fieldValue(id).split(",").map((x) => x.
 function changedFields(cfg, item) {
   const type = fieldValue("stageType"); const aiBacked = type !== "command"; const flowHasStatus = !!item && Object.prototype.hasOwnProperty.call(item, "status"); const flowHasPrompt = !!item && Object.prototype.hasOwnProperty.call(item, "prompt"); const candidates = {
     type, run_state: valueOrNull("stageRunState"), actor: valueOrNull("stageActor"), mode: valueOrNull("stageMode"), readonly_safety: valueOrNull("stageReadonlySafety"), timeout: numberOrNull("stageTimeout"), produces: valueOrNull("stageProduces"), detail: valueOrNull("stageDetail"),
-    retry: numberOrNull("stageRetry"), skip_on_error: checked("stageSkipOnError"), track_changes: checked("stageTrackChanges"), tolerate_restored_changes: checked("stageTolerateRestored"),
+    retry: numberOrNull("stageRetry"), track_changes: checked("stageTrackChanges"), tolerate_restored_changes: checked("stageTolerateRestored"),
   };
   if (!flowHasStatus) candidates.status = valueOrNull("stageStatus");
   if (stageSupportsParser(type)) candidates.parser = valueOrNull("stageParser");
@@ -1345,7 +1311,7 @@ function changedFields(cfg, item) {
   if (type === "command") { candidates.command = valueOrNull("stageCommand"); candidates.result_kind = valueOrNull("stageResultKind"); candidates.cwd = valueOrNull("stageCwd"); candidates.clean_work = listOrNull("stageCleanWork"); }
   if (type === "plan") { candidates.min_tasks = numberOrNull("stageMinTasks"); candidates.repair_plan = checked("stageRepairPlan"); }
   if (type === "ai_validator") candidates.validator = valueOrNull("stageValidator") || "ai";
-  const booleanKeys = new Set(["skip_on_error", "fresh_session_on_start", "fresh_session_each_run", "track_changes", "tolerate_restored_changes", "allow_project_read", "repair_plan"]); const result = {};
+  const booleanKeys = new Set(["fresh_session_on_start", "fresh_session_each_run", "track_changes", "tolerate_restored_changes", "allow_project_read", "repair_plan"]); const result = {};
   for (const [key, value] of Object.entries(candidates)) {
     const implicitBoolean = key === "allow_project_read" && type === "plan";
     if (booleanKeys.has(key) && cfg[key] === undefined && value === implicitBoolean) continue;
@@ -1360,12 +1326,12 @@ function changedFields(cfg, item) {
 }
 function routeMapOrNull() {
   const routes = {};
-  for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"], ["error", "stageRouteError"], ["replan", "stageRouteReplan"]]) {
+  for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"], ["error", "stageRouteError"]]) {
     const target = valueOrNull(id); if (target) routes[status] = target;
   }
   return Object.keys(routes).length ? routes : null;
 }
-function changedFlowFields(item) { const recover = listOrNull("stageRecover"); const maxAttempts = recover ? numberOrNull("stageMaxAttempts") : null; const result = { label: valueOrNull("stageFlowLabel"), routes: routeMapOrNull(), recover, restart_at: maxAttempts ? null : valueOrNull("stageRestartAt"), repeat: maxAttempts ? null : numberOrNull("stageRepeat"), max_attempts: maxAttempts, on_exhausted: maxAttempts ? valueOrNull("stageOnExhausted") : null, fresh_after_same_failures: numberOrNull("stageFreshAfterSameFailures") }; if (item && Object.prototype.hasOwnProperty.call(item, "status")) result.status = valueOrNull("stageStatus"); if (item && Object.prototype.hasOwnProperty.call(item, "prompt")) result.prompt = stageSupportsPrompt(fieldValue("stageType")) ? valueOrNull("stagePromptSelect") : null; return result; }
+function changedFlowFields(item) { const result = { label: valueOrNull("stageFlowLabel"), routes: routeMapOrNull() }; if (item && Object.prototype.hasOwnProperty.call(item, "status")) result.status = valueOrNull("stageStatus"); if (item && Object.prototype.hasOwnProperty.call(item, "prompt")) result.prompt = stageSupportsPrompt(fieldValue("stageType")) ? valueOrNull("stagePromptSelect") : null; return result; }
 async function validateStageEditor(index, name, cfg, item) {
   if (!state.studioFile || !state.studioGuard.editable) return; const status = $("stageEditorStatus"); status.textContent = "Validating draft…"; status.classList.remove("error");
   try {
