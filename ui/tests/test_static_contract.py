@@ -44,13 +44,12 @@ class StaticContractTests(unittest.TestCase):
     def test_stage_modal_has_real_editable_contract_fields(self):
         for token in (
             "stageStatus", "stageRunState", "stageScope", "stageActor", "stageMode", "stageTimeout",
-            "stageProduces", "stageSessionKey", "stageDetail", "stageRecover", "stageRetry",
-            "stageStructuredRetries", "stageStructuredFreshRetries", "stageSkipOnError",
+            "stageProduces", "stageSessionKey", "stageDetail", "stageRetry",
+            "stageStructuredRetries", "stageStructuredFreshRetries",
             "stageFreshOnStart", "stageFreshEachRun", "stageTrackChanges", "stageTolerateRestored",
             "stageAllowProjectRead", "stageCleanWork", "stageCommand", "stageResultKind", "stageCwd",
             "stageMinTasks", "stageRepairPlan", "stageValidator", "stageRuns", "stageRequiredPasses",
-            "stageParser", "stageFlowLabel", "stageRestartAt", "stageRepeat", "stageFreshAfterSameFailures",
-            "stageMaxAttempts", "stageOnExhausted",
+            "stageParser", "stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError",
         ):
             self.assertIn(token, self.js)
 
@@ -83,10 +82,11 @@ class StaticContractTests(unittest.TestCase):
             self.assertIn(token, self.html)
         self.assertIn("/api/studio/workflow/create", self.js)
 
-    def test_stage_editor_groups_recovery_and_explains_behavior_without_inline_noise(self):
-        for token in ("Recovery gate", "Retry & structured output", "Session & safety", "stageRecoveryBehavior", "stage-help"):
+    def test_stage_editor_exposes_result_edges_and_keeps_retry_separate(self):
+        for token in ("Result edges", "Retry & structured output", "Session & safety", "stage-help"):
             self.assertIn(token, self.js)
-        self.assertIn("Later re-entry starts again at 1", self.js)
+        for removed in ("Recovery gate", "stageRecover", "stageMaxAttempts", "stageRestartAt", "stageRouteReplan"):
+            self.assertNotIn(removed, self.js)
 
     def test_visual_editor_can_add_multi_run_to_review_not_only_edit_existing_values(self):
         self.assertIn('else if (["base", "task", "review"].includes(type))', self.js)
@@ -218,7 +218,7 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn('-1 = keep retrying until PASS', self.js)
 
     def test_flow_routing_fields_are_editable_in_stage_modal(self):
-        for token in ("stageFlowLabel", "stageRestartAt", "stageRepeat", "stageFreshAfterSameFailures", "flow_fields: changedFlowFields(item)"):
+        for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError", "flow_fields: changedFlowFields(item)"):
             self.assertIn(token, self.js)
 
     def test_stage_editor_is_modal_but_workflow_studio_is_page(self):
