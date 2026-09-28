@@ -988,6 +988,29 @@ flow:
     assert workflow[0]["fresh_after_same_failures"] == 2
 
 
+def test_flow_node_fresh_after_same_failures_can_bound_restart_at(tmp_path):
+    path = tmp_path / "workflow.yaml"
+    path.write_text(
+        """
+stages:
+  execute:
+    type: task
+  review:
+    type: review
+flow:
+  - execute
+  - stage: review
+    restart_at: execute
+    fresh_after_same_failures: 2
+""",
+        encoding="utf-8",
+    )
+    workflow = load_workflow(path)
+
+    assert workflow[1]["restart_at"] == "execute"
+    assert workflow[1]["fresh_after_same_failures"] == 2
+
+
 @pytest.mark.parametrize("value", [0, -1, True, "2"])
 def test_fresh_after_same_failures_must_be_positive_integer(tmp_path, value):
     path = tmp_path / "workflow.yaml"
@@ -1294,26 +1317,26 @@ def test_flow_node_max_attempts_cannot_combine_with_repeat(tmp_path):
         load_workflow(path)
 
 
-def test_flow_node_max_attempts_cannot_combine_with_restart_at(tmp_path):
+def test_flow_node_max_attempts_can_bound_restart_at(tmp_path):
     path = tmp_path / "workflow.yaml"
     path.write_text("""
 stages:
   gate:
-    type: review
-  repair:
     type: task
   later:
     type: review
 flow:
   - gate
   - stage: later
-    recover: [repair]
     max_attempts: 3
-    on_exhausted: continue
+    on_exhausted: fail
     restart_at: gate
 """, encoding="utf-8")
-    with pytest.raises(RunnerError, match="cannot combine max_attempts with restart_at"):
-        load_workflow(path)
+    workflow = load_workflow(path)
+
+    assert workflow[1]["restart_at"] == "gate"
+    assert workflow[1]["max_attempts"] == 3
+    assert workflow[1]["on_exhausted"] == "fail"
 
 def test_multiple_file_and_ai_validators_can_appear_anywhere(tmp_path):
     workflow_file = tmp_path / "workflow.yaml"
@@ -1760,3 +1783,55 @@ def test_resume_semantic_equivalence_at_every_linear_checkpoint(tmp_path, monkey
         assert state["workflow_position"] == baseline_state["workflow_position"], crash_at
         assert state["task_step"] == baseline_state["task_step"], crash_at
         assert state["transition_previous"] == baseline_state["transition_previous"], crash_at
+
+
+def test_restart_at_max_attempts_fails_closed_after_bound(tmp_path, monkeypatch):
+    class Stage:
+        def __init__(self, name: str):
+            self.name = name
+
+    monkeypatch.setattr(
+        flow_engine_module,
+        "create_stage",
+        lambda definition: Stage(str(definition["name"])),
+    )
+
+    workflow = [
+        {"name": "execute", "_workflow_index": 0},
+        {
+            "name": "review",
+            "restart_at": "execute",
+            "max_attempts": 3,
+            "on_exhausted": "fail",
+            "_workflow_index": 1,
+        },
+    ]
+    trace: list[str] = []
+
+    class Executor:
+        def run(self, stage, ctx, previous=None, *, label=""):
+            trace.append(stage.name)
+            if stage.name == "execute":
+                return StageResult("execute", "pass", output="unchanged")
+            return StageResult(
+                "review",
+                "fail",
+                output="still missing",
+                data={"completed": False, "missing_items": ["fix"]},
+                kind="review",
+            )
+
+        def fresh_session(self, stage, ctx):
+            return None
+
+    context = _context(tmp_path, workflow)
+    code = CanonicalFlowEngine(context, workflow).run(Executor())
+
+    assert code == 1
+    assert trace == [
+        "execute", "review",
+        "execute", "review",
+        "execute", "review",
+    ]
+    assert context.state.completed is False
+    assert context.state.recovery_attempt_count == 0
