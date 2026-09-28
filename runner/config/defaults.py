@@ -17,7 +17,7 @@ DEFAULT_VALIDATOR_TIMEOUT = 1200
 # individual session still gets only a small bounded retry budget before Runner
 # rotates to a Fresh Session. Deterministic configuration/state errors remain
 # fail-closed and never enter this loop.
-DEFAULT_MAX_ATTEMPTS = -1
+DEFAULT_STAGE_RETRIES = -1
 DEFAULT_PER_SESSION_ATTEMPTS = 2
 DEFAULT_REVIEW_RETRIES = -1
 DEFAULT_MAX_CYCLES = -1
