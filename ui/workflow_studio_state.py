@@ -443,7 +443,7 @@ class WorkflowStudioMixin:
                 "allow_project_read", "track_changes", "tolerate_restored_changes",
                 "fresh_session_each_run", "fresh_session_on_start",
                 "structured_retries", "structured_fresh_retries",
-                "retry", "runs", "required_passes", "min_tasks", "timeout",
+                "runs", "required_passes", "min_tasks", "timeout",
                 "clean_work", "label", "scope", "routes",
             }
             if not isinstance(fields, dict):
@@ -565,13 +565,13 @@ class WorkflowStudioMixin:
         produces = fields.get("produces")
         if produces not in (None, "", "tasks"):
             raise ValueError("Stage produces must be tasks when specified")
-        for key in ("retry", "structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
+        for key in ("structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
             value = fields.get(key)
             if value is None:
                 continue
             if not isinstance(value, int) or isinstance(value, bool):
                 raise ValueError(f"Stage {key} must be an integer")
-            minimum = -1 if key == "retry" else (1 if key in {"runs", "min_tasks"} else 0)
+            minimum = 1 if key in {"runs", "min_tasks"} else 0
             if value < minimum:
                 raise ValueError(f"Stage {key} must be >= {minimum}")
         timeout = fields.get("timeout")
