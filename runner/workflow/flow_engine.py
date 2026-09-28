@@ -313,7 +313,7 @@ class FlowEngine:
         if target == "done":
             return self.routing.route_to(target, result), False
         if (
-            result.kind == "validation"
+            result.status in {"fail", "replan"}
             and self.routing.target_produces_tasks(target)
         ):
             prepare_replan(self.context, result)
