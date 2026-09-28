@@ -83,7 +83,9 @@ runtime frameworks.
 - technical failure bookkeeping
 
 A technical retry attempts the same logical Stage. It does not choose another
-workflow Stage.
+workflow Stage. The unattended default is unlimited overall recovery (`-1`),
+while one Session remains bounded to two attempts before Fresh Session rotation.
+Deterministic configuration/state failures still fail closed.
 
 ### FlowEngine: semantic workflow result
 
@@ -152,9 +154,9 @@ For now there is still one durable `RunState` and one authoritative
 Fields should conceptually belong to:
 - common run lifecycle
 - Stage/session execution state
-- Linear routing state
-- semantic failure/recovery bookkeeping
+- Linear cursor/task state
 - latest transition context
+- legacy recovery counters only while compatibility syntax remains
 
 A later schema migration may group these fields structurally after ownership is
 stable and covered by resume tests.
