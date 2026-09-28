@@ -100,10 +100,15 @@ class SemanticRoutingPolicy:
             self.clear_bounded_attempt(node)
             self.clear_semantic_failure(node)
             self.clear_repeat(node)
-            return RoutingAction(
+            action = RoutingAction(
                 "next" if node.on_exhausted == "continue" else "stop",
                 True,
             )
+            # restart_at bookkeeping normally commits atomically with the
+            # routing cursor. A fail-closed stop has no later cursor commit.
+            if action.kind == "stop" and node.restart_at is not None:
+                self.context.save_state()
+            return action
 
         self._observe_semantic_failure(node, result, executor)
 
@@ -146,7 +151,8 @@ class SemanticRoutingPolicy:
             state.recovery_attempt_key = ""
             state.recovery_attempt_count = 0
             state.recovery_attempt_previous = {}
-            self.context.save_state()
+            if node.recover:
+                self.context.save_state()
 
     def _record_bounded_attempt(
         self, node: RoutingNode, result: StageResult
@@ -168,7 +174,8 @@ class SemanticRoutingPolicy:
                 json.dumps(result.data, ensure_ascii=False, default=str)
             ),
         }
-        self.context.save_state()
+        if node.recover:
+            self.context.save_state()
         return state.recovery_attempt_count >= max_attempts
 
     def clear_semantic_failure(self, node: RoutingNode) -> None:
