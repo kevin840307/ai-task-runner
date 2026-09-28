@@ -12,7 +12,7 @@ from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 
 
 # Per-item overrides intentionally mirror task-scoped CLI options. Batch orchestration
-# controls (script/work_dir/resume/force_new/plan_only/output mode) stay outer-run only
+# controls (script/work_dir/resume/force_new/output mode) stay outer-run only
 # so durable YAML child state remains <work_dir>/script/<index>.
 SCRIPT_ITEM_RUNTIME_ALIASES = {
     "backend": "backend",
@@ -104,11 +104,6 @@ def _ai_validator_prompt(
 
 def _options(script: Path, item: dict[str, Any], index: int) -> dict[str, Any]:
     result: dict[str, Any] = {}
-    if "skip_on_max_cycles" in item:
-        value = item["skip_on_max_cycles"]
-        if not isinstance(value, bool):
-            raise RunnerError(f"script item {index} skip_on_max_cycles must be a boolean")
-        result["skip_on_max_cycles"] = value
     if "project_name" in item:
         value = item["project_name"]
         if not isinstance(value, str):
