@@ -165,9 +165,11 @@ def _publish(
         except ValueError:
             # Existing external/System Prompt references remain unchanged.
             continue
-        target = (output_prompt_dir / rel).resolve()
+        if len(rel.parts) != 1:
+            raise ValueError("generated Prompt must publish as one flat Markdown file")
+        target = (output_prompt_dir / rel.name).resolve()
         prompt_sources[source] = target
-        owner[key] = os.path.relpath(target, output_workflow.parent).replace(os.sep, "/")
+        owner[key] = target.name
 
     conflicts = [target for target in prompt_sources.values() if target.exists() and not overwrite]
     if conflicts:
