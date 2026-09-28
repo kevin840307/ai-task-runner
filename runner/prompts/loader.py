@@ -76,7 +76,7 @@ def prompt_instructions(root: Path) -> tuple[str, str]:
     """Build shared Runner rules and user always-on instructions with one policy read."""
     text = instruction_text(root, "always")
     always = f"\nUser-enforced instructions (apply to this call):\n{text}\n" if text else ""
-    rules = render_prompt("system/rules.md", {
+    rules = render_prompt("rules.md", {
         "project": {"root": str(root)},
         "plugin_rules": collect_plugin_instructions(root),
     }) + always
