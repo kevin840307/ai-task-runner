@@ -1,18 +1,127 @@
 stages:
-  run_prompt:
-    type: task
+  project_discovery:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: Project Discovery
+    prompt: skills/project_discovery.md
 
-  review:
+  review_project_discovery:
     type: review
+    label: Review Project Discovery
+    prompt: skills/review.md
+    instructions: Review project discovery.
+    routes:
+      fail: project_discovery
 
-  grill:
+  project_documentation:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: Project Documentation
+    prompt: skills/project_documentation.md
+
+  grill_project_documentation:
     type: review
+    label: Grill Project Documentation
     session_key: grill_client
     prompt: skills/grill.md
     fresh_session_on_start: true
+    instructions: >-
+      Check the required demo documentation items only. PASS when materially
+      correct and sufficient.
+    routes:
+      fail: project_documentation
 
-  final_validate:
+  review_project_documentation:
+    type: review
+    label: Review Project Documentation
+    prompt: skills/review.md
+    instructions: Review the project documentation.
+    routes:
+      fail: project_documentation
+
+  e2e_spec_generation:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: E2E SPEC Generation
+    prompt: skills/e2e_spec_generation.md
+
+  grill_e2e_spec:
+    type: review
+    label: Grill E2E SPEC
+    session_key: grill_client
+    prompt: skills/grill.md
+    fresh_session_on_start: true
+    instructions: >-
+      Check concrete normal arithmetic cases plus important calculator
+      boundary/error behavior. PASS when materially covered.
+    routes:
+      fail: e2e_spec_generation
+
+  review_e2e_spec:
+    type: review
+    label: Review E2E SPEC
+    prompt: skills/review.md
+    instructions: Review the E2E specification.
+    routes:
+      fail: e2e_spec_generation
+
+  verification_design:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: Verification Design
+    prompt: skills/verification_design.md
+
+  review_verification_design:
+    type: review
+    label: Review Verification Design
+    prompt: skills/review.md
+    instructions: Review the verification design.
+    routes:
+      fail: verification_design
+
+  regression_dsl_generation:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: Regression DSL Generation
+    prompt: skills/regression_dsl_generation.md
+
+  review_regression_dsl:
+    type: review
+    label: Review Regression DSL
+    prompt: skills/review.md
+    instructions: Review the generated regression DSL.
+    routes:
+      fail: regression_dsl_generation
+
+  execution_qualification:
+    type: base
+    mode: write
+    actor: executor
+    track_changes: true
+    label: Regression Execution & Qualification
+    prompt: skills/execution_qualification.md
+
+  review_execution_qualification:
+    type: review
+    label: Review Execution & Qualification
+    prompt: skills/review.md
+    instructions: Review the regression execution and qualification result.
+    routes:
+      fail: execution_qualification
+
+  final_ai_validation:
     type: ai_validator
+    label: Final AI Validation
     validator: ai
     session_key: final_validation_client
     fresh_session_each_run: true
@@ -21,106 +130,22 @@ stages:
     structured_retries: 2
     retry: -1
     prompt: skills/final_validation.md
+    routes:
+      fail: execution_qualification
 
 flow:
-  - stage: run_prompt
-    name: project_discovery
-    label: Project Discovery
-    prompt: skills/project_discovery.md
-
-  - stage: review
-    name: review_project_discovery
-    label: Review Project Discovery
-    prompt: skills/review.md
-    instructions: Review project discovery.
-    routes:
-      fail: project_discovery
-
-  - stage: run_prompt
-    name: project_documentation
-    label: Project Documentation
-    prompt: skills/project_documentation.md
-
-  - stage: grill
-    name: grill_project_documentation
-    label: Grill Project Documentation
-    instructions: >-
-      Check the required demo documentation items only. PASS when materially
-      correct and sufficient.
-    routes:
-      fail: project_documentation
-
-  - stage: review
-    name: review_project_documentation
-    label: Review Project Documentation
-    prompt: skills/review.md
-    instructions: Review the project documentation.
-    routes:
-      fail: project_documentation
-
-  - stage: run_prompt
-    name: e2e_spec_generation
-    label: E2E SPEC Generation
-    prompt: skills/e2e_spec_generation.md
-
-  - stage: grill
-    name: grill_e2e_spec
-    label: Grill E2E SPEC
-    instructions: >-
-      Check concrete normal arithmetic cases plus important calculator
-      boundary/error behavior. PASS when materially covered.
-    routes:
-      fail: e2e_spec_generation
-
-  - stage: review
-    name: review_e2e_spec
-    label: Review E2E SPEC
-    prompt: skills/review.md
-    instructions: Review the E2E specification.
-    routes:
-      fail: e2e_spec_generation
-
-  - stage: run_prompt
-    name: verification_design
-    label: Verification Design
-    prompt: skills/verification_design.md
-
-  - stage: review
-    name: review_verification_design
-    label: Review Verification Design
-    prompt: skills/review.md
-    instructions: Review the verification design.
-    routes:
-      fail: verification_design
-
-  - stage: run_prompt
-    name: regression_dsl_generation
-    label: Regression DSL Generation
-    prompt: skills/regression_dsl_generation.md
-
-  - stage: review
-    name: review_regression_dsl
-    label: Review Regression DSL
-    prompt: skills/review.md
-    instructions: Review the generated regression DSL.
-    routes:
-      fail: regression_dsl_generation
-
-  - stage: run_prompt
-    name: execution_qualification
-    label: Regression Execution & Qualification
-    prompt: skills/execution_qualification.md
-
-  - stage: review
-    name: review_execution_qualification
-    label: Review Execution & Qualification
-    prompt: skills/review.md
-    instructions: Review the regression execution and qualification result.
-    routes:
-      fail: execution_qualification
-
-  - stage: final_validate
-    name: final_ai_validation
-    label: Final AI Validation
-    routes:
-      fail: execution_qualification
+  - project_discovery
+  - review_project_discovery
+  - project_documentation
+  - grill_project_documentation
+  - review_project_documentation
+  - e2e_spec_generation
+  - grill_e2e_spec
+  - review_e2e_spec
+  - verification_design
+  - review_verification_design
+  - regression_dsl_generation
+  - review_regression_dsl
+  - execution_qualification
+  - review_execution_qualification
+  - final_ai_validation
