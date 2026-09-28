@@ -935,7 +935,6 @@ class WorkflowStudioMixin:
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
     @staticmethod
-    def _stage_reference_paths    @staticmethod
     def _stage_reference_paths(value, stage_name: str, path: str = "workflow") -> list[str]:
         refs: list[str] = []
         if isinstance(value, dict):
