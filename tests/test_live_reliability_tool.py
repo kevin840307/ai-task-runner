@@ -49,7 +49,7 @@ def _option(command: list[str], name: str) -> str:
     return command[command.index(name) + 1]
 
 
-def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path):
+def test_runner_command_inputs_select_builtin_validation_workflows(tmp_path: Path):
     project = tmp_path / "project"
     config = replace(settings(tmp_path), agent_timeout=30.0, planning_timeout=40.0)
 
@@ -78,6 +78,14 @@ def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path
     assert _option(file_only, "--planning-timeout") == "40"
 
 
+def test_runner_command_uses_shared_retry_flags_only(tmp_path: Path):
+    command = live.runner_command(settings(tmp_path), tmp_path)
+    assert "--retry-delay" in command
+    assert "--retry-max-delay" in command
+    for removed in ("--execution-mode", "--retry-wait", "--retry-max-wait", "--max-attempts", "--max-cycles"):
+        assert removed not in command
+
+
 def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
     project = tmp_path / "project"
     script = tmp_path / "tasks.yaml"
@@ -98,28 +106,28 @@ def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
     assert all("--no-ui-project-register" in command for command in commands)
 
 
-def test_live_system_final_ai_contract_matches_bundled_workflows():
+def test_live_builtin_final_ai_contract_matches_bundled_workflows():
     assert live.system_final_ai_contract("ai") == (3, 2, True)
     assert live.system_final_ai_contract("mixed") == (3, 2, True)
 
 
-def test_live_system_readonly_safety_contract_matches_bundled_workflows():
+def test_live_builtin_readonly_safety_contract_matches_bundled_workflows():
     assert live.system_readonly_safety_contract() == {
-        "file": {"planning": "observe", "__plan_review__": "observe"},
+        "file": {"planning": "observe", "review": "observe"},
         "ai": {
             "planning": "observe",
-            "__plan_review__": "observe",
+            "review": "observe",
             "validate_ai": "observe",
         },
         "mixed": {
             "planning": "observe",
-            "__plan_review__": "observe",
+            "review": "observe",
             "validate_ai": "observe",
         },
     }
 
 
-def test_live_system_readonly_safety_contract_rejects_missing_observe(
+def test_live_builtin_readonly_safety_contract_rejects_missing_observe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -134,7 +142,7 @@ flow: [planning]
 """,
         encoding="utf-8",
     )
-    workflows = dict(live.SYSTEM_WORKFLOWS)
+    workflows = dict(live.WORKFLOWS)
     workflows["file"] = bad
     monkeypatch.setattr(live, "SYSTEM_WORKFLOWS", workflows)
 
@@ -142,13 +150,13 @@ flow: [planning]
         live.system_readonly_safety_contract()
 
 
-def test_system_workflow_probe_rejects_reused_final_ai_sessions(
+def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
         project = Path(command[command.index("--project-root") + 1])
-        assert Path(command[command.index("--workflow") + 1]) == live.SYSTEM_WORKFLOWS["ai"]
+        assert Path(command[command.index("--workflow") + 1]) == live.WORKFLOWS["ai"]
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
         history.mkdir(parents=True)
@@ -170,8 +178,8 @@ def test_system_workflow_probe_rejects_reused_final_ai_sessions(
                 "session": "planner",
                 "session_mode": "fresh",
             },
-            {"type": "runner.stage", "action": "start", "stage": "__plan_task__"},
-            {"type": "runner.stage", "action": "start", "stage": "__plan_review__"},
+            {"type": "runner.stage", "action": "start", "stage": "execute"},
+            {"type": "runner.stage", "action": "start", "stage": "review"},
             {"type": "runner.stage", "action": "start", "stage": "validate_ai"},
             {"type": "model.result", "session": "validator-a"},
             {"type": "model.result", "session": "validator-b"},
@@ -600,9 +608,9 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml
     assert "--high-density --require-transient" in text
     assert f"--single-process-yaml-items {yaml_items}" in text
     assert "--example-smoke-matrix-project" in text
-    assert "runner\\workflow\\system\\file.yaml" in text
-    assert "runner\\workflow\\system\\mixed.yaml" in text
-    assert "runner\\workflow\\custom\\common\\ralphy_ai_validate.yaml" in text
+    assert "runner\\workflows\\file.yaml" in text
+    assert "runner\\workflows\\mixed.yaml" in text
+    assert "runner\\workflows\\ralphy_ai_validate.yaml" in text
 
 
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
@@ -679,8 +687,8 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
         ("mixed", ["validate_file", "validate_ai"]),
     ],
 )
-def test_system_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
-    stages = ["planning", "__plan_task__", "__plan_review__", *validators]
+def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
+    stages = ["planning", "execute", "review", *validators]
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
@@ -704,15 +712,15 @@ def test_system_topology_contract(tmp_path: Path, workflow: str, validators: lis
     live.assert_system_topology(project, workflow)
 
 
-def test_system_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
+def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
     stages = [
         "planning",
-        "__plan_task__", "__plan_review__",
-        "__plan_task__", "__plan_review__",
-        "__plan_task__", "__plan_review__",
+        "execute", "review",
+        "execute", "review",
+        "execute", "review",
         "validate_file", "validate_ai",
     ]
     events = [
@@ -743,11 +751,11 @@ def test_system_topology_contract_accepts_multiple_planned_todos(tmp_path: Path)
     live.assert_system_topology(project, "mixed")
 
 
-def test_system_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
+def test_builtin_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
-    stages = ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"]
+    stages = ["planning", "execute", "review", "validate_file", "validate_ai"]
     events = [
         event
         for stage in stages
