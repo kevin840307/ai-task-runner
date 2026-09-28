@@ -43,6 +43,8 @@ UI, CLI and YAML List are adapters only. They must not own routing/runtime logic
 
 A Workflow contains Stage nodes and result edges.
 
+Each `stages.<name>` entry is exactly one graph node. `flow` is only the ordered list of those unique Stage names; there is no separate invocation/template override layer.
+
 A Stage returns exactly one status:
 
 - `pass`
