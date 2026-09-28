@@ -27,8 +27,8 @@ RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
-SYSTEM_WORKFLOWS = {
-    name: ROOT / "runner" / "workflow" / "system" / f"{name}.yaml"
+WORKFLOWS = {
+    name: ROOT / "runner" / "workflows" / f"{name}.yaml"
     for name in ("file", "ai", "mixed")
 }
 SYSTEM_FINAL_AI_RUNS = 3
@@ -460,7 +460,7 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     from runner.workflow.loader import load_workflow
 
     validators = [
-        node for node in load_workflow(SYSTEM_WORKFLOWS[workflow])
+        node for node in load_workflow(WORKFLOWS[workflow])
         if node.get("name") == "validate_ai" and node.get("type") == "ai_validator"
     ]
     if len(validators) != 1:
@@ -500,7 +500,7 @@ def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
     }
     observed: dict[str, dict[str, str | None]] = {}
     for workflow, stages in expected.items():
-        loaded = load_workflow(SYSTEM_WORKFLOWS[workflow])
+        loaded = load_workflow(WORKFLOWS[workflow])
         by_name = {str(node.get("name", "")): node for node in loaded}
         observed[workflow] = {}
         for stage, expected_value in stages.items():
@@ -1170,7 +1170,7 @@ def session_expiry_recovery_preflight() -> None:
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
-        *SYSTEM_WORKFLOWS.values(),
+        *WORKFLOWS.values(),
         ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml",
         ROOT / "examples" / "custom_workflow_latest.yaml",
         ROOT / "tool" / "workflow" / "08_bounded_grill_continue.yaml",
@@ -1755,7 +1755,7 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
             project,
             final_ai=ai_validation,
             ai_only=workflow == "ai",
-            workflow=SYSTEM_WORKFLOWS[workflow],
+            workflow=WORKFLOWS[workflow],
         ),
         console_log(project, "console.jsonl"),
         settings.run_timeout,
