@@ -153,7 +153,13 @@ def test_system_workflow_probe_rejects_reused_final_ai_sessions(
         history = work / "debug" / "history"
         history.mkdir(parents=True)
         (work / "state.json").write_text(
-            json.dumps({"completed": True, "stage": "completed"}),
+            json.dumps(
+                {
+                    "completed": True,
+                    "stage": "completed",
+                    "tasks": [{"title": "one", "status": "completed"}],
+                }
+            ),
             encoding="utf-8",
         )
         events = [
