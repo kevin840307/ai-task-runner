@@ -167,6 +167,15 @@ Current Linear UI concepts:
 - Stage settings = node properties
 - routing settings = edge/flow properties
 
+Current UI ownership:
+- `ui/server.py`: composition + HTTP transport only
+- `ui/project_runtime_state.py`: project lifecycle, runtime/process/chat state
+- `ui/workflow_studio_state.py`: Workflow Studio assets, validation, graph/editor operations
+- `ui/workflow_builder_state.py`: AI workflow generation/builder state
+
+Do not move project/runtime or Studio implementation back into `server.py`.
+Patch/tests should target the module that owns the behavior.
+
 Future routing strategies should extend these concepts before introducing a
 separate editor.
 
