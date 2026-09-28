@@ -39,7 +39,6 @@ class BaseStageSpec:
     session_key: str = ""
     fresh_session_each_run: bool = False
     fresh_session_on_start: bool = False
-    skip_on_error: bool = False
     produces: str = ""
 
 
@@ -66,7 +65,6 @@ class BaseStage:
         self.mode = spec.mode
         self.actor = spec.actor
         self.retry = spec.retry
-        self.skip_on_error = spec.skip_on_error
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
