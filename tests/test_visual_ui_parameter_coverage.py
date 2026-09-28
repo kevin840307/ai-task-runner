@@ -64,6 +64,10 @@ def test_visual_ui_covers_current_flow_routing_parameters() -> None:
     routing = {
         "scope": "stageScope",
         "label": "stageFlowLabel",
+        "routes.pass": "stageRoutePass",
+        "routes.fail": "stageRouteFail",
+        "routes.error": "stageRouteError",
+        "routes.replan": "stageRouteReplan",
         "recover": "stageRecover",
         "restart_at": "stageRestartAt",
         "repeat": "stageRepeat",
