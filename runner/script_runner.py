@@ -20,9 +20,9 @@ ExecuteOne = Callable[[RuntimeConfig], int]
 SCRIPT_ITEM_RUNTIME_FIELDS = frozenset({
     "backend", "command", "sandbox", "agent_args", "validator_args",
     "protect_files", "validator_timeout", "agent_timeout", "planning_timeout",
-    "agent_idle_after_change_timeout", "api_retry_timeout", "watchdog_interval",
-    "worker_hang_timeout", "stage_retries", "stage_retry_delay",
-    "api_retry_wait", "api_retry_max_wait", "final_ai_validations",
+    "agent_idle_after_change_timeout", "watchdog_interval",
+    "worker_hang_timeout", "stage_retries", "retry_delay", "retry_max_delay",
+    "final_ai_validations",
     "final_ai_required_passes", "ai_validator_yolo", "readonly_safety",
 })
 
