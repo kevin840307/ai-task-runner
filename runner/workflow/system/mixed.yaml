@@ -3,10 +3,18 @@ stages:
     type: plan
     status: AI 正在依任務複雜度建立可驗證 TODO
     readonly_safety: observe
-    routes:
-      replan: planning
-      error: stop
 
+  execute:
+    type: task
+    status: AI 正在處理目前任務
+
+  review:
+    type: review
+    status: AI 正在確認任務是否完成
+    readonly_safety: observe
+    routes:
+      fail: execute
+      error: stop
 
   validate_file:
     type: command
@@ -32,5 +40,9 @@ stages:
 
 flow:
   - planning
+  - stage: execute
+    scope: task
+  - stage: review
+    scope: task
   - validate_file
   - validate_ai
