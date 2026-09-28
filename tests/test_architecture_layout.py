@@ -26,25 +26,23 @@ def test_workflow_has_one_minimal_type_registry():
     }
 
 
-def test_workflow_runtime_has_clear_canonical_modules():
+def test_workflow_runtime_has_only_current_canonical_modules():
     workflow = ROOT / "runner" / "workflow"
-    for name in (
-        "flow_engine.py",
-        "linear_routing.py",
-        "semantic_routing.py",
-        "reducers.py",
-    ):
+    for name in ("flow_engine.py", "reducers.py", "loader.py", "schema.py", "registry.py"):
         assert (workflow / name).is_file()
 
-    # Compatibility shims may remain, but canonical runtime behavior belongs in
-    # the responsibility-matched modules above.
-    assert (ROOT / "runner" / "workflow_runner.py").is_file()
-    assert (ROOT / "runner" / "task_runner.py").is_file()
-    assert (workflow / "pipeline.py").is_file()
-    assert (workflow / "routing.py").is_file()
-    assert (workflow / "recovery.py").is_file()
-    assert (workflow / "rules.py").is_file()
+    for removed in (
+        "linear_routing.py",
+        "semantic_routing.py",
+        "pipeline.py",
+        "routing.py",
+        "recovery.py",
+        "rules.py",
+    ):
+        assert not (workflow / removed).exists()
 
+    assert (ROOT / "runner" / "workflow_runner.py").is_file()
+    assert not (ROOT / "runner" / "task_runner.py").exists()
 
 def test_ui_workflow_studio_domain_is_not_implemented_in_server():
     server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
