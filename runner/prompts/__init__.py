@@ -1,9 +1,7 @@
 from pathlib import Path
 
-"""Bundled prompt resource locations."""
+"""Prompt templates live beside Workflow YAML assets."""
 
-PROMPT_ROOT = Path(__file__).resolve().parent
-SYSTEM_PACKAGE = "runner.prompts.system"
-STAGE_PACKAGE = "runner.prompts.stages"
+PROMPT_ROOT = Path(__file__).resolve().parents[1] / "workflows"
 
-__all__ = ["PROMPT_ROOT", "STAGE_PACKAGE", "SYSTEM_PACKAGE"]
+__all__ = ["PROMPT_ROOT"]
