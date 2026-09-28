@@ -749,6 +749,7 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
         assert workflow == project / "workflow.yaml"
         assert workflow.read_text(encoding="utf-8") == live.REVIEW_ROUTING_WORKFLOW
         assert (project / "seed_review.py").read_text(encoding="utf-8") == live.REVIEW_ROUTING_SEED
+        assert (project / "review_check.md").read_text(encoding="utf-8") == live.REVIEW_ROUTING_REVIEW_PROMPT
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
         history.mkdir(parents=True)
@@ -791,6 +792,8 @@ def test_review_failure_routing_probe_uses_state_completion_and_semantic_routing
 
 def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert "deterministically seeds review.txt with only READY" in live.REVIEW_ROUTING_PROMPT
+    assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
+    assert "do not inspect files, do not use" in live.REVIEW_ROUTING_EXECUTION_PROMPT
     assert 'type: command' in live.REVIEW_ROUTING_WORKFLOW
     assert 'command: "{python} seed_review.py"' in live.REVIEW_ROUTING_WORKFLOW
     assert 'skip_on_error: false' in live.REVIEW_ROUTING_WORKFLOW
@@ -1414,7 +1417,7 @@ def test_semantic_live_probe_timeout_is_bounded_below_global_harness_timeout(tmp
         planning_timeout=600,
     )
 
-    assert live.semantic_probe_timeout(configured) == 3120
+    assert live.semantic_probe_timeout(configured) == 3600
 
 
 def test_review_probe_timeout_reports_state_and_console_tail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -1450,3 +1453,18 @@ def test_review_probe_timeout_reports_state_and_console_tail(tmp_path: Path, mon
     assert '"stage": "reviewing"' in message
     assert '"workflow_position": 2' in message
     assert "last live console line" in message
+
+
+def test_review_routing_probe_protects_control_assets():
+    policy = live.REVIEW_ROUTING_POLICY
+
+    for name in (
+        "prompt.md",
+        "validation.py",
+        "seed_review.py",
+        "review_execute.md",
+        "review_check.md",
+        "workflow.yaml",
+    ):
+        assert f"  - {name}" in policy
+    assert "Modify review.txt only" in policy
