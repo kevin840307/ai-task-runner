@@ -9,7 +9,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, set_stage
 from runner.workflow.flow_engine import FlowEngine
-from runner.workflow.loader import SYSTEM_WORKFLOWS, load_workflow
+from runner.workflow.loader import WORKFLOWS, load_workflow
 from runner.workflow.stages.contracts import StageContext, StageResult
 
 
@@ -61,8 +61,8 @@ def write_workflow(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def test_system_workflow_has_explicit_plan_task_review_validate_nodes():
-    workflow = load_workflow(SYSTEM_WORKFLOWS["ai"])
+def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
+    workflow = load_workflow(WORKFLOWS["ai"])
 
     assert [item["name"] for item in workflow] == [
         "planning",
