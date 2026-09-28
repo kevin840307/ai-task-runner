@@ -8,8 +8,6 @@ from pathlib import Path
 from .config.runtime import RuntimeConfig
 from .plugins.contracts import HookChain
 from .plugins.registry import register_plugins
-from .execution_modes import execution_mode_spec
-from .errors import ConfigurationError
 from .runtime import events
 from .runtime.events import EventBus
 
@@ -45,54 +43,41 @@ def register_resources(paths) -> None:
             runtime.resources.append(path)
 
 
-def _create_runtime(config: RuntimeConfig) -> Runtime:
-    return Runtime(
+@contextmanager
+def runtime_scope(config: RuntimeConfig):
+    global _current
+    previous = _current
+    runtime = Runtime(
         config=config,
         work=Path(config.project_root).resolve() / config.work_dir,
         events=EventBus(),
         hooks=HookChain(),
         resources=[],
     )
-
-
-def _event_context(config: RuntimeConfig) -> dict[str, object]:
-    return {
-        key: value for key, value in {
-            "execution_mode": config.execution_mode,
+    _current = runtime
+    context = {
+        key: value
+        for key, value in {
             "script_index": config.script_index,
             "script_total": config.script_total,
-        }.items() if value is not None
+        }.items()
+        if value is not None
     }
-
-
-
-@contextmanager
-def runtime_scope(config: RuntimeConfig):
-    """Activate one runtime and restore the caller runtime after completion."""
-    global _current
-    previous = _current
-    runtime = _create_runtime(config)
-    _current = runtime
     try:
-        with events.scope(runtime.events, _event_context(config)):
+        with events.scope(runtime.events, context):
             register_plugins(runtime)
             yield runtime
     finally:
         _current = previous
 
 
-def execute(args: RuntimeConfig) -> int:
-    with runtime_scope(args):
-        if args.script:
-            if args.execution_mode != "linear":
-                raise ConfigurationError(
-                    "YAML script batching currently supports execution_mode='linear' only"
-                )
+def execute(config: RuntimeConfig) -> int:
+    with runtime_scope(config):
+        if config.script:
             from .script_runner import execute_script
-            return execute_script(args, execute)
-        execution_mode_spec(args.execution_mode)
+            return execute_script(config, execute)
         from .workflow_runner import WorkflowRunner
-        return WorkflowRunner(args).run()
+        return WorkflowRunner(config).run()
 
 
 __all__ = ["Runtime", "current_runtime", "execute", "register_resources", "runtime_scope"]
