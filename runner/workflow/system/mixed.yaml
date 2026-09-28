@@ -12,7 +12,8 @@ stages:
     actor: validator
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
-    restart_at: planning
+    routes:
+      fail: planning
 
   validate_ai:
     type: ai_validator
@@ -23,7 +24,8 @@ stages:
     required_passes: 2
     ai_validator_yolo: true
     readonly_safety: observe
-    restart_at: planning
+    routes:
+      fail: planning
 
 flow:
   - planning
