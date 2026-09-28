@@ -195,6 +195,39 @@ def test_run_process_logs_pid_return_code_and_clears_active_file(tmp_path, monke
     assert (work / process_module.STREAM_FILE).read_text(encoding="utf-8").strip() == str(work)
 
 
+def test_process_start_event_keeps_return_code_none_even_if_child_already_exited(tmp_path, monkeypatch):
+    events = []
+
+    runtime = SimpleNamespace(
+        events=SimpleNamespace(publish=events.append),
+    )
+    import runner.bootstrap as bootstrap
+    monkeypatch.setattr(bootstrap, "current_runtime", lambda: runtime)
+
+    class FastProcess:
+        pid = 123
+
+        @staticmethod
+        def poll():
+            return 0
+
+    process_module._process_event(
+        "runner.process.start",
+        FastProcess(),
+        [sys.executable],
+        tmp_path,
+    )
+    process_module._process_event(
+        "runner.process.exit",
+        FastProcess(),
+        [sys.executable],
+        tmp_path,
+    )
+
+    assert events[0]["return_code"] is None
+    assert events[1]["return_code"] == 0
+
+
 def test_cleanup_orphans_use_each_state_work_directory(tmp_path, monkeypatch):
     first_work = tmp_path / ".ai-task-runner" / "script" / "001"
     second_work = tmp_path / ".ai-task-runner" / "script" / "002"
