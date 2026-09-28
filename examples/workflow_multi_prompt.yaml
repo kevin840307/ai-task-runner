@@ -16,15 +16,16 @@ flow:
 
   - stage: review
     prompt: prompts/review_a.md
-    retry: 1
-    skip: true
+    routes:
+      fail: run_prompt
 
   - stage: run_prompt
     prompt: prompts/step_b.md
 
   - stage: review
     prompt: prompts/review_b.md
-    skip: false
+    routes:
+      fail: run_prompt
 
   - stage: run_prompt
     prompt: prompts/step_c.md
