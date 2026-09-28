@@ -66,7 +66,21 @@ class QwenBackend(BaseBackend):
 
         session_id = self.find_session_id(values)
         result = self._find_result(values)
+        if result is not None and self._api_error_envelope(result):
+            raise BackendError(
+                result.strip(),
+                session_id=session_id,
+                output=raw,
+                command_mode="decoded-success-error",
+                diagnostics={"api_error_envelope": True},
+                recovery_key="qwen:api-error-envelope",
+            )
         return BackendResult(result if result is not None else raw, session_id)
+
+    @staticmethod
+    def _api_error_envelope(text: str) -> bool:
+        value = str(text or "").strip()
+        return value.startswith("[API Error:") and value.endswith("]")
 
     def error_output(self, raw: str) -> str:
         values = self.parse_json_events(raw)
