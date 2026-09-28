@@ -1948,13 +1948,43 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     assert_prompt_transport_contract(project)
 
 
-FULL_LOOP_EXECUTION_PROMPT = """This Stage proves a complete semantic closed loop.
-A one-shot seed Stage later forces the first Review to observe only READY.
-- Before Review or Validator feedback exists, no special action is required.
-- When Review feedback says REVIEW_OK is missing, preserve READY and add REVIEW_OK as its own logical line. Do not add VALIDATOR_OK yet.
-- Only when Validator feedback says VALIDATOR_OK is missing, preserve existing lines and add VALIDATOR_OK as its own logical line.
-Modify loop.txt only.
-"""
+FULL_LOOP_EXECUTOR = '''from __future__ import annotations
+import argparse
+import json
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--state-file", required=True)
+a = p.parse_args()
+
+state_path = Path(a.state_file)
+state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
+target = Path("loop.txt")
+lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+
+transition = state.get("transition_previous")
+transition_text = json.dumps(transition, ensure_ascii=False) if isinstance(transition, dict) else ""
+validator_text = str(state.get("validator_output") or "")
+
+changed = False
+if "REVIEW_OK" in transition_text and "REVIEW_OK" not in lines:
+    if "READY" not in lines:
+        lines.append("READY")
+    lines.append("REVIEW_OK")
+    changed = True
+
+if "VALIDATOR_OK" in validator_text and "VALIDATOR_OK" not in lines:
+    if "READY" not in lines:
+        lines.append("READY")
+    if "REVIEW_OK" not in lines:
+        lines.append("REVIEW_OK")
+    lines.append("VALIDATOR_OK")
+    changed = True
+
+if changed:
+    target.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+print("FULL_LOOP_EXECUTOR_OK")
+'''
 
 FULL_LOOP_REVIEW_PROMPT = """Inspect loop.txt only.
 PASS when logical lines READY and REVIEW_OK are both present.
@@ -1970,16 +2000,31 @@ if not marker.exists():
     marker.write_text("seeded\\n", encoding="utf-8")
 '''
 
+FULL_LOOP_REVIEW_GATE = '''from pathlib import Path
+marker = Path(".ai-task-runner") / "full-loop-review-failed-once"
+if not marker.exists():
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("failed\\n", encoding="utf-8")
+    print("REVIEW_OK is intentionally missing; add REVIEW_OK to loop.txt")
+    raise SystemExit(1)
+print("FULL_LOOP_REVIEW_GATE_PASSED")
+'''
+
 FULL_LOOP_WORKFLOW = '''stages:
   seed:
     type: command
     command: "{python} seed_loop.py"
 
   execute:
-    type: task
-    prompt: full_loop_execute.md
+    type: command
+    command: "{python} full_loop_execute.py --state-file {state_file}"
 
   review:
+    type: command
+    run_state: reviewing
+    command: "{python} full_loop_review_gate.py"
+
+  review_verify:
     type: review
     prompt: full_loop_review.md
     skip_on_error: false
@@ -1996,17 +2041,20 @@ flow:
     restart_at: execute
     max_attempts: 3
     on_exhausted: fail
+  - review_verify
   - stage: validate_file
     restart_at: execute
     max_attempts: 2
     on_exhausted: fail
 '''
 
+
 FULL_LOOP_POLICY = """protected_paths:
   - prompt.md
   - validation.py
   - seed_loop.py
-  - full_loop_execute.md
+  - full_loop_execute.py
+  - full_loop_review_gate.py
   - full_loop_review.md
   - full_loop_validator.py
 instructions:
@@ -2041,8 +2089,11 @@ def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
         policy=FULL_LOOP_POLICY,
     )
     (project / "seed_loop.py").write_text(FULL_LOOP_SEED, encoding="utf-8")
-    (project / "full_loop_execute.md").write_text(
-        FULL_LOOP_EXECUTION_PROMPT, encoding="utf-8"
+    (project / "full_loop_execute.py").write_text(
+        FULL_LOOP_EXECUTOR, encoding="utf-8"
+    )
+    (project / "full_loop_review_gate.py").write_text(
+        FULL_LOOP_REVIEW_GATE, encoding="utf-8"
     )
     (project / "full_loop_review.md").write_text(
         FULL_LOOP_REVIEW_PROMPT, encoding="utf-8"
@@ -2071,7 +2122,9 @@ def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
     if lines != ["READY", "REVIEW_OK", "VALIDATOR_OK"]:
         raise RuntimeError(f"complete closed-loop probe produced unexpected lines: {lines}")
     if not observed_stage_result(project, "review", "fail"):
-        raise RuntimeError("complete closed-loop probe did not exercise Review FAIL")
+        raise RuntimeError("complete closed-loop probe did not exercise deterministic Review gate FAIL")
+    if not observed_stage_result(project, "review_verify", "pass"):
+        raise RuntimeError("complete closed-loop probe Qwen Review did not PASS repaired state")
     if not observed_stage_result(project, "validate_file", "fail"):
         raise RuntimeError("complete closed-loop probe did not exercise Validator FAIL")
     starts = [
@@ -2079,10 +2132,16 @@ def complete_closed_loop_probe(settings: Settings, root: Path) -> None:
         for event in runner_events(project)
         if event.get("type") == "runner.stage" and event.get("action") == "start"
     ]
-    if starts.count("execute") < 3 or starts.count("review") < 2 or starts.count("validate_file") < 2:
+    if (
+        starts.count("execute") < 3
+        or starts.count("review") < 2
+        or starts.count("review_verify") < 2
+        or starts.count("validate_file") < 2
+    ):
         raise RuntimeError(
             "complete closed-loop probe did not traverse the expected repeated stages: "
             f"execute={starts.count('execute')}, review={starts.count('review')}, "
+            f"review_verify={starts.count('review_verify')}, "
             f"validate_file={starts.count('validate_file')}"
         )
     assert_prompt_transport_contract(project)
