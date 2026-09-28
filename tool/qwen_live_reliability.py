@@ -486,15 +486,15 @@ def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
     from runner.workflow.loader import load_workflow
 
     expected = {
-        "file": {"planning": "observe", "__plan_review__": "observe"},
+        "file": {"planning": "observe", "review": "observe"},
         "ai": {
             "planning": "observe",
-            "__plan_review__": "observe",
+            "review": "observe",
             "validate_ai": "observe",
         },
         "mixed": {
             "planning": "observe",
-            "__plan_review__": "observe",
+            "review": "observe",
             "validate_ai": "observe",
         },
     }
@@ -810,7 +810,7 @@ def assert_system_topology(project: Path, workflow: str) -> None:
         for event in runner_events(project)
         if event.get("type") == "runner.stage" and event.get("action") == "start"
     ]
-    required = {"planning", "__plan_task__", "__plan_review__"}
+    required = {"planning", "execute", "review"}
     expected_validators = {
         "file": {"validate_file"},
         "ai": {"validate_ai"},
@@ -818,8 +818,8 @@ def assert_system_topology(project: Path, workflow: str) -> None:
     }[workflow]
     missing = sorted(required - set(starts))
     validators = {name for name in starts if name.startswith("validate_")}
-    task_runs = starts.count("__plan_task__")
-    review_runs = starts.count("__plan_review__")
+    task_runs = starts.count("execute")
+    review_runs = starts.count("review")
 
     state = read_state(project)
     tasks = state.get("tasks")
@@ -1282,10 +1282,8 @@ def workflow_dryrun_negative_preflight() -> None:
   check:
     type: command
     command: [python, -c, "print('CHECK')"]
-    recover: [fallback]
-  fallback:
-    type: command
-    command: [python, -c, "print('FALLBACK')"]
+    routes:
+      fail: check
 flow:
   - check
 """,
@@ -1302,7 +1300,7 @@ flow:
             cwd=ROOT, text=True, capture_output=True, timeout=30,
         )
         if loop_run.returncode != 1:
-            raise RuntimeError("workflow dry-run failed to reject a non-converging recovery loop")
+            raise RuntimeError("workflow dry-run failed to reject a non-converging result-edge loop")
         try:
             payload = json.loads(loop_run.stdout)
         except json.JSONDecodeError as error:
@@ -1859,7 +1857,6 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     type: review
     status: Reviewing repaired state with Qwen
     prompt: review_check.md
-    skip_on_error: false
 
   validate_file:
     type: command
@@ -1870,15 +1867,9 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
 flow:
   - execute
   - seed
-  - stage: review
-    restart_at: execute
-    max_attempts: 3
-    on_exhausted: fail
+  - review
   - review_verify
-  - stage: validate_file
-    restart_at: execute
-    max_attempts: 2
-    on_exhausted: fail
+  - validate_file
 '''
 
 
@@ -2023,16 +2014,19 @@ FULL_LOOP_WORKFLOW = '''stages:
     type: command
     run_state: reviewing
     command: "{python} full_loop_review_gate.py"
+    routes:
+      fail: execute
 
   review_verify:
     type: review
     prompt: full_loop_review.md
-    skip_on_error: false
 
   validate_file:
     type: command
     result_kind: validation
     command: "{python} full_loop_validator.py"
+    routes:
+      fail: execute
 
 flow:
   - execute
@@ -2344,7 +2338,7 @@ def yaml_list_resume_probe(
             "project_root": projects[0].name,
             "validator": str(projects[0] / "validation.py"),
             "validator_args": ["--case-token", "ITEM-1"],
-            "max_attempts": 1,
+            "stage_retries": 1,
             "retry_delay": 0,
         },
         {
@@ -2478,7 +2472,7 @@ def yaml_list_endurance_probe(
             "prompt": case_prompt(PROMPT, f"yaml-endurance-{index:03d}"),
             "project_root": project.name,
             "validator": str(project / "validation.py"),
-            "max_attempts": 1,
+            "stage_retries": 1,
             "retry_delay": 0,
         })
     script = batch / "tasks.yaml"
