@@ -128,7 +128,6 @@ stages:
     runs: 5
     required_passes: 3
     structured_retries: 2
-    retry: -1
     prompt: skills/final_validation.md
     routes:
       fail: execution_qualification
