@@ -1475,6 +1475,96 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     assert "--resume" in resumed
 
 
+def test_full_loop_executor_applies_review_feedback_from_durable_transition(tmp_path: Path):
+    script = tmp_path / "full_loop_execute.py"
+    state = tmp_path / "state.json"
+    script.write_text(live.FULL_LOOP_EXECUTOR, encoding="utf-8")
+    (tmp_path / "loop.txt").write_text("READY\n", encoding="utf-8")
+    state.write_text(
+        json.dumps(
+            {
+                "transition_previous": {
+                    "stage": "review",
+                    "status": "fail",
+                    "output": "REVIEW_OK is intentionally missing; add REVIEW_OK to loop.txt",
+                },
+                "validator_output": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--state-file", str(state)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "loop.txt").read_text(encoding="utf-8").splitlines() == [
+        "READY",
+        "REVIEW_OK",
+    ]
+
+
+def test_full_loop_executor_applies_validator_feedback_from_durable_state(tmp_path: Path):
+    script = tmp_path / "full_loop_execute.py"
+    state = tmp_path / "state.json"
+    script.write_text(live.FULL_LOOP_EXECUTOR, encoding="utf-8")
+    (tmp_path / "loop.txt").write_text("READY\nREVIEW_OK\n", encoding="utf-8")
+    state.write_text(
+        json.dumps(
+            {
+                "transition_previous": {
+                    "stage": "validate_file",
+                    "status": "fail",
+                    "output": "VALIDATION_FAILED",
+                },
+                "validator_output": "VALIDATION_FAILED: add VALIDATOR_OK as its own logical line",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--state-file", str(state)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "loop.txt").read_text(encoding="utf-8").splitlines() == [
+        "READY",
+        "REVIEW_OK",
+        "VALIDATOR_OK",
+    ]
+
+
+def test_full_loop_workflow_uses_deterministic_repair_and_qwen_verification(tmp_path: Path):
+    workflow_path = tmp_path / "workflow.yaml"
+    workflow_path.write_text(live.FULL_LOOP_WORKFLOW, encoding="utf-8")
+    workflow = load_workflow(workflow_path)
+
+    assert [node["name"] for node in workflow] == [
+        "execute", "seed", "review", "review_verify", "validate_file"
+    ]
+    assert workflow[0]["type"] == "command"
+    assert workflow[2]["type"] == "command"
+    assert workflow[2]["restart_at"] == "execute"
+    assert workflow[3]["type"] == "review"
+    assert workflow[4]["restart_at"] == "execute"
+    compile(live.FULL_LOOP_EXECUTOR, "full_loop_execute.py", "exec")
+    compile(live.FULL_LOOP_REVIEW_GATE, "full_loop_review_gate.py", "exec")
+
+
 def test_live_reliability_main_includes_complete_closed_loop_probe():
     source = Path(live.__file__).read_text(encoding="utf-8")
     main = source[source.index("def main() -> int:"):]
