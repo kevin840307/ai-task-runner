@@ -1,4 +1,4 @@
-"""Minimal Stage type registry and generic Stage construction."""
+"""Stage registry and construction."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
-from .stages.base_stage import BaseStage
 from .stages.ai_stage import AIValidatorStage, ReviewStage, TaskStage
+from .stages.base_stage import BaseStage
 from .stages.command import CommandStage
 from .stages.plan_stage import PlanStage
 
@@ -20,25 +20,10 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
     "command": CommandStage,
     "plan": PlanStage,
 }
-ROUTING_FIELDS = frozenset(
-    {
-        "validator",
-        "routes",
-        "recover",
-        "restart_at",
-        "repeat",
-        "max_attempts",
-        "on_exhausted",
-        "fresh_after_same_failures",
-        "label",
-        "scope",
-        "_workflow_index",
-    }
-)
+FLOW_FIELDS = frozenset({"validator", "routes", "label", "scope", "_workflow_index"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
-    """Register one behavior type. Workflow instances and routing stay in YAML."""
     if not isinstance(name, str) or not name.strip():
         raise ValueError("Stage type must be a non-empty string")
     if name in STAGE_REGISTRY:
@@ -49,8 +34,8 @@ def register_stage(name: str, stage_class: type[Any]) -> None:
 
 
 def stage_catalog() -> dict[str, dict[str, Any]]:
-    """Return UI/editor metadata from the same Stage specs used by execution."""
     from ..extensions import discover_extensions
+
     discover_extensions()
     return {
         name: {
@@ -63,6 +48,57 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
         }
         for name, stage_class in sorted(STAGE_REGISTRY.items())
     }
+
+
+def workflow_catalog() -> dict[str, Any]:
+    return {
+        "stage_types": stage_catalog(),
+        "flow_options": {
+            "scope": {"type": "enum", "values": ["task"]},
+            "label": {"type": "string"},
+            "routes": {
+                "type": "object",
+                "description": "pass/fail/error -> next, done, stop, or another Stage",
+            },
+        },
+    }
+
+
+def stage_result_kind(definition: dict[str, Any]) -> str:
+    produces = str(definition.get("produces", "") or "")
+    if produces:
+        return produces
+    declared = str(definition.get("result_kind", "") or "")
+    if declared:
+        return declared
+    stage_class = STAGE_REGISTRY.get(str(definition.get("type", "base")))
+    return str(getattr(stage_class, "result_kind", "generic") or "generic")
+
+
+def create_stage(definition: dict[str, Any]):
+    values = deepcopy(definition)
+    stage_type = str(values.pop("type", "base"))
+    name = str(values.get("name", ""))
+    for field in FLOW_FIELDS:
+        values.pop(field, None)
+
+    try:
+        stage_class = STAGE_REGISTRY[stage_type]
+    except KeyError as error:
+        raise RunnerError(f"unknown workflow Stage type: {stage_type}") from error
+
+    parser = values.get("parser")
+    if isinstance(parser, str):
+        from .result_parsers import PARSERS
+        try:
+            values["parser"] = PARSERS[parser]
+        except KeyError as error:
+            raise RunnerError(f"unknown parser: {parser}") from error
+
+    try:
+        return stage_class(stage_class.spec_class(**values))
+    except TypeError as error:
+        raise RunnerError(f"invalid workflow Stage {name or stage_type}: {error}") from error
 
 
 def _field_info(item: Any) -> dict[str, Any]:
@@ -95,68 +131,11 @@ def _type_name(annotation: Any) -> str:
     return f"{name}[{args}]" if args else name
 
 
-
-def stage_result_kind(definition: dict[str, Any]) -> str:
-    """Return a Stage's declared effect without coupling Pipeline to a Stage class."""
-    produces = str(definition.get("produces", "") or "")
-    if produces:
-        return produces
-    declared = str(definition.get("result_kind", "") or "")
-    if declared:
-        return declared
-    stage_type = str(definition.get("type", "base"))
-    stage_class = STAGE_REGISTRY.get(stage_type)
-    return str(getattr(stage_class, "result_kind", "generic") or "generic")
-
-def workflow_catalog() -> dict[str, Any]:
-    """External editor contract; contains data only and requires no UI imports."""
-    return {
-        "stage_types": stage_catalog(),
-        "flow_options": {
-            "scope": {"type": "enum", "values": ["task"]},
-            "label": {"type": "string"},
-            "routes": {
-                "type": "object",
-                "description": "Result edges: pass/fail/error/replan -> next, done, stop, or a top-level Stage.",
-            },
-            "recover": {"type": "stage[]"},
-            "restart_at": {"type": "stage"},
-            "repeat": {"type": "integer", "minimum": 1},
-            "max_attempts": {"type": "integer", "minimum": 1},
-            "on_exhausted": {"type": "enum", "values": ["continue", "fail"]},
-            "fresh_after_same_failures": {"type": "integer", "minimum": 1},
-        },
-    }
-
-
-def _resolve_references(values: dict[str, Any]) -> None:
-    from .result_parsers import PARSERS
-
-    value = values.get("parser")
-    if isinstance(value, str):
-        try:
-            values["parser"] = PARSERS[value]
-        except KeyError as error:
-            raise RunnerError(f"unknown parser: {value}") from error
-
-
-def create_stage(definition: dict[str, Any]):
-    """Build one Stage from an already-normalized YAML instance."""
-    values = deepcopy(definition)
-    stage_type = str(values.pop("type", "base"))
-    name = str(values.get("name", ""))
-    for field in ROUTING_FIELDS:
-        values.pop(field, None)
-    try:
-        stage_class = STAGE_REGISTRY[stage_type]
-    except KeyError as error:
-        raise RunnerError(f"unknown workflow Stage type: {stage_type}") from error
-
-    _resolve_references(values)
-    try:
-        return stage_class(stage_class.spec_class(**values))
-    except TypeError as error:
-        raise RunnerError(f"invalid workflow Stage {name or stage_type}: {error}") from error
-
-
-__all__ = ["STAGE_REGISTRY", "create_stage", "register_stage", "stage_catalog", "stage_result_kind", "workflow_catalog"]
+__all__ = [
+    "STAGE_REGISTRY",
+    "create_stage",
+    "register_stage",
+    "stage_catalog",
+    "stage_result_kind",
+    "workflow_catalog",
+]
