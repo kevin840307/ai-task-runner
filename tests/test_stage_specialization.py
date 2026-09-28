@@ -7,17 +7,16 @@ def test_only_behavior_specific_stage_implementations_exist():
     assert BaseStage and PlanStage and CommandStage
 
 
-def test_retry_is_common_executor_metadata():
-    assert BaseStageSpec(name="x", status="x").retry is None
-    assert PlanStageSpec(name="plan", status="plan").retry is None
-    assert CommandStageSpec(name="validate", status="validate", command=["check"]).retry is None
+def test_retry_is_not_part_of_any_stage_spec():
+    assert not hasattr(BaseStageSpec(name="x", status="x"), "retry")
+    assert not hasattr(PlanStageSpec(name="plan", status="plan"), "retry")
+    assert not hasattr(CommandStageSpec(name="validate", status="validate", command=["check"]), "retry")
 
 
-def test_final_ai_validation_retries_until_pass():
+def test_final_ai_validation_uses_review_backend_semantics():
     validate = next(item for item in load_workflow() if item.get("name") == "validate_ai")
     assert validate["type"] == "ai_validator"
     stage = create_stage(validate)
-    assert stage.retry == -1
     assert stage.backend_mode == "review"
 
 
