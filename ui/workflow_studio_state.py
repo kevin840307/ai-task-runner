@@ -22,28 +22,14 @@ from jinja2 import Environment, meta
 from project_registry import path_key
 
 try:
-    from .workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from .workflow_graph import build_workflow_graph
-    from .workflow_storage import (
-        iter_project_packages,
-        project_package_for_asset,
-        project_package_folders,
-        project_package_prompt_dir,
-        project_package_workflow_dir,
-    )
+    from .workflow_storage import project_workflow_root
 except ImportError:  # direct ui/main.py execution
-    from workflow_folder_package import export_folder_package, import_folder_package, inspect_folder_package
     from workflow_graph import build_workflow_graph
-    from workflow_storage import (
-        iter_project_packages,
-        project_package_for_asset,
-        project_package_folders,
-        project_package_prompt_dir,
-        project_package_workflow_dir,
-    )
+    from workflow_storage import project_workflow_root
+
 
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
-SYSTEM_SCOPES = {"system"}
 
 
 class _IndentedSafeDumper(yaml.SafeDumper):
@@ -54,63 +40,30 @@ class _IndentedSafeDumper(yaml.SafeDumper):
 class WorkflowStudioMixin:
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
+        """List editable Workflow YAML and Prompt Markdown from the two asset roots."""
+        roots: list[tuple[str, Path]] = [("global", self._global_asset_root())]
+        if project is not None:
+            roots.append(("project", project_workflow_root(project)))
+
         workflows: list[dict] = []
         prompts: list[dict] = []
-        roots: list[tuple[str, Path]] = [
-            ("system", self.repo_root / "runner" / "workflow" / "system"),
-            ("custom", self.repo_root / "runner" / "workflow" / "custom"),
-        ]
-        prompt_roots: list[tuple[str, Path]] = [
-            ("system", self.repo_root / "runner" / "prompts" / "stages"),
-            ("system", self.repo_root / "runner" / "prompts" / "system"),
-            ("custom", self.repo_root / "runner" / "prompts" / "custom"),
-        ]
-        if project is not None:
-            for _folder, _package_root, workflow_dir, prompt_dir in (iter_project_packages(project) or ()):
-                roots.append(("project", workflow_dir))
-                if prompt_dir.is_dir():
-                    prompt_roots.append(("project", prompt_dir))
-
-        workflow_visibility = self._workflow_visibility()
-        seen: set[str] = set()
+        visibility = self._workflow_visibility()
         for scope, root in roots:
             if not root.is_dir():
                 continue
-            candidates = root.rglob("*.yaml")
-            for path in candidates:
-                if scope == "system" and path.name.lower() == "workflow_builder.yaml":
-                    continue
-                item = self._studio_item(path, scope, "workflow", workflow_visibility)
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    workflows.append(item)
-            for path in root.rglob("*.yml"):
-                if scope == "system" and path.name.lower() == "workflow_builder.yml":
-                    continue
-                item = self._studio_item(path, scope, "workflow", workflow_visibility)
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    workflows.append(item)
+            for path in sorted(root.glob("*.yaml")) + sorted(root.glob("*.yml")):
+                workflows.append(self._studio_item(path, scope, "workflow", visibility))
+            for path in sorted(root.glob("*.md")):
+                prompts.append(self._studio_item(path, scope, "prompt"))
 
-        seen.clear()
-        for scope, root in prompt_roots:
-            if not root.is_dir():
-                continue
-            for path in root.rglob("*.md"):
-                item = self._studio_item(path, scope, "prompt")
-                if item["id"] not in seen:
-                    seen.add(item["id"])
-                    prompts.append(item)
-
-        order = {"system": 0, "custom": 1, "project": 2}
+        order = {"global": 0, "project": 1}
+        key = lambda item: (
+            order.get(item["scope"], 9),
+            item.get("display_name", item["name"]).lower(),
+        )
         return {
-            "workflows": sorted(workflows, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
-            "prompts": sorted(prompts, key=lambda x: (order.get(x["scope"], 9), x.get("display_name", x["name"]).lower())),
-            "custom_folders": {
-                "workflow": self.studio_custom_folders("workflow"),
-                "prompt": self.studio_custom_folders("prompt"),
-            },
-            "project_folders": project_package_folders(project) if project is not None else [],
+            "workflows": sorted(workflows, key=key),
+            "prompts": sorted(prompts, key=key),
             "guard": self.edit_guard(),
         }
 
@@ -158,7 +111,7 @@ class WorkflowStudioMixin:
         and does not show false Prompt warnings when those files are inspected.
         """
         loader_file = self.repo_root / "runner" / "prompts" / "loader.py"
-        prompt_root = (self.repo_root / "runner" / "prompts").resolve()
+        prompt_root = self._global_asset_root()
         try:
             tree = ast.parse(loader_file.read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
@@ -253,56 +206,34 @@ class WorkflowStudioMixin:
             raise ValueError("Prompt check is available only for Prompt files")
         return self._check_prompt_content(content, path)
 
-    def studio_workflow_create(self, name: str, destination: str, project: Path | None = None, folder: str = "") -> dict:
-        """Create one blank workflow without touching Runner/Core code."""
+    def studio_workflow_create(
+        self,
+        name: str,
+        destination: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Create one editable Workflow in Global or Project assets."""
         with self._edit_lock:
             self._require_editable()
-            raw = str(name or "").strip()
-            if not raw:
-                raise ValueError("Workflow name is required")
-            if "/" in raw or "\\" in raw or raw in {".", ".."}:
-                raise ValueError("Workflow name must be a file name, not a path")
-            if not raw.lower().endswith((".yaml", ".yml")):
-                raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
-                raise ValueError("Workflow file name contains unsupported characters")
-            destination = str(destination or "custom").strip().lower()
-            if destination == "project":
-                if project is None:
-                    raise ValueError("Select a Project before creating a Project workflow")
-                default_folder = re.sub(r"(?i)\.workflow$", "", Path(raw).stem).strip() or "workflow"
-                rel_folder = self._normalize_workflow_folder(folder or default_folder)
-                if "/" in rel_folder:
-                    raise ValueError("Project Workflow folder must be one folder name")
-                target_root = project_package_workflow_dir(project, rel_folder)
-                target_root.mkdir(parents=True, exist_ok=True)
-                target = (target_root / raw).resolve()
-                if not self._is_within(target, target_root):
-                    raise ValueError("Workflow path is outside the Project Workflow package")
-            elif destination == "custom":
-                root = self._custom_asset_root("workflow")
-                root.mkdir(parents=True, exist_ok=True)
-                rel_folder = self._normalize_custom_folder(folder)
-                target_root = (root / Path(rel_folder)).resolve() if rel_folder else root
-                if not self._is_within(target_root, root):
-                    raise ValueError("Workflow folder is outside the Custom Workflow folder")
-                target_root.mkdir(parents=True, exist_ok=True)
-                target = (target_root / raw).resolve()
-                if not self._is_within(target, root):
-                    raise ValueError("Workflow path is outside the Custom Workflow folder")
-            else:
-                raise ValueError("Workflow destination must be project or custom")
+            raw = self._normalize_studio_asset_name("workflow", name)
+            scope = self._normalize_asset_scope(destination)
+            root = self._asset_root(scope, project)
+            root.mkdir(parents=True, exist_ok=True)
+            target = (root / raw).resolve()
             if target.exists():
                 raise ValueError(f"Workflow already exists: {target.name}")
-            content = "stages:\n  start:\n    type: base\n    prompt: stages/execution.md\n\nflow:\n  - start\n"
+            content = (
+                "stages:\n"
+                "  start:\n"
+                "    type: base\n"
+                "    prompt: execution.md\n\n"
+                "flow:\n"
+                "  - start\n"
+            )
             self._validate_workflow_before_write(target, content)
-            try:
-                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-                with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-                    handle.write(content)
-            except FileExistsError as exc:
-                raise ValueError(f"Workflow already exists: {target.name}") from exc
-            scope = "project" if destination == "project" else "custom"
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
             item = self._studio_item(target, scope, "workflow")
             return {"item": item, "file": self.studio_read(item["id"], project)}
 
