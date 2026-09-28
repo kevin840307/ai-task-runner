@@ -102,18 +102,24 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         str(name): _normalize_stage(name, definition, source)
         for name, definition in raw_stages.items()
     }
-    result = [
-        _normalize_invocation(item, stages, source)
-        for item in raw_flow
-    ]
-    names = [str(node.get("name") or "") for node in result]
+
+    names: list[str] = []
+    for item in raw_flow:
+        if not isinstance(item, str) or not item.strip():
+            raise RunnerError("workflow.flow must contain only Stage names")
+        name = item.strip()
+        if name not in stages:
+            raise RunnerError(f"unknown workflow stage: {name}")
+        names.append(name)
+
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise RunnerError(
-            "workflow flow node names must be unique; duplicate: "
+            "workflow.flow Stage names must be unique; use routes for loops: "
             + ", ".join(duplicates)
         )
 
+    result = [deepcopy(stages[name]) for name in names]
     for index, node in enumerate(result):
         node["_workflow_index"] = index
 
@@ -127,9 +133,6 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
         raise RunnerError("workflow stage name must be a non-empty string")
     if not isinstance(definition, dict):
         raise RunnerError(f"workflow stage {name} must be an object")
-    if "label" in definition or "scope" in definition:
-        raise RunnerError(f"workflow stage {name} label/scope belong to flow nodes")
-
     values = deepcopy(definition)
     values.setdefault("type", "base")
     values["name"] = name
@@ -139,28 +142,6 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
     _resolve_local_prompt(values, source)
     validate_stage(name, values)
     return values
-
-
-def _normalize_invocation(
-    item: Any,
-    stages: dict[str, dict[str, Any]],
-    source: Path,
-) -> dict[str, Any]:
-    if isinstance(item, str):
-        ref, overrides = item, {}
-    elif isinstance(item, dict):
-        ref = item.get("stage")
-        overrides = {key: value for key, value in item.items() if key != "stage"}
-    else:
-        raise RunnerError("workflow flow item must be a stage name or object")
-    if not isinstance(ref, str) or ref not in stages:
-        raise RunnerError(f"unknown workflow stage instance: {ref}")
-
-    node = deepcopy(stages[ref])
-    node.update(overrides)
-    _resolve_local_prompt(node, source)
-    validate_stage(ref, node)
-    return node
 
 
 def _read_text(value: Any, source: Path, name: str) -> str:
