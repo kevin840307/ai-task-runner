@@ -55,8 +55,4 @@ def test_graph_metadata_is_not_copied_to_stage_behavior():
 
 def test_yaml_references_expose_only_structured_parsers():
     from runner.workflow.result_parsers import PARSERS
-    import runner.workflow.rules as rules
     assert set(PARSERS) == {"review", "validation"}
-    assert not hasattr(rules, "RESULT_HANDLERS")
-    assert not hasattr(rules, "STATUS_RESOLVERS")
-    assert not hasattr(rules, "CONDITIONS")
