@@ -95,7 +95,6 @@ class Stage(Protocol):
     actor: str
     status: str
     detail: str
-    retry: int | None
 
     def run(
         self, ctx: StageContext, previous: StageResult | None = None
