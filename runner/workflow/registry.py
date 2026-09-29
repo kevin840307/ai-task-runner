@@ -88,7 +88,7 @@ def create_stage(definition: dict[str, Any]):
 
     parser = values.get("parser")
     if isinstance(parser, str):
-        from .lifecycle import PARSERS
+        from .results import PARSERS
         try:
             values["parser"] = PARSERS[parser]
         except KeyError as error:
