@@ -60,11 +60,11 @@ class UIStateTests(unittest.TestCase):
         (self.root / "ui" / "data").mkdir(parents=True)
         self.project = self.root / "project"
         self.project.mkdir()
-        assets = self.root / "runner" / "workflows"
+        assets = self.root / "runner" / "assets" / "workflows"
         assets.mkdir(parents=True)
         self.workflow = assets / "task.workflow.yaml"
         self.workflow.write_text("stages:\n  planning:\n    type: plan\nflow:\n  - planning\n", encoding="utf-8")
-        backends = self.root / "runner" / "backends"; backends.mkdir(parents=True)
+        backends = self.root / "runner" / "agent"; backends.mkdir(parents=True)
         (backends / "qwen.py").write_text("class QwenBackend:\n    name = 'qwen'\n", encoding="utf-8")
         (backends / "opencode.py").write_text("class OpenCodeBackend:\n    name = 'opencode'\n", encoding="utf-8")
         defaults = self.root / "runner" / "config"; defaults.mkdir(parents=True)
@@ -697,7 +697,7 @@ class UIStateTests(unittest.TestCase):
 
 
     def test_global_workflows_are_visible_and_editable(self) -> None:
-        assets = self.root / "runner" / "workflows"
+        assets = self.root / "runner" / "assets" / "workflows"
         (assets / "workflow_builder.yaml").write_text(
             "stages:\n  planning:\n    type: plan\nflow:\n  - planning\n",
             encoding="utf-8",
@@ -707,37 +707,39 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(item["scope"], "global")
         self.assertFalse(item["readonly"])
 
-    def test_global_workflow_and_prompt_share_one_flat_root(self):
+    def test_global_workflow_and_prompt_share_one_asset_package_but_separate_roots(self):
         original_validate = self.state._validate_workflow_before_write
         self.state._validate_workflow_before_write = lambda path, content: {"ok": True}
         try:
             workflow = self.state.studio_workflow_create("nested", "global", self.project)
         finally:
             self.state._validate_workflow_before_write = original_validate
-        prompt = self.state.studio_prompt_create("review", "global", self.project)
+        prompt = self.state.studio_prompt_create("common/review_copy", "global", self.project)
 
         self.assertEqual(
             Path(workflow["item"]["path"]).parent,
-            (self.root / "runner" / "workflows").resolve(),
+            (self.root / "runner" / "assets" / "workflows").resolve(),
         )
         self.assertEqual(
             Path(prompt["item"]["path"]).parent,
-            (self.root / "runner" / "workflows").resolve(),
+            (self.root / "runner" / "assets" / "prompts" / "common").resolve(),
         )
+        self.assertEqual(prompt["item"]["reference"], "common/review_copy.md")
         self.assertEqual(workflow["item"]["group"], "Global")
         self.assertEqual(prompt["item"]["group"], "Global")
 
-    def test_project_assets_use_the_same_flat_shape(self):
+    def test_project_assets_mirror_global_workflow_and_prompt_roots(self):
         original_validate = self.state._validate_workflow_before_write
         self.state._validate_workflow_before_write = lambda path, content: {"ok": True}
         try:
             workflow = self.state.studio_workflow_create("project_job", "project", self.project)
         finally:
             self.state._validate_workflow_before_write = original_validate
-        prompt = self.state.studio_prompt_create("project_review", "project", self.project)
-        root = (self.project / ".ai-task-runner" / "workflows").resolve()
-        self.assertEqual(Path(workflow["item"]["path"]).parent, root)
-        self.assertEqual(Path(prompt["item"]["path"]).parent, root)
+        prompt = self.state.studio_prompt_create("common/project_review", "project", self.project)
+        asset_root = (self.project / ".ai-task-runner" / "assets").resolve()
+        self.assertEqual(Path(workflow["item"]["path"]).parent, asset_root / "workflows")
+        self.assertEqual(Path(prompt["item"]["path"]).parent, asset_root / "prompts" / "common")
+        self.assertEqual(prompt["item"]["reference"], "common/project_review.md")
         self.assertEqual(workflow["item"]["group"], "Project")
         self.assertEqual(prompt["item"]["group"], "Project")
 
@@ -825,11 +827,11 @@ class WorkflowStudioTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / "ui" / "data").mkdir(parents=True)
-        assets = self.root / "runner" / "workflows"
+        assets = self.root / "runner" / "assets" / "workflows"
         assets.mkdir(parents=True)
-        (self.root / "runner" / "prompts").mkdir(parents=True)
+        (self.root / "runner" / "assets" / "prompts" / "common").mkdir(parents=True)
         (self.root / "runner" / "config").mkdir(parents=True)
-        (self.root / "runner" / "backends").mkdir(parents=True)
+        (self.root / "runner" / "agent").mkdir(parents=True)
         (self.root / "tool").mkdir(parents=True)
 
         (self.root / "tool" / "workflow_dryrun.py").write_text(
@@ -840,7 +842,7 @@ class WorkflowStudioTests(unittest.TestCase):
             "DEFAULT_BACKEND='qwen'\n",
             encoding="utf-8",
         )
-        (self.root / "runner" / "backends" / "qwen.py").write_text(
+        (self.root / "runner" / "agent" / "qwen.py").write_text(
             "class QwenBackend: name='qwen'\n",
             encoding="utf-8",
         )
@@ -873,9 +875,9 @@ class WorkflowStudioTests(unittest.TestCase):
             "  - review\n",
             encoding="utf-8",
         )
-        (assets / "execution.md").write_text("Do {{ goal }}\n", encoding="utf-8")
-        (assets / "review.md").write_text("Review {{ goal }}\n", encoding="utf-8")
-        (assets / "rules.md").write_text(
+        ((self.root / "runner" / "assets" / "prompts" / "common") / "execution.md").write_text("Do {{ goal }}\n", encoding="utf-8")
+        ((self.root / "runner" / "assets" / "prompts" / "common") / "review.md").write_text("Review {{ goal }}\n", encoding="utf-8")
+        ((self.root / "runner" / "assets" / "prompts" / "common") / "rules.md").write_text(
             "{{ project.root }}\n{{ plugin_rules }}\n",
             encoding="utf-8",
         )
@@ -912,20 +914,22 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(prompt["group"], "Global")
         self.assertFalse(workflow["readonly"])
         self.assertFalse(prompt["readonly"])
-        self.assertEqual(Path(workflow["path"]).parent, Path(prompt["path"]).parent)
+        self.assertEqual(Path(workflow["path"]).parent.name, "workflows")
+        self.assertEqual(Path(prompt["path"]).parent.name, "common")
+        self.assertEqual(prompt["reference"], "common/execution.md")
 
-    def test_global_and_project_create_use_the_same_flat_shape(self) -> None:
+    def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
-        global_prompt = self.state.studio_prompt_create("global_review", "global", self.project)
+        global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
         project_workflow = self.state.studio_workflow_create("project_job", "project", self.project)
-        project_prompt = self.state.studio_prompt_create("project_review", "project", self.project)
+        project_prompt = self.state.studio_prompt_create("common/project_review", "project", self.project)
 
-        global_root = (self.root / "runner" / "workflows").resolve()
-        project_root = (self.project / ".ai-task-runner" / "workflows").resolve()
-        self.assertEqual(Path(global_workflow["item"]["path"]).parent, global_root)
-        self.assertEqual(Path(global_prompt["item"]["path"]).parent, global_root)
-        self.assertEqual(Path(project_workflow["item"]["path"]).parent, project_root)
-        self.assertEqual(Path(project_prompt["item"]["path"]).parent, project_root)
+        global_assets = (self.root / "runner" / "assets").resolve()
+        project_assets = (self.project / ".ai-task-runner" / "assets").resolve()
+        self.assertEqual(Path(global_workflow["item"]["path"]).parent, global_assets / "workflows")
+        self.assertEqual(Path(global_prompt["item"]["path"]).parent, global_assets / "prompts" / "common")
+        self.assertEqual(Path(project_workflow["item"]["path"]).parent, project_assets / "workflows")
+        self.assertEqual(Path(project_prompt["item"]["path"]).parent, project_assets / "prompts" / "common")
 
     def test_prompt_contract_accepts_known_tags_and_rejects_unknown(self) -> None:
         prompt = next(
@@ -1028,7 +1032,7 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         self.assertEqual(
             Path(copied["item"]["path"]).parent,
-            (self.root / "runner" / "workflows").resolve(),
+            (self.root / "runner" / "assets" / "workflows").resolve(),
         )
 
         imported = self.state.studio_import(
@@ -1040,17 +1044,17 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         self.assertEqual(
             Path(imported["item"]["path"]).parent,
-            (self.project / ".ai-task-runner" / "workflows").resolve(),
+            (self.project / ".ai-task-runner" / "assets" / "prompts" / "common").resolve(),
         )
 
     def test_prompt_rename_is_blocked_while_referenced(self) -> None:
-        prompt = self.root / "runner" / "workflows" / "used.md"
+        prompt = self.root / "runner" / "assets" / "prompts" / "common" / "used.md"
         prompt.write_text("{{ goal }}\n", encoding="utf-8")
         self.workflow.write_text(
             "stages:\n"
             "  work:\n"
             "    type: base\n"
-            "    prompt: used.md\n"
+            "    prompt: common/used.md\n"
             "flow:\n"
             "  - work\n",
             encoding="utf-8",
