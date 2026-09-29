@@ -78,7 +78,7 @@ class RuntimeConfig:
     script_total: int | None = None
 
     def validate(self) -> None:
-        from ..backends.registry import backend_names, sandbox_supported
+        from ..agent import backend_names, sandbox_supported
         from ..plugins.registry import normalize_plugin_config
         from ..workflow.loader import workflow_validators
 
