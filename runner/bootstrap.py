@@ -74,7 +74,7 @@ def runtime_scope(config: RuntimeConfig):
 def execute(config: RuntimeConfig) -> int:
     with runtime_scope(config):
         if config.script:
-            from .script_runner import execute_script
+            from .script import execute_script
             return execute_script(config, execute)
         from .workflow_runner import WorkflowRunner
         return WorkflowRunner(config).run()
