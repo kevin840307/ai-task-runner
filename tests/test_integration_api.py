@@ -889,8 +889,7 @@ def test_api_deterministic_runner_error_fails_closed_without_resume_loop(tmp_pat
 
 def test_yaml_script_project_name_overrides_outer_default(tmp_path):
     from runner.api import RunRequest
-    from runner.script_loader import load_yaml_script
-    from runner.script_runner import build_script_item_config
+    from runner.script import build_script_item_config, load_yaml_script
 
     script = tmp_path / "tasks.yaml"
     script.write_text("- prompt: x\n  validator: ai\n  project_name: Child Display\n", encoding="utf-8")
