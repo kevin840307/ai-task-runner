@@ -5,15 +5,14 @@ import pytest
 
 from runner.agent import parse_result
 from runner.errors import RunnerError
-from runner.prompts.protocols import (
+from runner.prompting import (
     PLAN_PROTOCOL,
     REVIEW_PROTOCOL,
     VALIDATION_PROTOCOL,
     append_stage_protocol,
     structured_retry_prompt,
 )
-from runner.workflow.result_parsers import parse_ai_validation, parse_review
-from runner.workflow.task_output import decode_tasks
+from runner.workflow.lifecycle import decode_tasks, parse_ai_validation, parse_review
 
 
 def _valid_task_payload() -> dict[str, object]:
