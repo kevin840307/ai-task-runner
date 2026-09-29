@@ -155,8 +155,9 @@ def test_review_feedback_continuation_sends_only_new_evidence(tmp_path, monkeypa
     )
 
 
-def test_builtin_prompts_live_in_the_unified_workflow_asset_folder():
-    root = ROOT / "runner" / "workflows"
+def test_builtin_prompts_live_in_the_common_prompt_category():
+    root = ROOT / "runner" / "assets" / "prompts" / "common"
     for name in ("planning.md", "execution.md", "review.md", "ai_validator.md"):
         assert (root / name).is_file()
-    assert not (ROOT / "runner" / "prompts" / "stages").exists()
+    assert not (ROOT / "runner" / "workflows").exists()
+    assert not (ROOT / "runner" / "prompts").exists()
