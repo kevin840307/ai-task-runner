@@ -855,9 +855,9 @@ class WorkflowStudioMixin:
         raw = str(name or "").strip()
         if not raw:
             raise ValueError(f"{kind.title()} name is required")
-        if "/" in raw or "\\" in raw or raw in {".", ".."}:
-            raise ValueError(f"{kind.title()} name must be a file name, not a path")
         if kind == "workflow":
+            if "/" in raw or "\\" in raw or raw in {".", ".."}:
+                raise ValueError("Workflow name must be a file name, not a path")
             if not raw.lower().endswith((".yaml", ".yml")):
                 raw += ".workflow.yaml" if "workflow" not in raw.lower() else ".yaml"
             if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
