@@ -114,7 +114,7 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
         save_state=lambda: None,
         set_stage=lambda *_: None,
     )
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     previous = StageResult(
         "validate_ai",
         "fail",
