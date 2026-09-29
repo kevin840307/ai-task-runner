@@ -5,7 +5,7 @@ from pathlib import Path
 
 from runner.workflow.stages.base_stage import BaseStageSpec
 from runner.workflow.stages.command import CommandStageSpec
-from runner.workflow.stages.plan_stage import PlanStageSpec
+from runner.workflow.stages import PlanStageSpec
 
 
 ROOT = Path(__file__).resolve().parents[1]
