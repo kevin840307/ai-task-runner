@@ -10,7 +10,7 @@ from ...config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError, is_transient_error
 from ...workspace import changed_project_files, project_manifest
 from ...runtime import progress
-from ...runtime.heartbeat import sleep_with_heartbeat
+from ...runtime.events import sleep_with_heartbeat
 from .contracts import (
     MODE_READONLY,
     MODE_WRITE,
