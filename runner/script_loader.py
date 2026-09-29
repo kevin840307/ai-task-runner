@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .utils.files import io_path
+from .utils import io_path
 from .errors import RunnerError
 from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 
