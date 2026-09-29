@@ -1,39 +1,84 @@
-from importlib.resources import files
 from pathlib import Path
+
+from runner.assets import PROMPT_DIR, WORKFLOW_DIR
+from runner.prompting import PROMPT_ROOT
+from runner.workflow.stages import PlanStageSpec
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def test_all_prompt_templates_live_under_one_package():
-    stage_files = {p.name for p in files("runner.prompts.stages").iterdir() if p.name.endswith(".md")}
-    system_files = {p.name for p in files("runner.prompts.system").iterdir() if p.name.endswith(".md")}
-    assert {"planning.md", "execution.md", "ai_validator.md"} <= stage_files
-    assert {"rules.md"} <= system_files
-    assert "structured_output_retry.md" not in system_files
-    assert (ROOT / "runner/prompts/protocols.py").is_file()
-    assert not (ROOT / "runner/workflow/prompts").exists()
-    assert not (ROOT / "runner/ai/prompts").exists()
-    assert (ROOT / "runner/prompts/context.py").is_file()
-    assert (ROOT / "runner/prompts/loader.py").is_file()
-    assert not (ROOT / "runner/utils/templates.py").exists()
 
-def test_setuptools_packages_central_prompt_resources():
+def test_prompt_assets_are_categorized_under_one_asset_package():
+    assert PROMPT_ROOT == PROMPT_DIR
+    common = {p.name for p in (PROMPT_DIR / "common").glob("*.md")}
+    ralphy = {p.name for p in (PROMPT_DIR / "ralphy").glob("*.md")}
+    workflow = {p.name for p in (PROMPT_DIR / "workflow").glob("*.md")}
+
+    assert {
+        "planning.md",
+        "execution.md",
+        "review.md",
+        "ai_validator.md",
+        "rules.md",
+        "grill.md",
+    } <= common
+    assert ralphy == {"ralphy.md"}
+    assert {"workflow_prompt.md", "workflow_review.md"} <= workflow
+    assert not (ROOT / "runner" / "prompts").exists()
+
+
+def test_workflow_assets_are_separate_from_prompt_assets():
+    assert {p.name for p in WORKFLOW_DIR.glob("*.yaml")} >= {
+        "ai.yaml",
+        "file.yaml",
+        "mixed.yaml",
+        "ralphy_ai_validate.yaml",
+    }
+    assert not list(WORKFLOW_DIR.glob("*.md"))
+    assert not list(PROMPT_DIR.glob("*.yaml"))
+
+
+def test_setuptools_packages_only_current_runner_structure_and_assets():
     config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert '"runner.prompts.stages" = ["*.md"]' in config
-    assert '"runner.prompts.system" = ["*.md"]' in config
-    assert '"runner.workflow.system"' in config
-    assert '"runner.workflow.system" = ["*.yaml"]' in config
-    assert '"runner.project"' in config
+    for package in (
+        '"runner.agent"',
+        '"runner.assets"',
+        '"runner.plugins"',
+        '"runner.runtime"',
+        '"runner.workflow"',
+        '"runner.workflow.stages"',
+    ):
+        assert package in config
+
+    for removed in (
+        '"runner.ai"',
+        '"runner.backends"',
+        '"runner.project"',
+        '"runner.prompts"',
+        '"runner.workflow.system"',
+        '"runner.workflow.custom"',
+    ):
+        assert removed not in config
+
+    assert '"runner.assets" = [' in config
+    assert '"workflows/*.yaml"' in config
+    assert '"prompts/common/*.md"' in config
+    assert '"prompts/ralphy/*.md"' in config
+    assert '"prompts/workflow/*.md"' in config
 
 
-def test_plan_defaults_to_optional_readonly_filesystem_inspection():
-    from runner.workflow.stages.plan_stage import PlanStageSpec
+def test_plan_defaults_to_categorized_common_prompt():
+    spec = PlanStageSpec(name="planning")
+    assert spec.allow_project_read is True
+    assert spec.prompt == "common/planning.md"
 
-    assert PlanStageSpec(name="planning").allow_project_read is True
-    root = Path(__file__).resolve().parents[1]
-    planning = (root / "runner" / "prompts" / "stages" / "planning.md").read_text(encoding="utf-8")
+    planning = (PROMPT_DIR / spec.prompt).read_text(encoding="utf-8")
     assert "any readable path" in planning
     assert "outside the current Project" in planning
-    assert "Do not use more tools" not in planning
     assert "only when" in planning
-    assert not (root / "runner" / "prompts" / "stages" / "planning_rules.md").exists()
-    assert not (root / "runner" / "prompts" / "stages" / "plan_finalize.md").exists()
+    assert not (PROMPT_DIR / "common" / "planning_rules.md").exists()
+    assert not (PROMPT_DIR / "common" / "plan_finalize.md").exists()
+
+
+def test_prompt_runtime_is_one_module_not_a_parallel_prompt_package():
+    assert (ROOT / "runner" / "prompting.py").is_file()
+    assert not (ROOT / "runner" / "prompts").exists()
