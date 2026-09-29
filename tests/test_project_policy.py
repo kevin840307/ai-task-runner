@@ -11,7 +11,7 @@ from runner import bootstrap
 from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.plugins.safety import git_subcommand
-from runner.project.policy import POLICY_FILENAME, protected_paths
+from runner.workspace import POLICY_FILENAME, protected_paths
 from runner.runtime.process_runner import run_process
 from runner.plugins.safety import normalize_paths, restore_changed, snapshot
 
