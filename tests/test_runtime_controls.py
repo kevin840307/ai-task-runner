@@ -17,7 +17,7 @@ from runner.config.defaults import (
 )
 from runner.errors import RunnerError
 from runner.plugins.console import LiveUI
-from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
 from runner.agent import AIClient, BackendResult
 from runner.runtime import events
