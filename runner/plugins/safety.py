@@ -19,7 +19,7 @@ from typing import Any
 from ..errors import RunnerError
 from ..utils import copy_ignore, copy_path, digest, io_path, remove_path
 from ..bootstrap import current_runtime
-from .contracts import HookViolation
+from .utils import HookViolation
 
 from ..workspace import (
     TECHNICAL_EXCLUDE_DIRS,
