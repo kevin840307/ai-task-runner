@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .ai.client import create_ai_client
+from .agent import create_ai_client
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .workspace import cleanup_stale_artifacts
