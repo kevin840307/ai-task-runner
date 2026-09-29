@@ -301,15 +301,14 @@
               <div class="workflow-generator-input-card">
                 <label class="designer-form-row designer-form-wide workflow-generator-request-field">
                   <span class="designer-label">What should this Workflow do?</span>
-                  <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review twice, then run Python validation. Include retry/recovery rules and required prompts."></textarea>
+                  <textarea id="generateWorkflowRequest" class="designer-textarea workflow-generator-request" placeholder="Example: Analyze the project, generate regression cases, review the result, then run Python validation. Include required stages and prompts."></textarea>
                   <span class="designer-form-hint" data-i18n="builder.generate_hint">Generate always starts a new AI run and a new temporary Draft.</span>
                 </label>
                 <aside class="workflow-generator-target-card" aria-label="Target Workflow settings">
                   <span class="designer-label workflow-generator-target-title">Target Workflow</span>
-                  <label class="designer-form-row"><span class="designer-label">Folder</span><input id="generateWorkflowFolder" class="designer-input" placeholder="e2e_regression" /></label>
                   <label class="designer-form-row"><span class="designer-label">Filename</span><input id="generateWorkflowFilename" class="designer-input" placeholder="regression.workflow.yaml" /></label>
                   <label class="designer-form-row workflow-generator-backend-row"><span class="designer-label">Backend</span><select id="generateWorkflowBackend" class="designer-select"></select></label>
-                  <div class="workflow-generator-target-preview"><span>Will save under</span><code id="generateWorkflowTargetPreview">runner/workflows/&lt;filename&gt;</code></div>
+                  <div class="workflow-generator-target-preview"><span>Will save under</span><code id="generateWorkflowTargetPreview">runner/assets/workflows/&lt;filename&gt;</code></div>
                 </aside>
                 <div class="workflow-generator-input-meta">
                   <div id="generateWorkflowHint" class="workflow-generator-hint"></div>
@@ -331,12 +330,12 @@
 
           <section id="generateWorkflowReady" class="workflow-generator-phase workflow-generator-review" hidden>
             <div class="workflow-generator-review-head">
-              <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p data-i18n="builder.review_desc">Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Custom / Project until Save.</p></div>
+              <div><div class="workflow-generator-review-badges"><span class="workflow-builder-draft-badge">DRAFT · NOT SAVED</span><span class="workflow-builder-editable-badge">EDITABLE</span></div><h2>Draft ready for review</h2><p data-i18n="builder.review_desc">Edit the Workflow YAML or generated Prompts, then Validate Draft before Save. Nothing appears in Global / Project assets until Save.</p></div>
               <div id="generateWorkflowValidation" class="workflow-builder-validation success">Validation PASS</div>
             </div>
             <div class="workflow-generator-review-meta">
               <div class="workflow-generator-workspace"><span>Temporary workspace</span><code id="generateWorkflowReadyWorkspace"></code></div>
-              <div class="workflow-generator-ready-target"><span>Target</span><code id="generateWorkflowReadyTarget">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code></div>
+              <div class="workflow-generator-ready-target"><span>Target</span><code id="generateWorkflowReadyTarget">runner/assets/workflows/&lt;filename&gt;</code></div>
             </div>
             <div class="workflow-generator-review-tabs" role="tablist" aria-label="Generated draft view"><button id="generateDraftVisualTab" class="active" type="button">Visual</button><button id="generateDraftYamlTab" type="button">Edit YAML</button><button id="generateDraftPromptTab" type="button">Edit Prompt</button></div>
             <section id="generateDraftVisualPanel" class="workflow-generator-review-panel"><div class="workflow-generator-edit-guide"><div><strong>Visual preview</strong><span>Use Edit YAML / Edit Prompt to adjust this temporary Draft. Validate Draft refreshes the Visual preview.</span></div><button id="generateWorkflowEditYaml" type="button">Edit Workflow</button></div><div id="generateDraftFlowList" class="workflow-generator-flow"></div></section>
@@ -458,7 +457,7 @@ flow:
           <label class="designer-form-row"><span class="designer-label">Filename</span><input id="generateWorkflowSaveFilename" class="designer-input" placeholder="regression.workflow.yaml" /></label>
         </div>
         <label class="designer-form-row"><span class="designer-label">Save to</span><select id="generateWorkflowDestination" class="designer-select"><option value="global">Global</option><option value="project">Current Project</option></select></label>
-        <div class="workflow-save-path-preview"><span>Destination</span><code id="generateWorkflowSavePathPreview">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code><small id="generateWorkflowSavePromptPreview">Prompts: runner/workflows/*.md</small></div>
+        <div class="workflow-save-path-preview"><span>Destination</span><code id="generateWorkflowSavePathPreview">runner/workflow/custom/&lt;folder&gt;/&lt;filename&gt;</code><small id="generateWorkflowSavePromptPreview">Prompts: runner/assets/prompts/workflow/&lt;workflow-name&gt;/</small></div>
         <div id="generateWorkflowSaveHint" class="modal-hint" data-i18n="builder.save_hint">Save is the moment this Draft becomes a real Workflow.</div>
       </div>
       <div class="modal-actions"><button id="generateWorkflowSaveCancel" type="button">Cancel</button><button id="generateWorkflowSaveConfirm" class="primary" type="button">Validate &amp; Save</button></div>
