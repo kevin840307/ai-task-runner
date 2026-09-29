@@ -1,1 +1,1 @@
-"""Workflow definitions, FlowEngine routing, reducers, and Stage primitives."""
+"""Workflow graph loading, validation, result reduction, and Stage execution."""
