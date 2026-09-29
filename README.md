@@ -154,23 +154,55 @@ crash at a committed Stage boundary + resume
 
 The worker supervisor is separate from Stage retry and only owns process-level crash/hang/stop/orphan cleanup.
 
-## Workflow and Prompt assets
+## Runner map
 
-Global editable Workflow and Prompt assets share one flat folder:
+The package is intentionally organized by responsibility:
 
 ```text
-runner/workflows/
-  *.yaml
-  *.md
+runner/
+  agent/       model client, sessions and Qwen/OpenCode adapters
+  assets/
+    workflows/ editable Workflow YAML
+    prompts/
+      common/   built-in Plan/Task/Review/Validator prompts
+      ralphy/   Ralphy-specific prompts
+      workflow/ Workflow-generation prompts
+  config/       runtime defaults and validated RuntimeConfig
+  plugins/      extension discovery, hooks, safety and console observers
+  runtime/      durable state, events, subprocesses and worker supervision
+  workflow/     loader, schema, Stage registry, FlowEngine and lifecycle
+  prompting.py  Prompt rendering/context/protocols
+  workspace.py  project policy, protected paths and workspace registration
+  workflow_runner.py one-run orchestration entry
+```
+
+`agent`, `runtime`, `workflow`, and `plugins` remain separate because they own different runtime concerns. Small helper packages are avoided when one obvious module can own the behavior.
+
+## Workflow and Prompt assets
+
+Global editable assets use one package with separate file-type roots:
+
+```text
+runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    common/*.md
+    ralphy/*.md
+    workflow/*.md
 ```
 
 Project-local editable assets use the same shape:
 
 ```text
-<project>/.ai-task-runner/workflows/
-  *.yaml
-  *.md
+<project>/.ai-task-runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    <category>/*.md
 ```
+
+Prompt references are category-relative keys such as `common/review.md`. New prompt domains can be added as another category without changing Stage/runtime code.
 
 There is no System/Custom split and no read-only built-in asset class.
 
