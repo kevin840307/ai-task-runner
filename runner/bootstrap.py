@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config.runtime import RuntimeConfig
-from .plugins.utils import HookChain
+from .plugins.runtime import HookChain
 from .plugins.registry import register_plugins
 from .runtime import events
 from .runtime.events import EventBus
