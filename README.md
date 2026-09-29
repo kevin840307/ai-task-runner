@@ -304,7 +304,7 @@ Workflow code does not branch on concrete plugins.
 Example:
 
 ```bash
-python tool/workflow_dryrun.py runner/workflows/mixed.yaml --matrix --json
+python tool/workflow_dryrun.py runner/assets/workflows/mixed.yaml --matrix --json
 ```
 
 Dry Run validates graph closure and safe-stop behavior without creating a second runtime.
