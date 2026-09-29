@@ -1,16 +1,15 @@
 from pathlib import Path
 
-from runner.prompts.loader import prompt_variables, render_prompt
-from runner.prompts.protocols import append_stage_protocol
+from runner.prompting import append_stage_protocol, prompt_variables, render_prompt
 from runner.workflow.loader import load_workflow
 from runner.workflow.registry import STAGE_REGISTRY
 
 ROOT = Path(__file__).resolve().parents[1]
-GRILL_PROMPT = ROOT / "runner" / "assets" / "prompts" / "grill.md"
+GRILL_PROMPT = ROOT / "runner" / "assets" / "prompts" / "common" / "grill.md"
 EXAMPLES = ROOT / "tool" / "workflow"
 
 
-def test_grill_reuses_review_stage_and_flat_prompt_asset():
+def test_grill_reuses_review_stage_and_common_prompt_asset():
     assert "grill" not in STAGE_REGISTRY
     assert GRILL_PROMPT.is_file()
     variables = prompt_variables(str(GRILL_PROMPT))
