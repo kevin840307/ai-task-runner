@@ -93,7 +93,7 @@ class WorkflowStudioMixin:
 
     def _stage_prompt_tag_paths(self) -> list[str]:
         """Read the stable Stage prompt context contract without importing Runner."""
-        context_file = self.repo_root / "runner" / "prompts" / "context.py"
+        context_file = self.repo_root / "runner" / "prompting.py"
         try:
             tree = ast.parse(context_file.read_text(encoding="utf-8"))
         except (OSError, SyntaxError) as exc:
@@ -106,13 +106,13 @@ class WorkflowStudioMixin:
     def _loader_prompt_contracts(self) -> dict[str, list[str]]:
         """Discover dedicated System Prompt variables from literal render_prompt calls.
 
-        `system/rules.md` is not a Stage prompt. It is rendered by the prompt
+        `common/rules.md` is not a Stage prompt. It is rendered by the prompt
         loader with its own values. Immutable output/retry protocols live in
-        runner/prompts/protocols.py and are intentionally not Studio resources.
+        runner/prompting.py and are intentionally not Studio resources.
         Parse that contract statically so Workflow Studio does not import Runner Core
         and does not show false Prompt warnings when those files are inspected.
         """
-        loader_file = self.repo_root / "runner" / "prompts" / "loader.py"
+        loader_file = self.repo_root / "runner" / "prompting.py"
         prompt_root = self._global_asset_root("prompt")
         try:
             tree = ast.parse(loader_file.read_text(encoding="utf-8"))
@@ -163,7 +163,7 @@ class WorkflowStudioMixin:
             "workflow.validator_feedback": "Current workflow validator feedback.",
             "rules": "Runner AI rules for the project.",
             "always_instructions": "User-enforced always instructions.",
-            "plugin_rules": "Plugin-provided Runner rules used by system/rules.md.",
+            "plugin_rules": "Plugin-provided Runner rules used by common/rules.md.",
         }
         for key in paths:
             if not key or key in seen:
@@ -174,7 +174,7 @@ class WorkflowStudioMixin:
                 "label": key.replace("_", " ").replace(".", " · ").title(),
                 "description": descriptions.get(key, f"Runtime prompt context: {key}."),
             })
-        source = str(prompt_path) if prompt_path is not None else str(self.repo_root / "runner" / "prompts" / "context.py")
+        source = str(prompt_path) if prompt_path is not None else str(self.repo_root / "runner" / "prompting.py")
         return {"tags": tags, "source": source, "contract": contract}
 
     def _check_prompt_content(self, content: str, prompt_path: Path | None = None) -> dict:
