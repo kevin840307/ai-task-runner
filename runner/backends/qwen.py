@@ -15,7 +15,7 @@ from ..runtime.process_runner import run_process
 
 from ..ai.contracts import BackendMode, BackendResult
 from .base import BaseBackend
-from ..project.instructions import ensure_instruction_file, update_goal_reference
+from ..workspace import ensure_instruction_file, update_goal_reference
 from ..ai.errors import BackendError
 from .qwen_args import configure_qwen_args
 
