@@ -67,8 +67,6 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(self.state.backend_catalog())
             if parsed.path == "/api/workflow/catalog":
                 return self._json(self.state.workflow_catalog())
-            if parsed.path == "/api/execution-modes":
-                return self._json(self.state.execution_mode_catalog())
             if parsed.path == "/api/environment/check":
                 return self._json(self.state.environment_check())
             if parsed.path == "/api/studio/files":
