@@ -12,7 +12,7 @@ from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
 from .runtime import events
 from .runtime.run_state import StateStore
 from .utils import io_path
-from .workflow.lifecycle import load_run_resource, load_snapshot
+from .resources import load_run_resource, load_snapshot
 from .workflow.loader import load_default_workflow, load_workflow
 
 ExecuteOne = Callable[[RuntimeConfig], int]
