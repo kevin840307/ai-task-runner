@@ -11,12 +11,7 @@ from .runtime import events as progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
-from .workflow.lifecycle import (
-    freeze_run_resource,
-    freeze_workflow,
-    load_run_resource,
-    load_snapshot,
-)
+from .resources import freeze_run_resource, freeze_workflow, load_run_resource, load_snapshot
 from .workflow.stages import StageContext, StageExecutor
 
 
