@@ -62,13 +62,13 @@ def test_docs_describe_one_runtime_and_flat_assets():
         "FlowEngine",
         "StageExecutor",
         "StateStore",
-        "runner/workflows/",
+        "runner/assets/workflows/",
         "Dynamic Handoff",
         "Discussion / Group Chat",
     ):
         assert token in combined
 
-    assert "<project>/.ai-task-runner/workflows/" in combined
+    assert "<project>/.ai-task-runner/assets/" in combined
 
 
 def test_readmes_document_cli_yaml_and_24h_contract():
@@ -90,6 +90,7 @@ def test_canonical_docs_do_not_reintroduce_deleted_runtime_concepts():
         "runner/workflow/custom",
         "runner/prompts/system",
         "runner/prompts/stages",
+        "runner/workflows/",
         "TaskRunner alias",
         "Pipeline alias",
         "LinearRouting compatibility",
