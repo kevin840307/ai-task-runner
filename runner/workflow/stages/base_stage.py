@@ -7,9 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Protocol
 
-from ...ai.client import configure_ai_client, create_ai_client
-from ...ai.structured_output import structured_call
-from ...ai.contracts import AIClientProtocol
+from ...agent import AIClientProtocol, configure_ai_client, create_ai_client, structured_call
 from ...config.runtime import RuntimeConfig
 from ...errors import ConfigurationError, RunnerError
 from ...prompts.utils import build_stage_prompt_context
