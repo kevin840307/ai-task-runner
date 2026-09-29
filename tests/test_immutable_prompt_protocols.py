@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from runner.ai.structured_output import parse_result
+from runner.agent import parse_result
 from runner.errors import RunnerError
 from runner.prompts.protocols import (
     PLAN_PROTOCOL,
