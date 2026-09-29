@@ -21,7 +21,6 @@ from ..resources import text_hash, write_text
 from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text, io_path
-from .schema import validate_stage, validate_topology
 from .stages.base_stage import StageContext, StageResult
 
 MAX_MISSING_ITEMS = 100
@@ -390,6 +389,9 @@ def _snapshot_prompts(value: Any, resources: Path) -> None:
 
 
 def _validate_snapshot(workflow: Any) -> None:
+    # Lazy import avoids registry -> Stage -> lifecycle -> schema cycles.
+    from .schema import validate_stage, validate_topology
+
     if not isinstance(workflow, list) or not workflow:
         raise RunnerError("workflow snapshot must be a non-empty list")
     for item in workflow:
