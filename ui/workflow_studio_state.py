@@ -23,10 +23,10 @@ from project_registry import path_key
 
 try:
     from .workflow_graph import build_workflow_graph
-    from .workflow_storage import project_workflow_root
+    from .workflow_storage import project_asset_root
 except ImportError:  # direct ui/main.py execution
     from workflow_graph import build_workflow_graph
-    from workflow_storage import project_workflow_root
+    from workflow_storage import project_asset_root
 
 
 EDITABLE_SUFFIXES = {".yaml", ".yml", ".md"}
@@ -41,20 +41,22 @@ class WorkflowStudioMixin:
     # ------------------------------ workflow studio ------------------------------
     def studio_files(self, project: Path | None = None) -> dict:
         """List editable Workflow YAML and Prompt Markdown from the two asset roots."""
-        roots: list[tuple[str, Path]] = [("global", self._global_asset_root())]
+        scopes: list[tuple[str, Path | None]] = [("global", None)]
         if project is not None:
-            roots.append(("project", project_workflow_root(project)))
+            scopes.append(("project", project))
 
         workflows: list[dict] = []
         prompts: list[dict] = []
         visibility = self._workflow_visibility()
-        for scope, root in roots:
-            if not root.is_dir():
-                continue
-            for path in sorted(root.glob("*.yaml")) + sorted(root.glob("*.yml")):
-                workflows.append(self._studio_item(path, scope, "workflow", visibility))
-            for path in sorted(root.glob("*.md")):
-                prompts.append(self._studio_item(path, scope, "prompt"))
+        for scope, selected_project in scopes:
+            workflow_root = self._asset_root("workflow", scope, selected_project)
+            prompt_root = self._asset_root("prompt", scope, selected_project)
+            if workflow_root.is_dir():
+                for path in sorted(workflow_root.glob("*.yaml")) + sorted(workflow_root.glob("*.yml")):
+                    workflows.append(self._studio_item(path, scope, "workflow", visibility))
+            if prompt_root.is_dir():
+                for path in sorted(prompt_root.glob("*.md")):
+                    prompts.append(self._studio_item(path, scope, "prompt"))
 
         order = {"global": 0, "project": 1}
         key = lambda item: (
@@ -111,7 +113,7 @@ class WorkflowStudioMixin:
         and does not show false Prompt warnings when those files are inspected.
         """
         loader_file = self.repo_root / "runner" / "prompts" / "loader.py"
-        prompt_root = self._global_asset_root()
+        prompt_root = self._global_asset_root("prompt")
         try:
             tree = ast.parse(loader_file.read_text(encoding="utf-8"))
         except (OSError, SyntaxError):
@@ -217,7 +219,7 @@ class WorkflowStudioMixin:
             self._require_editable()
             raw = self._normalize_studio_asset_name("workflow", name)
             scope = self._normalize_asset_scope(destination)
-            root = self._asset_root(scope, project)
+            root = self._asset_root("workflow", scope, project)
             root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if target.exists():
@@ -731,7 +733,8 @@ class WorkflowStudioMixin:
         raw = Path(value).expanduser()
         candidates = [raw] if raw.is_absolute() else [
             workflow_path.parent / raw,
-            self._global_asset_root() / raw,
+            workflow_path.parent.parent / "prompts" / raw,
+            self._global_asset_root("prompt") / raw,
         ]
         for candidate in candidates:
             try:
@@ -771,7 +774,7 @@ class WorkflowStudioMixin:
             raise ValueError("Workflow references missing Prompt(s): " + "; ".join(missing[:12]))
 
     def _known_workflow_paths(self, project: Path | None = None) -> list[Path]:
-        roots = [self._global_asset_root()]
+        roots = [self._global_asset_root("workflow")]
         known_projects = [
             Path(row["path"]).absolute()
             for row in self.projects()
@@ -781,7 +784,7 @@ class WorkflowStudioMixin:
             project_path = Path(project).absolute()
             if all(path_key(project_path) != path_key(item) for item in known_projects):
                 known_projects.append(project_path)
-        roots.extend(project_workflow_root(item) for item in known_projects)
+        roots.extend(project_asset_root(item, "workflow") for item in known_projects)
 
         result: list[Path] = []
         seen: set[str] = set()
@@ -821,7 +824,7 @@ class WorkflowStudioMixin:
             self._require_editable()
             raw = self._normalize_studio_asset_name("prompt", name)
             scope = self._normalize_asset_scope(destination)
-            root = self._asset_root(scope, project)
+            root = self._asset_root("prompt", scope, project)
             root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if target.exists():
@@ -870,8 +873,7 @@ class WorkflowStudioMixin:
     def _studio_scope_root(
         self, kind: str, scope: str, project: Path | None
     ) -> Path:
-        del kind
-        root = self._asset_root(scope, project)
+        root = self._asset_root(kind, scope, project)
         root.mkdir(parents=True, exist_ok=True)
         return root
 
@@ -892,7 +894,7 @@ class WorkflowStudioMixin:
                         + "; ".join(usages[:12])
                     )
             raw = self._normalize_studio_asset_name(kind, name)
-            root = self._asset_root(scope, project)
+            root = self._asset_root(kind, scope, project)
             target = (root / raw).resolve()
             if target == path:
                 item = self._studio_item(path, scope, kind)
@@ -918,7 +920,7 @@ class WorkflowStudioMixin:
             self._require_editable()
             path, kind, scope = self._resolve_studio_file(file_id, project)
             raw = self._normalize_studio_asset_name(kind, name)
-            root = self._asset_root(scope, project)
+            root = self._asset_root(kind, scope, project)
             root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if target.exists():
@@ -1070,7 +1072,7 @@ class WorkflowStudioMixin:
             if kind not in {"workflow", "prompt"}:
                 raise ValueError("Import kind must be workflow or prompt")
             scope = self._normalize_asset_scope(destination)
-            root = self._asset_root(scope, project)
+            root = self._asset_root(kind, scope, project)
             root.mkdir(parents=True, exist_ok=True)
             raw = self._normalize_studio_asset_name(kind, name or f"imported-{kind}")
             target = (root / raw).resolve()
@@ -1135,8 +1137,11 @@ class WorkflowStudioMixin:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, path)
 
-    def _global_asset_root(self) -> Path:
-        return (self.repo_root / "runner" / "workflows").resolve()
+    def _global_asset_root(self, kind: str) -> Path:
+        name = "workflows" if kind == "workflow" else "prompts" if kind == "prompt" else ""
+        if not name:
+            raise ValueError("asset kind must be workflow or prompt")
+        return (self.repo_root / "runner" / "assets" / name).resolve()
 
     @staticmethod
     def _normalize_asset_scope(value: str) -> str:
@@ -1147,13 +1152,13 @@ class WorkflowStudioMixin:
             raise ValueError("Asset destination must be global or project")
         return scope
 
-    def _asset_root(self, scope: str, project: Path | None) -> Path:
+    def _asset_root(self, kind: str, scope: str, project: Path | None) -> Path:
         scope = self._normalize_asset_scope(scope)
         if scope == "global":
-            return self._global_asset_root()
+            return self._global_asset_root(kind)
         if project is None:
             raise ValueError("Select a Project before using Project assets")
-        return project_workflow_root(project)
+        return project_asset_root(project, kind)
 
     def _workflow_output_paths(
         self,
@@ -1165,7 +1170,7 @@ class WorkflowStudioMixin:
         del folder
         raw = self._normalize_studio_asset_name("workflow", filename)
         scope = self._normalize_asset_scope(destination)
-        root = self._asset_root(scope, project)
+        root = self._asset_root("workflow", scope, project)
         root.mkdir(parents=True, exist_ok=True)
         output = (root / raw).resolve()
         return raw, "", scope, output, root
@@ -1223,7 +1228,7 @@ class WorkflowStudioMixin:
             raise ValueError("Invalid Workflow asset kind")
         if not path.is_file() or path.suffix.lower() not in EDITABLE_SUFFIXES:
             raise ValueError("Workflow/prompt file does not exist")
-        root = self._asset_root(scope, project).resolve()
+        root = self._asset_root(kind, scope, project).resolve()
         if path.parent != root:
             raise ValueError("File is outside allowed Workflow asset root")
         if kind == "workflow" and path.suffix.lower() not in {".yaml", ".yml"}:
