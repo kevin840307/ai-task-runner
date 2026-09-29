@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .errors import RunnerError
-from .utils.files import io_path
+from .utils import io_path
 
 Validator = Callable[[str], None]
 
