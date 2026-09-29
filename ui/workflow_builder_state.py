@@ -99,7 +99,6 @@ class WorkflowBuilderMixin:
         self,
         request: str,
         backend: str = "",
-        folder: str = "",
         filename: str = "",
     ) -> dict:
         """Start a brand-new validated draft job in the UI-owned workspace.
@@ -116,7 +115,6 @@ class WorkflowBuilderMixin:
             request = str(request or "").strip()
             if not request:
                 raise ValueError("Workflow requirements are required")
-            folder = ""
             filename = str(filename or "").strip()
             if not filename:
                 raise ValueError("Workflow filename is required")
@@ -335,7 +333,7 @@ class WorkflowBuilderMixin:
             result["draft"] = self._builder_preview(job_root, status)
             return result
 
-    def studio_generate_save(self, project: Path | None, job_id: str, folder: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
+    def studio_generate_save(self, project: Path | None, job_id: str, filename: str, destination: str, workflow_content: str | None = None, prompt_rows: object = None) -> dict:
         with self._builder_lock, self._edit_lock:
             # Publishing mutates a real Workflow/Prompt asset, so keep the existing
             # global edit guard here even though draft generation itself is independent.
