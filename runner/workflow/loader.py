@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from ..assets import WORKFLOW_DIR
+from ..assets import PROMPT_DIR, WORKFLOW_DIR
 from ..errors import RunnerError
 from ..resources import write_text
 from ..utils.files import io_path
@@ -165,9 +165,14 @@ def _resolve_local_prompt(values: dict[str, Any], source: Path) -> None:
     path = Path(value).expanduser()
     if path.is_absolute():
         return
-    local = source.parent / path
-    if local.is_file():
-        values["prompt"] = str(local.resolve())
+    candidates = [source.parent / path]
+    if source.parent.name == "workflows":
+        candidates.append(source.parent.parent / "prompts" / path)
+    candidates.append(PROMPT_DIR / path)
+    for candidate in candidates:
+        if candidate.is_file():
+            values["prompt"] = str(candidate.resolve())
+            return
 
 
 def workflow_fingerprint(workflow: list[dict[str, Any]]) -> str:
