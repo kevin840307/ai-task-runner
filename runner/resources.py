@@ -74,8 +74,6 @@ def delete(path: str | Path, *, expected_hash: str | None = None) -> None:
         raise RunnerError(f"cannot delete resource: {target}: {error}") from error
 
 
-__all__ = ["delete", "read_text", "text_hash", "write_text"]
-
 SNAPSHOT_FILE = "workflow.snapshot.json"
 RESOURCE_DIR = "resources"
 RUN_RESOURCE_FILES = {
@@ -209,7 +207,7 @@ def _snapshot_prompts(value: Any, resources: Path) -> None:
 
 
 def _validate_snapshot(workflow: Any) -> None:
-    # Lazy import avoids registry -> Stage -> lifecycle -> schema cycles.
+    # Lazy import avoids registry -> Stage -> result/schema import cycles.
     from .workflow.schema import validate_stage, validate_topology
 
     if not isinstance(workflow, list) or not workflow:
