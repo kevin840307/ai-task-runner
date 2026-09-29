@@ -1,10 +1,7 @@
 from pathlib import Path
 
-from runner.backends.qwen import update_qwen_goal_reference
-from runner.project.instructions import (
-    GOAL_REFERENCE_END,
-    GOAL_REFERENCE_START,
-)
+from runner.agent.qwen import update_qwen_goal_reference
+from runner.workspace import GOAL_REFERENCE_END, GOAL_REFERENCE_START
 
 
 def test_goal_reference_is_added_and_replaced(tmp_path: Path):
@@ -37,7 +34,7 @@ def test_inline_goal_removes_managed_reference(tmp_path: Path):
 
 
 def test_qwen_backend_goal_reference_hook(tmp_path):
-    from runner.backends.qwen import QwenBackend
+    from runner.agent.qwen import QwenBackend
 
     goal = tmp_path / "goal.md"
     goal.write_text("goal", encoding="utf-8")
