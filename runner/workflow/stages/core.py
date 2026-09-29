@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ...ai.structured_output import parse_result
+from ...agent import parse_result
 from ...config.defaults import MIN_PLANNED_TASKS
 from ...prompts.loader import render_prompt
 from ...prompts.utils import build_stage_prompt_context
