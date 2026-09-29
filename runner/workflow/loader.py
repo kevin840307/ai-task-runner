@@ -8,6 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from ..assets import WORKFLOW_DIR
 from ..errors import RunnerError
 from ..resources import write_text
 from ..utils.files import io_path
@@ -19,7 +20,6 @@ from .schema import (
     workflow_validators,
 )
 
-WORKFLOW_DIR = Path(__file__).resolve().parents[1] / "workflows"
 WORKFLOWS = {
     "mixed": WORKFLOW_DIR / "mixed.yaml",
     "file": WORKFLOW_DIR / "file.yaml",
