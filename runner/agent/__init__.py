@@ -23,6 +23,8 @@ from .client import (
     create_ai_client,
     is_session_invalid_error,
     is_transient_service_error,
+    prepare_session_recovery,
+    should_reset_session,
 )
 from .structured import (
     AIValidationResult,
@@ -56,6 +58,7 @@ __all__ = [
     "default_command",
     "is_session_invalid_error",
     "is_transient_service_error",
+    "prepare_session_recovery",
     "json_candidates",
     "parse_result",
     "register_backend",
@@ -63,6 +66,7 @@ __all__ = [
     "require_text",
     "require_text_list",
     "sandbox_supported",
+    "should_reset_session",
     "split_command",
     "structured_call",
 ]
