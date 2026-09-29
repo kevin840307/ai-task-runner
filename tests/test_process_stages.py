@@ -8,7 +8,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.runtime.process_runner import ProcessResult
 from runner.runtime.run_state import RunState
 from runner.workflow.registry import create_stage
-from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages import StageContext
 
 
 def context(tmp_path: Path) -> StageContext:
