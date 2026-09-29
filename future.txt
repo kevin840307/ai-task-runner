@@ -430,13 +430,9 @@ Phase C - code-size/owner cleanup
     - Global: runner/assets/workflows/*.yaml
     - Global Prompt categories: runner/assets/prompts/<category>/*.md
     - Project: <project>/.ai-task-runner/assets/workflows/*.yaml and prompts/<category>/*.md
-    - remove runner/workflows and every old Prompt/Workflow path after all references move.
-27. [IN PROGRESS] Remove stale imports/tests left by owner merges:
-    - runner.workflow.utils -> runner.utils / current owner
-    - runner.workflow.result_parsers -> runner.workflow.results
-    - old ai/backends/project/script_loader/script_runner/utils folder imports -> current owner
-    - old System/Custom/flat-workflow asset paths -> assets roots
-    Acceptance: repository search returns zero stale production/test imports.
+    - remove every pre-assets Prompt/Workflow path after all references move.
+27. [IN PROGRESS] Remove stale imports/tests left by owner merges.
+    Acceptance: repository search returns zero references to superseded owner modules or pre-assets paths.
 28. [IN PROGRESS] Finish Workflow Studio categorized Prompt support:
     - recursive Prompt discovery
     - Prompt identity is category-relative key such as common/review.md
