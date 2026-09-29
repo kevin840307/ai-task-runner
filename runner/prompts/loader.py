@@ -6,7 +6,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, meta
 
-from ..project.policy import instruction_text
+from ..workspace import instruction_text
 from ..errors import RunnerError
 from ..resources import write_text
 from ..plugins.registry import collect_plugin_instructions
