@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from runner.utils.files import path_key, remove_path, same_path
+from runner.utils import path_key, remove_path, same_path
 
 
 def test_atomic_resource_temp_name_does_not_repeat_long_target_name(tmp_path, monkeypatch):
