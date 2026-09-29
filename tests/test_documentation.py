@@ -55,7 +55,7 @@ def test_timeout_defaults_match_cli_and_api():
     )
 
 
-def test_docs_describe_one_runtime_and_flat_assets():
+def test_docs_describe_one_runtime_and_structured_assets():
     combined = "\n".join(text(name) for name in DOCS)
     for token in (
         "WorkflowRunner",
@@ -63,6 +63,7 @@ def test_docs_describe_one_runtime_and_flat_assets():
         "StageExecutor",
         "StateStore",
         "runner/assets/workflows/",
+        "prompts/",
         "Dynamic Handoff",
         "Discussion / Group Chat",
     ):
