@@ -10,11 +10,11 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from ..utils.files import io_path
+from ..utils import io_path
 from typing import Any
 
 from .events import retry_event
-from .heartbeat import HEARTBEAT_ENV, touch_heartbeat_path
+from .events import HEARTBEAT_ENV, touch_heartbeat_path
 from .process_runner import ACTIVE_PROCESS_FILE
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
