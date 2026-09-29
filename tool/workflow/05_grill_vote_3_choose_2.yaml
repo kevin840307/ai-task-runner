@@ -14,7 +14,7 @@ stages:
 
   grill:
     type: review
-    prompt: ../../runner/workflows/grill.md
+    prompt: common/grill.md
     fresh_session_on_start: true
     fresh_session_each_run: true
     runs: 3
