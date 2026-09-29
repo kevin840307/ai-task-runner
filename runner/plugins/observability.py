@@ -4,8 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..utils.files import atomic_write_text, io_path
-from ..utils.logs import append_bounded_log
+from ..utils import append_bounded_log, atomic_write_text, io_path
 
 
 class ObservabilityObserver:
