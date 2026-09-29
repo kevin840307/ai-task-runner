@@ -8,7 +8,6 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
-from .run_state import RunState
 from ..version import __version__
 
 EventHandler = Callable[[dict[str, Any]], None]
@@ -80,7 +79,7 @@ class EventBus:
 
 
 _bus: EventBus | None = None
-_state: RunState | None = None
+_state: Any | None = None
 _context: dict[str, Any] = {}
 _status = "準備中"
 _detail = ""
@@ -104,7 +103,7 @@ def scope(bus: EventBus, context: dict[str, Any] | None = None):
         _bus, _state, _context, _status, _detail = previous
 
 
-def bind(state: RunState) -> None:
+def bind(state: Any) -> None:
     global _state
     _state = state
     publish("runner.progress", "bind")
@@ -131,7 +130,7 @@ def stop(status: str = "", detail: str = "") -> None:
         publish("runner.status", "stop")
 
 
-def show_todo(state: RunState | None = None) -> None:
+def show_todo(state: Any | None = None) -> None:
     if state is not None:
         bind(state)
     else:
