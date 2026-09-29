@@ -154,25 +154,55 @@ Technical retry counter 不形成第二套 durable recovery state machine。
 
 Worker Supervisor 與 Stage retry 分離，只負責 process-level crash / hang / stop / orphan cleanup。
 
-## Workflow 與 Prompt Assets
+## Runner 目錄圖
 
-Global 可編輯資產統一放：
+Package 直接依責任命名：
 
 ```text
-runner/workflows/
-  *.yaml
-  *.md
+runner/
+  agent/       Model client、Session、Qwen/OpenCode adapter
+  assets/
+    workflows/ 可編輯 Workflow YAML
+    prompts/
+      common/   內建 Plan/Task/Review/Validator Prompt
+      ralphy/   Ralphy Prompt
+      workflow/ Workflow 生成 Prompt
+  config/       Defaults 與 RuntimeConfig
+  plugins/      Extension discovery、Hook、安全與 Console observer
+  runtime/      Durable state、Event、Subprocess、Worker supervisor
+  workflow/     Loader、Schema、Stage registry、FlowEngine、Lifecycle
+  prompting.py  Prompt render/context/protocol
+  workspace.py  Project policy、protected path、workspace registration
+  workflow_runner.py 單次 Run 的 orchestration 入口
+```
+
+`agent/runtime/workflow/plugins` 責任不同，因此保留獨立 folder；只有沒有獨立 owner 的小 helper 才合併，避免為了少 folder 而增加耦合。
+
+## Workflow 與 Prompt Assets
+
+Global 可編輯資產集中在同一個 assets package，但 Workflow/Prompt 分開：
+
+```text
+runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    common/*.md
+    ralphy/*.md
+    workflow/*.md
 ```
 
 Project-local 使用完全相同 shape：
 
 ```text
-<project>/.ai-task-runner/workflows/
-  *.yaml
-  *.md
+<project>/.ai-task-runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    <category>/*.md
 ```
 
-Workflow YAML 與 Prompt Markdown 是同一層 peer assets。
+Prompt reference 使用分類相對 key，例如 `common/review.md`。未來可直接增加 `regression/`、`security/` 等分類，不需要修改 Stage/runtime。
 
 沒有 System / Custom 分類，也沒有唯讀 built-in asset。
 
