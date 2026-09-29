@@ -10,9 +10,7 @@ from typing import Any, Literal, Protocol
 from ...agent import AIClientProtocol, configure_ai_client, create_ai_client, structured_call
 from ...config.runtime import RuntimeConfig
 from ...errors import ConfigurationError, RunnerError
-from ...prompts.utils import build_stage_prompt_context
-from ...prompts.loader import render_prompt
-from ...prompts.utils import append_stage_protocol
+from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
 from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error"]
