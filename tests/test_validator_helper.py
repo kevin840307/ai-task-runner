@@ -7,7 +7,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState
 from runner.workflow.registry import create_stage
-from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages import StageContext
 
 
 def _ctx(tmp_path: Path):
