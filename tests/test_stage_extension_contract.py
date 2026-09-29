@@ -9,7 +9,7 @@ from runner.runtime.run_state import RunState
 from runner.workflow.loader import load_workflow
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage, stage_catalog
-from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
 
 
