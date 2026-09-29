@@ -7,7 +7,6 @@ import pytest
 from runner.agent import (
     AIClient,
     AIError,
-    BACKENDS,
     BackendError,
     BackendResult,
     BaseBackend,
@@ -18,6 +17,7 @@ from runner.agent import (
     sandbox_supported,
     split_command,
 )
+from runner.agent.backend import BACKENDS
 from runner.agent.opencode import OpenCodeBackend, ensure_opencode_rules
 from runner.agent.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
