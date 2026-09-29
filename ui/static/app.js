@@ -1186,7 +1186,7 @@ function routeTargetOptions(selected, emptyLabel = "Default") {
   return rows.join("");
 }
 function pathWithSlashes(value) { return String(value || "").replaceAll("\\", "/").replace(/^\.\//, ""); }
-function promptRef(item) { return item?.name || ""; }
+function promptRef(item) { return item?.reference || item?.name || ""; }
 
 function promptOptionRows(current) {
   const rows = [`<option value="">No prompt</option>`]; let matched = !current;
