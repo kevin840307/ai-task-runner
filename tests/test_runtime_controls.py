@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from ai_task_runner import parser
-from runner.backends.opencode import OpenCodeBackend
-from runner.backends.qwen import QwenBackend
+from runner.agent.opencode import OpenCodeBackend
+from runner.agent.qwen import QwenBackend
 from runner.config.runtime import RuntimeConfig
 from runner.config.defaults import (
     DEFAULT_STAGE_RETRIES,
@@ -19,8 +19,7 @@ from runner.errors import RunnerError
 from runner.plugins.console import LiveUI
 from runner.workflow.stages.contracts import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
-from runner.ai.contracts import BackendResult
-from runner.ai.client import AIClient
+from runner.agent import AIClient, BackendResult
 from runner.runtime import events
 from runner.runtime.run_state import RunState
 
