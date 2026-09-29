@@ -1,7 +1,6 @@
-from pathlib import Path
+"""Prompt rendering support for canonical editable Prompt assets."""
+from ..assets import PROMPT_DIR
 
-"""Prompt templates live beside Workflow YAML assets."""
-
-PROMPT_ROOT = Path(__file__).resolve().parents[1] / "workflows"
+PROMPT_ROOT = PROMPT_DIR
 
 __all__ = ["PROMPT_ROOT"]
