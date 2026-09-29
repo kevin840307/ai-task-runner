@@ -21,7 +21,6 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--draft-workflow", required=True)
     p.add_argument("--draft-prompt-dir", required=True)
     p.add_argument("--output-workflow", required=True)
-    p.add_argument("--output-prompt-dir", required=True)
     p.add_argument("--overwrite", action="store_true")
     return p
 
@@ -37,7 +36,6 @@ def main(argv: list[str] | None = None) -> int:
             workflow,
             prompts,
             Path(args.output_workflow),
-            Path(args.output_prompt_dir),
             overwrite=args.overwrite,
         )
     except Exception as exc:
