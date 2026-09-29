@@ -12,7 +12,7 @@ import yaml
 
 from .errors import RunnerError
 from .plugins.registry import collect_plugin_instructions
-from .utils.files import copy_path, digest, io_path, remove_path
+from .utils import copy_path, digest, io_path, remove_path
 
 POLICY_FILENAME = ".ai-task-runner.yaml"
 RUNNER_RULE_MARKER = "# AI Task Runner Rules"
