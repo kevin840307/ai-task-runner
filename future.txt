@@ -388,17 +388,17 @@ Phase A - destructive simplification first
    - deterministic configuration/state/programming errors fail closed.
 4. [DONE] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
 5. [DONE] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
-6. [DONE] Replace System/Custom Workflow + separate Prompt trees with one editable asset folder:
-      runner/workflows/
-        *.yaml
-        *.md
-   Workflow YAML and Prompt Markdown are peers in the same folder. Shared prompts are not duplicated. No read-only System assets.
-7. [DONE] Keep optional project-local assets in the identical flat shape:
-      <project>/.ai-task-runner/workflows/
-        *.yaml
-        *.md
-   Global and project assets use identical loader/UI behavior and are both editable.
-8. [DONE] Simplify Workflow Studio discovery/editor/export/import for the unified flat layout; remove System/Custom scope branches and read-only guards.
+6. [IN PROGRESS] Use one obvious editable asset package with separate concerns:
+      runner/assets/
+        workflows/*.yaml
+        prompts/*.md
+   Workflow and Prompt stay together under one asset package but are never mixed in one folder.
+7. [IN PROGRESS] Keep Project-local assets structurally identical:
+      <project>/.ai-task-runner/assets/
+        workflows/*.yaml
+        prompts/*.md
+   Global and Project assets use the same rules and are both editable.
+8. [IN PROGRESS] Simplify Workflow Studio discovery/editor/export/import for the split asset roots; remove System/Custom/folder-group compatibility.
 9. [DONE] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
 10. [DONE] Ensure Dry Run imports FlowEngine directly and has no second routing/recovery model.
 11. [DONE] Migrate all built-in/example/tool/live-probe Workflows to the new flat asset/node/result-edge contract.
@@ -419,26 +419,31 @@ Phase B - unattended reliability proof
 24. 24H high-density soak.
 
 Phase C - code-size/owner cleanup
-25. Measure production runtime LOC after migration.
-26. Remove helpers/config/state fields that only served deleted behavior.
-27. Review every core file over ~300-400 lines for mixed responsibility; split only when it reduces concepts.
-28. Keep the main runtime reading path short:
+25. [IN PROGRESS] Make the runner package readable by folder name alone:
+    - merge AI client/backend ownership into one agent/model execution area;
+    - keep Project/workspace policy separate from Plugin extension hooks;
+    - remove tiny helper modules whose functions have one obvious owner;
+    - avoid folders containing only wrappers/util fragments.
+26. Measure production runtime LOC after structural migration.
+27. Remove helpers/config/state fields that only served deleted behavior.
+28. Review every core file over ~300-400 lines for mixed responsibility; split only when it reduces concepts.
+29. Keep the main runtime reading path short:
       workflow_runner.py
       workflow/flow_engine.py
       workflow/stages/executor.py
       runtime/run_state.py
-29. Regenerate project.bundle.txt only after architecture and asset layout stabilize.
-30. Update README / README.zh-TW / architecture / DevFollow to exactly match the reduced runtime.
+30. Regenerate project.bundle.txt only after architecture and asset layout stabilize.
+31. Update README / README.zh-TW / architecture / DevFollow to exactly match the reduced runtime.
 
 Phase D - future UI family: Dynamic Handoff
-31. Do not implement until A/B/C are stable.
-32. Reuse the exact same Stage node, StageExecutor, StateStore, plugin boundary, Workflow package layout and Graph Designer.
-33. Add only the smallest scheduler/handoff metadata proven by a real use case.
+32. Do not implement until A/B/C are stable.
+33. Reuse the exact same Stage node, StageExecutor, StateStore, plugin boundary, Workflow package layout and Graph Designer.
+34. Add only the smallest scheduler/handoff metadata proven by a real use case.
 
 Phase E - future UI family: Discussion / Group Chat
-34. Do not implement until A/B/C are stable.
-35. Reuse the exact same Stage node/runtime/package/plugin/UI foundations.
-36. Add only bounded round/participant/moderator/termination state when required.
+35. Do not implement until A/B/C are stable.
+36. Reuse the exact same Stage node/runtime/package/plugin/UI foundations.
+37. Add only bounded round/participant/moderator/termination state when required.
 
 Final acceptance
 ----------------
@@ -446,7 +451,7 @@ The refactor is complete only when:
 - adding a new Stage requires implementing its work/result only, with no retry/recover/session code;
 - Linear rollback/loop is only a result edge;
 - API/service failures can retry indefinitely with seconds-based delay without losing durable progress;
-- Workflow/Prompt assets share one editable flat asset layout;
+- Workflow/Prompt assets share one editable asset package with separate workflows/ and prompts/ roots;
 - UI, CLI and YAML List execute the exact same runtime graph;
 - Plugin registration is small and isolated;
 - Windows + Ubuntu CI, real Qwen probes and 24H soak pass.
