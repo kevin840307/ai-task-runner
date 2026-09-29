@@ -11,7 +11,7 @@ from typing import Any
 from ..assets import PROMPT_DIR, WORKFLOW_DIR
 from ..errors import RunnerError
 from ..resources import write_text
-from ..utils.files import io_path
+from ..utils import io_path
 from .schema import (
     validate_routes,
     validate_stage,
