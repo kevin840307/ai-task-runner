@@ -8,7 +8,7 @@ import yaml
 
 from runner.config.runtime import RuntimeConfig
 from runner.script import load_yaml_script
-from runner.script_runner import build_script_item_config
+from runner.script import build_script_item_config
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
