@@ -1,0 +1,197 @@
+"""Built-in semantic Stage profiles: Plan, Task, Review, and AI Validator."""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+
+from ...ai.structured_output import parse_result
+from ...config.defaults import MIN_PLANNED_TASKS
+from ...prompts.loader import render_prompt
+from ...prompts.utils import build_stage_prompt_context
+from ...runtime.run_state import Task
+from ...utils import bounded_text
+from ..utils import decode_tasks
+from .base_stage import (
+    MODE_READONLY,
+    MODE_WRITE,
+    BaseStage,
+    BaseStageSpec,
+    StageContext,
+    StageResult,
+)
+
+
+@dataclass(frozen=True)
+class PlanStageSpec(BaseStageSpec):
+    status: str = "AI 正在產生任務規劃"
+    allow_project_read: bool = True
+    run_state: str = "planning"
+    prompt: str = "common/planning.md"
+    fresh_session_on_start: bool = True
+    min_tasks: int = MIN_PLANNED_TASKS
+
+
+class PlanStage(BaseStage):
+    result_kind = "tasks"
+    backend_mode = "planning"
+    timeout_config_attr = "planning_timeout"
+
+    def __init__(self, spec: PlanStageSpec) -> None:
+        parser = lambda text, ctx: parse_plan_tasks(
+            text,
+            ctx,
+            minimum=spec.min_tasks,
+        )
+        super().__init__(replace(spec, parser=parser))
+
+    def _original_prompt(
+        self,
+        ctx: StageContext,
+        previous: StageResult | None,
+    ) -> str:
+        values = build_stage_prompt_context(ctx, "planning")
+        planning = dict(values["planning"])
+        planning["inspection_summary"] = bounded_text(
+            previous.output if previous else "",
+            12000,
+        )
+        values["planning"] = planning
+        return self._augment_rendered_prompt(
+            ctx,
+            render_prompt(self.spec.prompt, values),
+        )
+
+
+def parse_plan_tasks(
+    text: str,
+    ctx: StageContext,
+    *,
+    minimum: int = MIN_PLANNED_TASKS,
+) -> list[Task]:
+    return parse_result(
+        text,
+        lambda value: decode_tasks(
+            value,
+            cycle=ctx.state.cycle,
+            minimum=minimum,
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class TaskStageSpec(BaseStageSpec):
+    status: str = "AI 正在處理目前任務"
+    run_state: str = "executing"
+    mode: str = MODE_WRITE
+    actor: str = "executor"
+    prompt: str = "common/execution.md"
+    track_changes: bool = True
+
+
+class TaskStage(BaseStage):
+    result_kind = "task"
+
+
+@dataclass(frozen=True)
+class ReviewStageSpec(BaseStageSpec):
+    status: str = "AI 正在確認任務是否完成"
+    run_state: str = "reviewing"
+    mode: str = MODE_READONLY
+    actor: str = "ai"
+    prompt: str = "common/review.md"
+
+
+class ReviewStage(BaseStage):
+    result_kind = "review"
+    parser_name = "review"
+    backend_mode = "review"
+    timeout_config_attr = "planning_timeout"
+    client_cache_key = "review_client"
+    result_flag = "completed"
+
+
+@dataclass(frozen=True)
+class AIValidatorStageSpec(BaseStageSpec):
+    status: str = "正在執行最終 AI 驗證"
+    run_state: str = "validating"
+    mode: str = MODE_READONLY
+    actor: str = "validator"
+    prompt: str = "common/ai_validator.md"
+    ai_validator_yolo: bool | None = None
+    structured_retries: int = 2
+    structured_fresh_retries: int = 1
+    fresh_session_each_run: bool = True
+
+
+class AIValidatorStage(BaseStage):
+    result_kind = "validation"
+    parser_name = "validation"
+    backend_mode = "review"
+    client_cache_key = "ai_validation_client"
+    runs_config_attr = "final_ai_validations"
+    required_passes_config_attr = "final_ai_required_passes"
+    result_flag = "passed"
+
+    def _backend_mode(self, ctx: StageContext) -> str:
+        return "validation" if self._yolo_enabled(ctx) else "review"
+
+    def _augment_rendered_prompt(
+        self,
+        ctx: StageContext,
+        prompt: str,
+    ) -> str:
+        mode = (
+            "Runner final validation mode: YOLO verification is enabled. "
+            "You may write small temporary verification scripts, run command-based checks, "
+            "execute build/code/test commands, and run coverage validation when they materially improve evidence. "
+            "Keep all scripts and generated artifacts in temporary locations or Runner work/debug/cache outputs, never in maintained project source. "
+            "Do not modify production/source files, repair code, create tasks, search for tools, or ask for unavailable tools."
+            if self._yolo_enabled(ctx)
+            else
+            "Runner final validation mode: read-only. Do not modify files, run shell/write/edit tools, create tasks, search for tools, or ask for unavailable tools. Use focused read-only checks when they materially resolve evidence."
+        )
+        instructions = str(
+            getattr(ctx.config, "ai_validator_prompt", "") or ""
+        ).strip()
+        result = prompt.rstrip()
+        if "Runner final validation mode:" not in result:
+            result += "\n\n" + mode + "\n"
+        else:
+            result += "\n"
+        if instructions and instructions not in result:
+            result += (
+                "\nRunner-provided AI validation resource (required):\n"
+                + instructions
+                + "\n"
+            )
+        return result
+
+    def _yolo_enabled(self, ctx: StageContext) -> bool:
+        value = self.spec.ai_validator_yolo
+        if value is None:
+            value = bool(getattr(ctx.config, "ai_validator_yolo", False))
+        return bool(value)
+
+    def enabled(self, ctx: StageContext) -> bool:
+        return bool(
+            ctx.config.workflow_explicit
+            or ctx.validator_is_ai
+            or ctx.config.ai_validator_prompt.strip()
+        )
+
+
+PlanStage.spec_class = PlanStageSpec
+TaskStage.spec_class = TaskStageSpec
+ReviewStage.spec_class = ReviewStageSpec
+AIValidatorStage.spec_class = AIValidatorStageSpec
+
+__all__ = [
+    "AIValidatorStage",
+    "AIValidatorStageSpec",
+    "PlanStage",
+    "PlanStageSpec",
+    "ReviewStage",
+    "ReviewStageSpec",
+    "TaskStage",
+    "TaskStageSpec",
+    "parse_plan_tasks",
+]
