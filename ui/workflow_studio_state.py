@@ -104,7 +104,7 @@ class WorkflowStudioMixin:
         return paths
 
     def _loader_prompt_contracts(self) -> dict[str, list[str]]:
-        """Discover dedicated System Prompt variables from literal render_prompt calls.
+        """Discover dedicated shared Prompt variables from literal render_prompt calls.
 
         `common/rules.md` is not a Stage prompt. It is rendered by the prompt
         loader with its own values. Immutable output/retry protocols live in
@@ -1158,8 +1158,6 @@ class WorkflowStudioMixin:
     @staticmethod
     def _normalize_asset_scope(value: str) -> str:
         scope = str(value or "global").strip().lower()
-        if scope == "custom":
-            scope = "global"
         if scope not in {"global", "project"}:
             raise ValueError("Asset destination must be global or project")
         return scope
