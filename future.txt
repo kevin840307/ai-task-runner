@@ -388,17 +388,17 @@ Phase A - destructive simplification first
    - deterministic configuration/state/programming errors fail closed.
 4. [DONE] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
 5. [DONE] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
-6. [IN PROGRESS] Use one obvious editable asset package with separate concerns:
+6. [DONE] Use one obvious editable asset package with separate concerns:
       runner/assets/
         workflows/*.yaml
         prompts/<category>/*.md
    Prompt categories currently include common, ralphy and workflow; future domains can add another category without runtime changes.
-7. [IN PROGRESS] Keep Project-local assets structurally identical:
+7. [DONE] Keep Project-local assets structurally identical:
       <project>/.ai-task-runner/assets/
         workflows/*.yaml
         prompts/<category>/*.md
    Global and Project assets use the same rules and are both editable.
-8. [IN PROGRESS] Simplify Workflow Studio discovery/editor/export/import for the split asset roots; remove System/Custom/folder-group compatibility.
+8. [DONE] Simplify Workflow Studio discovery/editor/export/import for the split asset roots; remove System/Custom/folder-group compatibility.
 9. [DONE] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
 10. [DONE] Ensure Dry Run imports FlowEngine directly and has no second routing/recovery model.
 11. [DONE] Migrate all built-in/example/tool/live-probe Workflows to the new flat asset/node/result-edge contract.
@@ -426,14 +426,14 @@ Phase C - code-size/owner cleanup
     - generic helpers live in utils.py instead of a utils/ fragment tree;
     - Workflow result handling lives in results.py and frozen run assets in resources.py;
     - no folder exists only to preserve a compatibility wrapper.
-26. [IN PROGRESS] Finish structured asset migration:
+26. [DONE] Finish structured asset migration:
     - Global: runner/assets/workflows/*.yaml
     - Global Prompt categories: runner/assets/prompts/<category>/*.md
     - Project: <project>/.ai-task-runner/assets/workflows/*.yaml and prompts/<category>/*.md
     - remove every pre-assets Prompt/Workflow path after all references move.
-27. [IN PROGRESS] Remove stale imports/tests left by owner merges.
+27. [DONE] Remove stale imports/tests left by owner merges.
     Acceptance: repository search returns zero references to superseded owner modules or pre-assets paths.
-28. [IN PROGRESS] Finish Workflow Studio categorized Prompt support:
+28. [DONE] Finish Workflow Studio categorized Prompt support:
     - recursive Prompt discovery
     - Prompt identity is category-relative key such as common/review.md
     - create/rename/duplicate/import preserve categories safely
