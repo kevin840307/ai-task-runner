@@ -7,7 +7,7 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..utils.files import io_path
+from ..utils import io_path
 from typing import Any
 
 from ..config.defaults import DEFAULT_QWEN_COMMAND
