@@ -218,23 +218,27 @@ Workflow code does not branch on concrete plugins.
 
 ## Workflow / Prompt assets
 
-Global editable assets share one flat folder:
+Editable assets have one obvious package with separate responsibilities:
 
 ```text
-runner/workflows/
-  *.yaml
-  *.md
+runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    *.md
 ```
 
-Project-local editable assets use the identical shape:
+Project-local assets use the identical shape:
 
 ```text
-<project>/.ai-task-runner/workflows/
-  *.yaml
-  *.md
+<project>/.ai-task-runner/assets/
+  workflows/
+    *.yaml
+  prompts/
+    *.md
 ```
 
-Workflow YAML and Prompt Markdown are peer assets. Prompt references are simple relative file names where possible.
+Workflow and Prompt are one product asset package, but different file types never share a directory. Prompt references stay simple names and resolve through the matching Prompt root.
 
 There is no System/Custom split and no read-only built-in asset class.
 
@@ -344,3 +348,15 @@ Again, StageExecutor and StateStore stay shared.
 9. StageExecutor owns Stage technical reliability only.
 10. Future agent models reuse Stage.
 11. Add abstraction only when it removes more complexity than it adds.
+
+
+## Package readability
+
+Folder names should reveal ownership without requiring readers to inspect every file.
+
+Target cleanup:
+- AI client/session/backend adapters belong to one agent/model execution area, not parallel `ai/` and `backends/` concepts.
+- Project/workspace policy is runtime context and must not masquerade as a Plugin.
+- Plugins are only extension/hook boundaries.
+- Tiny generic helpers should move to the module that owns their behavior unless they are reused across multiple domains.
+- Do not create a folder merely to hold one-line wrappers or scattered utility fragments.
