@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..utils.files import atomic_write_text
+from ..utils import atomic_write_text
 
 _MAX_CALLS = 100
 _MAX_BYTES = 50 * 1024 * 1024
