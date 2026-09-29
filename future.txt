@@ -401,7 +401,7 @@ Phase A - destructive simplification first
 8. [DONE] Simplify Workflow Studio discovery/editor/export/import for the unified flat layout; remove System/Custom scope branches and read-only guards.
 9. [DONE] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
 10. [DONE] Ensure Dry Run imports FlowEngine directly and has no second routing/recovery model.
-11. [IN PROGRESS] Migrate all built-in/example/tool/live-probe Workflows to the new flat asset/node/result-edge contract.
+11. [DONE] Migrate all built-in/example/tool/live-probe Workflows to the new flat asset/node/result-edge contract.
 12. [IN PROGRESS] Pass Windows + Ubuntu CI.
 
 Phase B - unattended reliability proof
