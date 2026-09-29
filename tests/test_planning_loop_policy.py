@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.ai.errors import AIError, BackendError
+from runner.agent import AIError, BackendError
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState
 from runner.workflow.stages.contracts import StageContext, StageResult
