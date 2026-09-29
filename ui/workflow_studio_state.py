@@ -228,7 +228,7 @@ class WorkflowStudioMixin:
                 "stages:\n"
                 "  start:\n"
                 "    type: base\n"
-                "    prompt: execution.md\n\n"
+                "    prompt: common/execution.md\n\n"
                 "flow:\n"
                 "  - start\n"
             )
