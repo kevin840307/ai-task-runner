@@ -388,15 +388,15 @@ Phase A - destructive simplification first
    - deterministic configuration/state/programming errors fail closed.
 4. [DONE] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
 5. [DONE] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
-6. [IN PROGRESS] Use one obvious editable asset package with separate concerns:
+6. [DONE] Use one obvious editable asset package with separate concerns:
       runner/assets/
         workflows/*.yaml
-        prompts/*.md
-   Workflow and Prompt stay together under one asset package but are never mixed in one folder.
-7. [IN PROGRESS] Keep Project-local assets structurally identical:
+        prompts/<category>/*.md
+   Prompt categories currently include common, ralphy and workflow; future domains can add another category without runtime changes.
+7. [DONE] Keep Project-local assets structurally identical:
       <project>/.ai-task-runner/assets/
         workflows/*.yaml
-        prompts/*.md
+        prompts/<category>/*.md
    Global and Project assets use the same rules and are both editable.
 8. [IN PROGRESS] Simplify Workflow Studio discovery/editor/export/import for the split asset roots; remove System/Custom/folder-group compatibility.
 9. [DONE] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
@@ -419,11 +419,13 @@ Phase B - unattended reliability proof
 24. 24H high-density soak.
 
 Phase C - code-size/owner cleanup
-25. [IN PROGRESS] Make the runner package readable by folder name alone:
-    - merge AI client/backend ownership into one agent/model execution area;
-    - keep Project/workspace policy separate from Plugin extension hooks;
-    - remove tiny helper modules whose functions have one obvious owner;
-    - avoid folders containing only wrappers/util fragments.
+25. [DONE] Make the runner package readable by folder name alone:
+    - AI client/backend/provider adapters live under agent/;
+    - Project/workspace policy lives in workspace.py, separate from Plugin hooks;
+    - YAML List loading/execution lives in script.py;
+    - generic helpers live in utils.py instead of a utils/ fragment tree;
+    - Workflow result handling lives in results.py and frozen run assets in resources.py;
+    - no folder exists only to preserve a compatibility wrapper.
 26. Measure production runtime LOC after structural migration.
 27. Remove helpers/config/state fields that only served deleted behavior.
 28. Review every core file over ~300-400 lines for mixed responsibility; split only when it reduces concepts.
