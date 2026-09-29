@@ -2,8 +2,8 @@ from pathlib import Path
 
 import yaml
 
-from runner.prompts.protocols import PLAN_PROTOCOL, REVIEW_PROTOCOL
-from runner.workflow.stages.plan_stage import PlanStageSpec
+from runner.prompting import PLAN_PROTOCOL, REVIEW_PROTOCOL
+from runner.workflow.stages import PlanStageSpec
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / "runner" / "assets" / "workflows"
@@ -11,12 +11,12 @@ PROMPTS = ROOT / "runner" / "assets" / "prompts"
 
 
 def text(name: str) -> str:
-    return (PROMPTS / name).read_text(encoding="utf-8")
+    return (PROMPTS / "common" / name).read_text(encoding="utf-8")
 
 
 def test_editable_workflows_and_prompts_have_separate_asset_roots():
     for name in ("rules.md", "planning.md", "execution.md", "review.md", "ai_validator.md"):
-        assert (PROMPTS / name).is_file()
+        assert (PROMPTS / "common" / name).is_file()
     assert not (ROOT / "runner" / "prompts" / "system").exists()
     assert not (ROOT / "runner" / "prompts" / "stages").exists()
 
@@ -124,6 +124,6 @@ def test_editable_prompt_word_budgets_stay_bounded():
 
 
 def test_planning_has_one_editable_prompt_asset():
-    assert PlanStageSpec(name="planning").prompt == "planning.md"
-    assert not (PROMPTS / "planning_rules.md").exists()
-    assert not (PROMPTS / "plan_finalize.md").exists()
+    assert PlanStageSpec(name="planning").prompt == "common/planning.md"
+    assert not (PROMPTS / "common" / "planning_rules.md").exists()
+    assert not (PROMPTS / "common" / "plan_finalize.md").exists()
