@@ -225,7 +225,9 @@ runner/assets/
   workflows/
     *.yaml
   prompts/
-    *.md
+    common/*.md
+    ralphy/*.md
+    workflow/*.md
 ```
 
 Project-local assets use the identical shape:
@@ -235,10 +237,10 @@ Project-local assets use the identical shape:
   workflows/
     *.yaml
   prompts/
-    *.md
+    <category>/*.md
 ```
 
-Workflow and Prompt are one product asset package, but different file types never share a directory. Prompt references stay simple names and resolve through the matching Prompt root.
+Workflow and Prompt are one product asset package, but different file types never share a directory. Prompt identity is category-relative (for example `common/review.md`), so future domains can add their own category without changing the runtime.
 
 There is no System/Custom split and no read-only built-in asset class.
 
