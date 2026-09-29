@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..agent import (
     AIValidationResult,
@@ -18,7 +18,8 @@ from ..errors import ConfigurationError, RunnerError
 from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
-from .stages.base_stage import StageContext, StageResult
+if TYPE_CHECKING:
+    from .stages.base_stage import StageContext, StageResult
 
 MAX_MISSING_ITEMS = 100
 MAX_MISSING_ITEM_CHARS = 1_000
