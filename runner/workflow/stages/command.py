@@ -11,7 +11,7 @@ from typing import Sequence
 
 from ...errors import ConfigurationError, RunnerError
 from ...runtime.process_runner import run_process
-from .contracts import MODE_WRITE, StageContext, StageMode, StageResult
+from .base_stage import MODE_WRITE, StageContext, StageMode, StageResult
 
 
 @dataclass(frozen=True)
