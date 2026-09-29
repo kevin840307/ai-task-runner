@@ -9,7 +9,7 @@ from ...bootstrap import current_runtime
 from ...config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
 from ...errors import ConfigurationError, RunnerError, is_transient_error
 from ...workspace import changed_project_files, project_manifest
-from ...runtime import progress
+from ...runtime import events as progress
 from ...runtime.events import sleep_with_heartbeat
 from .base_stage import (
     MODE_READONLY,
