@@ -50,7 +50,7 @@ def test_strict_undefined_fails_fast(tmp_path):
 def test_review_prompt_and_protocol_split_role_from_shared_control():
     from runner.prompts.protocols import REVIEW_PROTOCOL
 
-    review = (PROMPT_ROOT / "stages" / "review.md").read_text(encoding="utf-8")
+    review = (PROMPT_ROOT / "review.md").read_text(encoding="utf-8")
 
     assert "current TODO only" in review
     assert "adequate evidence" in review
@@ -79,7 +79,7 @@ def test_immutable_protocols_own_structured_contracts():
     assert "never invent a missing item" in STRUCTURED_RETRY_PROTOCOL.lower()
 
 def test_ai_validator_prompt_mode_is_injected_by_stage():
-    prompt = (PROMPT_ROOT / "stages" / "ai_validator.md").read_text(encoding="utf-8")
+    prompt = (PROMPT_ROOT / "ai_validator.md").read_text(encoding="utf-8")
 
     assert "Final validation. This is a fresh independent session." in prompt
     assert "coverage evidence" in prompt
@@ -93,7 +93,7 @@ def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
     assert "observable deliverable" in PLAN_PROTOCOL
     assert "acceptance criteria" in PLAN_PROTOCOL
     assert "Runner owns orchestration" in PLAN_PROTOCOL
-    assert not (PROMPT_ROOT / "stages" / "plan_task_rules.md").exists()
+    assert not (PROMPT_ROOT / "plan_task_rules.md").exists()
 
 
 def test_ai_validator_stage_always_injects_run_level_validation_resource():
@@ -131,7 +131,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
     from runner.workflow.stages.contracts import StageExecution
 
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="execution.md"))
     task = SimpleNamespace(
         last_review={"completed": False, "reason": "missing check", "missing_items": ["x"]}
     )
@@ -141,7 +141,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
         execution=StageExecution(),
         task=task,
         state=state,
-        scratch={"prompt_contracts": {("stages/execution.md", "session-1")}},
+        scratch={"prompt_contracts": {("execution.md", "session-1")}},
     )
 
     continued = stage._shared_control_prompt(ctx, None, client)
@@ -161,10 +161,10 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
 
 
 def test_obsolete_alternate_stage_prompts_are_removed():
-    stages = PROMPT_ROOT / "stages"
     for name in (
         "execution_continue.md",
         "review_continue.md",
         "plan_finalize_same_session.md",
+        "planning_rules.md",
     ):
-        assert not (stages / name).exists()
+        assert not (PROMPT_ROOT / name).exists()
