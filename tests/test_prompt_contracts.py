@@ -3,9 +3,7 @@ from pathlib import Path
 import pytest
 
 from runner.errors import RunnerError
-from runner.prompts import PROMPT_ROOT
-from runner.prompts.context import PROMPT_CONTEXT_KEYS
-from runner.prompts.loader import prompt_variables, render_prompt
+from runner.prompting import PROMPT_CONTEXT_KEYS, PROMPT_ROOT, prompt_variables, render_prompt
 
 SYSTEM_ONLY_KEYS = {"plugin_rules"}
 ALLOWED_PROMPT_KEYS = PROMPT_CONTEXT_KEYS | SYSTEM_ONLY_KEYS
@@ -48,9 +46,9 @@ def test_strict_undefined_fails_fast(tmp_path):
 
 
 def test_review_prompt_and_protocol_split_role_from_shared_control():
-    from runner.prompts.protocols import REVIEW_PROTOCOL
+    from runner.prompting import REVIEW_PROTOCOL
 
-    review = (PROMPT_ROOT / "review.md").read_text(encoding="utf-8")
+    review = (PROMPT_ROOT / "common" / "review.md").read_text(encoding="utf-8")
 
     assert "current TODO only" in review
     assert "adequate evidence" in review
@@ -64,7 +62,7 @@ def test_review_prompt_and_protocol_split_role_from_shared_control():
 
 
 def test_immutable_protocols_own_structured_contracts():
-    from runner.prompts.protocols import (
+    from runner.prompting import (
         PLAN_PROTOCOL, REVIEW_PROTOCOL, VALIDATION_PROTOCOL, STRUCTURED_RETRY_PROTOCOL,
     )
 
