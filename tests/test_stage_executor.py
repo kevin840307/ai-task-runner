@@ -9,7 +9,7 @@ from runner.runtime import events
 from runner.runtime.events import EventBus
 from runner.runtime.run_state import RunState
 from runner.workflow.stages import StageExecutor, StageResult
-from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages import StageContext
 
 
 class Hooks:
