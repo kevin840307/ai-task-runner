@@ -9,9 +9,9 @@ from typing import Any, Literal
 from ...ai.client import configure_ai_client, create_ai_client
 from ...ai.structured_output import structured_call
 from ...errors import ConfigurationError
-from ...prompts.context import build_stage_prompt_context
+from ...prompts.utils import build_stage_prompt_context
 from ...prompts.loader import render_prompt
-from ...prompts.protocols import append_stage_protocol
+from ...prompts.utils import append_stage_protocol
 from .contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 ResultParser = Callable[[str, StageContext], Any]
