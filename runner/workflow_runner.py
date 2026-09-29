@@ -6,7 +6,7 @@ from pathlib import Path
 from .ai.client import create_ai_client
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
-from .project.files import cleanup_stale_artifacts
+from .workspace import cleanup_stale_artifacts
 from .runtime import progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .ui_projects import register_ui_project
