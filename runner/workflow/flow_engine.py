@@ -8,7 +8,7 @@ from typing import Any
 from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..utils import bounded_text
-from .lifecycle import finish_run, finish_task
+from .results import finish_run, finish_task
 from .registry import create_stage, stage_result_kind
 from .stages import StageContext, StageExecutor, StageResult
 
