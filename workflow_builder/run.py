@@ -36,7 +36,8 @@ def parser() -> argparse.ArgumentParser:
     source = p.add_mutually_exclusive_group(required=True)
     source.add_argument("--request", help="Workflow requirements text")
     source.add_argument("--request-file", help="UTF-8 file containing Workflow requirements")
-    p.add_argument("--output-workflow", help="Final Workflow YAML path; required unless --draft-only")
+    p.add_argument("--output-asset-root", help="Final asset root containing workflows/ and prompts/; required unless --draft-only")
+    p.add_argument("--workflow-name", help="Final Workflow YAML file name; required unless --draft-only")
     p.add_argument("--backend", default="", help="Optional Runner backend override")
     p.add_argument("--overwrite", action="store_true", help="Allow replacing existing output files")
     p.add_argument("--draft-only", action="store_true", help="Stop after validated draft creation; do not publish")
@@ -137,7 +138,8 @@ def _prompt_refs(value: Any) -> list[tuple[dict[str, Any], str]]:
 def _publish(
     draft_workflow: Path,
     draft_prompt_dir: Path,
-    output_workflow: Path,
+    output_asset_root: Path,
+    workflow_name: str,
     *,
     overwrite: bool,
 ) -> dict[str, Any]:
@@ -145,8 +147,15 @@ def _publish(
     if not isinstance(data, dict):
         raise ValueError("validated draft Workflow is not a mapping")
 
-    output_workflow = output_workflow.resolve()
-    output_asset_dir = output_workflow.parent
+    output_asset_root = output_asset_root.resolve()
+    workflow_name = Path(workflow_name).name
+    if workflow_name != str(workflow_name) or not workflow_name.lower().endswith((".yaml", ".yml")):
+        raise ValueError("workflow_name must be one YAML file name")
+    output_workflow = (output_asset_root / "workflows" / workflow_name).resolve()
+    workflow_key = Path(workflow_name).stem
+    if workflow_key.endswith(".workflow"):
+        workflow_key = workflow_key[:-9]
+    output_prompt_dir = (output_asset_root / "prompts" / "workflow" / workflow_key).resolve()
     if output_workflow.exists() and not overwrite:
         raise FileExistsError(f"output Workflow already exists: {output_workflow}")
 
@@ -164,16 +173,17 @@ def _publish(
             # Existing external/System Prompt references remain unchanged.
             continue
         if len(rel.parts) != 1:
-            raise ValueError("generated Prompt must publish as one flat Markdown file")
-        target = (output_asset_dir / rel.name).resolve()
+            raise ValueError("generated Prompt must publish as one Markdown file")
+        target = (output_prompt_dir / rel.name).resolve()
         prompt_sources[source] = target
-        owner[key] = target.name
+        owner[key] = f"workflow/{workflow_key}/{rel.name}"
 
     conflicts = [target for target in prompt_sources.values() if target.exists() and not overwrite]
     if conflicts:
         raise FileExistsError("output Prompt already exists: " + ", ".join(str(p) for p in conflicts))
 
     output_workflow.parent.mkdir(parents=True, exist_ok=True)
+    output_prompt_dir.mkdir(parents=True, exist_ok=True)
 
     copied: list[Path] = []
     backups: dict[Path, Path] = {}
@@ -252,11 +262,14 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if not BUILDER_WORKFLOW.is_file() or not (BUILDER_ROOT / "prompt.md").is_file() or not VALIDATOR.is_file():
         raise ValueError("Workflow Builder files are incomplete")
 
-    output_workflow: Path | None = None
+    output_asset_root: Path | None = None
+    workflow_name = ""
     if not args.draft_only:
-        if not args.output_workflow:
-            raise ValueError("--output-workflow is required unless --draft-only is used")
-        output_workflow = Path(args.output_workflow).expanduser().resolve()
+        if not args.output_asset_root or not args.workflow_name:
+            raise ValueError("--output-asset-root and --workflow-name are required unless --draft-only is used")
+        output_asset_root = Path(args.output_asset_root).expanduser().resolve()
+        workflow_name = Path(args.workflow_name).name
+        output_workflow = output_asset_root / "workflows" / workflow_name
         if output_workflow.exists() and not args.overwrite:
             raise FileExistsError(f"output Workflow already exists: {output_workflow}")
 
@@ -360,12 +373,13 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         _write_status(run_root, "ready", "Draft ready. Review it and Save to create the Workflow.", result=manifest)
         return manifest
 
-    assert output_workflow is not None
+    assert output_asset_root is not None and workflow_name
     _write_status(run_root, "running", "Publishing validated Workflow")
     published = _publish(
         draft_workflow,
         draft_prompt_dir,
-        output_workflow,
+        output_asset_root,
+        workflow_name,
         overwrite=args.overwrite,
     )
     manifest["output"] = published
