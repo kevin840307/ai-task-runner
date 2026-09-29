@@ -1,6 +1,6 @@
 import pytest
 
-from runner.ai.structured_output import structured_call
+from runner.agent import structured_call
 from runner.errors import RunnerError, StructuredOutputError
 
 
