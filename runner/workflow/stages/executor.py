@@ -135,7 +135,7 @@ class StageExecutor:
 
         try:
             result = stage.finish(ctx, result)
-            from ..reducers import reduce_result
+            from ..results import reduce_result
 
             produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
             kind = produces or str(getattr(stage, "result_kind", "generic") or "generic")
