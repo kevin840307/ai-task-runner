@@ -2,7 +2,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from runner.ui_projects import register_ui_project
+from runner.workspace import register_ui_project
 
 
 def test_register_ui_project_adds_deduped_project_to_ui_list(tmp_path):
