@@ -7,7 +7,7 @@ from .agent import create_ai_client
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
 from .workspace import cleanup_stale_artifacts, register_ui_project
-from .runtime import progress
+from .runtime import events as progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
 from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
