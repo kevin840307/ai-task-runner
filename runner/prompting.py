@@ -120,8 +120,6 @@ def _task_data(task: Any | None) -> dict[str, Any] | None:
         "acceptance_criteria": list(task.acceptance_criteria),
         "last_output": task.last_output,
         "last_review": task.last_review,
-        "review_skipped": task.review_skipped,
-        "review_skip_reason": task.review_skip_reason,
         "status": task.status,
     }
 
@@ -205,13 +203,8 @@ def build_stage_prompt_context(
             "progress": {
                 "cycle": state.cycle,
                 "validator_feedback": state.validator_output[-8000:],
-                "replan_feedback": state.replan_feedback[-4000:],
                 "completed_tasks": [
                     task.title for task in state.tasks if task.status == "completed"
-                ][-20:],
-                "review_skipped_tasks": [
-                    {"id": task.id, "title": task.title, "reason": task.review_skip_reason}
-                    for task in state.tasks if task.review_skipped
                 ][-20:],
             },
         },
@@ -319,16 +312,6 @@ def structured_retry_prompt(error: str) -> str:
     feedback = str(error or "").strip()[-500:] or "invalid structured output"
     return STRUCTURED_RETRY_PROTOCOL.format(error=feedback)
 
-
-__all__ = [
-    "PLAN_PROTOCOL",
-    "REVIEW_PROTOCOL",
-    "VALIDATION_PROTOCOL",
-    "STRUCTURED_RETRY_PROTOCOL",
-    "append_stage_protocol",
-    "stage_protocol",
-    "structured_retry_prompt",
-]
 
 __all__ = [
     "PROMPT_ROOT",
