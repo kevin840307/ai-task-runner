@@ -6,7 +6,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
-from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages import StageContext
 from runner.workflow.stages.executor import StageExecutor
 
 
