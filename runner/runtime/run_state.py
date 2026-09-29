@@ -15,10 +15,8 @@ from typing import Any
 from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
-from ..utils.files import io_path, same_path
-from ..utils.logs import append_bounded_log
-from ..utils.text import bounded_text
-from .heartbeat import touch_heartbeat
+from ..utils import append_bounded_log, bounded_text, io_path, same_path
+from .events import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
 
