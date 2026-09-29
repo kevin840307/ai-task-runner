@@ -10,7 +10,7 @@ from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, set_stage
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.loader import WORKFLOWS, load_workflow
-from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages import StageContext, StageResult
 
 
 class FakeAI:
