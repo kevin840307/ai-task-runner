@@ -18,7 +18,7 @@ class PlanStageSpec(BaseStageSpec):
     status: str = "AI 正在產生任務規劃"
     allow_project_read: bool = True
     run_state: str = "planning"
-    prompt: str = "planning.md"
+    prompt: str = "common/planning.md"
     fresh_session_on_start: bool = True
     min_tasks: int = MIN_PLANNED_TASKS
 
