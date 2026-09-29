@@ -299,7 +299,7 @@ Workflow 不 branch 具體 Plugin。
 例如：
 
 ```bat
-python tool\workflow_dryrun.py runner\workflows\mixed.yaml --matrix --json
+python tool\workflow_dryrun.py runner\assets\workflows\mixed.yaml --matrix --json
 ```
 
 Dry Run 不維護第二套 Runtime。
