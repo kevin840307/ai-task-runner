@@ -13,7 +13,7 @@ from .runtime import events
 from .runtime.run_state import StateStore
 from .script_loader import load_yaml_script
 from .workflow.loader import load_default_workflow, load_workflow
-from .workflow.snapshot import load_run_resource, load_snapshot
+from .workflow.lifecycle import load_run_resource, load_snapshot
 
 ExecuteOne = Callable[[RuntimeConfig], int]
 
