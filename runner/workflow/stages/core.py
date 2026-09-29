@@ -5,8 +5,7 @@ from dataclasses import dataclass, replace
 
 from ...agent import parse_result
 from ...config.defaults import MIN_PLANNED_TASKS
-from ...prompts.loader import render_prompt
-from ...prompts.utils import build_stage_prompt_context
+from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
 from ...utils import bounded_text
 from ..utils import decode_tasks
