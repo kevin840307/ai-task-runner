@@ -16,7 +16,7 @@
 14. Active/Resume Run 必須凍結會影響 AI 行為的 Workflow、Prompt、Goal、Final-AI Prompt；YAML List child 同樣適用。
 15. Prompt 使用 bounded context。Same Session 不重送 Goal/Rules/完整 contract，只增加新 TODO/Review/Validator/error evidence。
 16. Backend parity：完整 Agent Prompt 走 stdin；session/sandbox/permission/error parsing/timeout identity 屬於 Backend adapter，Workflow/Stage 不 branch Qwen/OpenCode。
-17. Workflow/Prompt 全域資產統一放 `runner/workflows/*.{yaml,yml,md}`；Project 資產統一放 `<project>/.ai-task-runner/workflows/`，兩邊 shape 相同且可編輯。
+17. Global 資產統一放 `runner/assets/workflows/*.yaml` 與 `runner/assets/prompts/<category>/*.md`；Project 使用 `<project>/.ai-task-runner/assets/workflows/` 與 `prompts/`，兩邊 shape 相同且可編輯。
 18. UI 是同一張 n8n-style graph 的編輯器；CLI/API/YAML List 都只是 RunRequest adapter，不可擁有第二套路由或 recovery。
 19. Dry Run 必須重用正式 Workflow Loader + FlowEngine，只 mock Stage result。
 20. Plugin 只有一個 discovery boundary：`runner/plugins/registry.py`；外部統一使用 `ai_task_runner.plugins`。
