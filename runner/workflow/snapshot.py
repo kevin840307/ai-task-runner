@@ -8,7 +8,7 @@ from typing import Any
 
 from ..errors import ConfigurationError, RunnerError
 from ..resources import text_hash, write_text
-from ..utils.files import io_path
+from ..utils import io_path
 from .schema import validate_stage, validate_topology
 
 SNAPSHOT_FILE = "workflow.snapshot.json"
