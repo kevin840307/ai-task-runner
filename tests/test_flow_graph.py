@@ -9,7 +9,7 @@ import runner.workflow.flow_engine as flow_engine_module
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.flow_engine import FlowEngine
-from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages import StageContext, StageResult
 
 
 class Stage:
