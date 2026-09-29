@@ -10,7 +10,7 @@ from typing import Any
 from ..ai.contracts import BackendMode, BackendResult
 from ..config.defaults import DEFAULT_OPENCODE_COMMAND
 from ..ai.errors import BackendError
-from ..project.instructions import ensure_instruction_file, update_goal_reference
+from ..workspace import ensure_instruction_file, update_goal_reference
 from .base import BaseBackend
 
 OPENCODE_CONFIG_CONTENT = "OPENCODE_CONFIG_CONTENT"
