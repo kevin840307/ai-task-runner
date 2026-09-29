@@ -141,7 +141,7 @@ class ProjectRuntimeMixin:
     def backend_catalog(self) -> dict:
         """Return backend names without importing Runner Core into the UI."""
         names: set[str] = set()
-        backends_root = self.repo_root / "runner" / "backends"
+        backends_root = self.repo_root / "runner" / "agent"
         for path in backends_root.glob("*.py") if backends_root.is_dir() else ():
             if path.name.startswith("_"):
                 continue
@@ -174,31 +174,6 @@ class ProjectRuntimeMixin:
         if default:
             names.add(default)
         return {"default": default, "backends": sorted(names)}
-
-    def execution_mode_catalog(self) -> dict:
-        """Return the Runner-owned top-level orchestration catalog."""
-        tool = self.repo_root / "tool" / "execution_mode_catalog.py"
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(tool)],
-                cwd=str(self.repo_root),
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ValueError(f"Execution mode catalog unavailable: {exc}") from exc
-        if completed.returncode != 0:
-            detail = (completed.stderr or completed.stdout or "").strip()
-            raise ValueError("Execution mode catalog failed: " + detail[-2000:])
-        try:
-            payload = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            raise ValueError("Execution mode catalog returned invalid JSON") from exc
-        if not isinstance(payload, dict):
-            raise ValueError("Execution mode catalog must be an object")
-        return payload
 
     def workflow_catalog(self) -> dict:
         """Return the Runner-owned Stage/editor contract without importing Core."""
