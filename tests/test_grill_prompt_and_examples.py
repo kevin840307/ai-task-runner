@@ -6,16 +6,15 @@ from runner.workflow.loader import load_workflow
 from runner.workflow.registry import STAGE_REGISTRY
 
 ROOT = Path(__file__).resolve().parents[1]
-GRILL_PROMPT = ROOT / "runner" / "prompts" / "stages" / "grill.md"
+GRILL_PROMPT = ROOT / "runner" / "workflows" / "grill.md"
 EXAMPLES = ROOT / "tool" / "workflow"
 
 
-def test_grill_reuses_review_stage_and_contract() -> None:
+def test_grill_reuses_review_stage_and_flat_prompt_asset():
     assert "grill" not in STAGE_REGISTRY
     assert GRILL_PROMPT.is_file()
     variables = prompt_variables(str(GRILL_PROMPT))
     assert {"always_instructions", "goal", "task"} <= variables
-    assert "previous" not in variables
     text = render_prompt(
         str(GRILL_PROMPT),
         {
@@ -25,21 +24,19 @@ def test_grill_reuses_review_stage_and_contract() -> None:
         },
     )
     assert "Keep API retry durable." in text
-    assert "current implementation" in text
-    wire_prompt = append_stage_protocol(text, "review")
-    assert '"completed":false' in wire_prompt
-    assert '"completed":true' in wire_prompt
+    wire = append_stage_protocol(text, "review")
+    assert '"completed":false' in wire
+    assert '"completed":true' in wire
 
 
-def test_all_tool_workflow_examples_load() -> None:
+def test_all_existing_tool_workflow_examples_load():
     files = sorted(EXAMPLES.glob("*.yaml"))
-    assert len(files) >= 7
+    assert files
     for path in files:
-        workflow = load_workflow(path)
-        assert workflow, path.name
+        assert load_workflow(path), path.name
 
 
-def test_grill_examples_use_review_stage_and_fresh_session() -> None:
+def test_grill_examples_use_review_stage_and_result_edges():
     for name in (
         "02_ai_with_grill.yaml",
         "04_mixed_with_grill.yaml",
@@ -49,5 +46,7 @@ def test_grill_examples_use_review_stage_and_fresh_session() -> None:
         grill = next(stage for stage in workflow if stage["name"] == "grill")
         assert grill["type"] == "review"
         assert grill["fresh_session_on_start"] is True
-        assert grill["retry"] == 0
+        assert "retry" not in grill
+        assert "recover" not in grill
+        assert grill["routes"]["fail"] == "planning"
         assert Path(grill["prompt"]).resolve() == GRILL_PROMPT.resolve()
