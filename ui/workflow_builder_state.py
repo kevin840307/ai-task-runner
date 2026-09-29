@@ -344,12 +344,12 @@ class WorkflowBuilderMixin:
             status = self._read_json(job_root / "status.json") or {}
             if status.get("state") != "ready":
                 raise ValueError("Workflow Builder draft is not ready to Save")
-            raw, _folder, scope, output_workflow, _asset_root = self._workflow_output_paths(project, "", filename, destination)
+            raw, _folder, scope, output_workflow, asset_root = self._workflow_output_paths(project, "", filename, destination)
             if output_workflow.exists():
                 raise ValueError(f"Workflow already exists: {output_workflow.name}")
             draft_workflow, draft_prompt_dir = self._builder_apply_edits(job_root, status, workflow_content, prompt_rows)
             self._builder_validate_draft(job_root, draft_workflow, draft_prompt_dir)
-            command = [sys.executable, str(self.repo_root / "workflow_builder" / "publish.py"), "--project-root", str(job_root), "--draft-workflow", str(draft_workflow), "--draft-prompt-dir", str(draft_prompt_dir), "--output-workflow", str(output_workflow)]
+            command = [sys.executable, str(self.repo_root / "workflow_builder" / "publish.py"), "--project-root", str(job_root), "--draft-workflow", str(draft_workflow), "--draft-prompt-dir", str(draft_prompt_dir), "--output-asset-root", str(asset_root), "--workflow-name", raw]
             result_process = self._process_module.run(command, cwd=self.repo_root, capture_output=True, text=True, timeout=75)
             if result_process.returncode != 0:
                 raise ValueError("Workflow draft publish failed: " + (result_process.stdout or result_process.stderr or "")[-12000:])
@@ -357,7 +357,7 @@ class WorkflowBuilderMixin:
             file_data = self.studio_read(item["id"], project)
             shutil.rmtree(job_root, ignore_errors=True)
             self._builder_clear_active(job_id)
-            return {"ok": True, "workflow": str(output_workflow), "asset_dir": str(output_workflow.parent), "item": item, "file": file_data, "message": f"Workflow {raw} saved"}
+            return {"ok": True, "workflow": str(output_workflow), "asset_dir": str(asset_root), "item": item, "file": file_data, "message": f"Workflow {raw} saved"}
 
     def studio_generate_cancel(self, job_id: str) -> dict:
         with self._builder_lock:
