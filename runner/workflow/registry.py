@@ -7,10 +7,9 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
-from .stages.ai_stage import AIValidatorStage, ReviewStage, TaskStage
+from .stages.core import AIValidatorStage, PlanStage, ReviewStage, TaskStage
 from .stages.base_stage import BaseStage
 from .stages.command import CommandStage
-from .stages.plan_stage import PlanStage
 
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
