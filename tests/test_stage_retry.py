@@ -8,7 +8,7 @@ from runner.config.defaults import DEFAULT_PER_SESSION_ATTEMPTS, DEFAULT_STAGE_R
 from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState
-from runner.workflow.stages.contracts import StageContext, StageResult
+from runner.workflow.stages import StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
 
 
