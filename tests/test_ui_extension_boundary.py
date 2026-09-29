@@ -8,7 +8,7 @@ import pytest
 
 from runner.errors import RunnerError
 from runner.plugins.registry import discover_plugins
-from runner.prompts.loader import save_prompt
+from runner.prompting import save_prompt
 from runner.resources import read_text
 from runner.workflow.loader import load_workflow, save_workflow
 from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog, workflow_catalog
