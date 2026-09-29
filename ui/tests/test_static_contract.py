@@ -477,18 +477,19 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertIn(".workflow-builder-running{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
         self.assertIn(".workflow-builder-failed{min-height:0;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center", css)
 
-    def test_ai_workflow_builder_input_uses_folder_and_filename(self):
+    def test_ai_workflow_builder_uses_filename_and_destination_without_folder(self):
         form = self.html[self.html.index('id="generateWorkflowForm"'):self.html.index('id="generateWorkflowRunning"')]
         self.assertIn('id="generateWorkflowRequest"', form)
-        self.assertIn('id="generateWorkflowFolder"', form)
         self.assertIn('id="generateWorkflowFilename"', form)
         self.assertIn('id="generateWorkflowBackend"', form)
+        self.assertNotIn('id="generateWorkflowFolder"', form)
         self.assertNotIn('id="generateWorkflowDestination"', form)
         save = self.html[self.html.index('id="generateWorkflowSaveBackdrop"'):self.html.index('id="importAssetBackdrop"')]
-        self.assertIn('id="generateWorkflowSaveFolder"', save)
+        self.assertNotIn('id="generateWorkflowSaveFolder"', save)
         self.assertIn('id="generateWorkflowSaveFilename"', save)
         self.assertIn('id="generateWorkflowDestination"', save)
         self.assertIn('id="generateWorkflowSavePathPreview"', save)
+        self.assertIn('runner/assets/prompts/workflow/&lt;workflow-name&gt;/', save)
 
 
     def test_ai_workflow_builder_input_layout_keeps_meta_below_prompt(self):
