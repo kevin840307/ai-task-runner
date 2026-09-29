@@ -6,7 +6,7 @@ from runner.workflow.loader import load_workflow
 from runner.workflow.registry import STAGE_REGISTRY
 
 ROOT = Path(__file__).resolve().parents[1]
-GRILL_PROMPT = ROOT / "runner" / "workflows" / "grill.md"
+GRILL_PROMPT = ROOT / "runner" / "assets" / "prompts" / "grill.md"
 EXAMPLES = ROOT / "tool" / "workflow"
 
 
