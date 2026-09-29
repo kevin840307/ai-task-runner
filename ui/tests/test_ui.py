@@ -1037,7 +1037,7 @@ class WorkflowStudioTests(unittest.TestCase):
 
         imported = self.state.studio_import(
             "prompt",
-            "imported.md",
+            "common/imported.md",
             "{{ goal }}\n",
             "project",
             self.project,
