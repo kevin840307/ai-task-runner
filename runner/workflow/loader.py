@@ -24,7 +24,6 @@ WORKFLOWS = {
     "mixed": WORKFLOW_DIR / "mixed.yaml",
     "file": WORKFLOW_DIR / "file.yaml",
     "ai": WORKFLOW_DIR / "ai.yaml",
-    "workflow_builder": WORKFLOW_DIR / "workflow_builder.yaml",
     "ralphy_ai_validate": WORKFLOW_DIR / "ralphy_ai_validate.yaml",
 }
 DEFAULT_WORKFLOW = WORKFLOWS["mixed"]
