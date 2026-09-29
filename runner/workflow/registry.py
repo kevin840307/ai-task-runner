@@ -89,7 +89,7 @@ def create_stage(definition: dict[str, Any]):
 
     parser = values.get("parser")
     if isinstance(parser, str):
-        from .result_parsers import PARSERS
+        from .utils import PARSERS
         try:
             values["parser"] = PARSERS[parser]
         except KeyError as error:
@@ -109,7 +109,7 @@ def _field_info(item: Any) -> dict[str, Any]:
         "type": _type_name(item.type),
     }
     if item.name == "parser":
-        from .result_parsers import PARSERS
+        from .utils import PARSERS
         result["type"] = "enum"
         result["values"] = sorted(PARSERS)
     if item.name == "produces":
