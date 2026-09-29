@@ -1164,13 +1164,20 @@ class WorkflowStudioMixin:
             raise ValueError("Asset destination must be global or project")
         return scope
 
-    def _asset_root(self, kind: str, scope: str, project: Path | None) -> Path:
+    def _asset_package_root(self, scope: str, project: Path | None) -> Path:
         scope = self._normalize_asset_scope(scope)
         if scope == "global":
-            return self._global_asset_root(kind)
+            return (self.repo_root / "runner" / "assets").resolve()
         if project is None:
             raise ValueError("Select a Project before using Project assets")
-        return project_asset_root(project, kind)
+        return (project.resolve() / ".ai-task-runner" / "assets").resolve()
+
+    def _asset_root(self, kind: str, scope: str, project: Path | None) -> Path:
+        package = self._asset_package_root(scope, project)
+        name = "workflows" if kind == "workflow" else "prompts" if kind == "prompt" else ""
+        if not name:
+            raise ValueError("asset kind must be workflow or prompt")
+        return (package / name).resolve()
 
     def _workflow_output_paths(
         self,
@@ -1182,10 +1189,10 @@ class WorkflowStudioMixin:
         del folder
         raw = self._normalize_studio_asset_name("workflow", filename)
         scope = self._normalize_asset_scope(destination)
-        root = self._asset_root("workflow", scope, project)
-        root.mkdir(parents=True, exist_ok=True)
-        output = (root / raw).resolve()
-        return raw, "", scope, output, root
+        workflow_root = self._asset_root("workflow", scope, project)
+        workflow_root.mkdir(parents=True, exist_ok=True)
+        output = (workflow_root / raw).resolve()
+        return raw, "", scope, output, self._asset_package_root(scope, project)
 
     def _studio_item(
         self,
