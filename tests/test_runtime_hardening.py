@@ -7,7 +7,7 @@ from pathlib import Path
 from runner.config.defaults import MAX_PROCESS_OUTPUT_CHARS
 from runner.runtime.process_runner import run_process
 from runner.runtime.run_state import RunState, StateStore, _write_json
-from runner.utils.files import atomic_write_text
+from runner.utils import atomic_write_text
 
 
 def _state(root: Path, *, cycle: int, stage: str) -> RunState:
