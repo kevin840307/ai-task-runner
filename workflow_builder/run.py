@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from workflow_builder.runner_control import GenerationCancelled, run_with_recovery
+from workflow_builder.runner_control import GenerationCancelled, run_runner
 
 BUILDER_ROOT = Path(__file__).resolve().parent
 BUILDER_WORKFLOW = BUILDER_ROOT / "workflow_builder.yaml"
@@ -311,8 +311,6 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         str(goal_file),
         "--workflow",
         str(runtime_builder_workflow),
-        "--max-cycles",
-        "6",
         "--validator-arg=--draft-workflow",
         f"--validator-arg={rel_workflow}",
         "--validator-arg=--draft-prompt-dir",
@@ -321,17 +319,16 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if args.backend:
         command += ["--backend", args.backend]
 
-    returncode, runner_log = run_with_recovery(
+    returncode, runner_log = run_runner(
         command,
         run_root=run_root,
         project=project,
         write_status=_write_status,
         process_kwargs=_runner_process_kwargs,
-        max_attempts=2,
     )
     if returncode != 0:
         diagnostic = runner_log.strip()
-        message = "Workflow generation could not complete after automatic recovery"
+        message = "Workflow generation did not complete"
         if diagnostic:
             message += ": " + diagnostic[-4000:]
         message += f"\nDraft kept at {draft_root}"
