@@ -22,7 +22,7 @@ from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text, io_path
 from .schema import validate_stage, validate_topology
-from .stages.contracts import StageContext, StageResult
+from .stages.base_stage import StageContext, StageResult
 
 MAX_MISSING_ITEMS = 100
 MAX_MISSING_ITEM_CHARS = 1_000
