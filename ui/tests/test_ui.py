@@ -846,16 +846,18 @@ class WorkflowStudioTests(unittest.TestCase):
             "class QwenBackend: name='qwen'\n",
             encoding="utf-8",
         )
-        (self.root / "runner" / "prompts" / "context.py").write_text(
-            "def _task_data(task): return {'id':'','title':'','description':''}\n"
-            "def build_stage_prompt_context(ctx, stage, previous=None): "
-            "return {'goal':'','stage':stage,'task':_task_data(None),'project':{'root':''},"
-            "'previous':{'output':''},'validation':{'feedback':''}}\n",
+        (self.root / "runner" / "agent" / "opencode.py").write_text(
+            "class OpenCodeBackend: name='opencode'\n",
             encoding="utf-8",
         )
-        (self.root / "runner" / "prompts" / "loader.py").write_text(
+        (self.root / "runner" / "prompting.py").write_text(
+            "def _task_data(task): return {'id':'','title':'','description':'','acceptance_criteria':[]}\n"
+            "def build_stage_prompt_context(ctx, stage, previous=None): "
+            "return {'goal':'','stage':stage,'task':_task_data(None),'project':{'root':''},"
+            "'previous':{'output':'','status':'','data':{}},"
+            "'validation':{'feedback':''},'workflow':{'validator_feedback':''}}\n"
             "def render_prompt(name, values=None): return ''\n"
-            "def ai_rules(root): return render_prompt('rules.md', {'project': {'root': str(root)}, 'plugin_rules': ''})\n",
+            "def ai_rules(root): return render_prompt('common/rules.md', {'project': {'root': str(root)}, 'plugin_rules': ''})\n",
             encoding="utf-8",
         )
 
