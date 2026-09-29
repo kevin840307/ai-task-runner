@@ -15,7 +15,7 @@ from typing import Any
 
 from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
 from ..utils import atomic_write_text, bounded_text, io_path
-from .heartbeat import touch_heartbeat
+from .events import touch_heartbeat
 
 
 TERMINATION_GRACE_SECONDS = 5
