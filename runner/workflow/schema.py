@@ -53,12 +53,6 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     if produces not in {None, "", "tasks"}:
         raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
 
-    retry = values.get("retry")
-    if retry is not None and (
-        not isinstance(retry, int) or isinstance(retry, bool) or retry < -1
-    ):
-        raise RunnerError(f"workflow stage {name} retry must be -1 or non-negative")
-
     runs = values.get("runs")
     required = values.get("required_passes")
     if runs is not None and (
