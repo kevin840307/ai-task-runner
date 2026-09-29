@@ -146,7 +146,7 @@ def test_latest_custom_workflow_uses_python_task_producer():
     assert workflow[3]["type"] == "command"
 
 
-def test_validation_modes_example_maps_to_system_workflows():
+def test_validation_modes_example_maps_to_builtin_workflows():
     script = EXAMPLES / "validation_modes.yaml"
     items = load_yaml_script(script)
     config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
@@ -337,7 +337,7 @@ def test_example_temp_runner_external_workflow_stays_on_source_repo(tmp_path, mo
     data = yaml.safe_load(script.read_text(encoding="utf-8"))
     workflow = Path(data[0]["workflow_file"])
     assert workflow.is_absolute()
-    assert workflow == (ROOT / "runner" / "workflows" / "ralphy_ai_validate.yaml").resolve()
+    assert workflow == (ROOT / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml").resolve()
     assert not (workspace / "tool").exists()
 
 
