@@ -68,14 +68,14 @@ def test_graph_does_not_inject_hidden_plan_nodes_or_retry_edges():
     graph = build_workflow_graph({
         "stages": {
             "planning": {"type": "plan"},
-            "execute": {"type": "task"},
-            "review": {"type": "review", "routes": {"fail": "execute"}},
+            "execute": {"type": "task", "scope": "task"},
+            "review": {
+                "type": "review",
+                "scope": "task",
+                "routes": {"fail": "execute"},
+            },
         },
-        "flow": [
-            "planning",
-            {"stage": "execute", "scope": "task"},
-            {"stage": "review", "scope": "task"},
-        ],
+        "flow": ["planning", "execute", "review"],
     })
 
     ids = {node["id"] for node in graph["nodes"]}
