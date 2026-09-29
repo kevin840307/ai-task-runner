@@ -55,7 +55,7 @@ class WorkflowStudioMixin:
                 for path in sorted(workflow_root.glob("*.yaml")) + sorted(workflow_root.glob("*.yml")):
                     workflows.append(self._studio_item(path, scope, "workflow", visibility))
             if prompt_root.is_dir():
-                for path in sorted(prompt_root.glob("*.md")):
+                for path in sorted(prompt_root.rglob("*.md")):
                     prompts.append(self._studio_item(path, scope, "prompt"))
 
         order = {"global": 0, "project": 1}
@@ -828,7 +828,8 @@ class WorkflowStudioMixin:
             root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if target.exists():
-                raise ValueError(f"Prompt already exists: {target.name}")
+                raise ValueError(f"Prompt already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
                 handle.write("# Prompt\n\n{{ goal }}\n")
@@ -862,10 +863,18 @@ class WorkflowStudioMixin:
             if not re.fullmatch(r"[A-Za-z0-9_. -]+\.ya?ml", raw, re.IGNORECASE):
                 raise ValueError("Workflow file name contains unsupported characters")
         elif kind == "prompt":
+            raw = raw.replace("\\", "/")
             if not raw.lower().endswith(".md"):
                 raw += ".md"
-            if not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", raw, re.IGNORECASE):
-                raise ValueError("Prompt file name contains unsupported characters")
+            prompt_path = Path(raw)
+            if prompt_path.is_absolute() or any(part in {"", ".", ".."} for part in prompt_path.parts):
+                raise ValueError("Prompt name must be a safe relative path")
+            if any(
+                not re.fullmatch(r"[A-Za-z0-9_. -]+", part, re.IGNORECASE)
+                for part in prompt_path.parts[:-1]
+            ) or not re.fullmatch(r"[A-Za-z0-9_. -]+\.md", prompt_path.name, re.IGNORECASE):
+                raise ValueError("Prompt path contains unsupported characters")
+            raw = prompt_path.as_posix()
         else:
             raise ValueError("Unsupported Studio asset kind")
         return raw
@@ -900,7 +909,8 @@ class WorkflowStudioMixin:
                 item = self._studio_item(path, scope, kind)
                 return {"item": item, "file": self.studio_read(item["id"], project)}
             if target.exists():
-                raise ValueError(f"{kind.title()} already exists: {target.name}")
+                raise ValueError(f"{kind.title()} already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             content = path.read_text(encoding="utf-8")
             if kind == "workflow":
                 self._validate_workflow_before_write(target, content)
@@ -924,7 +934,8 @@ class WorkflowStudioMixin:
             root.mkdir(parents=True, exist_ok=True)
             target = (root / raw).resolve()
             if target.exists():
-                raise ValueError(f"{kind.title()} already exists: {target.name}")
+                raise ValueError(f"{kind.title()} already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             content = path.read_text(encoding="utf-8")
             if kind == "workflow":
                 self._validate_workflow_before_write(target, content)
@@ -1077,7 +1088,8 @@ class WorkflowStudioMixin:
             raw = self._normalize_studio_asset_name(kind, name or f"imported-{kind}")
             target = (root / raw).resolve()
             if target.exists():
-                raise ValueError(f"Asset already exists: {target.name}")
+                raise ValueError(f"Asset already exists: {raw}")
+            target.parent.mkdir(parents=True, exist_ok=True)
             text = str(content or "")
             if not text.strip():
                 raise ValueError("Imported content is empty")
@@ -1183,10 +1195,17 @@ class WorkflowStudioMixin:
         workflow_visibility: dict[str, bool] | None = None,
     ) -> dict:
         resolved = path.resolve()
+        prompt_key = ""
+        if kind == "prompt":
+            for parent in resolved.parents:
+                if parent.name == "prompts" and parent.parent.name == "assets":
+                    prompt_key = resolved.relative_to(parent).as_posix()
+                    break
         item = {
             "id": self._encode_file_id(resolved, kind, scope),
             "name": path.name,
-            "display_name": path.name,
+            "display_name": prompt_key or path.name,
+            "reference": prompt_key or path.name,
             "path": str(resolved),
             "scope": scope,
             "group": "Global" if scope == "global" else "Project",
@@ -1229,8 +1248,11 @@ class WorkflowStudioMixin:
         if not path.is_file() or path.suffix.lower() not in EDITABLE_SUFFIXES:
             raise ValueError("Workflow/prompt file does not exist")
         root = self._asset_root(kind, scope, project).resolve()
-        if path.parent != root:
-            raise ValueError("File is outside allowed Workflow asset root")
+        if kind == "workflow":
+            if path.parent != root:
+                raise ValueError("Workflow must live directly in the Workflow asset root")
+        elif not self._is_within(path, root):
+            raise ValueError("Prompt is outside allowed Prompt asset root")
         if kind == "workflow" and path.suffix.lower() not in {".yaml", ".yml"}:
             raise ValueError("Workflow asset must be YAML")
         if kind == "prompt" and path.suffix.lower() != ".md":
