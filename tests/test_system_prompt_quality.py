@@ -6,16 +6,17 @@ from runner.prompts.protocols import PLAN_PROTOCOL, REVIEW_PROTOCOL
 from runner.workflow.stages.plan_stage import PlanStageSpec
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSETS = ROOT / "runner" / "workflows"
+WORKFLOWS = ROOT / "runner" / "assets" / "workflows"
+PROMPTS = ROOT / "runner" / "assets" / "prompts"
 
 
 def text(name: str) -> str:
-    return (ASSETS / name).read_text(encoding="utf-8")
+    return (PROMPTS / name).read_text(encoding="utf-8")
 
 
-def test_all_editable_prompts_share_the_flat_workflow_asset_folder():
+def test_editable_workflows_and_prompts_have_separate_asset_roots():
     for name in ("rules.md", "planning.md", "execution.md", "review.md", "ai_validator.md"):
-        assert (ASSETS / name).is_file()
+        assert (PROMPTS / name).is_file()
     assert not (ROOT / "runner" / "prompts" / "system").exists()
     assert not (ROOT / "runner" / "prompts" / "stages").exists()
 
@@ -80,7 +81,7 @@ def test_builtin_workflows_use_explicit_plan_execute_review_validator_nodes():
         "mixed.yaml": ["planning", "execute", "review", "validate_file", "validate_ai"],
     }
     for name, flow in expected.items():
-        data = yaml.safe_load((ASSETS / name).read_text(encoding="utf-8"))
+        data = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
         assert data["flow"] == flow
         assert data["stages"]["execute"]["scope"] == "task"
         assert data["stages"]["review"]["scope"] == "task"
@@ -88,9 +89,9 @@ def test_builtin_workflows_use_explicit_plan_execute_review_validator_nodes():
 
 
 def test_builtin_validation_edges_close_back_through_planning():
-    ai = yaml.safe_load((ASSETS / "ai.yaml").read_text(encoding="utf-8"))
-    file = yaml.safe_load((ASSETS / "file.yaml").read_text(encoding="utf-8"))
-    mixed = yaml.safe_load((ASSETS / "mixed.yaml").read_text(encoding="utf-8"))
+    ai = yaml.safe_load((WORKFLOWS / "ai.yaml").read_text(encoding="utf-8"))
+    file = yaml.safe_load((WORKFLOWS / "file.yaml").read_text(encoding="utf-8"))
+    mixed = yaml.safe_load((WORKFLOWS / "mixed.yaml").read_text(encoding="utf-8"))
 
     assert ai["stages"]["validate_ai"]["routes"]["fail"] == "planning"
     assert file["stages"]["validate_file"]["routes"]["fail"] == "planning"
@@ -100,7 +101,7 @@ def test_builtin_validation_edges_close_back_through_planning():
 
 def test_final_ai_vote_contract_uses_independent_sessions():
     for name in ("ai.yaml", "mixed.yaml"):
-        data = yaml.safe_load((ASSETS / name).read_text(encoding="utf-8"))
+        data = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
         stage = data["stages"]["validate_ai"]
         assert stage["fresh_session_each_run"] is True
         assert stage["runs"] == 3
@@ -124,5 +125,5 @@ def test_editable_prompt_word_budgets_stay_bounded():
 
 def test_planning_has_one_editable_prompt_asset():
     assert PlanStageSpec(name="planning").prompt == "planning.md"
-    assert not (ASSETS / "planning_rules.md").exists()
-    assert not (ASSETS / "plan_finalize.md").exists()
+    assert not (PROMPTS / "planning_rules.md").exists()
+    assert not (PROMPTS / "plan_finalize.md").exists()
