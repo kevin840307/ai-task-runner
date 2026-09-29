@@ -22,7 +22,7 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 def test_builtin_mixed_dryrun_reaches_closure_through_result_edges():
     result = run(
-        "runner/workflows/mixed.yaml",
+        "runner/assets/workflows/mixed.yaml",
         "--scenario",
         "dryrunexample/system_mixed_scenario.yaml",
     )
@@ -70,7 +70,7 @@ flow:
 
 
 def test_dryrun_matrix_covers_semantic_routes_and_safe_stop():
-    result = run("runner/workflows/mixed.yaml", "--matrix", "--json")
+    result = run("runner/assets/workflows/mixed.yaml", "--matrix", "--json")
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
 
@@ -136,7 +136,7 @@ flow: [work]
 
 def test_ralphy_minimal_execute_validate_loop_closes():
     result = run(
-        "runner/workflows/ralphy_ai_validate.yaml",
+        "runner/assets/workflows/ralphy_ai_validate.yaml",
         "--matrix",
         "--json",
     )
@@ -151,7 +151,7 @@ def test_ralphy_minimal_execute_validate_loop_closes():
 
 
 def test_dryrun_json_contract_is_small_and_machine_readable():
-    result = run("runner/workflows/file.yaml", "--json")
+    result = run("runner/assets/workflows/file.yaml", "--json")
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
 
