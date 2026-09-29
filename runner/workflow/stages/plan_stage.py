@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from ...ai.structured_output import parse_result
 from ...config.defaults import MIN_PLANNED_TASKS
-from ...prompts.context import build_stage_prompt_context
+from ...prompts.utils import build_stage_prompt_context
 from ...prompts.loader import render_prompt
 from ...runtime.run_state import Task
 from ..task_output import decode_tasks
