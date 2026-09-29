@@ -157,8 +157,8 @@ def test_plugin_setup_registration_happens_before_catalog_validation(monkeypatch
 
 def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path):
     from runner.config.runtime import RuntimeConfig
-    from runner.script_loader import load_yaml_script
-    from runner.script_runner import build_script_item_config
+    from runner.script import load_yaml_script
+    from runner.script import build_script_item_config
 
     workflow_file = tmp_path / "workflow.yaml"
     workflow_file.write_text(_workflow_text(), encoding="utf-8")
@@ -189,7 +189,7 @@ def test_yaml_child_resume_uses_snapshot_before_changed_workflow_source(tmp_path
 
 
 def test_ui_editor_uses_owner_modules_without_exposure_facade():
-    from runner.prompts.loader import save_prompt
+    from runner.prompting import save_prompt
     from runner.resources import delete, read_text
     from runner.workflow.loader import save_workflow
     from runner.workflow.registry import stage_catalog
@@ -200,7 +200,7 @@ def test_ui_editor_uses_owner_modules_without_exposure_facade():
 
 def test_resume_prefers_frozen_goal_and_ai_validator_prompt_when_sources_are_gone(tmp_path):
     from runner.api import RunRequest
-    from runner.workflow.snapshot import freeze_run_resource
+    from runner.resources import freeze_run_resource
 
     goal = tmp_path / "goal.md"
     ai_prompt = tmp_path / "ai-validation.md"
@@ -228,9 +228,9 @@ def test_resume_prefers_frozen_goal_and_ai_validator_prompt_when_sources_are_gon
 
 def test_yaml_child_resume_uses_frozen_files_after_source_deletion(tmp_path):
     from runner.config.runtime import RuntimeConfig
-    from runner.script_loader import load_yaml_script
-    from runner.script_runner import build_script_item_config
-    from runner.workflow.snapshot import freeze_run_resource
+    from runner.script import load_yaml_script
+    from runner.script import build_script_item_config
+    from runner.resources import freeze_run_resource
 
     goal = tmp_path / "goal.md"
     ai_prompt = tmp_path / "ai-validation.md"
