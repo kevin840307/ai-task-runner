@@ -12,7 +12,7 @@ from runner.prompting import save_prompt
 from runner.resources import read_text
 from runner.workflow.loader import load_workflow, save_workflow
 from runner.workflow.registry import STAGE_REGISTRY, register_stage, stage_catalog, workflow_catalog
-from runner.workflow.snapshot import freeze_workflow, load_snapshot
+from runner.workflow.lifecycle import freeze_workflow, load_snapshot
 
 
 def _workflow_text(prompt: str = "") -> str:
