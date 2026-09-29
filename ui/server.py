@@ -160,7 +160,6 @@ class Handler(SimpleHTTPRequestHandler):
                     model=str(request.get("model") or ""),
                     validator=str(request.get("validator") or ""),
                     workflow=str(request.get("workflow") or ""),
-                    execution_mode=str(request.get("execution_mode") or "linear"),
                     readonly_safety=str(request.get("readonly_safety") or "restore"),
                 )
                 return self._json({"ok": True})
@@ -178,12 +177,12 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return self._json({"ok": True})
             if parsed.path == "/api/studio/generate":
-                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", "")), str(body.get("folder", "")), str(body.get("filename", ""))))
+                return self._json(self.state.studio_generate_workflow(str(body.get("request", "")), str(body.get("backend", "")), str(body.get("filename", ""))))
             if parsed.path == "/api/studio/generate/validate":
                 return self._json(self.state.studio_generate_validate(str(body.get("job_id", "")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/save":
                 project = self._optional_project(str(body.get("project", "")))
-                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("folder", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "global")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
+                return self._json(self.state.studio_generate_save(project, str(body.get("job_id", "")), str(body.get("filename", body.get("name", ""))), str(body.get("destination", "global")), str(body.get("workflow", "")) if "workflow" in body else None, body.get("prompts", [])))
             if parsed.path == "/api/studio/generate/cancel":
                 return self._json(self.state.studio_generate_cancel(str(body.get("job_id", ""))))
             if parsed.path == "/api/studio/generate/discard":
