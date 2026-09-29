@@ -32,8 +32,8 @@ from .plugins.registry import (
     plugin_config_from_request,
 )
 from .runtime.events import retry_event
-from .runtime.heartbeat import sleep_with_heartbeat
-from .utils.logs import append_bounded_log
+from .runtime.events import sleep_with_heartbeat
+from .utils import append_bounded_log
 from .version import __version__
 from .workflow.loader import load_default_workflow, load_workflow
 from .workflow.snapshot import load_run_resource, load_snapshot
