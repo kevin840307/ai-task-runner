@@ -12,7 +12,7 @@ from .runtime.run_state import StateStore, normalize_state, set_stage
 from .ui_projects import register_ui_project
 from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
-from .workflow.snapshot import (
+from .workflow.utils import (
     freeze_run_resource,
     freeze_workflow,
     load_run_resource,
