@@ -8,7 +8,7 @@ from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..runtime import progress
 from ..runtime.run_state import RunState, Task
-from ..utils.text import bounded_text
+from ..utils import bounded_text
 from .stages.contracts import StageContext, StageResult
 from .task_output import decode_tasks
 
