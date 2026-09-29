@@ -77,7 +77,7 @@ def test_immutable_protocols_own_structured_contracts():
     assert "never invent a missing item" in STRUCTURED_RETRY_PROTOCOL.lower()
 
 def test_ai_validator_prompt_mode_is_injected_by_stage():
-    prompt = (PROMPT_ROOT / "ai_validator.md").read_text(encoding="utf-8")
+    prompt = (PROMPT_ROOT / "common" / "ai_validator.md").read_text(encoding="utf-8")
 
     assert "Final validation. This is a fresh independent session." in prompt
     assert "coverage evidence" in prompt
@@ -129,7 +129,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
     from runner.workflow.stages.contracts import StageExecution
 
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     task = SimpleNamespace(
         last_review={"completed": False, "reason": "missing check", "missing_items": ["x"]}
     )
@@ -139,7 +139,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
         execution=StageExecution(),
         task=task,
         state=state,
-        scratch={"prompt_contracts": {("execution.md", "session-1")}},
+        scratch={"prompt_contracts": {("common/execution.md", "session-1")}},
     )
 
     continued = stage._shared_control_prompt(ctx, None, client)
@@ -159,10 +159,10 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
 
 
 def test_obsolete_alternate_stage_prompts_are_removed():
-    for name in (
+    forbidden = {
         "execution_continue.md",
         "review_continue.md",
         "plan_finalize_same_session.md",
         "planning_rules.md",
-    ):
-        assert not (PROMPT_ROOT / name).exists()
+    }
+    assert not any(path.name in forbidden for path in PROMPT_ROOT.rglob("*.md"))
