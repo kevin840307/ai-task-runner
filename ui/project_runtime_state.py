@@ -937,7 +937,7 @@ class ProjectRuntimeMixin:
         if workflow_path is not None:
             allowed = {path_key(path) for path in self._known_workflow_paths(project)}
             if path_key(workflow_path) not in allowed:
-                raise ValueError("Selected Workflow is outside the allowed System / Custom / Project workflow roots")
+                raise ValueError("Selected Workflow is outside the allowed Global / Project Workflow asset roots")
             if not workflow_path.is_file():
                 raise ValueError(f"Workflow not found: {workflow_path}")
         requirements = self._workflow_requirements(workflow_path) if workflow_path else {"requires_python_validator": False, "has_ai_validator": False}
