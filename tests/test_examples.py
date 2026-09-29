@@ -75,7 +75,7 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         assert "ai_validator_prompt" not in item
         prompt_file = item.get("ai_validator_prompt_file")
         assert isinstance(prompt_file, str) and (EXAMPLES / prompt_file).is_file()
-    assert data[9]["workflow_file"] == "../runner/workflow/custom/common/ralphy_ai_validate.yaml"
+    assert data[9]["workflow_file"] == "../runner/workflows/ralphy_ai_validate.yaml"
     assert (EXAMPLES / data[9]["workflow_file"]).is_file()
 
     items = load_yaml_script(script)
@@ -337,7 +337,7 @@ def test_example_temp_runner_external_workflow_stays_on_source_repo(tmp_path, mo
     data = yaml.safe_load(script.read_text(encoding="utf-8"))
     workflow = Path(data[0]["workflow_file"])
     assert workflow.is_absolute()
-    assert workflow == (ROOT / "runner" / "workflow" / "custom" / "common" / "ralphy_ai_validate.yaml").resolve()
+    assert workflow == (ROOT / "runner" / "workflows" / "ralphy_ai_validate.yaml").resolve()
     assert not (workspace / "tool").exists()
 
 
