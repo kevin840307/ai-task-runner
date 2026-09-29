@@ -28,7 +28,7 @@ DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
 WORKFLOWS = {
-    name: ROOT / "runner" / "workflows" / f"{name}.yaml"
+    name: ROOT / "runner" / "assets" / "workflows" / f"{name}.yaml"
     for name in ("file", "ai", "mixed")
 }
 SYSTEM_FINAL_AI_RUNS = 3
@@ -1501,9 +1501,9 @@ def loop_detection_contract_preflight() -> None:
     """Lock Qwen loop classification plus bounded Planning retry semantics."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from runner.ai.errors import AIError, BackendError
-    from runner.ai.session import should_reset_session
-    from runner.backends.base import BaseBackend
+    from runner.agent import AIError, BackendError
+    from runner.agent import should_reset_session
+    from runner.agent import BaseBackend
     from runner.workflow.stages.executor import StageExecutor
 
     message = (
