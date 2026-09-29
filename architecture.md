@@ -80,17 +80,7 @@ Targets are `next`, `done`, `stop`, or another Stage name.
 
 Rollback/loop is just an edge to an earlier Stage. There is no separate repair/recovery object.
 
-Removed runtime concepts must not return:
-
-- recover
-- restart_at
-- repeat
-- max_attempts
-- on_exhausted
-- replan StageResult
-- hidden Plan task/review nodes
-- per-Stage retry policy
-- execution_mode / RoutingStrategy hierarchy
+Keep the graph model singular: semantic navigation lives only in result edges, and technical retry/session behavior lives only in StageExecutor. No compatibility routing or second recovery model is retained.
 
 ## Stage
 
@@ -356,9 +346,14 @@ Again, StageExecutor and StateStore stay shared.
 
 Folder names should reveal ownership without requiring readers to inspect every file.
 
-Target cleanup:
-- AI client/session/backend adapters belong to one agent/model execution area, not parallel `ai/` and `backends/` concepts.
-- Project/workspace policy is runtime context and must not masquerade as a Plugin.
-- Plugins are only extension/hook boundaries.
-- Tiny generic helpers should move to the module that owns their behavior unless they are reused across multiple domains.
-- Do not create a folder merely to hold one-line wrappers or scattered utility fragments.
+Current package owners:
+- `agent/`: model/backend/session/structured-output execution.
+- `workflow/`: graph schema, loading, Stage registry, result reduction and Stage implementations.
+- `runtime/`: durable state, process lifecycle and events.
+- `plugins/`: extension registration and runtime hooks only.
+- `assets/`: editable Workflow YAML and categorized Prompt Markdown.
+- `workspace.py`: project policy/files.
+- `script.py`: YAML List adapter.
+- `prompting.py`: prompt rendering/context/protocols.
+
+Merge a helper into its owner when that makes the entry point clearer. Do not merge distinct domains merely to reduce folder count.
