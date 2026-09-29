@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from ..ai.structured_output import (
+from ..agent import (
     AIValidationResult,
     ReviewResult,
     parse_result,
