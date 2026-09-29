@@ -1,8 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.workflow.stages.contracts import StageContext
-from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+from runner.workflow.stages import BaseStage, BaseStageSpec, StageContext
 from runner.runtime.run_state import RunState
 
 
@@ -15,7 +14,7 @@ def test_plain_base_stage_can_reference_bundled_prompt_path_directly(tmp_path):
         set_stage=lambda *_: None,
     )
     stage = BaseStage(BaseStageSpec(
-        name="security_review", status="checking", prompt="stages/ai_validator.md"
+        name="security_review", status="checking", prompt="common/ai_validator.md"
     ))
     rendered = stage._original_prompt(ctx, None)
     assert "Final validation" in rendered
@@ -30,8 +29,8 @@ def test_default_flow_has_no_prompt_path_resolver_hardcode():
 def test_previous_structured_data_is_available_and_bounded(tmp_path):
     import json
 
-    from runner.prompts.context import PREVIOUS_DATA_CHARS, build_stage_prompt_context
-    from runner.workflow.stages.contracts import StageResult
+    from runner.prompting import PREVIOUS_DATA_CHARS, build_stage_prompt_context
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
@@ -77,7 +76,7 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
         save_state=lambda: None,
         set_stage=lambda *_: None,
     )
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     previous = StageResult(
         "review",
         "fail",
