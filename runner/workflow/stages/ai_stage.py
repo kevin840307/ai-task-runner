@@ -13,7 +13,7 @@ class TaskStageSpec(BaseStageSpec):
     run_state: str = "executing"
     mode: str = MODE_WRITE
     actor: str = "executor"
-    prompt: str = "execution.md"
+    prompt: str = "common/execution.md"
     track_changes: bool = True
 
 
@@ -27,7 +27,7 @@ class ReviewStageSpec(BaseStageSpec):
     run_state: str = "reviewing"
     mode: str = MODE_READONLY
     actor: str = "ai"
-    prompt: str = "review.md"
+    prompt: str = "common/review.md"
 
 
 class ReviewStage(BaseStage):
@@ -45,7 +45,7 @@ class AIValidatorStageSpec(BaseStageSpec):
     run_state: str = "validating"
     mode: str = MODE_READONLY
     actor: str = "validator"
-    prompt: str = "ai_validator.md"
+    prompt: str = "common/ai_validator.md"
     ai_validator_yolo: bool | None = None
     structured_retries: int = 2
     structured_fresh_retries: int = 1
