@@ -1827,7 +1827,7 @@ function closeStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $(
 function toggleStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $("studioAssetMenuButton"); if (!menu || !button || button.disabled) return; const open = menu.hidden; menu.hidden = !open; button.setAttribute("aria-expanded", String(open)); }
 async function renameStudioAsset() {
   closeStudioAssetMenu(); const current = state.studioFile; if (!current || current.readonly || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
-  const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = await inputDialog({ title: `Rename ${label}`, message: current.kind === "prompt" ? "Referenced Prompts must be unlinked before rename." : "Rename keeps the file in the same Custom / Project scope.", label: `${label} name`, value: current.name, confirmLabel: "Rename" }); if (!name || name === current.name) return;
+  const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = await inputDialog({ title: `Rename ${label}`, message: current.kind === "prompt" ? "Referenced Prompts must be unlinked before rename." : "Rename keeps the file in the same Global / Project scope.", label: `${label} name`, value: current.name, confirmLabel: "Rename" }); if (!name || name === current.name) return;
   try { const result = await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} renamed`); }
   catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} rename failed`); }
 }
@@ -1978,7 +1978,7 @@ $("generateWorkflowPreview").addEventListener("input", markGeneratedDraftDirty);
 $("generateDraftPromptTextarea").addEventListener("input", () => { const prompt = state.generateWorkflowDraft?.prompts?.[state.generateWorkflowPromptIndex]; if (prompt) prompt.content = $("generateDraftPromptTextarea").value; markGeneratedDraftDirty(); });
 $("generateWorkflowRequest").addEventListener("input", () => { if (state.generateWorkflowPhase === "form") state.generateWorkflowDirty = !!$("generateWorkflowRequest").value.trim(); });
 $("generateWorkflowBackend").addEventListener("change", () => { if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.builderBackend = $("generateWorkflowBackend").value; saveUiPreferences(); });
-for (const id of ["generateWorkflowFolder", "generateWorkflowFilename"]) $(id)?.addEventListener("input", updateGenerateWorkflowTargetPreview);
+$("generateWorkflowFilename")?.addEventListener("input", updateGenerateWorkflowTargetPreview);
 $("generateWorkflowSaveFilename")?.addEventListener("input", updateGenerateWorkflowSavePreview);
 $("generateWorkflowDestination")?.addEventListener("change", updateGenerateWorkflowSavePreview);
 $("generateWorkflowFailedCancel").onclick = () => leaveGenerateWorkflowPage();
