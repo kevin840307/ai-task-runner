@@ -14,7 +14,7 @@ PLUGIN_ENTRYPOINT_GROUP = "ai_task_runner.plugins"
 BUILTIN_PLUGINS = (
     "runner.plugins.console",
     "runner.plugins.context_compression",
-    "runner.plugins.utils",
+    "runner.plugins.runtime",
     "runner.plugins.safety",
 )
 
