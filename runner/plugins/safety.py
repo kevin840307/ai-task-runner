@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import RunnerError
-from ..utils.files import copy_ignore, copy_path, digest, io_path, remove_path
+from ..utils import copy_ignore, copy_path, digest, io_path, remove_path
 from ..bootstrap import current_runtime
 from .contracts import HookViolation
 
