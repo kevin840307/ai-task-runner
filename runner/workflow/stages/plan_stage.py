@@ -7,7 +7,7 @@ from ...config.defaults import MIN_PLANNED_TASKS
 from ...prompts.utils import build_stage_prompt_context
 from ...prompts.loader import render_prompt
 from ...runtime.run_state import Task
-from ..task_output import decode_tasks
+from ..utils import decode_tasks
 from ...utils import bounded_text
 from .base_stage import BaseStage, BaseStageSpec
 from .contracts import StageContext, StageResult
