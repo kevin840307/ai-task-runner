@@ -27,8 +27,11 @@ RUNNER = ROOT / "ai_task_runner.py"
 DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
+
+from runner.workflow.loader import WORKFLOWS as RUNNER_WORKFLOWS
+
 WORKFLOWS = {
-    name: ROOT / "runner" / "assets" / "workflows" / f"{name}.yaml"
+    name: RUNNER_WORKFLOWS[name]
     for name in ("file", "ai", "mixed")
 }
 SYSTEM_FINAL_AI_RUNS = 3
@@ -1165,7 +1168,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
         *WORKFLOWS.values(),
-        ROOT / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml",
+        RUNNER_WORKFLOWS["ralphy_ai_validate"],
         ROOT / "examples" / "custom_workflow_latest.yaml",
         ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
         ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
