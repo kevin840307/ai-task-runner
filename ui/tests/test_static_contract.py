@@ -44,14 +44,22 @@ class StaticContractTests(unittest.TestCase):
     def test_stage_modal_has_real_editable_contract_fields(self):
         for token in (
             "stageStatus", "stageRunState", "stageScope", "stageActor", "stageMode", "stageTimeout",
-            "stageProduces", "stageSessionKey", "stageDetail",
+            "stageProduces", "stageSessionKey", "stageSessionPolicy", "stageDetail",
             "stageStructuredRetries", "stageStructuredFreshRetries",
-            "stageFreshOnStart", "stageFreshEachRun", "stageTrackChanges", "stageTolerateRestored",
+            "stageTrackChanges", "stageTolerateRestored",
             "stageAllowProjectRead", "stageCleanWork", "stageCommand", "stageResultKind", "stageCwd",
             "stageMinTasks", "stageValidator", "stageRuns", "stageRequiredPasses",
             "stageParser", "stageFlowLabel", "stageRoutePass", "stageRouteFail",
         ):
             self.assertIn(token, self.js)
+
+    def test_stage_modal_uses_session_policy_not_legacy_fresh_toggles(self):
+        self.assertIn("stageSessionPolicy", self.js)
+        self.assertIn('sessionPolicy !== "auto"', self.js)
+        self.assertNotIn('id="stageFreshOnStart"', self.js)
+        self.assertNotIn('id="stageFreshEachRun"', self.js)
+        self.assertIn('for (const key of ["fresh_session_each_run", "fresh_session_on_start"])', self.js)
+
 
     def test_stage_modal_has_one_prompt_selector_and_no_prompt_body_editor(self):
         self.assertIn("stagePromptSelect", self.js)
