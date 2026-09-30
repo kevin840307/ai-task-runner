@@ -120,6 +120,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         backend=str(args.backend or DEFAULT_BACKEND),
         workflow=workflow,
         workflow_explicit=True,
+        command=sys.executable if definition.get("type") == "command" else None,
         work_dir=work_dir,
         force_new=True,
         stage_retries=0,
