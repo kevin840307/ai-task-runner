@@ -37,7 +37,7 @@ UI workflow families
 --------------------
 1. Linear Workflow with Rollback / Loop - current production mode.
 2. Dynamic Handoff - supported; one Handoff Stage dynamically chooses exactly one next Stage.
-3. Discussion / Group Chat - supported; one Discussion Controller dispatches ordinary participant/moderator/judge Stages across isolated Sessions.
+3. Discussion / Group Chat - supported; one Discussion Controller dispatches ordinary participant/moderator/judge Stages across isolated Sessions, then an independent AI Validator gates final completion.
 
 The user entry stays the same for every family: choose a Workflow/Profile in Chat,
 enter the prompt, then run. Do not add a separate mode selector.
@@ -72,7 +72,7 @@ the graph canvas to the old narrow card-list layout.
 
 Dynamic Handoff and Discussion both reuse Stage nodes and this same canvas, but their semantics stay distinct:
 - Dynamic Handoff chooses exactly one next Stage per decision and owns no discussion round state.
-- Discussion Controller coordinates multiple Stage Sessions and owns only bounded controller_rounds/history/termination state.
+- Discussion Controller coordinates multiple Stage Sessions and owns only bounded controller_rounds/history/termination state; Judge PASS goes to an ordinary final AI Validator, and only validator PASS completes the Workflow.
 Both reuse the same node registry, catalog-driven settings panel, YAML assets, FlowEngine, StageExecutor, StateStore, and plugins.
 
 
