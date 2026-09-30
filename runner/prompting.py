@@ -95,7 +95,6 @@ PREVIOUS_DATA_TEXT_CHARS = 500
 
 PROMPT_CONTEXT_KEYS = frozenset({
     "always_instructions",
-    "discussion",
     "goal",
     "instructions",
     "planning",
@@ -186,10 +185,6 @@ def build_stage_prompt_context(
     return {
         "goal": state.goal,
         "instructions": "",
-        "discussion": {
-            "round": max(getattr(state, "controller_rounds", {}).values(), default=1),
-            "history": list(getattr(state, "discussion_history", []))[-24:],
-        },
         "stage": stage,
         "task": _task_data(ctx.task),
         "tasks": tasks,
