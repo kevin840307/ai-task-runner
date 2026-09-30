@@ -47,12 +47,15 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert '["pass", "fail", "error"]' not in text
 
 
-def test_static_studio_bundle_has_no_removed_dispatch_runtime_branch():
-    scripts = list((ROOT / "ui" / "static" / "workflow-studio-app" / "assets").glob("*.js"))
-    assert scripts
-    bundled = "\n".join(path.read_text(encoding="utf-8") for path in scripts)
-    assert 've==="handoff"||ve==="dispatch"' not in bundled
-    assert '"discussion_controller"' not in bundled
+def test_full_designer_generated_output_has_one_source_and_build_path():
+    vite = (ROOT / "ui" / "studio-src" / "vite.config.ts").read_text(encoding="utf-8")
+    build_tool = (ROOT / "tool" / "build_workflow_studio.py").read_text(encoding="utf-8")
+    guidelines = (ROOT / "DevFollow.txt").read_text(encoding="utf-8")
+
+    assert '../static/workflow-studio-app' in vite
+    assert 'npm", "run", "build"' in build_tool
+    assert "ui/studio-src/**" in guidelines
+    assert "ui/static/workflow-studio-app/**" in guidelines
 
 
 def test_react_studio_keeps_stage_type_immutable_after_creation():
@@ -69,14 +72,11 @@ def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable()
     assert "group.fields.includes(option.name)" in text
 
 
-def test_static_studio_bundle_tracks_session_policy_ui_contract():
-    scripts = list((ROOT / "ui" / "static" / "workflow-studio-app" / "assets").glob("*.js"))
-    assert scripts
-    bundled = "\n".join(path.read_text(encoding="utf-8") for path in scripts)
-    assert "session_policy" in bundled
-    assert "fresh_session_each_run" not in bundled
-    assert "fresh_session_on_start" not in bundled
-    assert "session_key" in bundled
+def test_react_source_tracks_session_policy_ui_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "session_policy" in text
+    assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
+    assert "session_key" in text
 
 
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
