@@ -487,10 +487,11 @@ flow:
     assert ctx.state.completed is True
 
 
-def test_builtin_discussion_workflow_has_one_controller_for_many_sessions():
+def test_builtin_discussion_workflow_has_one_controller_for_many_sessions_and_final_ai_validation():
     workflow = load_workflow(WORKFLOWS["discussion"])
     controller = workflow[0]
-    judge = workflow[-1]
+    judge = workflow[-2]
+    final_validate = workflow[-1]
 
     assert [item["type"] for item in workflow] == [
         "discussion_controller",
@@ -498,24 +499,151 @@ def test_builtin_discussion_workflow_has_one_controller_for_many_sessions():
         "discussion",
         "discussion",
         "review",
+        "ai_validator",
     ]
+    assert controller["name"] == "discussion"
     assert controller["targets"] == [
         "participant_architecture",
         "participant_critic",
         "moderator",
         "judge",
     ]
+    assert "final_validate" not in controller["targets"]
     assert controller["round_end"] == "judge"
     assert controller["max_rounds"] == 3
     assert all(
-        item.get("controller") == "controller"
+        item.get("controller") == "discussion"
         for item in workflow[1:4]
     )
     assert all(
-        item.get("routes") == {"pass": "controller"}
+        item.get("routes") == {"pass": "discussion"}
         for item in workflow[1:4]
     )
-    assert judge["routes"] == {"pass": "done", "fail": "controller"}
+    assert judge["routes"] == {"pass": "final_validate", "fail": "discussion"}
+    assert final_validate["type"] == "ai_validator"
+    assert final_validate["routes"] == {"pass": "done", "fail": "discussion"}
+
+
+def test_discussion_judge_pass_runs_final_ai_validation_before_end(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  discussion:
+    type: discussion_controller
+    targets: [participant, judge]
+    round_end: judge
+    max_rounds: 2
+  participant:
+    type: discussion
+    controller: discussion
+    role: participant
+    routes:
+      pass: discussion
+  judge:
+    type: review
+    routes:
+      pass: final_validate
+      fail: discussion
+  final_validate:
+    type: ai_validator
+    validator: ai
+    routes:
+      pass: done
+      fail: discussion
+flow:
+  - discussion
+  - participant
+  - judge
+  - final_validate
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class FinalValidationExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            if stage.name == "discussion":
+                return StageResult(
+                    "discussion",
+                    "pass",
+                    output="dispatch:judge",
+                    data={"target": "judge", "reason": "ready"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = FinalValidationExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "discussion",
+        "judge",
+        "final_validate",
+    ]
+    assert ctx.state.completed is True
+
+
+def test_discussion_final_ai_validation_fail_returns_to_discussion(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  discussion:
+    type: discussion_controller
+    targets: [judge]
+    round_end: judge
+    max_rounds: 2
+  judge:
+    type: review
+    routes:
+      pass: final_validate
+      fail: discussion
+  final_validate:
+    type: ai_validator
+    validator: ai
+    routes:
+      pass: done
+      fail: discussion
+flow:
+  - discussion
+  - judge
+  - final_validate
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class ValidatorFailExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            count = self.counts.get(stage.name, 0)
+            self.counts[stage.name] = count + 1
+            if stage.name == "discussion":
+                return StageResult(
+                    "discussion",
+                    "pass",
+                    output="dispatch:judge",
+                    data={"target": "judge", "reason": "ready"},
+                    kind="handoff",
+                )
+            if stage.name == "final_validate" and count == 0:
+                return StageResult("final_validate", "fail", output="more evidence needed")
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = ValidatorFailExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "discussion",
+        "judge",
+        "final_validate",
+        "discussion",
+        "judge",
+        "final_validate",
+    ]
+    assert ctx.state.completed is True
 
 
 def test_discussion_participant_requires_controller(tmp_path):
