@@ -224,6 +224,15 @@ def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
     assert live.arguments().example_smoke_project == live.DEFAULT_EXAMPLE_SMOKE_PROJECT
 
 
+def test_live_soak_presets_use_current_workflow_asset_paths():
+    for name in ("qwen_live_reliability_0_5h.bat", "qwen_live_reliability_24h.bat"):
+        text = (live.ROOT / "tool" / name).read_text(encoding="utf-8")
+        assert "runner\\assets\\workflows\\file.yaml" in text
+        assert "runner\\assets\\workflows\\mixed.yaml" in text
+        assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
+        assert "runner\\workflows\\" not in text
+
+
 def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
     args = live.arguments()
