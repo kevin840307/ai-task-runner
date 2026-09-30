@@ -33,22 +33,22 @@ Goal: add Dynamic Handoff and Discussion / Group Chat without creating a second 
 Reuse Stage / StageExecutor / StateStore / plugins / Graph Designer and keep YAML canonical.
 
 Dynamic Handoff
-[ ] Add one built-in dynamic_handoff.yaml example/profile.
-[ ] Add the smallest declarative handoff contract so one Stage can advertise multiple allowed next Stages.
-[ ] Persist only the scheduler/handoff state required for resume; do not add a generic DAG scheduler.
-[ ] Reuse StageResult + FlowEngine routing and keep technical ERROR handling in StageExecutor.
-[ ] Final Review PASS routes to END; FAIL may hand back to an allowed worker Stage.
-[ ] Workflow Studio renders one Stage with multiple handoff edges and edits them without a separate designer.
-[ ] Add loader/schema/runtime/UI tests and resume coverage for dynamic handoff.
+[x] Add one built-in dynamic_handoff.yaml example/profile.
+[x] Add the smallest declarative handoff contract so one Stage can advertise multiple allowed next Stages.
+[x] Reuse durable workflow_position/transition state for selected handoff; no separate scheduler state or generic DAG scheduler required.
+[x] Reuse StageResult + FlowEngine routing and keep technical ERROR handling in StageExecutor.
+[x] Final Review PASS routes to END; FAIL hands back to coordinator for another allowed worker handoff.
+[x] Workflow Studio renders one Stage with multiple handoff edges and edits them without a separate designer.
+[ ] Add process-resume/live reliability coverage for dynamic handoff. Loader/schema/runtime/UI/dry-run contracts are added.
 
 Discussion / Group Chat
-[ ] Add one built-in discussion.yaml example/profile.
-[ ] Keep participant / moderator / judge as ordinary Stages.
-[ ] Add only bounded discussion state: round, participant order/current participant, max rounds, termination.
-[ ] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
-[ ] Judge PASS terminates to END; non-terminal result starts/continues the next bounded round.
-[ ] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
-[ ] Add loader/schema/runtime/UI tests and process-resume coverage for discussion.
+[x] Add one built-in discussion.yaml example/profile.
+[x] Keep participant / moderator / judge as ordinary Stages.
+[x] Reuse cycle + workflow_position for round/order/current participant, add bounded discussion_history and max_rounds termination.
+[x] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
+[x] Judge PASS terminates to END; Judge FAIL starts the next bounded round.
+[x] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
+[ ] Add process-resume/live reliability coverage for discussion. Loader/schema/runtime/UI/dry-run contracts are added.
 
 Implementation constraints
 - No execution_mode selector in Chat; selecting the Workflow YAML selects the family.
