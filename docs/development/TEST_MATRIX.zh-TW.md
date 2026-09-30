@@ -1,47 +1,85 @@
 # 測試矩陣
 
-Version: 1.2.66
+這份文件區分 deterministic CI 已覆蓋項目，以及仍必須用 real backend / soak 實跑的項目。
 
-## 主要契約
-- CLI/API request validation 與 YAML script mode。
-- Qwen/OpenCode backend command/session parsing、兩者 stdin-only Prompt + EOF、OpenCode permission sandbox/mode policy。
-- Plan Stage 的 structured task contract、Same/Fresh recovery、minimum TODO contract、bounded scope，以及 no-Understand/no-Judge flow。
-- Executor Fresh/Rebuilt Goal context、same-session short continuation、Current-TODO-only。
-- Review/read-only/finalize。
-- Generic structured result extraction + strict stage schemas。
-- Deterministic validator invocation、validator args、timeout/retry、Final AI validation。
-- Project policy/protected subtree/snapshot restore/Git guard。
-- deterministic 損壞／不相容 Resume state 必須 fail-fast；Goal／Final-AI Prompt durable resource（含 YAML child source 刪除後 Resume）需覆蓋。
-- Debug current/last/bounded history、Terminal single-line render。
-- Resume/state/no-progress/recovery。
+## Deterministic CI
 
-## Smoke / Examples policy 契約
-每個 `examples/*/project` 與 `smoke/*/project` root 都必須有 `.ai-task-runner.yaml`。Policy 本身由 Runner 自動 protected。存在 immutable input/reference 時要明確列 protected；真正要產生/修改的 source/output 仍保持 writable。
+一般 GitHub gate 會跑 Ubuntu + Windows compile/pytest，以及 React Studio build。
 
-## Validator 契約
-Example/smoke validator 使用 local `validator_interface.py` report contract。Validator 主要驗 observable deliverable；只有專門測 Runner Planning 的案例才可 assert TODO/state 結構。
+| 區域 | 覆蓋 |
+| --- | --- |
+| Workflow schema | Stage type/options、未知欄位拒絕、只允許 PASS/FAIL route、target 存在性、task-scope topology |
+| Semantic routing | PASS next、顯式 PASS/FAIL、done/stop、backward loop、未 routing FAIL 安全停止 |
+| Technical ERROR | Stage/global retry、無限 `-1`、Same Session retry、per-Stage Fresh Session rotation、KeyboardInterrupt/SystemExit 不被吞掉 |
+| Session policy | main/role/fresh、非法 mode、role durable restore/persist、fresh 不持久化、單一 role reset、global reset、錯誤後 session rotation |
+| Dynamic Handoff | target allow-list、非法 target、一次只選一個 target、role -> coordinator、final validator FAIL -> coordinator、durable resume |
+| Prompt | Dynamic shared worker 會 render role `instructions`；prompt category ownership；共用 retry/continue/recover control envelope |
+| Validator | File command validator、AI validator、多 validator 任意位置、多次 AI vote、validator FAIL rollback |
+| Task production | Plan Task[]、custom command/Python `produces: tasks`、連續 task scope |
+| Resume/state | workflow position、task step、transition_previous、role Sessions、損壞 state 拒絕 |
+| Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
+| Stage Probe | 只執行單一 Stage，回傳結果與 next target，不繼續 workflow |
+| Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
+| Studio React | PASS/FAIL/Handoff handle、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge/Discussion runtime |
+| Process/runtime | ownership/orphan/supervisor/control-file 的 deterministic unit/integration probes |
 
-## Prompt / Validator 對齊
-Smoke/example Prompt 只保留 task-specific requirement，不重複 Runner 已統一處理的自主 inspect、retry、verify 等通用行為。Deterministic validator 不可偷偷增加 Prompt 未寫的格式，也不可綁 Planner 拆法。每個 hard assertion 應對應明確需求或 immutable fixture invariant；像「concise」這種主觀品質，除非 Prompt 有數字上限，否則原則上只做 warning。
+## 負向 / 已移除契約
 
-## Qwen Live Reliability
-`python tool/qwen_live_reliability.py` 是 opt-in 的真實 Qwen 可靠性 gate。 在 long soak 前還會跑 deterministic expired-session probe，必須記錄 `reset_session` 並以 Fresh Session 接手；live endpoint fault injection 另外覆蓋 HTTP `429` / `502` / `503` 與 raw disconnect，且健康 session 不可被錯誤替換。它驗證 process restart/resume 沿用 durable session、validator failure 驅動 repair、在衝突 prompt 下的 protected-file policy handling、注入 transient API outage 後在恢復前不替換 session、多 TODO checkpoint resume 不重做已完成工作、YAML List process restart/resume 不重做已完成 item，並端到端驗證 per-item `validator_args` 與 Final AI 3/2 quorum 傳遞、三個不同 session 的 Final AI 3/2 voting、File + Final AI mixed validation，bounded timeout recovery（即使 sandbox stderr 每次不同仍維持穩定 failure identity）、每個 case 使用不同 prompt marker 以降低 prompt cache 掩蓋真實情境，以及 API 真正斷線 180 秒後自動以同 session 恢復。 另外會明確實跑 system `file`/`ai`/`mixed` topology；來源 YAML 使用簡化的 Plan flow，但 Loader normalization 必須仍得到 `planning -> 內建 task/review lifecycle -> validator`，並從 model prompt history 稽核 Same/Fresh transport 是否 bounded、強制單一最終驗收 TODO 走 Review FAIL -> Repair，並確認 Repair 只取得 bounded Review feedback 而不是整份 Review contract，並強化 validator failure recovery：Repair Plan 必須使用不同的 Fresh Planning Session，且 Prompt 只包含必要的 Goal + validator evidence。 現在在任何真實模型呼叫前，會先跑 deterministic Workflow Dry Run preflight，涵蓋 system `file`/`ai`/`mixed`、兩階段 `runner/workflow/custom/common/ralphy_ai_validate.yaml` Fresh Task + 必過 AI Validation recovery loop、自訂 command-backed Python Task Producer，以及含 `repeat` / `recover` / `restart_at` 的 synthetic 12-Stage composability SOP，並鎖定 Qwen `consecutive_identical_tool_calls` loop 訊號必須被診斷且觸發 Fresh Session reset。 Preflight 也加入 negative control：非法 Stage option 必須被正式 schema 擋下，刻意不收斂的 recovery loop 必須由 Dry Run execution limit 停止。Live gate 另外端到端驗 detached UI control contract：Qwen active durable session 執行中建立 `stop.request`，Supervisor 必須以 130 結束並清掉 runtime control marker，之後用 `--resume` 重新啟動且觀察到同 session continuation。每個成功 live probe 完成後若仍殘留 `runner-process.json`、`stop.request` 或 `active-process`，現在會直接判 FAIL。另新增真實 Qwen `command -> produces: tasks -> scope: task -> command file validator` probe，直接證明 Task Producer 不依賴 PlanStage。 Deterministic preflight 也會證明 `runner.api.run()` 對 transient `RunnerError` 會使用 durable resume retry，但 deterministic `RunnerError` 只允許執行一次就 fail-closed；另外會 dry-run `tool/workflow/11_multi_validators_anywhere.yaml`，要求至少 2 個 File Validator、2 個 AI Validator，且 Validation 後仍可接一般 Stage。 Deterministic preflight 也會驗證 protected-path technical artifact ignore：`.git/.vs/.vscode/bin/obj/TestResults/__pycache__` 等變化不可觸發 Safety failure，而真正 source 與 `.gitignore` 等正式 dotfile 仍必須被偵測/還原。
+測試必須拒絕或證明不存在：
 
-24 小時 soak 使用 `python tool/qwen_live_reliability.py --hours 24 --pause 30`。Windows 可直接執行 `run_qwen_live_reliability.bat`；無參數時會跑建議的 0.5 小時 high-density gate，傳入參數則完全取代預設，例如 `run_qwen_live_reliability.bat --hours 24 --high-density --require-transient`。要宣稱通過 24H，command 必須真的走完 24 小時 wall-clock duration，且產生 PASS 的 `summary.json`；summary 會記錄 `soak_elapsed_seconds` 作為證據。Fault-injection probes 全綠是很強的 preflight evidence，但不能取代實際經過時間。需要整個 live gate 都覆蓋 Qwen sandbox mode 時，請加 `--sandbox`。收斂階段可使用 `python tool/qwen_live_reliability.py --hours 0.5 --high-density --require-transient`，它會降低 pause、用 `--agent-timeout 180` 與 `--planning-timeout 180` 限制一般 Qwen call，並在短 soak 中混入 Final AI validation、transient API recovery、timeout recovery、YAML List restart/resume，以及週期性 sandbox run；high-density 若未實際覆蓋每一種混合情境就會判定失敗。每個產生的 live probe 都會在 prompt 第一行加入 case-specific marker，避免大量案例共用完全相同的 prompt prefix。獨立 long API probe 預設會把本機 proxy 直接斷線 180 秒，可用 `--long-api-outage-seconds N` 調整。個別頻率可用 `--soak-final-ai-every N`、`--soak-transient-api-every N`、`--soak-timeout-every N`、`--soak-yaml-every N`、`--soak-sandbox-every N` 調整。 `--single-process-yaml-items N` 會額外以同一個 CLI process 連續執行 N 個真實 Qwen YAML item；內建 0.5H / 24H BAT gate 分別使用 4 / 8。加上 `--example-smoke-project` 會在 reliability probes/soak 最後複製並執行 `examples/01_basic_command_validator/project` 作為真 agent smoke；也可以傳入其他 project path。若該 example 需要 custom workflow，另加 `--example-smoke-workflow path/to/workflow.yaml`，例如 `runner/workflow/custom/common/ralphy_ai_validate.yaml`。要更廣覆蓋，可重複傳入 `--example-smoke-matrix-project` 與 `--example-smoke-matrix-workflow`，在 probes/soak 後交叉實跑真實 example project 與 workflow YAML。這是 opt-in，避免改變既有 soak 預設。每次 run 的 project、精簡 console JSONL、Runner events、state 與 diagnostics 都保存在 `.ai-task-runner-live/<timestamp>/`。
+- `routes.error`；
+- repair/recover/restart_at/repeat/max_attempts/on_exhausted graph control；
+- 已移除的 Discussion runtime Stage/state；
+- 已刪 compatibility runtime module；
+- 舊 Workflow/Prompt asset path。
 
-Matrix command 範例：
+## Tool Workflow Preflight
+
+`tool/workflow/` 代表性 YAML 必須能被 production loader 載入，並相容 `tool/workflow_dryrun.py`。目前範例只使用 Review gate、Validator 與 custom task production，不存在 Grill runtime 契約。
+
+## real-Qwen 短 gate
+
+real backend proof 使用：
 
 ```powershell
-python tool/qwen_live_reliability.py --hours 0.25 --high-density --require-transient --example-smoke-matrix-project examples/01_basic_command_validator/project --example-smoke-matrix-project examples/10_skill_prompt_review_workflow/project --example-smoke-matrix-workflow runner/workflow/system/file.yaml --example-smoke-matrix-workflow runner/workflow/system/mixed.yaml --example-smoke-matrix-workflow runner/workflow/custom/common/ralphy_ai_validate.yaml
+tool\qwen_live_reliability_0_5h.bat
 ```
 
-Windows 便利 BAT 放在 `tool/`：`qwen_live_reliability_0_5h.bat` 是短時間 confidence gate；`qwen_live_reliability_24h.bat` 是完整 soak gate。PASS 會提高工程信心，但不等於可數學證明的可靠度百分比；實際證據仍以 `summary.json`、runtime artifacts 與實際 wall-clock duration 為準。
+在 soak 前會先跑 deterministic preflight，再跑 real-Qwen：
 
-- Worker Supervisor regression 需涵蓋依 durable state directory 清理 Direct/YAML child orphan process。
-- StageExecutor regression 需確認 `KeyboardInterrupt` / `SystemExit` 直接往上傳遞，不進入 retry/recovery。
-- Stage capability regression 需涵蓋 `retry: 0` 直接升級 Fresh Session、`skip_on_error: false`、`track_changes` exposure，以及 process-backed Stage 共用的直接 `retry` / `skip_on_error` / `track_changes` 選項。
+- file / AI / mixed topology；
+- Dynamic Handoff target 選擇；
+- main / reusable role / fresh session policy；
+- 同一 role 被再次選中時必須沿用相同 Session；
+- Review FAIL rollback；
+- Validator FAIL rollback；
+- HTTP 429 / 502 / 503；
+- raw disconnect；
+- expired Session -> Fresh Session；
+- process restart / detached UI resume；
+- YAML List resume；
+- custom Stage / custom Task producer；
+- protected-file policy；
+- timeout/recovery budget；
+- final AI voting。
 
-### Reliability preflight invariants
+「script 有 probe」不代表「probe 已 PASS」。要宣稱 live reliability 必須保留該次 run directory / summary。
 
-`qwen_live_reliability.py` 在真正 Qwen probe 前，會 deterministic 驗證 API retry classification、workflow dry-run convergence/non-convergence、immutable Review/AI-validator verdict mapping、bounded Planning loop recovery、>MAX_PATH runtime I/O/state/frozen resources，以及 >MAX_PATH read-only snapshot restore/update。目的是先排除 Runner regression，再引入模型本身的變異。
+## 24H 驗收
 
+短 live gate PASS 後再跑：
+
+```powershell
+tool\qwen_live_reliability_24h.bat
+```
+
+24H 必須有完整 wall-clock evidence，並確認：
+
+- ownership lock 不會卡死；
+- stop/crash/resume 後沒有 orphan process；
+- state/log 不會無限成長；
+- committed workflow/task position 不遺失；
+- role Session 不損壞；
+- resume 時 frozen Workflow/Prompt resource 穩定。
+
+Deterministic CI、短 live gate、24H soak 是三個不同的信心層級。
