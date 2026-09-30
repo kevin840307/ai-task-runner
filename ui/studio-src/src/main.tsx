@@ -235,7 +235,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
   const mainCenter = mainX + nodeWidth / 2;
   const verticalGap = 175;
   const branchColumnGap = 270;
-  const maxBranchColumns = 4;
 
   nodes.push({
     id: START,
@@ -282,23 +281,18 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         return;
       }
 
-      const columns = Math.min(maxBranchColumns, targets.length);
-      const rows = Math.ceil(targets.length / columns);
       const branchTop = cursorY + verticalGap;
+      const rowStartCenter = mainCenter - ((targets.length - 1) * branchColumnGap) / 2;
 
       targets.forEach((target, targetIndex) => {
         branchTargets.add(target);
-        const row = Math.floor(targetIndex / columns);
-        const indexInRow = targetIndex % columns;
-        const rowCount = Math.min(columns, targets.length - row * columns);
-        const rowStartCenter = mainCenter - ((rowCount - 1) * branchColumnGap) / 2;
         autoPositions[target] = {
-          x: rowStartCenter + indexInRow * branchColumnGap - nodeWidth / 2,
-          y: branchTop + row * verticalGap,
+          x: rowStartCenter + targetIndex * branchColumnGap - nodeWidth / 2,
+          y: branchTop,
         };
       });
 
-      cursorY = branchTop + rows * verticalGap + 45;
+      cursorY = branchTop + verticalGap + 45;
       return;
     }
 
