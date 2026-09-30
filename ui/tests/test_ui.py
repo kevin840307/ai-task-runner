@@ -1105,6 +1105,49 @@ class WorkflowStudioTests(unittest.TestCase):
                 )
 
 
+    def test_studio_session_policy_round_trip_and_conflict_rejection(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        draft = {
+            "stages": [
+                {
+                    "name": "worker",
+                    "type": "base",
+                    "prompt": "common/execution.md",
+                    "session_policy": "role",
+                }
+            ],
+            "flow": ["worker"],
+            "routes": {},
+        }
+
+        saved = self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+        data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["worker"]["session_policy"], "role")
+        self.assertEqual(saved["visual"]["stages"][0]["session_policy"], "role")
+
+        current = self.state.studio_visual(item["id"], self.project)
+        conflicting = {
+            "stages": [
+                {
+                    "name": "worker",
+                    "type": "base",
+                    "prompt": "common/execution.md",
+                    "session_policy": "role",
+                    "session_key": "legacy-conflict",
+                }
+            ],
+            "flow": ["worker"],
+            "routes": {},
+        }
+        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
+            self.state.studio_graph_save(
+                item["id"], conflicting, current["hash"], self.project
+            )
+
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
