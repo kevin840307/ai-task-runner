@@ -32,7 +32,6 @@ def test_workflow_assets_are_separate_from_prompt_assets():
         "file.yaml",
         "mixed.yaml",
         "dynamic_handoff.yaml",
-        "discussion.yaml",
         "ralphy_ai_validate.yaml",
     }
     assert not list(WORKFLOW_DIR.glob("*.md"))
