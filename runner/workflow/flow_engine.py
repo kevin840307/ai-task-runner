@@ -9,7 +9,7 @@ from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..utils import bounded_text
 from .results import finish_run, finish_task
-from .registry import create_stage, stage_result_kind
+from .registry import create_stage
 from .stages import StageContext, StageExecutor, StageResult
 
 
@@ -38,6 +38,11 @@ class FlowEngine:
         previous = self._restore_previous()
 
         while state.workflow_position < len(self.workflow) and not state.completed:
+            limit = self.context.config.max_cycles
+            if limit != -1 and state.cycle > limit:
+                self.context.set_stage("max_cycles_exhausted", f"cycle limit {limit} reached")
+                self.context.save_state()
+                return 2
             position = state.workflow_position
             if self.workflow[position].get("scope") == "task":
                 previous, stopped = self._run_task_block(position, executor, previous)
@@ -104,7 +109,14 @@ class FlowEngine:
         definition = self.workflow[index]
         stage = create_stage(definition)
         label = str(definition.get("label", "") or "")
-        result = executor.run(stage, self.context, previous, label=label)
+        policy = definition.get("error_policy")
+        if policy:
+            result = executor.run(
+                stage, self.context, previous, label=label,
+                retry_limit=policy["retries"],
+            )
+        else:
+            result = executor.run(stage, self.context, previous, label=label)
         self._remember_previous(result)
 
         target = resolve_stage_target(definition, result.status)
@@ -124,18 +136,15 @@ class FlowEngine:
             self.context.save_state()
             return result, False
 
-        self._route_to(target, result)
+        self._route_to(target, index, result)
         self.context.save_state()
         return result, False
 
-    def _route_to(self, target: str, result: StageResult) -> None:
+    def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
         state = self.context.state
 
-        if (
-            result.status != "pass"
-            and stage_result_kind(self.workflow[position]) == "tasks"
-        ):
+        if position <= source_index:
             state.cycle += 1
 
         if self.workflow[position].get("scope") == "task":
@@ -201,6 +210,8 @@ class FlowEngine:
 
 def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
     """Resolve one Stage result without advancing the Workflow."""
+    if status == "error" and definition.get("error_policy"):
+        return str(definition["error_policy"]["exhausted"])
     routes = definition.get("routes")
     if isinstance(routes, dict) and status in routes:
         return str(routes[status])

@@ -55,6 +55,8 @@ class RuntimeConfig:
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     stage_retries: int = DEFAULT_STAGE_RETRIES
+    max_cycles: int = -1
+    skip_on_max_cycles: bool = False
     retry_delay: float = 5
     retry_max_delay: float = 300
 
@@ -123,6 +125,9 @@ class RuntimeConfig:
         _non_negative(self, "agent_timeout", integer=True)
         _non_negative(self, "planning_timeout", integer=True)
         _retry_limit(self, "stage_retries")
+        _retry_limit(self, "max_cycles")
+        if not isinstance(self.skip_on_max_cycles, bool):
+            raise ValueError("skip_on_max_cycles must be a boolean")
         for name in (
             "agent_idle_after_change_timeout",
             "retry_delay",

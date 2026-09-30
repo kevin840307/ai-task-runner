@@ -179,7 +179,6 @@ def test_yaml_runtime_overrides_match_current_run_request_contract(tmp_path):
 def test_yaml_rejects_removed_retry_fields(tmp_path):
     removed = (
         "max_attempts",
-        "max_cycles",
         "review_retries",
         "api_wait_timeout",
         "retry_wait",
@@ -231,6 +230,50 @@ def test_execute_script_uses_distinct_item_roots_and_stops_on_failure(tmp_path):
 
     assert execute_script(config, execute_one) == 1
     assert seen == [1, 2]
+
+
+def test_yaml_cycle_limit_skips_only_exhausted_item(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  max_cycles: 10\n  skip_on_max_cycles: true\n"
+        "- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    config = base_config(tmp_path)
+    seen = []
+
+    def execute_one(child):
+        seen.append((child.script_index, child.max_cycles, child.skip_on_max_cycles))
+        root = Path(child.project_root)
+        exhausted = child.script_index == 1
+        StateStore(root, root / child.work_dir).save(RunState(
+            run_id=f"run-{child.script_index}", goal=child.goal,
+            project_root=str(root), cycle=11 if exhausted else 1,
+            completed=not exhausted,
+            stage="max_cycles_exhausted" if exhausted else "completed",
+        ))
+        return 2 if exhausted else 0
+
+    assert execute_script(config, execute_one) == 0
+    assert seen == [(1, 10, True), (2, -1, False)]
+
+
+def test_yaml_cycle_limit_without_skip_stops_batch(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: first\n  validator: ai\n  max_cycles: 1\n"
+        "- prompt: second\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    config = base_config(tmp_path)
+    seen = []
+
+    def execute_one(child):
+        seen.append(child.script_index)
+        return 2
+
+    assert execute_script(config, execute_one) == 2
+    assert seen == [1]
 
 
 def test_execute_script_multi_item_completion_uses_same_runtime_state_contract(tmp_path):

@@ -31,6 +31,8 @@ SCRIPT_ITEM_RUNTIME_ALIASES = {
     "watchdog_interval": "watchdog_interval",
     "worker_hang_timeout": "worker_hang_timeout",
     "stage_retries": "stage_retries",
+    "max_cycles": "max_cycles",
+    "skip_on_max_cycles": "skip_on_max_cycles",
     "retry_delay": "retry_delay",
     "retry_max_delay": "retry_max_delay",
     "final_ai_validations": "final_ai_validations",
@@ -43,12 +45,10 @@ SCRIPT_ITEM_RUNTIME_ALIASES = {
 SCRIPT_ITEM_RUNTIME_FIELDS = frozenset(SCRIPT_ITEM_RUNTIME_ALIASES.values())
 REMOVED_SCRIPT_FIELDS = frozenset({
     "max_attempts",
-    "max_cycles",
     "review_retries",
     "api_wait_timeout",
     "retry_wait",
     "retry_max_wait",
-    "skip_on_max_cycles",
 })
 
 
@@ -93,6 +93,9 @@ def execute_script(config: RuntimeConfig, execute_one: ExecuteOne) -> int:
         )
         _emit_script_event("script.item_started", index, total, item, child)
         code = execute_one(child)
+        if code == 2 and child.skip_on_max_cycles and _child_cycle_exhausted(child):
+            _emit_script_event("script.item_skipped", index, total, item, child)
+            continue
         if code == 0 and not _child_completed(child):
             code = 1
         if code != 0:
@@ -412,13 +415,23 @@ def _runtime_overrides(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _child_completed(child: RuntimeConfig) -> bool:
+    state = _child_state(child)
+    return state is not None and state.completed and state.stage == "completed"
+
+
+def _child_cycle_exhausted(child: RuntimeConfig) -> bool:
+    state = _child_state(child)
+    return state is not None and state.stage == "max_cycles_exhausted"
+
+
+def _child_state(child: RuntimeConfig):
     state_path = Path(child.project_root) / child.work_dir / "state.json"
     store = StateStore(Path(child.project_root), state_path.parent)
     try:
         _, state = store._read_state(state_path, strict=True)  # noqa: SLF001
     except ConfigurationError:
-        return False
-    return state is not None and state.completed and state.stage == "completed"
+        return None
+    return state
 
 
 def _emit_script_event(

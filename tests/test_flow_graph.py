@@ -30,9 +30,6 @@ def stage_factory(monkeypatch):
     monkeypatch.setattr(
         flow_engine_module, "create_stage", lambda item: Stage(item["name"])
     )
-    monkeypatch.setattr(
-        flow_engine_module, "stage_result_kind", lambda item: str(item.get("produces") or "generic")
-    )
 
 
 def node(name, **extra):

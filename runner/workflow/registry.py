@@ -19,7 +19,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
     "command": CommandStage,
     "plan": PlanStage,
 }
-NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "_workflow_index"})
+NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -58,6 +58,10 @@ def workflow_catalog() -> dict[str, Any]:
             "routes": {
                 "type": "object",
                 "description": "pass/fail/error -> next, done, stop, or another Stage",
+            },
+            "error_policy": {
+                "type": "object",
+                "description": "technical ERROR retries and exhausted target",
             },
         },
     }

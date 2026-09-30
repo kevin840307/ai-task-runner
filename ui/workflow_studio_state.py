@@ -408,7 +408,7 @@ class WorkflowStudioMixin:
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
-            "type", "status", "label", "scope", "routes", "validator",
+            "type", "status", "label", "scope", "routes", "error_policy", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
@@ -593,6 +593,15 @@ class WorkflowStudioMixin:
         produces = fields.get("produces")
         if produces not in (None, "", "tasks"):
             raise ValueError("Stage produces must be tasks when specified")
+        policy = fields.get("error_policy")
+        if policy is not None:
+            if not isinstance(policy, dict) or set(policy) != {"retries", "exhausted"}:
+                raise ValueError("Stage error_policy requires retries and exhausted")
+            retries = policy["retries"]
+            if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
+                raise ValueError("Stage error_policy.retries must be -1 or non-negative")
+            if not isinstance(policy["exhausted"], str) or not policy["exhausted"].strip():
+                raise ValueError("Stage error_policy.exhausted must be a target")
         for key in ("structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
             value = fields.get(key)
             if value is None:

@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-NODE_FIELDS = frozenset({"routes", "label", "scope"})
+NODE_FIELDS = frozenset({"routes", "label", "scope", "error_policy"})
 META_FIELDS = frozenset({"name", "type", "validator", *NODE_FIELDS})
 
 
@@ -67,6 +67,17 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(f"workflow stage {name} required_passes cannot exceed runs")
 
     _validate_routes(name, values.get("routes"))
+    policy = values.get("error_policy")
+    if policy is not None:
+        if not isinstance(policy, dict) or set(policy) != {"retries", "exhausted"}:
+            raise RunnerError(f"workflow stage {name} error_policy requires retries and exhausted")
+        retries = policy["retries"]
+        if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
+            raise RunnerError(f"workflow stage {name} error_policy.retries must be -1 or non-negative")
+        if not isinstance(policy["exhausted"], str) or not policy["exhausted"].strip():
+            raise RunnerError(f"workflow stage {name} error_policy.exhausted must be a target")
+        if "error" in (values.get("routes") or {}):
+            raise RunnerError(f"workflow stage {name} cannot set both error_policy.exhausted and routes.error")
 
 
 def _validate_routes(name: str, routes: Any) -> None:
@@ -96,6 +107,13 @@ def validate_routes(workflow: list[dict[str, Any]]) -> None:
                     f"workflow stage {definition['name']} routes.{status} "
                     f"references unknown stage: {target}"
                 )
+        policy = definition.get("error_policy") or {}
+        target = policy.get("exhausted")
+        if target is not None and target not in names | {"next", "done", "stop"}:
+            raise RunnerError(
+                f"workflow stage {definition['name']} error_policy.exhausted "
+                f"references unknown stage: {target}"
+            )
 
 
 def validate_topology(workflow: list[dict[str, Any]]) -> None:

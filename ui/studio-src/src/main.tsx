@@ -27,6 +27,7 @@ type Stage = Record<string, unknown> & {
   label?: string;
   scope?: string;
   routes?: Record<string, string>;
+  error_policy?: { retries: number; exhausted: string };
 };
 
 type Visual = {
@@ -305,7 +306,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
     });
     for (const status of ["fail", "error"] as const) {
-      const target = routes[status];
+      const target = status === "error" ? (s.error_policy?.exhausted || routes.error) : routes[status];
       if (!target) continue;
       const resolved = target === "done" || target === "stop" ? END : target === "next" ? (next || END) : target;
       edges.push({
@@ -601,6 +602,10 @@ function App() {
       const nextName = visual.flow[index + 1];
       let target = connection.target!;
       if (target === END) target = status === "pass" ? "done" : "stop";
+      if (status === "error" && stage.error_policy) {
+        delete routes.error;
+        return { ...stage, routes, error_policy: { ...stage.error_policy, exhausted: target } };
+      }
       if (status === "pass" && target === nextName) delete routes.pass;
       else routes[status] = target;
       return { ...stage, routes };
@@ -623,6 +628,9 @@ function App() {
         if (s.name !== edge.source) return s;
         const routes = { ...(s.routes || {}) };
         delete routes[status];
+        if (status === "error" && s.error_policy) {
+          return { ...s, routes, error_policy: { ...s.error_policy, exhausted: "stop" } };
+        }
         return { ...s, routes };
       });
     }
@@ -915,7 +923,32 @@ function App() {
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。連到 END 時，PASS 為完成，FAIL / ERROR 為停止。</p>
-                {draft.type === "review" && <p>Review 的 ERROR 會先依執行設定的 stage_retries 重試（預設 -1，持續重試）。次數用盡後才走紅色 ERROR 連線；可連到下一個積木來跳過。FAIL 走黃色連線，不會觸發技術性重試。</p>}
+                <p>ERROR 先依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。FAIL 不會觸發技術性重試。</p>
+                <label className="route-policy-field"><span>ERROR 重試次數</span><input type="number" min={-1}
+                  value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    const routes = { ...(draft.routes || {}) };
+                    if (raw === "") {
+                      const exhausted = draft.error_policy?.exhausted;
+                      if (exhausted && exhausted !== "stop") routes.error = exhausted;
+                      else delete routes.error;
+                      const { error_policy: _removed, ...rest } = draft;
+                      editDraft({ ...rest, routes });
+                    } else {
+                      const retries = Number(raw);
+                      if (!Number.isInteger(retries) || retries < -1) return;
+                      const exhausted = draft.error_policy?.exhausted || routes.error || "stop";
+                      delete routes.error;
+                      editDraft({ ...draft, routes, error_policy: { retries, exhausted } });
+                    }
+                  }} /></label>
+                {draft.error_policy && <label className="route-policy-field"><span>重試用盡後</span>
+                  <select value={draft.error_policy.exhausted} onChange={(event) => editDraft({ ...draft,
+                    error_policy: { ...draft.error_policy!, exhausted: event.target.value } })}>
+                    <option value="stop">停止</option><option value="next">下一個積木</option><option value="done">完成 Workflow</option>
+                    {visual.flow.filter((name) => name !== draft.name).map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select></label>}
                 <div className="route-section-title">從這個積木出去</div>
                 {(["pass", "fail", "error"] as const).map((status) => {
                   const edge = edges.find((item) => item.source === draft.name && item.data?.status === status);
