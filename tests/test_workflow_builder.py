@@ -78,13 +78,9 @@ def test_builder_prompt_describes_current_graph_and_prompt_contract():
     assert "common/review.md" in text
     assert "type: handoff" in text
     assert "targets" in text
-    assert "type: discussion_controller" in text
-    assert "type: discussion" in text
-    assert "round_end" in text
-    assert "max_rounds" in text
-    assert "Final AI Validator PASS -> done and FAIL -> controller." in text
-    assert "Keep the final validator outside the controller's targets" in text
-    assert "common/discussion_final_validator.md" in text
+    assert "session_policy: main" in text
+    assert "session_policy: role" in text
+    assert "session_policy: fresh" in text
     for removed in ("restart_at", "max_attempts", "on_exhausted"):
         assert removed in text
     assert "error_policy.retries" in text
