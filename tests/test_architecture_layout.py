@@ -5,8 +5,6 @@ from runner.workflow.stages import (
     AIValidatorStage,
     BaseStage,
     CommandStage,
-    DiscussionControllerStage,
-    DiscussionStage,
     HandoffStage,
     PlanStage,
     ReviewStage,
@@ -30,8 +28,6 @@ def test_stage_implementation_files_are_small_in_number():
 def test_workflow_has_one_minimal_type_registry():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
-        "discussion": DiscussionStage,
-        "discussion_controller": DiscussionControllerStage,
         "handoff": HandoffStage,
         "task": TaskStage,
         "review": ReviewStage,
