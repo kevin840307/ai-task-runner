@@ -51,7 +51,7 @@ else: session = "writer-session"
 
 log = root / ".ai-task-runner" / "demo-calls.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
 with log.open("a", encoding="utf-8") as f:
-    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Required demo checks only" in prompt}, ensure_ascii=False)+"\n")
+    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"shared_control":"RUNNER_SHARED_STAGE_CONTROL" in prompt,"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Required demo checks only" in prompt}, ensure_ascii=False)+"\n")
 
 low = prompt.lower()
 if r == "writer":
