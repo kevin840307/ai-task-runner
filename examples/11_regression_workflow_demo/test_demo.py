@@ -38,7 +38,7 @@ def main() -> int:
         assert all(x["session"] == "grill-session" for x in grills)
         assert all(x["full_grill_contract"] for x in grills)
         fixes = [x for x in writers if x["kind"] == "fix"]
-        assert fixes and all(x["has_previous_data"] for x in fixes)
+        assert fixes and all(x["has_feedback"] for x in fixes)
         assert len(finals) == 5 and all(not x["resumed"] for x in finals) and len({x["session"] for x in finals}) == 5
         assert json.loads((project / ".ai-task-runner/state.json").read_text(encoding="utf-8"))["completed"] is True
         for rel in ("artifacts/project_discovery.md","artifacts/project_documentation.md","artifacts/e2e_spec.md","artifacts/verification_design.md","regression/cases.yaml","artifacts/qualification.md"):
