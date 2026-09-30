@@ -107,3 +107,18 @@ def test_role_session_reset_clears_only_that_durable_role(tmp_path, monkeypatch)
 
     assert stage.reset_session(ctx) == "role-a"
     assert ctx.state.stage_sessions == {"other": "role-b"}
+
+
+def test_global_session_reset_clears_main_and_all_role_sessions(tmp_path):
+    ctx = context(tmp_path)
+    ctx.ai_client.session_id = "main-live"
+    ctx.state.ai_session_id = "main-live"
+    ctx.state.stage_sessions = {"worker": "role-a", "other": "role-b"}
+    ctx.scratch["worker-client"] = SimpleNamespace(session_id="role-a")
+
+    ctx.reset_sessions()
+
+    assert ctx.ai_client.session_id == ""
+    assert ctx.scratch["worker-client"].session_id == ""
+    assert ctx.state.ai_session_id == ""
+    assert ctx.state.stage_sessions == {}
