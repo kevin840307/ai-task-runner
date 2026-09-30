@@ -43,22 +43,17 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert '["pass", "fail", "error"]' not in text
 
 
-def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_discussion():
+def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
     text = SOURCE.read_text(encoding="utf-8")
-
-    assert 'id={discussionController ? "dispatch" : "handoff"}' in text
-    assert '"discussion_controller"' in text
-    assert 'types: ["handoff", "discussion_controller", "discussion"]' in text
-    assert '"dispatch"' in text
-    assert "最多討論輪數" in text
-    assert 'draft.type === "discussion_controller"' in text
-    assert "draft.max_rounds" in text
-    assert "stage.targets" in text
+    assert 'id="handoff"' in text
+    assert 'types: ["handoff"]' in text
+    assert '"discussion_controller"' not in text
+    assert '"discussion"' not in text
+    assert '"dispatch"' not in text
+    assert "session_policy" in text
     assert "autoPositions" in text
     assert "branchTargets" in text
     assert "branchColumnGap" in text
     assert "rowStartCenter" in text
     assert "cursorY" in text
-    assert "discussion-return" in text
-    assert 'title: "Discussion"' in text
-    assert 'title: "Discussion Session"' in text
+
