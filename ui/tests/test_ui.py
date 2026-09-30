@@ -949,6 +949,40 @@ class WorkflowStudioTests(unittest.TestCase):
             [stage["name"] for stage in result["visual"]["stages"]],
         )
 
+    def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        work = {**visual["stages"][0], "session_policy": "role"}
+        review = {**visual["stages"][1], "session_policy": "fresh"}
+        draft = {
+            "stages": [work, review],
+            "flow": ["work", "review"],
+            "routes": {"review": {"fail": "work"}},
+        }
+
+        saved = self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+        data = __import__("yaml").safe_load(saved["file"]["content"])
+        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
+        self.assertEqual(data["stages"]["review"]["session_policy"], "fresh")
+
+        bad = self.state.studio_visual(item["id"], self.project)
+        bad_work = {
+            **bad["stages"][0],
+            "session_policy": "role",
+            "session_key": "conflict",
+        }
+        bad_draft = {
+            "stages": [bad_work, bad["stages"][1]],
+            "flow": ["work", "review"],
+            "routes": {"review": {"fail": "work"}},
+        }
+        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
+            self.state.studio_graph_save(
+                item["id"], bad_draft, bad["hash"], self.project
+            )
+
     def test_graph_draft_validates_before_one_atomic_yaml_write(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
