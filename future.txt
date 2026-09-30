@@ -73,7 +73,7 @@ the graph canvas to the old narrow card-list layout.
 Dynamic Handoff is the only multi-agent runtime primitive:
 - one Handoff Stage chooses exactly one next Stage per decision;
 - every role is an ordinary Stage;
-- role session behavior is selected with session_policy: main / role / fresh;
+- Dynamic specialist roles default to session_policy: role; main and fresh remain explicit per-role alternatives, and independent final validation stays fresh;
 - discussion/review-board/triage behaviors remain YAML Workflow patterns, not runtime types.
 It reuses the same node registry, catalog-driven settings panel, YAML assets, FlowEngine, StageExecutor, StateStore, and plugins.
 
