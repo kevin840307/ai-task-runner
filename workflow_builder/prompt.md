@@ -29,10 +29,12 @@ Rules:
 - Optional `error_policy.retries` is common to every Stage; `-1` means unlimited retry. When retries are exhausted, the Runner logs the ERROR and stops at that Stage.
 - Never emit recover, restart_at, repeat, max_attempts, on_exhausted, replan, repair, or execution_mode fields.
 - Same Session continuation, Fresh Session recovery, API delay, watchdog, and resume are Runner-owned; do not model them as graph nodes or routes.
-- Use only supported Stage types: base, task, review, plan, ai_validator, command, handoff, discussion_controller, discussion.
-- For Dynamic Handoff, use one `type: handoff` Stage with a non-empty `targets` list. It dynamically chooses exactly one next Stage per decision; do not add discussion round/session state to it.
+- Use only supported Stage types: base, task, review, plan, ai_validator, command, handoff.
+- For Dynamic Handoff, use one `type: handoff` Stage with a non-empty `targets` list. It dynamically chooses exactly one next Stage per decision.
+- Dynamic specialist roles remain ordinary Stages. Use `session_policy: main` to reuse the primary Runner session, `session_policy: role` to keep one durable session per Stage role across handoffs/resume, or `session_policy: fresh` to start a new session on every Stage invocation.
+- Technical retry/recovery remains Runner-owned and may rotate any policy to a fresh session after repeated failures.
 - For Dynamic Handoff final completion, prefer an ordinary `ai_validator` Stage with PASS -> done and FAIL -> the Handoff Stage.
-- For Discussion / Group Chat, use one `type: discussion_controller` Stage with `targets`, `round_end`, and `max_rounds`. Each participant/moderator remains a `type: discussion` Stage with its own `session_key`, `controller`, and PASS -> controller. The judge remains an ordinary review Stage with PASS -> a separate ordinary `ai_validator` Stage and FAIL -> controller. Final AI Validator PASS -> done and FAIL -> controller. Keep the final validator outside the controller's targets and use `common/discussion_final_validator.md` so the fresh validator receives bounded discussion history.
+- Group-discussion, review-board, triage, and similar behaviors are Workflow patterns built from Dynamic Handoff + ordinary Stages; do not emit discussion-specific Stage types or state.
 - Selecting the Workflow YAML selects the workflow family. Never emit an execution_mode or a second runtime hierarchy.
 - If a Plan produces tasks, add explicit task-scoped execute/review Stages with `scope: task`; there are no hidden Plan Stages.
 - Validators are ordinary nodes. Route semantic FAIL explicitly when repair is required.
