@@ -46,10 +46,11 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_discussion():
     text = SOURCE.read_text(encoding="utf-8")
 
-    assert 'id="handoff"' in text
-    assert 'sourceHandle: "handoff"' in text
-    assert 's.type === "handoff"' in text
-    assert 'types: ["handoff", "discussion"]' in text
+    assert 'id={discussionController ? "dispatch" : "handoff"}' in text
+    assert '"discussion_controller"' in text
+    assert 'types: ["handoff", "discussion_controller", "discussion"]' in text
+    assert '"dispatch"' in text
     assert "最多討論輪數" in text
+    assert 'draft.type === "discussion_controller"' in text
     assert "draft.max_rounds" in text
     assert "stage.targets" in text
