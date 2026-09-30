@@ -51,6 +51,13 @@ def test_static_studio_bundle_has_no_removed_dispatch_runtime_branch():
     assert '"discussion_controller"' not in bundled
 
 
+def test_react_studio_keeps_stage_type_immutable_after_creation():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert "類型（建立後固定；要更換請刪除後重新拖入）" in text
+    assert '<select value={draft.type} disabled>' in text
+    assert 'editDraft({ ...draft, type:' not in text
+
+
 def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'section.id === "advanced"' in text
