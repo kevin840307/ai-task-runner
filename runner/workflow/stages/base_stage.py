@@ -92,6 +92,7 @@ class StageContext:
                 value.session_id = ""
         self.state.ai_session_id = ""
         self.state.stage_sessions.clear()
+        self.scratch.pop("prompt_contracts", None)
         self.save_state()
 
 
@@ -320,10 +321,14 @@ class BaseStage:
         elif self.spec.session_policy == "role":
             ctx.state.stage_sessions.pop(self.name, None)
         contracts = ctx.scratch.get("prompt_contracts")
-        if isinstance(contracts, set) and previous:
-            ctx.scratch["prompt_contracts"] = {
-                item for item in contracts if not (isinstance(item, tuple) and len(item) == 2 and item[1] == previous)
-            }
+        if isinstance(contracts, dict) and previous:
+            current = contracts.get(self.name)
+            if (
+                isinstance(current, tuple)
+                and len(current) == 2
+                and current[1] == previous
+            ):
+                contracts.pop(self.name, None)
         ctx.save_state()
         return previous
 
@@ -535,12 +540,21 @@ class BaseStage:
         session = str(getattr(client, "session_id", "") or "")
         if not session:
             return False
-        return (self.spec.prompt, session) in ctx.scratch.get("prompt_contracts", set())
+        contracts = ctx.scratch.get("prompt_contracts")
+        return (
+            isinstance(contracts, dict)
+            and contracts.get(self.name) == (self.spec.prompt, session)
+        )
 
     def _remember_prompt(self, ctx: StageContext, client) -> None:
         session = str(getattr(client, "session_id", "") or "")
-        if session and self.spec.prompt:
-            ctx.scratch.setdefault("prompt_contracts", set()).add((self.spec.prompt, session))
+        if not session or not self.spec.prompt:
+            return
+        contracts = ctx.scratch.setdefault("prompt_contracts", {})
+        if not isinstance(contracts, dict):
+            contracts = {}
+            ctx.scratch["prompt_contracts"] = contracts
+        contracts[self.name] = (self.spec.prompt, session)
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
