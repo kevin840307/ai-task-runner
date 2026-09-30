@@ -64,6 +64,20 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         if len(set(targets)) != len(targets):
             raise RunnerError(f"workflow stage {name} handoff targets must be unique")
 
+    if stage_type == "discussion":
+        role = values.get("role", "participant")
+        if not isinstance(role, str) or not role.strip():
+            raise RunnerError(f"workflow stage {name} discussion role must be non-empty")
+        history_limit = values.get("history_limit", 24)
+        if (
+            not isinstance(history_limit, int)
+            or isinstance(history_limit, bool)
+            or history_limit <= 0
+        ):
+            raise RunnerError(
+                f"workflow stage {name} discussion history_limit must be a positive integer"
+            )
+
     produces = values.get("produces")
     if produces not in {None, "", "tasks"}:
         raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
