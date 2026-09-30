@@ -7,19 +7,28 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
-from .stages.core import AIValidatorStage, PlanStage, ReviewStage, TaskStage
+from .stages.core import (
+    AIValidatorStage,
+    DiscussionStage,
+    HandoffStage,
+    PlanStage,
+    ReviewStage,
+    TaskStage,
+)
 from .stages.base_stage import BaseStage
 from .stages.command import CommandStage
 
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
+    "discussion": DiscussionStage,
+    "handoff": HandoffStage,
     "task": TaskStage,
     "review": ReviewStage,
     "ai_validator": AIValidatorStage,
     "command": CommandStage,
     "plan": PlanStage,
 }
-NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
+NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "max_rounds", "_workflow_index"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -57,11 +66,15 @@ def workflow_catalog() -> dict[str, Any]:
             "label": {"type": "string"},
             "routes": {
                 "type": "object",
-                "description": "pass/fail/error -> next, done, stop, or another Stage",
+                "description": "pass/fail -> next, done, stop, or another Stage",
             },
             "error_policy": {
                 "type": "object",
-                "description": "technical ERROR retries and exhausted target",
+                "description": "technical ERROR retry count; -1 means unlimited",
+            },
+            "max_rounds": {
+                "type": "integer",
+                "description": "optional bounded backward-loop rounds for discussion/judge flows",
             },
         },
     }
