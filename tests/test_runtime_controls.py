@@ -236,7 +236,7 @@ def test_watchdog_interval_does_not_delay_process_exit(tmp_path):
 
 
 def test_cleanup_stale_safety_snapshots(tmp_path):
-    from runner.project.files import cleanup_stale_artifacts
+    from runner.workspace import cleanup_stale_artifacts
 
     temp_root = tmp_path / "temp"
     temp_root.mkdir()
