@@ -1,503 +1,180 @@
-AI Task Runner - Future Direction
-=================================
+AI Task Runner - Remaining Work
+================================
 
-Primary goal
-------------
-Keep the runtime intentionally small while preserving:
+Goal
+----
+Keep one small closed-loop runtime that is easy to understand, easy to extend with
+new Stages, and reliable for 24H unattended execution.
 
-- 24H unattended execution
-- durable resume
-- closed-loop Stage routing
-- custom Stages
-- Plan/custom task producers
-- n8n-style visual Workflow editing
-- CLI execution
-- YAML List batch execution
-- future Dynamic Handoff and Discussion / Group Chat built from Stage
-- future Parallel scheduling built from Stage when a real use case requires it
-
-User-facing model
------------------
-
-All entry surfaces use the same Workflow model:
-
-  n8n-style UI
-       |
-  CLI / API
-       |
-  YAML List
-       |
-       v
-  RunRequest
-       |
-       v
-  WorkflowRunner
-       |
-       v
-  FlowEngine
-     /      \
-StageExecutor StateStore
-     |
-   Stage
-
-UI, CLI and YAML List are adapters only.
-They must never own their own routing or recovery semantics.
-
-Core Workflow contract
-----------------------
-
-One `stages.<name>` entry is one UI/runtime node.
-`flow` contains only the ordered unique Stage names.
-There is no reusable Stage-template + invocation-override layer.
-
-StageResult statuses:
-
-  pass
-  fail
-  error
-
-Default routing:
-
-  pass  -> next
-  fail  -> stop
-  error -> stop
-
-Optional result edge:
-
-  routes:
-    fail: execute
-
-Targets:
-
-  next
-  done
-  stop
-  another unique Stage
-
-Removed concepts must not return:
-
-- execution_mode
-- RoutingStrategy framework
-- RecoveryPolicy
-- SemanticRoutingPolicy
-- LinearRouting compatibility wrapper
-- TaskRunner alias
-- Pipeline alias
-- recover
-- restart_at
-- repeat
-- max_attempts
-- on_exhausted
-- fresh_after_same_failures
-- repair Stage as a runtime concept
-- replan StageResult
-- hidden __plan_task__ / __plan_review__
-- plan_only runtime mode
-- review-specific retry policy
-- YAML List skip_on_max_cycles state
-
-Stage model
------------
-
-Stage is the only execution/agent unit.
-
-Built-ins remain small:
-- base
-- plan
-- task
-- review
-- ai_validator
-- command
-
-Extensions use:
-
-  register_stage(...)
-
-Plan is simply a Stage that produces Task[].
-
-Any custom Stage may also use:
-
-  produces: tasks
-
-No hidden Stage injection is allowed.
-
-24H unattended contract
------------------------
-
-StageExecutor owns technical execution reliability:
-
-- hooks / safety
-- timeout
-- backend execution
-- same-session retry
-- Fresh Session rotation
-- changed-file tracking
-
-One public retry concept:
-
-  stage_retries: -1
-
-Default -1 means:
-- keep retrying technical Stage failures
-- keep one Session bounded
-- rotate Fresh Session periodically
-- preserve current durable Workflow position
-
-Deterministic configuration/state errors fail closed.
-
-Outer run supervisor owns:
-- transient service/backend restart
-- resume from state.json
-- unexpected Python exception logging
-- repeated identical Python error fail-closed behavior
-
-StateStore owns:
-- one authoritative state.json
-- atomic writes
-- backup restore
-- durable Workflow cursor
-- task cursor
-- latest StageResult
-- completion state
-
-No durable recovery state machine.
-
-n8n-style UI
-------------
-
-There is one Graph Designer with three Workflow families:
-
-1. Linear Workflow with Rollback / Loop
-   - current production family
-   - explicit Stage nodes
-   - PASS/FAIL/ERROR result edges
-   - rollback/loop = edge back to an earlier Stage
-
-2. Dynamic Handoff
-   - future
-   - Stage nodes remain unchanged
-   - handoff targets/roles/ownership are additional scheduling semantics
-
-3. Discussion / Group Chat
-   - future
-   - participants/moderator/judge are still Stages
-   - round/order/termination are additional scheduling semantics
-
-Workflow family is not a CLI execution-mode selector and does not imply three
-Runner implementations.
-
-The UI must be a visual editor for the exact runtime Workflow asset.
-
-Node:
-  Stage
-
-Normal edge:
-  PASS -> next
-
-Explicit result edge:
-  routes.pass
-  routes.fail
-  routes.error
-
-Node settings:
-- Stage type
-- prompt/instructions
-- role/session/tool/safety options
-- scope: task
-- validator/command options
-
-Edge settings:
-- result status
-- target Stage / done / stop
-
-Required behavior:
-- drag Stage from catalog
-- connect Stage nodes
-- delete/reconnect edge
-- edit node parameters in side panel
-- Global workflows editable
-- Project workflows editable
-- save only after real loader/schema validation
-- Dry Run uses the real FlowEngine
-- no hidden nodes
-- no retry/recovery edges
-
-The UI and YAML are two views of the same graph.
-A UI change must serialize to normal Workflow YAML.
-A YAML change must render back to the same graph.
-
-CLI
----
-
-CLI remains a thin adapter.
-
-Expected usage:
-
-  select project
-  select/provide workflow
-  provide goal/prompt
-  optional backend/runtime overrides
-  run
-
-No mode selector.
-
-CLI must not contain routing behavior.
-It creates RunRequest and calls the shared runtime.
-
-YAML List
----------
-
-YAML List is only a batch of RunRequests.
-
-Each item may override:
-- goal
-- project_root / project_name
-- workflow/workflow_file
-- validator
-- backend
-- Stage retry/runtime timeout settings
-- plugins
-
-Each child uses:
-- same Workflow loader
-- same FlowEngine
-- same StageExecutor
-- same StateStore
-
-YAML List does not get:
-- custom routing semantics
-- custom recovery state
-- skip markers
-- max-cycle policy
-
-Future Dynamic Agent
+Current architecture
 --------------------
 
-Do not build it yet.
+  UI / CLI / API / YAML List
+              |
+          RunRequest
+              |
+       WorkflowRunner
+              |
+          FlowEngine
+         /         \
+ StageExecutor    StateStore
+       |
+     Stage
 
-When required, keep Stage unchanged.
+One Workflow node = one Stage definition.
+Workflow routing is only PASS / FAIL / ERROR result edges.
 
-Possible future scheduler:
+StageExecutor owns all technical reliability:
+- unlimited technical retry when stage_retries = -1
+- Same Session retry
+- Fresh Session rotation
+- transient API/backend retry with seconds-based delay/backoff
+- timeout / safety / changed-file handling
 
-  current Stage
-      |
-  StageResult + bounded handoff intent
-      |
-  DynamicScheduler
-      |
-  target Stage
+Stage implementations do not own retry/recover/session logic.
 
-Examples:
-- Planner -> Coder
-- Reviewer -> Coder
-- Reviewer -> Architect
-- Reviewer -> Researcher
-- Validator -> done
+Current package layout
+----------------------
 
-Dynamic scheduling must reuse:
-- StageExecutor
-- StateStore
-- Stage registry
-- backend/session logic
-- protected-file safety
-- UI Stage catalog
+runner/
+  agent/       model client + backend adapters
+  assets/      editable Workflow / Prompt assets
+  config/      runtime configuration
+  plugins/     extension discovery + runtime hooks/policies
+  runtime/     process/state/supervisor reliability
+  workflow/    graph loading, validation, routing and Stage execution
+  api.py       public RunRequest entry
+  script.py    YAML List adapter
+  workspace.py project/workspace policy/context
+  workflow_runner.py
+  utils.py
 
-Do not create a second Orchestrator.
+Editable assets:
 
-UI direction for Dynamic:
-- same Stage nodes
-- allowed handoff edges/policies
-- runtime current-owner highlight
-- no separate product/editor
+  runner/assets/
+    workflows/*.yaml
+    prompts/
+      common/*.md
+      ralphy/*.md
+      workflow/*.md
 
-Future Discussion / Group Chat
-------------------------------
+Project-local assets use the same shape:
 
-Do not build it yet.
+  <project>/.ai-task-runner/assets/
+    workflows/*.yaml
+    prompts/<category>/*.md
 
-Discussion participants remain Stage nodes.
+Folder review decision
+----------------------
 
-Possible future scheduler:
+Do not merge the main domain folders further.
 
-  participant Stage
-        |
-  discussion result / bounded summary
-        |
-  DiscussionScheduler
-        |
-  next participant / moderator / done
+Keep:
+- agent/      model/backend execution is one clear domain
+- workflow/   graph + Stage semantics
+- runtime/    durable/process reliability
+- plugins/    optional extension/hook boundary
+- assets/     user-editable Workflow/Prompt assets
+- config/     runtime configuration
 
-Discussion-specific state may include only what is necessary:
-- round
-- active participant
-- moderator/judge
-- termination condition
-- bounded summary
+Do not merge just to reduce folder count.
 
-It must reuse:
-- StageExecutor
-- StateStore
-- Stage registry
-- backend/session logic
-- protected-file safety
-- the same Graph Designer
+Only merge a file when all of these are true:
+1. it has one obvious owner;
+2. it is mostly a thin helper/wrapper;
+3. merging reduces navigation without creating a large mixed-responsibility file.
 
-Do not create a separate group-chat runtime.
+Current decisions:
+- keep workflow/loader.py and workflow/schema.py separate: load/normalize vs validate
+- keep plugins/registry.py and plugins/runtime.py separate: discovery/config vs hook runtime
+- keep workflow_builder/publish.py and runner_control.py separate: explicit CLI/process boundaries
+- keep agent provider adapters separate because Qwen/OpenCode are independently replaceable
 
-UI direction for Discussion:
-- same Stage nodes
-- participant/group membership
-- round/order settings
-- moderator/judge node role
-- active speaker highlighting
-- no separate product/editor
+Removed concepts must not return
+--------------------------------
+- execution_mode / RoutingStrategy hierarchy
+- TaskRunner / Pipeline compatibility runtime
+- recover / restart_at / repeat / max_attempts / on_exhausted
+- repair Stage as a runtime concept
+- hidden Plan Task/Review nodes
+- plan_only runtime mode
+- per-Stage retry policy
+- System/Custom Workflow trees
+- old runner/ai, runner/backends, runner/project, runner/utils package trees
+- pre-assets Workflow/Prompt paths
 
-Future Parallel Agent
----------------------
+TODO - only remaining gates
+---------------------------
 
-Parallel execution also reuses Stage.
+Gate 1 - repository contract / CI
+1. [IN PROGRESS] Remove every stale production reference to deleted paths/modules.
+2. [IN PROGRESS] Migrate tests to current owners instead of restoring compatibility shims.
+3. [IN PROGRESS] Keep categorized Prompt keys stable:
+   - common/<name>.md
+   - ralphy/<name>.md
+   - workflow/<workflow-name>/<name>.md for generated Workflow-owned prompts
+4. [IN PROGRESS] Prove n8n Studio round-trip:
+   YAML -> graph -> edit node/edge -> YAML -> same graph.
+5. [IN PROGRESS] Prove CLI/API/YAML List all use the same RunRequest/runtime contract.
+6. [IN PROGRESS] Pass Ubuntu CI.
+7. [IN PROGRESS] Pass Windows CI.
 
-Default safety:
-- read-only Stages may run concurrently
-- only one writer per project/worktree
-- parallel writers require isolated worktrees
-- merge/reconcile is explicit
+Gate 2 - deterministic unattended reliability
+8. [DONE] Stage technical retry is centralized in StageExecutor.
+9. [DONE] stage_retries=-1 supports unlimited technical retry.
+10. [DONE] Same Session -> Fresh Session rotation is shared by all Stages.
+11. [IN PROGRESS] 429/502/503/disconnect use seconds-based bounded backoff without losing graph position.
+12. [IN PROGRESS] PASS/FAIL/ERROR result-edge closure tests.
+13. [IN PROGRESS] kill/resume equivalence at committed Stage boundaries.
+14. [IN PROGRESS] YAML List multi-item + restart/resume.
+15. [DONE] Custom Stage requires no retry/recovery code.
+16. [DONE] Custom produces: tasks works through the same graph.
 
-A future ParallelScheduler may coordinate ready Stages, but it must reuse the
-same StageExecutor and StateStore.
+Gate 3 - real backend proof
+17. [NEXT] Run real-Qwen built-in file/ai/mixed topologies.
+18. [NEXT] Run Review FAIL -> Execute closure.
+19. [NEXT] Run Validator FAIL -> configured target closure.
+20. [NEXT] Run HTTP 429/502/503/disconnect retry probes.
+21. [NEXT] Run expired session -> Fresh Session recovery.
+22. [NEXT] Run process restart / detached UI resume probes.
+23. [NEXT] Run custom Stage / custom Task Producer probes.
 
-UI direction for Parallel:
-- same Stage nodes
-- parallel branches
-- write-ownership indication
-- branch/join only when real requirements justify it
+Gate 4 - 24H acceptance
+24. [NEXT] Run high-density soak first and fix only reproducible/high-value failures.
+25. [NEXT] Run full 24H unattended soak on Windows.
+26. [NEXT] Confirm no unbounded log/state/history growth.
+27. [NEXT] Confirm no stuck owner lock/orphan process after stop/crash/resume.
+28. [NEXT] Confirm active/resumed runs keep frozen Workflow/Prompt resources.
+29. [NEXT] Update README / README.zh-TW / architecture / DevFollow to the final tested behavior.
+30. [NEXT] Regenerate project.bundle.txt only after all gates above stabilize.
 
-Do not pre-build a generic DAG engine now.
+Future - do not implement yet
+-----------------------------
 
-TODO
-----
+1. Dynamic Handoff
+   - reuse the same Stage node
+   - add only scheduler/handoff state when a real use case needs it
+   - reuse StageExecutor / StateStore / plugins / Graph Designer
 
-Phase A - destructive simplification first
-1. [DONE] Keep exactly one graph model: one `stages.<name>` = one n8n/UI/runtime node; `flow` is only ordered unique Stage names.
-2. [DONE] Remove every legacy routing/recovery field and test: recover/restart_at/repeat/max_attempts/on_exhausted/replan/hidden Plan nodes/invocation overrides.
-3. [DONE] Collapse technical reliability into one shared StageExecutor policy:
-   - Stage implementations never implement retry/recover/session rotation.
-   - same-session retry and Fresh Session rotation are shared.
-   - `stage_retries=-1` means unlimited technical recovery.
-   - transient API/backend errors use bounded exponential/seconds delay and retry indefinitely when configured.
-   - deterministic configuration/state/programming errors fail closed.
-4. [DONE] Remove per-Stage retry/recover special cases and obsolete config fields; keep the smallest common retry/session contract.
-5. [DONE] Simplify Plugin/Extension loading to one small registration boundary for Stage/backend/tool extensions with no Workflow/runtime branching.
-6. [DONE] Use one obvious editable asset package with separate concerns:
-      runner/assets/
-        workflows/*.yaml
-        prompts/<category>/*.md
-   Prompt categories currently include common, ralphy and workflow; future domains can add another category without runtime changes.
-7. [DONE] Keep Project-local assets structurally identical:
-      <project>/.ai-task-runner/assets/
-        workflows/*.yaml
-        prompts/<category>/*.md
-   Global and Project assets use the same rules and are both editable.
-8. [DONE] Simplify Workflow Studio discovery/editor/export/import for the split asset roots; remove System/Custom/folder-group compatibility.
-9. [DONE] Ensure CLI and YAML List are thin RunRequest adapters over the same WorkflowRunner/FlowEngine/StageExecutor/StateStore.
-10. [DONE] Ensure Dry Run imports FlowEngine directly and has no second routing/recovery model.
-11. [DONE] Migrate all built-in/example/tool/live-probe Workflows to the new flat asset/node/result-edge contract.
-12. [IN PROGRESS] Pass Windows + Ubuntu CI.
+2. Discussion / Group Chat
+   - participants/moderator/judge remain Stages
+   - add only bounded round/order/termination state
+   - reuse the same runtime and Graph Designer
 
-Phase B - unattended reliability proof
-13. [IN PROGRESS] Deterministic PASS/FAIL/ERROR closed-loop tests.
-14. [DONE] Same-session retry -> Fresh Session rotation test through shared StageExecutor only.
-15. [DONE] Unlimited `stage_retries=-1` test with no Stage-specific recovery code.
-16. [IN PROGRESS] API 429/502/503/disconnect tests with seconds-based backoff/delay.
-17. Kill/resume equivalence at committed Stage boundaries.
-18. [DONE] Custom Stage registration test with zero retry/recovery code in the custom Stage.
-19. [DONE] Custom `produces: tasks` test.
-20. n8n round-trip: package YAML -> graph -> edit node/edge -> YAML -> same graph.
-21. [DONE] CLI smoke test.
-22. [IN PROGRESS] YAML List multi-item + resume test.
-23. Real Qwen closed-loop reliability probes.
-24. 24H high-density soak.
-
-Phase C - code-size/owner cleanup
-25. [DONE] Make the runner package readable by folder name alone:
-    - AI client/backend/provider adapters live under agent/;
-    - Project/workspace policy lives in workspace.py, separate from Plugin hooks;
-    - YAML List loading/execution lives in script.py;
-    - generic helpers live in utils.py instead of a utils/ fragment tree;
-    - Workflow result handling lives in results.py and frozen run assets in resources.py;
-    - no folder exists only to preserve a compatibility wrapper.
-26. [DONE] Finish structured asset migration:
-    - Global: runner/assets/workflows/*.yaml
-    - Global Prompt categories: runner/assets/prompts/<category>/*.md
-    - Project: <project>/.ai-task-runner/assets/workflows/*.yaml and prompts/<category>/*.md
-    - remove every pre-assets Prompt/Workflow path after all references move.
-27. [DONE] Remove stale imports/tests left by owner merges.
-    Acceptance: repository search returns zero references to superseded owner modules or pre-assets paths.
-28. [DONE] Finish Workflow Studio categorized Prompt support:
-    - recursive Prompt discovery
-    - Prompt identity is category-relative key such as common/review.md
-    - create/rename/duplicate/import preserve categories safely
-    - Stage Prompt picker and YAML round-trip preserve the same key
-    - no folder-group/System/Custom compatibility UI.
-29. [NEXT] Re-run architecture review after migration and merge only folders/files with unclear ownership.
-    Current decision: keep agent/, workflow/, runtime/, plugins/, assets/ because each has a distinct runtime responsibility.
-    Prefer merging tiny one-owner helper files into their owner; do not merge domains merely to reduce folder count.
-30. [NEXT] Measure production runtime LOC after structural migration and remove helpers/config/state fields that only served deleted behavior.
-31. [NEXT] Review every core file over ~300-400 lines for mixed responsibility; split only when it reduces concepts.
-32. [NEXT] Keep the main runtime reading path short:
-      workflow_runner.py
-      workflow/flow_engine.py
-      workflow/stages/executor.py
-      runtime/run_state.py
-33. [NEXT] Regenerate project.bundle.txt only after architecture and asset layout stabilize.
-34. [NEXT] Update README / README.zh-TW / architecture / DevFollow to exactly match the final asset/package layout.
-
-Phase D - future UI family: Dynamic Handoff
-32. Do not implement until A/B/C are stable.
-33. Reuse the exact same Stage node, StageExecutor, StateStore, plugin boundary, Workflow package layout and Graph Designer.
-34. Add only the smallest scheduler/handoff metadata proven by a real use case.
-
-Phase E - future UI family: Discussion / Group Chat
-35. Do not implement until A/B/C are stable.
-36. Reuse the exact same Stage node/runtime/package/plugin/UI foundations.
-37. Add only bounded round/participant/moderator/termination state when required.
+3. Parallel
+   - read-only Stages may eventually run concurrently
+   - one writer per project/worktree by default
+   - isolated worktrees required for parallel writers
+   - do not build a generic DAG engine before a proven requirement
 
 Final acceptance
 ----------------
 The refactor is complete only when:
-- adding a new Stage requires implementing its work/result only, with no retry/recover/session code;
-- Linear rollback/loop is only a result edge;
-- API/service failures can retry indefinitely with seconds-based delay without losing durable progress;
-- Workflow/Prompt assets share one editable assets package with workflows/ and categorized prompts/<category>/ roots;
-- UI, CLI and YAML List execute the exact same runtime graph;
-- Plugin registration is small and isolated;
-- Windows + Ubuntu CI, real Qwen probes and 24H soak pass.
-
-Non-goals
----------
-
-Do not introduce unless a proven requirement needs them:
-- UniversalAgent
-- multiple full Orchestrators
-- execution mode registries
-- generic RoutingStrategy hierarchy
-- arbitrary expression language
-- unlimited DAG semantics
-- large AgentMessage hierarchy
-- separate UI per agent model
-- duplicate CLI/YAML/UI runtimes
-
-Final rule
-----------
-
-Workflow defines Stage nodes and result edges.
-Stage performs one responsibility.
-StageExecutor makes one Stage reliable.
-FlowEngine moves through the graph.
-StateStore makes progress resumable.
-
-UI edits that graph.
-CLI runs that graph.
-YAML List batches runs of that graph.
-
-Future Dynamic Handoff / Discussion / Parallel behavior must reuse Stage.
+- adding a Stage requires work/result code only;
+- rollback/loop is only a result edge;
+- API/service failures can retry indefinitely with seconds-based delay;
+- Workflow/Prompt assets use the structured assets layout;
+- UI, CLI, API and YAML List execute the same runtime graph;
+- Windows + Ubuntu CI pass;
+- real-Qwen reliability probes pass;
+- 24H soak passes without stuck state, orphan process or unbounded growth.
