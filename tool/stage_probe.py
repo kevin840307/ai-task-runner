@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from runner.config.defaults import DEFAULT_BACKEND
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import Task
 from runner.workflow.flow_engine import resolve_stage_target
@@ -70,7 +71,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     config = RuntimeConfig(
         goal=goal,
         project_root=str(project),
-        backend=str(args.backend or RuntimeConfig.backend),
+        backend=str(args.backend or DEFAULT_BACKEND),
         workflow=workflow,
         workflow_explicit=True,
         work_dir=work_dir,
