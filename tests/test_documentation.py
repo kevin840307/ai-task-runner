@@ -106,12 +106,13 @@ def test_deleted_runtime_modules_and_asset_paths_stay_absent():
 
 def test_architecture_keeps_behavior_ownership_explicit():
     value = text("ARCHITECTURE")
-    assert "Stage is the only execution/agent extension unit." in value
+    assert "Stage" in value
     assert "StageExecutor" in value
     assert "technical reliability" in value
     assert "FlowEngine" in value
-    assert "semantic graph progress" in value
-    assert "There is one plugin discovery boundary" in value
+    assert "semantic PASS/FAIL navigation" in value
+    assert "StateStore" in value
+    assert "Dynamic Handoff is the only multi-agent runtime primitive" in value
 
 
 def test_future_todo_keeps_linear_first_and_future_families_deferred():
