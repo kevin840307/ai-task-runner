@@ -1,73 +1,74 @@
-# Workflow examples
+# Workflow Tool Examples
 
-These YAML files are small reference graphs for the current Runner contract.
+These YAML files are deterministic examples for the current Workflow runtime. They are also used by dry-run/live reliability preflight.
 
-Available examples:
+## Examples
 
-- `01_default_ai.yaml` — Planning -> task-scoped Execute/Review -> AI validation.
-- `02_ai_with_grill.yaml` — adds one whole-result Review/Grill gate.
-- `03_file_validation.yaml` — deterministic File Validator.
-- `04_mixed_with_grill.yaml` — Grill + File Validator + Final AI Validator.
-- `05_grill_vote_3_choose_2.yaml` — three fresh Grill sessions, 2/3 required to pass.
-- `06_custom_task_producer.yaml` — Command produces Task[]; explicit task-scoped Execute/Review.
-- `11_multi_validators_anywhere.yaml` — several validation gates interleaved with ordinary Stages.
+- `01_default_ai.yaml` — Plan -> Task -> Review -> Final AI Validator.
+- `02_ai_with_review_gate.yaml` — adds an independent fresh Review gate before final validation.
+- `03_file_validation.yaml` — Task flow plus a command/File Validator.
+- `04_mixed_with_review_gate.yaml` — independent Review + File Validator + Final AI Validator.
+- `05_review_vote_3_choose_2.yaml` — three fresh Review runs, 2/3 required to pass.
+- `06_custom_task_producer.yaml` — command-backed custom Task producer; PlanStage is not required.
+- `11_multi_validators_anywhere.yaml` — validators and ordinary Stages interleaved to prove validation is not terminal-only.
 
-## Graph rule
+## Current Workflow contract
 
-One `stages.<name>` entry is one node. `flow` is only the ordered list of Stage names.
-
-Rollback/loop is a normal result edge:
+A Workflow is only Stages plus semantic result routing:
 
 ```yaml
 stages:
-  work:
+  execute:
     type: task
-    scope: task
-
-  review:
-    type: review
-    scope: task
     routes:
-      fail: work
+      fail: execute
+
+  verify:
+    type: review
+    session_policy: fresh
+    routes:
+      fail: execute
 
 flow:
-  - work
-  - review
+  - execute
+  - verify
 ```
 
-Use only `routes.pass`, `routes.fail`, and `routes.error`. Technical retry/session recovery is global Runner behavior and must not be expressed in Workflow YAML.
+Only `routes.pass` and `routes.fail` are graph edges. Technical exceptions/timeouts/API failures are owned by `StageExecutor` and use `error_policy.retries` or the global `stage_retries`; there is no `routes.error`, repair Stage, recover edge, restart_at, repeat, max_attempts, or on_exhausted graph contract.
 
-## Grill
-
-Grill is not a new Stage type. It reuses `type: review`:
+Dynamic Handoff uses one Handoff Stage with multiple allowed targets:
 
 ```yaml
-grill:
-  type: review
-  prompt: ../../runner/workflows/grill.md
-  fresh_session_on_start: true
-  routes:
-    fail: planning
+coordinator:
+  type: handoff
+  targets: [implementer, verifier, final_validate]
 ```
 
-If several independent opinions are required, use the ordinary Stage voting fields:
+The Handoff Stage chooses exactly one target per decision. Target roles remain ordinary Stages.
 
-```yaml
-runs: 3
-required_passes: 2
-fresh_session_each_run: true
+## Session policy
+
+AI-backed Stages may use:
+
+- `session_policy: role` — durable reusable Session owned by that Stage name; default for Dynamic specialist roles.
+- `session_policy: main` — share the Runner primary Session.
+- `session_policy: fresh` — start a new Session for every invocation; recommended for independent final validation.
+- `session_policy: auto` — internal/default Stage behavior. `session_key` is valid only with `auto`.
+
+If a reusable role Session repeatedly fails technically, StageExecutor may rotate only that Stage to a fresh Session and persist the new Session after recovery.
+
+## Validation and testing
+
+Run one workflow deterministically:
+
+```powershell
+python tool/workflow_dryrun.py tool/workflow/11_multi_validators_anywhere.yaml --matrix --json
 ```
 
-## Task producers
+The real-Qwen reliability tool runs representative dry-run preflight before live model probes:
 
-`plan` is the built-in Task producer. A custom Stage can also return Task[] with:
-
-```yaml
-produces: tasks
+```powershell
+tool\qwen_live_reliability_0_5h.bat
 ```
 
-The per-task SOP must then be explicit contiguous `scope: task` nodes. There are no hidden Task/Review/Repair Stages.
-
-## Validators
-
-`result_kind: validation` Command Stages and `type: ai_validator` are ordinary graph nodes. Any semantic FAIL loop is an explicit `routes.fail` edge.
+Use `tool\qwen_live_reliability_24h.bat` only after the short live gate passes.
