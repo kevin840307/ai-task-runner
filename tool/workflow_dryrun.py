@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 from runner.runtime.run_state import RunState, Task, set_stage
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.loader import load_workflow
-from runner.workflow.reducers import reduce_result
+from runner.workflow.results import reduce_result
 from runner.workflow.registry import stage_result_kind
 from runner.workflow.stages import StageResult
 
