@@ -225,7 +225,7 @@ Global 與 Project assets 都可以直接修改。
 1. **Linear Workflow with Rollback / Loop**
 2. **Dynamic Handoff**
 
-Dynamic Handoff 重用相同的 Stage、StageExecutor、StateStore、Plugin boundary、Workflow assets 與 Graph Designer。多角色 discussion/review-board/triage 以 Dynamic Handoff Workflow pattern 表達，不再建立另一套 runtime family。
+Dynamic Handoff 重用相同的 Stage、StageExecutor、StateStore、Plugin boundary、Workflow assets 與 Graph Designer。多角色 discussion/review-board/triage 以 Dynamic Handoff Workflow pattern 表達，不再建立另一套 runtime family。Handoff 與一般 specialist 預設使用 durable per-role Session；角色可明確選擇 `session_policy: main`、`role` 或 `fresh`，獨立 Final Validation 通常維持 `fresh`。
 
 ## CLI
 
