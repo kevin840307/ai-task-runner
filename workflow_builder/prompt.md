@@ -31,7 +31,7 @@ Rules:
 - Same Session continuation, Fresh Session recovery, API delay, watchdog, and resume are Runner-owned; do not model them as graph nodes or routes.
 - Use only supported Stage types: base, task, review, plan, ai_validator, command, handoff.
 - For Dynamic Handoff, use one `type: handoff` Stage with a non-empty `targets` list. It dynamically chooses exactly one next Stage per decision.
-- Dynamic specialist roles remain ordinary Stages. Use `session_policy: main` to reuse the primary Runner session, `session_policy: role` to keep one durable session per Stage role across handoffs/resume, or `session_policy: fresh` to start a new session on every Stage invocation.
+- Dynamic specialist roles remain ordinary Stages. Default them to `session_policy: role` so each role keeps one durable reusable Session across handoffs/resume. Use `session_policy: main` only when a role intentionally shares the primary Runner Session, or `session_policy: fresh` when every invocation must be isolated. Independent final validators should normally use `fresh`.
 - Technical retry/recovery remains Runner-owned and may rotate any policy to a fresh session after repeated failures.
 - For Dynamic Handoff final completion, prefer an ordinary `ai_validator` Stage with PASS -> done and FAIL -> the Handoff Stage.
 - Group-discussion, review-board, triage, and similar behaviors are Workflow patterns built from Dynamic Handoff + ordinary Stages; do not emit discussion-specific Stage types or state.
