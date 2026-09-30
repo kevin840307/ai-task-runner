@@ -38,7 +38,11 @@ class DryRunContext:
         self.root = root
         self.work = root / ".dryrun"
         self.work.mkdir(parents=True, exist_ok=True)
-        self.config = SimpleNamespace(workflow=workflow, ai_validator_prompt="dry-run")
+        self.config = SimpleNamespace(
+            workflow=workflow,
+            ai_validator_prompt="dry-run",
+            max_cycles=-1,
+        )
         self.state = RunState(
             run_id="dryrun",
             goal="Validate Workflow closure.",
@@ -122,7 +126,15 @@ class MockStageExecutor:
         self.calls = 0
         self.trace: list[tuple[int, str, str, str]] = []
 
-    def run(self, stage, ctx: DryRunContext, previous=None, *, label: str = "") -> StageResult:
+    def run(
+        self,
+        stage,
+        ctx: DryRunContext,
+        previous=None,
+        *,
+        label: str = "",
+        retry_limit: int | None = None,
+    ) -> StageResult:
         self.calls += 1
         if self.calls > self.max_steps:
             raise DryRunLimit(
@@ -155,6 +167,28 @@ class MockStageExecutor:
                 acceptance_criteria=["Workflow closes."],
             )
             return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
+        if kind == "handoff":
+            targets = list(getattr(getattr(stage, "spec", None), "targets", []) or [])
+            if not targets:
+                return StageResult.error_result(
+                    stage.name, RuntimeError("handoff has no targets")
+                )
+            target = targets[-1]
+            return StageResult(
+                stage.name,
+                "pass",
+                output="HANDOFF",
+                data={"target": target, "reason": "dry-run"},
+                kind="handoff",
+            )
+        if kind == "discussion":
+            return StageResult(
+                stage.name,
+                status,
+                output=f"DISCUSSION_{stage.name}",
+                data=f"DISCUSSION_{stage.name}",
+                kind="discussion",
+            )
         if kind == "review":
             passed = status == "pass"
             return StageResult(
