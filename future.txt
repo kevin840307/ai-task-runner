@@ -117,17 +117,17 @@ TODO - only remaining gates
 ---------------------------
 
 Gate 1 - repository contract / CI
-1. [IN PROGRESS] Remove every stale production reference to deleted paths/modules.
-2. [IN PROGRESS] Migrate tests to current owners instead of restoring compatibility shims.
-3. [IN PROGRESS] Keep categorized Prompt keys stable:
+1. [DONE] Remove every stale production reference to deleted paths/modules.
+2. [DONE] Migrate tests to current owners instead of restoring compatibility shims.
+3. [DONE] Keep categorized Prompt keys stable:
    - common/<name>.md
    - ralphy/<name>.md
    - workflow/<workflow-name>/<name>.md for generated Workflow-owned prompts
-4. [IN PROGRESS] Prove n8n Studio round-trip:
+4. [DONE] Prove n8n Studio graph contract / round-trip:
    YAML -> graph -> edit node/edge -> YAML -> same graph.
-5. [IN PROGRESS] Prove CLI/API/YAML List all use the same RunRequest/runtime contract.
-6. [IN PROGRESS] Pass Ubuntu CI.
-7. [IN PROGRESS] Pass Windows CI.
+5. [DONE] Prove CLI/API/YAML List all use the same RunRequest/runtime contract.
+6. [DONE] Pass Ubuntu CI (CI #586).
+7. [DONE] Pass Windows CI (CI #586).
 
 Gate 2 - deterministic unattended reliability
 8. [DONE] Stage technical retry is centralized in StageExecutor.
