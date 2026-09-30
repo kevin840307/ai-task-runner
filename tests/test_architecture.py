@@ -41,12 +41,13 @@ def test_assets_are_one_package_with_separate_workflow_and_prompt_roots():
     assets = ROOT / "runner" / "assets"
     workflows = assets / "workflows"
     prompts = assets / "prompts"
-    assert {"ai.yaml", "file.yaml", "mixed.yaml", "ralphy_ai_validate.yaml"} <= {
+    assert {"ai.yaml", "file.yaml", "mixed.yaml", "dynamic_handoff.yaml", "discussion.yaml", "ralphy_ai_validate.yaml"} <= {
         path.name for path in workflows.glob("*.yaml")
     }
-    assert {"common", "ralphy", "workflow"} <= {
+    assert {"common", "ralphy"} <= {
         path.name for path in prompts.iterdir() if path.is_dir()
     }
+    assert not (prompts / "workflow").exists()
     assert not (ROOT / "runner" / "workflows").exists()
     assert not (ROOT / "runner" / "prompts").exists()
 
