@@ -131,12 +131,12 @@ def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
 
 
 def test_live_builtin_final_ai_contract_matches_bundled_workflows():
-    assert live.system_final_ai_contract("ai") == (3, 2, True)
-    assert live.system_final_ai_contract("mixed") == (3, 2, True)
+    assert live.builtin_final_ai_contract("ai") == (3, 2, True)
+    assert live.builtin_final_ai_contract("mixed") == (3, 2, True)
 
 
 def test_live_builtin_readonly_safety_contract_matches_bundled_workflows():
-    assert live.system_readonly_safety_contract() == {
+    assert live.builtin_readonly_safety_contract() == {
         "file": {"planning": "observe", "review": "observe"},
         "ai": {
             "planning": "observe",
@@ -171,7 +171,7 @@ flow: [planning]
     monkeypatch.setattr(live, "WORKFLOWS", workflows)
 
     with pytest.raises(RuntimeError, match="workflow/file planning readonly_safety mismatch"):
-        live.system_readonly_safety_contract()
+        live.builtin_readonly_safety_contract()
 
 
 def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
@@ -226,7 +226,7 @@ def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
     monkeypatch.setattr(live, "run_command", fake_run)
 
     with pytest.raises(RuntimeError, match="expected 3, got 2"):
-        live.system_workflow_probe(settings(tmp_path), tmp_path, "ai")
+        live.builtin_workflow_probe(settings(tmp_path), tmp_path, "ai")
 
 
 def test_runner_timeout_arguments_must_be_whole_seconds():
@@ -742,7 +742,7 @@ def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: li
         encoding="utf-8",
     )
 
-    live.assert_system_topology(project, workflow)
+    live.assert_builtin_topology(project, workflow)
 
 
 def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
@@ -781,7 +781,7 @@ def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path
         encoding="utf-8",
     )
 
-    live.assert_system_topology(project, "mixed")
+    live.assert_builtin_topology(project, "mixed")
 
 
 def test_builtin_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
@@ -814,7 +814,7 @@ def test_builtin_topology_contract_rejects_uncovered_durable_todos(tmp_path: Pat
     )
 
     with pytest.raises(RuntimeError, match="durable_tasks=2"):
-        live.assert_system_topology(project, "mixed")
+        live.assert_builtin_topology(project, "mixed")
 
 @pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
 def test_review_failure_routing_validator_accepts_two_logical_lines_with_optional_final_newline(
