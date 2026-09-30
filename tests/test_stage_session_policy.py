@@ -83,8 +83,11 @@ def test_fresh_session_policy_clears_session_on_every_stage_invocation(tmp_path,
         session_key="fresh-worker",
     ))
 
-    assert stage.run(ctx).status == "pass"
-    assert stage.run(ctx).status == "pass"
+    first = stage.run(ctx)
+    assert first.status == "pass"
+    stage.finish(ctx, first)
+    second = stage.run(ctx)
+    assert second.status == "pass"
 
     assert stage.seen == ["", ""]
     assert ctx.state.stage_sessions == {}
