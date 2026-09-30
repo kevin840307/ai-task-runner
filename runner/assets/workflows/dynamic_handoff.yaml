@@ -1,0 +1,45 @@
+stages:
+  coordinator:
+    type: handoff
+    status: AI 正在選擇下一個 Agent
+    targets:
+      - implementer
+      - verifier
+      - final_review
+    error_policy:
+      retries: -1
+
+  implementer:
+    type: base
+    status: Implementation Agent 正在處理
+    prompt: common/dynamic_worker.md
+    instructions: Focus on implementation and concrete project changes.
+    mode: write
+    track_changes: true
+    routes:
+      pass: coordinator
+
+  verifier:
+    type: base
+    status: Verification Agent 正在檢查
+    prompt: common/dynamic_worker.md
+    instructions: Focus on tests, verification evidence, and finding remaining defects.
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  final_review:
+    type: review
+    status: Final Review 正在確認是否可以結束
+    prompt: common/dynamic_final_review.md
+    readonly_safety: observe
+    error_policy:
+      retries: -1
+    routes:
+      fail: coordinator
+
+flow:
+  - coordinator
+  - implementer
+  - verifier
+  - final_review
