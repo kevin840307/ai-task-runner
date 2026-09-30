@@ -165,6 +165,21 @@ def test_dryrun_json_contract_is_small_and_machine_readable():
     ]
 
 
+def test_dynamic_handoff_matrix_exercises_selected_role_failures():
+    result = run("runner/assets/workflows/dynamic_handoff.yaml", "--matrix", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+
+    cases = {item["name"]: item for item in payload["cases"]}
+    role_fail = cases["requirements_analyst FAIL -> stop"]
+    role_error = cases["requirements_analyst ERROR -> stop"]
+    assert role_fail["passed"] is True
+    assert role_error["passed"] is True
+    assert role_fail["executions"] == 2
+    assert role_error["executions"] == 2
+
+
 def test_dynamic_handoff_builtin_dryrun_reaches_final_validation():
     result = run("runner/assets/workflows/dynamic_handoff.yaml", "--json")
     assert result.returncode == 0, result.stdout + result.stderr
