@@ -369,16 +369,17 @@ class WorkflowStudioMixin:
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
 
-            allowed = {
-                "type", "status", "run_state", "actor", "mode", "prompt",
-                "continuation_prompt", "instructions", "detail", "produces",
-                "session_key", "parser", "cwd", "result_kind", "validator", "command",
-                "allow_project_read", "track_changes", "tolerate_restored_changes",
-                "fresh_session_each_run", "fresh_session_on_start",
-                "structured_retries", "structured_fresh_retries",
-                "runs", "required_passes", "min_tasks", "timeout",
-                "clean_work", "label", "scope", "routes",
-            }
+            # Keep Studio writable fields aligned with the runtime Stage catalog.
+            # Node-only fields live beside the Stage spec; Stage-spec fields are
+            # discovered dynamically so adding a Stage option does not require a
+            # second hard-coded UI/backend allow-list.
+            catalog = self.workflow_catalog()
+            allowed = {"type", "status", "label", "scope", "routes", "readonly_safety"}
+            for stage in (catalog.get("stage_types") or {}).values():
+                for option in stage.get("options") or []:
+                    name = str(option.get("name") or "").strip()
+                    if name:
+                        allowed.add(name)
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
             clean = {}
@@ -1070,6 +1071,88 @@ class WorkflowStudioMixin:
             raise ValueError("Flow Map is available only for Workflow YAML")
         data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
         return build_workflow_graph(data)
+
+    def studio_graph_save(
+        self,
+        file_id: str,
+        graph: dict,
+        expected_hash: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Persist Linear Designer flow order and PASS/FAIL/ERROR result edges.
+
+        YAML remains canonical. START/END are UI-only nodes and never enter the
+        Workflow file. Default PASS-to-next is represented by the Flow order;
+        only non-default PASS and semantic FAIL/ERROR routes are written.
+        """
+        with self._edit_lock:
+            self._require_editable()
+            path, kind, scope = self._resolve_studio_file(file_id, project)
+            self._require_studio_writable(scope)
+            if kind != "workflow":
+                raise ValueError("Graph editing is available only for Workflow YAML")
+
+            content = path.read_text(encoding="utf-8")
+            self._require_hash(content, expected_hash)
+            data = self._load_workflow_yaml(content)
+            stages = data.get("stages")
+            if not isinstance(stages, dict):
+                raise ValueError("Workflow stages must be a mapping")
+            if not isinstance(graph, dict):
+                raise ValueError("Graph must be an object")
+
+            raw_flow = graph.get("flow")
+            if not isinstance(raw_flow, list):
+                raise ValueError("Graph flow must be a list")
+            flow = [str(name).strip() for name in raw_flow if str(name).strip()]
+            if len(flow) != len(set(flow)):
+                raise ValueError("Workflow flow cannot contain duplicate Stage names")
+            unknown_flow = [name for name in flow if name not in stages]
+            if unknown_flow:
+                raise ValueError("Workflow flow references unknown Stage: " + ", ".join(unknown_flow))
+
+            raw_routes = graph.get("routes") or {}
+            if not isinstance(raw_routes, dict):
+                raise ValueError("Graph routes must be an object")
+            normalized_routes: dict[str, dict[str, str]] = {}
+            targets = set(stages) | {"next", "done", "stop"}
+            for stage_name, mapping in raw_routes.items():
+                stage_name = str(stage_name)
+                if stage_name not in stages:
+                    raise ValueError(f"Graph routes reference unknown Stage: {stage_name}")
+                if mapping in (None, {}):
+                    continue
+                if not isinstance(mapping, dict):
+                    raise ValueError(f"Graph routes for {stage_name} must be an object")
+                clean: dict[str, str] = {}
+                for status, target in mapping.items():
+                    status = str(status).lower().strip()
+                    target = str(target).strip()
+                    if status not in {"pass", "fail", "error"}:
+                        raise ValueError(f"Unsupported result edge status: {status}")
+                    if target not in targets:
+                        raise ValueError(f"Graph route {stage_name}.{status} references unknown target: {target}")
+                    clean[status] = target
+                if clean:
+                    normalized_routes[stage_name] = clean
+
+            updated = self._replace_flow_block(content, flow)
+            # Patch every Stage so deleting an Edge removes the YAML route too.
+            for stage_name in stages:
+                updated = self._patch_stage_fields(
+                    updated,
+                    str(stage_name),
+                    {"routes": normalized_routes.get(str(stage_name))},
+                )
+
+            self._validate_workflow_before_write(path, updated)
+            self._atomic_write(path, updated)
+            file = self.studio_read(file_id, project)
+            return {
+                "file": file,
+                "visual": self.studio_visual(file_id, project),
+                "graph": build_workflow_graph(self._load_workflow_yaml(file["content"])),
+            }
 
     def studio_import(
         self,
