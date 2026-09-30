@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Background,
@@ -9,6 +9,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   applyEdgeChanges,
   applyNodeChanges,
   type Connection,
@@ -111,6 +112,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       </div>
       <strong>{String(s.label || s.name)}</strong>
       <small>{String(s.status || s.name)}</small>
+      {String(s.prompt || "") && <code className="wf-prompt">{String(s.prompt)}</code>}
       <div className="wf-handles">
         <span>PASS</span><span>FAIL</span><span>ERROR</span>
       </div>
@@ -133,6 +135,34 @@ const nodeTypes = {
 
 function stageByName(visual: Visual, name: string) {
   return visual.stages.find((s) => s.name === name);
+}
+
+const STAGE_META: Record<string, { title: string; description: string }> = {
+  plan: { title: "Plan", description: "產生 Task[] 規劃" },
+  task: { title: "Execute", description: "執行目前 Task" },
+  review: { title: "Review", description: "檢查完成度並回 PASS / FAIL" },
+  ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
+  command: { title: "Command", description: "執行外部命令或驗證器" },
+  base: { title: "AI Stage", description: "通用 AI Stage" },
+};
+
+function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
+  return catalog?.stage_types?.[stageType]?.options?.find((item) => item.name === name)?.default;
+}
+
+function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
+  const explicit = String(stage.prompt || "").trim();
+  if (explicit) return explicit;
+  return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
+}
+
+function nextStageKey(visual: Visual, type: string): string {
+  const base = type === "task" ? "execute" : type === "ai_validator" ? "validate_ai" : type;
+  const used = new Set(visual.stages.map((s) => s.name));
+  if (!used.has(base)) return base;
+  let i = 2;
+  while (used.has(`${base}_${i}`)) i += 1;
+  return `${base}_${i}`;
 }
 
 function graphFromVisual(visual: Visual): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
@@ -167,26 +197,32 @@ function graphFromVisual(visual: Visual): { nodes: Node<StudioNodeData>[]; edges
     });
   }
 
-  visual.flow.forEach((name, index) => {
+  const orderedNames = [
+    ...visual.flow,
+    ...visual.stages.map((s) => s.name).filter((name) => !visual.flow.includes(name)),
+  ];
+  orderedNames.forEach((name, index) => {
     const s = stageByName(visual, name);
     if (!s) return;
+    const disconnected = !visual.flow.includes(name);
     nodes.push({
       id: name,
       type: "stage",
-      position: { x, y: 150 + index * gap },
+      position: { x: disconnected ? x + 320 : x, y: 150 + index * gap },
       data: {
         kind: "stage",
         label: String(s.label || s.name),
-        subtitle: String(s.status || ""),
+        subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
       },
+      className: disconnected ? "disconnected" : "",
     });
   });
 
   nodes.push({
     id: END,
     type: "terminal",
-    position: { x: x + 60, y: 150 + visual.flow.length * gap },
+    position: { x: x + 60, y: 150 + Math.max(visual.flow.length, 1) * gap },
     data: { kind: "end", label: "END" },
     deletable: false,
   });
@@ -299,6 +335,8 @@ function Field({
 }
 
 function App() {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const { screenToFlowPosition } = useReactFlow();
   const [visual, setVisual] = useState<Visual | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [nodes, setNodes] = useState<Node<StudioNodeData>[]>([]);
@@ -400,6 +438,13 @@ function App() {
       return;
     }
     if (connection.source === END || connection.target === START || status === "") return;
+    let nextFlow = visual.flow;
+    if (status === "pass" && connection.target !== END && !visual.flow.includes(connection.target)) {
+      const sourceIndex = visual.flow.indexOf(connection.source);
+      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : visual.flow.length;
+      nextFlow = [...visual.flow];
+      nextFlow.splice(insertAt, 0, connection.target);
+    }
     const stages = visual.stages.map((stage) => {
       if (stage.name !== connection.source) return stage;
       const routes = { ...(stage.routes || {}) };
@@ -411,7 +456,7 @@ function App() {
       else routes[status] = target;
       return { ...stage, routes };
     });
-    const next = { ...visual, stages };
+    const next = { ...visual, stages, flow: nextFlow };
     setVisual(next);
     const g = graphFromVisual(next);
     setNodes(g.nodes);
@@ -485,18 +530,9 @@ function App() {
     }
   }
 
-  async function addStage() {
-    if (!visual) return;
-    const name = window.prompt("New Stage key", "execute");
-    if (!name?.trim()) return;
-    const type = window.prompt(
-      `Stage type: ${Object.keys(catalog?.stage_types || {}).join(", ")}`,
-      "task",
-    )?.trim() || "task";
-    if (!catalog?.stage_types?.[type]) {
-      setMessage(`Unknown Stage type: ${type}`);
-      return;
-    }
+  async function addStage(stageType = "task", position?: { x: number; y: number }) {
+    if (!visual || !catalog?.stage_types?.[stageType]) return;
+    const name = nextStageKey(visual, stageType);
     setBusy(true);
     try {
       const base = dirtyGraph ? await persistGraph(visual) : visual;
@@ -505,23 +541,39 @@ function App() {
         body: JSON.stringify({
           id: base.id,
           project: query().project,
-          stage: name.trim(),
-          type,
+          stage: name,
+          type: stageType,
           hash: base.hash,
-          add_to_flow: true,
+          add_to_flow: false,
         }),
       });
       setVisual(result.visual);
       const g = graphFromVisual(result.visual);
+      if (position) {
+        g.nodes = g.nodes.map((node) => node.id === name ? { ...node, position } : node);
+      }
       setNodes(g.nodes);
       setEdges(g.edges);
-      setSelected(name.trim());
-      setMessage(`Stage ${name.trim()} added`);
+      setSelected(name);
+      setMessage(`Stage ${name} added. Connect it to START / PASS to join the flow.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  function dragStage(event: React.DragEvent<HTMLButtonElement>, stageType: string) {
+    event.dataTransfer.setData("application/x-ai-stage", stageType);
+    event.dataTransfer.effectAllowed = "copy";
+  }
+
+  async function dropStage(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const stageType = event.dataTransfer.getData("application/x-ai-stage");
+    if (!stageType) return;
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    await addStage(stageType, position);
   }
 
   async function deleteStage() {
@@ -564,7 +616,6 @@ function App() {
         </div>
         <div>
           {message && <span className="message">{message}</span>}
-          <button onClick={() => void addStage()} disabled={busy}>+ Stage</button>
           <button onClick={() => void load()} disabled={busy}>Reload</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
             {busy ? "Saving…" : "Save graph"}
@@ -573,7 +624,44 @@ function App() {
       </header>
 
       <section className="studio-body">
-        <div className="canvas">
+        <aside className="palette">
+          <div className="palette-head">
+            <strong>Stage Palette</strong>
+            <small>拖到畫布，或點一下新增</small>
+          </div>
+          <div className="palette-list">
+            {Object.keys(catalog?.stage_types || {}).map((type) => {
+              const meta = STAGE_META[type] || { title: type, description: "Stage" };
+              const prompt = String(defaultOption(catalog, type, "prompt") || "");
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className="palette-item"
+                  draggable
+                  disabled={busy}
+                  onDragStart={(event) => dragStage(event, type)}
+                  onClick={() => void addStage(type)}
+                >
+                  <strong>{meta.title}</strong>
+                  <span>{type}</span>
+                  <small>{meta.description}</small>
+                  {prompt && <code>{prompt}</code>}
+                </button>
+              );
+            })}
+          </div>
+          <div className="palette-note">
+            <strong>組裝方式</strong>
+            <small>START 接第一個 Stage；PASS / FAIL / ERROR 都從積木下方拉線。未接入 flow 的 Stage 會保留在 YAML，但不執行。</small>
+          </div>
+        </aside>
+        <div
+          ref={canvasRef}
+          className="canvas"
+          onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+          onDrop={(event) => void dropStage(event)}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -630,12 +718,13 @@ function App() {
                     <label key={option.name}>
                       <span>prompt</span>
                       <select value={String(draft.prompt || "")} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}>
-                        <option value="">Stage default / none</option>
+                        <option value="">{effectivePrompt(catalog, { ...draft, prompt: "" }) ? `Default — ${effectivePrompt(catalog, { ...draft, prompt: "" })}` : "No default prompt"}</option>
                         {prompts.map((p) => {
                           const ref = p.reference || p.display_name || p.name;
                           return <option key={p.id} value={ref}>{ref}</option>;
                         })}
                       </select>
+                      <small className="effective-value">Effective: <code>{effectivePrompt(catalog, draft) || "(none)"}</code></small>
                     </label>
                   ) : (
                     <Field
