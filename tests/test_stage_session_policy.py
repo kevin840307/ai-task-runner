@@ -3,7 +3,9 @@ from types import SimpleNamespace
 
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState
+from runner.errors import RunnerError
 from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
+from runner.workflow.stages.executor import StageExecutor
 
 
 def context(tmp_path: Path) -> StageContext:
@@ -125,3 +127,56 @@ def test_global_session_reset_clears_main_and_all_role_sessions(tmp_path):
     assert ctx.scratch["worker-client"].session_id == ""
     assert ctx.state.ai_session_id == ""
     assert ctx.state.stage_sessions == {}
+
+
+class NoopHooks:
+    def before(self, action):
+        return []
+
+    def after(self, action, tokens):
+        return []
+
+    def change_detector(self, action, tokens, fallback):
+        return fallback()
+
+
+class RecoveringRoleStage(BaseStage):
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.calls = []
+
+    def run(self, ctx, previous=None):
+        client = self._client(ctx)
+        self.calls.append(str(getattr(client, "session_id", "")))
+        if len(self.calls) <= 2:
+            raise RunnerError(f"role failure {len(self.calls)}")
+        if not client.session_id:
+            client.session_id = "role-after-recovery"
+        self._persist_session(ctx, client)
+        return StageResult(self.name, "pass", output="recovered")
+
+
+def test_role_session_technical_failure_rotates_only_that_role_session(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = -1
+    ctx.state.stage_sessions = {"worker": "role-before-error", "other": "other-role"}
+
+    def fake_create(*args, session_id="", **kwargs):
+        return SimpleNamespace(session_id=session_id)
+
+    monkeypatch.setattr("runner.workflow.stages.base_stage.create_ai_client", fake_create)
+    stage = RecoveringRoleStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        session_policy="role",
+        session_key="worker-client",
+    ))
+
+    result = StageExecutor(NoopHooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == ["role-before-error", "role-before-error", ""]
+    assert ctx.state.stage_sessions == {
+        "worker": "role-after-recovery",
+        "other": "other-role",
+    }
