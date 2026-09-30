@@ -30,7 +30,14 @@ def role():
 def kind(r):
     low = prompt.lower()
     if r != "writer": return r
-    if "fix only the issues" in low: return "fix"
+    if (
+        "fix only the issues" in low
+        or (
+            "runner_shared_stage_control" in low
+            and "review missing_items:" in low
+        )
+    ):
+        return "fix"
     for key in ("project discovery","project documentation","e2e spec generation","verification design","regression dsl generation","execution & qualification"):
         if key in low: return key
     return "writer"
@@ -48,8 +55,12 @@ with log.open("a", encoding="utf-8") as f:
 
 low = prompt.lower()
 if r == "writer":
-    if "fix only the issues" in low:
-        if '"reason"' not in prompt or '"missing_items"' not in prompt:
+    if kind(r) == "fix":
+        has_feedback = (
+            ('"reason"' in prompt and '"missing_items"' in prompt)
+            or ("Review:" in prompt and "Review missing_items:" in prompt)
+        )
+        if not has_feedback:
             print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
             raise SystemExit(3)
         p = root / ("artifacts/project_documentation.md" if "documentation" in low else "artifacts/e2e_spec.md" if "e2e" in low else "artifacts/project_discovery.md")
