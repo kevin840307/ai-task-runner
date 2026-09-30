@@ -37,6 +37,13 @@ if stage in {"plan_finalize", "plan_refine"}:
 elif stage == "plan_judge":
     n = max(1, prompt.count('"title"'))
     answer = {"accepted": True, "issues": []}
+elif stage == "handoff":
+    n = count("handoff")
+    if scenario == "dynamic_handoff":
+        target = "worker" if n == 1 else "final_validate"
+        answer = {"target": target, "reason": f"dynamic step {n}"}
+    else:
+        raise SystemExit(2)
 elif stage == "execute":
     n = count("execute")
     if scenario == "multi_task_plan":
