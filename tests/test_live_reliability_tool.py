@@ -954,9 +954,25 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
 
 def test_workflow_dryrun_preflight_covers_current_graph_contracts():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 8
     assert all(item["closed"] is True for item in results)
-    assert sum(int(item["paths_total"]) for item in results) >= 8
+    assert sum(int(item["paths_total"]) for item in results) >= len(results)
+
+    workflow_names = {
+        Path(str(item["workflow"])).name
+        for item in results
+        if not str(item["workflow"]).startswith("synthetic://")
+    }
+    for expected in {
+        "dynamic_handoff.yaml",
+        "01_default_ai.yaml",
+        "02_ai_with_review_gate.yaml",
+        "03_file_validation.yaml",
+        "04_mixed_with_review_gate.yaml",
+        "05_review_vote_3_choose_2.yaml",
+        "06_custom_task_producer.yaml",
+        "11_multi_validators_anywhere.yaml",
+    }:
+        assert expected in workflow_names
 
     ralphy = next(
         item for item in results
@@ -1648,7 +1664,7 @@ def test_full_loop_executor_applies_validator_feedback_from_durable_state(tmp_pa
     ]
 
 
-def test_full_loop_workflow_uses_deterministic_repair_and_qwen_verification(tmp_path: Path):
+def test_full_loop_workflow_uses_deterministic_rollback_and_qwen_verification(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
     workflow_path.write_text(live.FULL_LOOP_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
