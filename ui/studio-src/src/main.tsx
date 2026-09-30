@@ -210,7 +210,7 @@ function nextStageKey(visual: Visual, type: string): string {
 type CanvasPosition = { x: number; y: number };
 type CanvasLayout = Record<string, CanvasPosition>;
 
-function layoutKey(id: string): string { return `workflow-studio-layout:${id}`; }
+function layoutKey(id: string): string { return `workflow-studio-layout:v2:${id}`; }
 
 function readLayout(id: string): CanvasLayout {
   try {
