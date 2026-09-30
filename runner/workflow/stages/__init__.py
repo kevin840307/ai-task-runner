@@ -4,6 +4,8 @@ from .base_stage import BaseStage, BaseStageSpec
 from .core import (
     AIValidatorStage,
     AIValidatorStageSpec,
+    DiscussionControllerStage,
+    DiscussionControllerStageSpec,
     DiscussionStage,
     DiscussionStageSpec,
     HandoffStage,
@@ -30,6 +32,8 @@ __all__ = [
     "AIValidatorStageSpec",
     "CommandStage",
     "CommandStageSpec",
+    "DiscussionControllerStage",
+    "DiscussionControllerStageSpec",
     "DiscussionStage",
     "DiscussionStageSpec",
     "HandoffStage",
