@@ -49,7 +49,7 @@ class StaticContractTests(unittest.TestCase):
             "stageFreshOnStart", "stageFreshEachRun", "stageTrackChanges", "stageTolerateRestored",
             "stageAllowProjectRead", "stageCleanWork", "stageCommand", "stageResultKind", "stageCwd",
             "stageMinTasks", "stageValidator", "stageRuns", "stageRequiredPasses",
-            "stageParser", "stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError",
+            "stageParser", "stageFlowLabel", "stageRoutePass", "stageRouteFail",
         ):
             self.assertIn(token, self.js)
 
@@ -221,9 +221,10 @@ class LayoutRegressionTests(unittest.TestCase):
         self.assertNotIn('id="stageRetry"', self.js)
         self.assertNotIn('-1 = keep retrying until PASS', self.js)
         self.assertIn("Technical Stage retry/session recovery is global Runner behavior.", self.js)
+        self.assertNotIn("stageRouteError", self.js)
 
     def test_flow_routing_fields_are_editable_in_stage_modal(self):
-        for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "stageRouteError", "routes: routeMapOrNull()"):
+        for token in ("stageFlowLabel", "stageRoutePass", "stageRouteFail", "routes: routeMapOrNull()"):
             self.assertIn(token, self.js)
 
     def test_stage_editor_is_modal_but_workflow_studio_is_page(self):
