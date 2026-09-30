@@ -9,7 +9,8 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
-  addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   type Connection,
   type Edge,
   type Node,
@@ -489,18 +490,8 @@ function App() {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            onNodesChange={(changes) => {
-              setNodes((current) => changes.reduce((acc, change) => {
-                if (change.type === "position" && change.position) {
-                  return acc.map((n) => n.id === change.id ? { ...n, position: change.position! } : n);
-                }
-                if (change.type === "select") {
-                  return acc.map((n) => n.id === change.id ? { ...n, selected: change.selected } : n);
-                }
-                return acc;
-              }, current));
-            }}
-            onEdgesChange={() => {}}
+            onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
+            onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
             onEdgesDelete={deleteEdges}
             onNodeDragStop={reorderByPosition}
