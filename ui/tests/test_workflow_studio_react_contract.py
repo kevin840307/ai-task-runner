@@ -31,3 +31,12 @@ def test_workflow_builder_internal_prompts_are_not_user_assets():
     assert (ROOT / "workflow_builder" / "prompt.md").is_file()
     assert not (ROOT / "runner" / "assets" / "prompts" / "workflow" / "workflow_prompt.md").exists()
     assert not (ROOT / "runner" / "assets" / "prompts" / "workflow" / "workflow_review.md").exists()
+
+
+def test_react_studio_exposes_common_stage_error_policy_controls():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "ERROR 重試次數" in text
+    assert "重試用盡後" in text
+    assert "draft.error_policy?.retries" in text
+    assert 'error_policy: { retries, exhausted }' in text
