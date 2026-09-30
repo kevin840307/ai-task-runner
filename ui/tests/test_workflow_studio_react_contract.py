@@ -51,6 +51,13 @@ def test_static_studio_bundle_has_no_removed_dispatch_runtime_branch():
     assert '"discussion_controller"' not in bundled
 
 
+def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable():
+    text = SOURCE.read_text(encoding="utf-8")
+    assert 'section.id === "advanced"' in text
+    assert "PARAMETER_SECTIONS.slice(0, -1)" in text
+    assert "group.fields.includes(option.name)" in text
+
+
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'id="handoff"' in text
