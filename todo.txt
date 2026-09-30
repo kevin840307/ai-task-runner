@@ -144,8 +144,8 @@ The latest completed Ubuntu CI (#571, run 36664071076) had only two failures:
      `87a56c64a9b9be2b2073a86b5db25ff5c6bdabd1`
 
 IMPORTANT:
-Latest observed CI is #601 (run 36667070499) and is in progress; a newer CI will be triggered by the current handoff/package-map commit.
-Do not assume Gate 1 is green until both Ubuntu and Windows complete successfully on the current branch head.
+Latest verified CI is #603 (run 36667263900): Windows PASS and Ubuntu PASS on the current refactor baseline.
+Gate 1 is complete. Do not continue structural refactoring unless a real reliability failure proves it necessary.
 
 START HERE IN THE NEXT CONVERSATION
 -----------------------------------
@@ -155,8 +155,8 @@ START HERE IN THE NEXT CONVERSATION
    `861d9e7d8cd54c66dd0e170496b48d11b048d601`
    If the branch is newer, continue from the newer head.
 
-2. If CI is green on BOTH Ubuntu and Windows:
-   - mark Gate 1 complete in this file
+2. CI is green on BOTH Ubuntu and Windows:
+   - Gate 1 is complete
    - do NOT keep refactoring folders
    - move directly to Gate 3 real-Qwen validation
 
@@ -184,8 +184,8 @@ START HERE IN THE NEXT CONVERSATION
 CURRENT GATES
 =============
 
-Gate 1 - Repository contract / CI
----------------------------------
+Gate 1 - Repository contract / CI - COMPLETE
+--------------------------------------------
 [x] old runner/workflows / prompts / ai / backends / project / utils package paths removed
 [x] stale production imports found so far removed instead of shimmed
 [x] categorized Prompt key/reference support wired into Studio
@@ -193,8 +193,8 @@ Gate 1 - Repository contract / CI
 [x] UI static tests migrated away from old Flow overrides/recovery controls
 [x] Dry Run uses production loader + FlowEngine and current result owner
 [x] CLI/API/runtime tests recovered from migration failures
-[ ] fresh Ubuntu CI PASS on current head
-[ ] fresh Windows CI PASS on current head
+[x] fresh Ubuntu CI PASS on current head
+[x] fresh Windows CI PASS on current head
 
 Gate 1 completion rule:
 BOTH operating systems must pass full pytest + compile on the same/current head.
