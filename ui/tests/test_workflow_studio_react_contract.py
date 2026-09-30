@@ -58,6 +58,16 @@ def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable()
     assert "group.fields.includes(option.name)" in text
 
 
+def test_static_studio_bundle_tracks_session_policy_ui_contract():
+    scripts = list((ROOT / "ui" / "static" / "workflow-studio-app" / "assets").glob("*.js"))
+    assert scripts
+    bundled = "\n".join(path.read_text(encoding="utf-8") for path in scripts)
+    assert "session_policy" in bundled
+    assert "fresh_session_each_run" not in bundled
+    assert "fresh_session_on_start" not in bundled
+    assert 'Y.name==="session_key"' in bundled or 'name==="session_key"' in bundled
+
+
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'id="handoff"' in text
