@@ -113,6 +113,13 @@ function endpoint(path: string) {
   return `${path}?${p}`;
 }
 
+function workflowStudioUrl() {
+  const { id, project } = query();
+  const p = new URLSearchParams({ view: "workflow", studio: id });
+  if (project) p.set("project", project);
+  return `/index.html?${p}`;
+}
+
 function TerminalNode({ data }: NodeProps<Node<StudioNodeData>>) {
   const start = data.kind === "start";
   return (
@@ -819,7 +826,7 @@ function App() {
     <main className="studio-shell">
       <header className="studio-header">
         <div>
-          <button className="ghost" onClick={() => history.back()}>← Back</button>
+          <button className="ghost" onClick={() => { window.location.href = workflowStudioUrl(); }}>← Workflow Studio</button>
           <strong>{visual.name}</strong>
           <span>Workflow Studio</span>
         </div>
