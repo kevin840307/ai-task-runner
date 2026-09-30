@@ -867,6 +867,8 @@ class WorkflowStudioMixin:
             if not raw.lower().endswith(".md"):
                 raw += ".md"
             prompt_path = Path(raw)
+            if len(prompt_path.parts) == 1:
+                prompt_path = Path("common") / prompt_path
             if prompt_path.is_absolute() or any(part in {"", ".", ".."} for part in prompt_path.parts):
                 raise ValueError("Prompt name must be a safe relative path")
             if any(
