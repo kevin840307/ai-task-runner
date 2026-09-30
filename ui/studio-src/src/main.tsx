@@ -84,7 +84,7 @@ type ParameterSection = "content" | "execution" | "result" | "advanced";
 
 const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[] }[] = [
   { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
-  { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
+  { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
   { id: "result", label: "結果", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
   { id: "advanced", label: "進階", fields: ["session_key", "fresh_session_each_run", "fresh_session_on_start", "ai_validator_yolo"] },
 ];
@@ -128,9 +128,7 @@ function TerminalNode({ data }: NodeProps<Node<StudioNodeData>>) {
 function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const s = data.stage!;
   const title = String(s.label || s.name);
-  const handoff = s.type === "handoff";
-  const discussionController = s.type === "discussion_controller";
-  const dynamicRouter = handoff || discussionController;
+  const dynamicRouter = s.type === "handoff";
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
@@ -142,11 +140,11 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-handles">
-        {dynamicRouter ? <span>{discussionController ? "DISPATCH" : "HANDOFF"}</span> : <><span>PASS</span><span>FAIL</span></>}
+        {dynamicRouter ? <span>HANDOFF</span> : <><span>PASS</span><span>FAIL</span></>}
       </div>
       {dynamicRouter ? (
         <Handle className="pass handoff" type="source" position={Position.Bottom}
-          id={discussionController ? "dispatch" : "handoff"} style={{ left: "50%" }} />
+          id="handoff" style={{ left: "50%" }} />
       ) : <>
         <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "34%" }} />
         <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "66%" }} />
@@ -175,8 +173,6 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
   review: { title: "Review", description: "檢查完成度並回 PASS / FAIL" },
   ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
   handoff: { title: "Handoff", description: "動態選擇下一個 Stage" },
-  discussion_controller: { title: "Discussion", description: "一顆控制多 Session 的討論積木" },
-  discussion: { title: "Discussion Session", description: "單一 Participant / Moderator Session" },
   command: { title: "Command", description: "執行外部命令或驗證器" },
   base: { title: "AI Stage", description: "通用 AI Stage" },
 };
@@ -184,7 +180,7 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
 const PALETTE_SECTIONS = [
   { title: "建立與執行", types: ["plan", "task", "base"], icon: "✦" },
   { title: "檢查與驗證", types: ["review", "ai_validator"], icon: "✓" },
-  { title: "協作", types: ["handoff", "discussion_controller", "discussion"], icon: "↔" },
+  { title: "協作", types: ["handoff"], icon: "↔" },
   { title: "工具", types: ["command"], icon: "›" },
 ];
 
@@ -274,7 +270,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
 
     autoPositions[name] = { x: mainX, y: cursorY };
 
-    if (["handoff", "discussion_controller"].includes(stage.type)) {
+    if (stage.type === "handoff") {
       const targets = (stage.targets || []).filter((target) => Boolean(stageByName(visual, target)));
       if (!targets.length) {
         cursorY += verticalGap;
@@ -346,8 +342,8 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     if (!s) return;
     const routes = (s.routes || {}) as Record<string, string>;
     const next = visual.flow[index + 1];
-    if (s.type === "handoff" || s.type === "discussion_controller") {
-      const status = s.type === "discussion_controller" ? "dispatch" : "handoff";
+    if (s.type === "handoff") {
+      const status = "handoff";
       (s.targets || []).forEach((target) => {
         if (!stageByName(visual, target)) return;
         edges.push({
@@ -364,9 +360,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     }
     const passTarget = routes.pass || (next ? "next" : "done");
     const resolvedPass = passTarget === "next" ? (next || END) : passTarget === "done" || passTarget === "stop" ? END : passTarget;
-    const passClass = s.type === "discussion" && routes.pass
-      ? "result pass discussion-return"
-      : routes.pass ? "result pass" : "normal pass";
+    const passClass = routes.pass ? "result pass" : "normal pass";
     edges.push({
       id: `${name}:pass:${resolvedPass}`,
       source: name,
@@ -658,10 +652,10 @@ function App() {
       setDirtyGraph(true);
       return;
     }
-    if (connection.source === END || connection.target === START || !["pass", "fail", "handoff", "dispatch"].includes(status)) return;
-    if ((status === "handoff" || status === "dispatch") && connection.target === END) return;
+    if (connection.source === END || connection.target === START || !["pass", "fail", "handoff"].includes(status)) return;
+    if (status === "handoff" && connection.target === END) return;
     let nextFlow = visual.flow;
-    if ((status === "pass" || status === "handoff" || status === "dispatch") && connection.target !== END && !visual.flow.includes(connection.target)) {
+    if ((status === "pass" || status === "handoff") && connection.target !== END && !visual.flow.includes(connection.target)) {
       const sourceIndex = visual.flow.indexOf(connection.source);
       const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : visual.flow.length;
       nextFlow = [...visual.flow];
@@ -673,7 +667,7 @@ function App() {
       const index = visual.flow.indexOf(stage.name);
       const nextName = visual.flow[index + 1];
       let target = connection.target!;
-      if (status === "handoff" || status === "dispatch") {
+      if (status === "handoff") {
         const targets = Array.from(new Set([...(stage.targets || []), target]));
         return { ...stage, targets };
       }
@@ -698,7 +692,7 @@ function App() {
       if (!status || !edge.data?.explicit) continue;
       stages = stages.map((s) => {
         if (s.name !== edge.source) return s;
-        if (status === "handoff" || status === "dispatch") {
+        if (status === "handoff") {
           return { ...s, targets: (s.targets || []).filter((target) => target !== edge.target) };
         }
         const routes = { ...(s.routes || {}) };
@@ -933,7 +927,7 @@ function App() {
           {!draft ? (
             <div className="empty">
               <h2>Stage settings</h2>
-              <p>選取 Stage 編輯。Handoff 動態選一個下一跳；Discussion Controller 控制多 Session dispatch；ERROR 使用 Error Policy。</p>
+              <p>選取 Stage 編輯。Handoff 動態選一個下一跳；角色可選 main / role / fresh Session Policy；ERROR 使用 Error Policy。</p>
             </div>
           ) : (
             <>
@@ -998,21 +992,6 @@ function App() {
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
                 <p>ERROR 只依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。重試用盡會記錄錯誤並停在目前 Stage。</p>
-                {draft.type === "discussion_controller" && <label className="route-policy-field">
-                  <span>最多討論輪數</span><input type="number" min={1}
-                    value={draft.max_rounds ?? ""}
-                    placeholder="不限制"
-                    onChange={(event) => {
-                      const raw = event.target.value;
-                      if (raw === "") {
-                        const { max_rounds: _removed, ...rest } = draft;
-                        editDraft(rest);
-                        return;
-                      }
-                      const maxRounds = Number(raw);
-                      if (Number.isInteger(maxRounds) && maxRounds > 0) editDraft({ ...draft, max_rounds: maxRounds });
-                    }} />
-                </label>}
                 <label className="route-policy-field"><span>ERROR 重試次數</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
                   onChange={(event) => {
@@ -1027,8 +1006,8 @@ function App() {
                     }
                   }} /></label>
                 <div className="route-section-title">從這個積木出去</div>
-                {draft.type === "handoff" || draft.type === "discussion_controller"
-                  ? edges.filter((edge) => edge.source === draft.name && ["handoff", "dispatch"].includes(String(edge.data?.status))).map((edge) =>
+                {draft.type === "handoff"
+                  ? edges.filter((edge) => edge.source === draft.name && edge.data?.status === "handoff").map((edge) =>
                     <div className="route-row" key={edge.id}><span className="route-dot pass" />
                       <strong>{String(edge.data?.status || "").toUpperCase()}</strong><span>{edge.target}</span>
                     </div>
