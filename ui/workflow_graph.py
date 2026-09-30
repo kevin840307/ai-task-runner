@@ -20,7 +20,10 @@ def build_workflow_graph(data: dict[str, Any]) -> dict[str, Any]:
             "id": name,
             "label": str(cfg.get("label") or name),
             "type": str(cfg.get("type") or "base"),
+            "status": str(cfg.get("status") or ""),
             "prompt": str(cfg.get("prompt") or ""),
+            "scope": str(cfg.get("scope") or ""),
+            "produces": str(cfg.get("produces") or ""),
             "virtual": False,
             "routing": {"routes": cfg.get("routes")} if cfg.get("routes") else {},
         })
