@@ -61,7 +61,7 @@ stages:
     type: ai_validator
     validator: ai
     status: Final AI Validation 正在確認最終結果
-    instructions: Validate the overall Goal using the accumulated discussion evidence before completion.
+    prompt: common/discussion_final_validator.md
     readonly_safety: observe
     error_policy:
       retries: -1
