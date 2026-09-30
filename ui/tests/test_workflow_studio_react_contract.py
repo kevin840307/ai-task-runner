@@ -43,6 +43,14 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert '["pass", "fail", "error"]' not in text
 
 
+def test_static_studio_bundle_has_no_removed_dispatch_runtime_branch():
+    scripts = list((ROOT / "ui" / "static" / "workflow-studio-app" / "assets").glob("*.js"))
+    assert scripts
+    bundled = "\n".join(path.read_text(encoding="utf-8") for path in scripts)
+    assert 've==="handoff"||ve==="dispatch"' not in bundled
+    assert '"discussion_controller"' not in bundled
+
+
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'id="handoff"' in text
