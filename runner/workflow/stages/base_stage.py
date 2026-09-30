@@ -168,7 +168,9 @@ class BaseStage:
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
-        self.fresh_session_on_start = spec.fresh_session_on_start
+        self.fresh_session_on_start = (
+            spec.session_policy == "auto" and spec.fresh_session_on_start
+        )
         if spec.parser is None and self.parser_name:
             from ..results import PARSERS
             self.spec = replace(spec, parser=PARSERS[self.parser_name])
@@ -195,7 +197,10 @@ class BaseStage:
             client = self._client(ctx)
             if (
                 self.spec.session_policy == "fresh"
-                or self.spec.fresh_session_each_run
+                or (
+                    self.spec.session_policy == "auto"
+                    and self.spec.fresh_session_each_run
+                )
             ) and not self._run_pending:
                 client.session_id = ""
             self._run_pending = True
