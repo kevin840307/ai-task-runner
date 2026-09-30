@@ -43,6 +43,10 @@ def kind(r):
     return "writer"
 
 r = role()
+has_feedback = (
+    ('"reason"' in prompt and '"missing_items"' in prompt)
+    or ("Review:" in prompt and "Review missing_items:" in prompt)
+)
 if resume: session = resume
 elif r == "final": session = f"final-{uuid.uuid4().hex[:12]}"
 elif r == "review": session = "review-session"
@@ -51,15 +55,11 @@ else: session = "writer-session"
 
 log = root / ".ai-task-runner" / "demo-calls.jsonl"; log.parent.mkdir(parents=True, exist_ok=True)
 with log.open("a", encoding="utf-8") as f:
-    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_previous_data":'"missing_items"' in prompt and '"reason"' in prompt,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Required demo checks only" in prompt}, ensure_ascii=False)+"\n")
+    f.write(json.dumps({"role":r,"kind":kind(r),"session":session,"resumed":bool(resume),"chars":len(prompt),"has_feedback":has_feedback,"full_review_contract":"Return PASS only when" in prompt,"full_grill_contract":"Required demo checks only" in prompt}, ensure_ascii=False)+"\n")
 
 low = prompt.lower()
 if r == "writer":
     if kind(r) == "fix":
-        has_feedback = (
-            ('"reason"' in prompt and '"missing_items"' in prompt)
-            or ("Review:" in prompt and "Review missing_items:" in prompt)
-        )
         if not has_feedback:
             print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
             raise SystemExit(3)
