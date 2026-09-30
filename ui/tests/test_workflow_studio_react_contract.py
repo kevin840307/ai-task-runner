@@ -9,6 +9,10 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     text = SOURCE.read_text(encoding="utf-8")
 
     assert "Stage Palette" in text
+    assert "workflowStudioUrl" in text
+    assert 'view: "workflow", studio: id' in text
+    assert "← Workflow Studio" in text
+    assert "history.back()" not in text
     assert "application/x-ai-stage" in text
     assert 'sourceHandle: "pass"' in text
     assert 'id="pass"' in text
