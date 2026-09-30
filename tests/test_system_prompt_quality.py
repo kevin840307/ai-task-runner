@@ -103,7 +103,7 @@ def test_final_ai_vote_contract_uses_independent_sessions():
     for name in ("ai.yaml", "mixed.yaml"):
         data = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
         stage = data["stages"]["validate_ai"]
-        assert stage["fresh_session_each_run"] is True
+        assert stage["session_policy"] == "fresh"
         assert stage["runs"] == 3
         assert stage["required_passes"] == 2
         assert stage["ai_validator_yolo"] is True
