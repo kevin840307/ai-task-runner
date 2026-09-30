@@ -11,6 +11,7 @@ PromptStage = Literal[
     "plan_judge",
     "plan_refine",
     "execute",
+    "handoff",
     "review",
     "review_finalize",
     "validator",
@@ -41,6 +42,8 @@ def prompt_stage(prompt: str) -> PromptStage:
         return "plan_finalize"
     if "Review only. Finalize the current review now." in prompt:
         return "review_finalize"
+    if "[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]" in prompt:
+        return "handoff"
     if "[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]" in prompt:
         return "review"
     if "[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]" in prompt:
