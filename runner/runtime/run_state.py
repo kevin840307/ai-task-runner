@@ -75,8 +75,7 @@ class RunState:
     task_step: int = 0
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
-    discussion_history: list[dict[str, str]] = field(default_factory=list)
-    controller_rounds: dict[str, int] = field(default_factory=dict)
+    stage_sessions: dict[str, str] = field(default_factory=dict)
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -105,26 +104,13 @@ class RunState:
                 raise ValueError(f"state.{name} must be a non-negative number")
         if not isinstance(self.transition_previous, dict):
             raise ValueError("state.transition_previous must be an object")
-        if not isinstance(self.discussion_history, list):
-            raise ValueError("state.discussion_history must be an array")
-        if not isinstance(self.controller_rounds, dict):
-            raise ValueError("state.controller_rounds must be an object")
-        for name, value in self.controller_rounds.items():
+        if not isinstance(self.stage_sessions, dict):
+            raise ValueError("state.stage_sessions must be an object")
+        for name, value in self.stage_sessions.items():
             if not isinstance(name, str) or not name.strip():
-                raise ValueError("state.controller_rounds keys must be non-empty strings")
-            if not is_integer(value) or value < 0:
-                raise ValueError(f"state.controller_rounds.{name} must be non-negative")
-        for index, item in enumerate(self.discussion_history, 1):
-            if not isinstance(item, dict):
-                raise ValueError(f"state.discussion_history[{index}] must be an object")
-            if set(item) != {"stage", "role", "message"}:
-                raise ValueError(
-                    f"state.discussion_history[{index}] requires stage, role and message"
-                )
-            if any(not isinstance(item[key], str) for key in ("stage", "role", "message")):
-                raise ValueError(
-                    f"state.discussion_history[{index}] values must be strings"
-                )
+                raise ValueError("state.stage_sessions keys must be non-empty strings")
+            if not isinstance(value, str):
+                raise ValueError(f"state.stage_sessions.{name} must be a string")
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):
