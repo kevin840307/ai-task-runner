@@ -1,10 +1,14 @@
 stages:
   discussion:
     type: discussion_controller
-    status: AI 正在協調多 Session 討論
+    label: Discussion Board
+    status: AI 正在協調多 Session 專業討論
     targets:
-      - participant_architecture
-      - participant_critic
+      - requirements_analyst
+      - solution_architect
+      - domain_specialist
+      - risk_reviewer
+      - evidence_verifier
       - moderator
       - judge
     round_end: judge
@@ -12,23 +16,61 @@ stages:
     error_policy:
       retries: -1
 
-  participant_architecture:
+  requirements_analyst:
     type: discussion
     controller: discussion
-    role: architect
-    status: Architect 正在提出方案
-    session_key: discussion_architect
+    label: Requirements Analyst
+    role: requirements_analyst
+    status: Requirements Analyst 正在釐清目標、限制與驗收條件
+    session_key: discussion_requirements_analyst
     error_policy:
       retries: -1
     routes:
       pass: discussion
 
-  participant_critic:
+  solution_architect:
     type: discussion
     controller: discussion
-    role: critic
-    status: Critic 正在檢查風險
-    session_key: discussion_critic
+    label: Solution Architect
+    role: solution_architect
+    status: Solution Architect 正在評估架構、邊界與整體方案
+    session_key: discussion_solution_architect
+    error_policy:
+      retries: -1
+    routes:
+      pass: discussion
+
+  domain_specialist:
+    type: discussion
+    controller: discussion
+    label: Domain Specialist
+    role: domain_specialist
+    status: Domain Specialist 正在補充領域知識與情境限制
+    session_key: discussion_domain_specialist
+    error_policy:
+      retries: -1
+    routes:
+      pass: discussion
+
+  risk_reviewer:
+    type: discussion
+    controller: discussion
+    label: Risk & Quality Reviewer
+    role: risk_quality_reviewer
+    status: Risk Reviewer 正在檢查風險、品質與失敗模式
+    session_key: discussion_risk_reviewer
+    error_policy:
+      retries: -1
+    routes:
+      pass: discussion
+
+  evidence_verifier:
+    type: discussion
+    controller: discussion
+    label: Evidence Verifier
+    role: evidence_verifier
+    status: Evidence Verifier 正在確認證據、假設與可驗證性
+    session_key: discussion_evidence_verifier
     error_policy:
       retries: -1
     routes:
@@ -37,8 +79,9 @@ stages:
   moderator:
     type: discussion
     controller: discussion
+    label: Discussion Moderator
     role: moderator
-    status: Moderator 正在整合討論
+    status: Moderator 正在整合觀點、衝突與待確認事項
     session_key: discussion_moderator
     error_policy:
       retries: -1
@@ -47,6 +90,7 @@ stages:
 
   judge:
     type: review
+    label: Decision Judge
     status: Judge 正在判斷討論是否成熟
     prompt: common/discussion_judge.md
     session_key: discussion_judge
@@ -60,7 +104,8 @@ stages:
   final_validate:
     type: ai_validator
     validator: ai
-    status: Final AI Validation 正在確認最終結果
+    label: Independent Final Validator
+    status: Final AI Validation 正在獨立確認最終結果
     prompt: common/discussion_final_validator.md
     readonly_safety: observe
     error_policy:
@@ -71,8 +116,11 @@ stages:
 
 flow:
   - discussion
-  - participant_architecture
-  - participant_critic
+  - requirements_analyst
+  - solution_architect
+  - domain_specialist
+  - risk_reviewer
+  - evidence_verifier
   - moderator
   - judge
   - final_validate
