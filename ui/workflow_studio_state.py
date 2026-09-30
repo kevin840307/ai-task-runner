@@ -593,6 +593,13 @@ class WorkflowStudioMixin:
         produces = fields.get("produces")
         if produces not in (None, "", "tasks"):
             raise ValueError("Stage produces must be tasks when specified")
+        session_policy = fields.get("session_policy", "auto")
+        if session_policy not in {"auto", "main", "role", "fresh"}:
+            raise ValueError("Stage session_policy must be auto, main, role, or fresh")
+        if session_policy != "auto" and fields.get("session_key"):
+            raise ValueError(
+                "Stage session_key is only valid with session_policy: auto"
+            )
         policy = fields.get("error_policy")
         if policy is not None:
             if not isinstance(policy, dict) or set(policy) != {"retries"}:
@@ -1221,8 +1228,7 @@ class WorkflowStudioMixin:
                     for key in config:
                         if key not in allowed and (not isinstance(original, dict) or config[key] != original.get(key)):
                             raise ValueError(f"Unsupported Stage field: {key}")
-                    if not isinstance(original, dict):
-                        self._validate_stage_editor_fields(config)
+                    self._validate_stage_editor_fields(config)
                     desired[name] = config
                 if not desired:
                     raise ValueError("Workflow must contain at least one Stage")
