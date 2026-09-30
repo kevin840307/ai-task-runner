@@ -5,6 +5,7 @@ from runner.workflow.stages import (
     AIValidatorStage,
     BaseStage,
     CommandStage,
+    DiscussionControllerStage,
     DiscussionStage,
     HandoffStage,
     PlanStage,
@@ -17,6 +18,7 @@ def test_registry_contains_only_behavior_types():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
         "discussion": DiscussionStage,
+        "discussion_controller": DiscussionControllerStage,
         "handoff": HandoffStage,
         "task": TaskStage,
         "review": ReviewStage,
