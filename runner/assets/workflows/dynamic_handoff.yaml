@@ -5,7 +5,7 @@ stages:
     targets:
       - implementer
       - verifier
-      - final_review
+      - final_validate
     error_policy:
       retries: -1
 
@@ -30,10 +30,11 @@ stages:
     routes:
       pass: coordinator
 
-  final_review:
-    type: review
-    status: Final Review 正在確認是否可以結束
-    prompt: common/dynamic_final_review.md
+  final_validate:
+    type: ai_validator
+    validator: ai
+    status: Final Validation 正在確認是否可以結束
+    instructions: Validate the overall Goal and concrete project evidence before completion.
     readonly_safety: observe
     error_policy:
       retries: -1
@@ -45,4 +46,4 @@ flow:
   - coordinator
   - implementer
   - verifier
-  - final_review
+  - final_validate
