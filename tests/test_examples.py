@@ -274,6 +274,29 @@ def test_example_project_policies_protect_control_files():
             assert "ai_validation.md" in protected
 
 
+def test_executable_example_batches_do_not_use_deleted_runner_contracts():
+    batch_files = [
+        ROOT / "dryrunexample" / "run_dryrun.bat",
+        *sorted((EXAMPLES).glob("**/*.bat")),
+    ]
+    forbidden = (
+        "runner\\workflows\\",
+        "--execution-mode",
+        "--max-cycles",
+        "--max-attempts",
+        "--retry-wait",
+        "--retry-max-wait",
+        "--plan-only",
+    )
+    offenders = {}
+    for path in batch_files:
+        text = path.read_text(encoding="utf-8")
+        hits = [token for token in forbidden if token in text]
+        if hits:
+            offenders[path.relative_to(ROOT).as_posix()] = hits
+    assert offenders == {}
+
+
 def test_regression_workflow_demo_mock_contract():
     result = subprocess.run(
         [sys.executable, str(EXAMPLES / "11_regression_workflow_demo" / "test_demo.py")],
