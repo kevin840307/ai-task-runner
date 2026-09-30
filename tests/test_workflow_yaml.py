@@ -521,6 +521,7 @@ def test_builtin_discussion_workflow_has_one_controller_for_many_sessions_and_fi
     )
     assert judge["routes"] == {"pass": "final_validate", "fail": "discussion"}
     assert final_validate["type"] == "ai_validator"
+    assert final_validate["prompt"] == "common/discussion_final_validator.md"
     assert final_validate["routes"] == {"pass": "done", "fail": "discussion"}
 
 
