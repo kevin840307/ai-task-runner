@@ -22,7 +22,7 @@ def test_final_ai_validation_uses_review_backend_semantics():
 
 def test_final_ai_validation_yolo_switches_backend_mode():
     from types import SimpleNamespace
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     ctx_off = SimpleNamespace(config=SimpleNamespace(ai_validator_yolo=False))
     ctx_on = SimpleNamespace(config=SimpleNamespace(ai_validator_yolo=True))
@@ -51,7 +51,7 @@ def test_file_validation_is_command_semantics():
 
 
 def test_review_and_validation_result_flags_map_true_to_pass_false_to_fail():
-    from runner.workflow.stages.ai_stage import (
+    from runner.workflow.stages import (
         AIValidatorStage,
         AIValidatorStageSpec,
         ReviewStage,
