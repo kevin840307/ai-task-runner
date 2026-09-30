@@ -11,7 +11,7 @@ def test_prompt_assets_are_categorized_under_one_asset_package():
     assert PROMPT_ROOT == PROMPT_DIR
     common = {p.name for p in (PROMPT_DIR / "common").glob("*.md")}
     ralphy = {p.name for p in (PROMPT_DIR / "ralphy").glob("*.md")}
-    workflow = {p.name for p in (PROMPT_DIR / "workflow").glob("*.md")}
+    workflow_dir = PROMPT_DIR / "workflow"
 
     assert {
         "planning.md",
@@ -22,7 +22,7 @@ def test_prompt_assets_are_categorized_under_one_asset_package():
         "grill.md",
     } <= common
     assert ralphy == {"ralphy.md"}
-    assert {"workflow_prompt.md", "workflow_review.md"} <= workflow
+    assert not workflow_dir.exists()
     assert not (ROOT / "runner" / "prompts").exists()
 
 
@@ -31,6 +31,8 @@ def test_workflow_assets_are_separate_from_prompt_assets():
         "ai.yaml",
         "file.yaml",
         "mixed.yaml",
+        "dynamic_handoff.yaml",
+        "discussion.yaml",
         "ralphy_ai_validate.yaml",
     }
     assert not list(WORKFLOW_DIR.glob("*.md"))
