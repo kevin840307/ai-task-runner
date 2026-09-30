@@ -63,6 +63,7 @@ type StudioNodeData = {
   label: string;
   subtitle?: string;
   stage?: Stage;
+  prompt?: string;
 };
 
 const START = "__start__";
@@ -112,7 +113,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       </div>
       <strong>{String(s.label || s.name)}</strong>
       <small>{String(s.status || s.name)}</small>
-      {String(s.prompt || "") && <code className="wf-prompt">{String(s.prompt)}</code>}
+      {data.prompt && <code className="wf-prompt">{data.prompt}</code>}
       <div className="wf-handles">
         <span>PASS</span><span>FAIL</span><span>ERROR</span>
       </div>
@@ -165,7 +166,7 @@ function nextStageKey(visual: Visual, type: string): string {
   return `${base}_${i}`;
 }
 
-function graphFromVisual(visual: Visual): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
+function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
   const nodes: Node<StudioNodeData>[] = [];
   const edges: Edge[] = [];
   const x = 280;
@@ -214,6 +215,7 @@ function graphFromVisual(visual: Visual): { nodes: Node<StudioNodeData>[]; edges
         label: String(s.label || s.name),
         subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
+        prompt: effectivePrompt(catalog, s),
       },
       className: disconnected ? "disconnected" : "",
     });
@@ -368,7 +370,7 @@ function App() {
       setVisual(v);
       setCatalog(c);
       setPrompts(files.prompts || []);
-      const g = graphFromVisual(v);
+      const g = graphFromVisual(v, c);
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(false);
@@ -406,7 +408,7 @@ function App() {
       }),
     });
     setVisual(result.visual);
-    const g = graphFromVisual(result.visual);
+    const g = graphFromVisual(result.visual, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(false);
@@ -434,7 +436,7 @@ function App() {
       const flow = [connection.target, ...visual.flow.filter((x) => x !== connection.target)];
       const next = { ...visual, flow };
       setVisual(next);
-      const g = graphFromVisual(next);
+      const g = graphFromVisual(next, catalog);
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(true);
@@ -461,7 +463,7 @@ function App() {
     });
     const next = { ...visual, stages, flow: nextFlow };
     setVisual(next);
-    const g = graphFromVisual(next);
+    const g = graphFromVisual(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
@@ -482,7 +484,7 @@ function App() {
     }
     const next = { ...visual, stages };
     setVisual(next);
-    const g = graphFromVisual(next);
+    const g = graphFromVisual(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
@@ -499,7 +501,7 @@ function App() {
     if (ordered.join("|") === visual.flow.join("|")) return;
     const next = { ...visual, flow: ordered };
     setVisual(next);
-    const g = graphFromVisual(next);
+    const g = graphFromVisual(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
@@ -523,7 +525,7 @@ function App() {
         }),
       });
       setVisual(result.visual);
-      const g = graphFromVisual(result.visual);
+      const g = graphFromVisual(result.visual, catalog);
       setNodes(g.nodes);
       setEdges(g.edges);
       setMessage("Stage saved");
@@ -554,7 +556,7 @@ function App() {
         }),
       });
       setVisual(result.visual);
-      const g = graphFromVisual(result.visual);
+      const g = graphFromVisual(result.visual, catalog);
       if (position) {
         g.nodes = g.nodes.map((node) => node.id === name ? { ...node, position } : node);
       }
@@ -624,7 +626,7 @@ function App() {
         }),
       });
       setVisual(result.visual);
-      const g = graphFromVisual(result.visual);
+      const g = graphFromVisual(result.visual, catalog);
       setNodes(g.nodes);
       setEdges(g.edges);
       setSelected("");
