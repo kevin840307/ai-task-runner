@@ -51,6 +51,9 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
     assert '"discussion"' not in text
     assert '"dispatch"' not in text
     assert "session_policy" in text
+    assert '"fresh_session_each_run", "fresh_session_on_start"' in text
+    assert 'o.name === "session_key"' in text
+    assert 'session_key: _sessionKey' in text
     assert "autoPositions" in text
     assert "branchTargets" in text
     assert "branchColumnGap" in text
