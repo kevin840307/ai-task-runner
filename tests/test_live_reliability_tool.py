@@ -641,9 +641,9 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml
     assert "--high-density --require-transient" in text
     assert f"--single-process-yaml-items {yaml_items}" in text
     assert "--example-smoke-matrix-project" in text
-    assert "runner\\workflows\\file.yaml" in text
-    assert "runner\\workflows\\mixed.yaml" in text
-    assert "runner\\workflows\\ralphy_ai_validate.yaml" in text
+    assert "runner\\assets\\workflows\\file.yaml" in text
+    assert "runner\\assets\\workflows\\mixed.yaml" in text
+    assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
 
 
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
