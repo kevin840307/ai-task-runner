@@ -920,6 +920,35 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(Path(prompt["path"]).parent.name, "common")
         self.assertEqual(prompt["reference"], "common/execution.md")
 
+    def test_workflow_builder_internal_prompt_is_not_a_studio_asset(self) -> None:
+        internal = self.root / "workflow_builder" / "prompt.md"
+        internal.parent.mkdir(parents=True)
+        internal.write_text("internal builder prompt\n", encoding="utf-8")
+
+        files = self.state.studio_files(self.project)
+        listed = {Path(row["path"]).resolve() for row in files["prompts"]}
+        self.assertNotIn(internal.resolve(), listed)
+        self.assertTrue(all("workflow_builder" not in Path(row["path"]).parts for row in files["prompts"]))
+
+    def test_stage_can_be_created_disconnected_until_edges_join_it_to_flow(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_add(
+            item["id"],
+            "detached_execute",
+            "task",
+            opened["hash"],
+            self.project,
+            add_to_flow=False,
+        )
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertIn("detached_execute", data["stages"])
+        self.assertEqual(data["flow"], ["work", "review"])
+        self.assertIn(
+            "detached_execute",
+            [stage["name"] for stage in result["visual"]["stages"]],
+        )
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
