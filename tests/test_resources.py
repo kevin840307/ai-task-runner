@@ -41,7 +41,7 @@ def test_remove_path_deletes_short_root_with_deep_descendants(tmp_path):
         deep = deep / (f"segment-{index}-" + "x" * 38)
         index += 1
 
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     io_path(deep).mkdir(parents=True, exist_ok=True)
     io_path(deep / "payload.txt").write_text("x", encoding="utf-8")
