@@ -145,7 +145,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
 }
 
 function ScopeNode({ data }: NodeProps<Node<StudioNodeData>>) {
-  return <div className="wf-scope"><strong>{data.label}</strong></div>;
+  return <div className="wf-scope"><span className="wf-scope-handle" title="拖曳移動 Per Task 區域"><strong>{data.label}</strong><span aria-hidden="true">⠿</span></span></div>;
 }
 
 const nodeTypes = {
@@ -192,7 +192,27 @@ function nextStageKey(visual: Visual, type: string): string {
   return `${base}_${i}`;
 }
 
-function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
+type CanvasPosition = { x: number; y: number };
+type CanvasLayout = Record<string, CanvasPosition>;
+
+function layoutKey(id: string): string { return `workflow-studio-layout:${id}`; }
+
+function readLayout(id: string): CanvasLayout {
+  try {
+    const saved = JSON.parse(localStorage.getItem(layoutKey(id)) || "{}");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+    return Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, CanvasPosition] => {
+      const position = entry[1] as CanvasPosition | null;
+      return position !== null && typeof position === "object" && Number.isFinite(position.x) && Number.isFinite(position.y);
+    }));
+  } catch { return {}; }
+}
+
+function writeLayout(id: string, layout: CanvasLayout): void {
+  try { localStorage.setItem(layoutKey(id), JSON.stringify(layout)); } catch { /* Canvas remains usable without browser storage. */ }
+}
+
+function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout: CanvasLayout = {}): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
   const nodes: Node<StudioNodeData>[] = [];
   const edges: Edge[] = [];
   const x = 280;
@@ -217,9 +237,10 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
       type: "scope",
       position: { x: x - 90, y: 120 + first * gap - 22 },
       data: { kind: "scope", label: "↻ PER TASK" },
-      style: { width: 480, height: (last - first + 1) * gap + 36, zIndex: -10 },
-      selectable: false,
-      draggable: false,
+      style: { width: 480, height: (last - first + 1) * gap + 36 },
+      dragHandle: ".wf-scope-handle",
+      selectable: true,
+      draggable: true,
       deletable: false,
     });
   }
@@ -301,7 +322,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
     }
   });
 
-  return { nodes, edges };
+  return { nodes: nodes.map((node) => ({ ...node, position: layout[node.id] || node.position })), edges };
 }
 
 function parseInputValue(option: CatalogOption, raw: string, checked?: boolean): unknown {
@@ -363,6 +384,13 @@ function Field({
 
 function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const layoutRef = useRef<CanvasLayout>({});
+  const graphFor = useCallback((v: Visual, c: Catalog | null) => {
+    const graph = graphFromVisual(v, c, layoutRef.current);
+    layoutRef.current = Object.fromEntries(graph.nodes.map((node) => [node.id, node.position]));
+    return graph;
+  }, []);
   const { screenToFlowPosition } = useReactFlow();
   const [visual, setVisual] = useState<Visual | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -383,6 +411,25 @@ function App() {
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
+  const displayEdges = useMemo<Edge[]>(() => edges.map((edge) => {
+    const related = Boolean(selected && (edge.source === selected || edge.target === selected));
+    const status = String(edge.data?.status || "pass").toUpperCase();
+    const source = edge.source === START ? "START" : edge.source;
+    const target = edge.target === END ? "END" : edge.target;
+    const color = status === "FAIL" ? "#d97706" : status === "ERROR" ? "#dc2626"
+      : edge.data?.explicit ? "#2563eb" : "#64748b";
+    return {
+      ...edge,
+      type: "smoothstep",
+      className: `${edge.className || ""}${selected ? related ? " focused" : " muted" : ""}`,
+      label: related ? `${status} · ${source} → ${target}` : edge.label,
+      labelBgPadding: [6, 4] as [number, number],
+      labelBgBorderRadius: 6,
+      labelBgStyle: { fill: "#fff", fillOpacity: 0.96 },
+      labelStyle: { fill: "#334155", fontWeight: 700 },
+      markerEnd: { type: MarkerType.ArrowClosed, color, width: 20, height: 20 },
+    };
+  }), [edges, selected]);
 
   const load = useCallback(async () => {
     if (!query().id) {
@@ -401,7 +448,8 @@ function App() {
       setVisual(v);
       setCatalog(c);
       setPrompts(files.prompts || []);
-      const g = graphFromVisual(v, c);
+      layoutRef.current = readLayout(v.id);
+      const g = graphFor(v, c);
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(false);
@@ -409,7 +457,7 @@ function App() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
-  }, []);
+  }, [graphFor]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -489,12 +537,12 @@ function App() {
       }),
     });
     setVisual(result.visual);
-    const g = graphFromVisual(result.visual, catalog);
+    const g = graphFor(result.visual, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(false);
     return result.visual;
-  }, [catalog]);
+  }, [catalog, graphFor]);
 
   const saveGraph = useCallback(async (nextVisual = visual) => {
     if (!nextVisual) return;
@@ -517,7 +565,7 @@ function App() {
       const flow = [connection.target, ...visual.flow.filter((x) => x !== connection.target)];
       const next = { ...visual, flow };
       setVisual(next);
-      const g = graphFromVisual(next, catalog);
+      const g = graphFor(next, catalog);
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(true);
@@ -544,11 +592,11 @@ function App() {
     });
     const next = { ...visual, stages, flow: nextFlow };
     setVisual(next);
-    const g = graphFromVisual(next, catalog);
+    const g = graphFor(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
-  }, [visual, catalog]);
+  }, [visual, catalog, graphFor]);
 
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
@@ -565,28 +613,17 @@ function App() {
     }
     const next = { ...visual, stages };
     setVisual(next);
-    const g = graphFromVisual(next, catalog);
+    const g = graphFor(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
-  }, [visual, catalog]);
+  }, [visual, catalog, graphFor]);
 
-  const reorderByPosition = useCallback((_event: unknown, moved: Node<StudioNodeData>) => {
-    if (!visual || moved.data.kind !== "stage") return;
-    if (!visual.flow.includes(moved.id)) return;
-    const ordered = nodes
-      .filter((n) => n.data.kind === "stage" && visual.flow.includes(n.id))
-      .map((n) => n.id === moved.id ? moved : n)
-      .sort((a, b) => a.position.y - b.position.y)
-      .map((n) => n.id);
-    if (ordered.join("|") === visual.flow.join("|")) return;
-    const next = { ...visual, flow: ordered };
-    setVisual(next);
-    const g = graphFromVisual(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
-    setDirtyGraph(true);
-  }, [nodes, visual, catalog]);
+  const rememberPosition = useCallback((_event: unknown, moved: Node<StudioNodeData>) => {
+    if (!visual) return;
+    layoutRef.current = { ...layoutRef.current, [moved.id]: moved.position };
+    writeLayout(visual.id, layoutRef.current);
+  }, [visual]);
 
   async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "") {
     if (!visual || !catalog?.stage_types?.[stageType]) return;
@@ -597,8 +634,11 @@ function App() {
     if (stageType === "ai_validator") stage.validator = "ai";
     const next = { ...visual, stages: [...visual.stages, stage] };
     setVisual(next);
-    const g = graphFromVisual(next, catalog);
-    if (position) g.nodes = g.nodes.map((node) => node.id === name ? { ...node, position } : node);
+    if (position) {
+      layoutRef.current = { ...layoutRef.current, [name]: position };
+      writeLayout(visual.id, layoutRef.current);
+    }
+    const g = graphFor(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setSelected(name);
@@ -632,7 +672,7 @@ function App() {
     await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim());
   }
 
-  function dragStage(event: React.DragEvent<HTMLButtonElement>, stageType: string) {
+  function dragStage(event: React.DragEvent<HTMLDivElement>, stageType: string) {
     event.dataTransfer.setData("application/x-ai-stage", stageType);
     event.dataTransfer.effectAllowed = "copy";
   }
@@ -654,12 +694,29 @@ function App() {
     if (!window.confirm(`從草稿移除 Stage "${draft.name}"？儲存 Workflow 後才會更新 YAML。`)) return;
     const next = { ...visual, flow: visual.flow.filter((name) => name !== draft.name), stages: visual.stages.filter((stage) => stage.name !== draft.name) };
     setVisual(next);
-    const g = graphFromVisual(next, catalog);
+    const g = graphFor(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setSelected("");
     setDirtyGraph(true);
     setMessage(`Stage ${draft.name} 已從草稿移除。`);
+  }
+
+  function resetLayout() {
+    if (!visual) return;
+    layoutRef.current = {};
+    try { localStorage.removeItem(layoutKey(visual.id)); } catch { /* Ignore unavailable browser storage. */ }
+    setNodes(graphFor(visual, catalog).nodes);
+    setMessage("已重設畫布位置；Workflow 執行順序沒有變動。");
+  }
+
+  function focusStageTitle(name: string) {
+    setSelected(name);
+    setInspectorTab("settings");
+    requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    });
   }
 
   if (!visual) return <main className="loading">{message || "Loading Workflow Studio…"}</main>;
@@ -675,6 +732,7 @@ function App() {
         <div>
           {message && <span className="message">{message}</span>}
           {dirtyGraph && <span className="unsaved-badge">未儲存草稿</span>}
+          <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">重設排列</button>
           <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>Reload</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
             {busy ? "驗證與儲存中…" : "儲存 Workflow"}
@@ -684,7 +742,7 @@ function App() {
 
       <section className="studio-body">
         <aside className="palette">
-          <div className="palette-head"><span className="palette-eyebrow">Stage Palette</span><strong>新增積木</strong><small>點擊加入，或拖曳至畫布</small></div>
+          <div className="palette-head"><span className="palette-eyebrow">Stage Palette</span><strong>新增積木</strong><small>拖曳積木到畫布才會新增</small></div>
           {PALETTE_SECTIONS.map((section) => {
             const types = section.types.filter((type) => catalog?.stage_types?.[type]);
             if (!types.length) return null;
@@ -692,22 +750,22 @@ function App() {
               <div className="palette-section-head"><span>{section.title}</span><small>{types.length}</small></div>
               <div className="palette-list">{types.map((type) => {
                 const meta = STAGE_META[type];
-                return <button key={type} type="button" className="palette-item" draggable disabled={busy}
-                  onDragStart={(event) => dragStage(event, type)} onClick={() => void addStage(type)}>
+                return <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
+                  onDragStart={(event) => dragStage(event, type)}>
                   <span className={`palette-icon type-${type}`} aria-hidden="true">{section.icon}</span>
                   <span className="palette-copy"><strong>{meta.title}</strong><small>{meta.description}</small></span>
-                  <span className="palette-add" aria-hidden="true">＋</span>
-                </button>;
+                  <span className="palette-add" aria-hidden="true">⠿</span>
+                </div>;
               })}</div>
             </div>;
           })}
           {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).length > 0 &&
             <div className="palette-section"><div className="palette-section-head"><span>擴充積木</span></div><div className="palette-list">
               {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).map((type) =>
-                <button key={type} type="button" className="palette-item" draggable disabled={busy}
-                  onDragStart={(event) => dragStage(event, type)} onClick={() => void addStage(type)}>
-                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>自訂 Stage</small></span><span className="palette-add" aria-hidden="true">＋</span>
-                </button>)}</div></div>}
+                <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
+                  onDragStart={(event) => dragStage(event, type)}>
+                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>自訂 Stage</small></span><span className="palette-add" aria-hidden="true">⠿</span>
+                </div>)}</div></div>}
           <div className="palette-note"><small>畫布上的修改會先保留為草稿，按「儲存 Workflow」後才更新 YAML。</small></div>
         </aside>
         <div
@@ -718,15 +776,15 @@ function App() {
         >
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={displayEdges}
             nodeTypes={nodeTypes}
             onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
             onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
             onEdgesDelete={deleteEdges}
-            onNodeDragStop={reorderByPosition}
+            onNodeDragStop={rememberPosition}
             onNodeClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
-            onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
+            onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && focusStageTitle(n.id)}
             onPaneClick={() => setSelected("")}
             connectionLineStyle={{ strokeWidth: 2.5 }}
             defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
@@ -801,7 +859,7 @@ function App() {
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
-                <label><span>積木標題</span><input value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>積木標題（雙擊積木可重新命名）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>執行狀態文字</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 <label>
                   <span>執行範圍</span>
