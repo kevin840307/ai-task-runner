@@ -66,7 +66,7 @@ Discussion / Group Chat
 [x] Keep participant / moderator / judge as ordinary Stages.
 [x] Reuse workflow_position for current Stage; persist only controller_rounds + bounded discussion_history for Discussion orchestration.
 [x] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
-[x] Judge PASS terminates to END; Judge FAIL returns to Discussion Controller, which advances the bounded round and chooses the next Session.
+[x] Judge PASS routes to Final AI Validation; Judge FAIL returns to Discussion Controller. Final AI Validation PASS -> END, FAIL -> Discussion.
 [x] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
 [x] Add durable StateStore process-resume coverage for discussion. Loader/schema/runtime/UI/dry-run contracts are covered; 24H live soak remains part of the existing reliability gate.
 
@@ -331,7 +331,7 @@ These remain future work outside the current multi-workflow milestone:
 - multi-session registry abstraction
 - generic AgentMessage/Handoff framework
 
-When Dynamic Handoff is actually started, reuse:
+For Dynamic Handoff / Discussion follow-up work, continue to reuse:
 - WorkflowRunner
 - Stage
 - StageExecutor
