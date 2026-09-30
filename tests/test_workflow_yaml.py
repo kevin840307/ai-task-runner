@@ -21,10 +21,12 @@ class Executor:
     def __init__(self, results: dict[str, list[str] | str] | None = None):
         self.results = results or {}
         self.calls: list[tuple[str, StageResult | None]] = []
+        self.retry_limits: list[int | None] = []
         self.counts: dict[str, int] = {}
 
-    def run(self, stage, ctx, previous=None, *, label=""):
+    def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
         self.calls.append((stage.name, previous))
+        self.retry_limits.append(retry_limit)
         configured = self.results.get(stage.name, "pass")
         values = configured if isinstance(configured, list) else [configured]
         index = self.counts.get(stage.name, 0)
@@ -72,7 +74,8 @@ def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     ]
     assert workflow[1]["scope"] == "task"
     assert workflow[2]["scope"] == "task"
-    assert workflow[2]["routes"] == {"fail": "execute", "error": "stop"}
+    assert workflow[2]["error_policy"] == {"retries": 2, "exhausted": "next"}
+    assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["routes"] == {"fail": "planning"}
 
 
@@ -136,6 +139,53 @@ flow:
 """,
     )
     with pytest.raises(RunnerError, match="unknown stage"):
+        load_workflow(path)
+
+
+def test_error_policy_is_common_to_every_stage_type(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  work:
+    type: base
+    error_policy:
+      retries: -1
+      exhausted: next
+  check:
+    type: review
+    error_policy:
+      retries: 2
+      exhausted: done
+flow:
+  - work
+  - check
+""",
+    )
+
+    workflow = load_workflow(path)
+    assert workflow[0]["error_policy"] == {"retries": -1, "exhausted": "next"}
+    assert workflow[1]["error_policy"] == {"retries": 2, "exhausted": "done"}
+
+
+def test_error_policy_cannot_compete_with_routes_error(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  work:
+    type: base
+    error_policy:
+      retries: 2
+      exhausted: next
+    routes:
+      error: stop
+flow:
+  - work
+""",
+    )
+
+    with pytest.raises(RunnerError, match="cannot set both"):
         load_workflow(path)
 
 
@@ -236,6 +286,30 @@ flow:
         "review",
     ]
     assert ctx.state.completed is True
+
+
+def test_stage_error_policy_overrides_global_retry_limit(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  first:
+    type: base
+  second:
+    type: review
+    error_policy:
+      retries: -1
+      exhausted: next
+flow:
+  - first
+  - second
+""",
+    )
+    workflow = load_workflow(path)
+    executor = Executor()
+
+    assert FlowEngine(context(tmp_path, workflow)).run(executor) == 0
+    assert executor.retry_limits == [None, -1]
 
 
 def test_unrouted_fail_stops_safely(tmp_path):
