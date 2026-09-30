@@ -24,7 +24,7 @@ def main() -> int:
         calls = [json.loads(x) for x in (project / ".ai-task-runner/demo-calls.jsonl").read_text(encoding="utf-8").splitlines()]
         writers = [x for x in calls if x["role"] == "writer"]
         reviews = [x for x in calls if x["role"] == "review"]
-        grills = [x for x in calls if x["role"] == "grill"]
+        challenges = [x for x in calls if x["role"] == "challenge_review"]
         finals = [x for x in calls if x["role"] == "final"]
         assert writers and not writers[0]["resumed"] and all(x["session"] == "writer-session" for x in writers)
         assert all(x["resumed"] for x in writers[1:])
@@ -33,10 +33,10 @@ def main() -> int:
         # Stage nodes is deliberately not part of this demo contract.
         assert len(reviews) == 6
         assert all(x["full_review_contract"] for x in reviews)
-        # Grill opts into a fresh session on every Stage start.
-        assert len(grills) == 3 and all(not x["resumed"] for x in grills)
-        assert all(x["session"] == "grill-session" for x in grills)
-        assert all(x["full_grill_contract"] for x in grills)
+        # Challenge Review opts into a fresh session on every Stage start.
+        assert len(challenges) == 3 and all(not x["resumed"] for x in challenges)
+        assert all(x["session"] == "challenge-review-session" for x in challenges)
+        assert all(x["full_challenge_contract"] for x in challenges)
         fixes = [x for x in writers if x["kind"] == "fix"]
         assert fixes and all(x["has_feedback"] for x in fixes)
         assert len(finals) == 5 and all(not x["resumed"] for x in finals) and len({x["session"] for x in finals}) == 5
