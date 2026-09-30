@@ -135,3 +135,5 @@ def test_orchestration_stage_catalog_reuses_stage_executor_contract():
     base_options = {item["name"]: item for item in catalog["base"]["options"]}
     assert "targets" in handoff_options
     assert base_options["session_policy"]["values"] == ["auto", "main", "role", "fresh"]
+    assert "fresh_session_each_run" not in base_options
+    assert "fresh_session_on_start" not in base_options
