@@ -15,7 +15,7 @@ from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
-StageResultKind = Literal["generic", "tasks", "task", "review", "validation"]
+StageResultKind = Literal["generic", "tasks", "task", "review", "validation", "handoff", "discussion"]
 MODE_READONLY: StageMode = "readonly"
 MODE_WRITE: StageMode = "write"
 
