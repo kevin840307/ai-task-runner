@@ -953,7 +953,7 @@ function App() {
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
-                <label><span>積木標題（雙擊積木可重新命名）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>顯示名稱（Stage key 不變；雙擊積木可快速編輯）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>執行狀態文字</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 <label>
                   <span>執行範圍</span>
