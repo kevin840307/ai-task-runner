@@ -28,6 +28,15 @@ Current product direction:
 
 
 
+DISCUSSION VISUAL + FINAL VALIDATION REFINEMENT (2026-09-30)
+------------------------------------------------------
+[ ] Present Discussion as one controller block visually connected to multiple Session Stage blocks.
+[ ] Keep Session blocks ordinary Stages with independent session_key values; Discussion owns only dispatch/round/history.
+[ ] Judge PASS must route to a separate ordinary ai_validator Stage, never directly to END.
+[ ] Final AI Validator PASS -> END; FAIL -> Discussion controller for another bounded discussion cycle.
+[ ] Keep final validator outside Discussion controller targets so orchestration and final acceptance stay separate.
+[ ] Update YAML / Graph Designer / dry-run / resume / runtime tests for this closure.
+
 CONTROLLER MODEL REFINEMENT (2026-09-30)
 ----------------------------------------
 [x] Keep Dynamic Handoff as pure dynamic routing: one Handoff Stage chooses exactly one next Stage from allowed targets.
