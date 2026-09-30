@@ -26,6 +26,36 @@ Current product direction:
 - Chat entry remains: choose Workflow/Profile -> enter prompt -> Run
 - do NOT add a separate execution-mode selector
 
+
+NEW WORK - MULTI-WORKFLOW FAMILIES (STARTED 2026-09-30)
+-------------------------------------------------------
+Goal: add Dynamic Handoff and Discussion / Group Chat without creating a second runtime.
+Reuse Stage / StageExecutor / StateStore / plugins / Graph Designer and keep YAML canonical.
+
+Dynamic Handoff
+[ ] Add one built-in dynamic_handoff.yaml example/profile.
+[ ] Add the smallest declarative handoff contract so one Stage can advertise multiple allowed next Stages.
+[ ] Persist only the scheduler/handoff state required for resume; do not add a generic DAG scheduler.
+[ ] Reuse StageResult + FlowEngine routing and keep technical ERROR handling in StageExecutor.
+[ ] Final Review PASS routes to END; FAIL may hand back to an allowed worker Stage.
+[ ] Workflow Studio renders one Stage with multiple handoff edges and edits them without a separate designer.
+[ ] Add loader/schema/runtime/UI tests and resume coverage for dynamic handoff.
+
+Discussion / Group Chat
+[ ] Add one built-in discussion.yaml example/profile.
+[ ] Keep participant / moderator / judge as ordinary Stages.
+[ ] Add only bounded discussion state: round, participant order/current participant, max rounds, termination.
+[ ] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
+[ ] Judge PASS terminates to END; non-terminal result starts/continues the next bounded round.
+[ ] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
+[ ] Add loader/schema/runtime/UI tests and process-resume coverage for discussion.
+
+Implementation constraints
+- No execution_mode selector in Chat; selecting the Workflow YAML selects the family.
+- No generic DAG engine, scheduler hierarchy, multi-session registry, or parallel writers in this milestone.
+- PASS / FAIL remain semantic result edges; technical ERROR remains retry-only and stops after exhaustion.
+- Existing Linear workflows and YAML List max_cycles / skip_on_max_cycles behavior must remain unchanged.
+
 CURRENT PACKAGE SHAPE
 ---------------------
 runner/
