@@ -133,11 +133,6 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
   width: 224px; min-height: 105px; padding: 13px 15px 19px; border-radius: 12px;
   border: 1px solid #d5deea; border-left: 4px solid #4775d1; background: #fff; box-shadow: 0 5px 16px rgba(15,23,42,.07);
 }
-.wf-stage.type-discussion_controller {
-  width: 260px; min-height: 116px; border-left-width: 6px;
-  box-shadow: 0 8px 24px rgba(15,23,42,.10);
-}
-.wf-stage.type-discussion { border-left-color: #7c3aed; }
 .wf-stage.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.17), 0 9px 24px rgba(15,23,42,.10); }
 .react-flow__node.disconnected .wf-stage { border-style: dashed; opacity: .78; }
 .wf-stage-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
@@ -155,7 +150,6 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .react-flow__edge.result.fail path { stroke: #f59e0b; }
 .react-flow__edge.result.error path { stroke: #dc2626; }
 .react-flow__edge.result.pass path { stroke: #2563eb; }
-.react-flow__edge.discussion-return path { stroke: #94a3b8; stroke-dasharray: 6 5; opacity: .72; }
 .react-flow__edge.normal path { stroke: #94a3b8; }
 .react-flow__edge-text { font-size: 10px; fill: #475569; }
 .react-flow__edge.muted { opacity: .17; }
