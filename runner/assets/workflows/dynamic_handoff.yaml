@@ -14,6 +14,7 @@ stages:
     status: Implementation Agent 正在處理
     prompt: common/dynamic_worker.md
     instructions: Focus on implementation and concrete project changes.
+    session_key: dynamic_implementer
     mode: write
     track_changes: true
     routes:
@@ -24,6 +25,7 @@ stages:
     status: Verification Agent 正在檢查
     prompt: common/dynamic_worker.md
     instructions: Focus on tests, verification evidence, and finding remaining defects.
+    session_key: dynamic_verifier
     readonly_safety: observe
     routes:
       pass: coordinator
