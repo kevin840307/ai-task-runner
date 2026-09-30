@@ -131,3 +131,46 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
 
     assert "Validator: Validation evidence is incomplete" in feedback
     assert 'Validator missing_items: ["Run the required check"]' in feedback
+
+
+def test_handoff_protocol_is_appended_on_same_session_continuation(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.config.runtime import RuntimeConfig
+    from runner.workflow.stages import HandoffStage, HandoffStageSpec, StageResult
+
+    state = RunState(run_id="test", goal="route work", project_root=str(tmp_path))
+    client = SimpleNamespace(session_id="router-session")
+    ctx = StageContext(
+        config=RuntimeConfig(goal="route work", project_root=str(tmp_path)),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
+        ai_client=client,
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+    stage = HandoffStage(HandoffStageSpec(
+        name="coordinator",
+        targets=["worker", "final_validate"],
+        session_policy="main",
+    ))
+
+    first = stage._prompt(ctx, None, client)
+    assert "[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]" in first
+    assert "Allowed targets: worker, final_validate" in first
+
+    stage._remember_prompt(ctx, client)
+    second = stage._prompt(
+        ctx,
+        StageResult("worker", "pass", output="worker complete"),
+        client,
+    )
+
+    assert second.startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert "[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]" in second
+    assert "Allowed targets: worker, final_validate" in second
+    assert '{"target":"stage_name","reason":"concise reason"}' in second
