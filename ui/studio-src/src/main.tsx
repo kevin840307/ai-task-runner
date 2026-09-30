@@ -260,6 +260,21 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     });
   }
 
+  const branchPositions: CanvasLayout = {};
+  visual.flow.forEach((name, index) => {
+    const controller = stageByName(visual, name);
+    if (!controller || !["handoff", "discussion_controller"].includes(controller.type)) return;
+    const targets = (controller.targets || []).filter((target) => Boolean(stageByName(visual, target)));
+    if (!targets.length) return;
+    const branchGap = 230;
+    const centerX = x + 60;
+    const startX = centerX - ((targets.length - 1) * branchGap) / 2;
+    const branchY = 150 + (index + 1) * gap;
+    targets.forEach((target, targetIndex) => {
+      branchPositions[target] = { x: startX + targetIndex * branchGap, y: branchY };
+    });
+  });
+
   const orderedNames = [
     ...visual.flow,
     ...visual.stages.map((s) => s.name).filter((name) => !visual.flow.includes(name)),
@@ -271,7 +286,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     nodes.push({
       id: name,
       type: "stage",
-      position: { x: disconnected ? x + 320 : x, y: 150 + index * gap },
+      position: branchPositions[name] || { x: disconnected ? x + 320 : x, y: 150 + index * gap },
       data: {
         kind: "stage",
         label: String(s.label || s.name),
