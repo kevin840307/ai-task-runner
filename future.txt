@@ -33,6 +33,16 @@ StageExecutor owns all technical reliability:
 
 Stage implementations do not own retry/recover/session logic.
 
+UI workflow families
+--------------------
+1. Linear Workflow with Rollback / Loop - current production mode.
+2. Dynamic Handoff - future; reuse the same Stage/StageExecutor/StateStore.
+3. Discussion / Group Chat - future; participants remain Stages.
+
+The user entry stays the same for every family: choose a Workflow/Profile in Chat,
+enter the prompt, then run. Do not add a separate mode selector.
+
+
 Current package layout
 ----------------------
 
