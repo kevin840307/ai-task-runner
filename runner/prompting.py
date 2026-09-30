@@ -187,7 +187,7 @@ def build_stage_prompt_context(
         "goal": state.goal,
         "instructions": "",
         "discussion": {
-            "round": state.cycle,
+            "round": max(getattr(state, "controller_rounds", {}).values(), default=1),
             "history": list(getattr(state, "discussion_history", []))[-24:],
         },
         "stage": stage,
