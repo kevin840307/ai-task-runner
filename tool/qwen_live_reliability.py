@@ -34,8 +34,8 @@ WORKFLOWS = {
     name: RUNNER_WORKFLOWS[name]
     for name in ("file", "ai", "mixed")
 }
-SYSTEM_FINAL_AI_RUNS = 3
-SYSTEM_FINAL_AI_REQUIRED_PASSES = 2
+BUILTIN_FINAL_AI_RUNS = 3
+BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
 QWEN_SANDBOX_ERROR_MARKERS = (
     "failed to connect to the docker api",
     "dockerdesktoplinuxengine",
@@ -454,7 +454,7 @@ def whole_seconds_arg(value: float) -> str:
     return str(whole)
 
 
-def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
+def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     """Return and verify the bundled Final AI contract."""
     if workflow not in {"ai", "mixed"}:
         raise ValueError(f"workflow/{workflow} has no Final AI contract")
@@ -471,8 +471,8 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     required = int(validator.get("required_passes") or (runs // 2 + 1))
     yolo = validator.get("ai_validator_yolo") is True
     if (runs, required, yolo) != (
-        SYSTEM_FINAL_AI_RUNS,
-        SYSTEM_FINAL_AI_REQUIRED_PASSES,
+        BUILTIN_FINAL_AI_RUNS,
+        BUILTIN_FINAL_AI_REQUIRED_PASSES,
         True,
     ):
         raise RuntimeError(
@@ -482,7 +482,7 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     return runs, required, yolo
 
 
-def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
+def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
     """Verify bundled workflows default read-only AI stages to observe."""
     from runner.workflow.loader import load_workflow
 
@@ -804,7 +804,7 @@ def assert_prompt_transport_contract(project: Path) -> None:
             )
 
 
-def assert_system_topology(project: Path, workflow: str) -> None:
+def assert_builtin_topology(project: Path, workflow: str) -> None:
     starts = [
         str(event.get("stage", ""))
         for event in runner_events(project)
@@ -1723,11 +1723,11 @@ def custom_task_producer_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("custom Task Producer task did not complete")
 
 
-def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
+def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
     project = create_project(root, f"system-{workflow}-probe")
     ai_validation = workflow in {"ai", "mixed"}
     expected_ai_sessions = (
-        system_final_ai_contract(workflow)[0] if ai_validation else 0
+        builtin_final_ai_contract(workflow)[0] if ai_validation else 0
     )
     code = run_command(
         runner_command(
@@ -1741,7 +1741,7 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
         settings.run_timeout,
     )
     assert_completed(project, code)
-    assert_system_topology(project, workflow)
+    assert_builtin_topology(project, workflow)
     assert_prompt_transport_contract(project)
     if ai_validation:
         sessions = final_validation_sessions(project)
@@ -2792,7 +2792,7 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
         mixed_validations = result.mixed_validations
         if mixed:
             mixed_validations += 1
-            expected_ai_sessions = system_final_ai_contract("mixed")[0]
+            expected_ai_sessions = builtin_final_ai_contract("mixed")[0]
             if len(final_validation_sessions(project)) < expected_ai_sessions:
                 raise RuntimeError(
                     f"soak-{run_number:04d} did not use {expected_ai_sessions} "
@@ -3145,8 +3145,8 @@ def main() -> int:
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
         flush=True,
     )
-    readonly_contract = system_readonly_safety_contract()
-    print("PASS system Workflow readonly_safety observe contract preflight", flush=True)
+    readonly_contract = builtin_readonly_safety_contract()
+    print("PASS built-in Workflow readonly_safety observe contract preflight", flush=True)
     workflow_dryrun_negative_preflight()
     print("PASS workflow dry-run negative/error preflight", flush=True)
     stage_result_mapping_preflight()
@@ -3165,7 +3165,7 @@ def main() -> int:
         stop_request_resume_probe(settings, run_root)
         print("PASS detached-UI stop.request/resume probe", flush=True)
         for workflow in ("file", "ai", "mixed"):
-            system_workflow_probe(settings, run_root, workflow)
+            builtin_workflow_probe(settings, run_root, workflow)
             print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
         custom_task_producer_probe(settings, run_root)
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
@@ -3250,7 +3250,7 @@ def main() -> int:
         "http_503_recovered": True,
         "single_process_yaml_items": args.single_process_yaml_items,
         "workflow_dryrun_preflight": True,
-        "system_readonly_safety_contract": readonly_contract,
+        "builtin_readonly_safety_contract": readonly_contract,
         "workflow_dryrun_negative_preflight": True,
         "stage_result_mapping_preflight": True,
         "runtime_long_path_preflight": True,
@@ -3259,7 +3259,7 @@ def main() -> int:
         "stop_request_resume_probe": True,
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,
-        "system_workflow_contracts": ["file", "ai", "mixed"],
+        "builtin_workflow_contracts": ["file", "ai", "mixed"],
         "custom_task_producer_probe": True,
         "review_failure_routing_probe": True,
         "validator_failure_routing_probe": True,
