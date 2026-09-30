@@ -84,6 +84,23 @@ def test_current_tool_workflow_examples_load_with_production_schema(relative):
     assert all(item["name"] for item in workflow)
 
 
+def test_public_workflow_yaml_uses_session_policy_not_legacy_fresh_flags():
+    paths = [
+        *WORKFLOWS.values(),
+        ROOT / "tool" / "workflow" / "01_default_ai.yaml",
+        ROOT / "tool" / "workflow" / "02_ai_with_review_gate.yaml",
+        ROOT / "tool" / "workflow" / "03_file_validation.yaml",
+        ROOT / "tool" / "workflow" / "04_mixed_with_review_gate.yaml",
+        ROOT / "tool" / "workflow" / "05_review_vote_3_choose_2.yaml",
+        ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
+        ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
+    ]
+    for path in paths:
+        text = Path(path).read_text(encoding="utf-8")
+        assert "fresh_session_each_run:" not in text, path
+        assert "fresh_session_on_start:" not in text, path
+
+
 def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     workflow = load_workflow(WORKFLOWS["ai"])
 
