@@ -227,91 +227,15 @@ class HandoffStage(BaseStage):
             + "[/RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]"
         )
 
-
-@dataclass(frozen=True)
-class DiscussionControllerStageSpec(HandoffStageSpec):
-    status: str = "AI 正在協調討論"
-    run_state: str = "discussion_control"
-    actor: str = "moderator"
-    prompt: str = "common/discussion_controller.md"
-    round_end: str = "judge"
-    session_key: str = "discussion_controller"
-
-
-class DiscussionControllerStage(HandoffStage):
-    result_kind = "handoff"
-
-    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
-        round_no = int(ctx.state.controller_rounds.get(self.name, 1))
-        history = list(ctx.state.discussion_history)[-24:]
-        import json
-        contextual = (
-            prompt.rstrip()
-            + "\n\nRunner discussion controller context:\n"
-            + f"round: {round_no}\n"
-            + "history: "
-            + json.dumps(history, ensure_ascii=False)
-        )
-        return super()._augment_rendered_prompt(ctx, contextual)
-
-
-@dataclass(frozen=True)
-class DiscussionStageSpec(BaseStageSpec):
-    status: str = "AI 正在參與討論"
-    run_state: str = "discussion"
-    mode: str = MODE_READONLY
-    actor: str = "participant"
-    prompt: str = "common/discussion.md"
-    role: str = "participant"
-    history_limit: int = 24
-    controller: str = ""
-    session_key: str = ""
-
-
-class DiscussionStage(BaseStage):
-    result_kind = "discussion"
-
-    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
-        history = list(ctx.state.discussion_history)[-max(1, int(self.spec.history_limit)):]
-        import json
-        round_no = int(ctx.state.controller_rounds.get(self.spec.controller, 1))
-        return (
-            prompt.rstrip()
-            + "\n\nRunner discussion context:\n"
-            + f"round: {round_no}\n"
-            + f"role: {self.spec.role}\n"
-            + "history: "
-            + json.dumps(history, ensure_ascii=False)
-        )
-
-    def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
-        if result.status == "pass" and result.output.strip():
-            ctx.state.discussion_history.append(
-                {
-                    "stage": self.name,
-                    "role": self.spec.role,
-                    "message": bounded_text(result.output, 4000),
-                }
-            )
-            limit = max(1, int(self.spec.history_limit))
-            del ctx.state.discussion_history[:-limit]
-        return super().finish(ctx, result)
-
 PlanStage.spec_class = PlanStageSpec
 TaskStage.spec_class = TaskStageSpec
 HandoffStage.spec_class = HandoffStageSpec
-DiscussionControllerStage.spec_class = DiscussionControllerStageSpec
-DiscussionStage.spec_class = DiscussionStageSpec
 ReviewStage.spec_class = ReviewStageSpec
 AIValidatorStage.spec_class = AIValidatorStageSpec
 
 __all__ = [
     "AIValidatorStage",
     "AIValidatorStageSpec",
-    "DiscussionControllerStage",
-    "DiscussionControllerStageSpec",
-    "DiscussionStage",
-    "DiscussionStageSpec",
     "HandoffStage",
     "HandoffStageSpec",
     "PlanStage",
