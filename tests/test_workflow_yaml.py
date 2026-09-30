@@ -417,14 +417,19 @@ def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
         "final_validate",
     ]
     roles = {item["name"]: item for item in workflow[1:]}
-    assert roles["requirements_analyst"]["session_policy"] == "main"
+    assert coordinator["session_policy"] == "role"
+    assert roles["requirements_analyst"]["session_policy"] == "role"
     assert roles["solution_architect"]["session_policy"] == "role"
     assert roles["implementer"]["session_policy"] == "role"
     assert roles["debugger"]["session_policy"] == "role"
-    assert roles["verifier"]["session_policy"] == "fresh"
-    assert roles["risk_reviewer"]["session_policy"] == "fresh"
+    assert roles["verifier"]["session_policy"] == "role"
+    assert roles["risk_reviewer"]["session_policy"] == "role"
     assert final_validate["type"] == "ai_validator"
     assert final_validate["session_policy"] == "fresh"
+    assert all(
+        stage["session_policy"] == "role"
+        for stage in workflow[:-1]
+    )
     assert final_validate["routes"] == {"pass": "done", "fail": "coordinator"}
 
 
