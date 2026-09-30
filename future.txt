@@ -42,6 +42,38 @@ UI workflow families
 The user entry stays the same for every family: choose a Workflow/Profile in Chat,
 enter the prompt, then run. Do not add a separate mode selector.
 
+Workflow Studio product contract
+--------------------------------
+The editor is an n8n-style graph workspace built with React + TypeScript + React Flow
+(@xyflow/react), compiled by Vite into static HTML/JS/CSS served by the existing
+Python UI server. End-user machines do not need Node.js, npm, React, or a separate
+frontend server.
+
+YAML remains the only canonical Workflow model. The graph is an editor projection:
+- one YAML Stage = one Stage node
+- START / END are UI-only virtual nodes and are never written as Stages
+- flow order = default PASS -> next
+- routes.pass/fail/error = explicit result edges
+- scope: task = visual PER TASK group; it is not a hidden Stage
+- Plan produces Task[] data only; it never injects Execute/Review nodes
+- Stage parameters are rendered from /api/workflow/catalog so new Stage options do
+  not require another hard-coded UI field list
+- Graph edits patch the existing YAML; there is no second graph/runtime schema
+- default PASS edges are structural flow edges; explicit PASS/FAIL/ERROR edges can
+  be connected, retargeted, and removed
+- Stage order can be changed by dragging; edge routing and node settings remain
+  editable from the same full-screen workspace
+- Prompt Markdown remains a separate editable asset; Stage selects/references it
+
+The full graph editor is a dedicated large page. The existing Studio asset browser
+may remain the library/entry page for Workflow/Prompt files, but must not constrain
+the graph canvas to the old narrow card-list layout.
+
+Future Dynamic Handoff / Discussion still use Stage nodes. They may allow one Stage
+(Agent) to connect to many Stage nodes, but must reuse this same canvas, node registry,
+catalog-driven settings panel, YAML asset ownership where applicable, and runtime
+owners. Do not build a separate designer per mode.
+
 
 Current package layout
 ----------------------
