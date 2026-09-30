@@ -1303,11 +1303,10 @@ function renderStageEditorContent(cfg, item) {
 
   const control = box.querySelector('[data-stage-panel="control"]');
   control.innerHTML = `
-    <div class="stage-section-head"><div><strong>Result edges</strong><span>${escapeHtml(t("stage.routes_desc", "Workflow routing: PASS defaults to next; FAIL/ERROR default to stop. Technical retry stays inside StageExecutor."))}</span></div></div>
+    <div class="stage-section-head"><div><strong>Result edges</strong><span>${escapeHtml(t("stage.routes_desc", "Workflow routing: PASS defaults to next; FAIL defaults to stop. ERROR uses Stage retry policy and is not a result edge."))}</span></div></div>
     <div class="stage-form-two-col">
       <label class="designer-form-row">${fieldLabel("PASS", t("stage.help.route_pass", "Default is the next Flow Stage."))}<select id="stageRoutePass" class="designer-select" ${disabled}>${routeTargetOptions(routes.pass || "", "Next (default)")}</select></label>
       <label class="designer-form-row">${fieldLabel("FAIL", t("stage.help.route_fail", "Route semantic failure to another Stage or terminal target."))}<select id="stageRouteFail" class="designer-select" ${disabled}>${routeTargetOptions(routes.fail || "", "Stop (default)")}</select></label>
-      <label class="designer-form-row">${fieldLabel("ERROR", t("stage.help.route_error", "Route unrecovered Stage error. Default is stop."))}<select id="stageRouteError" class="designer-select" ${disabled}>${routeTargetOptions(routes.error || "", "Stop (default)")}</select></label>
     </div>
 
     <div class="stage-section-head"><div><strong>Structured output</strong><span>${escapeHtml(t("stage.retry_desc", "Technical Stage retry/session recovery is global Runner behavior."))}</span></div></div>
@@ -1361,7 +1360,7 @@ function numberOrNull(id) { const value = fieldValue(id).trim(); return value ==
 function listOrNull(id) { const values = fieldValue(id).split(",").map((x) => x.trim()).filter(Boolean); return values.length ? values : null; }
 function routeMapOrNull() {
   const routes = {};
-  for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"], ["error", "stageRouteError"]]) {
+  for (const [status, id] of [["pass", "stageRoutePass"], ["fail", "stageRouteFail"]]) {
     const target = valueOrNull(id);
     if (target) routes[status] = target;
   }
