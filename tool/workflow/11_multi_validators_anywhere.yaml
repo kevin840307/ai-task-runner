@@ -19,10 +19,10 @@ stages:
     routes:
       fail: planning
 
-  grill:
+  challenge_review:
     type: review
-    prompt: common/grill.md
-    fresh_session_on_start: true
+    prompt: common/review.md
+    session_policy: fresh
     routes:
       fail: planning
 
@@ -54,7 +54,7 @@ flow:
   - execute
   - review
   - preflight_file
-  - grill
+  - challenge_review
   - ai_gate_1
   - post_file
   - ai_gate_2
