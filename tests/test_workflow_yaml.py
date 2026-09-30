@@ -535,3 +535,141 @@ flow:
     assert ctx.state.cycle == 2
     assert ctx.state.stage == "max_rounds_exhausted"
     assert ctx.state.completed is False
+
+
+def test_dynamic_handoff_state_store_resume_continues_selected_target(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker, final_review]
+  worker:
+    type: base
+    routes:
+      pass: router
+  final_review:
+    type: review
+    routes:
+      pass: done
+      fail: router
+flow:
+  - router
+  - worker
+  - final_review
+""",
+    )
+    workflow = load_workflow(path)
+    work = tmp_path / ".work"
+    store = StateStore(tmp_path, work)
+    state = RunState("run", "goal", str(tmp_path))
+    state.workflow_position = 1
+    state.transition_previous = {
+        "stage": "router",
+        "status": "pass",
+        "output": "handoff:worker",
+        "changed_files": [],
+        "data": {"target": "worker", "reason": "resume test"},
+        "kind": "handoff",
+    }
+    store.save(state)
+
+    resumed = store.load_or_create("", resume=True, force_new=False)
+    ctx = context(tmp_path, workflow)
+    ctx.state = resumed
+
+    class ResumeHandoffExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            if stage.name == "router":
+                return StageResult(
+                    "router",
+                    "pass",
+                    output="handoff:final_review",
+                    data={"target": "final_review", "reason": "worker completed"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = ResumeHandoffExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "worker",
+        "router",
+        "final_review",
+    ]
+    previous = executor.calls[0][1]
+    assert previous is not None
+    assert previous.kind == "handoff"
+    assert previous.data == {"target": "worker", "reason": "resume test"}
+    assert ctx.state.completed is True
+
+
+def test_discussion_state_store_resume_preserves_round_order_and_history(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  participant:
+    type: discussion
+    role: participant
+  moderator:
+    type: discussion
+    role: moderator
+  judge:
+    type: review
+    max_rounds: 3
+    routes:
+      pass: done
+      fail: participant
+flow:
+  - participant
+  - moderator
+  - judge
+""",
+    )
+    workflow = load_workflow(path)
+    work = tmp_path / ".work"
+    store = StateStore(tmp_path, work)
+    state = RunState("run", "goal", str(tmp_path))
+    state.cycle = 2
+    state.workflow_position = 1
+    state.discussion_history = [
+        {
+            "stage": "participant",
+            "role": "participant",
+            "message": "Persisted round-two evidence",
+        }
+    ]
+    state.transition_previous = {
+        "stage": "participant",
+        "status": "pass",
+        "output": "Persisted round-two evidence",
+        "changed_files": [],
+        "data": "Persisted round-two evidence",
+        "kind": "discussion",
+    }
+    store.save(state)
+
+    resumed = store.load_or_create("", resume=True, force_new=False)
+    ctx = context(tmp_path, workflow)
+    ctx.state = resumed
+    executor = Executor()
+
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == ["moderator", "judge"]
+    assert ctx.state.cycle == 2
+    assert ctx.state.discussion_history == [
+        {
+            "stage": "participant",
+            "role": "participant",
+            "message": "Persisted round-two evidence",
+        }
+    ]
+    previous = executor.calls[0][1]
+    assert previous is not None
+    assert previous.kind == "discussion"
+    assert previous.output == "Persisted round-two evidence"
+    assert ctx.state.completed is True
