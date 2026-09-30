@@ -1411,6 +1411,42 @@ def test_live_resume_workflow_uses_current_string_flow_contract():
         assert data["stages"][name]["scope"] == "task"
 
 
+def test_resume_probe_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
+    fake = tmp_path / "fake_qwen_resume.py"
+    fake.write_text(
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "prompt = sys.stdin.buffer.read().decode('utf-8')\n"
+        "session = 'resume-session-001'\n"
+        "if '--resume' in args:\n"
+        "    assert args[args.index('--resume') + 1] == session\n"
+        "Path.cwd().joinpath('health.txt').write_text(" + repr(live.EXPECTED) + ", encoding='utf-8')\n"
+        "answer = 'completed current task'\n"
+        "print(json.dumps(["
+        "{'type':'system','subtype':'session_start','session_id':session},"
+        "{'type':'result','subtype':'success','session_id':session,'result':answer}"
+        "]))\n",
+        encoding="utf-8",
+    )
+    command = f'"{sys.executable}" "{fake}"'
+    config = replace(
+        settings(tmp_path),
+        command=command,
+        run_timeout=45,
+        agent_timeout=15,
+        planning_timeout=15,
+    )
+
+    live.resume_probe(config, tmp_path / "resume-root")
+
+    project = tmp_path / "resume-root" / "resume-probe"
+    state = live.read_state(project)
+    assert state["completed"] is True
+    assert (project / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert live.observed_session(project, "resume-session-001", "resume")
+
+
 def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
