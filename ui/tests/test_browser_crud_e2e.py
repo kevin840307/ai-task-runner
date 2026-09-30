@@ -243,10 +243,10 @@ def test_browser_crud_journey_uses_flat_global_assets_and_result_edges() -> None
             page.click("#addFlowStepButton")
             page.fill("#addStageName", "work")
             page.select_option("#addStageType", "task")
-            page.select_option("#addStagePrompt", "e2e_prompt.md")
+            page.select_option("#addStagePrompt", "common/e2e_prompt.md")
             page.click("#addStageConfirm")
             page.wait_for_timeout(180)
-            assert page.locator("#stagePromptSelect").input_value() == "e2e_prompt.md"
+            assert page.locator("#stagePromptSelect").input_value() == "common/e2e_prompt.md"
 
             # Semantic FAIL is an edge, not a retry/recovery field.
             page.click('[data-stage-tab="control"]')
