@@ -399,3 +399,139 @@ flow:
     assert previous is not None
     assert previous.stage == "first"
     assert previous.output == "durable feedback"
+
+
+def test_builtin_dynamic_handoff_workflow_uses_one_router_with_many_targets():
+    workflow = load_workflow(WORKFLOWS["dynamic_handoff"])
+    coordinator = workflow[0]
+    final_review = workflow[-1]
+
+    assert coordinator["type"] == "handoff"
+    assert coordinator["targets"] == ["implementer", "verifier", "final_review"]
+    assert final_review["type"] == "review"
+    assert final_review["routes"] == {"fail": "coordinator"}
+
+
+def test_handoff_target_must_exist(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [missing]
+  worker:
+    type: base
+flow:
+  - router
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="handoff target"):
+        load_workflow(path)
+
+
+def test_dynamic_handoff_routes_selected_target_and_final_review_ends(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker, final_review]
+  worker:
+    type: base
+    routes:
+      pass: router
+  final_review:
+    type: review
+    routes:
+      fail: router
+flow:
+  - router
+  - worker
+  - final_review
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class HandoffExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            count = self.counts.get(stage.name, 0)
+            self.counts[stage.name] = count + 1
+            if stage.name == "router":
+                target = "worker" if count == 0 else "final_review"
+                return StageResult(
+                    stage.name,
+                    "pass",
+                    output=f"handoff:{target}",
+                    data={"target": target, "reason": "test"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = HandoffExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "router",
+        "worker",
+        "router",
+        "final_review",
+    ]
+    assert ctx.state.completed is True
+
+
+def test_builtin_discussion_workflow_is_bounded_by_judge_rounds():
+    workflow = load_workflow(WORKFLOWS["discussion"])
+    assert [item["type"] for item in workflow] == [
+        "discussion",
+        "discussion",
+        "discussion",
+        "review",
+    ]
+    assert workflow[-1]["max_rounds"] == 3
+    assert workflow[-1]["routes"] == {"fail": "participant_architecture"}
+
+
+def test_discussion_round_limit_stops_after_bounded_backward_routes(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  participant:
+    type: discussion
+    role: participant
+  moderator:
+    type: discussion
+    role: moderator
+  judge:
+    type: review
+    max_rounds: 2
+    routes:
+      fail: participant
+flow:
+  - participant
+  - moderator
+  - judge
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    executor = Executor({"judge": "fail"})
+
+    assert FlowEngine(ctx).run(executor) == 1
+    assert [name for name, _ in executor.calls] == [
+        "participant",
+        "moderator",
+        "judge",
+        "participant",
+        "moderator",
+        "judge",
+    ]
+    assert ctx.state.cycle == 2
+    assert ctx.state.stage == "max_rounds_exhausted"
+    assert ctx.state.completed is False
