@@ -230,13 +230,17 @@ function writeLayout(id: string, layout: CanvasLayout): void {
 function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout: CanvasLayout = {}): { nodes: Node<StudioNodeData>[]; edges: Edge[] } {
   const nodes: Node<StudioNodeData>[] = [];
   const edges: Edge[] = [];
-  const x = 280;
-  const gap = 150;
+  const mainX = 420;
+  const nodeWidth = 224;
+  const mainCenter = mainX + nodeWidth / 2;
+  const verticalGap = 175;
+  const branchColumnGap = 270;
+  const maxBranchColumns = 4;
 
   nodes.push({
     id: START,
     type: "terminal",
-    position: { x: x + 60, y: 20 },
+    position: { x: mainCenter - 56, y: 20 },
     data: { kind: "start", label: "START" },
     deletable: false,
   });
@@ -250,9 +254,9 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     nodes.push({
       id: "__task_scope__",
       type: "scope",
-      position: { x: x - 90, y: 120 + first * gap - 22 },
+      position: { x: mainX - 90, y: 120 + first * verticalGap - 22 },
       data: { kind: "scope", label: "↻ PER TASK" },
-      style: { width: 480, height: (last - first + 1) * gap + 36 },
+      style: { width: 480, height: (last - first + 1) * verticalGap + 36 },
       dragHandle: ".wf-scope-handle",
       selectable: true,
       draggable: true,
@@ -260,19 +264,45 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     });
   }
 
-  const branchPositions: CanvasLayout = {};
-  visual.flow.forEach((name, index) => {
-    const controller = stageByName(visual, name);
-    if (!controller || !["handoff", "discussion_controller"].includes(controller.type)) return;
-    const targets = (controller.targets || []).filter((target) => Boolean(stageByName(visual, target)));
-    if (!targets.length) return;
-    const branchGap = 230;
-    const centerX = x + 60;
-    const startX = centerX - ((targets.length - 1) * branchGap) / 2;
-    const branchY = 150 + (index + 1) * gap;
-    targets.forEach((target, targetIndex) => {
-      branchPositions[target] = { x: startX + targetIndex * branchGap, y: branchY };
-    });
+  const autoPositions: CanvasLayout = {};
+  const branchTargets = new Set<string>();
+  let cursorY = 150;
+
+  visual.flow.forEach((name) => {
+    if (branchTargets.has(name)) return;
+    const stage = stageByName(visual, name);
+    if (!stage) return;
+
+    autoPositions[name] = { x: mainX, y: cursorY };
+
+    if (["handoff", "discussion_controller"].includes(stage.type)) {
+      const targets = (stage.targets || []).filter((target) => Boolean(stageByName(visual, target)));
+      if (!targets.length) {
+        cursorY += verticalGap;
+        return;
+      }
+
+      const columns = Math.min(maxBranchColumns, targets.length);
+      const rows = Math.ceil(targets.length / columns);
+      const branchTop = cursorY + verticalGap;
+
+      targets.forEach((target, targetIndex) => {
+        branchTargets.add(target);
+        const row = Math.floor(targetIndex / columns);
+        const indexInRow = targetIndex % columns;
+        const rowCount = Math.min(columns, targets.length - row * columns);
+        const rowStartCenter = mainCenter - ((rowCount - 1) * branchColumnGap) / 2;
+        autoPositions[target] = {
+          x: rowStartCenter + indexInRow * branchColumnGap - nodeWidth / 2,
+          y: branchTop + row * verticalGap,
+        };
+      });
+
+      cursorY = branchTop + rows * verticalGap + 45;
+      return;
+    }
+
+    cursorY += verticalGap;
   });
 
   const orderedNames = [
@@ -286,7 +316,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     nodes.push({
       id: name,
       type: "stage",
-      position: branchPositions[name] || { x: disconnected ? x + 320 : x, y: 150 + index * gap },
+      position: autoPositions[name] || { x: disconnected ? mainX + 360 : mainX, y: cursorY + index * 40 },
       data: {
         kind: "stage",
         label: String(s.label || s.name),
@@ -301,7 +331,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
   nodes.push({
     id: END,
     type: "terminal",
-    position: { x: x + 60, y: 150 + Math.max(visual.flow.length, 1) * gap },
+    position: { x: mainCenter - 56, y: cursorY + 20 },
     data: { kind: "end", label: "END" },
     deletable: false,
   });
