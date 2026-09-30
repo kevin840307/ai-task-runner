@@ -120,7 +120,19 @@ class FlowEngine:
             result = executor.run(stage, self.context, previous, label=label)
         self._remember_previous(result)
 
-        target = resolve_stage_target(definition, result.status)
+        target = (
+            resolve_handoff_target(definition, result)
+            if definition.get("type") == "handoff" and result.status == "pass"
+            else resolve_stage_target(definition, result.status)
+        )
+        if self._round_limit_reached(definition, index, target):
+            limit = int(definition["max_rounds"])
+            self.context.set_stage(
+                "max_rounds_exhausted",
+                f"{definition['name']} round limit {limit} reached",
+            )
+            self.context.save_state()
+            return result, True
         if target == "stop":
             self.context.save_state()
             return result, True
@@ -140,6 +152,17 @@ class FlowEngine:
         self._route_to(target, index, result)
         self.context.save_state()
         return result, False
+
+    def _round_limit_reached(
+        self,
+        definition: dict[str, Any],
+        source_index: int,
+        target: str,
+    ) -> bool:
+        limit = definition.get("max_rounds")
+        if limit is None or target not in self.positions:
+            return False
+        return self.positions[target] <= source_index and self.context.state.cycle >= int(limit)
 
     def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
@@ -209,6 +232,25 @@ class FlowEngine:
 
 
 
+def resolve_handoff_target(
+    definition: dict[str, Any],
+    result: StageResult,
+) -> str:
+    """Resolve one model-selected target from a Handoff Stage allow-list."""
+    data = result.data
+    if not isinstance(data, dict):
+        raise ConfigurationError(
+            f"handoff stage {definition['name']} returned no structured target"
+        )
+    target = str(data.get("target", "") or "")
+    allowed = definition.get("targets") or []
+    if target not in allowed:
+        raise ConfigurationError(
+            f"handoff stage {definition['name']} selected disallowed target: {target}"
+        )
+    return target
+
+
 def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
     """Resolve semantic PASS/FAIL routing; technical ERROR always stops."""
     if status == "error":
@@ -223,4 +265,4 @@ def build_flow_engine(context: StageContext) -> FlowEngine:
     return FlowEngine(context)
 
 
-__all__ = ["FlowEngine", "build_flow_engine", "resolve_stage_target"]
+__all__ = ["FlowEngine", "build_flow_engine", "resolve_handoff_target", "resolve_stage_target"]
