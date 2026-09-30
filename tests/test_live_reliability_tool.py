@@ -1386,6 +1386,22 @@ def test_record_resource_snapshot_writes_jsonl(tmp_path):
     assert "timestamp" in record
 
 
+def test_live_resume_workflow_uses_current_string_flow_contract():
+    import yaml
+
+    data = yaml.safe_load(live.RESUME_PROBE_WORKFLOW)
+    assert data["flow"] == [
+        "discover",
+        "execute_first",
+        "pause",
+        "execute_second",
+        "validate_file",
+    ]
+    assert all(isinstance(item, str) for item in data["flow"])
+    for name in ("execute_first", "pause", "execute_second"):
+        assert data["stages"][name]["scope"] == "task"
+
+
 def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
