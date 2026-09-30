@@ -627,10 +627,10 @@ class WorkflowStudioMixin:
             return
         if not isinstance(routes, dict) or not routes:
             raise ValueError("Stage routes must be a non-empty object")
-        unknown = sorted(str(key) for key in routes if key not in {"pass", "fail", "error"})
+        unknown = sorted(str(key) for key in routes if key not in {"pass", "fail"})
         if unknown:
             raise ValueError(
-                "Stage routes supports only pass/fail/error; unknown: "
+                "Stage routes supports only pass/fail; unknown: "
                 + ", ".join(unknown)
             )
 
@@ -1256,7 +1256,7 @@ class WorkflowStudioMixin:
                 for status, target in mapping.items():
                     status = str(status).lower().strip()
                     target = str(target).strip()
-                    if status not in {"pass", "fail", "error"}:
+                    if status not in {"pass", "fail"}:
                         raise ValueError(f"Unsupported result edge status: {status}")
                     if target not in targets:
                         raise ValueError(f"Graph route {stage_name}.{status} references unknown target: {target}")
