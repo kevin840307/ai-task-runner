@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from runner.config.runtime import RuntimeConfig
-from runner.errors import RunnerError
+from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState, StateStore, set_stage
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.loader import WORKFLOWS, load_workflow
@@ -561,6 +561,125 @@ flow:
 
     with pytest.raises(RunnerError, match="unknown options"):
         load_workflow(path)
+
+
+@pytest.mark.parametrize(
+    ("targets", "message"),
+    [
+        ("[]", "non-empty array"),
+        ("[worker, worker]", "must be unique"),
+    ],
+)
+def test_handoff_rejects_invalid_target_lists(tmp_path, targets, message):
+    path = write_workflow(
+        tmp_path,
+        f"""
+stages:
+  router:
+    type: handoff
+    targets: {targets}
+  worker:
+    type: base
+flow:
+  - router
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match=message):
+        load_workflow(path)
+
+
+def test_handoff_cannot_target_itself(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [router]
+flow:
+  - router
+""",
+    )
+
+    with pytest.raises(RunnerError, match="cannot hand off to itself"):
+        load_workflow(path)
+
+
+def test_handoff_runtime_rejects_model_target_outside_allow_list(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: base
+flow:
+  - router
+  - worker
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class InvalidTargetExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            if stage.name == "router":
+                return StageResult(
+                    "router",
+                    "pass",
+                    data={"target": "not_allowed", "reason": "bad model output"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass")
+
+    with pytest.raises(ConfigurationError, match="selected disallowed target"):
+        FlowEngine(ctx).run(InvalidTargetExecutor())
+
+
+def test_dynamic_handoff_respects_global_max_cycles(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: base
+    routes:
+      pass: router
+flow:
+  - router
+  - worker
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    ctx.config.max_cycles = 2
+
+    class LoopingHandoffExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            if stage.name == "router":
+                return StageResult(
+                    "router",
+                    "pass",
+                    data={"target": "worker", "reason": "continue"},
+                    kind="handoff",
+                )
+            return StageResult("worker", "pass", output="done")
+
+    executor = LoopingHandoffExecutor()
+    assert FlowEngine(ctx).run(executor) == 2
+    assert [name for name, _ in executor.calls] == [
+        "router", "worker", "router", "worker"
+    ]
+    assert ctx.state.cycle == 3
+    assert ctx.state.stage == "max_cycles_exhausted"
 
 
 def test_handoff_target_must_exist(tmp_path):
