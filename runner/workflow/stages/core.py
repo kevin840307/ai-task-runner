@@ -1,9 +1,9 @@
-"""Built-in semantic Stage profiles: Plan, Task, Review, and AI Validator."""
+"""Built-in semantic Stage profiles for planning, execution, review and orchestration."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
-from ...agent import parse_result
+from ...agent import parse_result, require_object, require_text
 from ...config.defaults import MIN_PLANNED_TASKS
 from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
@@ -178,14 +178,113 @@ class AIValidatorStage(BaseStage):
         )
 
 
+
+@dataclass(frozen=True)
+class HandoffStageSpec(BaseStageSpec):
+    status: str = "AI 正在選擇下一個 Agent"
+    run_state: str = "handoff"
+    mode: str = MODE_READONLY
+    actor: str = "scheduler"
+    prompt: str = "common/handoff.md"
+    targets: list[str] = field(default_factory=list)
+    structured_retries: int = 2
+    session_key: str = "handoff_client"
+
+
+class HandoffStage(BaseStage):
+    result_kind = "handoff"
+    backend_mode = "review"
+
+    def __init__(self, spec: HandoffStageSpec) -> None:
+        allowed = tuple(spec.targets)
+
+        def parse_handoff(text: str, ctx: StageContext):
+            def parse(value):
+                obj = require_object(value)
+                target = require_text(obj.get("target"), "handoff.target")
+                reason = require_text(obj.get("reason"), "handoff.reason")
+                if target not in allowed:
+                    raise ValueError(
+                        f"handoff.target must be one of: {', '.join(allowed)}"
+                    )
+                return {"target": target, "reason": reason}
+
+            try:
+                return parse_result(text, parse)
+            except ValueError as error:
+                from ...errors import RunnerError
+                raise RunnerError(str(error)) from error
+
+        super().__init__(replace(spec, parser=parse_handoff))
+
+    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+        allowed = ", ".join(self.spec.targets)
+        return (
+            prompt.rstrip()
+            + "\n\n[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]\n"
+            + "Choose exactly one next Stage from the allowed targets. "
+            + "Do not execute that Stage yourself.\n"
+            + f"Allowed targets: {allowed}\n"
+            + 'Return exactly one JSON object and no markdown: '
+            + '{"target":"stage_name","reason":"concise reason"}\n'
+            + "[/RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]"
+        )
+
+
+@dataclass(frozen=True)
+class DiscussionStageSpec(BaseStageSpec):
+    status: str = "AI 正在參與討論"
+    run_state: str = "discussion"
+    mode: str = MODE_READONLY
+    actor: str = "participant"
+    prompt: str = "common/discussion.md"
+    role: str = "participant"
+    history_limit: int = 24
+    session_key: str = ""
+
+
+class DiscussionStage(BaseStage):
+    result_kind = "discussion"
+
+    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+        history = list(ctx.state.discussion_history)[-max(1, int(self.spec.history_limit)):]
+        import json
+        return (
+            prompt.rstrip()
+            + "\n\nRunner discussion context:\n"
+            + f"round: {ctx.state.cycle}\n"
+            + f"role: {self.spec.role}\n"
+            + "history: "
+            + json.dumps(history, ensure_ascii=False)
+        )
+
+    def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
+        if result.status == "pass" and result.output.strip():
+            ctx.state.discussion_history.append(
+                {
+                    "stage": self.name,
+                    "role": self.spec.role,
+                    "message": bounded_text(result.output, 4000),
+                }
+            )
+            limit = max(1, int(self.spec.history_limit))
+            del ctx.state.discussion_history[:-limit]
+        return super().finish(ctx, result)
+
 PlanStage.spec_class = PlanStageSpec
 TaskStage.spec_class = TaskStageSpec
+HandoffStage.spec_class = HandoffStageSpec
+DiscussionStage.spec_class = DiscussionStageSpec
 ReviewStage.spec_class = ReviewStageSpec
 AIValidatorStage.spec_class = AIValidatorStageSpec
 
 __all__ = [
     "AIValidatorStage",
     "AIValidatorStageSpec",
+    "DiscussionStage",
+    "DiscussionStageSpec",
+    "HandoffStage",
+    "HandoffStageSpec",
     "PlanStage",
     "PlanStageSpec",
     "ReviewStage",
