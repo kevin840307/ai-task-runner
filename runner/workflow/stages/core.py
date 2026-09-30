@@ -215,17 +215,18 @@ class HandoffStage(BaseStage):
 
         super().__init__(replace(spec, parser=parse_handoff))
 
-    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+    def _with_immutable_protocol(self, prompt: str) -> str:
         allowed = ", ".join(self.spec.targets)
+        base = super()._with_immutable_protocol(prompt).rstrip()
         return (
-            prompt.rstrip()
+            base
             + "\n\n[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]\n"
             + "Choose exactly one next Stage from the allowed targets. "
             + "Do not execute that Stage yourself.\n"
             + f"Allowed targets: {allowed}\n"
             + 'Return exactly one JSON object and no markdown: '
             + '{"target":"stage_name","reason":"concise reason"}\n'
-            + "[/RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]"
+            + "[/RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]\n"
         )
 
 PlanStage.spec_class = PlanStageSpec
