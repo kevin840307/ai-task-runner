@@ -183,34 +183,7 @@ class MockStageExecutor:
                 data={"target": target, "reason": "dry-run"},
                 kind="handoff",
             )
-        if kind == "discussion":
-            return StageResult(
-                stage.name,
-                status,
-                output=f"DISCUSSION_{stage.name}",
-                data=f"DISCUSSION_{stage.name}",
-                kind="discussion",
-            )
-        if kind == "review":
-            passed = status == "pass"
-            return StageResult(
-                stage.name,
-                status,
-                output="REVIEW_PASS" if passed else "REVIEW_FAIL",
-                data={
-                    "completed": passed,
-                    "reason": "dry-run",
-                    "missing_items": [] if passed else ["simulated"],
-                },
-            )
-        if kind == "validation":
-            passed = status == "pass"
-            return StageResult(
-                stage.name,
-                status,
-                output="VALIDATION_PASS" if passed else "VALIDATION_FAIL",
-                data={"passed": passed, "reason": "dry-run"},
-            )
+
         return StageResult(stage.name, status, output=status.upper())
 
 
