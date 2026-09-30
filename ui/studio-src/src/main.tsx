@@ -948,8 +948,8 @@ function App() {
               </div>
               {inspectorTab === "settings" && <div className="fields" role="tabpanel">
                 <label>
-                  <span>類型</span>
-                  <select value={draft.type} onChange={(e) => editDraft({ ...draft, type: e.target.value })}>
+                  <span>類型（建立後固定；要更換請刪除後重新拖入）</span>
+                  <select value={draft.type} disabled>
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
