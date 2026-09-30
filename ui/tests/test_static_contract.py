@@ -527,7 +527,15 @@ class LayoutRegressionTests(unittest.TestCase):
     def test_ai_workflow_builder_restores_single_active_job_and_shows_workspace(self):
         for token in ('id="generateWorkflowWorkspacePreview"', 'id="generateWorkflowRunningWorkspace"', 'id="generateWorkflowReadyWorkspace"'):
             self.assertIn(token, self.html)
-        for token in ('/api/studio/generate/active', 'restoreActiveWorkflowGenerator', 'hydrateActiveGenerateWorkflow', 'setGenerateWorkflowWorkspace', 'Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(() => restoreActiveWorkflowGenerator())'):
+        for token in (
+            '/api/studio/generate/active',
+            'restoreActiveWorkflowGenerator',
+            'hydrateActiveGenerateWorkflow',
+            'setGenerateWorkflowWorkspace',
+            'restoreWorkflowStudioNavigation',
+            'await restoreWorkflowStudioNavigation()',
+            'await restoreActiveWorkflowGenerator()',
+        ):
             self.assertIn(token, self.js)
         before = self.js[self.js.index('window.addEventListener("beforeunload"'):self.js.index('state.preferences = loadUiPreferences()')]
         self.assertNotIn('["running", "cancelling", "ready"]', before)
