@@ -32,6 +32,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--workflow", required=True)
     value.add_argument("--stage", required=True)
     value.add_argument("--input", default="")
+    value.add_argument("--request-stdin", action="store_true")
     value.add_argument("--backend", default="")
     value.add_argument("--keep-work", action="store_true")
     return value
@@ -50,6 +51,16 @@ def _resolved_next(workflow: list[dict[str, Any]], index: int, result: StageResu
     return target
 
 
+def _draft_next(draft: dict[str, Any], stage_name: str, status: str) -> tuple[str, str]:
+    definition = draft["stages"][stage_name]
+    route = resolve_stage_target(definition, status)
+    if route != "next":
+        return route, route
+    flow = draft.get("flow") or []
+    index = flow.index(stage_name) if stage_name in flow else -1
+    return (str(flow[index + 1]) if index >= 0 and index + 1 < len(flow) else "done"), route
+
+
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     project = Path(args.project_root).expanduser().resolve()
     workflow_path = Path(args.workflow).expanduser().resolve()
@@ -58,15 +69,22 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     if not workflow_path.is_file():
         raise ValueError("workflow does not exist")
 
-    workflow = load_workflow(workflow_path)
-    if not any(str(item["name"]) == args.stage for item in workflow):
-        import yaml
-
-        source = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
-        if args.stage not in source.get("stages", {}):
+    draft_workflow = getattr(args, "draft_workflow", None)
+    if draft_workflow is not None:
+        if not isinstance(draft_workflow, dict) or not isinstance(draft_workflow.get("stages"), dict) or args.stage not in draft_workflow["stages"]:
             raise ValueError(f"unknown Workflow Stage: {args.stage}")
-        source["flow"] = [*source["flow"], args.stage]
-        workflow = normalize_workflow(source, workflow_path)
+        selected = dict(draft_workflow["stages"][args.stage])
+        selected.pop("routes", None)
+        workflow = normalize_workflow({"stages": {args.stage: selected}, "flow": [args.stage]}, workflow_path)
+    else:
+        workflow = load_workflow(workflow_path)
+        if not any(str(item["name"]) == args.stage for item in workflow):
+            import yaml
+            source = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+            if args.stage not in source.get("stages", {}):
+                raise ValueError(f"unknown Workflow Stage: {args.stage}")
+            source["flow"] = [*source["flow"], args.stage]
+            workflow = normalize_workflow(source, workflow_path)
     index = next((i for i, item in enumerate(workflow) if str(item["name"]) == args.stage), -1)
     if index < 0:
         raise ValueError(f"unknown Workflow Stage: {args.stage}")
@@ -118,6 +136,9 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
 
             stage = create_stage(definition)
             result = runner.stage_executor.run(stage, runner.context, previous)
+            next_target, route = _draft_next(draft_workflow, args.stage, result.status) if draft_workflow is not None else (
+                _resolved_next(workflow, index, result), resolve_stage_target(definition, result.status)
+            )
             return {
                 "ok": result.status != "error",
                 "stage": args.stage,
@@ -125,8 +146,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 "output": result.output,
                 "data": result.data,
                 "changed_files": result.changed_files,
-                "next": _resolved_next(workflow, index, result),
-                "route": resolve_stage_target(definition, result.status),
+                "next": next_target,
+                "route": route,
                 "kind": result.kind,
                 "work_dir": str((project / work_dir).resolve()),
             }
@@ -143,6 +164,12 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.request_stdin:
+            request = json.load(sys.stdin)
+            if not isinstance(request, dict):
+                raise ValueError("Stage test request must be an object")
+            args.input = str(request.get("input") or "")
+            args.draft_workflow = request.get("workflow")
         payload = run_probe(args)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))

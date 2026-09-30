@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -435,31 +436,46 @@ class WorkflowStudioMixin:
         project: Path | None = None,
         *,
         backend: str = "",
+        graph: dict | None = None,
     ) -> dict:
-        """Execute exactly one Stage and return its result plus resolved next target."""
-        with self._edit_lock:
-            self._require_editable()
-            if project is None:
-                raise ValueError("Project is required to test a Stage")
-            path, kind, _scope_name = self._resolve_studio_file(file_id, project)
-            if kind != "workflow":
-                raise ValueError("Stage test is available only for workflow YAML")
-            data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
-            stages = data.get("stages") if isinstance(data, dict) else None
-            if not isinstance(stages, dict) or stage_name not in stages:
-                raise ValueError(f"Stage not found: {stage_name}")
+        """Execute one Stage in a disposable Project, including unsaved graph drafts."""
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Stage test is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        if graph is not None:
+            if not isinstance(graph, dict) or not isinstance(graph.get("stages"), list) or not isinstance(graph.get("flow"), list):
+                raise ValueError("Stage test graph requires stages and flow")
+            routes = graph.get("routes") or {}
+            if not isinstance(routes, dict):
+                raise ValueError("Stage test routes must be an object")
+            stages = {}
+            for row in graph["stages"]:
+                if not isinstance(row, dict):
+                    raise ValueError("Each Stage must be an object")
+                name = str(row.get("name") or "").strip()
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name) or name in stages:
+                    raise ValueError(f"Invalid or duplicate Stage key: {name}")
+                config = {key: value for key, value in row.items() if key not in {"name", "routes"} and value is not None and value != ""}
+                mapping = routes.get(name, row.get("routes"))
+                if mapping:
+                    config["routes"] = mapping
+                stages[name] = config
+            data = {"stages": stages, "flow": graph["flow"]}
+        if stage_name not in data.get("stages", {}):
+            raise ValueError(f"Stage not found: {stage_name}")
 
+        with tempfile.TemporaryDirectory(prefix="ai-task-runner-stage-test-") as test_project:
             command = [
                 sys.executable,
                 str(self.repo_root / "tool" / "stage_probe.py"),
                 "--project-root",
-                str(project),
+                test_project,
                 "--workflow",
                 str(path),
                 "--stage",
                 str(stage_name),
-                "--input",
-                str(input_text or ""),
+                "--request-stdin",
             ]
             if str(backend or "").strip():
                 command += ["--backend", str(backend).strip()]
@@ -469,6 +485,7 @@ class WorkflowStudioMixin:
                     cwd=str(self.repo_root),
                     capture_output=True,
                     text=True,
+                    input=json.dumps({"input": input_text, "workflow": data}, ensure_ascii=False),
                     timeout=900,
                     check=False,
                 )

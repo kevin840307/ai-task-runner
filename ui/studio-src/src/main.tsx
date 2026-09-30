@@ -299,7 +299,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       source: name,
       sourceHandle: "pass",
       target: resolvedPass,
-      label: routes.pass ? "PASS" : undefined,
       className: routes.pass ? "result pass" : "normal pass",
       deletable: Boolean(routes.pass),
       markerEnd: { type: MarkerType.ArrowClosed },
@@ -314,7 +313,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         source: name,
         sourceHandle: status,
         target: resolved,
-        label: status.toUpperCase(),
         className: `result ${status}`,
         markerEnd: { type: MarkerType.ArrowClosed },
         data: { status, explicit: true, terminal: target },
@@ -323,6 +321,14 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
   });
 
   return { nodes: nodes.map((node) => ({ ...node, position: layout[node.id] || node.position })), edges };
+}
+
+function graphDraft(visual: Visual) {
+  const routes: Record<string, Record<string, string>> = {};
+  visual.stages.forEach((stage) => {
+    if (stage.routes && Object.keys(stage.routes).length) routes[stage.name] = stage.routes;
+  });
+  return { flow: visual.flow, routes, stages: visual.stages };
 }
 
 function parseInputValue(option: CatalogOption, raw: string, checked?: boolean): unknown {
@@ -414,19 +420,12 @@ function App() {
   const displayEdges = useMemo<Edge[]>(() => edges.map((edge) => {
     const related = Boolean(selected && (edge.source === selected || edge.target === selected));
     const status = String(edge.data?.status || "pass").toUpperCase();
-    const source = edge.source === START ? "START" : edge.source;
-    const target = edge.target === END ? "END" : edge.target;
     const color = status === "FAIL" ? "#d97706" : status === "ERROR" ? "#dc2626"
       : edge.data?.explicit ? "#2563eb" : "#64748b";
     return {
       ...edge,
       type: "smoothstep",
       className: `${edge.className || ""}${selected ? related ? " focused" : " muted" : ""}`,
-      label: related ? `${status} · ${source} → ${target}` : edge.label,
-      labelBgPadding: [6, 4] as [number, number],
-      labelBgBorderRadius: 6,
-      labelBgStyle: { fill: "#fff", fillOpacity: 0.96 },
-      labelStyle: { fill: "#334155", fontWeight: 700 },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 20, height: 20 },
     };
   }), [edges, selected]);
@@ -498,21 +497,41 @@ function App() {
     : parameterOptions;
   function editDraft(next: Stage) {
     setDraft(next);
-    setVisual((current) => current && ({ ...current, stages: current.stages.map((stage) => stage.name === next.name ? next : stage) }));
-    setNodes((current) => current.map((node) => node.id === next.name ? { ...node, data: { ...node.data, label: String(next.label || next.name), stage: next } } : node));
+    if (visual) {
+      const updated = { ...visual, stages: visual.stages.map((stage) => stage.name === next.name ? next : stage) };
+      setVisual(updated);
+      if (draft?.scope !== next.scope) {
+        const graph = graphFor(updated, catalog);
+        setNodes(graph.nodes);
+        setEdges(graph.edges);
+      } else {
+        setNodes((current) => current.map((node) => node.id === next.name ? {
+          ...node,
+          data: {
+            ...node.data,
+            label: String(next.label || next.name),
+            subtitle: String(next.status || ""),
+            stage: next,
+          },
+        } : node));
+      }
+    }
     setDirtyGraph(true);
     setTestResult(null);
   }
 
   async function testStage() {
-    if (!visual || !draft || testing || dirtyGraph || !query().project) return;
+    if (!visual || !draft || testing || busy) return;
     setTesting(true);
     setTestResult(null);
     setTestError("");
     try {
       const result = await api<StageTestResult>("/api/studio/stage/test", {
         method: "POST",
-        body: JSON.stringify({ id: visual.id, project: query().project, stage: draft.name, input: testInput }),
+        body: JSON.stringify({
+          id: visual.id, project: query().project, stage: draft.name, input: testInput,
+          graph: graphDraft(visual),
+        }),
       });
       setTestResult(result);
     } catch (error) {
@@ -523,17 +542,13 @@ function App() {
   }
 
   const persistGraph = useCallback(async (nextVisual: Visual): Promise<Visual> => {
-    const routes: Record<string, Record<string, string>> = {};
-    nextVisual.stages.forEach((s) => {
-      if (s.routes && Object.keys(s.routes).length) routes[s.name] = s.routes;
-    });
     const result = await api<{ visual: Visual }>("/api/studio/graph/save", {
       method: "POST",
       body: JSON.stringify({
         id: nextVisual.id,
         project: query().project,
         hash: nextVisual.hash,
-        graph: { flow: nextVisual.flow, routes, stages: nextVisual.stages },
+        graph: graphDraft(nextVisual),
       }),
     });
     setVisual(result.visual);
@@ -900,19 +915,32 @@ function App() {
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。連到 END 時，PASS 為完成，FAIL / ERROR 為停止。</p>
-                {(["pass", "fail", "error"] as const).map((status) => (
-                  <div className="route-row" key={status}><span className={`route-dot ${status}`} />
-                    <strong>{status.toUpperCase()}</strong><span>{draft.routes?.[status] || (status === "pass" ? "next（預設）" : "未設定")}</span>
-                  </div>
-                ))}
+                {draft.type === "review" && <p>Review 的 ERROR 會先依執行設定的 stage_retries 重試（預設 -1，持續重試）。次數用盡後才走紅色 ERROR 連線；可連到下一個積木來跳過。FAIL 走黃色連線，不會觸發技術性重試。</p>}
+                <div className="route-section-title">從這個積木出去</div>
+                {(["pass", "fail", "error"] as const).map((status) => {
+                  const edge = edges.find((item) => item.source === draft.name && item.data?.status === status);
+                  const terminal = String(edge?.data?.terminal || "");
+                  const target = edge?.target === END
+                    ? terminal === "stop" ? "END（停止）" : "END（完成）"
+                    : edge?.target || (status === "pass" ? "下一個積木（預設）" : "停止（預設）");
+                  return <div className="route-row" key={status}><span className={`route-dot ${status}`} />
+                    <strong>{status.toUpperCase()}</strong><span>{target}</span>
+                  </div>;
+                })}
+                <div className="route-section-title">連到這個積木</div>
+                {edges.filter((edge) => edge.target === draft.name).length === 0 && <p>目前沒有連入線。</p>}
+                {edges.filter((edge) => edge.target === draft.name).map((edge) => {
+                  const status = String(edge.data?.status || "pass").toLowerCase();
+                  return <div className="route-row" key={edge.id}><span className={`route-dot ${status}`} />
+                    <strong>{status.toUpperCase()}</strong><span>{edge.source === START ? "START" : edge.source}</span>
+                  </div>;
+                })}
               </div>}
               {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
-                <p>只執行目前積木一次，顯示結果及下一個目標；不接續執行其他積木。測試會在目前專案執行，可能修改專案檔案。</p>
-                {!query().project && <p className="test-notice">請從專案內開啟此 Workflow，才能提供測試工作目錄。</p>}
-                {dirtyGraph && <p className="test-notice">請先儲存 Workflow 草稿，再執行測試。</p>}
+                <p>只執行目前積木一次，顯示結果及下一個目標。每次測試會建立隔離的臨時 Project，使用目前畫布草稿；測完自動清除，不修改原始 YAML。</p>
                 <label><span>測試 Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
                 <button type="button" className="primary" onClick={() => void testStage()}
-                  disabled={testing || busy || dirtyGraph || !query().project}>{testing ? "測試中…" : "執行單一積木"}</button>
+                  disabled={testing || busy}>{testing ? "測試中…" : "執行單一積木"}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
                   <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>下一個：<strong>{testResult.next}</strong></span></div>

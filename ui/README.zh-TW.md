@@ -1,9 +1,9 @@
 
 ## Flow 編輯器
 
-Flow 編輯器的 Stage 積木精簡顯示內容，並放大 PASS / FAIL / ERROR 連線接點。右側設定分為基本、分組參數、連線和單一積木測試。測試需要選擇 Project，會以輸入內容執行已儲存的 Stage 一次，顯示 output、狀態和下一個目標，但不執行下一個積木。測試在所選 Project 上執行，可能修改專案檔案。
+Flow 編輯器的 Stage 積木精簡顯示內容，並放大 PASS / FAIL / ERROR 連線接點。右側設定分為基本、分組參數、連線和單一積木測試。全域或 Project Workflow 都能測試，未儲存的畫布草稿也可以。每次測試會建立臨時 Project，只用輸入內容執行選取的積木，顯示 output、狀態和下一個目標，然後清除臨時 Project；不會執行下一個積木，也不會寫入原始 Workflow YAML 或以來源 Project 作為工作目錄。
 
-Stage Palette 依用途分類內建類型，第三方註冊類型列在**擴充積木**。畫布、Stage 與連線的修改都先存在瀏覽器草稿；按**儲存 Workflow**並通過驗證後才寫入 YAML。可參考[新增 Stage](../docs/development/ADD_STAGE.zh-TW.md)與可安裝範例。
+Stage Palette 依用途分類內建類型，第三方註冊類型列在**擴充積木**。拖曳 Palette 積木到畫布才會新增。畫布、Stage 與連線的修改都先存在瀏覽器草稿；按**儲存 Workflow**並通過驗證後才寫入 YAML。可參考[新增 Stage](../docs/development/ADD_STAGE.zh-TW.md)與可安裝範例。
 
 ## 環境檢測
 

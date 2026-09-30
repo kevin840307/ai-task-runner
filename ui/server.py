@@ -257,6 +257,7 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("input", "")),
                     project,
                     backend=str(body.get("backend", "")),
+                    graph=body.get("graph"),
                 ))
             if parsed.path == "/api/studio/stage/add":
                 project = self._optional_project(str(body.get("project", "")))

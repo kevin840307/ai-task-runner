@@ -70,9 +70,9 @@ On Windows, UI-launched Runner/Workflow Builder subprocesses use hidden-console 
 
 Workflow Studio remains file based and does not import Runner workflow code.
 
-The Flow editor uses compact Stage cards and larger PASS / FAIL / ERROR connection handles. The inspector separates basic settings, grouped parameters, routing, and a single-Stage test. A test requires a Project, runs the saved Stage once with the supplied input, and reports its output, status, and resolved next target without executing that target. It runs against the selected Project and may change Project files.
+The Flow editor uses compact Stage cards and larger PASS / FAIL / ERROR connection handles. The inspector separates basic settings, grouped parameters, routing, and a single-Stage test. A test can run from a global or Project Workflow, including unsaved canvas drafts. Each test creates a disposable Project, runs only the selected Stage with the supplied input, reports its output, status, and resolved next target, then removes the disposable Project. The test does not write the original Workflow YAML or use the source Project as its working directory.
 
-The Stage Palette groups built-in types by purpose and lists registered third-party types under **擴充積木**. Canvas, Stage, and route edits remain a browser draft until **儲存 Workflow** validates and writes the YAML. See [Add a Stage](../docs/development/ADD_STAGE.md) for an installable example.
+The Stage Palette groups built-in types by purpose and lists registered third-party types under **擴充積木**. Drag a palette item onto the canvas to add it. Canvas, Stage, and route edits remain a browser draft until **儲存 Workflow** validates and writes the YAML. See [Add a Stage](../docs/development/ADD_STAGE.md) for an installable example.
 
 It presents assets in three groups:
 

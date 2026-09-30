@@ -14,7 +14,7 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert 'id="pass"' in text
     assert 'id="fail"' in text
     assert 'id="error"' in text
-    assert 'graph: { flow: nextVisual.flow, routes, stages: nextVisual.stages }' in text
+    assert 'graph: graphDraft(nextVisual)' in text
     assert '"/api/studio/stage/add"' not in text  # Palette additions stay in the draft until Save.
 
 
