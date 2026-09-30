@@ -49,6 +49,14 @@ type Catalog = {
   node_options?: Record<string, unknown>;
 };
 
+type StudioFile = {
+  id: string;
+  kind: "workflow" | "prompt";
+  name: string;
+  display_name?: string;
+  reference?: string;
+};
+
 type StudioNodeData = {
   kind: "start" | "end" | "stage" | "scope";
   label: string;
@@ -300,6 +308,7 @@ function App() {
   const [dirtyGraph, setDirtyGraph] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [prompts, setPrompts] = useState<StudioFile[]>([]);
 
   const load = useCallback(async () => {
     if (!query().id) {
@@ -307,12 +316,17 @@ function App() {
       return;
     }
     try {
-      const [v, c] = await Promise.all([
+      const filesUrl = query().project
+        ? `/api/studio/files?project=${encodeURIComponent(query().project)}`
+        : "/api/studio/files";
+      const [v, c, files] = await Promise.all([
         api<Visual>(endpoint("/api/studio/visual")),
         api<Catalog>("/api/workflow/catalog"),
+        api<{ prompts?: StudioFile[] }>(filesUrl),
       ]);
       setVisual(v);
       setCatalog(c);
+      setPrompts(files.prompts || []);
       const g = graphFromVisual(v);
       setNodes(g.nodes);
       setEdges(g.edges);
@@ -336,35 +350,40 @@ function App() {
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
 
+  const persistGraph = useCallback(async (nextVisual: Visual): Promise<Visual> => {
+    const routes: Record<string, Record<string, string>> = {};
+    nextVisual.stages.forEach((s) => {
+      if (s.routes && Object.keys(s.routes).length) routes[s.name] = s.routes;
+    });
+    const result = await api<{ visual: Visual }>("/api/studio/graph/save", {
+      method: "POST",
+      body: JSON.stringify({
+        id: nextVisual.id,
+        project: query().project,
+        hash: nextVisual.hash,
+        graph: { flow: nextVisual.flow, routes },
+      }),
+    });
+    setVisual(result.visual);
+    const g = graphFromVisual(result.visual);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setDirtyGraph(false);
+    return result.visual;
+  }, []);
+
   const saveGraph = useCallback(async (nextVisual = visual) => {
     if (!nextVisual) return;
     setBusy(true);
     try {
-      const routes: Record<string, Record<string, string>> = {};
-      nextVisual.stages.forEach((s) => {
-        if (s.routes && Object.keys(s.routes).length) routes[s.name] = s.routes;
-      });
-      const result = await api<{ visual: Visual }>("/api/studio/graph/save", {
-        method: "POST",
-        body: JSON.stringify({
-          id: nextVisual.id,
-          project: query().project,
-          hash: nextVisual.hash,
-          graph: { flow: nextVisual.flow, routes },
-        }),
-      });
-      setVisual(result.visual);
-      const g = graphFromVisual(result.visual);
-      setNodes(g.nodes);
-      setEdges(g.edges);
-      setDirtyGraph(false);
+      await persistGraph(nextVisual);
       setMessage("Workflow saved");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
-  }, [visual]);
+  }, [visual, persistGraph]);
 
   const connect = useCallback((connection: Connection) => {
     if (!visual || !connection.source || !connection.target) return;
@@ -441,15 +460,16 @@ function App() {
     if (!visual || !draft) return;
     setBusy(true);
     try {
+      const base = dirtyGraph ? await persistGraph(visual) : visual;
       const fields = { ...draft };
       delete (fields as Record<string, unknown>).name;
       const result = await api<{ visual: Visual }>("/api/studio/stage/save", {
         method: "POST",
         body: JSON.stringify({
-          id: visual.id,
+          id: base.id,
           project: query().project,
           stage: draft.name,
-          hash: visual.hash,
+          hash: base.hash,
           fields,
         }),
       });
@@ -458,6 +478,73 @@ function App() {
       setNodes(g.nodes);
       setEdges(g.edges);
       setMessage("Stage saved");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addStage() {
+    if (!visual) return;
+    const name = window.prompt("New Stage key", "execute");
+    if (!name?.trim()) return;
+    const type = window.prompt(
+      `Stage type: ${Object.keys(catalog?.stage_types || {}).join(", ")}`,
+      "task",
+    )?.trim() || "task";
+    if (!catalog?.stage_types?.[type]) {
+      setMessage(`Unknown Stage type: ${type}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const base = dirtyGraph ? await persistGraph(visual) : visual;
+      const result = await api<{ visual: Visual }>("/api/studio/stage/add", {
+        method: "POST",
+        body: JSON.stringify({
+          id: base.id,
+          project: query().project,
+          stage: name.trim(),
+          type,
+          hash: base.hash,
+          add_to_flow: true,
+        }),
+      });
+      setVisual(result.visual);
+      const g = graphFromVisual(result.visual);
+      setNodes(g.nodes);
+      setEdges(g.edges);
+      setSelected(name.trim());
+      setMessage(`Stage ${name.trim()} added`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteStage() {
+    if (!visual || !draft) return;
+    if (!window.confirm(`Delete Stage "${draft.name}"? Result edges referencing it must already be removed.`)) return;
+    setBusy(true);
+    try {
+      const base = dirtyGraph ? await persistGraph(visual) : visual;
+      const result = await api<{ visual: Visual }>("/api/studio/stage/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          id: base.id,
+          project: query().project,
+          stage: draft.name,
+          hash: base.hash,
+        }),
+      });
+      setVisual(result.visual);
+      const g = graphFromVisual(result.visual);
+      setNodes(g.nodes);
+      setEdges(g.edges);
+      setSelected("");
+      setMessage(`Stage ${draft.name} deleted`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -477,6 +564,7 @@ function App() {
         </div>
         <div>
           {message && <span className="message">{message}</span>}
+          <button onClick={() => void addStage()} disabled={busy}>+ Stage</button>
           <button onClick={() => void load()} disabled={busy}>Reload</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
             {busy ? "Saving…" : "Save graph"}
@@ -538,7 +626,18 @@ function App() {
                 </label>
                 {options
                   .filter((o) => !["name", "type", "status", "label", "scope", "routes"].includes(o.name))
-                  .map((option) => (
+                  .map((option) => option.name === "prompt" ? (
+                    <label key={option.name}>
+                      <span>prompt</span>
+                      <select value={String(draft.prompt || "")} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}>
+                        <option value="">Stage default / none</option>
+                        {prompts.map((p) => {
+                          const ref = p.reference || p.display_name || p.name;
+                          return <option key={p.id} value={ref}>{ref}</option>;
+                        })}
+                      </select>
+                    </label>
+                  ) : (
                     <Field
                       key={option.name}
                       option={option}
@@ -553,6 +652,7 @@ function App() {
                 <code>{JSON.stringify(draft.routes || {}, null, 2)}</code>
               </div>
               <footer>
+                <button className="danger" onClick={() => void deleteStage()} disabled={busy}>Delete Stage</button>
                 <button className="primary" onClick={() => void saveStage()} disabled={busy}>Save Stage</button>
               </footer>
             </>
