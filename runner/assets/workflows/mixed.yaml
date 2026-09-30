@@ -33,7 +33,7 @@ stages:
     type: ai_validator
     status: AI 正在執行最終語意驗證
     validator: ai
-    fresh_session_each_run: true
+    session_policy: fresh
     runs: 3
     required_passes: 2
     ai_validator_yolo: true
