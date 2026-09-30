@@ -18,8 +18,9 @@ class FlowEngine:
 
     Workflow semantics are intentionally small:
     - PASS defaults to the next Stage.
-    - FAIL/ERROR default to stop.
-    - routes may override a result with next/done/stop/or another Stage.
+    - FAIL defaults to stop unless routes.fail overrides it.
+    - ERROR is not routable: StageExecutor applies retry policy, then stops here.
+    - routes may override PASS/FAIL with next/done/stop/or another Stage.
     - contiguous scope: task nodes repeat once per durable Task.
 
     Technical retry/session recovery belongs only to StageExecutor.
@@ -209,9 +210,9 @@ class FlowEngine:
 
 
 def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
-    """Resolve one Stage result without advancing the Workflow."""
-    if status == "error" and definition.get("error_policy"):
-        return str(definition["error_policy"]["exhausted"])
+    """Resolve semantic PASS/FAIL routing; technical ERROR always stops."""
+    if status == "error":
+        return "stop"
     routes = definition.get("routes")
     if isinstance(routes, dict) and status in routes:
         return str(routes[status])
