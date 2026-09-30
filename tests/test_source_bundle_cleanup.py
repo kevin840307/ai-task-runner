@@ -11,4 +11,12 @@ def test_default_bundle_excludes_runtime_and_cache_artifacts():
         "tests/x.pyc",
     ]
     assert all(excluded(path, DEFAULT_EXCLUDES) for path in excluded_paths)
-    assert not excluded("runner/workflow/pipeline.py", DEFAULT_EXCLUDES)
+    # Source and test code must remain in the portable project snapshot.
+    included_source_paths = [
+        "runner/workflow/pipeline.py",
+        "tests/test_ui.py",
+        "ui/tests/test_static_contract.py",
+        "smoke/qwen_simple/project/README.md",
+        "examples/01_basic_command_validator/project/validation.py",
+    ]
+    assert not any(excluded(path, DEFAULT_EXCLUDES) for path in included_source_paths)
