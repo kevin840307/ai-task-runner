@@ -7,6 +7,6 @@ Previous Session result:
 {{ previous }}
 
 Choose exactly one allowed Stage to run next.
-Use participants to add missing evidence or challenge assumptions, use the moderator when synthesis is useful, and choose the judge when there is enough evidence to decide whether the discussion can terminate.
-Do not perform participant, moderator, or judge work yourself.
+Dispatch the specialist whose responsibility best matches the current gap: requirements/acceptance clarity, solution architecture, domain constraints, risk/quality review, evidence verification, or moderation/synthesis. Choose the judge only when the discussion appears mature enough for an independent final-validation gate.
+Do not perform specialist, moderator, judge, or final-validator work yourself.
 A judge FAIL means the previous round did not terminate and the next controller decision starts a new round.
