@@ -163,3 +163,26 @@ def test_dryrun_json_contract_is_small_and_machine_readable():
     assert [item["stage"] for item in payload["transitions"]] == [
         "planning", "execute", "review", "validate_file"
     ]
+
+
+def test_dynamic_handoff_builtin_dryrun_reaches_final_review():
+    result = run("runner/assets/workflows/dynamic_handoff.yaml", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["completed"] is True
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "coordinator", "final_review"
+    ]
+
+
+def test_discussion_builtin_dryrun_reaches_judge_and_completes():
+    result = run("runner/assets/workflows/discussion.yaml", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["completed"] is True
+    assert [item["stage"] for item in payload["transitions"]] == [
+        "participant_architecture",
+        "participant_critic",
+        "moderator",
+        "judge",
+    ]
