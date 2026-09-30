@@ -1050,7 +1050,6 @@ class WorkflowStudioTests(unittest.TestCase):
                 visual["stages"][1],
             ],
             "flow": visual["flow"],
-            "routes": visual["routes"],
         }
 
         self.state.studio_graph_save(
@@ -1074,7 +1073,6 @@ class WorkflowStudioTests(unittest.TestCase):
                 visual["stages"][1],
             ],
             "flow": visual["flow"],
-            "routes": visual["routes"],
         }
 
         with self.assertRaisesRegex(ValueError, "session_key is only valid"):
@@ -1089,7 +1087,6 @@ class WorkflowStudioTests(unittest.TestCase):
         draft = {
             "stages": visual["stages"],
             "flow": visual["flow"],
-            "routes": visual["routes"],
         }
 
         with patch.object(
