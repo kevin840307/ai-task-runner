@@ -1192,7 +1192,7 @@ function promptOptionRows(current) {
   const rows = [`<option value="">No prompt</option>`]; let matched = !current;
   for (const item of state.studioFiles.prompts || []) {
     const ref = promptRef(item); const selected = normalizedPath(ref) === normalizedPath(current) || normalizedPath(item.path).endsWith(normalizedPath(current)); matched ||= selected;
-    rows.push(`<option value="${escapeHtml(ref)}" ${selected ? "selected" : ""}>${escapeHtml(item.scope)} · ${escapeHtml(item.name)}</option>`);
+    rows.push(`<option value="${escapeHtml(ref)}" ${selected ? "selected" : ""}>${escapeHtml(item.scope)} · ${escapeHtml(item.display_name || ref)}</option>`);
   }
   if (current && !matched) rows.push(`<option value="${escapeHtml(current)}" selected>Current · ${escapeHtml(current)}</option>`);
   return rows.join("");
