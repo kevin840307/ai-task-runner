@@ -22,7 +22,6 @@ Current product direction:
 - supported UI workflow families:
   1. Linear Workflow with Rollback / Loop
   2. Dynamic Handoff
-- Discussion / Group Chat is a Dynamic Handoff Workflow pattern, not a runtime family
 - Chat entry remains: choose Workflow/Profile -> enter prompt -> Run
 - do NOT add a separate execution-mode selector
 
@@ -30,25 +29,25 @@ Current product direction:
 
 DYNAMIC ROLE SESSION + PROMPT CONSOLIDATION (2026-09-30)
 -----------------------------------------------------
-[ ] Built-in Dynamic specialist roles default to session_policy: role (durable reusable per-role Session).
-[ ] Keep Independent Final Validator fresh per run as the explicit validation-isolation exception.
-[ ] Keep one shared dynamic_worker.md for ordinary Dynamic specialists, but render each Stage's instructions explicitly so roles remain distinct.
-[ ] Remove remaining Discussion UI/static/tool/test/live contracts and obsolete assets without compatibility shims.
-[ ] Add deterministic tests for main / role / fresh policy, including durable role-session resume and recovery rotation.
-[ ] Add/extend qwen_live_reliability Dynamic Handoff probes for routing + reusable role sessions + fresh-session role.
+[x] Built-in Dynamic specialist roles default to session_policy: role (durable reusable per-role Session).
+[x] Keep Independent Final Validator fresh per run as the explicit validation-isolation exception.
+[x] Keep one shared dynamic_worker.md for ordinary Dynamic specialists, but render each Stage's instructions explicitly so roles remain distinct.
+[x] Remove remaining Discussion UI/static/tool/test/live contracts and obsolete assets without compatibility shims.
+[x] Add deterministic tests for main / role / fresh policy, including durable role-session resume and recovery rotation.
+[x] Add/extend qwen_live_reliability Dynamic Handoff probes for routing + reusable role sessions + fresh-session role.
 [ ] Keep Studio/Ubuntu/Windows CI green after Dynamic-only cleanup.
 
 DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
 -----------------------------------------
-[ ] Remove Discussion / Group Chat as a runtime Stage family; keep Dynamic Handoff as the only multi-agent runtime primitive.
-[ ] Remove discussion_controller / discussion Stage types, controller_rounds, discussion-specific schema/UI/runtime contracts, prompts, and obsolete tests.
-[ ] Keep any group-discussion behavior expressible as ordinary Dynamic Handoff YAML using base/review/ai_validator Stages.
-[ ] Expand built-in Dynamic Handoff with formal specialist roles and a final independent AI validator.
-[ ] Add per-target session policy for Dynamic roles: main session, stable role session, or fresh session each invocation.
-[ ] Reuse existing StageExecutor recovery so technical/session failure may still rotate to a fresh session regardless of selected policy.
-[ ] Update Workflow Studio + static bundle so Dynamic targets expose session policy clearly without a second controller type.
-[ ] Update deterministic runtime/schema/resume/Stage probe/dry-run tests for all three Dynamic session policies.
-[ ] Update live Qwen reliability probes/tools to exercise Dynamic Handoff routing and session-policy behavior.
+[x] Keep Dynamic Handoff as the only multi-agent runtime primitive.
+[x] Remove the superseded multi-agent Stage/state/schema/UI/runtime contracts, prompts, and obsolete tests.
+[x] Keep multi-role collaboration expressible as ordinary Dynamic Handoff YAML using base/review/ai_validator Stages.
+[x] Expand built-in Dynamic Handoff with formal specialist roles and a final independent AI validator.
+[x] Add per-target session policy for Dynamic roles: main session, stable role session, or fresh session each invocation.
+[x] Reuse existing StageExecutor recovery so technical/session failure may still rotate to a fresh session regardless of selected policy.
+[x] Update Workflow Studio + static bundle so Dynamic targets expose session policy clearly without a second controller type.
+[x] Update deterministic runtime/schema/resume/Stage probe/dry-run tests for all three Dynamic session policies.
+[x] Update live Qwen reliability probes/tools to exercise Dynamic Handoff routing and session-policy behavior.
 [ ] Remove old Discussion contracts from todo/future/docs/builder and keep CI/Ubuntu/Windows/Studio green.
 
 FULL DESIGN READABILITY + PROFESSIONAL DYNAMIC ROLES (2026-09-30)
@@ -59,22 +58,6 @@ FULL DESIGN READABILITY + PROFESSIONAL DYNAMIC ROLES (2026-09-30)
 [x] Make built-in Dynamic Handoff roles formal and production-oriented while keeping each role an ordinary Stage.
 [x] Keep role specialization in YAML prompt/instructions/status only; do not add a role framework or second runtime.
 [x] Update Studio/static bundle/tests for the Dynamic-only graph contract.
-
-SUPERSEDED MULTI-AGENT DESIGN HISTORY
--------------------------------------
-Discussion / Group Chat was briefly implemented as separate discussion_controller/discussion Stage types.
-That design is removed. Do not restore:
-- discussion_controller / discussion Stage types
-- controller_rounds / discussion_history state
-- max_rounds / round_end Discussion routing contract
-- Discussion-specific prompts or Studio controls
-- a second scheduler/controller runtime
-
-Any discussion board, review board, triage, or multi-role collaboration is now a Dynamic Handoff Workflow pattern built from:
-- one handoff Stage
-- ordinary base/review/ai_validator role Stages
-- routes back to the Handoff Stage as needed
-- session_policy: main / role / fresh
 
 Dynamic Handoff
 [x] Add one built-in dynamic_handoff.yaml example/profile.
@@ -349,7 +332,7 @@ These remain future work outside the current multi-workflow milestone:
 - multi-session registry abstraction
 - generic AgentMessage/Handoff framework
 
-For Dynamic Handoff / Discussion follow-up work, continue to reuse:
+For Dynamic Handoff follow-up work, continue to reuse:
 - WorkflowRunner
 - Stage
 - StageExecutor
