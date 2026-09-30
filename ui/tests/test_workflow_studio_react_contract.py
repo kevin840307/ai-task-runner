@@ -90,6 +90,8 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
     assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
     assert 'o.name === "session_key"' in text
     assert 'session_key: _sessionKey' in text
+    assert "leaveStudio()" in text
+    assert 'window.confirm("捨棄未儲存的 Workflow 草稿？")' in text
     assert "autoPositions" in text
     assert "branchTargets" in text
     assert "branchColumnGap" in text
