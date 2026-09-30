@@ -307,6 +307,9 @@ class BaseStage:
             timeout=self._timeout(ctx),
         )
 
+    def has_session(self, ctx: StageContext) -> bool:
+        return bool(getattr(self._client(ctx), "session_id", ""))
+
     def reset_session(self, ctx: StageContext) -> str:
         """Drop only this Stage's AI session so unrelated sessions remain reusable."""
         client = self._client(ctx)
