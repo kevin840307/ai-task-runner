@@ -433,6 +433,17 @@ def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
     assert final_validate["routes"] == {"pass": "done", "fail": "coordinator"}
 
 
+def test_dynamic_worker_prompt_renders_stage_instructions():
+    prompt = (
+        Path(WORKFLOWS["dynamic_handoff"]).parent.parent
+        / "prompts"
+        / "common"
+        / "dynamic_worker.md"
+    ).read_text(encoding="utf-8")
+    assert "{{ instructions }}" in prompt
+    assert "Assigned responsibility:" in prompt
+
+
 @pytest.mark.parametrize("policy", ["main", "role", "fresh"])
 def test_session_policy_accepts_dynamic_role_modes(tmp_path, policy):
     path = write_workflow(
