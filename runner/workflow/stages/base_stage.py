@@ -341,7 +341,7 @@ class BaseStage:
             return ctx.ai_client
 
         if policy in {"role", "fresh"}:
-            key = self.spec.session_key or f"stage_session:{self.name}"
+            key = f"stage_session:{self.name}"
             client = ctx.scratch.get(key)
             if client is None:
                 client = create_ai_client(
