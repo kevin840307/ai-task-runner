@@ -9,8 +9,6 @@ from typing import Any, get_args, get_origin
 from ..errors import RunnerError
 from .stages.core import (
     AIValidatorStage,
-    DiscussionControllerStage,
-    DiscussionStage,
     HandoffStage,
     PlanStage,
     ReviewStage,
@@ -21,8 +19,6 @@ from .stages.command import CommandStage
 
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
-    "discussion": DiscussionStage,
-    "discussion_controller": DiscussionControllerStage,
     "handoff": HandoffStage,
     "task": TaskStage,
     "review": ReviewStage,
@@ -30,7 +26,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
     "command": CommandStage,
     "plan": PlanStage,
 }
-NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "max_rounds", "_workflow_index"})
+NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -73,10 +69,6 @@ def workflow_catalog() -> dict[str, Any]:
             "error_policy": {
                 "type": "object",
                 "description": "technical ERROR retry count; -1 means unlimited",
-            },
-            "max_rounds": {
-                "type": "integer",
-                "description": "bounded rounds owned only by a Discussion Controller Stage",
             },
         },
     }
@@ -133,6 +125,9 @@ def _field_info(item: Any) -> dict[str, Any]:
     if item.name == "produces":
         result["type"] = "enum"
         result["values"] = ["", "tasks"]
+    if item.name == "session_policy":
+        result["type"] = "enum"
+        result["values"] = ["auto", "main", "role", "fresh"]
     if not required:
         default = item.default if item.default is not MISSING else item.default_factory()
         if default is None or isinstance(default, (str, int, float, bool, list, dict, tuple)):
