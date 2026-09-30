@@ -19,7 +19,7 @@ from runner.config.defaults import DEFAULT_BACKEND
 from runner.config.runtime import RuntimeConfig
 from runner.bootstrap import runtime_scope
 from runner.runtime.run_state import Task
-from runner.workflow.flow_engine import resolve_stage_target
+from runner.workflow.flow_engine import resolve_handoff_target, resolve_stage_target
 from runner.workflow.loader import load_workflow, normalize_workflow
 from runner.workflow.registry import create_stage
 from runner.workflow.stages import StageResult
@@ -45,15 +45,30 @@ def _json_default(value: Any) -> Any:
 
 
 def _resolved_next(workflow: list[dict[str, Any]], index: int, result: StageResult) -> str:
-    target = resolve_stage_target(workflow[index], result.status)
+    definition = workflow[index]
+    target = (
+        resolve_handoff_target(definition, result)
+        if definition.get("type") == "handoff" and result.status == "pass"
+        else resolve_stage_target(definition, result.status)
+    )
     if target == "next":
         return str(workflow[index + 1]["name"]) if index + 1 < len(workflow) else "done"
     return target
 
 
-def _draft_next(draft: dict[str, Any], stage_name: str, status: str) -> tuple[str, str]:
+def _draft_next(
+    draft: dict[str, Any],
+    stage_name: str,
+    result: StageResult,
+) -> tuple[str, str]:
     definition = draft["stages"][stage_name]
-    route = resolve_stage_target(definition, status)
+    if definition.get("type") == "handoff" and result.status == "pass":
+        target = resolve_handoff_target(
+            {"name": stage_name, **definition},
+            result,
+        )
+        return target, "handoff"
+    route = resolve_stage_target(definition, result.status)
     if route != "next":
         return route, route
     flow = draft.get("flow") or []
@@ -73,9 +88,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     if draft_workflow is not None:
         if not isinstance(draft_workflow, dict) or not isinstance(draft_workflow.get("stages"), dict) or args.stage not in draft_workflow["stages"]:
             raise ValueError(f"unknown Workflow Stage: {args.stage}")
-        selected = dict(draft_workflow["stages"][args.stage])
-        selected.pop("routes", None)
-        workflow = normalize_workflow({"stages": {args.stage: selected}, "flow": [args.stage]}, workflow_path)
+        workflow = normalize_workflow(draft_workflow, workflow_path)
     else:
         workflow = load_workflow(workflow_path)
         if not any(str(item["name"]) == args.stage for item in workflow):
@@ -136,7 +149,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
 
             stage = create_stage(definition)
             result = runner.stage_executor.run(stage, runner.context, previous)
-            next_target, route = _draft_next(draft_workflow, args.stage, result.status) if draft_workflow is not None else (
+            next_target, route = _draft_next(draft_workflow, args.stage, result) if draft_workflow is not None else (
                 _resolved_next(workflow, index, result), resolve_stage_target(definition, result.status)
             )
             return {
