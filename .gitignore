@@ -10,3 +10,4 @@ __pycache__/
 
 # UI-owned temporary Workflow Generator jobs
 ui/data/workflow-builder/
+node_modules/
