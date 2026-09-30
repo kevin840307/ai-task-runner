@@ -5,7 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from tool.stage_probe import run_probe
+from runner.workflow.stages import StageResult
+from tool.stage_probe import _draft_next, run_probe
 
 
 def test_stage_probe_reports_input_output_and_next_without_running_next(tmp_path):
@@ -68,3 +69,22 @@ def test_stage_probe_accepts_disconnected_stage(tmp_path):
 
     assert result["output"].strip() == "detached"
     assert result["next"] == "done"
+
+
+def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
+    draft = {
+        "stages": {
+            "router": {"type": "handoff", "targets": ["worker", "final_review"]},
+            "worker": {"type": "base"},
+            "final_review": {"type": "review"},
+        },
+        "flow": ["router", "worker", "final_review"],
+    }
+    result = StageResult(
+        "router",
+        "pass",
+        data={"target": "final_review", "reason": "ready"},
+        kind="handoff",
+    )
+
+    assert _draft_next(draft, "router", result) == ("final_review", "handoff")
