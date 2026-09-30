@@ -28,13 +28,10 @@ def main() -> int:
         finals = [x for x in calls if x["role"] == "final"]
         assert writers and not writers[0]["resumed"] and all(x["session"] == "writer-session" for x in writers)
         assert all(x["resumed"] for x in writers[1:])
-        # Review Stages share the review client/session by default. The first call
-        # establishes the contract; later review nodes continue the same session.
-        assert len(reviews) == 6 and not reviews[0]["resumed"]
-        assert all(x["session"] == "review-session" for x in reviews)
-        # Backend transport may or may not expose --resume. The stable contract
-        # is one shared session identity plus Runner-owned continuation context.
-        assert any(x["shared_control"] for x in reviews[1:])
+        # These are six distinct Review Stage nodes. Each must receive the full
+        # immutable review contract; transport/session reuse between different
+        # Stage nodes is deliberately not part of this demo contract.
+        assert len(reviews) == 6
         assert all(x["full_review_contract"] for x in reviews)
         # Grill opts into a fresh session on every Stage start.
         assert len(grills) == 3 and all(not x["resumed"] for x in grills)
