@@ -19,8 +19,10 @@ def test_prompt_assets_are_categorized_under_one_asset_package():
         "review.md",
         "ai_validator.md",
         "rules.md",
-        "grill.md",
+        "handoff.md",
+        "dynamic_worker.md",
     } <= common
+    assert "grill.md" not in common
     assert ralphy == {"ralphy.md"}
     assert not workflow_dir.exists()
     assert not (ROOT / "runner" / "prompts").exists()
