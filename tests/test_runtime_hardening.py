@@ -111,7 +111,7 @@ def test_large_normal_process_keeps_final_tail(tmp_path):
 
 
 def test_atomic_write_text_is_best_effort(tmp_path, monkeypatch):
-    import runner.utils.files as files_module
+    import runner.utils as files_module
 
     path = tmp_path / "snapshot.txt"
     temporary = path.with_suffix(".txt.tmp")
@@ -123,7 +123,7 @@ def test_atomic_write_text_is_best_effort(tmp_path, monkeypatch):
 
 
 def test_history_observer_uses_shared_atomic_writer(tmp_path):
-    from runner.plugins.history import HistoryObserver
+    from runner.plugins.runtime import HistoryObserver
 
     observer = HistoryObserver()
     debug_dir = tmp_path / "debug"
@@ -136,7 +136,7 @@ def test_history_observer_uses_shared_atomic_writer(tmp_path):
 
 def test_observability_model_snapshot_uses_shared_atomic_writer(tmp_path):
     from types import SimpleNamespace
-    from runner.plugins.observability import ObservabilityObserver
+    from runner.plugins.runtime import ObservabilityObserver
 
     observer = ObservabilityObserver(SimpleNamespace(
         config=SimpleNamespace(event_callback=None, json_events=False, script=True),
@@ -205,7 +205,7 @@ def test_terminate_process_tree_waits_again_after_force_kill(monkeypatch):
 def test_state_commit_refreshes_worker_heartbeat(tmp_path, monkeypatch):
     import os
     import time
-    from runner.runtime.heartbeat import HEARTBEAT_ENV
+    from runner.runtime.events import HEARTBEAT_ENV
 
     heartbeat = tmp_path / "heartbeat"
     heartbeat.write_text("", encoding="utf-8")
@@ -222,7 +222,7 @@ def test_state_commit_refreshes_worker_heartbeat(tmp_path, monkeypatch):
 def test_child_output_refreshes_worker_heartbeat(tmp_path, monkeypatch):
     import os
     import time
-    from runner.runtime.heartbeat import HEARTBEAT_ENV
+    from runner.runtime.events import HEARTBEAT_ENV
 
     heartbeat = tmp_path / "heartbeat"
     heartbeat.write_text("", encoding="utf-8")
@@ -243,7 +243,7 @@ def test_child_output_refreshes_worker_heartbeat(tmp_path, monkeypatch):
 def test_project_changes_refresh_worker_heartbeat_without_cli_output(tmp_path, monkeypatch):
     import os
     import time
-    from runner.runtime.heartbeat import HEARTBEAT_ENV
+    from runner.runtime.events import HEARTBEAT_ENV
 
     heartbeat = tmp_path / "heartbeat"
     heartbeat.write_text("", encoding="utf-8")
@@ -266,7 +266,7 @@ def test_project_changes_refresh_worker_heartbeat_without_cli_output(tmp_path, m
 def test_silent_managed_subprocess_refreshes_worker_heartbeat(tmp_path, monkeypatch):
     import os
     import time
-    from runner.runtime.heartbeat import HEARTBEAT_ENV
+    from runner.runtime.events import HEARTBEAT_ENV
 
     heartbeat = tmp_path / "heartbeat"
     heartbeat.write_text("", encoding="utf-8")
