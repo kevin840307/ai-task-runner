@@ -86,7 +86,9 @@ It does not continue running the rest of the Workflow and does not modify the re
 
 YAML is canonical. Graph Save validates the complete draft through the current Workflow schema before one atomic write. Invalid targets/options/session-policy combinations are rejected without partially modifying the file.
 
-The React/Vite source is under `ui/studio-src`. Compiled static assets under `ui/static/workflow-studio-app` are served by the existing Python UI server; end-user machines do not need Node.js.
+The React/Vite source is under `ui/studio-src`. It is the **only** place developers should edit Full Designer React code. `ui/static/workflow-studio-app` is generated output from `cd ui/studio-src && npm run build`; never hand-edit its HTML/JS/CSS. The existing Python UI server serves that generated output, so end-user machines do not need Node.js.
+
+Full Designer navigation back to the main application must target Workflow Studio explicitly and restore the current Workflow when possible; do not use browser-history-dependent navigation.
 
 ## Runtime status
 
