@@ -15,6 +15,7 @@ from .base_stage import (
     MODE_WRITE,
     BaseStage,
     BaseStageSpec,
+    SessionPolicy,
     StageContext,
     StageResult,
 )
@@ -189,7 +190,7 @@ class HandoffStageSpec(BaseStageSpec):
     prompt: str = "common/handoff.md"
     targets: list[str] = field(default_factory=list)
     structured_retries: int = 2
-    session_policy: str = "role"
+    session_policy: SessionPolicy = "role"
 
 
 class HandoffStage(BaseStage):
