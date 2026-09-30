@@ -466,6 +466,24 @@ flow:
     assert workflow[1]["session_policy"] == policy
 
 
+def test_explicit_session_policy_rejects_session_key(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    session_policy: role
+    session_key: conflicting_key
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="session_key is only valid"):
+        load_workflow(path)
+
+
 def test_session_policy_rejects_unknown_mode(tmp_path):
     path = write_workflow(
         tmp_path,
