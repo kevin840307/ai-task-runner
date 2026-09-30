@@ -15,7 +15,8 @@ from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
-StageResultKind = Literal["generic", "tasks", "task", "review", "validation", "handoff", "discussion"]
+StageResultKind = Literal["generic", "tasks", "task", "review", "validation", "handoff"]
+SessionPolicy = Literal["auto", "main", "role", "fresh"]
 MODE_READONLY: StageMode = "readonly"
 MODE_WRITE: StageMode = "write"
 
@@ -135,6 +136,7 @@ class BaseStageSpec:
     tolerate_restored_changes: bool = False
     timeout: float | None = None
     session_key: str = ""
+    session_policy: SessionPolicy = "auto"
     fresh_session_each_run: bool = False
     fresh_session_on_start: bool = False
     produces: str = ""
@@ -189,7 +191,10 @@ class BaseStage:
         self._attempt_checkpoint = len(self._completed_runs)
         while len(self._completed_runs) < runs:
             client = self._client(ctx)
-            if self.spec.fresh_session_each_run and not self._run_pending:
+            if (
+                self.spec.session_policy == "fresh"
+                or self.spec.fresh_session_each_run
+            ) and not self._run_pending:
                 client.session_id = ""
             self._run_pending = True
             self._completed_runs.append(self._run_once(ctx, previous, client))
@@ -263,6 +268,7 @@ class BaseStage:
 
             output, data = call()
             self._remember_prompt(ctx, client)
+            self._persist_session(ctx, client)
             status = self.result_status(data)
         finally:
             if client is ctx.ai_client:
@@ -307,6 +313,8 @@ class BaseStage:
         client.session_id = ""
         if client is ctx.ai_client:
             ctx.state.ai_session_id = ""
+        elif self.spec.session_policy == "role":
+            ctx.state.stage_sessions.pop(self.name, None)
         contracts = ctx.scratch.get("prompt_contracts")
         if isinstance(contracts, set) and previous:
             ctx.scratch["prompt_contracts"] = {
@@ -324,6 +332,29 @@ class BaseStage:
         return self.backend_mode
 
     def _client(self, ctx: StageContext):
+        policy = self.spec.session_policy
+        if policy == "main":
+            return ctx.ai_client
+
+        if policy in {"role", "fresh"}:
+            key = self.spec.session_key or f"stage_session:{self.name}"
+            client = ctx.scratch.get(key)
+            if client is None:
+                client = create_ai_client(
+                    ctx.config,
+                    ctx.root,
+                    ctx.work / "debug",
+                    mode=self._backend_mode(ctx),
+                    timeout=self._timeout(ctx),
+                    session_id=(
+                        ctx.state.stage_sessions.get(self.name, "")
+                        if policy == "role"
+                        else ""
+                    ),
+                )
+                ctx.scratch[key] = client
+            return client
+
         key = self.spec.session_key or self.client_cache_key
         if not key:
             return ctx.ai_client
@@ -338,6 +369,18 @@ class BaseStage:
             )
             ctx.scratch[key] = client
         return client
+
+    def _persist_session(self, ctx: StageContext, client) -> None:
+        session_id = str(getattr(client, "session_id", "") or "")
+        if self.spec.session_policy == "role":
+            if session_id:
+                ctx.state.stage_sessions[self.name] = session_id
+            else:
+                ctx.state.stage_sessions.pop(self.name, None)
+            ctx.save_state()
+        elif client is ctx.ai_client and session_id:
+            ctx.state.ai_session_id = session_id
+            ctx.save_state()
 
     def _prompt(self, ctx: StageContext, previous: StageResult | None, client) -> str:
         original = self._original_prompt(ctx, previous)
