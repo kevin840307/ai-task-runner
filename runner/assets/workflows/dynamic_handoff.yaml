@@ -12,7 +12,6 @@ stages:
       - risk_reviewer
       - final_validate
     session_policy: role
-    session_key: dynamic_coordinator
     error_policy:
       retries: -1
 
@@ -23,7 +22,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Identify goals, constraints, ambiguities, assumptions, and measurable acceptance criteria. Do not modify project files.
     session_policy: role
-    session_key: dynamic_requirements_analyst
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -35,7 +33,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Evaluate architecture, interfaces, tradeoffs, maintainability, and the smallest viable design. Do not modify project files unless the Goal explicitly requires an architecture artifact.
     session_policy: role
-    session_key: dynamic_solution_architect
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -47,7 +44,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Implement the smallest correct project changes that advance the Goal. Preserve valid existing work and leave concrete evidence.
     session_policy: role
-    session_key: dynamic_implementer
     mode: write
     track_changes: true
     routes:
@@ -60,7 +56,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Diagnose concrete failures from current evidence, isolate the root cause, and make only the minimal corrective changes needed.
     session_policy: role
-    session_key: dynamic_debugger
     mode: write
     track_changes: true
     routes:
@@ -73,7 +68,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Independently verify behavior, tests, build evidence, and remaining defects. Do not modify production/source files.
     session_policy: role
-    session_key: dynamic_verifier
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -85,7 +79,6 @@ stages:
     prompt: common/dynamic_worker.md
     instructions: Review correctness, reliability, security, maintainability, hidden coupling, edge cases, and operational failure modes. Report only material risks.
     session_policy: role
-    session_key: dynamic_risk_reviewer
     readonly_safety: observe
     routes:
       pass: coordinator
