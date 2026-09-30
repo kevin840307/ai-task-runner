@@ -16,7 +16,6 @@ stages:
     readonly_safety: observe
     error_policy:
       retries: 2
-      exhausted: next
     routes:
       fail: execute
 
