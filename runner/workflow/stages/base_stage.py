@@ -166,7 +166,7 @@ class BaseStage:
         self.track_changes = spec.track_changes
         self.fresh_session_on_start = spec.fresh_session_on_start
         if spec.parser is None and self.parser_name:
-            from ..utils import PARSERS
+            from ..results import PARSERS
             self.spec = replace(spec, parser=PARSERS[self.parser_name])
         self._completed_runs: list[StageResult] = []
         self._run_pending = False
