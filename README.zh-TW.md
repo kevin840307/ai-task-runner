@@ -65,7 +65,7 @@ flow:
 
 - PASS -> 下一個 Stage
 - FAIL -> stop
-- ERROR -> stop
+- ERROR -> 由 StageExecutor retry/recovery；用盡後停在目前 Stage
 
 Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 
@@ -79,7 +79,7 @@ Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 - `fresh_after_same_failures`
 - `replan` StageResult
 - hidden Plan Task/Review nodes
-- per-Stage retry policy
+- 可用 graph routing 的 ERROR/recovery policy
 - System/Custom Workflow 分流
 - TaskRunner/Pipeline/LinearRouting 相容 runtime
 
