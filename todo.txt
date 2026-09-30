@@ -28,6 +28,16 @@ Current product direction:
 
 
 
+DYNAMIC ROLE SESSION + PROMPT CONSOLIDATION (2026-09-30)
+-----------------------------------------------------
+[ ] Built-in Dynamic specialist roles default to session_policy: role (durable reusable per-role Session).
+[ ] Keep Independent Final Validator fresh per run as the explicit validation-isolation exception.
+[ ] Keep one shared dynamic_worker.md for ordinary Dynamic specialists, but render each Stage's instructions explicitly so roles remain distinct.
+[ ] Remove remaining Discussion UI/static/tool/test/live contracts and obsolete assets without compatibility shims.
+[ ] Add deterministic tests for main / role / fresh policy, including durable role-session resume and recovery rotation.
+[ ] Add/extend qwen_live_reliability Dynamic Handoff probes for routing + reusable role sessions + fresh-session role.
+[ ] Keep Studio/Ubuntu/Windows CI green after Dynamic-only cleanup.
+
 DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
 -----------------------------------------
 [ ] Remove Discussion / Group Chat as a runtime Stage family; keep Dynamic Handoff as the only multi-agent runtime primitive.
