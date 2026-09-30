@@ -404,12 +404,12 @@ flow:
 def test_builtin_dynamic_handoff_workflow_uses_one_router_with_many_targets():
     workflow = load_workflow(WORKFLOWS["dynamic_handoff"])
     coordinator = workflow[0]
-    final_review = workflow[-1]
+    final_validate = workflow[-1]
 
     assert coordinator["type"] == "handoff"
-    assert coordinator["targets"] == ["implementer", "verifier", "final_review"]
-    assert final_review["type"] == "review"
-    assert final_review["routes"] == {"pass": "done", "fail": "coordinator"}
+    assert coordinator["targets"] == ["implementer", "verifier", "final_validate"]
+    assert final_validate["type"] == "ai_validator"
+    assert final_validate["routes"] == {"pass": "done", "fail": "coordinator"}
 
 
 def test_handoff_target_must_exist(tmp_path):
@@ -432,26 +432,28 @@ flow:
         load_workflow(path)
 
 
-def test_dynamic_handoff_routes_selected_target_and_final_review_ends(tmp_path):
+def test_dynamic_handoff_routes_exactly_one_selected_stage_then_final_validation(tmp_path):
     path = write_workflow(
         tmp_path,
         """
 stages:
   router:
     type: handoff
-    targets: [worker, final_review]
+    targets: [worker, final_validate]
   worker:
     type: base
     routes:
       pass: router
-  final_review:
-    type: review
+  final_validate:
+    type: ai_validator
+    validator: ai
     routes:
+      pass: done
       fail: router
 flow:
   - router
   - worker
-  - final_review
+  - final_validate
 """,
     )
     workflow = load_workflow(path)
@@ -464,7 +466,7 @@ flow:
             count = self.counts.get(stage.name, 0)
             self.counts[stage.name] = count + 1
             if stage.name == "router":
-                target = "worker" if count == 0 else "final_review"
+                target = "worker" if count == 0 else "final_validate"
                 return StageResult(
                     stage.name,
                     "pass",
@@ -480,40 +482,107 @@ flow:
         "router",
         "worker",
         "router",
-        "final_review",
+        "final_validate",
     ]
     assert ctx.state.completed is True
 
 
-def test_builtin_discussion_workflow_is_bounded_by_judge_rounds():
+def test_builtin_discussion_workflow_has_one_controller_for_many_sessions():
     workflow = load_workflow(WORKFLOWS["discussion"])
+    controller = workflow[0]
+    judge = workflow[-1]
+
     assert [item["type"] for item in workflow] == [
+        "discussion_controller",
         "discussion",
         "discussion",
         "discussion",
         "review",
     ]
-    assert workflow[-1]["max_rounds"] == 3
-    assert workflow[-1]["routes"] == {"fail": "participant_architecture"}
+    assert controller["targets"] == [
+        "participant_architecture",
+        "participant_critic",
+        "moderator",
+        "judge",
+    ]
+    assert controller["round_end"] == "judge"
+    assert controller["max_rounds"] == 3
+    assert all(
+        item.get("controller") == "controller"
+        for item in workflow[1:4]
+    )
+    assert all(
+        item.get("routes") == {"pass": "controller"}
+        for item in workflow[1:4]
+    )
+    assert judge["routes"] == {"pass": "done", "fail": "controller"}
 
 
-def test_discussion_round_limit_stops_after_bounded_backward_routes(tmp_path):
+def test_discussion_participant_requires_controller(tmp_path):
     path = write_workflow(
         tmp_path,
         """
 stages:
   participant:
     type: discussion
-    role: participant
-  moderator:
-    type: discussion
-    role: moderator
+    role: architect
+flow:
+  - participant
+""",
+    )
+    with pytest.raises(RunnerError, match="discussion controller"):
+        load_workflow(path)
+
+
+def test_discussion_controller_requires_round_end_and_bound(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  controller:
+    type: discussion_controller
+    targets: [judge]
+    round_end: judge
   judge:
     type: review
-    max_rounds: 2
-    routes:
-      fail: participant
 flow:
+  - controller
+  - judge
+""",
+    )
+    with pytest.raises(RunnerError, match="requires max_rounds"):
+        load_workflow(path)
+
+
+def test_discussion_controller_dispatches_sessions_and_only_judge_fail_advances_round(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  controller:
+    type: discussion_controller
+    targets: [participant, moderator, judge]
+    round_end: judge
+    max_rounds: 2
+  participant:
+    type: discussion
+    controller: controller
+    role: participant
+    routes:
+      pass: controller
+  moderator:
+    type: discussion
+    controller: controller
+    role: moderator
+    routes:
+      pass: controller
+  judge:
+    type: review
+    routes:
+      pass: done
+      fail: controller
+flow:
+  - controller
   - participant
   - moderator
   - judge
@@ -521,18 +590,44 @@ flow:
     )
     workflow = load_workflow(path)
     ctx = context(tmp_path, workflow)
-    executor = Executor({"judge": "fail"})
 
+    class DiscussionExecutor(Executor):
+        choices = ["participant", "moderator", "judge", "participant", "judge"]
+
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            count = self.counts.get(stage.name, 0)
+            self.counts[stage.name] = count + 1
+            if stage.name == "controller":
+                target = self.choices[count]
+                return StageResult(
+                    "controller",
+                    "pass",
+                    output=f"dispatch:{target}",
+                    data={"target": target, "reason": "test"},
+                    kind="handoff",
+                )
+            if stage.name == "judge":
+                return StageResult("judge", "fail", output="continue")
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = DiscussionExecutor()
     assert FlowEngine(ctx).run(executor) == 1
     assert [name for name, _ in executor.calls] == [
+        "controller",
         "participant",
+        "controller",
         "moderator",
+        "controller",
         "judge",
+        "controller",
         "participant",
-        "moderator",
+        "controller",
         "judge",
     ]
-    assert ctx.state.cycle == 2
+    assert ctx.state.controller_rounds == {"controller": 2}
+    assert ctx.state.cycle == 1
     assert ctx.state.stage == "max_rounds_exhausted"
     assert ctx.state.completed is False
 
@@ -544,20 +639,21 @@ def test_dynamic_handoff_state_store_resume_continues_selected_target(tmp_path):
 stages:
   router:
     type: handoff
-    targets: [worker, final_review]
+    targets: [worker, final_validate]
   worker:
     type: base
     routes:
       pass: router
-  final_review:
-    type: review
+  final_validate:
+    type: ai_validator
+    validator: ai
     routes:
       pass: done
       fail: router
 flow:
   - router
   - worker
-  - final_review
+  - final_validate
 """,
     )
     workflow = load_workflow(path)
@@ -587,8 +683,8 @@ flow:
                 return StageResult(
                     "router",
                     "pass",
-                    output="handoff:final_review",
-                    data={"target": "final_review", "reason": "worker completed"},
+                    output="handoff:final_validate",
+                    data={"target": "final_validate", "reason": "worker completed"},
                     kind="handoff",
                 )
             return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
@@ -598,7 +694,7 @@ flow:
     assert [name for name, _ in executor.calls] == [
         "worker",
         "router",
-        "final_review",
+        "final_validate",
     ]
     previous = executor.calls[0][1]
     assert previous is not None
@@ -607,26 +703,30 @@ flow:
     assert ctx.state.completed is True
 
 
-def test_discussion_state_store_resume_preserves_round_order_and_history(tmp_path):
+def test_discussion_state_store_resume_preserves_controller_round_and_history(tmp_path):
     path = write_workflow(
         tmp_path,
         """
 stages:
+  controller:
+    type: discussion_controller
+    targets: [participant, judge]
+    round_end: judge
+    max_rounds: 3
   participant:
     type: discussion
+    controller: controller
     role: participant
-  moderator:
-    type: discussion
-    role: moderator
+    routes:
+      pass: controller
   judge:
     type: review
-    max_rounds: 3
     routes:
       pass: done
-      fail: participant
+      fail: controller
 flow:
+  - controller
   - participant
-  - moderator
   - judge
 """,
     )
@@ -634,8 +734,8 @@ flow:
     work = tmp_path / ".work"
     store = StateStore(tmp_path, work)
     state = RunState("run", "goal", str(tmp_path))
-    state.cycle = 2
     state.workflow_position = 1
+    state.controller_rounds = {"controller": 2}
     state.discussion_history = [
         {
             "stage": "participant",
@@ -644,23 +744,38 @@ flow:
         }
     ]
     state.transition_previous = {
-        "stage": "participant",
+        "stage": "controller",
         "status": "pass",
-        "output": "Persisted round-two evidence",
+        "output": "dispatch:participant",
         "changed_files": [],
-        "data": "Persisted round-two evidence",
-        "kind": "discussion",
+        "data": {"target": "participant", "reason": "resume test"},
+        "kind": "handoff",
     }
     store.save(state)
 
     resumed = store.load_or_create("", resume=True, force_new=False)
     ctx = context(tmp_path, workflow)
     ctx.state = resumed
-    executor = Executor()
 
+    class ResumeDiscussionExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            if stage.name == "controller":
+                return StageResult(
+                    "controller",
+                    "pass",
+                    output="dispatch:judge",
+                    data={"target": "judge", "reason": "enough evidence"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = ResumeDiscussionExecutor()
     assert FlowEngine(ctx).run(executor) == 0
-    assert [name for name, _ in executor.calls] == ["moderator", "judge"]
-    assert ctx.state.cycle == 2
+    assert [name for name, _ in executor.calls] == ["participant", "controller", "judge"]
+    assert ctx.state.controller_rounds == {"controller": 2}
+    assert ctx.state.cycle == 1
     assert ctx.state.discussion_history == [
         {
             "stage": "participant",
@@ -670,6 +785,6 @@ flow:
     ]
     previous = executor.calls[0][1]
     assert previous is not None
-    assert previous.kind == "discussion"
-    assert previous.output == "Persisted round-two evidence"
+    assert previous.kind == "handoff"
+    assert previous.data == {"target": "participant", "reason": "resume test"}
     assert ctx.state.completed is True
