@@ -94,11 +94,35 @@ def test_public_workflow_yaml_uses_session_policy_not_legacy_fresh_flags():
         ROOT / "tool" / "workflow" / "05_review_vote_3_choose_2.yaml",
         ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
         ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
+        ROOT / "examples" / "11_regression_workflow_demo" / "workflow.yaml",
+        ROOT / "examples" / "12_custom_stage_plugin" / "workflow.yaml",
+        ROOT / "examples" / "custom_workflow_latest.yaml",
     ]
     for path in paths:
         text = Path(path).read_text(encoding="utf-8")
         assert "fresh_session_each_run:" not in text, path
         assert "fresh_session_on_start:" not in text, path
+
+
+@pytest.mark.parametrize(
+    "legacy_option",
+    ["fresh_session_each_run", "fresh_session_on_start"],
+)
+def test_removed_fresh_session_yaml_options_are_rejected(tmp_path, legacy_option):
+    path = write_workflow(
+        tmp_path,
+        f"""
+stages:
+  worker:
+    type: base
+    {legacy_option}: true
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="was removed.*session_policy: fresh"):
+        load_workflow(path)
 
 
 def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
