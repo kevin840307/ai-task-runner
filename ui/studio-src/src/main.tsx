@@ -370,12 +370,15 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     }
     const passTarget = routes.pass || (next ? "next" : "done");
     const resolvedPass = passTarget === "next" ? (next || END) : passTarget === "done" || passTarget === "stop" ? END : passTarget;
+    const passClass = s.type === "discussion" && routes.pass
+      ? "result pass discussion-return"
+      : routes.pass ? "result pass" : "normal pass";
     edges.push({
       id: `${name}:pass:${resolvedPass}`,
       source: name,
       sourceHandle: "pass",
       target: resolvedPass,
-      className: routes.pass ? "result pass" : "normal pass",
+      className: passClass,
       deletable: Boolean(routes.pass),
       markerEnd: { type: MarkerType.ArrowClosed },
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
