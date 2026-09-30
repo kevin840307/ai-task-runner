@@ -972,6 +972,41 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertNotIn("review", data["stages"])
         self.assertEqual(saved["visual"]["hash"], self.state.studio_visual(item["id"], self.project)["hash"])
 
+    def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        work = {**visual["stages"][0], "session_policy": "role"}
+        review = visual["stages"][1]
+        draft = {
+            "stages": [work, review],
+            "flow": list(visual["flow"]),
+            "routes": {"review": {"fail": "work"}},
+        }
+
+        saved = self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+        data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
+        self.assertNotIn("session_key", data["stages"]["work"])
+
+        conflict_visual = saved["visual"]
+        conflict_work = {
+            **conflict_visual["stages"][0],
+            "session_policy": "role",
+            "session_key": "stale-key",
+        }
+        conflict = {
+            "stages": [conflict_work, conflict_visual["stages"][1]],
+            "flow": list(conflict_visual["flow"]),
+            "routes": {"review": {"fail": "work"}},
+        }
+        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
+            self.state.studio_graph_save(
+                item["id"], conflict, conflict_visual["hash"], self.project
+            )
+
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
