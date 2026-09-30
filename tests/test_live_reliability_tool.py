@@ -952,6 +952,12 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
     compile(live.REVIEW_ROUTING_GATE, "review_gate.py", "exec")
 
 
+def test_live_main_keeps_dynamic_session_policy_probe_enabled():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "dynamic_handoff_session_policy_probe(settings, run_root)" in source
+    assert '"dynamic_handoff_session_policy_probe": True' in source
+
+
 def test_workflow_dryrun_preflight_covers_current_graph_contracts():
     results = live.workflow_dryrun_preflight()
     assert all(item["closed"] is True for item in results)
