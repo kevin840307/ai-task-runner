@@ -1,24 +1,11 @@
 # AI Task Runner Architecture
 
-## Goal
-
-Keep the runtime small enough to understand end-to-end while preserving:
-
-- 24H unattended execution
-- durable resume
-- explicit closed-loop routing
-- Same Session continuation and Fresh Session recovery
-- custom Stages and custom Task producers
-- n8n-style visual editing
-- CLI / API / YAML List on the same runtime
-- future Dynamic Handoff and Discussion scheduling without a second runtime
-
-## Canonical runtime
+The runtime intentionally has one small execution model.
 
 ```text
 UI / CLI / API / YAML List
             |
-         RunRequest
+        RunRequest
             |
      WorkflowRunner
             |
@@ -29,331 +16,92 @@ StageExecutor   StateStore
     Stage
 ```
 
-There is one runtime path. UI, CLI, API, YAML List and Dry Run are adapters or callers; none owns a second routing/recovery model.
+## Ownership
 
-The main reading path is intentionally short:
+- **Stage**: one semantic unit of work.
+- **StageExecutor**: technical reliability for one Stage: retry, timeout, Same Session retry, Fresh Session rotation, safety/change tracking and hooks.
+- **FlowEngine**: semantic PASS/FAIL navigation, task-scope iteration and Dynamic Handoff target routing.
+- **StateStore**: durable workflow position, task progress, primary Session and per-role Sessions.
+- **WorkflowRunner**: constructs the runtime and executes the loaded Workflow.
+- **UI/CLI/API/YAML List**: adapters to the same runtime; none owns execution semantics.
 
-1. `runner/workflow_runner.py`
-2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/stages/executor.py`
-4. `runner/runtime/run_state.py`
+## Workflow semantics
 
-## Workflow graph
+A normal Stage returns PASS, FAIL or ERROR.
 
-One `stages.<name>` entry is exactly one Stage node.
+- PASS defaults to the next Stage.
+- FAIL defaults to stop.
+- `routes.pass` / `routes.fail` may target another Stage, `done` or `stop`.
+- ERROR is never a graph edge. StageExecutor applies retry policy; exhausted ERROR stops at the current Stage.
+- A backward PASS/FAIL edge is the rollback/loop mechanism. There is no repair/recover Stage model.
 
-`flow` is only the ordered list of unique Stage names.
+`scope: task` Stages form one contiguous block and execute per durable Task.
 
-A Stage returns one status:
+## Dynamic Handoff
 
-- `pass`
-- `fail`
-- `error`
-
-Default routing:
-
-- PASS -> next Stage
-- FAIL -> stop
-- ERROR -> stop
-
-A Stage may override a result with `routes`:
-
-```yaml
-stages:
-  execute:
-    type: task
-    scope: task
-
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
-      error: stop
-
-flow:
-  - execute
-  - review
-```
-
-Targets are `next`, `done`, `stop`, or another Stage name.
-
-Rollback/loop is just an edge to an earlier Stage. There is no separate repair/recovery object.
-
-Keep the graph model singular: semantic navigation lives only in result edges, and technical retry/session behavior lives only in StageExecutor. No compatibility routing or second recovery model is retained.
-
-## Stage
-
-Stage is the only execution/agent extension unit.
-
-Built-ins:
-
-- base
-- plan
-- task
-- review
-- ai_validator
-- command
-
-A Stage does one responsibility and returns `StageResult`. It does not own retry/session recovery or final graph navigation.
-
-Plan is simply a Stage that produces `Task[]`. Any custom Stage may also declare:
-
-```yaml
-produces: tasks
-```
-
-Task execution is explicit in the graph with `scope: task`; there are no hidden injected Stages.
-
-Adding a new Stage should require only:
-
-1. its spec
-2. its work/result behavior
-3. `register_stage(...)`
-
-No retry/recover/session code belongs in the Stage.
-
-## StageExecutor
-
-`StageExecutor` is the single owner of Stage technical reliability:
-
-- hooks / safety
-- changed-file tracking
-- timeout/backend execution boundary
-- Same Session retry
-- Fresh Session rotation
-- technical retry delay
-
-One public retry setting:
+Dynamic Handoff is the only multi-agent runtime primitive.
 
 ```text
-stage_retries = -1
+                 -> Requirements Analyst
+                 -> Solution Architect
+Handoff Stage    -> Implementer
+                 -> Debugger
+                 -> Verifier
+                 -> Risk Reviewer
+                 -> Final Validator
 ```
 
-`-1` means unlimited technical retries for unattended operation.
+The Handoff Stage returns one structured allowed target. Only that Stage runs. Roles are ordinary Stages and normally route PASS back to the Handoff Stage. Discussion/review-board/triage are Workflow patterns built from the same primitive, not runtime types.
 
-Session rule:
+## Session lifecycle
 
-```text
-attempt
-  -> Same Session retry
-  -> Fresh Session after the bounded per-session attempt budget
-  -> repeat
-```
+AI Stages expose `session_policy`:
 
-Transient API/service errors remain in the current Stage and use seconds-based bounded exponential delay:
+- `role`: durable reusable Session keyed by Stage name; Dynamic specialist default.
+- `main`: share the Runner primary Session.
+- `fresh`: new Session every invocation; use for independent validation.
+- `auto`: built-in/internal behavior; only this mode may use `session_key`.
 
-```text
-retry_delay -> ... -> retry_max_delay
-```
+`RunState.stage_sessions` stores only durable `role` Sessions. Technical failure can rotate only the failing Stage to a fresh Session; other role Sessions remain intact.
 
-They do not create Workflow edges.
+The older `fresh_session_each_run`, `fresh_session_on_start` and `session_key` knobs remain internal compatibility primitives for existing built-in Stage profiles. New Dynamic YAML should use `session_policy`.
 
-Deterministic configuration/state errors fail closed. `KeyboardInterrupt` and `SystemExit` are never swallowed.
+## Prompt model
 
-If an attempt already changed maintained project files, the Runner does not blindly repeat it; the semantic graph/review/validator decides what happens next.
+One core prompt per Stage behavior. Retry/recover/continue context is Runner-owned and appended by the shared control envelope; it is not maintained as separate prompt files.
 
-## FlowEngine
+Dynamic ordinary roles share `common/dynamic_worker.md` and receive role-specific `instructions`. Handoff and final validation use their own prompt contracts.
 
-`FlowEngine` owns only semantic graph progress:
+## UI
 
-1. read the durable cursor
-2. execute the current Stage through StageExecutor
-3. persist the latest StageResult
-4. resolve PASS/FAIL/ERROR target
-5. move the cursor
-6. iterate task scope when applicable
-7. stop or complete
+Workflow Studio edits the same YAML model used by the runtime.
 
-It does not own backend retry, session rotation, watchdog, subprocess cleanup, or UI behavior.
+- START/END are UI-only virtual nodes.
+- one YAML Stage = one node.
+- PASS/FAIL edges map to `routes`.
+- Handoff multi-target edges map to `targets`.
+- ERROR policy is edited as retry count, not as an edge.
+- Stage Test executes exactly one Stage in an isolated temporary Project and reports result + next target.
 
-## StateStore / resume
+## Package boundaries
 
-One authoritative `state.json` stores only durable facts needed to resume:
+Keep these domains separate:
 
-- run identity / goal / project
-- tasks and current task
-- workflow position
-- task-scope position
-- AI session id
-- latest StageResult transition
-- workflow fingerprint
-- completion/activity facts
+- `runner/agent` — provider/backend clients.
+- `runner/workflow` — schema, routing, Stage implementations.
+- `runner/runtime` — durable/process reliability.
+- `runner/plugins` — extension hooks/registration.
+- `runner/assets` — editable Workflow/Prompt assets.
+- `runner/config` — configuration.
 
-Technical retry counters are attempt-local, not a second durable recovery state machine.
+Do not add another Runner/Pipeline, generic scheduler hierarchy, AgentMessage framework or parallel DAG engine without a proven requirement.
 
-Correctness target:
+## Reliability gates
 
-```text
-uninterrupted run
-==
-crash at a committed Stage boundary + resume
-```
+1. deterministic compile/pytest on Ubuntu + Windows + Studio build;
+2. deterministic dry-run / Stage probe / resume / retry/session-policy matrix;
+3. real-Qwen short reliability gate;
+4. high-density soak;
+5. full 24H Windows unattended soak.
 
-The process supervisor is separate from Stage retry. It owns only process-level reliability such as worker hard crash, hang detection, ownership lock, stop request and orphan cleanup.
-
-## Plugins
-
-There is one plugin discovery boundary: `runner/plugins/registry.py`.
-
-External plugins use the `ai_task_runner.plugins` entry-point group.
-
-A plugin may expose:
-
-- `setup()` for process-level Stage/backend registration before validation
-- `register(runtime)` for runtime hooks
-- optional CLI/request/YAML config adapters
-
-Workflow code does not branch on concrete plugins.
-
-## Workflow / Prompt assets
-
-Editable assets have one obvious package with separate responsibilities:
-
-```text
-runner/assets/
-  workflows/
-    *.yaml
-  prompts/
-    common/*.md
-    ralphy/*.md
-    workflow/*.md
-```
-
-Project-local assets use the identical shape:
-
-```text
-<project>/.ai-task-runner/assets/
-  workflows/
-    *.yaml
-  prompts/
-    <category>/*.md
-```
-
-Workflow and Prompt are one product asset package, but different file types never share a directory. Prompt identity is category-relative (for example `common/review.md`), so future domains can add their own category without changing the runtime.
-
-There is no System/Custom split and no read-only built-in asset class.
-
-## n8n-style UI
-
-There is one Graph Designer.
-
-Current family:
-
-1. **Linear Workflow with Rollback / Loop**
-   - Stage = node
-   - normal PASS = next
-   - `routes.pass/fail/error` = explicit result edge
-   - rollback/loop = edge to an earlier Stage
-   - retry/session recovery is not drawn as an edge
-
-Future families:
-
-2. **Dynamic Handoff**
-3. **Discussion / Group Chat**
-
-They must reuse the same Stage, StageExecutor, StateStore, Stage registry, plugin boundary, asset layout and Graph Designer.
-
-Do not create a second Runner or a generic mode framework now. When a real Dynamic/Discussion use case exists, add only the smallest scheduler-specific state.
-
-## CLI / API
-
-CLI and API only construct `RunRequest` and call the shared runtime.
-
-They may provide:
-
-- goal/project/workflow
-- validator/backend
-- timeout/retry settings
-- plugin config
-
-They must not own routing semantics.
-
-## YAML List
-
-YAML List is only a batch of child RunRequests.
-
-Each item may override normal RunRequest inputs, but every child still uses the same:
-
-- Workflow loader
-- WorkflowRunner
-- FlowEngine
-- StageExecutor
-- StateStore
-
-YAML List has no custom routing or recovery state machine.
-
-## Dry Run
-
-`tool/workflow_dryrun.py` reuses the production Workflow loader and FlowEngine. It mocks only the bottom Stage execution result.
-
-Dry Run must never maintain a second routing/recovery implementation.
-
-## Future Dynamic Handoff
-
-Dynamic Handoff changes scheduling only.
-
-Conceptually:
-
-```text
-StageResult + bounded handoff intent
-              |
-       Dynamic Scheduler
-              |
-          target Stage
-```
-
-Possible additional state when actually required:
-
-- current owner
-- allowed targets
-- handoff budget
-- bounded handoff reason/context
-
-Stage execution/retry/session/safety remains unchanged.
-
-## Future Discussion / Group Chat
-
-Discussion participants are still Stages.
-
-Possible additional state when actually required:
-
-- round
-- active participant
-- participant order
-- moderator/judge
-- termination condition
-- bounded summary
-
-Again, StageExecutor and StateStore stay shared.
-
-## Maintainability rules
-
-1. Prefer deleting concepts over compatibility.
-2. One behavior has one owner.
-3. One public capability has one import path.
-4. UI/CLI/YAML List are adapters, not runtimes.
-5. No hidden Workflow nodes.
-6. No duplicate graph/retry models.
-7. New Stages contain no retry/recover/session policy.
-8. FlowEngine owns semantic navigation only.
-9. StageExecutor owns Stage technical reliability only.
-10. Future agent models reuse Stage.
-11. Add abstraction only when it removes more complexity than it adds.
-
-
-## Package readability
-
-Folder names should reveal ownership without requiring readers to inspect every file.
-
-Current package owners:
-- `agent/`: model/backend/session/structured-output execution.
-- `workflow/`: graph schema, loading, Stage registry, result reduction and Stage implementations.
-- `runtime/`: durable state, process lifecycle and events.
-- `plugins/`: extension registration and runtime hooks only.
-- `assets/`: editable Workflow YAML and categorized Prompt Markdown.
-- `workspace.py`: project policy/files.
-- `script.py`: YAML List adapter.
-- `prompting.py`: prompt rendering/context/protocols.
-
-Merge a helper into its owner when that makes the entry point clearer. Do not merge distinct domains merely to reduce folder count.
+A green deterministic CI does not substitute for real-Qwen or 24H evidence.
