@@ -1,5 +1,5 @@
 stages:
-  controller:
+  discussion:
     type: discussion_controller
     status: AI 正在協調多 Session 討論
     targets:
@@ -14,52 +14,65 @@ stages:
 
   participant_architecture:
     type: discussion
-    controller: controller
+    controller: discussion
     role: architect
     status: Architect 正在提出方案
     session_key: discussion_architect
     error_policy:
       retries: -1
     routes:
-      pass: controller
+      pass: discussion
 
   participant_critic:
     type: discussion
-    controller: controller
+    controller: discussion
     role: critic
     status: Critic 正在檢查風險
     session_key: discussion_critic
     error_policy:
       retries: -1
     routes:
-      pass: controller
+      pass: discussion
 
   moderator:
     type: discussion
-    controller: controller
+    controller: discussion
     role: moderator
     status: Moderator 正在整合討論
     session_key: discussion_moderator
     error_policy:
       retries: -1
     routes:
-      pass: controller
+      pass: discussion
 
   judge:
     type: review
-    status: Judge 正在判斷是否結束討論
+    status: Judge 正在判斷討論是否成熟
     prompt: common/discussion_judge.md
     session_key: discussion_judge
     readonly_safety: observe
     error_policy:
       retries: -1
     routes:
+      pass: final_validate
+      fail: discussion
+
+  final_validate:
+    type: ai_validator
+    validator: ai
+    status: Final AI Validation 正在確認最終結果
+    instructions: Validate the overall Goal using the accumulated discussion evidence before completion.
+    readonly_safety: observe
+    error_policy:
+      retries: -1
+    routes:
       pass: done
-      fail: controller
+      fail: discussion
 
 flow:
-  - controller
+  - discussion
   - participant_architecture
   - participant_critic
   - moderator
   - judge
+  - final_validate
