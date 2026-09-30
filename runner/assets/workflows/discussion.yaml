@@ -22,6 +22,7 @@ stages:
     label: Requirements Analyst
     role: requirements_analyst
     status: Requirements Analyst 正在釐清目標、限制與驗收條件
+    instructions: Identify goals, constraints, assumptions, ambiguities, and measurable acceptance criteria. Surface missing requirements before solution discussion.
     session_key: discussion_requirements_analyst
     error_policy:
       retries: -1
@@ -34,6 +35,7 @@ stages:
     label: Solution Architect
     role: solution_architect
     status: Solution Architect 正在評估架構、邊界與整體方案
+    instructions: Evaluate architecture, component boundaries, integration choices, tradeoffs, maintainability, and the smallest viable design that satisfies the Goal.
     session_key: discussion_solution_architect
     error_policy:
       retries: -1
@@ -46,6 +48,7 @@ stages:
     label: Domain Specialist
     role: domain_specialist
     status: Domain Specialist 正在補充領域知識與情境限制
+    instructions: Validate domain assumptions, business or technical semantics, edge cases, operational context, and constraints the other roles may overlook.
     session_key: discussion_domain_specialist
     error_policy:
       retries: -1
@@ -58,6 +61,7 @@ stages:
     label: Risk & Quality Reviewer
     role: risk_quality_reviewer
     status: Risk Reviewer 正在檢查風險、品質與失敗模式
+    instructions: Challenge the proposal for correctness, reliability, security, maintainability, failure modes, hidden coupling, and operational risk. Prioritize material risks only.
     session_key: discussion_risk_reviewer
     error_policy:
       retries: -1
@@ -70,6 +74,7 @@ stages:
     label: Evidence Verifier
     role: evidence_verifier
     status: Evidence Verifier 正在確認證據、假設與可驗證性
+    instructions: Separate facts from assumptions, request decisive evidence, define practical verification, and identify claims that are not yet sufficiently supported.
     session_key: discussion_evidence_verifier
     error_policy:
       retries: -1
@@ -82,6 +87,7 @@ stages:
     label: Discussion Moderator
     role: moderator
     status: Moderator 正在整合觀點、衝突與待確認事項
+    instructions: Synthesize agreements, disagreements, decisions, and unresolved questions without introducing a new competing solution. Prepare a concise decision-ready summary.
     session_key: discussion_moderator
     error_policy:
       retries: -1
