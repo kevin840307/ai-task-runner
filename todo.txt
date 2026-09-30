@@ -28,6 +28,15 @@ Current product direction:
 
 
 
+FULL DESIGN READABILITY + PROFESSIONAL ROLES (2026-09-30)
+-----------------------------------------------------
+[ ] Replace simple branch positioning with a readable main-lane + grouped branch layout.
+[ ] Keep controller Stage centered; arrange targets in balanced rows with bounded columns.
+[ ] Place downstream convergence/final validation below the branch group so the graph reads top-to-bottom.
+[ ] Make Discussion built-in roles more formal and production-oriented while keeping each role an ordinary Stage.
+[ ] Keep role specialization in YAML/prompt/status only; do not add a role framework or second runtime.
+[ ] Update Studio/static bundle/tests and Discussion workflow contracts.
+
 DISCUSSION VISUAL + FINAL VALIDATION REFINEMENT (2026-09-30)
 ------------------------------------------------------
 [x] Present Discussion as one controller block visually connected to multiple Session Stage blocks.
