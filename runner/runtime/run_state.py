@@ -75,6 +75,7 @@ class RunState:
     task_step: int = 0
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
+    discussion_history: list[dict[str, str]] = field(default_factory=list)
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -103,6 +104,19 @@ class RunState:
                 raise ValueError(f"state.{name} must be a non-negative number")
         if not isinstance(self.transition_previous, dict):
             raise ValueError("state.transition_previous must be an object")
+        if not isinstance(self.discussion_history, list):
+            raise ValueError("state.discussion_history must be an array")
+        for index, item in enumerate(self.discussion_history, 1):
+            if not isinstance(item, dict):
+                raise ValueError(f"state.discussion_history[{index}] must be an object")
+            if set(item) != {"stage", "role", "message"}:
+                raise ValueError(
+                    f"state.discussion_history[{index}] requires stage, role and message"
+                )
+            if any(not isinstance(item[key], str) for key in ("stage", "role", "message")):
+                raise ValueError(
+                    f"state.discussion_history[{index}] values must be strings"
+                )
         for index, task in enumerate(self.tasks, 1):
             task.validate(index)
         if self.completed and any(task.status != "completed" for task in self.tasks):
