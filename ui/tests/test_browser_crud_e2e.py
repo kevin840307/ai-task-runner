@@ -33,19 +33,19 @@ def _write_fixture_repo(root: Path) -> UIState:
     (root / "ui" / "data").mkdir(parents=True)
     (root / "ui" / "data" / "projects.json").write_text("[]", encoding="utf-8")
     for relative in (
-        "runner/workflows",
-        "runner/prompts",
-        "runner/backends",
+        "runner/assets/workflows",
+        "runner/assets/prompts/common",
+        "runner/agent",
         "runner/config",
         "tool",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 
-    (root / "runner" / "workflows" / "execution.md").write_text(
+    (root / "runner" / "assets" / "prompts" / "common" / "execution.md").write_text(
         "{{ goal }}\n",
         encoding="utf-8",
     )
-    (root / "runner" / "backends" / "qwen.py").write_text(
+    (root / "runner" / "agent" / "qwen.py").write_text(
         "class QwenBackend:\n    name='qwen'\n",
         encoding="utf-8",
     )
@@ -53,13 +53,11 @@ def _write_fixture_repo(root: Path) -> UIState:
         "DEFAULT_BACKEND='qwen'\n",
         encoding="utf-8",
     )
-    (root / "runner" / "prompts" / "context.py").write_text(
+    (root / "runner" / "prompting.py").write_text(
         "def build_stage_prompt_context(ctx, stage, previous=None):\n"
-        "    return {'goal':'','project':{'root':''},'task':{'title':''},'stage':stage}\n",
-        encoding="utf-8",
-    )
-    (root / "runner" / "prompts" / "loader.py").write_text(
-        "def render_prompt(name, values=None): return ''\n",
+        "    return {'goal':'','project':{'root':''},'task':{'title':''},'stage':stage}\n"
+        "def render_prompt(name, values=None): return ''\n"
+        "def ai_rules(root): return ''\n",
         encoding="utf-8",
     )
     (root / "tool" / "workflow_dryrun.py").write_text(
