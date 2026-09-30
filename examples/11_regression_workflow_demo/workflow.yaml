@@ -26,9 +26,8 @@ stages:
   challenge_review_project_documentation:
     type: review
     label: Challenge Review Project Documentation
-    session_key: grill_client
     prompt: skills/challenge_review.md
-    fresh_session_on_start: true
+    session_policy: fresh
     instructions: >-
       Check the required demo documentation items only. PASS when materially
       correct and sufficient.
@@ -54,9 +53,8 @@ stages:
   challenge_review_e2e_spec:
     type: review
     label: Challenge Review E2E SPEC
-    session_key: grill_client
     prompt: skills/challenge_review.md
-    fresh_session_on_start: true
+    session_policy: fresh
     instructions: >-
       Check concrete normal arithmetic cases plus important calculator
       boundary/error behavior. PASS when materially covered.
