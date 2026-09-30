@@ -24,6 +24,8 @@ WORKFLOWS = {
     "mixed": WORKFLOW_DIR / "mixed.yaml",
     "file": WORKFLOW_DIR / "file.yaml",
     "ai": WORKFLOW_DIR / "ai.yaml",
+    "dynamic_handoff": WORKFLOW_DIR / "dynamic_handoff.yaml",
+    "discussion": WORKFLOW_DIR / "discussion.yaml",
     "ralphy_ai_validate": WORKFLOW_DIR / "ralphy_ai_validate.yaml",
 }
 DEFAULT_WORKFLOW = WORKFLOWS["mixed"]
