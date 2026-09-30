@@ -49,7 +49,7 @@ def test_previous_structured_data_is_available_and_bounded(tmp_path):
         },
     )
 
-    data = build_stage_prompt_context(ctx, "repair", previous)["previous"]["data"]
+    data = build_stage_prompt_context(ctx, "execute", previous)["previous"]["data"]
 
     assert data["completed"] is False
     assert data["reason"] == "Missing required evidence"
