@@ -2,7 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from runner.config.runtime import RuntimeConfig
-from runner.runtime.run_state import RunState
+from runner.runtime.run_state import RunState, StateStore
 from runner.errors import RunnerError
 from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
 from runner.workflow.stages.executor import StageExecutor
@@ -41,6 +41,21 @@ def test_main_session_policy_reuses_primary_client(tmp_path):
     stage = BaseStage(BaseStageSpec(name="worker", prompt="unused", session_policy="main"))
 
     assert stage._client(ctx) is ctx.ai_client
+
+
+def test_role_session_state_store_round_trip_survives_resume(tmp_path):
+    work = tmp_path / ".work"
+    store = StateStore(tmp_path, work)
+    state = RunState("run", "goal", str(tmp_path))
+    state.stage_sessions = {
+        "implementer": "role-implementer-session",
+        "verifier": "role-verifier-session",
+    }
+    store.save(state)
+
+    resumed = store.load_or_create("", resume=True, force_new=False)
+
+    assert resumed.stage_sessions == state.stage_sessions
 
 
 def test_role_session_policy_restores_and_persists_durable_stage_session(tmp_path, monkeypatch):
