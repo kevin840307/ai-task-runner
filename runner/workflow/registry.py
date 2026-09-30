@@ -9,6 +9,7 @@ from typing import Any, get_args, get_origin
 from ..errors import RunnerError
 from .stages.core import (
     AIValidatorStage,
+    DiscussionControllerStage,
     DiscussionStage,
     HandoffStage,
     PlanStage,
@@ -21,6 +22,7 @@ from .stages.command import CommandStage
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
     "discussion": DiscussionStage,
+    "discussion_controller": DiscussionControllerStage,
     "handoff": HandoffStage,
     "task": TaskStage,
     "review": ReviewStage,
@@ -74,7 +76,7 @@ def workflow_catalog() -> dict[str, Any]:
             },
             "max_rounds": {
                 "type": "integer",
-                "description": "optional bounded backward-loop rounds for discussion/judge flows",
+                "description": "bounded rounds owned only by a Discussion Controller Stage",
             },
         },
     }
