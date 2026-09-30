@@ -22,7 +22,7 @@ from runner.runtime.run_state import Task
 from runner.workflow.flow_engine import resolve_handoff_target, resolve_stage_target
 from runner.workflow.loader import load_workflow, normalize_workflow
 from runner.workflow.registry import create_stage
-from runner.workflow.stages import StageResult
+from runner.workflow.stages import BaseStage, StageResult
 from runner.workflow_runner import WorkflowRunner
 
 
@@ -109,6 +109,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"unknown Workflow Stage: {args.stage}")
 
     definition = workflow[index]
+    stage = create_stage(definition)
     test_id = uuid.uuid4().hex[:12]
     work_dir = f".ai-task-runner/stage-tests/{test_id}"
     input_text = str(args.input or "").strip()
@@ -120,7 +121,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         backend=str(args.backend or DEFAULT_BACKEND),
         workflow=workflow,
         workflow_explicit=True,
-        command=sys.executable if definition.get("type") == "command" else None,
+        command=None if isinstance(stage, BaseStage) else sys.executable,
         work_dir=work_dir,
         force_new=True,
         stage_retries=0,
@@ -154,7 +155,6 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 else None
             )
 
-            stage = create_stage(definition)
             result = runner.stage_executor.run(stage, runner.context, previous)
             next_target, route = _draft_next(draft_workflow, args.stage, result) if draft_workflow is not None else (
                 _resolved_next(workflow, index, result), resolve_stage_target(definition, result.status)
