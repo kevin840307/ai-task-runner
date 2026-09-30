@@ -452,9 +452,9 @@ def whole_seconds_arg(value: float) -> str:
 
 
 def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
-    """Return and verify the bundled system Final AI contract."""
+    """Return and verify the bundled Final AI contract."""
     if workflow not in {"ai", "mixed"}:
-        raise ValueError(f"system/{workflow} has no Final AI contract")
+        raise ValueError(f"workflow/{workflow} has no Final AI contract")
     from runner.workflow.loader import load_workflow
 
     validators = [
@@ -462,7 +462,7 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
         if node.get("name") == "validate_ai" and node.get("type") == "ai_validator"
     ]
     if len(validators) != 1:
-        raise RuntimeError(f"system/{workflow} must contain exactly one validate_ai stage")
+        raise RuntimeError(f"workflow/{workflow} must contain exactly one validate_ai stage")
     validator = validators[0]
     runs = int(validator.get("runs", 1))
     required = int(validator.get("required_passes") or (runs // 2 + 1))
@@ -473,14 +473,14 @@ def system_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
         True,
     ):
         raise RuntimeError(
-            f"system/{workflow} Final AI contract mismatch: "
+            f"workflow/{workflow} Final AI contract mismatch: "
             f"runs={runs}, required_passes={required}, yolo={yolo}"
         )
     return runs, required, yolo
 
 
 def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
-    """Verify bundled system workflows default read-only AI stages to observe."""
+    """Verify bundled workflows default read-only AI stages to observe."""
     from runner.workflow.loader import load_workflow
 
     expected = {
@@ -506,7 +506,7 @@ def system_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
             observed[workflow][stage] = actual if isinstance(actual, str) else None
             if actual != expected_value:
                 raise RuntimeError(
-                    f"system/{workflow} {stage} readonly_safety mismatch: "
+                    f"workflow/{workflow} {stage} readonly_safety mismatch: "
                     f"expected {expected_value!r}, got {actual!r}"
                 )
     return observed
@@ -843,7 +843,7 @@ def assert_system_topology(project: Path, workflow: str) -> None:
     )
     if missing or validators != expected_validators or invalid_task_loop:
         raise RuntimeError(
-            f"system/{workflow} topology mismatch: missing={missing}, "
+            f"workflow/{workflow} topology mismatch: missing={missing}, "
             f"validators={sorted(validators)}, durable_tasks={task_count}, "
             f"incomplete={incomplete}, task_runs={task_runs}, review_runs={review_runs}"
         )
@@ -1087,7 +1087,7 @@ def task_array_recovery_preflight() -> None:
     """Prove Planning can recover a complete TaskArray from a broken object envelope."""
     from types import SimpleNamespace
 
-    from runner.workflow.stages.plan_stage import parse_plan_tasks
+    from runner.workflow.stages.core import parse_plan_tasks
 
     payload = [{
         "title": "Create artifact",
@@ -1121,10 +1121,9 @@ def session_expiry_recovery_preflight() -> None:
             "--project-root", str(root),
             "--goal", "Create done.txt and validate it.",
             "--validator", "ai",
-            "--max-attempts", "2",
+            "--stage-retries", "2",
             "--retry-delay", "0",
-            "--retry-wait", "0",
-            "--retry-max-wait", "0",
+            "--retry-max-delay", "0",
             "--agent-timeout", "30",
             "--planning-timeout", "30",
             "--force-new",
@@ -1166,7 +1165,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
     workflows = [
         *WORKFLOWS.values(),
-        ROOT / "runner" / "workflows" / "ralphy_ai_validate.yaml",
+        ROOT / "runner" / "assets" / "workflows" / "ralphy_ai_validate.yaml",
         ROOT / "examples" / "custom_workflow_latest.yaml",
         ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
         ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
@@ -1300,7 +1299,7 @@ flow:
 
 def stage_result_mapping_preflight() -> None:
     """Prove immutable Review/Validator booleans map to Runner PASS/FAIL correctly."""
-    from runner.workflow.stages.ai_stage import (
+    from runner.workflow.stages import (
         AIValidatorStage,
         AIValidatorStageSpec,
         ReviewStage,
@@ -1356,7 +1355,7 @@ def runtime_long_path_preflight() -> None:
     from runner.resources import read_text, write_text
     from runner.runtime.run_state import RunState, StateStore
     from runner.utils import copy_path, digest, remove_path
-    from runner.workflow.snapshot import freeze_run_resource, load_run_resource
+    from runner.resources import freeze_run_resource, load_run_resource
 
     with _long_path_temp_root("ai-runner-long-path-", 300) as root:
         source = root / "source.txt"
@@ -1498,13 +1497,12 @@ def technical_artifact_safety_preflight() -> None:
 
 
 def loop_detection_contract_preflight() -> None:
-    """Lock Qwen loop classification plus bounded Planning retry semantics."""
+    """Lock Qwen loop classification plus the shared Stage retry/session contract."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from runner.agent import AIError, BackendError
-    from runner.agent import should_reset_session
-    from runner.agent import BaseBackend
-    from runner.workflow.stages.executor import StageExecutor
+    from runner.agent import BaseBackend, should_reset_session
+    from runner.config.defaults import DEFAULT_PER_SESSION_ATTEMPTS
+    from runner.config.runtime import RuntimeConfig
 
     message = (
         "Loop detection halted the run "
@@ -1514,31 +1512,16 @@ def loop_detection_contract_preflight() -> None:
     if diagnostics.get("loop_type") != "consecutive_identical_tool_calls":
         raise RuntimeError("Qwen loop diagnostic classification contract changed")
     if not should_reset_session(message):
-        raise RuntimeError("Qwen loop signal no longer forces session reset")
-
-    backend = BackendError(
-        message,
-        return_code=1,
-        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
-    )
-    error = AIError(message)
-    error.__cause__ = backend
-    planning = type("PlanningStageProbe", (), {"name": "planning", "result_kind": "tasks"})()
-    if StageExecutor._same_session_retry_limit(planning, error, 5) != 1:
-        raise RuntimeError("Planning loop same-session retry cap contract changed")
-
-    backend2 = BackendError(
-        message + " dynamic-turn=99",
-        return_code=1,
-        diagnostics={"loop_type": "consecutive_identical_tool_calls"},
-    )
-    error2 = AIError(message + " dynamic-turn=99")
-    error2.__cause__ = backend2
-    ctx = type("PlanningCtxProbe", (), {"task": None})()
-    if StageExecutor._failure_key(planning, ctx, error) != StageExecutor._failure_key(
-        planning, ctx, error2
-    ):
-        raise RuntimeError("Planning loop recovery key is no longer stable")
+        raise RuntimeError("Qwen loop signal no longer requests a Fresh Session")
+    if DEFAULT_PER_SESSION_ATTEMPTS != 2:
+        raise RuntimeError(
+            "shared per-session retry budget changed; update the reliability contract"
+        )
+    config = RuntimeConfig()
+    if config.stage_retries != -1:
+        raise RuntimeError("unattended Stage retry default is no longer unlimited")
+    if config.retry_delay < 0 or config.retry_max_delay < config.retry_delay:
+        raise RuntimeError("shared retry delay contract is invalid")
 
 
 RESUME_PROBE_PAUSE = '''from __future__ import annotations
@@ -1761,7 +1744,7 @@ def system_workflow_probe(settings: Settings, root: Path, workflow: str) -> None
         sessions = final_validation_sessions(project)
         if len(sessions) < expected_ai_sessions:
             raise RuntimeError(
-                f"system/{workflow} reused Final AI validation sessions: "
+                f"workflow/{workflow} reused Final AI validation sessions: "
                 f"expected {expected_ai_sessions}, got {len(sessions)}"
             )
 
@@ -1841,6 +1824,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     status: Forcing deterministic first Review routing failure
     run_state: reviewing
     command: "{python} review_gate.py"
+    routes:
+      fail: execute
 
   review_verify:
     type: review
@@ -3178,7 +3163,7 @@ def main() -> int:
         print("PASS detached-UI stop.request/resume probe", flush=True)
         for workflow in ("file", "ai", "mixed"):
             system_workflow_probe(settings, run_root, workflow)
-            print(f"PASS system/{workflow} topology + prompt contract probe", flush=True)
+            print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
         custom_task_producer_probe(settings, run_root)
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
         review_failure_routing_probe(settings, run_root)
