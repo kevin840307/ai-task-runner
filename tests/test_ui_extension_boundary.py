@@ -92,7 +92,7 @@ def test_command_stage_runs_python_out_of_process(tmp_path):
     from runner.config.runtime import RuntimeConfig
     from runner.runtime.run_state import RunState
     from runner.workflow.registry import create_stage
-    from runner.workflow.stages.contracts import StageContext
+    from runner.workflow.stages import StageContext
 
     script = tmp_path / "stage.py"
     script.write_text("from pathlib import Path\nPath('marker.txt').write_text('ok', encoding='utf-8')\n", encoding="utf-8")
