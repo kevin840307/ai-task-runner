@@ -1834,6 +1834,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     type: review
     status: Reviewing repaired state with Qwen
     prompt: review_check.md
+    routes:
+      fail: execute
 
   validate_file:
     type: command
@@ -1997,6 +1999,8 @@ FULL_LOOP_WORKFLOW = '''stages:
   review_verify:
     type: review
     prompt: full_loop_review.md
+    routes:
+      fail: execute
 
   validate_file:
     type: command
