@@ -286,7 +286,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
 def test_json_event_output_disconnect_does_not_stop_observer(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner.plugins.observability import ObservabilityObserver
+    from runner.plugins.runtime import ObservabilityObserver
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
@@ -512,7 +512,7 @@ def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
 
 
 def test_ai_validator_prompt_file_reaches_final_validation_prompt(tmp_path):
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     prompt_file = tmp_path / "ai_validation.md"
     prompt_file.write_text("USER_FILE_RULE: verify domain behavior.\n", encoding="utf-8")
