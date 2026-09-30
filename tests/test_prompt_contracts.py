@@ -86,7 +86,7 @@ def test_ai_validator_prompt_mode_is_injected_by_stage():
 
 
 def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
-    from runner.prompts.protocols import PLAN_PROTOCOL
+    from runner.prompting import PLAN_PROTOCOL
 
     assert "observable deliverable" in PLAN_PROTOCOL
     assert "acceptance criteria" in PLAN_PROTOCOL
@@ -96,7 +96,7 @@ def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
 
 def test_ai_validator_stage_always_injects_run_level_validation_resource():
     from types import SimpleNamespace
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
     ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="CHECK_MAGIC_BUSINESS_RULE", ai_validator_yolo=False))
@@ -111,7 +111,7 @@ def test_ai_validator_stage_always_injects_run_level_validation_resource():
 
 def test_ai_validator_stage_injects_yolo_validation_mode():
     from types import SimpleNamespace
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai", ai_validator_yolo=True))
     ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="", ai_validator_yolo=False))
@@ -127,7 +127,7 @@ def test_ai_validator_stage_injects_yolo_validation_mode():
 def test_shared_stage_control_has_only_continue_retry_recover_modes():
     from types import SimpleNamespace
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageExecution
+    from runner.workflow.stages import StageExecution
 
     stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     task = SimpleNamespace(
