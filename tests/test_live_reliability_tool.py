@@ -1052,27 +1052,45 @@ def test_workflow_dryrun_negative_preflight_proves_invalid_and_loop_detection():
 def test_stop_request_resume_probe_exercises_detached_ui_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    original_runner_command = live.runner_command
-
     def fake_runner_command(config, project, **kwargs):
-        if kwargs.get("resume"):
-            return ["resume-placeholder", str(project)]
-        code = r'''
-import json, sys, time
-from pathlib import Path
-project = Path(sys.argv[1])
-work = project / ".ai-task-runner"
-work.mkdir(parents=True, exist_ok=True)
-(work / "state.json").write_text(json.dumps({"completed": False, "stage": "execute", "ai_session_id": "session-stop"}), encoding="utf-8")
-(work / "runner-process.json").write_text(json.dumps({"supervisor_pid": 1, "worker_pid": 2}), encoding="utf-8")
-deadline = time.time() + 10
-while time.time() < deadline and not (work / "stop.request").exists():
-    time.sleep(0.02)
-(work / "stop.request").unlink(missing_ok=True)
-(work / "runner-process.json").unlink(missing_ok=True)
-raise SystemExit(130)
-'''
-        return [sys.executable, "-c", code, str(project)]
+        return [
+            "resume-placeholder" if kwargs.get("resume") else "start-placeholder",
+            str(project),
+        ]
+
+    class FakeProcess:
+        pid = 12345
+
+        def __init__(self, command, **options):
+            self.project = Path(command[-1])
+            self.work = self.project / ".ai-task-runner"
+            self.work.mkdir(parents=True, exist_ok=True)
+            self.returncode = None
+            (self.work / "state.json").write_text(
+                json.dumps({
+                    "completed": False,
+                    "stage": "execute",
+                    "ai_session_id": "session-stop",
+                }),
+                encoding="utf-8",
+            )
+            (self.work / "runner-process.json").write_text(
+                json.dumps({"supervisor_pid": self.pid, "worker_pid": 2}),
+                encoding="utf-8",
+            )
+
+        def poll(self):
+            stop = self.work / "stop.request"
+            if self.returncode is None and stop.exists():
+                stop.unlink(missing_ok=True)
+                (self.work / "runner-process.json").unlink(missing_ok=True)
+                self.returncode = 130
+            return self.returncode
+
+        def wait(self, timeout=None):
+            if self.poll() is None:
+                raise subprocess.TimeoutExpired(["fake-runner"], timeout)
+            return self.returncode
 
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
         project = Path(command[-1])
@@ -1081,14 +1099,41 @@ raise SystemExit(130)
         history.mkdir(parents=True, exist_ok=True)
         events = [
             {"type": "runner.stage", "action": "start", "stage": "execute"},
-            {"type": "model.prompt", "call_id": "resume-1", "session": "session-stop", "session_mode": "resume"},
-            {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+            {
+                "type": "model.prompt",
+                "call_id": "resume-1",
+                "session": "session-stop",
+                "session_mode": "resume",
+            },
+            {
+                "type": "runner.stage",
+                "action": "finish",
+                "stage": "execute",
+                "result": "pass",
+            },
         ]
-        (work / "state.json").write_text(json.dumps({"completed": True, "stage": "completed", "ai_session_id": "session-stop"}), encoding="utf-8")
-        (work / "log.txt").write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
-        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
-        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
-        (history / "resume-1-prompt.txt").write_text("Continue normal task execution in this same session.\n", encoding="utf-8")
+        (work / "state.json").write_text(
+            json.dumps({
+                "completed": True,
+                "stage": "completed",
+                "ai_session_id": "session-stop",
+            }),
+            encoding="utf-8",
+        )
+        (work / "log.txt").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        (work / "debug" / "last-prompt.txt").write_text(
+            "prompt", encoding="utf-8"
+        )
+        (work / "debug" / "last-result.txt").write_text(
+            "result", encoding="utf-8"
+        )
+        (history / "resume-1-prompt.txt").write_text(
+            "Continue normal task execution in this same session.\n",
+            encoding="utf-8",
+        )
         (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("", encoding="utf-8")
@@ -1097,6 +1142,7 @@ raise SystemExit(130)
         return 0
 
     monkeypatch.setattr(live, "runner_command", fake_runner_command)
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
     monkeypatch.setattr(live, "run_command", fake_run)
 
     live.stop_request_resume_probe(settings(tmp_path), tmp_path)
