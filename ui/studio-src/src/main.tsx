@@ -27,7 +27,7 @@ type Stage = Record<string, unknown> & {
   label?: string;
   scope?: string;
   routes?: Record<string, string>;
-  error_policy?: { retries: number; exhausted: string };
+  error_policy?: { retries: number };
 };
 
 type Visual = {
@@ -136,11 +136,10 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-handles">
-        <span>PASS</span><span>FAIL</span><span>ERROR</span>
+        <span>PASS</span><span>FAIL</span>
       </div>
-      <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "24%" }} />
-      <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "50%" }} />
-      <Handle className="error" type="source" position={Position.Bottom} id="error" style={{ left: "76%" }} />
+      <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "34%" }} />
+      <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "66%" }} />
     </div>
   );
 }
@@ -305,18 +304,17 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       markerEnd: { type: MarkerType.ArrowClosed },
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
     });
-    for (const status of ["fail", "error"] as const) {
-      const target = status === "error" ? (s.error_policy?.exhausted || routes.error) : routes[status];
-      if (!target) continue;
-      const resolved = target === "done" || target === "stop" ? END : target === "next" ? (next || END) : target;
+    const failTarget = routes.fail;
+    if (failTarget) {
+      const resolved = failTarget === "done" || failTarget === "stop" ? END : failTarget === "next" ? (next || END) : failTarget;
       edges.push({
-        id: `${name}:${status}:${resolved}`,
+        id: `${name}:fail:${resolved}`,
         source: name,
-        sourceHandle: status,
+        sourceHandle: "fail",
         target: resolved,
-        className: `result ${status}`,
+        className: "result fail",
         markerEnd: { type: MarkerType.ArrowClosed },
-        data: { status, explicit: true, terminal: target },
+        data: { status: "fail", explicit: true, terminal: failTarget },
       });
     }
   });
@@ -587,7 +585,7 @@ function App() {
       setDirtyGraph(true);
       return;
     }
-    if (connection.source === END || connection.target === START || status === "") return;
+    if (connection.source === END || connection.target === START || !["pass", "fail"].includes(status)) return;
     let nextFlow = visual.flow;
     if (status === "pass" && connection.target !== END && !visual.flow.includes(connection.target)) {
       const sourceIndex = visual.flow.indexOf(connection.source);
@@ -602,10 +600,6 @@ function App() {
       const nextName = visual.flow[index + 1];
       let target = connection.target!;
       if (target === END) target = status === "pass" ? "done" : "stop";
-      if (status === "error" && stage.error_policy) {
-        delete routes.error;
-        return { ...stage, routes, error_policy: { ...stage.error_policy, exhausted: target } };
-      }
       if (status === "pass" && target === nextName) delete routes.pass;
       else routes[status] = target;
       return { ...stage, routes };
@@ -628,9 +622,6 @@ function App() {
         if (s.name !== edge.source) return s;
         const routes = { ...(s.routes || {}) };
         delete routes[status];
-        if (status === "error" && s.error_policy) {
-          return { ...s, routes, error_policy: { ...s.error_policy, exhausted: "stop" } };
-        }
         return { ...s, routes };
       });
     }
@@ -922,35 +913,23 @@ function App() {
               </div>}
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>結果連線</strong>
-                <p>從積木下方的大接點拉到目標積木。連到 END 時，PASS 為完成，FAIL / ERROR 為停止。</p>
-                <p>ERROR 先依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。FAIL 不會觸發技術性重試。</p>
+                <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
+                <p>ERROR 只依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。重試用盡會記錄錯誤並停在目前 Stage。</p>
                 <label className="route-policy-field"><span>ERROR 重試次數</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
                   onChange={(event) => {
                     const raw = event.target.value;
-                    const routes = { ...(draft.routes || {}) };
                     if (raw === "") {
-                      const exhausted = draft.error_policy?.exhausted;
-                      if (exhausted && exhausted !== "stop") routes.error = exhausted;
-                      else delete routes.error;
                       const { error_policy: _removed, ...rest } = draft;
-                      editDraft({ ...rest, routes });
+                      editDraft(rest);
                     } else {
                       const retries = Number(raw);
                       if (!Number.isInteger(retries) || retries < -1) return;
-                      const exhausted = draft.error_policy?.exhausted || routes.error || "stop";
-                      delete routes.error;
-                      editDraft({ ...draft, routes, error_policy: { retries, exhausted } });
+                      editDraft({ ...draft, error_policy: { retries } });
                     }
                   }} /></label>
-                {draft.error_policy && <label className="route-policy-field"><span>重試用盡後</span>
-                  <select value={draft.error_policy.exhausted} onChange={(event) => editDraft({ ...draft,
-                    error_policy: { ...draft.error_policy!, exhausted: event.target.value } })}>
-                    <option value="stop">停止</option><option value="next">下一個積木</option><option value="done">完成 Workflow</option>
-                    {visual.flow.filter((name) => name !== draft.name).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select></label>}
                 <div className="route-section-title">從這個積木出去</div>
-                {(["pass", "fail", "error"] as const).map((status) => {
+                {(["pass", "fail"] as const).map((status) => {
                   const edge = edges.find((item) => item.source === draft.name && item.data?.status === status);
                   const terminal = String(edge?.data?.terminal || "");
                   const target = edge?.target === END
