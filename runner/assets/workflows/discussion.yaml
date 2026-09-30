@@ -1,40 +1,64 @@
 stages:
+  controller:
+    type: discussion_controller
+    status: AI 正在協調多 Session 討論
+    targets:
+      - participant_architecture
+      - participant_critic
+      - moderator
+      - judge
+    round_end: judge
+    max_rounds: 3
+    error_policy:
+      retries: -1
+
   participant_architecture:
     type: discussion
+    controller: controller
     role: architect
     status: Architect 正在提出方案
     session_key: discussion_architect
     error_policy:
       retries: -1
+    routes:
+      pass: controller
 
   participant_critic:
     type: discussion
+    controller: controller
     role: critic
     status: Critic 正在檢查風險
     session_key: discussion_critic
     error_policy:
       retries: -1
+    routes:
+      pass: controller
 
   moderator:
     type: discussion
+    controller: controller
     role: moderator
     status: Moderator 正在整合討論
     session_key: discussion_moderator
     error_policy:
       retries: -1
+    routes:
+      pass: controller
 
   judge:
     type: review
     status: Judge 正在判斷是否結束討論
     prompt: common/discussion_judge.md
+    session_key: discussion_judge
     readonly_safety: observe
-    max_rounds: 3
     error_policy:
       retries: -1
     routes:
-      fail: participant_architecture
+      pass: done
+      fail: controller
 
 flow:
+  - controller
   - participant_architecture
   - participant_critic
   - moderator
