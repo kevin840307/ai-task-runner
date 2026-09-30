@@ -77,7 +77,7 @@ def test_project_workflow_and_categorized_prompt_use_split_asset_roots(
     assert prompt["item"]["readonly"] is False
 
 
-def test_generator_project_workflow_output_uses_workflow_asset_root(
+def test_generator_project_workflow_output_returns_asset_package_root(
     tmp_path: Path,
 ) -> None:
     state, project = _state(tmp_path)
@@ -90,9 +90,7 @@ def test_generator_project_workflow_output_uses_workflow_asset_root(
     assert workflow.relative_to(project).as_posix() == (
         ".ai-task-runner/assets/workflows/main.workflow.yaml"
     )
-    assert asset_root.relative_to(project).as_posix() == (
-        ".ai-task-runner/assets/workflows"
-    )
+    assert asset_root.relative_to(project).as_posix() == ".ai-task-runner/assets"
 
 
 def test_global_and_project_assets_are_structurally_symmetric(
