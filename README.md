@@ -211,24 +211,21 @@ There is no System/Custom split and no read-only built-in asset class.
 Workflow Studio edits the same runtime graph:
 
 - Stage = node
-- PASS/FAIL/ERROR route = edge
-- rollback/loop = edge to an earlier Stage
-- technical retry/session recovery is not drawn as an edge
+- PASS / FAIL = semantic result edges
+- rollback/loop = PASS/FAIL edge to an earlier Stage
+- Handoff = one Stage with multiple allowed target edges, selecting exactly one target per decision
+- ERROR is technical retry only and is never drawn as a graph edge
 - node settings contain Stage behavior
 - edge settings contain semantic routing only
 
 Global and Project assets are both editable.
 
-Current family:
+Supported workflow families:
 
 1. **Linear Workflow with Rollback / Loop**
-
-Future families, intentionally not implemented yet:
-
 2. **Dynamic Handoff**
-3. **Discussion / Group Chat**
 
-Future families must reuse the same Stage, StageExecutor, StateStore, plugin boundary, Workflow assets and Graph Designer. They must not create a second full orchestrator.
+Dynamic Handoff reuses the same Stage, StageExecutor, StateStore, plugin boundary, Workflow assets and Graph Designer. Multi-role discussion/review-board/triage behavior is expressed as a Dynamic Handoff Workflow pattern rather than a separate runtime family.
 
 ## CLI
 
