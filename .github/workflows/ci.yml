@@ -63,6 +63,7 @@ jobs:
         run: git diff --exit-code -- ../static/workflow-studio-app
 
       - name: Upload Studio build artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: workflow-studio-app
