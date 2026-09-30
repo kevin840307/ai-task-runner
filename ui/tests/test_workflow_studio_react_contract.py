@@ -54,3 +54,7 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_discussion():
     assert 'draft.type === "discussion_controller"' in text
     assert "draft.max_rounds" in text
     assert "stage.targets" in text
+    assert "branchPositions" in text
+    assert "branchGap" in text
+    assert 'title: "Discussion"' in text
+    assert 'title: "Discussion Session"' in text
