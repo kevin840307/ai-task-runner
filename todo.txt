@@ -28,6 +28,19 @@ Current product direction:
 
 
 
+DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
+-----------------------------------------
+[ ] Remove Discussion / Group Chat as a runtime Stage family; keep Dynamic Handoff as the only multi-agent runtime primitive.
+[ ] Remove discussion_controller / discussion Stage types, controller_rounds, discussion-specific schema/UI/runtime contracts, prompts, and obsolete tests.
+[ ] Keep any group-discussion behavior expressible as ordinary Dynamic Handoff YAML using base/review/ai_validator Stages.
+[ ] Expand built-in Dynamic Handoff with formal specialist roles and a final independent AI validator.
+[ ] Add per-target session policy for Dynamic roles: main session, stable role session, or fresh session each invocation.
+[ ] Reuse existing StageExecutor recovery so technical/session failure may still rotate to a fresh session regardless of selected policy.
+[ ] Update Workflow Studio + static bundle so Dynamic targets expose session policy clearly without a second controller type.
+[ ] Update deterministic runtime/schema/resume/Stage probe/dry-run tests for all three Dynamic session policies.
+[ ] Update live Qwen reliability probes/tools to exercise Dynamic Handoff routing and session-policy behavior.
+[ ] Remove old Discussion contracts from todo/future/docs/builder and keep CI/Ubuntu/Windows/Studio green.
+
 FULL DESIGN READABILITY + PROFESSIONAL ROLES (2026-09-30)
 -----------------------------------------------------
 [ ] Replace simple branch positioning with a readable main-lane + grouped branch layout.
