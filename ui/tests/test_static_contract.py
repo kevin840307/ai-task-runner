@@ -103,6 +103,14 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('if (!state.project || state.runtime?.running) return;', self.js)
 
 
+    def test_full_designer_returns_to_workflow_studio_and_restores_workflow(self):
+        self.assertIn("restoreWorkflowStudioNavigation", self.app_js)
+        self.assertIn('params.get("view") !== "workflow"', self.app_js)
+        self.assertIn('params.get("studio")', self.app_js)
+        self.assertIn('await switchView("workflow")', self.app_js)
+        self.assertIn('await openStudioFile(item)', self.app_js)
+
+
 class LayoutRegressionTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(__file__).resolve().parents[1]
