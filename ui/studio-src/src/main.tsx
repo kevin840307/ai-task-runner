@@ -811,6 +811,11 @@ function App() {
     setMessage("已重設畫布位置；Workflow 執行順序沒有變動。");
   }
 
+  function leaveStudio() {
+    if (dirtyGraph && !window.confirm("捨棄未儲存的 Workflow 草稿？")) return;
+    window.location.href = workflowStudioUrl();
+  }
+
   function focusStageTitle(name: string) {
     setSelected(name);
     setInspectorTab("settings");
@@ -826,7 +831,7 @@ function App() {
     <main className="studio-shell">
       <header className="studio-header">
         <div>
-          <button className="ghost" onClick={() => { window.location.href = workflowStudioUrl(); }}>← Workflow Studio</button>
+          <button className="ghost" onClick={leaveStudio}>← Workflow Studio</button>
           <strong>{visual.name}</strong>
           <span>Workflow Studio</span>
         </div>
