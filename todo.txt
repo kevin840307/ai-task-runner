@@ -35,7 +35,7 @@ DYNAMIC ROLE SESSION + PROMPT CONSOLIDATION (2026-09-30)
 [x] Remove remaining Discussion UI/static/tool/test/live contracts and obsolete assets without compatibility shims.
 [x] Add deterministic tests for main / role / fresh policy, including durable role-session resume and recovery rotation.
 [x] Add/extend qwen_live_reliability Dynamic Handoff probes for routing + reusable role sessions + fresh-session role.
-[ ] Keep Studio/Ubuntu/Windows CI green after Dynamic-only cleanup.
+[x] Keep Studio/Ubuntu/Windows CI green after Dynamic-only cleanup.
 
 DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
 -----------------------------------------
@@ -48,7 +48,7 @@ DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
 [x] Update Workflow Studio + static bundle so Dynamic targets expose session policy clearly without a second controller type.
 [x] Update deterministic runtime/schema/resume/Stage probe/dry-run tests for all three Dynamic session policies.
 [x] Update live Qwen reliability probes/tools to exercise Dynamic Handoff routing and session-policy behavior.
-[ ] Remove old Discussion contracts from todo/future/docs/builder and keep CI/Ubuntu/Windows/Studio green.
+[x] Remove superseded multi-agent contracts from todo/future/docs/builder and keep CI/Ubuntu/Windows/Studio green.
 
 FULL DESIGN READABILITY + PROFESSIONAL DYNAMIC ROLES (2026-09-30)
 -------------------------------------------------------------
