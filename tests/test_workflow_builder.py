@@ -76,6 +76,10 @@ def test_builder_prompt_describes_current_graph_and_prompt_contract():
     assert "prompts/<filename>.md" in text
     assert "assets/prompts/workflow/<workflow-name>/" in text
     assert "common/review.md" in text
+    assert "type: handoff" in text
+    assert "targets" in text
+    assert "type: discussion" in text
+    assert "max_rounds" in text
     for removed in ("restart_at", "max_attempts", "on_exhausted"):
         assert removed in text
     assert "error_policy.retries" in text
