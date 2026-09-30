@@ -108,6 +108,13 @@ class FlowEngine:
         task_scoped: bool,
     ) -> tuple[StageResult, bool]:
         definition = self.workflow[index]
+        if self._prepare_discussion_controller(definition, previous):
+            return previous or StageResult(
+                str(definition["name"]),
+                "fail",
+                output="discussion round limit reached",
+                kind="handoff",
+            ), True
         stage = create_stage(definition)
         label = str(definition.get("label", "") or "")
         policy = definition.get("error_policy")
@@ -122,17 +129,10 @@ class FlowEngine:
 
         target = (
             resolve_handoff_target(definition, result)
-            if definition.get("type") == "handoff" and result.status == "pass"
+            if definition.get("type") in {"handoff", "discussion_controller"}
+            and result.status == "pass"
             else resolve_stage_target(definition, result.status)
         )
-        if self._round_limit_reached(definition, index, target):
-            limit = int(definition["max_rounds"])
-            self.context.set_stage(
-                "max_rounds_exhausted",
-                f"{definition['name']} round limit {limit} reached",
-            )
-            self.context.save_state()
-            return result, True
         if target == "stop":
             self.context.save_state()
             return result, True
@@ -153,22 +153,41 @@ class FlowEngine:
         self.context.save_state()
         return result, False
 
-    def _round_limit_reached(
+    def _prepare_discussion_controller(
         self,
         definition: dict[str, Any],
-        source_index: int,
-        target: str,
+        previous: StageResult | None,
     ) -> bool:
-        limit = definition.get("max_rounds")
-        if limit is None or target not in self.positions:
+        if definition.get("type") != "discussion_controller":
             return False
-        return self.positions[target] <= source_index and self.context.state.cycle >= int(limit)
+        name = str(definition["name"])
+        state = self.context.state
+        round_no = int(state.controller_rounds.get(name, 1))
+        round_end = str(definition.get("round_end") or "")
+        if previous is not None and previous.stage == round_end and previous.status == "fail":
+            round_no += 1
+        changed = state.controller_rounds.get(name) != round_no
+        state.controller_rounds[name] = round_no
+        limit = int(definition["max_rounds"])
+        if changed:
+            self.context.save_state()
+        if round_no <= limit:
+            return False
+        self.context.set_stage(
+            "max_rounds_exhausted",
+            f"{name} round limit {limit} reached",
+        )
+        self.context.save_state()
+        return True
 
     def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
         state = self.context.state
 
-        if position <= source_index:
+        if (
+            position <= source_index
+            and self.workflow[position].get("type") != "discussion_controller"
+        ):
             state.cycle += 1
 
         if self.workflow[position].get("scope") == "task":
