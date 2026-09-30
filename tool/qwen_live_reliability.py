@@ -1538,15 +1538,18 @@ RESUME_PROBE_WORKFLOW = '''stages:
 
   execute_first:
     type: task
+    scope: task
     status: Execute before forced restart
 
   pause:
     type: command
+    scope: task
     status: Holding durable resume checkpoint
     command: "{python} resume_pause.py"
 
   execute_second:
     type: task
+    scope: task
     status: Continue same session after restart
 
   validate_file:
@@ -1556,12 +1559,9 @@ RESUME_PROBE_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - stage: execute_first
-    scope: task
-  - stage: pause
-    scope: task
-  - stage: execute_second
-    scope: task
+  - execute_first
+  - pause
+  - execute_second
   - validate_file
 '''
 
