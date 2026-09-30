@@ -41,3 +41,15 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
     assert '["pass", "fail", "error"]' not in text
+
+
+def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_discussion():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'id="handoff"' in text
+    assert 'sourceHandle: "handoff"' in text
+    assert 's.type === "handoff"' in text
+    assert 'types: ["handoff", "discussion"]' in text
+    assert "最多討論輪數" in text
+    assert "draft.max_rounds" in text
+    assert "stage.targets" in text
