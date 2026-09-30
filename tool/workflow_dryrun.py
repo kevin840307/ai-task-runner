@@ -273,6 +273,20 @@ def matrix_payload(path: Path, max_steps: int) -> dict[str, Any]:
             "task_scope": any(item.get("scope") == "task" for item in workflow),
             "task_producer": any(stage_result_kind(item) == "tasks" for item in workflow),
             "routes": sum(bool(item.get("routes")) for item in workflow),
+            "file_validations": sum(
+                item.get("type") == "command"
+                and stage_result_kind(item) == "validation"
+                for item in workflow
+            ),
+            "ai_validations": sum(
+                item.get("type") == "ai_validator"
+                for item in workflow
+            ),
+            "validation_not_last": any(
+                stage_result_kind(item) == "validation"
+                and index < len(workflow) - 1
+                for index, item in enumerate(workflow)
+            ),
         },
         "paths_passed": passed,
         "paths_total": len(results),
