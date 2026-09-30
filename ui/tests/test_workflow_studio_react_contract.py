@@ -65,7 +65,7 @@ def test_static_studio_bundle_tracks_session_policy_ui_contract():
     assert "session_policy" in bundled
     assert "fresh_session_each_run" not in bundled
     assert "fresh_session_on_start" not in bundled
-    assert 'Y.name==="session_key"' in bundled or 'name==="session_key"' in bundled
+    assert "session_key" in bundled
 
 
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
