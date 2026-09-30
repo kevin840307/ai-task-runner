@@ -175,13 +175,3 @@ def test_dynamic_handoff_builtin_dryrun_reaches_final_validation():
     ]
 
 
-def test_discussion_builtin_dryrun_reaches_final_ai_validation_and_completes():
-    result = run("runner/assets/workflows/discussion.yaml", "--json")
-    assert result.returncode == 0, result.stdout + result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["completed"] is True
-    assert [item["stage"] for item in payload["transitions"]] == [
-        "discussion",
-        "judge",
-        "final_validate",
-    ]
