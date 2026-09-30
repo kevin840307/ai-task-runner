@@ -408,7 +408,7 @@ class WorkflowStudioMixin:
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
-            "type", "status", "label", "scope", "routes", "error_policy", "validator",
+            "type", "status", "label", "scope", "routes", "error_policy", "max_rounds", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
@@ -621,6 +621,11 @@ class WorkflowStudioMixin:
         label = updates.get("label")
         if label is not None and (not isinstance(label, str) or not label.strip()):
             raise ValueError("Stage label must be a non-empty string")
+        max_rounds = updates.get("max_rounds")
+        if max_rounds is not None and (
+            not isinstance(max_rounds, int) or isinstance(max_rounds, bool) or max_rounds <= 0
+        ):
+            raise ValueError("Stage max_rounds must be a positive integer")
 
         routes = updates.get("routes")
         if routes is None:
@@ -1184,7 +1189,7 @@ class WorkflowStudioMixin:
 
         YAML remains canonical. START/END are UI-only nodes and never enter the
         Workflow file. Default PASS-to-next is represented by the Flow order;
-        only non-default PASS and semantic FAIL/ERROR routes are written.
+        only non-default PASS and semantic FAIL routes are written; handoff targets remain Stage fields.
         """
         with self._edit_lock:
             self._require_editable()
