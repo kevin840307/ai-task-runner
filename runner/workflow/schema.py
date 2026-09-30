@@ -69,15 +69,11 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     _validate_routes(name, values.get("routes"))
     policy = values.get("error_policy")
     if policy is not None:
-        if not isinstance(policy, dict) or set(policy) != {"retries", "exhausted"}:
-            raise RunnerError(f"workflow stage {name} error_policy requires retries and exhausted")
+        if not isinstance(policy, dict) or set(policy) != {"retries"}:
+            raise RunnerError(f"workflow stage {name} error_policy requires only retries")
         retries = policy["retries"]
         if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
             raise RunnerError(f"workflow stage {name} error_policy.retries must be -1 or non-negative")
-        if not isinstance(policy["exhausted"], str) or not policy["exhausted"].strip():
-            raise RunnerError(f"workflow stage {name} error_policy.exhausted must be a target")
-        if "error" in (values.get("routes") or {}):
-            raise RunnerError(f"workflow stage {name} cannot set both error_policy.exhausted and routes.error")
 
 
 def _validate_routes(name: str, routes: Any) -> None:
@@ -85,10 +81,10 @@ def _validate_routes(name: str, routes: Any) -> None:
         return
     if not isinstance(routes, dict) or not routes:
         raise RunnerError(f"workflow stage {name} routes must be a non-empty object")
-    unknown = sorted(str(key) for key in routes if key not in {"pass", "fail", "error"})
+    unknown = sorted(str(key) for key in routes if key not in {"pass", "fail"})
     if unknown:
         raise RunnerError(
-            f"workflow stage {name} routes supports only pass/fail/error; "
+            f"workflow stage {name} routes supports only pass/fail; "
             f"unknown: {', '.join(unknown)}"
         )
     for status, target in routes.items():
@@ -107,13 +103,6 @@ def validate_routes(workflow: list[dict[str, Any]]) -> None:
                     f"workflow stage {definition['name']} routes.{status} "
                     f"references unknown stage: {target}"
                 )
-        policy = definition.get("error_policy") or {}
-        target = policy.get("exhausted")
-        if target is not None and target not in names | {"next", "done", "stop"}:
-            raise RunnerError(
-                f"workflow stage {definition['name']} error_policy.exhausted "
-                f"references unknown stage: {target}"
-            )
 
 
 def validate_topology(workflow: list[dict[str, Any]]) -> None:
