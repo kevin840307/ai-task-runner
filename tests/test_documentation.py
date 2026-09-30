@@ -65,7 +65,7 @@ def test_docs_describe_one_runtime_and_structured_assets():
         "runner/assets/workflows/",
         "prompts/",
         "Dynamic Handoff",
-        "Discussion / Group Chat",
+        "session_policy",
     ):
         assert token in combined
 
@@ -115,10 +115,11 @@ def test_architecture_keeps_behavior_ownership_explicit():
     assert "Dynamic Handoff is the only multi-agent runtime primitive" in value
 
 
-def test_future_todo_keeps_linear_first_and_future_families_deferred():
+def test_future_todo_keeps_current_runtime_and_parallel_deferred():
     value = text("FUTURE")
     assert "Linear Workflow with Rollback / Loop" in value
     assert "Dynamic Handoff" in value
-    assert "Discussion / Group Chat" in value
+    assert "Dynamic Handoff is the only multi-agent runtime primitive" in value
     assert "Future - do not implement yet" in value
+    assert "Parallel" in value
     assert "high-density soak" in value
