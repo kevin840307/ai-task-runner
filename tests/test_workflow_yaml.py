@@ -401,15 +401,111 @@ flow:
     assert previous.output == "durable feedback"
 
 
-def test_builtin_dynamic_handoff_workflow_uses_one_router_with_many_targets():
+def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
     workflow = load_workflow(WORKFLOWS["dynamic_handoff"])
     coordinator = workflow[0]
     final_validate = workflow[-1]
 
     assert coordinator["type"] == "handoff"
-    assert coordinator["targets"] == ["implementer", "verifier", "final_validate"]
+    assert coordinator["targets"] == [
+        "requirements_analyst",
+        "solution_architect",
+        "implementer",
+        "debugger",
+        "verifier",
+        "risk_reviewer",
+        "final_validate",
+    ]
+    roles = {item["name"]: item for item in workflow[1:]}
+    assert roles["requirements_analyst"]["session_policy"] == "main"
+    assert roles["solution_architect"]["session_policy"] == "role"
+    assert roles["implementer"]["session_policy"] == "role"
+    assert roles["debugger"]["session_policy"] == "role"
+    assert roles["verifier"]["session_policy"] == "fresh"
+    assert roles["risk_reviewer"]["session_policy"] == "fresh"
     assert final_validate["type"] == "ai_validator"
+    assert final_validate["session_policy"] == "fresh"
     assert final_validate["routes"] == {"pass": "done", "fail": "coordinator"}
+
+
+@pytest.mark.parametrize("policy", ["main", "role", "fresh"])
+def test_session_policy_accepts_dynamic_role_modes(tmp_path, policy):
+    path = write_workflow(
+        tmp_path,
+        f"""
+stages:
+  router:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: base
+    session_policy: {policy}
+flow:
+  - router
+  - worker
+""",
+    )
+
+    workflow = load_workflow(path)
+    assert workflow[1]["session_policy"] == policy
+
+
+def test_session_policy_rejects_unknown_mode(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    session_policy: shared_magic
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="session_policy"):
+        load_workflow(path)
+
+
+def test_removed_discussion_stage_types_are_rejected(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  old:
+    type: discussion_controller
+    targets: [worker]
+  worker:
+    type: base
+flow:
+  - old
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="unknown type"):
+        load_workflow(path)
+
+
+def test_removed_discussion_options_are_rejected(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker]
+    max_rounds: 3
+  worker:
+    type: base
+flow:
+  - router
+  - worker
+""",
+    )
+
+    with pytest.raises(RunnerError, match="unknown options"):
+        load_workflow(path)
 
 
 def test_handoff_target_must_exist(tmp_path):
@@ -442,11 +538,13 @@ stages:
     targets: [worker, final_validate]
   worker:
     type: base
+    session_policy: role
     routes:
       pass: router
   final_validate:
     type: ai_validator
     validator: ai
+    session_policy: fresh
     routes:
       pass: done
       fail: router
@@ -487,297 +585,7 @@ flow:
     assert ctx.state.completed is True
 
 
-def test_builtin_discussion_workflow_has_one_controller_for_many_sessions_and_final_ai_validation():
-    workflow = load_workflow(WORKFLOWS["discussion"])
-    controller = workflow[0]
-    judge = workflow[-2]
-    final_validate = workflow[-1]
-
-    assert [item["type"] for item in workflow] == [
-        "discussion_controller",
-        "discussion",
-        "discussion",
-        "discussion",
-        "discussion",
-        "discussion",
-        "discussion",
-        "review",
-        "ai_validator",
-    ]
-    assert controller["name"] == "discussion"
-    assert controller["targets"] == [
-        "requirements_analyst",
-        "solution_architect",
-        "domain_specialist",
-        "risk_reviewer",
-        "evidence_verifier",
-        "moderator",
-        "judge",
-    ]
-    assert "final_validate" not in controller["targets"]
-    assert controller["round_end"] == "judge"
-    assert controller["max_rounds"] == 3
-    assert all(
-        item.get("controller") == "discussion"
-        for item in workflow[1:7]
-    )
-    assert all(
-        item.get("routes") == {"pass": "discussion"}
-        for item in workflow[1:7]
-    )
-    assert [item.get("label") for item in workflow[1:7]] == [
-        "Requirements Analyst",
-        "Solution Architect",
-        "Domain Specialist",
-        "Risk & Quality Reviewer",
-        "Evidence Verifier",
-        "Discussion Moderator",
-    ]
-    assert judge["label"] == "Decision Judge"
-    assert judge["routes"] == {"pass": "final_validate", "fail": "discussion"}
-    assert final_validate["type"] == "ai_validator"
-    assert Path(final_validate["prompt"]).name == "discussion_final_validator.md"
-    assert Path(final_validate["prompt"]).parent.name == "common"
-    assert final_validate["routes"] == {"pass": "done", "fail": "discussion"}
-
-
-def test_discussion_judge_pass_runs_final_ai_validation_before_end(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  discussion:
-    type: discussion_controller
-    targets: [participant, judge]
-    round_end: judge
-    max_rounds: 2
-  participant:
-    type: discussion
-    controller: discussion
-    role: participant
-    routes:
-      pass: discussion
-  judge:
-    type: review
-    routes:
-      pass: final_validate
-      fail: discussion
-  final_validate:
-    type: ai_validator
-    validator: ai
-    routes:
-      pass: done
-      fail: discussion
-flow:
-  - discussion
-  - participant
-  - judge
-  - final_validate
-""",
-    )
-    workflow = load_workflow(path)
-    ctx = context(tmp_path, workflow)
-
-    class FinalValidationExecutor(Executor):
-        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
-            self.calls.append((stage.name, previous))
-            self.retry_limits.append(retry_limit)
-            if stage.name == "discussion":
-                return StageResult(
-                    "discussion",
-                    "pass",
-                    output="dispatch:judge",
-                    data={"target": "judge", "reason": "ready"},
-                    kind="handoff",
-                )
-            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
-
-    executor = FinalValidationExecutor()
-    assert FlowEngine(ctx).run(executor) == 0
-    assert [name for name, _ in executor.calls] == [
-        "discussion",
-        "judge",
-        "final_validate",
-    ]
-    assert ctx.state.completed is True
-
-
-def test_discussion_final_ai_validation_fail_returns_to_discussion(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  discussion:
-    type: discussion_controller
-    targets: [judge]
-    round_end: judge
-    max_rounds: 2
-  judge:
-    type: review
-    routes:
-      pass: final_validate
-      fail: discussion
-  final_validate:
-    type: ai_validator
-    validator: ai
-    routes:
-      pass: done
-      fail: discussion
-flow:
-  - discussion
-  - judge
-  - final_validate
-""",
-    )
-    workflow = load_workflow(path)
-    ctx = context(tmp_path, workflow)
-
-    class ValidatorFailExecutor(Executor):
-        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
-            self.calls.append((stage.name, previous))
-            self.retry_limits.append(retry_limit)
-            count = self.counts.get(stage.name, 0)
-            self.counts[stage.name] = count + 1
-            if stage.name == "discussion":
-                return StageResult(
-                    "discussion",
-                    "pass",
-                    output="dispatch:judge",
-                    data={"target": "judge", "reason": "ready"},
-                    kind="handoff",
-                )
-            if stage.name == "final_validate" and count == 0:
-                return StageResult("final_validate", "fail", output="more evidence needed")
-            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
-
-    executor = ValidatorFailExecutor()
-    assert FlowEngine(ctx).run(executor) == 0
-    assert [name for name, _ in executor.calls] == [
-        "discussion",
-        "judge",
-        "final_validate",
-        "discussion",
-        "judge",
-        "final_validate",
-    ]
-    assert ctx.state.completed is True
-
-
-def test_discussion_participant_requires_controller(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  participant:
-    type: discussion
-    role: architect
-flow:
-  - participant
-""",
-    )
-    with pytest.raises(RunnerError, match="discussion controller"):
-        load_workflow(path)
-
-
-def test_discussion_controller_requires_round_end_and_bound(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  controller:
-    type: discussion_controller
-    targets: [judge]
-    round_end: judge
-  judge:
-    type: review
-flow:
-  - controller
-  - judge
-""",
-    )
-    with pytest.raises(RunnerError, match="requires max_rounds"):
-        load_workflow(path)
-
-
-def test_discussion_controller_dispatches_sessions_and_only_judge_fail_advances_round(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  controller:
-    type: discussion_controller
-    targets: [participant, moderator, judge]
-    round_end: judge
-    max_rounds: 2
-  participant:
-    type: discussion
-    controller: controller
-    role: participant
-    routes:
-      pass: controller
-  moderator:
-    type: discussion
-    controller: controller
-    role: moderator
-    routes:
-      pass: controller
-  judge:
-    type: review
-    routes:
-      pass: done
-      fail: controller
-flow:
-  - controller
-  - participant
-  - moderator
-  - judge
-""",
-    )
-    workflow = load_workflow(path)
-    ctx = context(tmp_path, workflow)
-
-    class DiscussionExecutor(Executor):
-        choices = ["participant", "moderator", "judge", "participant", "judge"]
-
-        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
-            self.calls.append((stage.name, previous))
-            self.retry_limits.append(retry_limit)
-            count = self.counts.get(stage.name, 0)
-            self.counts[stage.name] = count + 1
-            if stage.name == "controller":
-                target = self.choices[count]
-                return StageResult(
-                    "controller",
-                    "pass",
-                    output=f"dispatch:{target}",
-                    data={"target": target, "reason": "test"},
-                    kind="handoff",
-                )
-            if stage.name == "judge":
-                return StageResult("judge", "fail", output="continue")
-            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
-
-    executor = DiscussionExecutor()
-    assert FlowEngine(ctx).run(executor) == 1
-    assert [name for name, _ in executor.calls] == [
-        "controller",
-        "participant",
-        "controller",
-        "moderator",
-        "controller",
-        "judge",
-        "controller",
-        "participant",
-        "controller",
-        "judge",
-    ]
-    assert ctx.state.controller_rounds == {"controller": 2}
-    assert ctx.state.cycle == 1
-    assert ctx.state.stage == "max_rounds_exhausted"
-    assert ctx.state.completed is False
-
-
-def test_dynamic_handoff_state_store_resume_continues_selected_target(tmp_path):
+def test_dynamic_final_validation_fail_returns_to_handoff(tmp_path):
     path = write_workflow(
         tmp_path,
         """
@@ -802,10 +610,73 @@ flow:
 """,
     )
     workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class ValidatorFailExecutor(Executor):
+        choices = ["final_validate", "worker", "final_validate"]
+
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            count = self.counts.get(stage.name, 0)
+            self.counts[stage.name] = count + 1
+            if stage.name == "router":
+                target = self.choices[count]
+                return StageResult(
+                    "router",
+                    "pass",
+                    output=f"handoff:{target}",
+                    data={"target": target, "reason": "test"},
+                    kind="handoff",
+                )
+            if stage.name == "final_validate" and count == 0:
+                return StageResult("final_validate", "fail", output="more work needed")
+            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
+
+    executor = ValidatorFailExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "router",
+        "final_validate",
+        "router",
+        "worker",
+        "router",
+        "final_validate",
+    ]
+    assert ctx.state.completed is True
+
+
+def test_dynamic_handoff_state_store_resume_continues_selected_target(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker, final_validate]
+  worker:
+    type: base
+    session_policy: role
+    routes:
+      pass: router
+  final_validate:
+    type: ai_validator
+    validator: ai
+    routes:
+      pass: done
+      fail: router
+flow:
+  - router
+  - worker
+  - final_validate
+""",
+    )
+    workflow = load_workflow(path)
     work = tmp_path / ".work"
     store = StateStore(tmp_path, work)
     state = RunState("run", "goal", str(tmp_path))
     state.workflow_position = 1
+    state.stage_sessions = {"worker": "durable-role-session"}
     state.transition_previous = {
         "stage": "router",
         "status": "pass",
@@ -817,6 +688,7 @@ flow:
     store.save(state)
 
     resumed = store.load_or_create("", resume=True, force_new=False)
+    assert resumed.stage_sessions == {"worker": "durable-role-session"}
     ctx = context(tmp_path, workflow)
     ctx.state = resumed
 
@@ -845,91 +717,4 @@ flow:
     assert previous is not None
     assert previous.kind == "handoff"
     assert previous.data == {"target": "worker", "reason": "resume test"}
-    assert ctx.state.completed is True
-
-
-def test_discussion_state_store_resume_preserves_controller_round_and_history(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  controller:
-    type: discussion_controller
-    targets: [participant, judge]
-    round_end: judge
-    max_rounds: 3
-  participant:
-    type: discussion
-    controller: controller
-    role: participant
-    routes:
-      pass: controller
-  judge:
-    type: review
-    routes:
-      pass: done
-      fail: controller
-flow:
-  - controller
-  - participant
-  - judge
-""",
-    )
-    workflow = load_workflow(path)
-    work = tmp_path / ".work"
-    store = StateStore(tmp_path, work)
-    state = RunState("run", "goal", str(tmp_path))
-    state.workflow_position = 1
-    state.controller_rounds = {"controller": 2}
-    state.discussion_history = [
-        {
-            "stage": "participant",
-            "role": "participant",
-            "message": "Persisted round-two evidence",
-        }
-    ]
-    state.transition_previous = {
-        "stage": "controller",
-        "status": "pass",
-        "output": "dispatch:participant",
-        "changed_files": [],
-        "data": {"target": "participant", "reason": "resume test"},
-        "kind": "handoff",
-    }
-    store.save(state)
-
-    resumed = store.load_or_create("", resume=True, force_new=False)
-    ctx = context(tmp_path, workflow)
-    ctx.state = resumed
-
-    class ResumeDiscussionExecutor(Executor):
-        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
-            self.calls.append((stage.name, previous))
-            self.retry_limits.append(retry_limit)
-            if stage.name == "controller":
-                return StageResult(
-                    "controller",
-                    "pass",
-                    output="dispatch:judge",
-                    data={"target": "judge", "reason": "enough evidence"},
-                    kind="handoff",
-                )
-            return StageResult(stage.name, "pass", output=f"{stage.name}:pass")
-
-    executor = ResumeDiscussionExecutor()
-    assert FlowEngine(ctx).run(executor) == 0
-    assert [name for name, _ in executor.calls] == ["participant", "controller", "judge"]
-    assert ctx.state.controller_rounds == {"controller": 2}
-    assert ctx.state.cycle == 1
-    assert ctx.state.discussion_history == [
-        {
-            "stage": "participant",
-            "role": "participant",
-            "message": "Persisted round-two evidence",
-        }
-    ]
-    previous = executor.calls[0][1]
-    assert previous is not None
-    assert previous.kind == "handoff"
-    assert previous.data == {"target": "participant", "reason": "resume test"}
     assert ctx.state.completed is True
