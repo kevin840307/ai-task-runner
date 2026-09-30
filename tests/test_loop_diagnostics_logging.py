@@ -121,7 +121,7 @@ def _make_agent_with_loop_backend(
     percent,
     message="fake exit 1: Loop detection halted the run",
 ):
-    from runner.ai.client import AIClient
+    from runner.agent.client import AIClient
 
     class FakeBackend:
         name = "fake"
