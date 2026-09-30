@@ -301,7 +301,7 @@ function Field({
       <label>
         <span>{option.name}</span>
         <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
-          {!option.required && <option value="">Stage default</option>}
+          {!option.required && <option value="">{option.default !== undefined && option.default !== "" ? `Default — ${String(option.default)}` : "Use Stage default"}</option>}
           {(option.values || []).map((v) => <option key={v} value={v}>{v || "(empty)"}</option>)}
         </select>
       </label>
@@ -347,6 +347,9 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [prompts, setPrompts] = useState<StudioFile[]>([]);
+  const [pendingCreate, setPendingCreate] = useState<{ type: string; position?: { x: number; y: number } } | null>(null);
+  const [createPrompt, setCreatePrompt] = useState("");
+  const [createCommand, setCreateCommand] = useState("");
 
   const load = useCallback(async () => {
     if (!query().id) {
@@ -531,7 +534,7 @@ function App() {
     }
   }
 
-  async function addStage(stageType = "task", position?: { x: number; y: number }) {
+  async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "") {
     if (!visual || !catalog?.stage_types?.[stageType]) return;
     const name = nextStageKey(visual, stageType);
     setBusy(true);
@@ -544,6 +547,8 @@ function App() {
           project: query().project,
           stage: name,
           type: stageType,
+          prompt,
+          command,
           hash: base.hash,
           add_to_flow: false,
         }),
@@ -556,12 +561,38 @@ function App() {
       setNodes(g.nodes);
       setEdges(g.edges);
       setSelected(name);
+      setPendingCreate(null);
+      setCreatePrompt("");
+      setCreateCommand("");
       setMessage(`Stage ${name} added. Connect it to START / PASS to join the flow.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function addStage(stageType = "task", position?: { x: number; y: number }) {
+    if (stageType === "base" || stageType === "command") {
+      setPendingCreate({ type: stageType, position });
+      setCreatePrompt(stageType === "base" ? String(defaultOption(catalog, stageType, "prompt") || "") : "");
+      setCreateCommand("");
+      return;
+    }
+    await createStage(stageType, position);
+  }
+
+  async function confirmPendingCreate() {
+    if (!pendingCreate) return;
+    if (pendingCreate.type === "base" && !createPrompt.trim()) {
+      setMessage("Generic AI Stage requires a Prompt.");
+      return;
+    }
+    if (pendingCreate.type === "command" && !createCommand.trim()) {
+      setMessage("Command Stage requires a command.");
+      return;
+    }
+    await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim());
   }
 
   function dragStage(event: React.DragEvent<HTMLButtonElement>, stageType: string) {
@@ -647,7 +678,7 @@ function App() {
                   <strong>{meta.title}</strong>
                   <span>{type}</span>
                   <small>{meta.description}</small>
-                  {prompt && <code>{prompt}</code>}
+                  {prompt && <code>Default: {prompt}</code>}
                 </button>
               );
             })}
@@ -686,6 +717,38 @@ function App() {
           </ReactFlow>
         </div>
 
+        {pendingCreate && (
+          <div className="create-stage-backdrop" role="dialog" aria-modal="true" aria-label="Create Stage">
+            <div className="create-stage-card">
+              <div>
+                <small>NEW STAGE</small>
+                <h3>{STAGE_META[pendingCreate.type]?.title || pendingCreate.type}</h3>
+              </div>
+              {pendingCreate.type === "base" && (
+                <label>
+                  <span>Prompt</span>
+                  <select value={createPrompt} onChange={(e) => setCreatePrompt(e.target.value)}>
+                    <option value="">Choose Prompt…</option>
+                    {prompts.map((p) => {
+                      const ref = p.reference || p.display_name || p.name;
+                      return <option key={p.id} value={ref}>{ref}</option>;
+                    })}
+                  </select>
+                </label>
+              )}
+              {pendingCreate.type === "command" && (
+                <label>
+                  <span>Command</span>
+                  <textarea rows={4} value={createCommand} onChange={(e) => setCreateCommand(e.target.value)} placeholder="python tool/my_validator.py" />
+                </label>
+              )}
+              <div className="create-stage-actions">
+                <button type="button" onClick={() => setPendingCreate(null)} disabled={busy}>Cancel</button>
+                <button type="button" className="primary" onClick={() => void confirmPendingCreate()} disabled={busy}>Create Stage</button>
+              </div>
+            </div>
+          </div>
+        )}
         <aside className="inspector">
           {!draft ? (
             <div className="empty">
