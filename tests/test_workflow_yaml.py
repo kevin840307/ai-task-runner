@@ -409,7 +409,7 @@ def test_builtin_dynamic_handoff_workflow_uses_one_router_with_many_targets():
     assert coordinator["type"] == "handoff"
     assert coordinator["targets"] == ["implementer", "verifier", "final_review"]
     assert final_review["type"] == "review"
-    assert final_review["routes"] == {"fail": "coordinator"}
+    assert final_review["routes"] == {"pass": "done", "fail": "coordinator"}
 
 
 def test_handoff_target_must_exist(tmp_path):
