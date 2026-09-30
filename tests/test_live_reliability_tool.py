@@ -34,6 +34,30 @@ def settings(tmp_path: Path) -> live.Settings:
     )
 
 
+def _fake_qwen_command(tmp_path: Path) -> str:
+    fake = tmp_path / "fake_qwen.py"
+    fake.write_text(
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "prompt = sys.stdin.buffer.read().decode('utf-8')\n"
+        "resume = args[args.index('--resume') + 1] if '--resume' in args else ''\n"
+        "session = resume or f'fake-session-{os.getpid()}'\n"
+        "if '[RUNNER_IMMUTABLE_PLAN_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'tasks':[{'title':'Create health probe','description':'Create health.txt exactly as required','deliverable':'health.txt','acceptance_criteria':['health.txt has exact requested text']}]})\n"
+        "elif '[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'completed':True,'reason':'checked','missing_items':[]})\n"
+        "elif '[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'passed':True,'reason':'checked','missing_items':[],'checks_run':['fake deterministic check'],'suggested_checks':[]})\n"
+        "else:\n"
+        "    Path.cwd().joinpath('health.txt').write_text(" + repr(live.EXPECTED) + ", encoding='utf-8')\n"
+        "    answer = 'completed current task'\n"
+        "print(json.dumps([{'type':'system','subtype':'session_start','session_id':session},{'type':'result','subtype':'success','session_id':session,'result':answer}]))\n",
+        encoding="utf-8",
+    )
+    return f'"{sys.executable}" "{fake}"'
+
+
 def test_script_command_uses_canonical_yaml_entry(tmp_path: Path):
     script = tmp_path / "tasks.yaml"
     command = live.runner_command(settings(tmp_path), tmp_path, script=script, resume=True)
@@ -1412,39 +1436,47 @@ def test_live_resume_workflow_uses_current_string_flow_contract():
 
 
 def test_resume_probe_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
-    fake = tmp_path / "fake_qwen_resume.py"
-    fake.write_text(
-        "import json, sys\n"
-        "from pathlib import Path\n"
-        "args = sys.argv[1:]\n"
-        "prompt = sys.stdin.buffer.read().decode('utf-8')\n"
-        "session = 'resume-session-001'\n"
-        "if '--resume' in args:\n"
-        "    assert args[args.index('--resume') + 1] == session\n"
-        "Path.cwd().joinpath('health.txt').write_text(" + repr(live.EXPECTED) + ", encoding='utf-8')\n"
-        "answer = 'completed current task'\n"
-        "print(json.dumps(["
-        "{'type':'system','subtype':'session_start','session_id':session},"
-        "{'type':'result','subtype':'success','session_id':session,'result':answer}"
-        "]))\n",
-        encoding="utf-8",
-    )
-    command = f'"{sys.executable}" "{fake}"'
     config = replace(
         settings(tmp_path),
-        command=command,
+        command=_fake_qwen_command(tmp_path),
         run_timeout=45,
         agent_timeout=15,
         planning_timeout=15,
     )
 
-    live.resume_probe(config, tmp_path / "resume-root")
+    live.resume_probe(config, tmp_path)
 
-    project = tmp_path / "resume-root" / "resume-probe"
+    project = tmp_path / "resume-probe"
     state = live.read_state(project)
     assert state["completed"] is True
     assert (project / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
-    assert live.observed_session(project, "resume-session-001", "resume")
+    assert any(
+        event.get("type") == "model.prompt"
+        and event.get("session_mode") == "resume"
+        for event in live.runner_events(project)
+    )
+
+
+def test_yaml_list_resume_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
+    config = replace(
+        settings(tmp_path),
+        command=_fake_qwen_command(tmp_path),
+        run_timeout=60,
+        agent_timeout=15,
+        planning_timeout=15,
+    )
+
+    live.yaml_list_resume_probe(config, tmp_path, name="yaml-fast-resume")
+
+    batch = tmp_path / "yaml-fast-resume"
+    first = batch / "item-1"
+    second = batch / "item-2"
+    assert live.read_json(
+        first / ".ai-task-runner" / "script" / "001" / "state.json"
+    )["completed"] is True
+    assert live.read_json(
+        second / ".ai-task-runner" / "script" / "002" / "state.json"
+    )["completed"] is True
 
 
 def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
