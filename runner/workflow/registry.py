@@ -108,7 +108,7 @@ def _field_info(item: Any) -> dict[str, Any]:
         "type": _type_name(item.type),
     }
     if item.name == "parser":
-        from .lifecycle import PARSERS
+        from .results import PARSERS
         result["type"] = "enum"
         result["values"] = sorted(PARSERS)
     if item.name == "produces":
