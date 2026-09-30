@@ -253,8 +253,8 @@ WORKFLOW STUDIO - LINEAR FIRST
 [x] Show scope: task as a PER TASK visual group; Plan still produces Task[] only.
 [x] Add PASS / FAIL Stage handles; ERROR is retry-only; Handoff uses one multi-target HANDOFF handle.
 [x] Add large dedicated Studio source package: React + TypeScript + @xyflow/react + Vite.
-[ ] Build and commit ui/static/workflow-studio-app/ static HTML/JS/CSS output.
-[ ] Add existing Studio/library button to open the full designer for the selected Workflow.
+[x] Full Designer React source lives only in ui/studio-src; ui/static/workflow-studio-app is generated only by npm run build and must never be hand-edited.
+[x] Workflow Studio opens Full Designer for the selected Workflow; Full Designer returns deterministically to Workflow Studio and restores that Workflow.
 [x] Add node creation/deletion from the React canvas (+ draggable Stage Palette) while disconnected nodes stay out of flow.
 [ ] Add explicit edge retarget UX and terminal target choice (done vs stop when needed).
 [ ] Add Stage rename transaction that updates flow/routes safely, or keep Stage key immutable with a clear UI label.
