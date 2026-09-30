@@ -229,6 +229,33 @@ class HandoffStage(BaseStage):
 
 
 @dataclass(frozen=True)
+class DiscussionControllerStageSpec(HandoffStageSpec):
+    status: str = "AI 正在協調討論"
+    run_state: str = "discussion_control"
+    actor: str = "moderator"
+    prompt: str = "common/discussion_controller.md"
+    round_end: str = "judge"
+    session_key: str = "discussion_controller"
+
+
+class DiscussionControllerStage(HandoffStage):
+    result_kind = "handoff"
+
+    def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
+        round_no = int(ctx.state.controller_rounds.get(self.name, 1))
+        history = list(ctx.state.discussion_history)[-24:]
+        import json
+        base = super()._augment_rendered_prompt(ctx, prompt)
+        return (
+            base
+            + "\n\nRunner discussion controller context:\n"
+            + f"round: {round_no}\n"
+            + "history: "
+            + json.dumps(history, ensure_ascii=False)
+        )
+
+
+@dataclass(frozen=True)
 class DiscussionStageSpec(BaseStageSpec):
     status: str = "AI 正在參與討論"
     run_state: str = "discussion"
@@ -237,6 +264,7 @@ class DiscussionStageSpec(BaseStageSpec):
     prompt: str = "common/discussion.md"
     role: str = "participant"
     history_limit: int = 24
+    controller: str = ""
     session_key: str = ""
 
 
@@ -246,10 +274,11 @@ class DiscussionStage(BaseStage):
     def _augment_rendered_prompt(self, ctx: StageContext, prompt: str) -> str:
         history = list(ctx.state.discussion_history)[-max(1, int(self.spec.history_limit)):]
         import json
+        round_no = int(ctx.state.controller_rounds.get(self.spec.controller, 1))
         return (
             prompt.rstrip()
             + "\n\nRunner discussion context:\n"
-            + f"round: {ctx.state.cycle}\n"
+            + f"round: {round_no}\n"
             + f"role: {self.spec.role}\n"
             + "history: "
             + json.dumps(history, ensure_ascii=False)
@@ -271,6 +300,7 @@ class DiscussionStage(BaseStage):
 PlanStage.spec_class = PlanStageSpec
 TaskStage.spec_class = TaskStageSpec
 HandoffStage.spec_class = HandoffStageSpec
+DiscussionControllerStage.spec_class = DiscussionControllerStageSpec
 DiscussionStage.spec_class = DiscussionStageSpec
 ReviewStage.spec_class = ReviewStageSpec
 AIValidatorStage.spec_class = AIValidatorStageSpec
@@ -278,6 +308,8 @@ AIValidatorStage.spec_class = AIValidatorStageSpec
 __all__ = [
     "AIValidatorStage",
     "AIValidatorStageSpec",
+    "DiscussionControllerStage",
+    "DiscussionControllerStageSpec",
     "DiscussionStage",
     "DiscussionStageSpec",
     "HandoffStage",
