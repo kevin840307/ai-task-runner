@@ -1,0 +1,41 @@
+stages:
+  participant_architecture:
+    type: discussion
+    role: architect
+    status: Architect 正在提出方案
+    session_key: discussion_architect
+    error_policy:
+      retries: -1
+
+  participant_critic:
+    type: discussion
+    role: critic
+    status: Critic 正在檢查風險
+    session_key: discussion_critic
+    error_policy:
+      retries: -1
+
+  moderator:
+    type: discussion
+    role: moderator
+    status: Moderator 正在整合討論
+    session_key: discussion_moderator
+    error_policy:
+      retries: -1
+
+  judge:
+    type: review
+    status: Judge 正在判斷是否結束討論
+    prompt: common/discussion_judge.md
+    readonly_safety: observe
+    max_rounds: 3
+    error_policy:
+      retries: -1
+    routes:
+      fail: participant_architecture
+
+flow:
+  - participant_architecture
+  - participant_critic
+  - moderator
+  - judge
