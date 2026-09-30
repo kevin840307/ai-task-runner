@@ -30,6 +30,7 @@ FIELD_CONTROLS = {
     "tolerate_restored_changes": "stageTolerateRestored",
     "timeout": "stageTimeout",
     "session_key": "stageSessionKey",
+    "session_policy": "stageSessionPolicy",
     "fresh_session_each_run": "stageFreshEachRun",
     "fresh_session_on_start": "stageFreshOnStart",
     "produces": "stageProduces",
