@@ -48,7 +48,7 @@ def _resolved_next(workflow: list[dict[str, Any]], index: int, result: StageResu
     definition = workflow[index]
     target = (
         resolve_handoff_target(definition, result)
-        if definition.get("type") == "handoff" and result.status == "pass"
+        if definition.get("type") in {"handoff", "discussion_controller"} and result.status == "pass"
         else resolve_stage_target(definition, result.status)
     )
     if target == "next":
@@ -62,12 +62,12 @@ def _draft_next(
     result: StageResult,
 ) -> tuple[str, str]:
     definition = draft["stages"][stage_name]
-    if definition.get("type") == "handoff" and result.status == "pass":
+    if definition.get("type") in {"handoff", "discussion_controller"} and result.status == "pass":
         target = resolve_handoff_target(
             {"name": stage_name, **definition},
             result,
         )
-        return target, "handoff"
+        return target, "dispatch" if definition.get("type") == "discussion_controller" else "handoff"
     route = resolve_stage_target(definition, result.status)
     if route != "next":
         return route, route
