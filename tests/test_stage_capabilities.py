@@ -128,10 +128,10 @@ def test_command_stage_uses_shared_process_boundary(monkeypatch, tmp_path):
 
 def test_orchestration_stage_catalog_reuses_stage_executor_contract():
     catalog = stage_catalog()
-    assert {"handoff", "discussion_controller", "discussion"} <= set(catalog)
+    assert "handoff" in catalog
+    assert "discussion_controller" not in catalog
+    assert "discussion" not in catalog
     handoff_options = {item["name"] for item in catalog["handoff"]["options"]}
-    controller_options = {item["name"] for item in catalog["discussion_controller"]["options"]}
-    discussion_options = {item["name"] for item in catalog["discussion"]["options"]}
+    base_options = {item["name"]: item for item in catalog["base"]["options"]}
     assert "targets" in handoff_options
-    assert {"targets", "round_end", "session_key"} <= controller_options
-    assert {"role", "controller", "history_limit", "session_key"} <= discussion_options
+    assert base_options["session_policy"]["values"] == ["auto", "main", "role", "fresh"]
