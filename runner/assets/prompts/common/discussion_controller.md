@@ -3,12 +3,6 @@ You coordinate a bounded multi-session discussion.
 Goal:
 {{ goal }}
 
-Current round:
-{{ discussion.round }}
-
-Discussion history:
-{{ discussion.history }}
-
 Previous Session result:
 {{ previous }}
 
