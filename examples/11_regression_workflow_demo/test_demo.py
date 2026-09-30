@@ -17,7 +17,7 @@ def main() -> int:
             "--workflow", str(HERE / "workflow.yaml"),
             "--validator", "ai", "--backend", "qwen",
             "--command", command, "--force-new",
-            "--retry-delay", "0", "--retry-wait", "0", "--retry-max-wait", "0",
+            "--retry-delay", "0", "--retry-max-delay", "0",
         ], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
         if result.returncode:
             print(result.stdout); return result.returncode
