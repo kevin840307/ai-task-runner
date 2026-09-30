@@ -30,13 +30,13 @@ Current product direction:
 
 CONTROLLER MODEL REFINEMENT (2026-09-30)
 ----------------------------------------
-[x] Dynamic Handoff uses one controller/handoff Stage as the only dynamic routing decision owner.
-[ ] Dynamic Final validation is an ordinary validator Stage; controller selects workers or final validator, and validator PASS -> END.
-[ ] Discussion / Group Chat uses one controller Stage as the only participant/moderator/judge scheduling decision owner.
-[ ] Discussion participants/moderator/judge remain ordinary Stages; controller owns bounded round/order/termination routing state only.
-[ ] Reuse the same controller/handoff Stage behavior for both families where possible; do not create a second scheduler abstraction.
-[ ] Update Graph Designer so controller Stage shows multiple controlled Stage edges in both Dynamic Handoff and Discussion.
-[ ] Add controller-loop runtime/resume/UI tests for both workflow families.
+[x] Keep Dynamic Handoff as pure dynamic routing: one Handoff Stage chooses exactly one next Stage from allowed targets.
+[ ] Dynamic Final validation remains an ordinary validator/review Stage; PASS -> END, FAIL -> Handoff.
+[ ] Add one thin Discussion Controller Stage; it orchestrates multiple participant Sessions but participants/moderator/judge remain ordinary Stages.
+[ ] Discussion Controller owns only bounded round/order/termination metadata and delegates actual work to ordinary Stages through the existing FlowEngine.
+[ ] Reuse Handoff target-selection behavior inside Discussion Controller where practical, but keep Dynamic Handoff free of discussion state.
+[ ] Graph Designer shows Dynamic Handoff as one-of-many routing and Discussion Controller as multi-session orchestration, both using normal Stage nodes/edges.
+[ ] Add controller-loop runtime/resume/UI tests for Discussion without changing Linear or Dynamic Handoff semantics.
 
 NEW WORK - MULTI-WORKFLOW FAMILIES (STARTED 2026-09-30)
 -------------------------------------------------------
