@@ -236,11 +236,22 @@ function uniqueProjects(projects) {
   return result;
 }
 function projectRuntimeSignature(projects) { return uniqueProjects(projects || []).map((p) => `${projectPathKey(p.path)}:${p.name || ""}:${p.runtime_status || "idle"}:${p.runtime_stage || ""}:${p.runtime_completed_count || 0}:${p.runtime_total || 0}:${p.exists !== false}`).join("|"); }
+function applySelectedRuntimeToProjectList(projects) {
+  if (!state.project || !state.runtime) return projects;
+  const current = projects.find((p) => sameProjectPath(p.path, state.project.path));
+  if (!current) return projects;
+  const runtime = state.runtime;
+  current.runtime_status = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+  current.runtime_stage = String(runtime.cli_status || runtime.stage || "");
+  current.runtime_completed_count = Number(runtime.completed_count || 0);
+  current.runtime_total = Number(runtime.total || 0);
+  return projects;
+}
 async function refreshProjectStatuses() {
   if (state.projectRefreshPromise) return state.projectRefreshPromise;
   state.projectRefreshPromise = (async () => {
     try {
-      const data = await api("/api/projects"), next = uniqueProjects(data.projects || []);
+      const data = await api("/api/projects"), next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []));
       applyProjectPollMeta(data);
       if (projectRuntimeSignature(next) === projectRuntimeSignature(state.projects)) return;
       state.projects = next;
