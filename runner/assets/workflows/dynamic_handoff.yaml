@@ -1,20 +1,63 @@
 stages:
   coordinator:
     type: handoff
-    status: AI 正在選擇下一個 Agent
+    label: Dynamic Coordinator
+    status: AI 正在動態選擇下一個專業角色
     targets:
+      - requirements_analyst
+      - solution_architect
       - implementer
+      - debugger
       - verifier
+      - risk_reviewer
       - final_validate
     error_policy:
       retries: -1
 
+  requirements_analyst:
+    type: base
+    label: Requirements Analyst
+    status: Requirements Analyst 正在釐清目標、限制與驗收條件
+    prompt: common/dynamic_worker.md
+    instructions: Identify goals, constraints, ambiguities, assumptions, and measurable acceptance criteria. Do not modify project files.
+    session_policy: main
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  solution_architect:
+    type: base
+    label: Solution Architect
+    status: Solution Architect 正在評估架構、邊界與方案
+    prompt: common/dynamic_worker.md
+    instructions: Evaluate architecture, interfaces, tradeoffs, maintainability, and the smallest viable design. Do not modify project files unless the Goal explicitly requires an architecture artifact.
+    session_policy: role
+    session_key: dynamic_solution_architect
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
   implementer:
     type: base
-    status: Implementation Agent 正在處理
+    label: Implementation Engineer
+    status: Implementation Engineer 正在進行實作
     prompt: common/dynamic_worker.md
-    instructions: Focus on implementation and concrete project changes.
+    instructions: Implement the smallest correct project changes that advance the Goal. Preserve valid existing work and leave concrete evidence.
+    session_policy: role
     session_key: dynamic_implementer
+    mode: write
+    track_changes: true
+    routes:
+      pass: coordinator
+
+  debugger:
+    type: base
+    label: Debugging Engineer
+    status: Debugging Engineer 正在定位與修正問題
+    prompt: common/dynamic_worker.md
+    instructions: Diagnose concrete failures from current evidence, isolate the root cause, and make only the minimal corrective changes needed.
+    session_policy: role
+    session_key: dynamic_debugger
     mode: write
     track_changes: true
     routes:
@@ -22,10 +65,22 @@ stages:
 
   verifier:
     type: base
-    status: Verification Agent 正在檢查
+    label: Verification Engineer
+    status: Verification Engineer 正在獨立檢查測試與證據
     prompt: common/dynamic_worker.md
-    instructions: Focus on tests, verification evidence, and finding remaining defects.
-    session_key: dynamic_verifier
+    instructions: Independently verify behavior, tests, build evidence, and remaining defects. Do not modify production/source files.
+    session_policy: fresh
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  risk_reviewer:
+    type: base
+    label: Risk & Quality Reviewer
+    status: Risk Reviewer 正在檢查可靠性、品質與失敗模式
+    prompt: common/dynamic_worker.md
+    instructions: Review correctness, reliability, security, maintainability, hidden coupling, edge cases, and operational failure modes. Report only material risks.
+    session_policy: fresh
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -33,8 +88,10 @@ stages:
   final_validate:
     type: ai_validator
     validator: ai
-    status: Final Validation 正在確認是否可以結束
+    label: Independent Final Validator
+    status: Final Validation 正在獨立確認是否可以結束
     instructions: Validate the overall Goal and concrete project evidence before completion.
+    session_policy: fresh
     readonly_safety: observe
     error_policy:
       retries: -1
@@ -44,6 +101,10 @@ stages:
 
 flow:
   - coordinator
+  - requirements_analyst
+  - solution_architect
   - implementer
+  - debugger
   - verifier
+  - risk_reviewer
   - final_validate
