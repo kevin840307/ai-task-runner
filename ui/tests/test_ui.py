@@ -422,6 +422,51 @@ class UIStateTests(unittest.TestCase):
         with patch.object(UIState, "_pid_alive", return_value=True):
             self.assertEqual(self.state.projects()[0]["runtime_status"], "running")
 
+    def test_projects_payload_does_not_replay_cached_runtime_status(self) -> None:
+        self.state.add_project(str(self.project))
+        runtime = self.project / ".ai-task-runner"
+        runtime.mkdir(parents=True, exist_ok=True)
+        self.write_json(runtime / "state.json", {
+            "run_id": "status-1",
+            "completed": False,
+            "stage": "execute",
+        })
+
+        first = self.state.projects_payload()
+        self.assertEqual(first["projects"][0]["runtime_status"], "stopped")
+
+        self.write_json(runtime / "state.json", {
+            "run_id": "status-1",
+            "completed": True,
+            "stage": "completed",
+        })
+        second = self.state.projects_payload()
+
+        self.assertEqual(second["projects"][0]["runtime_status"], "completed")
+
+    def test_old_launch_reservation_expires_even_if_child_pid_is_reused(self) -> None:
+        launch = self.project / ".ai-task-runner" / "ui" / "launching.json"
+        self.write_json(launch, {
+            "token": "old-reused",
+            "owner_pid": 1,
+            "child_pid": 24680,
+            "created_at": time.time() - 35,
+            "mode": "run",
+        })
+        with patch.object(UIState, "_pid_alive", return_value=True):
+            info = self.state.read_runtime(self.project)
+
+        self.assertFalse(info["running"])
+        self.assertFalse(info["launching"])
+        self.assertFalse(launch.exists())
+
+    def test_windows_pid_probe_failure_does_not_report_process_dead(self) -> None:
+        def fail(*args, **kwargs):
+            raise subprocess.TimeoutExpired(args[0] if args else "tasklist", 2)
+
+        with patch("ui.server.os.name", "nt"), patch("ui.server.subprocess.run", side_effect=fail):
+            self.assertTrue(UIState._pid_alive(12345))
+
     def test_project_payload_suggests_slower_polling_under_load(self) -> None:
         for index in range(20):
             project = self.root / f"load-{index:02d}"
