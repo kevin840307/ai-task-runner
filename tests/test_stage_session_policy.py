@@ -58,7 +58,6 @@ def test_role_session_policy_restores_and_persists_durable_stage_session(tmp_pat
         name="worker",
         prompt="unused",
         session_policy="role",
-        session_key="worker-client",
     ))
 
     client = stage._client(ctx)
@@ -82,7 +81,6 @@ def test_fresh_session_policy_clears_session_on_every_stage_invocation(tmp_path,
         name="worker",
         prompt="unused",
         session_policy="fresh",
-        session_key="fresh-worker",
     ))
 
     first = stage.run(ctx)
@@ -107,7 +105,6 @@ def test_role_session_reset_clears_only_that_durable_role(tmp_path, monkeypatch)
         name="worker",
         prompt="unused",
         session_policy="role",
-        session_key="worker-client",
     ))
 
     assert stage.reset_session(ctx) == "role-a"
@@ -119,14 +116,18 @@ def test_global_session_reset_clears_main_and_all_role_sessions(tmp_path):
     ctx.ai_client.session_id = "main-live"
     ctx.state.ai_session_id = "main-live"
     ctx.state.stage_sessions = {"worker": "role-a", "other": "role-b"}
-    ctx.scratch["worker-client"] = SimpleNamespace(session_id="role-a")
+    ctx.scratch["stage_session:worker"] = SimpleNamespace(session_id="role-a")
+    ctx.scratch["prompt_contracts"] = {
+        "worker": ("common/execution.md", "role-a")
+    }
 
     ctx.reset_sessions()
 
     assert ctx.ai_client.session_id == ""
-    assert ctx.scratch["worker-client"].session_id == ""
+    assert ctx.scratch["stage_session:worker"].session_id == ""
     assert ctx.state.ai_session_id == ""
     assert ctx.state.stage_sessions == {}
+    assert "prompt_contracts" not in ctx.scratch
 
 
 class NoopHooks:
@@ -169,7 +170,6 @@ def test_role_session_technical_failure_rotates_only_that_role_session(tmp_path,
         name="worker",
         prompt="unused",
         session_policy="role",
-        session_key="worker-client",
     ))
 
     result = StageExecutor(NoopHooks()).run(stage, ctx)
