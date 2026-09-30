@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo === Built-in mixed workflow ===
-python tool\workflow_dryrun.py runner\workflows\mixed.yaml --scenario dryrunexample\system_mixed_scenario.yaml
+python tool\workflow_dryrun.py runner\assets\workflows\mixed.yaml --scenario dryrunexample\system_mixed_scenario.yaml
 if errorlevel 1 exit /b %errorlevel%
 
 echo.
@@ -13,7 +13,7 @@ if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo === Built-in failure matrix ===
-python tool\workflow_dryrun.py runner\workflows\mixed.yaml --matrix
+python tool\workflow_dryrun.py runner\assets\workflows\mixed.yaml --matrix
 if errorlevel 1 exit /b %errorlevel%
 
 echo.
