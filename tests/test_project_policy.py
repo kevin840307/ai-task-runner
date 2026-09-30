@@ -95,7 +95,7 @@ def test_runner_child_process_blocks_git_writes_but_allows_read_only_git(
 
 
 def test_policy_supports_always_and_project_instructions(tmp_path: Path) -> None:
-    from runner.project.policy import instruction_text
+    from runner.workspace.policy import instruction_text
 
     (tmp_path / POLICY_FILENAME).write_text(
         "instructions:\n"
