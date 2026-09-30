@@ -76,8 +76,10 @@ def test_builder_prompt_describes_current_graph_and_prompt_contract():
     assert "prompts/<filename>.md" in text
     assert "assets/prompts/workflow/<workflow-name>/" in text
     assert "common/review.md" in text
-    for removed in ("restart_at", "max_attempts", "on_exhausted", "per-Stage retry"):
+    for removed in ("restart_at", "max_attempts", "on_exhausted"):
         assert removed in text
+    assert "error_policy.retries" in text
+    assert "ERROR is never a graph edge" in text
 
 
 def test_builder_runner_has_no_second_retry_runtime():
