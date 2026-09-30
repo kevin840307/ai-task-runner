@@ -213,3 +213,44 @@ def test_role_session_technical_failure_rotates_only_that_role_session(tmp_path,
         "worker": "role-after-recovery",
         "other": "other-role",
     }
+
+
+class RecoveringFreshStage(BaseStage):
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.calls = []
+        self.created = 0
+
+    def _run_once(self, ctx, previous, client):
+        if not client.session_id:
+            self.created += 1
+            client.session_id = f"fresh-session-{self.created}"
+        self.calls.append(client.session_id)
+        if len(self.calls) <= 2:
+            raise RunnerError(f"fresh failure {len(self.calls)}")
+        return StageResult(self.name, "pass", output="recovered")
+
+
+def test_fresh_policy_retries_same_invocation_before_rotating_session(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    ctx.config.stage_retries = -1
+
+    def fake_create(*args, session_id="", **kwargs):
+        return SimpleNamespace(session_id=session_id)
+
+    monkeypatch.setattr("runner.workflow.stages.base_stage.create_ai_client", fake_create)
+    stage = RecoveringFreshStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        session_policy="fresh",
+    ))
+
+    result = StageExecutor(NoopHooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == [
+        "fresh-session-1",
+        "fresh-session-1",
+        "fresh-session-2",
+    ]
+    assert ctx.state.stage_sessions == {}
