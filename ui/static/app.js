@@ -33,7 +33,7 @@ const state = {
   generateWorkflowDraft: null, generateWorkflowPromptIndex: 0, generateWorkflowReviewTab: "visual", generateWorkflowRequestText: "",
   generateWorkflowWorkspace: "", generateWorkflowWorkspacePattern: "",
   syntaxTimer: 0,
-  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
+  lastRuntimeSignature: "", runtimeLastChangedAt: 0, runtimeStartedAt: 0, runtimeStoppedAt: 0, lastErrorDetail: "", studioErrorDetail: "", errorDetailsModalText: "", validationDetail: "", validationSummary: "", runtimeRefreshPromise: null, runtimeRefreshProject: "", runtimeRefreshToken: 0, projectRefreshPromise: null, projectPollMs: 8000, studioGuardRefreshPromise: null,
   studioFileCache: new Map(), studioOpenToken: 0, studioCatalogKey: "", studioCatalogLoadedAt: 0, studioFilesRefreshPromise: null, studioFilesRefreshKey: "", studioCatalogLoading: false, projectSwitching: false, removingProjectPath: "", projectListLoading: false, projectListLoadingLabel: "", studioSaving: false, studioValidating: false,
   runLaunching: false,
 };
@@ -519,18 +519,19 @@ function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
   return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
 }
-async function refreshRuntime({ projectPath = state.project?.path || "" } = {}) {
+async function refreshRuntime({ projectPath = state.project?.path || "", force = false } = {}) {
   if (!projectPath) return;
   const projectKey = projectPathKey(projectPath);
-  if (state.runtimeRefreshPromise && state.runtimeRefreshProject === projectKey) return state.runtimeRefreshPromise;
+  if (!force && state.runtimeRefreshPromise && state.runtimeRefreshProject === projectKey) return state.runtimeRefreshPromise;
+  const token = ++state.runtimeRefreshToken;
   const request = (async () => {
     try {
       const runtime = await api(`/api/project/runtime?project=${encodeURIComponent(projectPath)}`);
-      if (!sameProjectPath(state.project?.path, projectPath)) return;
+      if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;
       state.runtime = runtime;
       const signature = runtimeRenderSignature(runtime);
       if (signature !== state.lastRuntimeSignature) { state.lastRuntimeSignature = signature; state.runtimeLastChangedAt = Date.now(); renderRuntime(runtime); }
-    } catch (error) { if (sameProjectPath(state.project?.path, projectPath)) setTextIfChanged($("errorText"), error.message); }
+    } catch (error) { if (token === state.runtimeRefreshToken && sameProjectPath(state.project?.path, projectPath)) setTextIfChanged($("errorText"), error.message); }
   })();
   state.runtimeRefreshPromise = request; state.runtimeRefreshProject = projectKey;
   try { return await request; }
@@ -581,7 +582,9 @@ function renderRunConfigurationLock() {
 
 function renderRuntime(runtime) {
   const startedAt = Number(runtime.started_at || 0);
-  if (runtime.running && startedAt) {
+  if (!runtime.running && !runtime.has_state && !runtime.resumable && !runtime.completed) {
+    state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0;
+  } else if (runtime.running && startedAt) {
     if (state.runtimeStartedAt !== startedAt) { state.runtimeStartedAt = startedAt; state.runtimeStoppedAt = 0; }
   } else if (!runtime.running && state.runtimeStartedAt && !state.runtimeStoppedAt) {
     state.runtimeStoppedAt = Date.now();
@@ -617,7 +620,21 @@ function renderRuntime(runtime) {
     followHistoryToBottom();
   } else removeLiveCard();
   const current = state.projects.find((p) => sameProjectPath(p.path, state.project?.path));
-  if (current) { const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle"; if (current.runtime_status !== nextStatus) { current.runtime_status = nextStatus; renderProjects(); } }
+  if (current) {
+    const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+    const nextStage = String(runtime.cli_status || runtime.stage || "");
+    const nextCompleted = Number(runtime.completed_count || 0);
+    const nextTotal = Number(runtime.total || 0);
+    const changed = current.runtime_status !== nextStatus
+      || current.runtime_stage !== nextStage
+      || Number(current.runtime_completed_count || 0) !== nextCompleted
+      || Number(current.runtime_total || 0) !== nextTotal;
+    current.runtime_status = nextStatus;
+    current.runtime_stage = nextStage;
+    current.runtime_completed_count = nextCompleted;
+    current.runtime_total = nextTotal;
+    if (changed) renderProjects();
+  }
   if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
