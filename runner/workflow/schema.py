@@ -56,7 +56,7 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(f"workflow stage {name} max_rounds must be a positive integer")
 
     targets = values.get("targets")
-    if stage_type == "handoff":
+    if stage_type in {"handoff", "discussion_controller"}:
         if not isinstance(targets, list) or not targets:
             raise RunnerError(f"workflow stage {name} handoff targets must be a non-empty array")
         if any(not isinstance(target, str) or not target.strip() for target in targets):
@@ -64,10 +64,30 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         if len(set(targets)) != len(targets):
             raise RunnerError(f"workflow stage {name} handoff targets must be unique")
 
+    if stage_type == "discussion_controller":
+        if max_rounds is None:
+            raise RunnerError(
+                f"workflow stage {name} discussion controller requires max_rounds"
+            )
+        round_end = values.get("round_end")
+        if not isinstance(round_end, str) or not round_end.strip():
+            raise RunnerError(
+                f"workflow stage {name} discussion controller round_end must be non-empty"
+            )
+        if round_end not in (targets or []):
+            raise RunnerError(
+                f"workflow stage {name} discussion controller round_end must be one of targets"
+            )
+
     if stage_type == "discussion":
         role = values.get("role", "participant")
         if not isinstance(role, str) or not role.strip():
             raise RunnerError(f"workflow stage {name} discussion role must be non-empty")
+        controller = values.get("controller")
+        if not isinstance(controller, str) or not controller.strip():
+            raise RunnerError(
+                f"workflow stage {name} discussion controller must be non-empty"
+            )
         history_limit = values.get("history_limit", 24)
         if (
             not isinstance(history_limit, int)
@@ -125,6 +145,7 @@ def _validate_routes(name: str, routes: Any) -> None:
 
 def validate_routes(workflow: list[dict[str, Any]]) -> None:
     names = {str(item["name"]) for item in workflow}
+    definitions = {str(item["name"]): item for item in workflow}
     for definition in workflow:
         for status, target in (definition.get("routes") or {}).items():
             if target not in {"next", "done", "stop"} and target not in names:
@@ -141,6 +162,18 @@ def validate_routes(workflow: list[dict[str, Any]]) -> None:
             if target == definition["name"]:
                 raise RunnerError(
                     f"workflow stage {definition['name']} cannot hand off to itself"
+                )
+        if definition.get("type") == "discussion":
+            controller = str(definition.get("controller") or "")
+            if controller not in definitions:
+                raise RunnerError(
+                    f"workflow stage {definition['name']} discussion controller "
+                    f"references unknown stage: {controller}"
+                )
+            if definitions[controller].get("type") != "discussion_controller":
+                raise RunnerError(
+                    f"workflow stage {definition['name']} controller must reference "
+                    "type: discussion_controller"
                 )
 
 
