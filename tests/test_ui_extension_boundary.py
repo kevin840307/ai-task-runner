@@ -290,7 +290,7 @@ def test_workflow_catalog_tool_is_json_process_boundary():
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert set(payload["stage_types"]) == {"ai_validator", "base", "command", "discussion", "discussion_controller", "handoff", "plan", "review", "task"}
+    assert set(payload["stage_types"]) == {"ai_validator", "base", "command", "handoff", "plan", "review", "task"}
     assert "command" in payload["stage_types"]
     assert payload["node_options"]["scope"]["values"] == ["task"]
     assert set(payload["node_options"]) == {
@@ -298,7 +298,6 @@ def test_workflow_catalog_tool_is_json_process_boundary():
         "label",
         "routes",
         "error_policy",
-        "max_rounds",
     }
 
 
