@@ -1338,8 +1338,6 @@ function renderStageEditorContent(cfg, item) {
 
     <div class="stage-section-head"><div><strong>Session & safety</strong><span>${escapeHtml(t("stage.session_desc", "Session isolation and file / change handling."))}</span></div></div>
     <div class="stage-switch-grid">
-      <span id="stageFreshOnStartRow">${switchRow("stageFreshOnStart", "Fresh session on start", t("stage.help.fresh_on_start", "Start this Stage in a new AI Session."), cfg.fresh_session_on_start, disabled)}</span>
-      <span id="stageFreshEachRunRow">${switchRow("stageFreshEachRun", "Fresh session each run", t("stage.help.fresh_each_run", "Use a new Session for every multi-run validation."), cfg.fresh_session_each_run, disabled)}</span>
       ${switchRow("stageTrackChanges", "Track changes", t("stage.help.track_changes", "Track project changes produced by this Stage."), cfg.track_changes, disabled)}
       ${switchRow("stageTolerateRestored", "Tolerate restored changes", t("stage.help.tolerate_restored", "Allow restored readonly changes without failing the Stage."), cfg.tolerate_restored_changes, disabled)}
       <span id="stageAllowProjectReadRow">${switchRow("stageAllowProjectRead", "Allow readonly file read", t("stage.help.allow_read", "For Plan, allow readonly inspection of any filesystem path readable by the current account, including paths outside the Current Project."), cfg.allow_project_read ?? ((cfg.type || "base") === "plan"), disabled)}</span>
@@ -1348,7 +1346,9 @@ function renderStageEditorContent(cfg, item) {
       <label class="designer-form-row stage-form-wide">${fieldLabel("Clean work paths", t("stage.help.clean_work", "Delete these relative paths under the Runner work directory before a Command / Validator run."))}<input id="stageCleanWork" class="designer-input" value="${escapeHtml((cfg.clean_work || []).join(", "))}" placeholder="validator-reports" ${disabled} /></label>
     </div>`;
 
-  $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); }); renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
+  $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); });
+  $("stageSessionPolicy")?.addEventListener("change", () => syncStageTypeUi(cfg));
+  renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
 }
 function hasAdvancedStageOverrides(cfg) { return ["run_state", "actor", "mode", "readonly_safety", "parser", "produces", "session_key", "session_policy", "instructions"].some((key) => cfg[key] !== undefined && cfg[key] !== ""); }
 function switchRow(id, title, hint, value, disabled) { return `<label class="designer-switch-row"><input id="${id}" type="checkbox" ${value ? "checked" : ""} ${disabled} /><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></span></label>`; }
@@ -1369,10 +1369,11 @@ function syncStageTypeUi(cfg) {
   const box = currentStageModal(); if (!box) return; const type = $("stageType")?.value || cfg.type || "base"; const promptAllowed = stageSupportsPrompt(type); const aiBacked = type !== "command";
   if ($("stagePromptSelectRow")) $("stagePromptSelectRow").hidden = !promptAllowed;
   const parserRow = $("stageParserRow"); if (parserRow) parserRow.hidden = !stageSupportsParser(type);
-  if ($("stageSessionKeyRow")) $("stageSessionKeyRow").hidden = !aiBacked;
+  const sessionPolicy = fieldValue("stageSessionPolicy") || String(cfg.session_policy || "auto");
+  if ($("stageSessionKeyRow")) $("stageSessionKeyRow").hidden = !aiBacked || sessionPolicy !== "auto";
   if ($("stageSessionPolicyRow")) $("stageSessionPolicyRow").hidden = !aiBacked;
   if ($("stageInstructionsRow")) $("stageInstructionsRow").hidden = !promptAllowed;
-  for (const id of ["stageStructuredRetriesRow", "stageStructuredFreshRetriesRow", "stageFreshOnStartRow", "stageFreshEachRunRow", "stageAllowProjectReadRow"]) if ($(id)) $(id).hidden = !aiBacked;
+  for (const id of ["stageStructuredRetriesRow", "stageStructuredFreshRetriesRow", "stageAllowProjectReadRow"]) if ($(id)) $(id).hidden = !aiBacked;
   if ($("stageCleanWorkRow")) $("stageCleanWorkRow").hidden = type !== "command";
   if ($("stageAllowProjectRead") && cfg.allow_project_read === undefined) $("stageAllowProjectRead").checked = type === "plan";
   const chip = box.querySelector(".designer-step-type"); if (chip) chip.textContent = type;
@@ -1409,10 +1410,9 @@ function changedFields(cfg) {
   };
   if (stageSupportsParser(type)) candidates.parser = valueOrNull("stageParser");
   if (aiBacked) {
-    candidates.session_key = valueOrNull("stageSessionKey");
-    candidates.session_policy = valueOrNull("stageSessionPolicy") || "auto";
-    candidates.fresh_session_on_start = checked("stageFreshOnStart");
-    candidates.fresh_session_each_run = checked("stageFreshEachRun");
+    const sessionPolicy = valueOrNull("stageSessionPolicy") || "auto";
+    candidates.session_policy = sessionPolicy;
+    candidates.session_key = sessionPolicy === "auto" ? valueOrNull("stageSessionKey") : null;
     candidates.allow_project_read = checked("stageAllowProjectRead");
     candidates.structured_retries = numberOrNull("stageStructuredRetries");
     candidates.structured_fresh_retries = numberOrNull("stageStructuredFreshRetries");
@@ -1433,8 +1433,7 @@ function changedFields(cfg) {
   if (type === "ai_validator") candidates.validator = valueOrNull("stageValidator") || "ai";
 
   const booleanKeys = new Set([
-    "fresh_session_on_start", "fresh_session_each_run", "track_changes",
-    "tolerate_restored_changes", "allow_project_read",
+    "track_changes", "tolerate_restored_changes", "allow_project_read",
   ]);
   const result = {};
   for (const [key, value] of Object.entries(candidates)) {
@@ -1450,9 +1449,14 @@ function changedFields(cfg) {
   }
   if (type !== "plan" && cfg.type === "plan" && cfg.min_tasks !== undefined) result.min_tasks = null;
   if (type !== "ai_validator" && cfg.type === "ai_validator" && cfg.validator !== undefined) result.validator = null;
+  if (aiBacked) {
+    for (const key of ["fresh_session_each_run", "fresh_session_on_start"]) {
+      if (cfg[key] !== undefined) result[key] = null;
+    }
+  }
   if (!aiBacked && cfg.type !== "command") {
     for (const key of [
-      "prompt", "continuation_prompt", "instructions", "session_key", "parser",
+      "prompt", "continuation_prompt", "instructions", "session_key", "session_policy", "parser",
       "structured_retries", "structured_fresh_retries", "fresh_session_each_run",
       "fresh_session_on_start", "allow_project_read", "runs", "required_passes",
     ]) if (cfg[key] !== undefined) result[key] = null;
