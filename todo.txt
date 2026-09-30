@@ -1,327 +1,269 @@
 AI Task Runner - Handoff TODO
-=============================
-Updated: 2026-09-30
+==============================
+
+Last updated: 2026-09-30
 Branch: minimal-closed-loop-runtime
+Checkpoint head: 87a56c64a9b9be2b2073a86b5db25ff5c6bdabd1
 
-這份檔案是給下一個對話/Agent 接手用的「目前狀態 + 下一步」，不要再依照舊版 todo 重建已刪架構。
+PURPOSE
+-------
+This file is the handoff entry point for the next ChatGPT conversation.
+Read this file first, then `future.txt`, then `architecture.md`.
+Do not restart the refactor from old assumptions.
 
+Current product direction:
+- one small closed-loop runtime
+- Stage is the only execution unit
+- Workflow routing is PASS / FAIL / ERROR result edges
+- StageExecutor owns technical retry / Same Session / Fresh Session / timeout / transient API recovery
+- FlowEngine owns semantic navigation only
+- UI / CLI / API / YAML List use the same RunRequest/runtime
+- future UI families:
+  1. Linear Workflow with Rollback / Loop (current)
+  2. Dynamic Handoff (future)
+  3. Discussion / Group Chat (future)
+- Chat entry remains: choose Workflow/Profile -> enter prompt -> Run
+- do NOT add a separate execution-mode selector
 
-1. 最終目標
-===========
-
-用最少程式碼完成可 24H 無人值守的閉環 Runner：
-
-UI / CLI / API / YAML List
-            |
-         RunRequest
-            |
-     WorkflowRunner
-            |
-        FlowEngine
-       /         \
-StageExecutor   StateStore
-      |
-    Stage
-
-核心原則：
-- Stage 是唯一執行單位。
-- Workflow 只定義 Stage nodes + PASS/FAIL/ERROR result edges。
-- rollback / loop = edge 回到前一個 Stage。
-- Stage 不處理 retry / recover / session rotation / routing。
-- StageExecutor 統一處理 technical retry、Same Session、Fresh Session、timeout、API transient。
-- stage_retries=-1 = technical failure 可無限重試。
-- API/服務 transient retry 使用「秒」為單位 delay/backoff。
-- FlowEngine 只處理 semantic graph navigation。
-- StateStore 只保存 Resume 必要 durable state。
-- 不建立第二套 Runner / Pipeline / Recovery framework。
-
-
-2. 目前真實 package layout
-=========================
-
+CURRENT PACKAGE SHAPE
+---------------------
 runner/
-  agent/       model client + Qwen/OpenCode backend adapters
-  assets/
-    workflows/ editable Workflow YAML
-    prompts/
-      common/   planning/execution/review/validator/rules/grill
-      ralphy/   Ralphy prompts
-      workflow/ workflow-generation prompts
-  config/      runtime defaults + RuntimeConfig
-  plugins/     extension discovery + runtime hooks/policies
-  runtime/     state/events/process/supervisor
-  workflow/    loader/schema/registry/results/FlowEngine/Stages
-  api.py       public RunRequest API
-  bootstrap.py runtime scope + plugin bootstrap
-  prompting.py prompt rendering/context/immutable protocols
-  resources.py resource hash/write/freeze/snapshot
-  script.py    YAML List adapter
-  utils.py     truly cross-domain filesystem/log/text helpers
-  workspace.py project/workspace policy
-  workflow_runner.py one-run orchestration entry
+  agent/       model client + backend adapters
+  assets/      Workflow / categorized Prompt assets
+  config/      runtime configuration
+  plugins/     extension registration + runtime hooks
+  runtime/     durable/process reliability
+  workflow/    graph loading/schema/result routing + Stage implementations
+  api.py
+  bootstrap.py
+  prompting.py
+  resources.py
+  script.py
+  utils.py
+  workflow_runner.py
+  workspace.py
 
-目前不要為了少 folder 硬合併：
-- agent/
-- workflow/
-- runtime/
-- plugins/
-- assets/
-- config/
+Do NOT merge the main domain folders further just to reduce folder count.
+The current folder review conclusion is:
+- keep agent/
+- keep workflow/
+- keep runtime/
+- keep plugins/
+- keep assets/
+- keep config/
 
-已評估：
-- utils.py 被多個 domain 共用，保留合理。
-- resources.py 是 durable resource/snapshot owner，保留合理。
-- bootstrap.py 雖名稱抽象，但目前被 agent/process/plugins 共用；除非能實際刪碼，先不要搬。
-- 不再做「為了漂亮而拆/併」。
+Top-level `prompting.py / resources.py / utils.py / workspace.py / bootstrap.py`
+currently have real cross-domain or entry-point responsibilities. Do not move them
+unless a concrete ownership improvement is proven.
 
+REMOVED CONCEPTS / PATHS - DO NOT RESTORE
+-----------------------------------------
+Do not add compatibility shims for these old paths/concepts:
+- runner/workflows/
+- runner/prompts/
+- runner/ai/
+- runner/backends/
+- runner/project/
+- runner/utils/ package
+- TaskRunner/Pipeline alternate runtime
+- execution_mode / separate mode Runner hierarchy
+- repair Stage as runtime concept
+- recover / restart_at / repeat / max_attempts / on_exhausted graph controls
+- hidden Plan Task/Review nodes
+- per-Stage technical retry policy
+- System/Custom asset split
+- generic Folder picker UI for asset grouping
 
-3. Asset contract
-=================
+Current Prompt identity is category-relative:
+- common/<name>.md
+- ralphy/<name>.md
+- workflow/<workflow-name>/<name>.md for generated Workflow-owned Prompts
 
-Global：
+Current editable asset roots:
+Global:
+  runner/assets/workflows/*.yaml
+  runner/assets/prompts/<category>/*.md
 
-runner/assets/
-  workflows/
-    *.yaml
-  prompts/
-    common/*.md
-    ralphy/*.md
-    workflow/*.md
+Project:
+  <project>/.ai-task-runner/assets/workflows/*.yaml
+  <project>/.ai-task-runner/assets/prompts/<category>/*.md
 
-Project-local：
+WHAT WAS JUST FIXED
+-------------------
+The large migration regression has mostly been closed.
 
-<project>/.ai-task-runner/assets/
-  workflows/
-    *.yaml
-  prompts/
-    <category>/*.md
+CI failure count on both Ubuntu/Windows was reduced:
+- first post-refactor CI: 75 failed / 692 passed
+- next CI: 14 failed / 753 passed / 1 skipped
+- latest completed Ubuntu CI before the final two fixes:
+  2 failed / 722 passed / 1 skipped
 
-Prompt identity 使用 category-relative key：
-- common/review.md
-- common/execution.md
-- ralphy/ralphy.md
+Root causes already fixed:
+- Dry Run stale import from deleted `runner.workflow.reducers`
+  -> now uses `runner.workflow.results`
+- Stage registry stale import from deleted `runner.workflow.lifecycle`
+  -> now uses `runner.workflow.results`
+- BaseStage stale parser import from deleted `runner.workflow.utils`
+  -> now uses `runner.workflow.results`
+- tests still importing deleted workspace/project packages
+  -> now use `runner.workspace`
+- Example 11 stale retry CLI flags
+  -> now uses shared retry CLI
+- Dry Run now reports validator placement features required by live preflight
+- UI static tests now protect the new minimal node/edge contract instead of old Flow overrides
+- obsolete recovery/restart/max_attempts UI i18n keys were removed
+- AI Validator static contract now points to `workflow/stages/core.py`
+- Project Workflow Builder publish helper test now expects the asset package root
+- regression demo mock now understands `RUNNER_SHARED_STAGE_CONTROL` and structured Review feedback
+- `future.txt` explicitly lists the three UI workflow families
 
-未來可直接新增：
-- regression/
-- security/
-- release/
-- 其他 domain
+LATEST TWO FAILURES AND FIXES
+-----------------------------
+The latest completed Ubuntu CI (#571, run 36664071076) had only two failures:
 
-不要恢復 System / Custom 分類。
+1. `tests/test_examples.py::test_regression_workflow_demo_mock_contract`
+   - Runtime/demo completed.
+   - Remaining failure was an over-specific assertion requiring every later Review
+     transport call to expose `--resume`.
+   - Fixed at commit:
+     `1f11588aab8f1d0e131ad836954a9e24f209ddbf`
+   - Test now validates the real contract:
+     shared Review session identity + at least one continuation/resume call,
+     without binding Workflow semantics to a backend transport flag.
 
-Workflow 保持 workflows/*.yaml 平面。
-Prompt 可以有 category subfolder。
+2. `ui/tests/test_static_contract.py::ThemeContractTests::test_descriptive_i18n_matches_current_stage_contract`
+   - Test referenced nonexistent `stage.routes_desc`.
+   - Fixed to validate current `stage.help.route_fail` / `stage.help.route_error`.
+   - Fixed at commit:
+     `87a56c64a9b9be2b2073a86b5db25ff5c6bdabd1`
 
+IMPORTANT:
+A fresh CI result for head `87a56c64...` still needs to be checked.
+Do not assume Gate 1 is green until both Ubuntu and Windows complete successfully.
 
-4. 已完成的大瘦身
-================
+START HERE IN THE NEXT CONVERSATION
+-----------------------------------
+1. Check branch head and CI for:
+   `minimal-closed-loop-runtime`
+   expected handoff head:
+   `87a56c64a9b9be2b2073a86b5db25ff5c6bdabd1`
 
-[DONE] ai/ + backends/ 合併成 agent/
-[DONE] project/ 收斂成 workspace.py
-[DONE] script_loader + script_runner 收斂成 script.py
-[DONE] 舊 TaskRunner / Pipeline / LinearRouting / SemanticRouting compatibility runtime 刪除
-[DONE] recover / restart_at / repeat / max_attempts / on_exhausted runtime fields 刪除
-[DONE] repair Stage runtime concept 刪除
-[DONE] hidden Plan Task/Review nodes 刪除
-[DONE] plan_only mode 刪除
-[DONE] per-Stage retry policy 刪除
-[DONE] Stage technical retry 集中 StageExecutor
-[DONE] stage_retries=-1 支援 unlimited technical retry
-[DONE] Same Session -> Fresh Session rotation 共用化
-[DONE] Workflow/Prompt 舊 runner/workflows 與 System/Custom paths 刪除
-[DONE] Prompt 分類資產建立 common / ralphy / workflow
-[DONE] Workflow Studio 改為 Global / Project editable assets
-[DONE] Prompt Studio 支援 recursive categorized prompts
-[DONE] Prompt reference 使用相對 key
-[DONE] Workflow Builder 外層 duplicate retry layer 刪除
-[DONE] Workflow Builder publish 改成 assets package
-[DONE] README / architecture 已更新為最小 closed-loop runtime
-[DONE] future.txt 已改成只列剩餘 gates
+2. If CI is green on BOTH Ubuntu and Windows:
+   - mark Gate 1 complete in this file
+   - do NOT keep refactoring folders
+   - move directly to Gate 3 real-Qwen validation
 
+3. If CI still fails:
+   - inspect only the new failure names/logs
+   - fix current owners/tests
+   - do NOT restore deleted modules or compatibility shims
+   - prefer one root-cause fix over per-test patches
 
-5. 現在要從哪裡開始
-===================
+4. After CI green, run real-Qwen reliability in this order:
+   a. built-in file/ai/mixed topology + prompt contract probes
+   b. Review FAIL -> configured Execute closure
+   c. Validator FAIL -> configured target closure
+   d. HTTP 429 / 502 / 503 transient recovery
+   e. disconnect / expired-session -> Fresh Session recovery
+   f. process restart / detached UI resume
+   g. YAML List multi-item + resume
+   h. custom Stage / custom Task Producer
+   i. complete closed-loop closure
 
-下一個接手對話請從 Gate 1 開始，不要先做 Dynamic/Discussion。
+5. Only after the real-Qwen probes pass:
+   - run high-density soak
+   - then full 24H Windows unattended soak
+
+CURRENT GATES
+=============
 
 Gate 1 - Repository contract / CI
 ---------------------------------
-[IN PROGRESS] 1. 清除所有 stale production/test references：
-- 舊 runner/workflows
-- 舊 runner/prompts/stages
-- 舊 runner/ai
-- 舊 runner/backends
-- 舊 runner/project
-- 舊 runner/utils package
-- execution_mode / max_cycles / max_attempts 等已刪欄位
+[x] old runner/workflows / prompts / ai / backends / project / utils package paths removed
+[x] stale production imports found so far removed instead of shimmed
+[x] categorized Prompt key/reference support wired into Studio
+[x] Builder publishes generated Prompts under workflow/<workflow-name>/
+[x] UI static tests migrated away from old Flow overrides/recovery controls
+[x] Dry Run uses production loader + FlowEngine and current result owner
+[x] CLI/API/runtime tests recovered from migration failures
+[ ] fresh Ubuntu CI PASS on current head
+[ ] fresh Windows CI PASS on current head
 
-[IN PROGRESS] 2. Prompt categorized key contract：
-- common/<name>.md
-- ralphy/<name>.md
-- workflow/<name>.md
-- Studio create/rename/duplicate/import/reference/usages 都必須保留完整 relative key
-- 不可只用 basename，避免 common/review.md 與未來 security/review.md 衝突
-
-[IN PROGRESS] 3. n8n Studio round-trip：
-YAML -> Graph -> edit Stage/result edge -> YAML -> same graph
-
-[IN PROGRESS] 4. CLI / API / YAML List：
-全部只能是 RunRequest adapter，使用同一 WorkflowRunner/FlowEngine/StageExecutor/StateStore。
-
-[IN PROGRESS] 5. Windows CI + Ubuntu CI。
-目前 2026-09-30 最新一輪 CI 已 Compile PASS，pytest 執行中。
-接手時先看 GitHub Actions 最新 run，不要直接假設 PASS/FAIL。
+Gate 1 completion rule:
+BOTH operating systems must pass full pytest + compile on the same/current head.
 
 Gate 2 - Deterministic unattended reliability
 ---------------------------------------------
-[DONE] StageExecutor technical retry owner
-[DONE] unlimited stage_retries=-1
-[DONE] Same Session -> Fresh Session rotation
-[DONE] Custom Stage 不需要 retry/recovery code
-[DONE] custom produces: tasks
-
-[IN PROGRESS]
-- 429/502/503/disconnect seconds-based backoff
-- PASS/FAIL/ERROR result-edge closure
-- kill/resume semantic equivalence
-- YAML List multi-item + restart/resume
-- active/resumed Workflow/Prompt frozen resources
-- no unbounded log/state/history growth
+[x] Stage technical retry centralized in StageExecutor
+[x] stage_retries=-1 = unlimited technical retry
+[x] Same Session -> Fresh Session rotation centralized
+[x] semantic FAIL is result-edge routing, not technical retry
+[x] custom Stage requires no retry/recovery implementation
+[x] custom produces: tasks uses the same graph
+[x] deterministic Dry Run matrix exists
+[x] validator placement observability restored in Dry Run
+[ ] re-confirm kill/resume semantic equivalence after current refactor if CI exposes regressions
+[ ] re-confirm YAML List multi-item restart/resume in live gate
 
 Gate 3 - Real backend proof
 ---------------------------
-[NEXT]
-- real-Qwen built-in file/ai/mixed
-- Review FAIL -> Execute
-- Validator FAIL -> configured target
-- HTTP 429/502/503/disconnect
-- expired session -> Fresh Session
-- process restart / detached UI resume
-- custom Stage / custom Task Producer
+NEXT AFTER CI GREEN:
+[ ] real-Qwen built-in file topology
+[ ] real-Qwen built-in ai topology
+[ ] real-Qwen built-in mixed topology
+[ ] Review FAIL -> Execute -> closure
+[ ] Validator FAIL -> configured target -> closure
+[ ] HTTP 429 retry
+[ ] HTTP 502 retry
+[ ] HTTP 503 retry
+[ ] disconnect recovery
+[ ] expired session -> Fresh Session
+[ ] process restart / detached UI resume
+[ ] YAML List multi-item resume
+[ ] custom Stage / custom Task Producer
+[ ] complete closed-loop probe
 
 Gate 4 - 24H acceptance
 -----------------------
-[NEXT]
-1. high-density soak
-2. full Windows 24H unattended soak
-3. verify no stuck owner lock
-4. verify no orphan process
-5. verify no unbounded state/log/history
-6. verify active/resume frozen assets
-7. final README/architecture/DevFollow sync
-8. regenerate project.bundle.txt
+[ ] high-density soak
+[ ] full 24H Windows unattended soak
+[ ] no stuck ownership lock
+[ ] no orphan worker/process after stop/crash/resume
+[ ] no unbounded state/log/history growth
+[ ] frozen Workflow/Prompt resources remain stable across Resume
+[ ] final documentation sync
+[ ] regenerate project.bundle.txt only after the gates stabilize
 
+DO NOT START YET
+----------------
+These are future work, not current Linear blockers:
+- Dynamic Handoff implementation
+- Discussion / Group Chat implementation
+- generic DAG/parallel runtime
+- RoutingStrategy hierarchy reintroduction
+- large RunState class hierarchy
+- multi-session registry abstraction
+- generic AgentMessage/Handoff framework
 
-6. Folder 合併決策
-=================
-
-目前不建議再硬合併 major folders。
-
-KEEP:
-- agent/：AI client/session/provider adapter
-- workflow/：graph + Stage semantics
-- runtime/：durable/process reliability
-- plugins/：extension/hook boundary
-- assets/：editable assets
-- config/：RuntimeConfig/defaults
-
-只有符合以下三條才再合併檔案：
-1. 只有一個明確 owner；
-2. 主要只是薄 wrapper/helper；
-3. 合併後能減少 navigation，且不會產生 mixed-responsibility 大檔。
-
-禁止用「folder 越少越好」作為重構理由。
-
-
-7. 不可加回的舊設計
-==================
-
-DO NOT RESTORE:
-- RoutingStrategy hierarchy（目前 Linear 不需要）
-- execution_mode runtime dispatch
-- TaskRunner compatibility runtime
-- Pipeline compatibility runtime
-- LinearRouting / SemanticRoutingPolicy runtime hierarchy
-- recover object
-- repair Stage
-- restart_at
-- repeat
-- max_attempts
-- on_exhausted
-- fresh_after_same_failures
-- replan StageResult
-- hidden Plan Task/Review nodes
-- plan_only
-- per-Stage retry fields
-- System/Custom Workflow trees
-- duplicate Prompt copies
-- 第二套 Dry Run routing engine
-- Workflow Builder 外層 retry Runner
-
-
-8. Future - 現在不要做
-=====================
-
-UI 最終支援三種 family：
-1. Linear Workflow with Rollback / Loop   <- current
-2. Dynamic Handoff                       <- future
-3. Discussion / Group Chat               <- future
-
-共同產品入口永遠：
-Choose Workflow/Profile -> Prompt -> Run
-
-未來 Dynamic/Discussion 必須重用：
+When Dynamic Handoff is actually started, reuse:
+- WorkflowRunner
 - Stage
 - StageExecutor
 - StateStore
-- Plugin boundary
-- Asset layout
+- plugins
+- assets
 - Graph Designer
 
-只有真的出現第二種 scheduling semantics 時，才抽最小 scheduler state。
-不要現在先建立 UniversalAgent / GenericGraph / 多套 Orchestrator。
+Add only the smallest scheduler/handoff state required by a real use case.
 
-
-9. 完成定義
-===========
-
-這次大重構只有在以下全部成立才算完成：
-
-- 新增 Stage 只需 Stage work/result code。
-- Stage 不含 retry/recover/session/routing。
-- rollback/loop 只由 result edge 表示。
-- API/service transient 可 stage_retries=-1 無限重試，且使用秒數 delay/backoff。
-- Prompt categorized key 不衝突。
-- UI/CLI/API/YAML List 共用同一 runtime。
-- Dry Run 共用 production FlowEngine。
-- Windows CI PASS。
-- Ubuntu CI PASS。
-- real-Qwen reliability probes PASS。
-- 24H soak PASS。
-- 無 stuck state / orphan process / unbounded growth。
-- README / architecture / DevFollow / future.txt / todo.txt 與實際 code 一致。
-
-
-10. 接手操作順序
-===============
-
-1. 讀：todo.txt
-2. 讀：future.txt
-3. 讀：architecture.md
-4. 看 branch HEAD：minimal-closed-loop-runtime
-5. 看最新 GitHub Actions CI
-6. 若 CI FAIL：只修真實 failure，不恢復 legacy compatibility
-7. 跑/確認 categorized Prompt + Studio round-trip contract
-8. 完成 Gate 1
-9. 再做 deterministic reliability Gate 2
-10. 再跑 real-Qwen Gate 3
-11. 最後才跑 24H Gate 4
-
-核心閱讀順序：
-1. runner/workflow_runner.py
-2. runner/workflow/flow_engine.py
-3. runner/workflow/stages/executor.py
-4. runner/runtime/run_state.py
-
-一句話：
-Stage 做事；StageExecutor 讓 Stage 穩定；FlowEngine 決定下一步；StateStore 讓進度可 Resume。
+DONE DEFINITION FOR THIS REFACTOR
+---------------------------------
+The current Linear refactor is complete only when:
+- fresh Windows + Ubuntu CI pass
+- real-Qwen topology/rollback/API/restart probes pass
+- 24H soak passes
+- no old runtime/asset compatibility path is restored
+- UI/CLI/API/YAML List all execute the same runtime
+- Prompt/Workflow structured asset layout remains stable
+- adding a Stage requires only Stage work/result behavior, not retry/recover/session code
+- rollback/loop remains a result edge
