@@ -164,21 +164,20 @@ class FlowEngine:
         state = self.context.state
         round_no = int(state.controller_rounds.get(name, 1))
         round_end = str(definition.get("round_end") or "")
-        if previous is not None and previous.stage == round_end and previous.status == "fail":
-            round_no += 1
-        changed = state.controller_rounds.get(name) != round_no
-        state.controller_rounds[name] = round_no
         limit = int(definition["max_rounds"])
-        if changed:
+        if previous is not None and previous.stage == round_end and previous.status == "fail":
+            if round_no >= limit:
+                self.context.set_stage(
+                    "max_rounds_exhausted",
+                    f"{name} round limit {limit} reached",
+                )
+                self.context.save_state()
+                return True
+            round_no += 1
+        if state.controller_rounds.get(name) != round_no:
+            state.controller_rounds[name] = round_no
             self.context.save_state()
-        if round_no <= limit:
-            return False
-        self.context.set_stage(
-            "max_rounds_exhausted",
-            f"{name} round limit {limit} reached",
-        )
-        self.context.save_state()
-        return True
+        return False
 
     def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
