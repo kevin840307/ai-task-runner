@@ -28,6 +28,8 @@ type Stage = Record<string, unknown> & {
   scope?: string;
   routes?: Record<string, string>;
   error_policy?: { retries: number };
+  targets?: string[];
+  max_rounds?: number;
 };
 
 type Visual = {
@@ -126,6 +128,7 @@ function TerminalNode({ data }: NodeProps<Node<StudioNodeData>>) {
 function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const s = data.stage!;
   const title = String(s.label || s.name);
+  const handoff = s.type === "handoff";
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
@@ -136,10 +139,14 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-handles">
-        <span>PASS</span><span>FAIL</span>
+        {handoff ? <span>HANDOFF</span> : <><span>PASS</span><span>FAIL</span></>}
       </div>
-      <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "34%" }} />
-      <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "66%" }} />
+      {handoff ? (
+        <Handle className="pass handoff" type="source" position={Position.Bottom} id="handoff" style={{ left: "50%" }} />
+      ) : <>
+        <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "34%" }} />
+        <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "66%" }} />
+      </>}
     </div>
   );
 }
@@ -163,6 +170,8 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
   task: { title: "Execute", description: "執行目前 Task" },
   review: { title: "Review", description: "檢查完成度並回 PASS / FAIL" },
   ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
+  handoff: { title: "Handoff", description: "動態選擇下一個 Agent" },
+  discussion: { title: "Discussion", description: "群聊參與者 / Moderator" },
   command: { title: "Command", description: "執行外部命令或驗證器" },
   base: { title: "AI Stage", description: "通用 AI Stage" },
 };
@@ -170,6 +179,7 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
 const PALETTE_SECTIONS = [
   { title: "建立與執行", types: ["plan", "task", "base"], icon: "✦" },
   { title: "檢查與驗證", types: ["review", "ai_validator"], icon: "✓" },
+  { title: "協作", types: ["handoff", "discussion"], icon: "↔" },
   { title: "工具", types: ["command"], icon: "›" },
 ];
 
@@ -292,6 +302,21 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     if (!s) return;
     const routes = (s.routes || {}) as Record<string, string>;
     const next = visual.flow[index + 1];
+    if (s.type === "handoff") {
+      (s.targets || []).forEach((target) => {
+        if (!stageByName(visual, target)) return;
+        edges.push({
+          id: `${name}:handoff:${target}`,
+          source: name,
+          sourceHandle: "handoff",
+          target,
+          className: "result handoff",
+          markerEnd: { type: MarkerType.ArrowClosed },
+          data: { status: "handoff", explicit: true, terminal: target },
+        });
+      });
+      return;
+    }
     const passTarget = routes.pass || (next ? "next" : "done");
     const resolvedPass = passTarget === "next" ? (next || END) : passTarget === "done" || passTarget === "stop" ? END : passTarget;
     edges.push({
@@ -484,7 +509,7 @@ function App() {
     if (!draft || !catalog) return [];
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
-  const parameterOptions = options.filter((o) => !["name", "type", "status", "label", "scope", "routes"].includes(o.name));
+  const parameterOptions = options.filter((o) => !["name", "type", "status", "label", "scope", "routes", "targets"].includes(o.name));
   const parameterGroups = PARAMETER_SECTIONS.map((section) => ({
     ...section,
     options: parameterOptions.filter((option) => section.id === "advanced"
@@ -585,9 +610,10 @@ function App() {
       setDirtyGraph(true);
       return;
     }
-    if (connection.source === END || connection.target === START || !["pass", "fail"].includes(status)) return;
+    if (connection.source === END || connection.target === START || !["pass", "fail", "handoff"].includes(status)) return;
+    if (status === "handoff" && connection.target === END) return;
     let nextFlow = visual.flow;
-    if (status === "pass" && connection.target !== END && !visual.flow.includes(connection.target)) {
+    if ((status === "pass" || status === "handoff") && connection.target !== END && !visual.flow.includes(connection.target)) {
       const sourceIndex = visual.flow.indexOf(connection.source);
       const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : visual.flow.length;
       nextFlow = [...visual.flow];
@@ -599,6 +625,10 @@ function App() {
       const index = visual.flow.indexOf(stage.name);
       const nextName = visual.flow[index + 1];
       let target = connection.target!;
+      if (status === "handoff") {
+        const targets = Array.from(new Set([...(stage.targets || []), target]));
+        return { ...stage, targets };
+      }
       if (target === END) target = status === "pass" ? "done" : "stop";
       if (status === "pass" && target === nextName) delete routes.pass;
       else routes[status] = target;
@@ -620,6 +650,9 @@ function App() {
       if (!status || !edge.data?.explicit) continue;
       stages = stages.map((s) => {
         if (s.name !== edge.source) return s;
+        if (status === "handoff") {
+          return { ...s, targets: (s.targets || []).filter((target) => target !== edge.target) };
+        }
         const routes = { ...(s.routes || {}) };
         delete routes[status];
         return { ...s, routes };
@@ -701,7 +734,9 @@ function App() {
 
   async function deleteStage() {
     if (!visual || !draft) return;
-    if (visual.stages.some((stage) => stage.name !== draft.name && Object.values(stage.routes || {}).includes(draft.name))) {
+    if (visual.stages.some((stage) => stage.name !== draft.name && (
+      Object.values(stage.routes || {}).includes(draft.name) || (stage.targets || []).includes(draft.name)
+    ))) {
       setMessage(`請先移除指向 ${draft.name} 的結果連線。`);
       return;
     }
@@ -915,6 +950,21 @@ function App() {
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
                 <p>ERROR 只依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。重試用盡會記錄錯誤並停在目前 Stage。</p>
+                {visual.stages.some((stage) => stage.type === "discussion") && draft.type === "review" && <label className="route-policy-field">
+                  <span>最多討論輪數</span><input type="number" min={1}
+                    value={draft.max_rounds ?? ""}
+                    placeholder="不限制"
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (raw === "") {
+                        const { max_rounds: _removed, ...rest } = draft;
+                        editDraft(rest);
+                        return;
+                      }
+                      const maxRounds = Number(raw);
+                      if (Number.isInteger(maxRounds) && maxRounds > 0) editDraft({ ...draft, max_rounds: maxRounds });
+                    }} />
+                </label>}
                 <label className="route-policy-field"><span>ERROR 重試次數</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
                   onChange={(event) => {
@@ -929,7 +979,11 @@ function App() {
                     }
                   }} /></label>
                 <div className="route-section-title">從這個積木出去</div>
-                {(["pass", "fail"] as const).map((status) => {
+                {draft.type === "handoff" ? edges.filter((edge) => edge.source === draft.name && edge.data?.status === "handoff").map((edge) =>
+                  <div className="route-row" key={edge.id}><span className="route-dot pass" />
+                    <strong>HANDOFF</strong><span>{edge.target}</span>
+                  </div>
+                ) : (["pass", "fail"] as const).map((status) => {
                   const edge = edges.find((item) => item.source === draft.name && item.data?.status === status);
                   const terminal = String(edge?.data?.terminal || "");
                   const target = edge?.target === END
