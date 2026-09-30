@@ -168,6 +168,8 @@ class MockStageExecutor:
             )
             return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
         if kind == "handoff":
+            if status == "fail":
+                return StageResult(stage.name, "fail", output="HANDOFF_FAIL", kind="handoff")
             targets = list(getattr(getattr(stage, "spec", None), "targets", []) or [])
             if not targets:
                 return StageResult.error_result(
