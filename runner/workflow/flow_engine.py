@@ -107,7 +107,7 @@ class FlowEngine:
         result = executor.run(stage, self.context, previous, label=label)
         self._remember_previous(result)
 
-        target = self._target(definition, result.status)
+        target = resolve_stage_target(definition, result.status)
         if target == "stop":
             self.context.save_state()
             return result, True
@@ -127,13 +127,6 @@ class FlowEngine:
         self._route_to(target, result)
         self.context.save_state()
         return result, False
-
-    @staticmethod
-    def _target(definition: dict[str, Any], status: str) -> str:
-        routes = definition.get("routes")
-        if isinstance(routes, dict) and status in routes:
-            return str(routes[status])
-        return "next" if status == "pass" else "stop"
 
     def _route_to(self, target: str, result: StageResult) -> None:
         position = self.positions[target]
@@ -205,8 +198,17 @@ class FlowEngine:
         )
 
 
+
+def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
+    """Resolve one Stage result without advancing the Workflow."""
+    routes = definition.get("routes")
+    if isinstance(routes, dict) and status in routes:
+        return str(routes[status])
+    return "next" if status == "pass" else "stop"
+
+
 def build_flow_engine(context: StageContext) -> FlowEngine:
     return FlowEngine(context)
 
 
-__all__ = ["FlowEngine", "build_flow_engine"]
+__all__ = ["FlowEngine", "build_flow_engine", "resolve_stage_target"]
