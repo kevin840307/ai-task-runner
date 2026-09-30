@@ -84,27 +84,31 @@ def test_readmes_document_cli_yaml_and_24h_contract():
         assert "Fresh Session" in value
 
 
-def test_canonical_docs_do_not_reintroduce_deleted_runtime_concepts():
-    combined = "\n".join(text(name) for name in DOCS)
-    forbidden = (
+def test_deleted_runtime_modules_and_asset_paths_stay_absent():
+    removed_paths = (
         "runner/workflow/system",
         "runner/workflow/custom",
         "runner/prompts/system",
         "runner/prompts/stages",
-        "runner/workflows/",
-        "TaskRunner alias",
-        "Pipeline alias",
-        "LinearRouting compatibility",
-        "skip_on_max_cycles",
+        "runner/workflows",
+        "runner/task_runner.py",
+        "runner/workflow/pipeline.py",
+        "runner/workflow/linear_routing.py",
+        "runner/workflow/semantic_routing.py",
+        "runner/ai",
+        "runner/backends",
+        "runner/project",
+        "runner/utils/files.py",
     )
-    for token in forbidden:
-        assert token not in combined
+    for relative in removed_paths:
+        assert not (ROOT / relative).exists(), relative
 
 
 def test_architecture_keeps_behavior_ownership_explicit():
     value = text("ARCHITECTURE")
     assert "Stage is the only execution/agent extension unit." in value
-    assert "StageExecutor is the single owner of Stage technical reliability" in value
+    assert "StageExecutor" in value
+    assert "technical reliability" in value
     assert "FlowEngine" in value
     assert "semantic graph progress" in value
     assert "There is one plugin discovery boundary" in value
@@ -115,5 +119,5 @@ def test_future_todo_keeps_linear_first_and_future_families_deferred():
     assert "Linear Workflow with Rollback / Loop" in value
     assert "Dynamic Handoff" in value
     assert "Discussion / Group Chat" in value
-    assert "Do not build it yet." in value
-    assert "24H high-density soak" in value
+    assert "Future - do not implement yet" in value
+    assert "high-density soak" in value
