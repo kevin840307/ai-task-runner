@@ -76,6 +76,7 @@ class RunState:
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
     discussion_history: list[dict[str, str]] = field(default_factory=list)
+    controller_rounds: dict[str, int] = field(default_factory=dict)
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -106,6 +107,13 @@ class RunState:
             raise ValueError("state.transition_previous must be an object")
         if not isinstance(self.discussion_history, list):
             raise ValueError("state.discussion_history must be an array")
+        if not isinstance(self.controller_rounds, dict):
+            raise ValueError("state.controller_rounds must be an object")
+        for name, value in self.controller_rounds.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("state.controller_rounds keys must be non-empty strings")
+            if not is_integer(value) or value < 0:
+                raise ValueError(f"state.controller_rounds.{name} must be non-negative")
         for index, item in enumerate(self.discussion_history, 1):
             if not isinstance(item, dict):
                 raise ValueError(f"state.discussion_history[{index}] must be an object")
