@@ -17,9 +17,10 @@ if str(ROOT) not in sys.path:
 
 from runner.config.defaults import DEFAULT_BACKEND
 from runner.config.runtime import RuntimeConfig
+from runner.bootstrap import runtime_scope
 from runner.runtime.run_state import Task
 from runner.workflow.flow_engine import resolve_stage_target
-from runner.workflow.loader import load_workflow
+from runner.workflow.loader import load_workflow, normalize_workflow
 from runner.workflow.registry import create_stage
 from runner.workflow.stages import StageResult
 from runner.workflow_runner import WorkflowRunner
@@ -58,6 +59,14 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("workflow does not exist")
 
     workflow = load_workflow(workflow_path)
+    if not any(str(item["name"]) == args.stage for item in workflow):
+        import yaml
+
+        source = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        if args.stage not in source.get("stages", {}):
+            raise ValueError(f"unknown Workflow Stage: {args.stage}")
+        source["flow"] = [*source["flow"], args.stage]
+        workflow = normalize_workflow(source, workflow_path)
     index = next((i for i, item in enumerate(workflow) if str(item["name"]) == args.stage), -1)
     if index < 0:
         raise ValueError(f"unknown Workflow Stage: {args.stage}")
@@ -76,58 +85,59 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         workflow_explicit=True,
         work_dir=work_dir,
         force_new=True,
+        stage_retries=0,
         auto_register_ui_project=False,
         human_output=False,
     )
     config.validate()
-    runner = WorkflowRunner(config)
+    try:
+        with runtime_scope(config):
+            runner = WorkflowRunner(config)
 
-    if definition.get("scope") == "task" or str(definition.get("type") or "") in {"task", "review"}:
-        runner.state.tasks = [
-            Task(
-                id="stage-test",
-                title=f"Test {args.stage}",
-                description=input_text or f"Execute the selected Stage {args.stage} once.",
-                acceptance_criteria=["Return the Stage result for this isolated test."],
+            if definition.get("scope") == "task" or str(definition.get("type") or "") in {"task", "review"}:
+                runner.state.tasks = [
+                    Task(
+                        id="stage-test",
+                        title=f"Test {args.stage}",
+                        description=input_text or f"Execute the selected Stage {args.stage} once.",
+                        acceptance_criteria=["Return the Stage result for this isolated test."],
+                    )
+                ]
+                runner._save_state()
+
+            previous = (
+                StageResult(
+                    "__test_input__",
+                    "pass",
+                    output=input_text,
+                    data={"input": input_text},
+                )
+                if input_text
+                else None
             )
-        ]
-        runner._save_state()
 
-    previous = (
-        StageResult(
-            "__test_input__",
-            "pass",
-            output=input_text,
-            data={"input": input_text},
-        )
-        if input_text
-        else None
-    )
-
-    stage = create_stage(definition)
-    result = runner.stage_executor.run(stage, runner.context, previous)
-    payload = {
-        "ok": result.status != "error",
-        "stage": args.stage,
-        "status": result.status,
-        "output": result.output,
-        "data": result.data,
-        "changed_files": result.changed_files,
-        "next": _resolved_next(workflow, index, result),
-        "route": resolve_stage_target(definition, result.status),
-        "kind": result.kind,
-        "work_dir": str((project / work_dir).resolve()),
-    }
-
-    if not args.keep_work:
-        shutil.rmtree(project / work_dir, ignore_errors=True)
-        current = project / ".ai-task-runner" / "stage-tests"
-        try:
-            current.rmdir()
-        except OSError:
-            pass
-
-    return payload
+            stage = create_stage(definition)
+            result = runner.stage_executor.run(stage, runner.context, previous)
+            return {
+                "ok": result.status != "error",
+                "stage": args.stage,
+                "status": result.status,
+                "output": result.output,
+                "data": result.data,
+                "changed_files": result.changed_files,
+                "next": _resolved_next(workflow, index, result),
+                "route": resolve_stage_target(definition, result.status),
+                "kind": result.kind,
+                "work_dir": str((project / work_dir).resolve()),
+            }
+    finally:
+        if not args.keep_work:
+            shutil.rmtree(project / work_dir, ignore_errors=True)
+            current = project / ".ai-task-runner" / "stage-tests"
+            try:
+                current.rmdir()
+            except OSError:
+                pass
 
 
 def main(argv: list[str] | None = None) -> int:

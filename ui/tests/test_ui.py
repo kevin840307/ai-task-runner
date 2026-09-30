@@ -949,6 +949,29 @@ class WorkflowStudioTests(unittest.TestCase):
             [stage["name"] for stage in result["visual"]["stages"]],
         )
 
+    def test_graph_draft_validates_before_one_atomic_yaml_write(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        before = self.workflow.read_text(encoding="utf-8")
+        work = {**visual["stages"][0], "label": "Do work"}
+        command = {"name": "check", "type": "command", "command": "{python} -c 'print(1)'"}
+        draft = {"stages": [work, command], "flow": ["work", "check"], "routes": {"work": {"fail": "check"}}}
+
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
+        with self.assertRaisesRegex(ValueError, "unknown target"):
+            self.state.studio_graph_save(item["id"], {**draft, "routes": {"work": {"fail": "missing"}}}, visual["hash"], self.project)
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
+
+        saved = self.state.studio_graph_save(item["id"], draft, visual["hash"], self.project)
+        content = self.workflow.read_text(encoding="utf-8")
+        data = __import__("yaml").safe_load(content)
+        self.assertEqual(data["flow"], ["work", "check"])
+        self.assertEqual(data["stages"]["work"]["label"], "Do work")
+        self.assertEqual(data["stages"]["work"]["routes"], {"fail": "check"})
+        self.assertEqual(data["stages"]["check"]["type"], "command")
+        self.assertNotIn("review", data["stages"])
+        self.assertEqual(saved["visual"]["hash"], self.state.studio_visual(item["id"], self.project)["hash"])
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)

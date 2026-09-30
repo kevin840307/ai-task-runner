@@ -249,6 +249,15 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("hash", "")),
                     project,
                 ))
+            if parsed.path == "/api/studio/stage/test":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_stage_test(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("input", "")),
+                    project,
+                    backend=str(body.get("backend", "")),
+                ))
             if parsed.path == "/api/studio/stage/add":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_add(str(body.get("id", "")), str(body.get("stage", "")), str(body.get("type", "base")), str(body.get("hash", "")), project, status=str(body.get("status", "")), prompt=str(body.get("prompt", "")), command=str(body.get("command", "")), add_to_flow=bool(body.get("add_to_flow", True))))

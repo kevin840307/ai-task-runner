@@ -63,8 +63,28 @@ type StudioNodeData = {
   label: string;
   subtitle?: string;
   stage?: Stage;
-  prompt?: string;
 };
+
+type StageTestResult = {
+  stage: string;
+  status: string;
+  output: string;
+  data?: unknown;
+  next: string;
+  route: string;
+  kind?: string;
+  changed_files?: string[];
+};
+
+type InspectorTab = "settings" | "parameters" | "routing" | "test";
+type ParameterSection = "content" | "execution" | "result" | "advanced";
+
+const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[] }[] = [
+  { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
+  { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
+  { id: "result", label: "結果", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
+  { id: "advanced", label: "進階", fields: ["session_key", "fresh_session_each_run", "fresh_session_on_start", "ai_validator_yolo"] },
+];
 
 const START = "__start__";
 const END = "__end__";
@@ -104,16 +124,16 @@ function TerminalNode({ data }: NodeProps<Node<StudioNodeData>>) {
 
 function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const s = data.stage!;
+  const title = String(s.label || s.name);
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
-      <Handle type="target" position={Position.Top} />
+      <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
-        <span>{String(s.type || "base")}</span>
-        {s.scope === "task" && <b>↻ PER TASK</b>}
+        <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
+        {s.scope === "task" && <b>↻ Task</b>}
       </div>
-      <strong>{String(s.label || s.name)}</strong>
-      <small>{String(s.status || s.name)}</small>
-      {data.prompt && <code className="wf-prompt">{data.prompt}</code>}
+      <strong title={title}>{title}</strong>
+      {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-handles">
         <span>PASS</span><span>FAIL</span><span>ERROR</span>
       </div>
@@ -146,6 +166,12 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
   command: { title: "Command", description: "執行外部命令或驗證器" },
   base: { title: "AI Stage", description: "通用 AI Stage" },
 };
+
+const PALETTE_SECTIONS = [
+  { title: "建立與執行", types: ["plan", "task", "base"], icon: "✦" },
+  { title: "檢查與驗證", types: ["review", "ai_validator"], icon: "✓" },
+  { title: "工具", types: ["command"], icon: "›" },
+];
 
 function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
   return catalog?.stage_types?.[stageType]?.options?.find((item) => item.name === name)?.default;
@@ -215,8 +241,8 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
         label: String(s.label || s.name),
         subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
-        prompt: effectivePrompt(catalog, s),
       },
+      deletable: false,
       className: disconnected ? "disconnected" : "",
     });
   });
@@ -235,7 +261,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
       source: START,
       target: visual.flow[0],
       sourceHandle: "pass",
-      label: "START",
       deletable: false,
       markerEnd: { type: MarkerType.ArrowClosed },
     });
@@ -253,7 +278,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
       source: name,
       sourceHandle: "pass",
       target: resolvedPass,
-      label: routes.pass ? `PASS → ${passTarget}` : "PASS → next",
+      label: routes.pass ? "PASS" : undefined,
       className: routes.pass ? "result pass" : "normal pass",
       deletable: Boolean(routes.pass),
       markerEnd: { type: MarkerType.ArrowClosed },
@@ -268,7 +293,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null): { node
         source: name,
         sourceHandle: status,
         target: resolved,
-        label: `${status.toUpperCase()} → ${target}`,
+        label: status.toUpperCase(),
         className: `result ${status}`,
         markerEnd: { type: MarkerType.ArrowClosed },
         data: { status, explicit: true, terminal: target },
@@ -352,6 +377,12 @@ function App() {
   const [pendingCreate, setPendingCreate] = useState<{ type: string; position?: { x: number; y: number } } | null>(null);
   const [createPrompt, setCreatePrompt] = useState("");
   const [createCommand, setCreateCommand] = useState("");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("settings");
+  const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
+  const [testInput, setTestInput] = useState("");
+  const [testResult, setTestResult] = useState<StageTestResult | null>(null);
+  const [testError, setTestError] = useState("");
+  const [testing, setTesting] = useState(false);
 
   const load = useCallback(async () => {
     if (!query().id) {
@@ -383,15 +414,65 @@ function App() {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
+    if (!dirtyGraph) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirtyGraph]);
+
+  useEffect(() => {
     if (!visual || !selected) { setDraft(null); return; }
     const s = stageByName(visual, selected);
     setDraft(s ? structuredClone(s) : null);
   }, [selected, visual]);
 
+  useEffect(() => {
+    setInspectorTab("settings");
+    setParameterSection("content");
+    setTestResult(null);
+    setTestError("");
+    setTestInput("");
+  }, [selected]);
+
   const options = useMemo(() => {
     if (!draft || !catalog) return [];
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
+  const parameterOptions = options.filter((o) => !["name", "type", "status", "label", "scope", "routes"].includes(o.name));
+  const parameterGroups = PARAMETER_SECTIONS.map((section) => ({
+    ...section,
+    options: parameterOptions.filter((option) => section.id === "advanced"
+      ? !PARAMETER_SECTIONS.slice(0, -1).some((group) => group.fields.includes(option.name))
+      : section.fields.includes(option.name)),
+  })).filter((section) => section.options.length);
+  const visibleParameters = parameterOptions.length > 8
+    ? (parameterGroups.find((section) => section.id === parameterSection) || parameterGroups[0])?.options || []
+    : parameterOptions;
+  function editDraft(next: Stage) {
+    setDraft(next);
+    setVisual((current) => current && ({ ...current, stages: current.stages.map((stage) => stage.name === next.name ? next : stage) }));
+    setNodes((current) => current.map((node) => node.id === next.name ? { ...node, data: { ...node.data, label: String(next.label || next.name), stage: next } } : node));
+    setDirtyGraph(true);
+    setTestResult(null);
+  }
+
+  async function testStage() {
+    if (!visual || !draft || testing || dirtyGraph || !query().project) return;
+    setTesting(true);
+    setTestResult(null);
+    setTestError("");
+    try {
+      const result = await api<StageTestResult>("/api/studio/stage/test", {
+        method: "POST",
+        body: JSON.stringify({ id: visual.id, project: query().project, stage: draft.name, input: testInput }),
+      });
+      setTestResult(result);
+    } catch (error) {
+      setTestError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   const persistGraph = useCallback(async (nextVisual: Visual): Promise<Visual> => {
     const routes: Record<string, Record<string, string>> = {};
@@ -404,7 +485,7 @@ function App() {
         id: nextVisual.id,
         project: query().project,
         hash: nextVisual.hash,
-        graph: { flow: nextVisual.flow, routes },
+        graph: { flow: nextVisual.flow, routes, stages: nextVisual.stages },
       }),
     });
     setVisual(result.visual);
@@ -507,71 +588,25 @@ function App() {
     setDirtyGraph(true);
   }, [nodes, visual, catalog]);
 
-  async function saveStage() {
-    if (!visual || !draft) return;
-    setBusy(true);
-    try {
-      const base = dirtyGraph ? await persistGraph(visual) : visual;
-      const fields = { ...draft };
-      delete (fields as Record<string, unknown>).name;
-      const result = await api<{ visual: Visual }>("/api/studio/stage/save", {
-        method: "POST",
-        body: JSON.stringify({
-          id: base.id,
-          project: query().project,
-          stage: draft.name,
-          hash: base.hash,
-          fields,
-        }),
-      });
-      setVisual(result.visual);
-      const g = graphFromVisual(result.visual, catalog);
-      setNodes(g.nodes);
-      setEdges(g.edges);
-      setMessage("Stage saved");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "") {
     if (!visual || !catalog?.stage_types?.[stageType]) return;
     const name = nextStageKey(visual, stageType);
-    setBusy(true);
-    try {
-      const base = dirtyGraph ? await persistGraph(visual) : visual;
-      const result = await api<{ visual: Visual }>("/api/studio/stage/add", {
-        method: "POST",
-        body: JSON.stringify({
-          id: base.id,
-          project: query().project,
-          stage: name,
-          type: stageType,
-          prompt,
-          command,
-          hash: base.hash,
-          add_to_flow: false,
-        }),
-      });
-      setVisual(result.visual);
-      const g = graphFromVisual(result.visual, catalog);
-      if (position) {
-        g.nodes = g.nodes.map((node) => node.id === name ? { ...node, position } : node);
-      }
-      setNodes(g.nodes);
-      setEdges(g.edges);
-      setSelected(name);
-      setPendingCreate(null);
-      setCreatePrompt("");
-      setCreateCommand("");
-      setMessage(`Stage ${name} added. Connect it to START / PASS to join the flow.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
+    const stage: Stage = { name, type: stageType };
+    if (prompt) stage.prompt = prompt;
+    if (command) stage.command = command;
+    if (stageType === "ai_validator") stage.validator = "ai";
+    const next = { ...visual, stages: [...visual.stages, stage] };
+    setVisual(next);
+    const g = graphFromVisual(next, catalog);
+    if (position) g.nodes = g.nodes.map((node) => node.id === name ? { ...node, position } : node);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setSelected(name);
+    setPendingCreate(null);
+    setCreatePrompt("");
+    setCreateCommand("");
+    setDirtyGraph(true);
+    setMessage(`Stage ${name} 已加入草稿。儲存 Workflow 後才會寫入 YAML。`);
   }
 
   async function addStage(stageType = "task", position?: { x: number; y: number }) {
@@ -612,30 +647,19 @@ function App() {
 
   async function deleteStage() {
     if (!visual || !draft) return;
-    if (!window.confirm(`Delete Stage "${draft.name}"? Result edges referencing it must already be removed.`)) return;
-    setBusy(true);
-    try {
-      const base = dirtyGraph ? await persistGraph(visual) : visual;
-      const result = await api<{ visual: Visual }>("/api/studio/stage/delete", {
-        method: "POST",
-        body: JSON.stringify({
-          id: base.id,
-          project: query().project,
-          stage: draft.name,
-          hash: base.hash,
-        }),
-      });
-      setVisual(result.visual);
-      const g = graphFromVisual(result.visual, catalog);
-      setNodes(g.nodes);
-      setEdges(g.edges);
-      setSelected("");
-      setMessage(`Stage ${draft.name} deleted`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
+    if (visual.stages.some((stage) => stage.name !== draft.name && Object.values(stage.routes || {}).includes(draft.name))) {
+      setMessage(`請先移除指向 ${draft.name} 的結果連線。`);
+      return;
     }
+    if (!window.confirm(`從草稿移除 Stage "${draft.name}"？儲存 Workflow 後才會更新 YAML。`)) return;
+    const next = { ...visual, flow: visual.flow.filter((name) => name !== draft.name), stages: visual.stages.filter((stage) => stage.name !== draft.name) };
+    setVisual(next);
+    const g = graphFromVisual(next, catalog);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setSelected("");
+    setDirtyGraph(true);
+    setMessage(`Stage ${draft.name} 已從草稿移除。`);
   }
 
   if (!visual) return <main className="loading">{message || "Loading Workflow Studio…"}</main>;
@@ -646,49 +670,45 @@ function App() {
         <div>
           <button className="ghost" onClick={() => history.back()}>← Back</button>
           <strong>{visual.name}</strong>
-          <span>Linear Workflow</span>
+          <span>Workflow Studio</span>
         </div>
         <div>
           {message && <span className="message">{message}</span>}
-          <button onClick={() => void load()} disabled={busy}>Reload</button>
+          {dirtyGraph && <span className="unsaved-badge">未儲存草稿</span>}
+          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>Reload</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
-            {busy ? "Saving…" : "Save graph"}
+            {busy ? "驗證與儲存中…" : "儲存 Workflow"}
           </button>
         </div>
       </header>
 
       <section className="studio-body">
         <aside className="palette">
-          <div className="palette-head">
-            <strong>Stage Palette</strong>
-            <small>拖到畫布，或點一下新增</small>
-          </div>
-          <div className="palette-list">
-            {Object.keys(catalog?.stage_types || {}).map((type) => {
-              const meta = STAGE_META[type] || { title: type, description: "Stage" };
-              const prompt = String(defaultOption(catalog, type, "prompt") || "");
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  className="palette-item"
-                  draggable
-                  disabled={busy}
-                  onDragStart={(event) => dragStage(event, type)}
-                  onClick={() => void addStage(type)}
-                >
-                  <strong>{meta.title}</strong>
-                  <span>{type}</span>
-                  <small>{meta.description}</small>
-                  {prompt && <code>Default: {prompt}</code>}
-                </button>
-              );
-            })}
-          </div>
-          <div className="palette-note">
-            <strong>組裝方式</strong>
-            <small>START 接第一個 Stage；PASS / FAIL / ERROR 都從積木下方拉線。未接入 flow 的 Stage 會保留在 YAML，但不執行。</small>
-          </div>
+          <div className="palette-head"><span className="palette-eyebrow">Stage Palette</span><strong>新增積木</strong><small>點擊加入，或拖曳至畫布</small></div>
+          {PALETTE_SECTIONS.map((section) => {
+            const types = section.types.filter((type) => catalog?.stage_types?.[type]);
+            if (!types.length) return null;
+            return <div className="palette-section" key={section.title}>
+              <div className="palette-section-head"><span>{section.title}</span><small>{types.length}</small></div>
+              <div className="palette-list">{types.map((type) => {
+                const meta = STAGE_META[type];
+                return <button key={type} type="button" className="palette-item" draggable disabled={busy}
+                  onDragStart={(event) => dragStage(event, type)} onClick={() => void addStage(type)}>
+                  <span className={`palette-icon type-${type}`} aria-hidden="true">{section.icon}</span>
+                  <span className="palette-copy"><strong>{meta.title}</strong><small>{meta.description}</small></span>
+                  <span className="palette-add" aria-hidden="true">＋</span>
+                </button>;
+              })}</div>
+            </div>;
+          })}
+          {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).length > 0 &&
+            <div className="palette-section"><div className="palette-section-head"><span>擴充積木</span></div><div className="palette-list">
+              {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).map((type) =>
+                <button key={type} type="button" className="palette-item" draggable disabled={busy}
+                  onDragStart={(event) => dragStage(event, type)} onClick={() => void addStage(type)}>
+                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>自訂 Stage</small></span><span className="palette-add" aria-hidden="true">＋</span>
+                </button>)}</div></div>}
+          <div className="palette-note"><small>畫布上的修改會先保留為草稿，按「儲存 Workflow」後才更新 YAML。</small></div>
         </aside>
         <div
           ref={canvasRef}
@@ -707,6 +727,9 @@ function App() {
             onNodeDragStop={reorderByPosition}
             onNodeClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
             onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
+            onPaneClick={() => setSelected("")}
+            connectionLineStyle={{ strokeWidth: 2.5 }}
+            defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
             fitView
             minZoom={0.25}
             maxZoom={1.8}
@@ -763,27 +786,42 @@ function App() {
                 <div><small>STAGE</small><h2>{draft.name}</h2></div>
                 <span>{draft.type}</span>
               </div>
-              <div className="fields">
+              <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
+                {(["settings", "parameters", "routing", "test"] as const).map((tab) => (
+                  <button key={tab} type="button" role="tab" aria-selected={inspectorTab === tab}
+                    className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)}>
+                    {{ settings: "基本", parameters: `參數${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, routing: "連線", test: "測試" }[tab]}
+                  </button>
+                ))}
+              </div>
+              {inspectorTab === "settings" && <div className="fields" role="tabpanel">
                 <label>
-                  <span>type</span>
-                  <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
+                  <span>類型</span>
+                  <select value={draft.type} onChange={(e) => editDraft({ ...draft, type: e.target.value })}>
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
-                <label><span>status</span><input value={String(draft.status || "")} onChange={(e) => setDraft({ ...draft, status: e.target.value })} /></label>
-                <label><span>label</span><input value={String(draft.label || "")} onChange={(e) => setDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>積木標題</span><input value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>執行狀態文字</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 <label>
-                  <span>scope</span>
-                  <select value={String(draft.scope || "")} onChange={(e) => setDraft({ ...draft, scope: e.target.value })}>
+                  <span>執行範圍</span>
+                  <select value={String(draft.scope || "")} onChange={(e) => editDraft({ ...draft, scope: e.target.value })}>
                     <option value="">Workflow</option><option value="task">Per task</option>
                   </select>
                 </label>
-                {options
-                  .filter((o) => !["name", "type", "status", "label", "scope", "routes"].includes(o.name))
-                  .map((option) => option.name === "prompt" ? (
+              </div>}
+              {inspectorTab === "parameters" && <div className="fields" role="tabpanel">
+                {parameterOptions.length === 0 && <p className="section-empty">此積木沒有其他參數。</p>}
+                {parameterOptions.length > 8 && <div className="parameter-sections" role="tablist" aria-label="Parameter sections">
+                  {parameterGroups.map((section) => <button key={section.id} type="button" role="tab"
+                    aria-selected={visibleParameters === section.options}
+                    className={visibleParameters === section.options ? "active" : ""}
+                    onClick={() => setParameterSection(section.id)}>{section.label}<small>{section.options.length}</small></button>)}
+                </div>}
+                {visibleParameters.map((option) => option.name === "prompt" ? (
                     <label key={option.name}>
                       <span>prompt</span>
-                      <select value={String(draft.prompt || "")} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}>
+                      <select value={String(draft.prompt || "")} onChange={(e) => editDraft({ ...draft, prompt: e.target.value })}>
                         <option value="">{effectivePrompt(catalog, { ...draft, prompt: "" }) ? `Default — ${effectivePrompt(catalog, { ...draft, prompt: "" })}` : "No default prompt"}</option>
                         {prompts.map((p) => {
                           const ref = p.reference || p.display_name || p.name;
@@ -797,18 +835,37 @@ function App() {
                       key={option.name}
                       option={option}
                       value={draft[option.name]}
-                      onChange={(value) => setDraft({ ...draft, [option.name]: value })}
+                      onChange={(value) => editDraft({ ...draft, [option.name]: value })}
                     />
                   ))}
-              </div>
-              <div className="edge-help">
-                <strong>Result edges</strong>
-                <p>從節點下方 PASS / FAIL / ERROR Handle 拉到另一個 Stage。拉到 END 時，PASS=done；FAIL/ERROR=stop。</p>
-                <code>{JSON.stringify(draft.routes || {}, null, 2)}</code>
-              </div>
+              </div>}
+              {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
+                <strong>結果連線</strong>
+                <p>從積木下方的大接點拉到目標積木。連到 END 時，PASS 為完成，FAIL / ERROR 為停止。</p>
+                {(["pass", "fail", "error"] as const).map((status) => (
+                  <div className="route-row" key={status}><span className={`route-dot ${status}`} />
+                    <strong>{status.toUpperCase()}</strong><span>{draft.routes?.[status] || (status === "pass" ? "next（預設）" : "未設定")}</span>
+                  </div>
+                ))}
+              </div>}
+              {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
+                <p>只執行目前積木一次，顯示結果及下一個目標；不接續執行其他積木。測試會在目前專案執行，可能修改專案檔案。</p>
+                {!query().project && <p className="test-notice">請從專案內開啟此 Workflow，才能提供測試工作目錄。</p>}
+                {dirtyGraph && <p className="test-notice">請先儲存 Workflow 草稿，再執行測試。</p>}
+                <label><span>測試 Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
+                <button type="button" className="primary" onClick={() => void testStage()}
+                  disabled={testing || busy || dirtyGraph || !query().project}>{testing ? "測試中…" : "執行單一積木"}</button>
+                {testError && <p className="test-error" role="alert">{testError}</p>}
+                {testResult && <div className="test-result" aria-live="polite">
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>下一個：<strong>{testResult.next}</strong></span></div>
+                  <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
+                  {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
+                  {!!testResult.changed_files?.length && <details><summary>變更檔案 · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
+                </div>}
+              </div>}
               <footer>
-                <button className="danger" onClick={() => void deleteStage()} disabled={busy}>Delete Stage</button>
-                <button className="primary" onClick={() => void saveStage()} disabled={busy}>Save Stage</button>
+                <button className="danger" onClick={() => void deleteStage()} disabled={busy}>移除積木</button>
+                <span className="draft-hint">修改先存為草稿</span>
               </footer>
             </>
           )}

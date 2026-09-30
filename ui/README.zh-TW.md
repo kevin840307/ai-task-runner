@@ -1,4 +1,10 @@
 
+## Flow 編輯器
+
+Flow 編輯器的 Stage 積木精簡顯示內容，並放大 PASS / FAIL / ERROR 連線接點。右側設定分為基本、分組參數、連線和單一積木測試。測試需要選擇 Project，會以輸入內容執行已儲存的 Stage 一次，顯示 output、狀態和下一個目標，但不執行下一個積木。測試在所選 Project 上執行，可能修改專案檔案。
+
+Stage Palette 依用途分類內建類型，第三方註冊類型列在**擴充積木**。畫布、Stage 與連線的修改都先存在瀏覽器草稿；按**儲存 Workflow**並通過驗證後才寫入 YAML。可參考[新增 Stage](../docs/development/ADD_STAGE.zh-TW.md)與可安裝範例。
+
 ## 環境檢測
 
 Run options 內提供 **Check environment**。UI 直接呼叫同一份可從命令列使用的 `tool/environment_check.py`，檢查本機 Python 版本/套件、必要 Runner 檔案、UI data 寫入權限，以及 Qwen/OpenCode 執行檔是否可從 PATH 找到。Backend 未安裝只列為 warning，因為使用者可能只使用其中一種 Backend。

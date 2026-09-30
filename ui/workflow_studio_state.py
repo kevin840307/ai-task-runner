@@ -369,31 +369,9 @@ class WorkflowStudioMixin:
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
 
-            # Stable built-in contract first, then extend from the runtime
-            # catalog when it is available. Tests and portable Studio instances
-            # may use a temporary repo_root without tool/workflow_catalog.py, so
-            # Stage saving must never depend on that subprocess existing.
-            allowed = {
-                "type", "status", "label", "scope", "routes",
-                "prompt", "instructions", "detail", "run_state", "mode", "actor",
-                "allow_project_read", "parser", "structured_retries",
-                "structured_fresh_retries", "runs", "required_passes",
-                "readonly_safety", "track_changes", "tolerate_restored_changes",
-                "timeout", "session_key", "fresh_session_each_run",
-                "fresh_session_on_start", "produces", "min_tasks",
-                "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
-            }
-            try:
-                catalog = self.workflow_catalog()
-            except ValueError:
-                catalog = {}
-            for stage in (catalog.get("stage_types") or {}).values():
-                for option in stage.get("options") or []:
-                    name = str(option.get("name") or "").strip()
-                    if name:
-                        allowed.add(name)
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
+            allowed = self._stage_editor_fields()
             clean = {}
             for key, value in fields.items():
                 if key not in allowed:
@@ -425,6 +403,29 @@ class WorkflowStudioMixin:
                 "file": self.studio_read(file_id, project),
                 "visual": self.studio_visual(file_id, project),
             }
+
+    def _stage_editor_fields(self) -> set[str]:
+        """Fields that the Studio may change in a Stage definition."""
+        allowed = {
+            "type", "status", "label", "scope", "routes", "validator",
+            "prompt", "instructions", "detail", "run_state", "mode", "actor",
+            "allow_project_read", "parser", "structured_retries",
+            "structured_fresh_retries", "runs", "required_passes",
+            "readonly_safety", "track_changes", "tolerate_restored_changes",
+            "timeout", "session_key", "fresh_session_each_run",
+            "fresh_session_on_start", "produces", "min_tasks",
+            "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
+        }
+        try:
+            catalog = self.workflow_catalog()
+        except ValueError:
+            catalog = {}
+        for stage in (catalog.get("stage_types") or {}).values():
+            for option in stage.get("options") or []:
+                name = str(option.get("name") or "").strip()
+                if name:
+                    allowed.add(name)
+        return allowed
 
     def studio_stage_test(
         self,
@@ -1155,7 +1156,7 @@ class WorkflowStudioMixin:
         expected_hash: str,
         project: Path | None = None,
     ) -> dict:
-        """Persist Linear Designer flow order and PASS/FAIL/ERROR result edges.
+        """Validate and persist one complete Flow UI draft.
 
         YAML remains canonical. START/END are UI-only nodes and never enter the
         Workflow file. Default PASS-to-next is represented by the Flow order;
@@ -1177,13 +1178,40 @@ class WorkflowStudioMixin:
             if not isinstance(graph, dict):
                 raise ValueError("Graph must be an object")
 
+            draft_rows = graph.get("stages")
+            desired: dict[str, dict] | None = None
+            if draft_rows is not None:
+                if not isinstance(draft_rows, list):
+                    raise ValueError("Graph stages must be a list")
+                desired = {}
+                allowed = self._stage_editor_fields()
+                for row in draft_rows:
+                    if not isinstance(row, dict):
+                        raise ValueError("Each Graph Stage must be an object")
+                    name = str(row.get("name") or "").strip()
+                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
+                        raise ValueError(f"Invalid Stage key: {name}")
+                    if name in desired:
+                        raise ValueError(f"Duplicate Graph Stage: {name}")
+                    config = {key: value for key, value in row.items() if key != "name"}
+                    original = stages.get(name)
+                    for key in config:
+                        if key not in allowed and (not isinstance(original, dict) or config[key] != original.get(key)):
+                            raise ValueError(f"Unsupported Stage field: {key}")
+                    if not isinstance(original, dict):
+                        self._validate_stage_editor_fields(config)
+                    desired[name] = config
+                if not desired:
+                    raise ValueError("Workflow must contain at least one Stage")
+            stage_names = set(desired) if desired is not None else set(stages)
+
             raw_flow = graph.get("flow")
             if not isinstance(raw_flow, list):
                 raise ValueError("Graph flow must be a list")
             flow = [str(name).strip() for name in raw_flow if str(name).strip()]
             if len(flow) != len(set(flow)):
                 raise ValueError("Workflow flow cannot contain duplicate Stage names")
-            unknown_flow = [name for name in flow if name not in stages]
+            unknown_flow = [name for name in flow if name not in stage_names]
             if unknown_flow:
                 raise ValueError("Workflow flow references unknown Stage: " + ", ".join(unknown_flow))
 
@@ -1191,10 +1219,10 @@ class WorkflowStudioMixin:
             if not isinstance(raw_routes, dict):
                 raise ValueError("Graph routes must be an object")
             normalized_routes: dict[str, dict[str, str]] = {}
-            targets = set(stages) | {"next", "done", "stop"}
+            targets = stage_names | {"next", "done", "stop"}
             for stage_name, mapping in raw_routes.items():
                 stage_name = str(stage_name)
-                if stage_name not in stages:
+                if stage_name not in stage_names:
                     raise ValueError(f"Graph routes reference unknown Stage: {stage_name}")
                 if mapping in (None, {}):
                     continue
@@ -1212,9 +1240,31 @@ class WorkflowStudioMixin:
                 if clean:
                     normalized_routes[stage_name] = clean
 
-            updated = self._replace_flow_block(content, flow)
+            updated = content
+            if desired is not None:
+                for name in stages:
+                    if name not in desired:
+                        updated = self._remove_stage_definition_block(updated, name)
+                for name, config in desired.items():
+                    original = stages.get(name)
+                    if not isinstance(original, dict):
+                        clean = {key: value for key, value in config.items() if key in allowed and key != "routes" and value not in (None, "")}
+                        updated = self._insert_stage_block(updated, name, clean)
+                        continue
+                    changes = {}
+                    for key, value in config.items():
+                        if key in {"name", "routes"} or key not in allowed:
+                            continue
+                        previous = original.get(key, "" if key in {"status", "prompt"} else None)
+                        if value != previous:
+                            changes[key] = None if key in {"status", "prompt", "label", "scope"} and value == "" else value
+                    if changes:
+                        self._validate_stage_editor_fields(changes)
+                        self._validate_node_editor_fields(changes, {"stages": desired})
+                        updated = self._patch_stage_fields(updated, name, changes)
+            updated = self._replace_flow_block(updated, flow)
             # Patch every Stage so deleting an Edge removes the YAML route too.
-            for stage_name in stages:
+            for stage_name in (desired if desired is not None else stages):
                 updated = self._patch_stage_fields(
                     updated,
                     str(stage_name),
