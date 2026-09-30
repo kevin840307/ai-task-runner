@@ -137,6 +137,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <div className="wf-stage-head">
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
         {s.scope === "task" && <b>↻ Task</b>}
+        {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
@@ -174,8 +175,8 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
   review: { title: "Review", description: "檢查完成度並回 PASS / FAIL" },
   ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
   handoff: { title: "Handoff", description: "動態選擇下一個 Stage" },
-  discussion_controller: { title: "Discussion Controller", description: "控制多 Session 討論順序與輪次" },
-  discussion: { title: "Discussion", description: "單一討論 Participant / Moderator Session" },
+  discussion_controller: { title: "Discussion", description: "一顆控制多 Session 的討論積木" },
+  discussion: { title: "Discussion Session", description: "單一 Participant / Moderator Session" },
   command: { title: "Command", description: "執行外部命令或驗證器" },
   base: { title: "AI Stage", description: "通用 AI Stage" },
 };
