@@ -77,6 +77,19 @@ def test_project_workflow_and_categorized_prompt_use_split_asset_roots(
     assert prompt["item"]["readonly"] is False
 
 
+
+def test_bare_prompt_name_defaults_to_common_category(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    created = state.studio_prompt_create("review", "global", project)
+
+    path = Path(created["item"]["path"])
+    assert path.relative_to(tmp_path).as_posix() == (
+        "runner/assets/prompts/common/review.md"
+    )
+    assert created["item"]["reference"] == "common/review.md"
+    assert created["item"]["display_name"] == "common/review.md"
+
+
 def test_generator_project_workflow_output_returns_asset_package_root(
     tmp_path: Path,
 ) -> None:
