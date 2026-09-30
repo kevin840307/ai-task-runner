@@ -426,6 +426,70 @@ class WorkflowStudioMixin:
                 "visual": self.studio_visual(file_id, project),
             }
 
+    def studio_stage_test(
+        self,
+        file_id: str,
+        stage_name: str,
+        input_text: str,
+        project: Path | None = None,
+        *,
+        backend: str = "",
+    ) -> dict:
+        """Execute exactly one Stage and return its result plus resolved next target."""
+        with self._edit_lock:
+            self._require_editable()
+            if project is None:
+                raise ValueError("Project is required to test a Stage")
+            path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+            if kind != "workflow":
+                raise ValueError("Stage test is available only for workflow YAML")
+            data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+            stages = data.get("stages") if isinstance(data, dict) else None
+            if not isinstance(stages, dict) or stage_name not in stages:
+                raise ValueError(f"Stage not found: {stage_name}")
+
+            command = [
+                sys.executable,
+                str(self.repo_root / "tool" / "stage_probe.py"),
+                "--project-root",
+                str(project),
+                "--workflow",
+                str(path),
+                "--stage",
+                str(stage_name),
+                "--input",
+                str(input_text or ""),
+            ]
+            if str(backend or "").strip():
+                command += ["--backend", str(backend).strip()]
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=str(self.repo_root),
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise ValueError(f"Stage test failed: {exc}") from exc
+
+            raw = (completed.stdout or "").strip().splitlines()
+            payload = {}
+            if raw:
+                try:
+                    payload = json.loads(raw[-1])
+                except json.JSONDecodeError:
+                    payload = {}
+            if completed.returncode != 0 and not payload:
+                detail = (completed.stderr or completed.stdout or "").strip()
+                raise ValueError("Stage test failed: " + detail[-6000:])
+            if not isinstance(payload, dict):
+                raise ValueError("Stage test returned invalid output")
+            if payload.get("error") and not payload.get("stage"):
+                raise ValueError(str(payload.get("error")))
+            return payload
+
     def studio_stage_add(
         self,
         file_id: str,
