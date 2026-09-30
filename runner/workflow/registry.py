@@ -27,6 +27,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
     "plan": PlanStage,
 }
 NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
+CATALOG_HIDDEN_FIELDS = frozenset({"fresh_session_each_run", "fresh_session_on_start"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -49,7 +50,7 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "options": [
                 _field_info(item)
                 for item in fields(stage_class.spec_class)
-                if item.name != "name"
+                if item.name != "name" and item.name not in CATALOG_HIDDEN_FIELDS
             ],
         }
         for name, stage_class in sorted(STAGE_REGISTRY.items())
