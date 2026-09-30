@@ -413,8 +413,7 @@ class WorkflowStudioMixin:
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
             "readonly_safety", "track_changes", "tolerate_restored_changes",
-            "timeout", "session_key", "session_policy", "fresh_session_each_run",
-            "fresh_session_on_start", "produces", "min_tasks",
+            "timeout", "session_key", "session_policy", "produces", "min_tasks",
             "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
         }
         try:
