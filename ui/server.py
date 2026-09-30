@@ -86,18 +86,12 @@ class UIState(WorkflowBuilderMixin):
         return str(Path(path).expanduser().resolve())
 
     def projects_payload(self) -> dict:
-        try:
-            stat = self.projects_file.stat()
-            version = stat.st_mtime_ns
-        except OSError:
-            version = 0
-        now = time.monotonic()
-        cached = self._projects_payload_cache
-        if cached and cached[0] == version and cached[1] > now:
-            return cached[2]
+        # Runtime status is live process/state data. Do not cache it using only
+        # projects.json mtime: that can replay a pre-run/pre-stop status on the
+        # next sidebar poll and make rows visibly oscillate.
         projects = self.projects()
         running = sum(1 for item in projects if item.get("runtime_status") == "running")
-        payload = {
+        return {
             "projects": projects,
             "meta": {
                 "total": len(projects),
@@ -105,8 +99,6 @@ class UIState(WorkflowBuilderMixin):
                 "suggested_poll_ms": self._project_poll_interval_ms(len(projects), running),
             },
         }
-        self._projects_payload_cache = (version, now + PROJECTS_PAYLOAD_CACHE_SECONDS, payload)
-        return payload
 
     @staticmethod
     def _project_poll_interval_ms(total: int, running: int) -> int:
@@ -330,13 +322,20 @@ class UIState(WorkflowBuilderMixin):
             created_at = float(marker.get("created_at") or 0.0)
         except (TypeError, ValueError):
             created_at = 0.0
+        age = max(0.0, time.time() - created_at) if created_at else float("inf")
         if child_pid:
-            active = self._pid_alive(child_pid, alive_pids)
+            # launching.json only bridges the short gap between Popen and the
+            # supervisor-owned runner-process.json. Never let a recycled PID
+            # keep a project "running" indefinitely.
+            active = bool(
+                age <= LAUNCH_RESERVATION_GRACE
+                and self._pid_alive(child_pid, alive_pids)
+            )
         else:
             active = bool(
                 owner_pid
+                and age <= LAUNCH_RESERVATION_GRACE
                 and self._pid_alive(owner_pid, alive_pids)
-                and time.time() - created_at <= LAUNCH_RESERVATION_GRACE
             )
         if active:
             return marker
@@ -2677,9 +2676,11 @@ class UIState(WorkflowBuilderMixin):
                 )
                 output = result.stdout.strip().lower()
                 return bool(output and "no tasks are running" not in output and str(pid) in output)
-            except (OSError, subprocess.SubprocessError):
-                return False
-            except ValueError:
+            except (OSError, subprocess.SubprocessError, ValueError):
+                # A failed Windows process probe is "unknown", not proof that
+                # the process died. Fail safe for one polling cycle to avoid
+                # RUN -> STOP/INT -> RUN sidebar flicker on transient tasklist
+                # failures; a later successful snapshot will correct status.
                 return True
         try:
             os.kill(pid, 0)
