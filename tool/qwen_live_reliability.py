@@ -1166,12 +1166,23 @@ def session_expiry_recovery_preflight() -> None:
 
 def workflow_dryrun_preflight() -> list[dict[str, object]]:
     """Exercise representative Workflow routing deterministically before live Qwen calls."""
+    tool_workflows = [
+        ROOT / "tool" / "workflow" / name
+        for name in (
+            "01_default_ai.yaml",
+            "02_ai_with_review_gate.yaml",
+            "03_file_validation.yaml",
+            "04_mixed_with_review_gate.yaml",
+            "05_review_vote_3_choose_2.yaml",
+            "06_custom_task_producer.yaml",
+            "11_multi_validators_anywhere.yaml",
+        )
+    ]
     workflows = [
         *WORKFLOWS.values(),
         RUNNER_WORKFLOWS["ralphy_ai_validate"],
         ROOT / "examples" / "custom_workflow_latest.yaml",
-        ROOT / "tool" / "workflow" / "06_custom_task_producer.yaml",
-        ROOT / "tool" / "workflow" / "11_multi_validators_anywhere.yaml",
+        *tool_workflows,
     ]
     tool = ROOT / "tool" / "workflow_dryrun.py"
     results: list[dict[str, object]] = []
