@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-NODE_FIELDS = frozenset({"routes", "label", "scope", "error_policy"})
+NODE_FIELDS = frozenset({"routes", "label", "scope", "error_policy", "max_rounds"})
 META_FIELDS = frozenset({"name", "type", "validator", *NODE_FIELDS})
 
 
@@ -48,6 +48,21 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     scope = values.get("scope")
     if scope not in {None, "task"}:
         raise RunnerError(f"workflow stage {name} scope must be task when specified")
+
+    max_rounds = values.get("max_rounds")
+    if max_rounds is not None and (
+        not isinstance(max_rounds, int) or isinstance(max_rounds, bool) or max_rounds <= 0
+    ):
+        raise RunnerError(f"workflow stage {name} max_rounds must be a positive integer")
+
+    targets = values.get("targets")
+    if stage_type == "handoff":
+        if not isinstance(targets, list) or not targets:
+            raise RunnerError(f"workflow stage {name} handoff targets must be a non-empty array")
+        if any(not isinstance(target, str) or not target.strip() for target in targets):
+            raise RunnerError(f"workflow stage {name} handoff targets must be non-empty strings")
+        if len(set(targets)) != len(targets):
+            raise RunnerError(f"workflow stage {name} handoff targets must be unique")
 
     produces = values.get("produces")
     if produces not in {None, "", "tasks"}:
@@ -102,6 +117,16 @@ def validate_routes(workflow: list[dict[str, Any]]) -> None:
                 raise RunnerError(
                     f"workflow stage {definition['name']} routes.{status} "
                     f"references unknown stage: {target}"
+                )
+        for target in definition.get("targets") or []:
+            if target not in names:
+                raise RunnerError(
+                    f"workflow stage {definition['name']} handoff target "
+                    f"references unknown stage: {target}"
+                )
+            if target == definition["name"]:
+                raise RunnerError(
+                    f"workflow stage {definition['name']} cannot hand off to itself"
                 )
 
 
