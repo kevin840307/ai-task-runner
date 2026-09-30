@@ -191,9 +191,8 @@ def test_yaml_rejects_removed_retry_fields(tmp_path):
             f"- prompt: build\n  validator: ai\n  {field}: 2\n",
             encoding="utf-8",
         )
-        item = load_yaml_script(script)[0]
-        child = build_script_item_config(base_config(tmp_path), item, 1)
-        assert not hasattr(child, field)
+        with pytest.raises(RunnerError, match="removed options"):
+            load_yaml_script(script)
 
 
 def test_execute_script_uses_distinct_item_roots_and_stops_on_failure(tmp_path):
