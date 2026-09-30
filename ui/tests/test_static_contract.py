@@ -699,7 +699,8 @@ class ThemeContractTests(unittest.TestCase):
             "studio.flow_desc",
             "stage.section_desc",
             "stage.retry_desc",
-            "stage.routes_desc",
+            "stage.help.route_fail",
+            "stage.help.route_error",
         ):
             self.assertGreaterEqual(i18n.count(f'"{key}"'), 2, key)
         for removed in (
