@@ -74,7 +74,7 @@ def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     ]
     assert workflow[1]["scope"] == "task"
     assert workflow[2]["scope"] == "task"
-    assert workflow[2]["error_policy"] == {"retries": 2, "exhausted": "next"}
+    assert workflow[2]["error_policy"] == {"retries": 2}
     assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["routes"] == {"fail": "planning"}
 
@@ -110,7 +110,7 @@ flow:
         load_workflow(path)
 
 
-def test_routes_support_only_pass_fail_error(tmp_path):
+def test_routes_support_only_pass_fail(tmp_path):
     path = write_workflow(
         tmp_path,
         """
@@ -122,7 +122,7 @@ flow:
   - a
 """,
     )
-    with pytest.raises(RunnerError, match="pass/fail/error"):
+    with pytest.raises(RunnerError, match="pass/fail"):
         load_workflow(path)
 
 
@@ -151,12 +151,10 @@ stages:
     type: base
     error_policy:
       retries: -1
-      exhausted: next
   check:
     type: review
     error_policy:
       retries: 2
-      exhausted: done
 flow:
   - work
   - check
@@ -164,11 +162,29 @@ flow:
     )
 
     workflow = load_workflow(path)
-    assert workflow[0]["error_policy"] == {"retries": -1, "exhausted": "next"}
-    assert workflow[1]["error_policy"] == {"retries": 2, "exhausted": "done"}
+    assert workflow[0]["error_policy"] == {"retries": -1}
+    assert workflow[1]["error_policy"] == {"retries": 2}
 
 
-def test_error_policy_cannot_compete_with_routes_error(tmp_path):
+def test_error_route_is_rejected(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  work:
+    type: base
+    routes:
+      error: stop
+flow:
+  - work
+""",
+    )
+
+    with pytest.raises(RunnerError, match="pass/fail"):
+        load_workflow(path)
+
+
+def test_error_policy_has_only_retry_count(tmp_path):
     path = write_workflow(
         tmp_path,
         """
@@ -178,14 +194,12 @@ stages:
     error_policy:
       retries: 2
       exhausted: next
-    routes:
-      error: stop
 flow:
   - work
 """,
     )
 
-    with pytest.raises(RunnerError, match="cannot set both"):
+    with pytest.raises(RunnerError, match="requires only retries"):
         load_workflow(path)
 
 
@@ -299,7 +313,6 @@ stages:
     type: review
     error_policy:
       retries: -1
-      exhausted: next
 flow:
   - first
   - second
