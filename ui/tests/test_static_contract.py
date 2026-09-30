@@ -1139,3 +1139,22 @@ def test_project_sidebar_switch_restores_buttons_and_scroll_position():
     assert 'menuButton.disabled = removing || state.projectSwitching' in app
     assert 'const previousScrollTop = root.scrollTop;' in app
     assert 'if (root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;' in app
+
+
+def test_project_sidebar_uses_selected_runtime_and_rejects_stale_runtime_responses():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert "applySelectedRuntimeToProjectList" in script
+    assert 'next = applySelectedRuntimeToProjectList(uniqueProjects(data.projects || []))' in script
+    assert "runtimeRefreshToken" in script
+    assert "const token = ++state.runtimeRefreshToken;" in script
+    assert "token !== state.runtimeRefreshToken" in script
+
+
+def test_selected_project_sidebar_syncs_stage_and_progress_from_runtime_poll():
+    script = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'const nextStage = String(runtime.cli_status || runtime.stage || "");' in script
+    assert "const nextCompleted = Number(runtime.completed_count || 0);" in script
+    assert "const nextTotal = Number(runtime.total || 0);" in script
+    assert "current.runtime_stage = nextStage;" in script
+    assert "current.runtime_completed_count = nextCompleted;" in script
+    assert "current.runtime_total = nextTotal;" in script
