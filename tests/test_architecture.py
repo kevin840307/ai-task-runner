@@ -48,6 +48,11 @@ def test_assets_are_one_package_with_separate_workflow_and_prompt_roots():
         path.name for path in prompts.iterdir() if path.is_dir()
     }
     assert not (prompts / "workflow").exists()
+    assert not (workflows / "discussion.yaml").exists()
+    assert not (prompts / "common" / "discussion.md").exists()
+    assert not (prompts / "common" / "discussion_controller.md").exists()
+    assert not (prompts / "common" / "discussion_judge.md").exists()
+    assert not (prompts / "common" / "discussion_final_validator.md").exists()
     assert not (ROOT / "runner" / "workflows").exists()
     assert not (ROOT / "runner" / "prompts").exists()
 
