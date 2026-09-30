@@ -22,7 +22,7 @@ Current product direction:
 - supported UI workflow families:
   1. Linear Workflow with Rollback / Loop
   2. Dynamic Handoff
-  3. Discussion / Group Chat
+- Discussion / Group Chat is a Dynamic Handoff Workflow pattern, not a runtime family
 - Chat entry remains: choose Workflow/Profile -> enter prompt -> Run
 - do NOT add a separate execution-mode selector
 
@@ -41,38 +41,30 @@ DYNAMIC-ONLY CONSOLIDATION (2026-09-30)
 [ ] Update live Qwen reliability probes/tools to exercise Dynamic Handoff routing and session-policy behavior.
 [ ] Remove old Discussion contracts from todo/future/docs/builder and keep CI/Ubuntu/Windows/Studio green.
 
-FULL DESIGN READABILITY + PROFESSIONAL ROLES (2026-09-30)
------------------------------------------------------
-[ ] Replace simple branch positioning with a readable main-lane + grouped branch layout.
-[ ] Keep controller Stage centered; arrange targets in balanced rows with bounded columns.
-[ ] Place downstream convergence/final validation below the branch group so the graph reads top-to-bottom.
-[ ] Make Discussion built-in roles more formal and production-oriented while keeping each role an ordinary Stage.
-[ ] Keep role specialization in YAML/prompt/status only; do not add a role framework or second runtime.
-[ ] Update Studio/static bundle/tests and Discussion workflow contracts.
+FULL DESIGN READABILITY + PROFESSIONAL DYNAMIC ROLES (2026-09-30)
+-------------------------------------------------------------
+[x] Replace simple branch positioning with a readable centered main-lane + horizontal Handoff target layout.
+[x] Keep Handoff Stage centered and keep targets on one horizontal row; the canvas can pan/zoom horizontally.
+[x] Place downstream convergence/final validation below the target group so the graph reads top-to-bottom.
+[x] Make built-in Dynamic Handoff roles formal and production-oriented while keeping each role an ordinary Stage.
+[x] Keep role specialization in YAML prompt/instructions/status only; do not add a role framework or second runtime.
+[x] Update Studio/static bundle/tests for the Dynamic-only graph contract.
 
-DISCUSSION VISUAL + FINAL VALIDATION REFINEMENT (2026-09-30)
-------------------------------------------------------
-[x] Present Discussion as one controller block visually connected to multiple Session Stage blocks.
-[x] Keep Session blocks ordinary Stages with independent session_key values; Discussion owns only dispatch/round/history.
-[x] Judge PASS routes to a separate ordinary ai_validator Stage, never directly to END.
-[x] Final AI Validator PASS -> END; FAIL -> Discussion controller for another bounded discussion cycle.
-[x] Keep final validator outside Discussion controller targets so orchestration and final acceptance stay separate.
-[x] Update YAML / Graph Designer / dry-run / resume / runtime tests for this closure.
+SUPERSEDED MULTI-AGENT DESIGN HISTORY
+-------------------------------------
+Discussion / Group Chat was briefly implemented as separate discussion_controller/discussion Stage types.
+That design is removed. Do not restore:
+- discussion_controller / discussion Stage types
+- controller_rounds / discussion_history state
+- max_rounds / round_end Discussion routing contract
+- Discussion-specific prompts or Studio controls
+- a second scheduler/controller runtime
 
-CONTROLLER MODEL REFINEMENT (2026-09-30)
-----------------------------------------
-[x] Keep Dynamic Handoff as pure dynamic routing: one Handoff Stage chooses exactly one next Stage from allowed targets.
-[x] Dynamic Final validation is an ordinary ai_validator Stage; PASS -> END, FAIL -> Handoff.
-[x] Add one thin Discussion Controller Stage; it orchestrates multiple participant Sessions while participants/moderator/judge remain ordinary Stages.
-[x] Discussion Controller owns only bounded round/order/termination metadata and delegates actual work to ordinary Stages through the existing FlowEngine.
-[x] Reuse Handoff target-selection behavior inside Discussion Controller while keeping Dynamic Handoff free of discussion state.
-[x] Graph Designer shows Dynamic Handoff as one-of-many routing and Discussion Controller as multi-session orchestration, both using normal Stage nodes/edges.
-[x] Add controller-loop runtime/resume/UI tests for Discussion without changing Linear or Dynamic Handoff semantics.
-
-NEW WORK - MULTI-WORKFLOW FAMILIES (STARTED 2026-09-30)
--------------------------------------------------------
-Goal: add Dynamic Handoff and Discussion / Group Chat without creating a second runtime.
-Reuse Stage / StageExecutor / StateStore / plugins / Graph Designer and keep YAML canonical.
+Any discussion board, review board, triage, or multi-role collaboration is now a Dynamic Handoff Workflow pattern built from:
+- one handoff Stage
+- ordinary base/review/ai_validator role Stages
+- routes back to the Handoff Stage as needed
+- session_policy: main / role / fresh
 
 Dynamic Handoff
 [x] Add one built-in dynamic_handoff.yaml example/profile.
@@ -80,17 +72,11 @@ Dynamic Handoff
 [x] Reuse durable workflow_position/transition state for selected handoff; no separate scheduler state or generic DAG scheduler required.
 [x] Reuse StageResult + FlowEngine routing and keep technical ERROR handling in StageExecutor.
 [x] Final Validation PASS routes to END; FAIL hands back to Handoff for another dynamic next-stage decision.
-[x] Workflow Studio renders one Stage with multiple handoff edges and edits them without a separate designer.
-[x] Add durable StateStore process-resume coverage for dynamic handoff. Loader/schema/runtime/UI/dry-run contracts are covered; 24H live soak remains part of the existing reliability gate.
-
-Discussion / Group Chat
-[x] Add one built-in discussion.yaml example/profile.
-[x] Keep participant / moderator / judge as ordinary Stages.
-[x] Reuse workflow_position for current Stage; persist only controller_rounds + bounded discussion_history for Discussion orchestration.
-[x] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
-[x] Judge PASS routes to Final AI Validation; Judge FAIL returns to Discussion Controller. Final AI Validation PASS -> END, FAIL -> Discussion.
-[x] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
-[x] Add durable StateStore process-resume coverage for discussion. Loader/schema/runtime/UI/dry-run contracts are covered; 24H live soak remains part of the existing reliability gate.
+[x] Workflow Studio renders one Stage with multiple Handoff edges and edits them without a separate designer.
+[x] Add durable StateStore process-resume coverage for Dynamic Handoff.
+[x] Add durable role-session state for session_policy: role; main uses ai_session_id and fresh is never persisted.
+[x] Add main / role / fresh deterministic session-policy tests.
+[x] Add real-Qwen Dynamic Handoff session-policy probe to qwen_live_reliability.py.
 
 Implementation constraints
 - No execution_mode selector in Chat; selecting the Workflow YAML selects the family.
