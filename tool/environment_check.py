@@ -52,7 +52,7 @@ def check(repo_root: Path) -> dict:
     for relative, label in (
         ("ai_task_runner.py", "Runner entrypoint"),
         ("tool/workflow_dryrun.py", "Workflow dry-run"),
-        ("runner/workflow/system/ai.yaml", "Default workflow"),
+        ("runner/assets/workflows/ai.yaml", "Default workflow"),
     ):
         path = repo_root / relative
         checks.append(_row(label, "pass" if path.is_file() else "fail", str(path)))
