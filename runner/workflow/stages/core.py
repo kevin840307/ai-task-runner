@@ -245,14 +245,14 @@ class DiscussionControllerStage(HandoffStage):
         round_no = int(ctx.state.controller_rounds.get(self.name, 1))
         history = list(ctx.state.discussion_history)[-24:]
         import json
-        base = super()._augment_rendered_prompt(ctx, prompt)
-        return (
-            base
+        contextual = (
+            prompt.rstrip()
             + "\n\nRunner discussion controller context:\n"
             + f"round: {round_no}\n"
             + "history: "
             + json.dumps(history, ensure_ascii=False)
         )
+        return super()._augment_rendered_prompt(ctx, contextual)
 
 
 @dataclass(frozen=True)
