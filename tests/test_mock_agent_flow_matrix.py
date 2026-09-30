@@ -79,6 +79,63 @@ def test_technical_failures_use_shared_stage_retry_for_both_backends(
 
 
 @pytest.mark.parametrize("backend", ["qwen", "opencode"])
+def test_dynamic_handoff_uses_same_runtime_contract_for_both_backends(
+    tmp_path, monkeypatch, backend
+):
+    workflow = tmp_path / "dynamic.workflow.yaml"
+    workflow.write_text(
+        """stages:
+  coordinator:
+    type: handoff
+    targets: [worker, final_validate]
+    session_policy: role
+  worker:
+    type: base
+    prompt: common/dynamic_worker.md
+    instructions: Create done.txt and return.
+    session_policy: role
+    mode: write
+    track_changes: true
+    routes:
+      pass: coordinator
+  final_validate:
+    type: ai_validator
+    validator: ai
+    session_policy: fresh
+    runs: 1
+    required_passes: 1
+    routes:
+      pass: done
+      fail: coordinator
+flow:
+  - coordinator
+  - worker
+  - final_validate
+""",
+        encoding="utf-8",
+    )
+
+    result, rows = run_case(
+        tmp_path,
+        monkeypatch,
+        "dynamic_handoff",
+        backend=backend,
+        workflow=str(workflow),
+        final_ai_validations=1,
+        final_ai_required_passes=1,
+    )
+
+    assert result.completed is True
+    assert [row["stage"] for row in rows] == [
+        "handoff",
+        "execute",
+        "handoff",
+        "validator",
+    ]
+    assert (tmp_path / "done.txt").is_file()
+
+
+@pytest.mark.parametrize("backend", ["qwen", "opencode"])
 def test_review_fail_result_edge_routes_back_to_execute(tmp_path, monkeypatch, backend):
     result, rows = run_case(
         tmp_path,
