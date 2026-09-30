@@ -1,0 +1,34 @@
+stages:
+  planning:
+    type: plan
+
+  execute:
+    type: task
+    scope: task
+
+  review:
+    type: review
+    scope: task
+    routes:
+      fail: execute
+
+  challenge_review:
+    type: review
+    prompt: common/review.md
+    session_policy: fresh
+    routes:
+      fail: planning
+
+  validate_ai:
+    type: ai_validator
+    validator: ai
+    session_policy: fresh
+    routes:
+      fail: planning
+
+flow:
+  - planning
+  - execute
+  - review
+  - challenge_review
+  - validate_ai
