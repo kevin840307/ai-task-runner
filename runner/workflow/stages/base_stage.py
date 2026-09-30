@@ -91,6 +91,7 @@ class StageContext:
             if hasattr(value, "session_id"):
                 value.session_id = ""
         self.state.ai_session_id = ""
+        self.state.stage_sessions.clear()
         self.save_state()
 
 
