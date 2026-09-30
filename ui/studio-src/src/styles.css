@@ -21,7 +21,25 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .studio-header strong { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .studio-header span { color: #64748b; font-size: 12px; }
 .studio-header .message { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studio-body { min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 360px; }
+.studio-body { min-height: 0; display: grid; grid-template-columns: 230px minmax(0,1fr) 360px; }
+
+.palette { min-width: 0; overflow: auto; background: #fff; border-right: 1px solid #e5e7eb; padding: 14px; }
+.palette-head { display: grid; gap: 3px; margin-bottom: 12px; }
+.palette-head strong { font-size: 14px; }
+.palette-head small, .palette-note small { color: #64748b; line-height: 1.45; }
+.palette-list { display: grid; gap: 9px; }
+.palette-item {
+  display: grid; gap: 3px; width: 100%; text-align: left; padding: 10px 11px;
+  border: 1px solid #dbe3ef; border-radius: 12px; background: #fff; cursor: grab;
+}
+.palette-item:active { cursor: grabbing; }
+.palette-item strong { color: #0f172a; }
+.palette-item > span { color: #2563eb; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.palette-item small { color: #64748b; line-height: 1.35; }
+.palette-item code { color: #475569; font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.palette-note { display: grid; gap: 5px; margin-top: 14px; padding: 10px; border-radius: 10px; background: #f8fafc; }
+.palette-note strong { font-size: 12px; }
+
 .canvas { min-width: 0; min-height: 0; background: #f8fafc; }
 .inspector { min-width: 0; overflow: auto; background: #fff; border-left: 1px solid #e5e7eb; padding: 18px; }
 .inspector .empty { color: #64748b; }
@@ -38,6 +56,8 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 }
 .fields textarea { resize: vertical; min-height: 84px; }
 .fields small { font-weight: 500; color: #94a3b8; }
+.fields .effective-value { color: #64748b; }
+.fields .effective-value code { color: #334155; font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .edge-help { margin: 18px 0; padding: 12px; border: 1px solid #dbe3f0; border-radius: 12px; background: #f8fafc; }
 .edge-help p { color: #64748b; font-size: 12px; line-height: 1.5; }
 .edge-help code { display: block; white-space: pre-wrap; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #334155; }
@@ -54,11 +74,13 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
   border: 1px solid #cfd8e8; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.08);
 }
 .wf-stage.selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,.15), 0 10px 28px rgba(15,23,42,.10); }
+.react-flow__node.disconnected .wf-stage { border-style: dashed; opacity: .78; }
 .wf-stage-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .wf-stage-head span { text-transform: uppercase; color: #2563eb; font-size: 10px; font-weight: 900; letter-spacing: .07em; }
 .wf-stage-head b { font-size: 9px; color: #7c3aed; background: #f3e8ff; border-radius: 999px; padding: 3px 6px; }
 .wf-stage > strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wf-stage > small { display: block; margin-top: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #64748b; }
+.wf-prompt { display: block; margin-top: 6px; color: #475569; font: 9px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-handles { display: grid; grid-template-columns: repeat(3,1fr); margin-top: 14px; color: #94a3b8; text-align: center; font-size: 8px; font-weight: 900; }
 .react-flow__handle.pass { background: #16a34a; }
 .react-flow__handle.fail { background: #f59e0b; }
@@ -74,6 +96,10 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 }
 .wf-scope strong { font-size: 10px; letter-spacing: .08em; }
 .react-flow__node-scope { z-index: -1 !important; }
-@media (max-width: 900px) {
-  .studio-body { grid-template-columns: minmax(0,1fr) 300px; }
+@media (max-width: 1050px) {
+  .studio-body { grid-template-columns: 190px minmax(0,1fr) 300px; }
+}
+@media (max-width: 760px) {
+  .studio-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(520px,1fr) auto; overflow: auto; }
+  .palette, .inspector { border: 0; border-bottom: 1px solid #e5e7eb; max-height: 320px; }
 }
