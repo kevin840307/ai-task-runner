@@ -369,12 +369,24 @@ class WorkflowStudioMixin:
             if not isinstance(stages, dict) or stage_name not in stages:
                 raise ValueError(f"Stage not found: {stage_name}")
 
-            # Keep Studio writable fields aligned with the runtime Stage catalog.
-            # Node-only fields live beside the Stage spec; Stage-spec fields are
-            # discovered dynamically so adding a Stage option does not require a
-            # second hard-coded UI/backend allow-list.
-            catalog = self.workflow_catalog()
-            allowed = {"type", "status", "label", "scope", "routes", "readonly_safety"}
+            # Stable built-in contract first, then extend from the runtime
+            # catalog when it is available. Tests and portable Studio instances
+            # may use a temporary repo_root without tool/workflow_catalog.py, so
+            # Stage saving must never depend on that subprocess existing.
+            allowed = {
+                "type", "status", "label", "scope", "routes",
+                "prompt", "instructions", "detail", "run_state", "mode", "actor",
+                "allow_project_read", "parser", "structured_retries",
+                "structured_fresh_retries", "runs", "required_passes",
+                "readonly_safety", "track_changes", "tolerate_restored_changes",
+                "timeout", "session_key", "fresh_session_each_run",
+                "fresh_session_on_start", "produces", "min_tasks",
+                "ai_validator_yolo", "command", "cwd", "result_kind", "clean_work",
+            }
+            try:
+                catalog = self.workflow_catalog()
+            except ValueError:
+                catalog = {}
             for stage in (catalog.get("stage_types") or {}).values():
                 for option in stage.get("options") or []:
                     name = str(option.get("name") or "").strip()
