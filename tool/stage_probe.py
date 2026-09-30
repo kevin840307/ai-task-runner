@@ -88,7 +88,13 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     if draft_workflow is not None:
         if not isinstance(draft_workflow, dict) or not isinstance(draft_workflow.get("stages"), dict) or args.stage not in draft_workflow["stages"]:
             raise ValueError(f"unknown Workflow Stage: {args.stage}")
-        workflow = normalize_workflow(draft_workflow, workflow_path)
+        draft_for_test = {
+            "stages": dict(draft_workflow["stages"]),
+            "flow": list(draft_workflow.get("flow") or []),
+        }
+        if args.stage not in draft_for_test["flow"]:
+            draft_for_test["flow"].append(args.stage)
+        workflow = normalize_workflow(draft_for_test, workflow_path)
     else:
         workflow = load_workflow(workflow_path)
         if not any(str(item["name"]) == args.stage for item in workflow):
