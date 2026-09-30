@@ -2,7 +2,7 @@
 
 1. 最少 Code。沒有明確需求就不要新增抽象；舊概念無使用者就直接刪除，不保留相容層。
 2. 24H 無人值守優先。預設 `stage_retries=-1`，技術異常可持續重試；API/服務異常必須使用「秒」為單位的 delay/backoff。
-3. Workflow 只有 Stage nodes + PASS/FAIL/ERROR result edges。rollback/loop 就是 edge，不存在 recover/restart_at/repeat/repair runtime object。
+3. Workflow 只有 Stage nodes + PASS/FAIL semantic edges；ERROR 不是 graph edge，由 StageExecutor technical retry/recovery 處理。rollback/loop 就是 PASS/FAIL edge，不存在 recover/restart_at/repeat/repair runtime object。
 4. Stage 只做工作並回傳 StageResult。新增 Stage 不得實作 retry/recover/session rotation。
 5. StageExecutor 是 Stage 技術可靠度唯一 owner：Hook、安全、changed files、Same Session retry、Fresh Session rotation、retry delay。
 6. 正常 AI 流程優先 Same Session，只補新 evidence；Fresh Session 才重送完整但必要的 Stage context。
@@ -24,8 +24,10 @@
 22. protected/readonly fingerprint 只追 maintained project source；`.git`、`.ai-task-runner`、IDE/build/test/cache artifacts 使用共用 ignore policy 排除，但 `.gitignore`、`.github/**`、`.editorconfig` 等正式檔案仍需追蹤。
 23. Log 精簡但足夠 Debug；所有長輸出必須 bounded。
 24. 名稱、folder、owner/import path 必須直觀；一個能力只保留一個 owner。
-25. Future Dynamic Handoff / Discussion / Parallel 必須重用 Stage、StageExecutor、StateStore、Plugin boundary、Workflow asset 與 Graph Designer；不得先建立第二個 Orchestrator。
+25. Dynamic Handoff 是唯一 multi-agent runtime primitive；未來 Parallel 若真的需要，必須重用 Stage、StageExecutor、StateStore、Plugin boundary、Workflow asset 與 Graph Designer，不得先建立第二個 Orchestrator。
 26. 文件、範例、UI、CLI、YAML、Dry Run 與測試必須與正式 runtime contract 同步，不允許 legacy contract 留在測試裡。
-27. 只有實際通過 Windows + Ubuntu CI、real-Qwen reliability probes 與必要 soak 證據後，才可宣稱 24H 重構完成。
+27. React Full Designer 唯一可維護 source 是 `ui/studio-src/**`。禁止直接修改 `ui/static/workflow-studio-app/**`；該目錄只能由 `cd ui/studio-src && npm run build` 產生。若 compiled output 需要提交，也只能提交 build 產物，不可手修 minified JS/CSS。
+28. Full Designer 的返回行為必須 deterministic 回到主 UI 的 Workflow Studio，並盡量重新開啟同一 Workflow；禁止依賴 `history.back()`。
+29. 只有實際通過 Windows + Ubuntu CI、real-Qwen reliability probes 與必要 soak 證據後，才可宣稱 24H 重構完成。
 
 核心：Stage 做事；StageExecutor 讓 Stage 穩定；FlowEngine 決定下一步；StateStore 讓進度可 Resume。
