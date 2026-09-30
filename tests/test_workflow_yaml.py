@@ -13,6 +13,9 @@ from runner.workflow.loader import WORKFLOWS, load_workflow
 from runner.workflow.stages import StageContext, StageResult
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 class FakeAI:
     session_id = ""
 
@@ -61,6 +64,24 @@ def write_workflow(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "workflow.yaml"
     path.write_text(text.lstrip(), encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "tool/workflow/01_default_ai.yaml",
+        "tool/workflow/02_ai_with_review_gate.yaml",
+        "tool/workflow/03_file_validation.yaml",
+        "tool/workflow/04_mixed_with_review_gate.yaml",
+        "tool/workflow/05_review_vote_3_choose_2.yaml",
+        "tool/workflow/06_custom_task_producer.yaml",
+        "tool/workflow/11_multi_validators_anywhere.yaml",
+    ],
+)
+def test_current_tool_workflow_examples_load_with_production_schema(relative):
+    workflow = load_workflow(ROOT / relative)
+    assert workflow
+    assert all(item["name"] for item in workflow)
 
 
 def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
