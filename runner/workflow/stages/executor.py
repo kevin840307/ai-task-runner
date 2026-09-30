@@ -73,7 +73,7 @@ class StageExecutor:
         label: str = "",
         retry_limit: int | None = None,
     ) -> StageResult:
-        if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(ctx):
+        if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(stage, ctx):
             self._fresh_session(stage, ctx)
 
         retry_limit = int(ctx.config.stage_retries if retry_limit is None else retry_limit)
@@ -114,7 +114,7 @@ class StageExecutor:
             previous_error = str(error)
 
             if is_transient_error(error):
-                retry_mode = "retry" if self._has_session(ctx) else "recover"
+                retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
                 self._sleep(ctx, service_delay)
                 if service_delay:
                     service_delay = min(
@@ -130,7 +130,7 @@ class StageExecutor:
                 failures_in_session = 0
                 retry_mode = "recover"
             else:
-                retry_mode = "retry" if self._has_session(ctx) else "recover"
+                retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
 
             self._sleep(ctx, float(ctx.config.retry_delay))
 
@@ -223,7 +223,10 @@ class StageExecutor:
         progress.session_fresh(previous)
 
     @staticmethod
-    def _has_session(ctx: StageContext) -> bool:
+    def _has_session(stage: Stage, ctx: StageContext) -> bool:
+        checker = getattr(stage, "has_session", None)
+        if callable(checker):
+            return bool(checker(ctx))
         return bool(ctx.ai_client.session_id) or any(
             bool(getattr(value, "session_id", "")) for value in ctx.scratch.values()
         )
