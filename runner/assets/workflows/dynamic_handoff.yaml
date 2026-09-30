@@ -11,6 +11,8 @@ stages:
       - verifier
       - risk_reviewer
       - final_validate
+    session_policy: role
+    session_key: dynamic_coordinator
     error_policy:
       retries: -1
 
@@ -20,7 +22,8 @@ stages:
     status: Requirements Analyst 正在釐清目標、限制與驗收條件
     prompt: common/dynamic_worker.md
     instructions: Identify goals, constraints, ambiguities, assumptions, and measurable acceptance criteria. Do not modify project files.
-    session_policy: main
+    session_policy: role
+    session_key: dynamic_requirements_analyst
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -69,7 +72,8 @@ stages:
     status: Verification Engineer 正在獨立檢查測試與證據
     prompt: common/dynamic_worker.md
     instructions: Independently verify behavior, tests, build evidence, and remaining defects. Do not modify production/source files.
-    session_policy: fresh
+    session_policy: role
+    session_key: dynamic_verifier
     readonly_safety: observe
     routes:
       pass: coordinator
@@ -80,7 +84,8 @@ stages:
     status: Risk Reviewer 正在檢查可靠性、品質與失敗模式
     prompt: common/dynamic_worker.md
     instructions: Review correctness, reliability, security, maintainability, hidden coupling, edge cases, and operational failure modes. Report only material risks.
-    session_policy: fresh
+    session_policy: role
+    session_key: dynamic_risk_reviewer
     readonly_safety: observe
     routes:
       pass: coordinator
