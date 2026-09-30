@@ -15,14 +15,14 @@ Do not restart the refactor from old assumptions.
 Current product direction:
 - one small closed-loop runtime
 - Stage is the only execution unit
-- Workflow routing is PASS / FAIL / ERROR result edges
+- Workflow routing is PASS / FAIL result edges; ERROR is Stage retry-only and stops after exhaustion
 - StageExecutor owns technical retry / Same Session / Fresh Session / timeout / transient API recovery
 - FlowEngine owns semantic navigation only
 - UI / CLI / API / YAML List use the same RunRequest/runtime
-- future UI families:
-  1. Linear Workflow with Rollback / Loop (current)
-  2. Dynamic Handoff (future)
-  3. Discussion / Group Chat (future)
+- supported UI workflow families:
+  1. Linear Workflow with Rollback / Loop
+  2. Dynamic Handoff (implementation started)
+  3. Discussion / Group Chat (implementation started)
 - Chat entry remains: choose Workflow/Profile -> enter prompt -> Run
 - do NOT add a separate execution-mode selector
 
@@ -106,7 +106,6 @@ Do not add compatibility shims for these old paths/concepts:
 - repair Stage as runtime concept
 - recover / restart_at / repeat / max_attempts / on_exhausted graph controls
 - hidden Plan Task/Review nodes
-- per-Stage technical retry policy
 - System/Custom asset split
 - generic Folder picker UI for asset grouping
 
@@ -216,11 +215,11 @@ WORKFLOW STUDIO - LINEAR FIRST
 ------------------------------
 [IN PROGRESS] Replace the old card-list Visual editor with the dedicated React Flow workspace.
 [x] Keep Workflow YAML as the canonical model; no second runtime/graph schema.
-[x] Add graph-save API for Flow order + PASS/FAIL/ERROR routes.
+[x] Add graph-save API for Flow order + PASS/FAIL routes; Handoff targets are Stage-owned edges.
 [x] Make Stage writable fields derive from the runtime workflow catalog instead of a fixed allow-list.
 [x] Add START / END as UI-only virtual node concepts in the new Studio source.
 [x] Show scope: task as a PER TASK visual group; Plan still produces Task[] only.
-[x] Add PASS / FAIL / ERROR Stage handles and explicit result-edge editing in React Flow source.
+[x] Add PASS / FAIL Stage handles; ERROR is retry-only; Handoff uses one multi-target HANDOFF handle.
 [x] Add large dedicated Studio source package: React + TypeScript + @xyflow/react + Vite.
 [ ] Build and commit ui/static/workflow-studio-app/ static HTML/JS/CSS output.
 [ ] Add existing Studio/library button to open the full designer for the selected Workflow.
@@ -229,7 +228,7 @@ WORKFLOW STUDIO - LINEAR FIRST
 [ ] Add Stage rename transaction that updates flow/routes safely, or keep Stage key immutable with a clear UI label.
 [ ] Add graph dirty/unsaved-navigation guard and runtime edit-lock handling to the full page.
 [x] Add Prompt selector/browse experience in the Stage inspector and show the effective default Prompt explicitly.
-[ ] Add graph CRUD browser tests: START/END, delete Stage, reorder, PASS/FAIL/ERROR connect/delete/retarget, scope:task, save/reload. (Disconnected Stage + Prompt ownership contracts added.)
+[ ] Add graph CRUD browser tests: START/END, delete Stage, reorder, PASS/FAIL + HANDOFF connect/delete/retarget, scope:task, save/reload. (Disconnected Stage + Prompt ownership contracts added.)
 [ ] Add catalog coverage test proving every runtime Stage option is editable by the generic inspector.
 [ ] Remove/retire the old Flow Map modal/card-list Visual editor only after the React Flow page has equivalent coverage.
 [x] Workflow Builder internal prompts stay outside assets/Studio; removed unused workflow_prompt.md and workflow_review.md from runner assets.
@@ -238,7 +237,7 @@ Linear Studio completion rule:
 - Start/End visible and movable in the canvas (virtual only)
 - every real Stage is one draggable node
 - every runtime Stage option can be edited from UI
-- PASS/FAIL/ERROR routing can be created/retargeted/removed without hand-editing YAML
+- PASS/FAIL routing and HANDOFF targets can be created/retargeted/removed without hand-editing YAML
 - flow order and scope:task are visible and editable
 - YAML round-trip is lossless for supported fields
 - compiled static assets run with only the existing Python UI server; no Node/React runtime on user machines
@@ -305,9 +304,7 @@ Gate 4 - 24H acceptance
 
 DO NOT START YET
 ----------------
-These are future work, not current Linear blockers:
-- Dynamic Handoff implementation
-- Discussion / Group Chat implementation
+These remain future work outside the current multi-workflow milestone:
 - generic DAG/parallel runtime
 - RoutingStrategy hierarchy reintroduction
 - large RunState class hierarchy
