@@ -49,6 +49,13 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     if scope not in {None, "task"}:
         raise RunnerError(f"workflow stage {name} scope must be task when specified")
 
+    for legacy_session_option in ("fresh_session_each_run", "fresh_session_on_start"):
+        if legacy_session_option in values:
+            raise RunnerError(
+                f"workflow stage {name} {legacy_session_option} was removed; "
+                "use session_policy: fresh instead"
+            )
+
     session_policy = values.get("session_policy", "auto")
     if session_policy not in {"auto", "main", "role", "fresh"}:
         raise RunnerError(
