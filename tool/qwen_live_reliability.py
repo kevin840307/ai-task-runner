@@ -1326,7 +1326,7 @@ def _deep_preflight_root(base: Path, minimum: int = 300) -> Path:
     while len(str(root)) <= minimum:
         root = root / (f"segment-{index}-" + "x" * 38)
         index += 1
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     io_path(root).mkdir(parents=True, exist_ok=True)
     return root
@@ -1340,9 +1340,9 @@ def _long_path_temp_root(prefix: str, minimum: int):
     non-extended root path. On Windows, cleanup can therefore fail after a
     successful >MAX_PATH preflight with WinError 145 because descendants cannot
     be removed. Keep the logical path for the test, but always clean through
-    runner.utils.files.remove_path(), which applies the extended-length prefix.
+    runner.utils.remove_path(), which applies the extended-length prefix.
     """
-    from runner.utils.files import remove_path
+    from runner.utils import remove_path
 
     base = Path(tempfile.mkdtemp(prefix=prefix))
     try:
@@ -1355,7 +1355,7 @@ def runtime_long_path_preflight() -> None:
     """Exercise core resource/state/snapshot I/O beyond traditional Windows MAX_PATH."""
     from runner.resources import read_text, write_text
     from runner.runtime.run_state import RunState, StateStore
-    from runner.utils.files import copy_path, digest, remove_path
+    from runner.utils import copy_path, digest, remove_path
     from runner.workflow.snapshot import freeze_run_resource, load_run_resource
 
     with _long_path_temp_root("ai-runner-long-path-", 300) as root:
@@ -1398,7 +1398,7 @@ def readonly_long_path_preflight() -> None:
             return []
 
     from runner.resources import read_text, write_text
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     with _long_path_temp_root("ai-runner-readonly-long-", 260) as root:
         work = root / ".ai-task-runner"
