@@ -36,8 +36,8 @@ Stage implementations do not own retry/recover/session logic.
 UI workflow families
 --------------------
 1. Linear Workflow with Rollback / Loop - current production mode.
-2. Dynamic Handoff - implementation started; reuse the same Stage/StageExecutor/StateStore.
-3. Discussion / Group Chat - implementation started; participants remain Stages.
+2. Dynamic Handoff - supported; one Handoff Stage dynamically chooses exactly one next Stage.
+3. Discussion / Group Chat - supported; one Discussion Controller dispatches ordinary participant/moderator/judge Stages across isolated Sessions.
 
 The user entry stays the same for every family: choose a Workflow/Profile in Chat,
 enter the prompt, then run. Do not add a separate mode selector.
@@ -53,14 +53,15 @@ YAML remains the only canonical Workflow model. The graph is an editor projectio
 - one YAML Stage = one Stage node
 - START / END are UI-only virtual nodes and are never written as Stages
 - flow order = default PASS -> next
-- routes.pass/fail/error = explicit result edges
+- routes.pass/fail = explicit semantic result edges; ERROR is retry-only and never a graph edge
 - scope: task = visual PER TASK group; it is not a hidden Stage
 - Plan produces Task[] data only; it never injects Execute/Review nodes
 - Stage parameters are rendered from /api/workflow/catalog so new Stage options do
   not require another hard-coded UI field list
 - Graph edits patch the existing YAML; there is no second graph/runtime schema
 - default PASS edges are structural flow edges; explicit PASS/FAIL edges can
-  be connected, retargeted, and removed; Handoff targets are multi-target Stage edges
+  be connected, retargeted, and removed; Handoff targets are one-of-many dynamic edges;
+  Discussion Controller targets are multi-session dispatch edges
 - Stage order can be changed by dragging; edge routing and node settings remain
   editable from the same full-screen workspace
 - Prompt Markdown remains a separate editable asset; Stage selects/references it
@@ -69,10 +70,10 @@ The full graph editor is a dedicated large page. The existing Studio asset brows
 may remain the library/entry page for Workflow/Prompt files, but must not constrain
 the graph canvas to the old narrow card-list layout.
 
-Future Dynamic Handoff / Discussion still use Stage nodes. They may allow one Stage
-(Agent) to connect to many Stage nodes, but must reuse this same canvas, node registry,
-catalog-driven settings panel, YAML asset ownership where applicable, and runtime
-owners. Do not build a separate designer per mode.
+Dynamic Handoff and Discussion both reuse Stage nodes and this same canvas, but their semantics stay distinct:
+- Dynamic Handoff chooses exactly one next Stage per decision and owns no discussion round state.
+- Discussion Controller coordinates multiple Stage Sessions and owns only bounded controller_rounds/history/termination state.
+Both reuse the same node registry, catalog-driven settings panel, YAML assets, FlowEngine, StageExecutor, StateStore, and plugins.
 
 
 Current package layout
@@ -140,7 +141,7 @@ Removed concepts must not return
 - repair Stage as a runtime concept
 - hidden Plan Task/Review nodes
 - plan_only runtime mode
-- per-Stage retry policy
+- separate retry/recovery Stage or graph framework
 - System/Custom Workflow trees
 - old runner/ai, runner/backends, runner/project, runner/utils package trees
 - pre-assets Workflow/Prompt paths
@@ -166,7 +167,7 @@ Gate 2 - deterministic unattended reliability
 9. [DONE] stage_retries=-1 supports unlimited technical retry.
 10. [DONE] Same Session -> Fresh Session rotation is shared by all Stages.
 11. [IN PROGRESS] 429/502/503/disconnect use seconds-based bounded backoff without losing graph position.
-12. [IN PROGRESS] PASS/FAIL result-edge + Dynamic Handoff closure tests.
+12. [DONE] PASS/FAIL result-edge + Dynamic Handoff + Discussion Controller deterministic closure/resume tests.
 13. [IN PROGRESS] kill/resume equivalence at committed Stage boundaries.
 14. [IN PROGRESS] YAML List multi-item + restart/resume.
 15. [DONE] Custom Stage requires no retry/recovery code.
@@ -193,17 +194,7 @@ Gate 4 - 24H acceptance
 Future - do not implement yet
 -----------------------------
 
-1. Dynamic Handoff
-   - reuse the same Stage node
-   - add only scheduler/handoff state when a real use case needs it
-   - reuse StageExecutor / StateStore / plugins / Graph Designer
-
-2. Discussion / Group Chat
-   - participants/moderator/judge remain Stages
-   - add only bounded round/order/termination state
-   - reuse the same runtime and Graph Designer
-
-3. Parallel
+1. Parallel
    - read-only Stages may eventually run concurrently
    - one writer per project/worktree by default
    - isolated worktrees required for parallel writers
