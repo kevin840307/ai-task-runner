@@ -1,12 +1,23 @@
 from dataclasses import dataclass
 
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
-from runner.workflow.stages import AIValidatorStage, BaseStage, CommandStage, PlanStage, ReviewStage, TaskStage
+from runner.workflow.stages import (
+    AIValidatorStage,
+    BaseStage,
+    CommandStage,
+    DiscussionStage,
+    HandoffStage,
+    PlanStage,
+    ReviewStage,
+    TaskStage,
+)
 
 
 def test_registry_contains_only_behavior_types():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
+        "discussion": DiscussionStage,
+        "handoff": HandoffStage,
         "task": TaskStage,
         "review": ReviewStage,
         "ai_validator": AIValidatorStage,
@@ -46,7 +57,7 @@ def test_graph_metadata_is_not_copied_to_stage_behavior():
         "status": "Write",
         "label": "Concrete work",
         "scope": "task",
-        "routes": {"error": "stop"},
+        "routes": {"fail": "stop"},
     })
     assert not hasattr(stage, "label")
     assert not hasattr(stage, "scope")
