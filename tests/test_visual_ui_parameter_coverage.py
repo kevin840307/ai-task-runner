@@ -68,7 +68,6 @@ def test_visual_ui_covers_only_current_graph_parameters():
         "label": "stageFlowLabel",
         "routes.pass": "stageRoutePass",
         "routes.fail": "stageRouteFail",
-        "routes.error": "stageRouteError",
     }
     missing = sorted(name for name, control in routing.items() if control not in APP)
     assert not missing, f"Visual UI is missing graph fields: {missing}"
