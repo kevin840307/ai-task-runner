@@ -1034,7 +1034,7 @@ class WorkflowStudioTests(unittest.TestCase):
             {
                 "label": "Review result",
                 "scope": "task",
-                "routes": {"fail": "work", "error": "stop"},
+                "routes": {"fail": "work"},
             },
             opened["hash"],
             self.project,
@@ -1043,7 +1043,7 @@ class WorkflowStudioTests(unittest.TestCase):
         stage = data["stages"]["review"]
         self.assertEqual(stage["scope"], "task")
         self.assertEqual(stage["label"], "Review result")
-        self.assertEqual(stage["routes"], {"fail": "work", "error": "stop"})
+        self.assertEqual(stage["routes"], {"fail": "work"})
 
         opened = self.state.studio_read(item["id"], self.project)
         with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
