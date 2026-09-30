@@ -144,9 +144,9 @@ flow: [planning]
     )
     workflows = dict(live.WORKFLOWS)
     workflows["file"] = bad
-    monkeypatch.setattr(live, "SYSTEM_WORKFLOWS", workflows)
+    monkeypatch.setattr(live, "WORKFLOWS", workflows)
 
-    with pytest.raises(RuntimeError, match="system/file planning readonly_safety mismatch"):
+    with pytest.raises(RuntimeError, match="workflow/file planning readonly_safety mismatch"):
         live.system_readonly_safety_contract()
 
 
@@ -889,16 +889,15 @@ def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert "do not inspect files, do not use" in live.REVIEW_ROUTING_EXECUTION_PROMPT
     assert 'type: command' in live.REVIEW_ROUTING_WORKFLOW
     assert 'command: "{python} seed_review.py"' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'skip_on_error: false' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'restart_at: execute' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'continuation_prompt' not in live.REVIEW_ROUTING_WORKFLOW
+    assert 'routes:' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'fail: execute' in live.REVIEW_ROUTING_WORKFLOW
+    for removed in ("skip_on_error", "restart_at", "max_attempts", "on_exhausted"):
+        assert removed not in live.REVIEW_ROUTING_WORKFLOW
     assert 'READY\\n' in live.REVIEW_ROUTING_SEED
     assert "REVIEW_REQUIRED is intentionally missing" in live.REVIEW_ROUTING_GATE
-    assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
-    assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
 
-def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_before_review(tmp_path: Path):
+def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
     workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
@@ -908,45 +907,45 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     ]
     assert workflow[0]["type"] == "task"
     assert workflow[1]["type"] == "command"
-    assert workflow[2]["restart_at"] == "execute"
-    assert workflow[2]["max_attempts"] == 3
-    assert workflow[2]["on_exhausted"] == "fail"
+    assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["type"] == "review"
-    assert workflow[4]["restart_at"] == "execute"
-    assert workflow[4]["max_attempts"] == 2
-    assert workflow[4]["on_exhausted"] == "fail"
-    assert all("scope" not in node for node in workflow)
+    assert all(
+        key not in node
+        for node in workflow
+        for key in ("restart_at", "max_attempts", "on_exhausted", "recover")
+    )
     assert "planning" not in {node["name"] for node in workflow}
-    assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
-
     compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
     compile(live.REVIEW_ROUTING_GATE, "review_gate.py", "exec")
 
 
-def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
+def test_workflow_dryrun_preflight_covers_current_graph_contracts():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 9
+    assert len(results) == 8
     assert all(item["closed"] is True for item in results)
-    assert sum(int(item["paths_total"]) for item in results) >= 10
-    linear = next(item for item in results if str(item["workflow"]).endswith("ralphy_ai_validate.yaml"))
-    assert linear["features"]["task_producer"] is False
-    assert linear["features"]["task_scope"] is False
-    custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))
+    assert sum(int(item["paths_total"]) for item in results) >= 8
+
+    ralphy = next(
+        item for item in results
+        if str(item["workflow"]).endswith("ralphy_ai_validate.yaml")
+    )
+    assert ralphy["features"]["task_producer"] is False
+    assert ralphy["features"]["task_scope"] is False
+
+    custom = next(
+        item for item in results
+        if str(item["workflow"]).endswith("custom_workflow_latest.yaml")
+    )
     assert custom["features"]["task_producer"] is True
     assert custom["features"]["task_scope"] is True
-    bounded = next(item for item in results if str(item["workflow"]).endswith("08_bounded_grill_continue.yaml"))
-    assert bounded["features"]["max_attempts"] == 1
-    reentry = next(item for item in results if str(item["workflow"]).endswith("10_bounded_gate_reentry_reset.yaml"))
-    assert reentry["features"]["max_attempts"] == 1
-    assert reentry["features"]["restart_at"] == 1
-    multi = next(item for item in results if str(item["workflow"]).endswith("11_multi_validators_anywhere.yaml"))
-    assert multi["features"]["file_validations"] == 2
-    assert multi["features"]["ai_validations"] == 2
-    assert multi["features"]["validation_not_last"] is True
-    twelve = next(item for item in results if item["workflow"] == "synthetic://12-stage-composability")
+
+    twelve = next(
+        item for item in results
+        if item["workflow"] == "synthetic://12-stage-composability"
+    )
     assert twelve["features"]["stages"] == 12
-    assert twelve["features"]["repeat"] == 1
-    assert twelve["features"]["restart_at"] == 1
+    assert twelve["features"]["routes"] == 3
+
 
 
 def test_loop_detection_contract_preflight_accepts_known_qwen_signal():
@@ -1235,7 +1234,7 @@ def test_task_array_recovery_preflight_covers_broken_planning_envelope():
     live.task_array_recovery_preflight()
 
 
-def test_loop_detection_contract_preflight_covers_planning_retry_policy():
+def test_loop_detection_contract_preflight_covers_shared_retry_policy():
     live.loop_detection_contract_preflight()
 
 
@@ -1270,7 +1269,7 @@ def test_deep_preflight_root_uses_extended_length_io_helper(monkeypatch, tmp_pat
     class ProbePath:
         def mkdir(self, *, parents, exist_ok):
             calls.append((parents, exist_ok))
-    monkeypatch.setattr("runner.utils.files.io_path", lambda path: ProbePath())
+    monkeypatch.setattr("runner.utils.io_path", lambda path: ProbePath())
     root = live._deep_preflight_root(tmp_path, len(str(tmp_path)) + 80)
     assert len(str(root)) > len(str(tmp_path)) + 80
     assert calls == [(True, True)]
@@ -1280,7 +1279,7 @@ def test_long_path_temp_root_uses_long_path_safe_cleanup(monkeypatch, tmp_path):
     base = tmp_path / "long-temp"
     removed = []
     monkeypatch.setattr(live.tempfile, "mkdtemp", lambda prefix: str(base))
-    monkeypatch.setattr("runner.utils.files.remove_path", lambda path: removed.append(Path(path)))
+    monkeypatch.setattr("runner.utils.remove_path", lambda path: removed.append(Path(path)))
     monkeypatch.setattr(live, "_deep_preflight_root", lambda root, minimum: root / "deep")
 
     with live._long_path_temp_root("ai-runner-long-path-", 300) as root:
@@ -1566,9 +1565,9 @@ def test_full_loop_workflow_uses_deterministic_repair_and_qwen_verification(tmp_
     ]
     assert workflow[0]["type"] == "command"
     assert workflow[2]["type"] == "command"
-    assert workflow[2]["restart_at"] == "execute"
+    assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["type"] == "review"
-    assert workflow[4]["restart_at"] == "execute"
+    assert workflow[4]["routes"] == {"fail": "execute"}
     compile(live.FULL_LOOP_EXECUTOR, "full_loop_execute.py", "exec")
     compile(live.FULL_LOOP_REVIEW_GATE, "full_loop_review_gate.py", "exec")
 
