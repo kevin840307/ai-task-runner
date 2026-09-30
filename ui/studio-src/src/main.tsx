@@ -487,8 +487,9 @@ function App() {
 
   const reorderByPosition = useCallback((_event: unknown, moved: Node<StudioNodeData>) => {
     if (!visual || moved.data.kind !== "stage") return;
+    if (!visual.flow.includes(moved.id)) return;
     const ordered = nodes
-      .filter((n) => n.data.kind === "stage")
+      .filter((n) => n.data.kind === "stage" && visual.flow.includes(n.id))
       .map((n) => n.id === moved.id ? moved : n)
       .sort((a, b) => a.position.y - b.position.y)
       .map((n) => n.id);
