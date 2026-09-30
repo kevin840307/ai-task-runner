@@ -40,7 +40,7 @@ def test_stage_catalog_uses_registered_spec_as_single_schema_source():
     assert "name" not in command_fields
     contract = workflow_catalog()
     assert "command" in contract["stage_types"]
-    assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "discussion", "handoff", "plan", "review", "task"}
+    assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "discussion", "discussion_controller", "handoff", "plan", "review", "task"}
     assert contract["node_options"]["scope"]["values"] == ["task"]
 
 
