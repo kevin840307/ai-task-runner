@@ -88,6 +88,7 @@ class Scenario:
         self.default = str(data.get("default", "pass")).lower()
         self.stages = self._normalize(data.get("stages", {}))
         self.labels = self._normalize(data.get("labels", {}))
+        self.handoffs = self._normalize_handoffs(data.get("handoffs", {}))
         self.counts: dict[tuple[str, str], int] = defaultdict(int)
 
     @staticmethod
@@ -103,6 +104,19 @@ class Scenario:
             result[str(key)] = statuses
         return result
 
+    @staticmethod
+    def _normalize_handoffs(value: Any) -> dict[str, list[str]]:
+        if not isinstance(value, dict):
+            raise ValueError("scenario handoffs must be an object")
+        result: dict[str, list[str]] = {}
+        for key, raw in value.items():
+            values = raw if isinstance(raw, list) else [raw]
+            targets = [str(item).strip() for item in values]
+            if any(not item for item in targets):
+                raise ValueError(f"invalid dry-run handoff target for {key}")
+            result[str(key)] = targets
+        return result
+
     def next(self, stage: str, label: str) -> str:
         if label in self.labels:
             return self._pick("label", label, self.labels[label])
@@ -111,6 +125,16 @@ class Scenario:
         if self.default not in {"pass", "fail", "error"}:
             raise ValueError(f"invalid default dry-run status: {self.default}")
         return self.default
+
+    def handoff_target(self, stage: str, allowed: list[str]) -> str:
+        if stage not in self.handoffs:
+            return allowed[-1]
+        target = self._pick("handoff", stage, self.handoffs[stage])
+        if target not in allowed:
+            raise ValueError(
+                f"dry-run handoff {stage} target must be one of: {', '.join(allowed)}"
+            )
+        return target
 
     def _pick(self, kind: str, key: str, values: list[str]) -> str:
         token = (kind, key)
@@ -175,7 +199,7 @@ class MockStageExecutor:
                 return StageResult.error_result(
                     stage.name, RuntimeError("handoff has no targets")
                 )
-            target = targets[-1]
+            target = self.scenario.handoff_target(stage.name, targets)
             return StageResult(
                 stage.name,
                 "pass",
@@ -228,26 +252,44 @@ class MatrixCase:
     expected_completed: bool
 
 
+def _handoff_selector(
+    workflow: list[dict[str, Any]],
+    target_name: str,
+) -> dict[str, str]:
+    for definition in workflow:
+        if (
+            definition.get("type") == "handoff"
+            and target_name in (definition.get("targets") or [])
+        ):
+            return {str(definition["name"]): target_name}
+    return {}
+
+
 def _matrix_cases(workflow: list[dict[str, Any]]) -> list[MatrixCase]:
     cases = [MatrixCase("happy path", Scenario(), True)]
     for definition in workflow:
         name = str(definition["name"])
         routes = definition.get("routes") or {}
+        handoffs = _handoff_selector(workflow, name)
         for status in ("fail", "error"):
             target = str(routes.get(status, "stop"))
+            scenario_data: dict[str, Any] = {"stages": {name: status}}
+            if handoffs:
+                scenario_data["handoffs"] = handoffs
             if target == "stop":
                 cases.append(
                     MatrixCase(
                         f"{name} {status.upper()} -> stop",
-                        Scenario({"stages": {name: status}}),
+                        Scenario(scenario_data),
                         False,
                     )
                 )
             else:
+                scenario_data["stages"][name] = [status, "pass"]
                 cases.append(
                     MatrixCase(
                         f"{name} {status.upper()} -> {target} -> closure",
-                        Scenario({"stages": {name: [status, "pass"]}}),
+                        Scenario(scenario_data),
                         True,
                     )
                 )
