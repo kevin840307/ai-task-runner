@@ -189,7 +189,7 @@ class HandoffStageSpec(BaseStageSpec):
     prompt: str = "common/handoff.md"
     targets: list[str] = field(default_factory=list)
     structured_retries: int = 2
-    session_key: str = "handoff_client"
+    session_policy: str = "role"
 
 
 class HandoffStage(BaseStage):
