@@ -51,7 +51,10 @@ jobs:
           cache-dependency-path: ui/studio-src/package-lock.json
 
       - name: Install Studio
-        run: npm install
+        run: |
+          npm install
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
 
       - name: Build Studio
         run: npm run build
