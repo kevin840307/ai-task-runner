@@ -65,7 +65,7 @@ Default routing is:
 
 - PASS -> next Stage
 - FAIL -> stop
-- ERROR -> stop
+- ERROR -> StageExecutor retry/recovery; exhausted ERROR stops at the current Stage
 
 Rollback and loop are ordinary result edges to an earlier Stage.
 
@@ -79,7 +79,7 @@ The following legacy runtime concepts are intentionally removed:
 - `fresh_after_same_failures`
 - `replan` StageResult
 - hidden Plan Task/Review nodes
-- per-Stage retry policy
+- graph-routable ERROR/recovery policy
 - separate System/Custom Workflow trees
 - TaskRunner/Pipeline/LinearRouting compatibility runtimes
 
