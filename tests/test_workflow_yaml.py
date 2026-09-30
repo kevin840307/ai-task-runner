@@ -498,13 +498,19 @@ def test_builtin_discussion_workflow_has_one_controller_for_many_sessions_and_fi
         "discussion",
         "discussion",
         "discussion",
+        "discussion",
+        "discussion",
+        "discussion",
         "review",
         "ai_validator",
     ]
     assert controller["name"] == "discussion"
     assert controller["targets"] == [
-        "participant_architecture",
-        "participant_critic",
+        "requirements_analyst",
+        "solution_architect",
+        "domain_specialist",
+        "risk_reviewer",
+        "evidence_verifier",
         "moderator",
         "judge",
     ]
@@ -513,12 +519,21 @@ def test_builtin_discussion_workflow_has_one_controller_for_many_sessions_and_fi
     assert controller["max_rounds"] == 3
     assert all(
         item.get("controller") == "discussion"
-        for item in workflow[1:4]
+        for item in workflow[1:7]
     )
     assert all(
         item.get("routes") == {"pass": "discussion"}
-        for item in workflow[1:4]
+        for item in workflow[1:7]
     )
+    assert [item.get("label") for item in workflow[1:7]] == [
+        "Requirements Analyst",
+        "Solution Architect",
+        "Domain Specialist",
+        "Risk & Quality Reviewer",
+        "Evidence Verifier",
+        "Discussion Moderator",
+    ]
+    assert judge["label"] == "Decision Judge"
     assert judge["routes"] == {"pass": "final_validate", "fail": "discussion"}
     assert final_validate["type"] == "ai_validator"
     assert Path(final_validate["prompt"]).name == "discussion_final_validator.md"
