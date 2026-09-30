@@ -29,7 +29,6 @@ type Stage = Record<string, unknown> & {
   routes?: Record<string, string>;
   error_policy?: { retries: number };
   targets?: string[];
-  max_rounds?: number;
 };
 
 type Visual = {
