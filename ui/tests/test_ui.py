@@ -1041,6 +1041,73 @@ class WorkflowStudioTests(unittest.TestCase):
             )
 
 
+    def test_graph_save_round_trips_explicit_role_session_policy(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        draft = {
+            "stages": [
+                {**visual["stages"][0], "session_policy": "role"},
+                visual["stages"][1],
+            ],
+            "flow": visual["flow"],
+            "routes": visual["routes"],
+        }
+
+        self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+
+        data = __import__("yaml").safe_load(self.workflow.read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
+
+
+    def test_graph_save_rejects_conflicting_session_policy_and_session_key(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        draft = {
+            "stages": [
+                {
+                    **visual["stages"][0],
+                    "session_policy": "role",
+                    "session_key": "legacy-key",
+                },
+                visual["stages"][1],
+            ],
+            "flow": visual["flow"],
+            "routes": visual["routes"],
+        }
+
+        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
+            self.state.studio_graph_save(
+                item["id"], draft, visual["hash"], self.project
+            )
+
+
+    def test_graph_save_is_blocked_while_runtime_is_active(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        draft = {
+            "stages": visual["stages"],
+            "flow": visual["flow"],
+            "routes": visual["routes"],
+        }
+
+        with patch.object(
+            self.state,
+            "edit_guard",
+            return_value={
+                "editable": False,
+                "active_projects": [{"name": "Running Project"}],
+            },
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "Cannot edit workflow/prompt while runtime is active"
+            ):
+                self.state.studio_graph_save(
+                    item["id"], draft, visual["hash"], self.project
+                )
+
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
