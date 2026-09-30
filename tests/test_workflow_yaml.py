@@ -10,7 +10,7 @@ from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState, StateStore, set_stage
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.loader import WORKFLOWS, load_workflow
-from runner.workflow.stages import StageContext, StageResult
+from runner.workflow.stages import HandoffStageSpec, StageContext, StageResult
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -420,6 +420,12 @@ flow:
     assert previous is not None
     assert previous.stage == "first"
     assert previous.output == "durable feedback"
+
+
+def test_handoff_stage_defaults_to_durable_role_session():
+    spec = HandoffStageSpec(name="router", targets=["worker"])
+    assert spec.session_policy == "role"
+    assert spec.session_key == ""
 
 
 def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
