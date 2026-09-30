@@ -1180,6 +1180,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
     ]
     workflows = [
         *WORKFLOWS.values(),
+        RUNNER_WORKFLOWS["dynamic_handoff"],
         RUNNER_WORKFLOWS["ralphy_ai_validate"],
         ROOT / "examples" / "custom_workflow_latest.yaml",
         *tool_workflows,
