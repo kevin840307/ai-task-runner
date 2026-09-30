@@ -1760,11 +1760,12 @@ Goal:
 Previous Stage result:
 {{ previous }}
 
-Choose exactly one next Stage using this sequence:
+Choose exactly one next Stage using the latest Stage output:
 - if there is no previous Stage result, choose main_role
-- after main_role, choose stable_role
-- after stable_role, choose fresh_role
-- after fresh_role, choose final_gate
+- after MAIN_DONE, choose stable_role
+- after STABLE_FIRST, choose stable_role again
+- after STABLE_REPEAT, choose fresh_role
+- after FRESH_DONE, choose final_gate
 
 Do not perform the selected Stage's work yourself.
 """
@@ -1774,10 +1775,13 @@ DYNAMIC_SESSION_ROLE_PROMPT = """You are the selected Dynamic Handoff role.
 Goal:
 {{ goal }}
 
+Assigned responsibility:
+{{ instructions }}
+
 Handoff context:
 {{ previous }}
 
-Return one short line confirming this Stage completed. Do not use tools or modify files.
+Follow the assigned responsibility exactly. Do not use tools or modify files.
 """
 
 DYNAMIC_SESSION_WORKFLOW = """stages:
@@ -1791,7 +1795,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
   main_role:
     type: base
     prompt: dynamic_role.md
-    instructions: Act as the main-session specialist.
+    instructions: Always return exactly MAIN_DONE.
     session_policy: main
     routes:
       pass: coordinator
@@ -1799,7 +1803,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
   stable_role:
     type: base
     prompt: dynamic_role.md
-    instructions: Act as the stable-role-session specialist.
+    instructions: On the first invocation in this Session return exactly STABLE_FIRST. On every later invocation in the same Session return exactly STABLE_REPEAT.
     session_policy: role
     session_key: dynamic_live_stable_role
     routes:
@@ -1808,7 +1812,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
   fresh_role:
     type: base
     prompt: dynamic_role.md
-    instructions: Act as the fresh-session specialist.
+    instructions: Always return exactly FRESH_DONE.
     session_policy: fresh
     session_key: dynamic_live_fresh_role
     routes:
@@ -1866,6 +1870,8 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
         "coordinator",
         "stable_role",
         "coordinator",
+        "stable_role",
+        "coordinator",
         "fresh_role",
         "coordinator",
         "final_gate",
@@ -1890,9 +1896,13 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
             "session_policy=main did not persist the primary Runner session"
         )
     stable_session = str(stage_sessions.get("stable_role") or "")
-    if not stable_results or not stable_session or stable_results[-1] != stable_session:
+    if len(stable_results) < 2 or not stable_session:
         raise RuntimeError(
-            "session_policy=role did not persist the role-specific session"
+            "session_policy=role did not run the reusable role more than once"
+        )
+    if any(session != stable_session for session in stable_results[-2:]):
+        raise RuntimeError(
+            "session_policy=role did not reuse the same durable role-specific session"
         )
     if "fresh_role" in stage_sessions:
         raise RuntimeError(
