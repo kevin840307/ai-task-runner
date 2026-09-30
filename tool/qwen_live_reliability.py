@@ -1752,6 +1752,161 @@ def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> Non
             )
 
 
+DYNAMIC_SESSION_ROUTER_PROMPT = """You are a deterministic Dynamic Handoff coordinator.
+
+Goal:
+{{ goal }}
+
+Previous Stage result:
+{{ previous }}
+
+Choose exactly one next Stage using this sequence:
+- if there is no previous Stage result, choose main_role
+- after main_role, choose stable_role
+- after stable_role, choose fresh_role
+- after fresh_role, choose final_gate
+
+Do not perform the selected Stage's work yourself.
+"""
+
+DYNAMIC_SESSION_ROLE_PROMPT = """You are the selected Dynamic Handoff role.
+
+Goal:
+{{ goal }}
+
+Handoff context:
+{{ previous }}
+
+Return one short line confirming this Stage completed. Do not use tools or modify files.
+"""
+
+DYNAMIC_SESSION_WORKFLOW = """stages:
+  coordinator:
+    type: handoff
+    prompt: dynamic_router.md
+    targets: [main_role, stable_role, fresh_role, final_gate]
+    error_policy:
+      retries: 2
+
+  main_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Act as the main-session specialist.
+    session_policy: main
+    routes:
+      pass: coordinator
+
+  stable_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Act as the stable-role-session specialist.
+    session_policy: role
+    session_key: dynamic_live_stable_role
+    routes:
+      pass: coordinator
+
+  fresh_role:
+    type: base
+    prompt: dynamic_role.md
+    instructions: Act as the fresh-session specialist.
+    session_policy: fresh
+    session_key: dynamic_live_fresh_role
+    routes:
+      pass: coordinator
+
+  final_gate:
+    type: command
+    command: "{python} final_gate.py"
+    routes:
+      pass: done
+
+flow:
+  - coordinator
+  - main_role
+  - stable_role
+  - fresh_role
+  - final_gate
+"""
+
+
+def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None:
+    """Exercise Dynamic Handoff plus main/role/fresh session transport with real Qwen."""
+    project = create_project(
+        root,
+        "dynamic-handoff-session-policy-probe",
+        prompt="Exercise Dynamic Handoff session policies and finish the deterministic route.",
+    )
+    (project / "dynamic_router.md").write_text(
+        DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8"
+    )
+    (project / "dynamic_role.md").write_text(
+        DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8"
+    )
+    (project / "final_gate.py").write_text(
+        "print('DYNAMIC_FINAL_GATE_PASS')\n", encoding="utf-8"
+    )
+    workflow = project / "workflow.yaml"
+    workflow.write_text(DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    code = run_command(
+        runner_command(settings, project, workflow=workflow),
+        console_log(project, "console.jsonl"),
+        semantic_probe_timeout(settings),
+    )
+    assert_state_completed(project, code)
+
+    starts = [
+        str(event.get("stage", ""))
+        for event in runner_events(project)
+        if event.get("type") == "runner.stage" and event.get("action") == "start"
+    ]
+    expected = [
+        "coordinator",
+        "main_role",
+        "coordinator",
+        "stable_role",
+        "coordinator",
+        "fresh_role",
+        "coordinator",
+        "final_gate",
+    ]
+    if starts != expected:
+        raise RuntimeError(
+            "Dynamic Handoff live routing mismatch: "
+            f"expected={expected}, observed={starts}"
+        )
+
+    state = read_state(project)
+    main_session = str(state.get("ai_session_id") or "")
+    stage_sessions = state.get("stage_sessions")
+    if not isinstance(stage_sessions, dict):
+        raise RuntimeError("Dynamic Handoff live state missing stage_sessions")
+
+    main_results = stage_result_sessions(project, "main_role")
+    stable_results = stage_result_sessions(project, "stable_role")
+    fresh_results = stage_result_sessions(project, "fresh_role")
+    if not main_results or not main_session or main_results[-1] != main_session:
+        raise RuntimeError(
+            "session_policy=main did not persist the primary Runner session"
+        )
+    stable_session = str(stage_sessions.get("stable_role") or "")
+    if not stable_results or not stable_session or stable_results[-1] != stable_session:
+        raise RuntimeError(
+            "session_policy=role did not persist the role-specific session"
+        )
+    if "fresh_role" in stage_sessions:
+        raise RuntimeError(
+            "session_policy=fresh unexpectedly persisted a durable role session"
+        )
+    if not fresh_results:
+        raise RuntimeError("session_policy=fresh produced no real model session evidence")
+    if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
+        raise RuntimeError(
+            "Dynamic Handoff session policies did not produce isolated session identities"
+        )
+
+
+
 REVIEW_ROUTING_PROMPT = """Make review.txt contain exactly these two logical lines:
 READY
 REVIEW_REQUIRED
@@ -3171,6 +3326,8 @@ def main() -> int:
         for workflow in ("file", "ai", "mixed"):
             builtin_workflow_probe(settings, run_root, workflow)
             print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
+        dynamic_handoff_session_policy_probe(settings, run_root)
+        print("PASS Dynamic Handoff main/role/fresh session-policy live probe", flush=True)
         custom_task_producer_probe(settings, run_root)
         print("PASS custom Python Task Producer -> task-scope probe", flush=True)
         review_failure_routing_probe(settings, run_root)
@@ -3264,6 +3421,7 @@ def main() -> int:
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": True,
         "builtin_workflow_contracts": ["file", "ai", "mixed"],
+        "dynamic_handoff_session_policy_probe": True,
         "custom_task_producer_probe": True,
         "review_failure_routing_probe": True,
         "validator_failure_routing_probe": True,
