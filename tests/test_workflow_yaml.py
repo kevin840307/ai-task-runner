@@ -630,6 +630,40 @@ flow:
         load_workflow(path)
 
 
+def test_handoff_runtime_rejects_missing_structured_target(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: base
+flow:
+  - router
+  - worker
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class MissingTargetExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            if stage.name == "router":
+                return StageResult(
+                    "router",
+                    "pass",
+                    output="missing target",
+                    data=None,
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass")
+
+    with pytest.raises(ConfigurationError, match="no structured target"):
+        FlowEngine(ctx).run(MissingTargetExecutor())
+
+
 def test_handoff_runtime_rejects_model_target_outside_allow_list(tmp_path):
     path = write_workflow(
         tmp_path,
