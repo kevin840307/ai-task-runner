@@ -31,8 +31,6 @@ FIELD_CONTROLS = {
     "timeout": "stageTimeout",
     "session_key": "stageSessionKey",
     "session_policy": "stageSessionPolicy",
-    "fresh_session_each_run": "stageFreshEachRun",
-    "fresh_session_on_start": "stageFreshOnStart",
     "produces": "stageProduces",
     "command": "stageCommand",
     "cwd": "stageCwd",
@@ -41,7 +39,12 @@ FIELD_CONTROLS = {
     "min_tasks": "stageMinTasks",
 }
 
-INTENTIONAL_YAML_ONLY = {"name"}
+INTENTIONAL_YAML_ONLY = {
+    "name",
+    # Internal compatibility/profile knobs. User-facing UI uses session_policy.
+    "fresh_session_each_run",
+    "fresh_session_on_start",
+}
 
 
 def test_visual_ui_covers_base_stage_parameters():
