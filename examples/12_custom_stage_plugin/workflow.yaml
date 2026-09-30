@@ -5,7 +5,6 @@ stages:
     prefix: "Echo: "
     routes:
       fail: stop
-      error: stop
 
 flow:
   - echo_message
