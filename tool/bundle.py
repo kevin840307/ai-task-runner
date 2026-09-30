@@ -10,10 +10,27 @@ FORMAT = "PROJECT_BUNDLE_V1"
 DEFAULT_EXCLUDES = [
     ".git", ".git/**",
     ".pytest_cache", ".pytest_cache/**",
+    ".mypy_cache", "**/.mypy_cache", "**/.mypy_cache/**",
+    ".ruff_cache", "**/.ruff_cache", "**/.ruff_cache/**",
+    ".tox", "**/.tox", "**/.tox/**",
+    ".nox", "**/.nox", "**/.nox/**",
     "__pycache__", "**/__pycache__", "**/__pycache__/**",
     "*.pyc", "**/*.pyc",
     ".ai-task-runner", "**/.ai-task-runner", "**/.ai-task-runner/**",
     "validator-reports", "**/validator-reports", "**/validator-reports/**",
+    "qa_evidence", "**/qa_evidence", "**/qa_evidence/**",
+    "htmlcov", "**/htmlcov", "**/htmlcov/**",
+    "coverage", "**/coverage", "**/coverage/**",
+    "coverage-reports", "**/coverage-reports", "**/coverage-reports/**",
+    "test-results", "**/test-results", "**/test-results/**",
+    "node_modules", "**/node_modules", "**/node_modules/**",
+    "dist", "**/dist", "**/dist/**",
+    "build", "**/build", "**/build/**",
+    ".coverage", "**/.coverage",
+    "coverage.xml", "**/coverage.xml",
+    "*.log", "**/*.log",
+    "*.tmp", "**/*.tmp",
+    "*.bak", "**/*.bak",
 ]
 
 
@@ -61,6 +78,11 @@ def pack(root: Path, output: Path, excludes: list[str]) -> None:
                 path = current / name
                 rel = path.relative_to(root).as_posix()
 
+                # The output can live inside the packed folder (the common
+                # project.bundle.txt case). Never read the bundle while it is
+                # still being written and accidentally embed it into itself.
+                if path.resolve() == output:
+                    continue
                 if excluded(rel, excludes):
                     continue
 
