@@ -551,7 +551,7 @@ function App() {
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
   const parameterOptions = options.filter((o) => {
-    if (["name", "type", "status", "label", "scope", "routes", "targets", "fresh_session_each_run", "fresh_session_on_start"].includes(o.name)) return false;
+    if (["name", "type", "status", "label", "scope", "routes", "targets"].includes(o.name)) return false;
     if (o.name === "session_key" && String(draft?.session_policy || "auto") !== "auto") return false;
     return true;
   });
@@ -989,7 +989,7 @@ function App() {
                       value={draft[option.name]}
                       onChange={(value) => {
                         if (option.name === "session_policy" && String(value || "auto") !== "auto") {
-                          const { session_key: _sessionKey, fresh_session_each_run: _freshEach, fresh_session_on_start: _freshStart, ...rest } = draft;
+                          const { session_key: _sessionKey, ...rest } = draft;
                           editDraft({ ...rest, session_policy: value });
                           return;
                         }
