@@ -29,13 +29,13 @@ Current product direction:
 
 RELEASE READINESS REVIEW (2026-09-30)
 --------------------------------------
-[ ] Fix Studio session-policy UX so explicit main/role/fresh cannot leave or edit conflicting session_key.
-[ ] Remove stale Grill-named tool workflows/prompt assets; keep adversarial review as ordinary review Stage examples.
-[ ] Rewrite stale tool/workflow documentation to PASS/FAIL + StageExecutor + session_policy contracts only.
-[ ] Rewrite stale CUSTOM_WORKFLOW and architecture/test-matrix sections that still teach repair/recover/restart_at/routes.error/Pipeline.
-[ ] Add regression tests proving obsolete runtime contracts/assets are absent and current Dynamic/session-policy examples load.
-[ ] Recheck deterministic matrix for routing, retry/error, session-policy, resume, UI catalog/save, Stage probe, dry-run and live preflight coverage.
-[ ] Keep current Runner package shape unless a concrete bug proves a simplification is safe.
+[x] Fix Studio session-policy UX so explicit main/role/fresh cannot leave or edit conflicting session_key.
+[x] Remove stale Grill-named tool workflows/prompt assets; keep adversarial review as ordinary review Stage examples.
+[x] Rewrite stale tool/workflow documentation to PASS/FAIL + StageExecutor + session_policy contracts only.
+[x] Rewrite stale CUSTOM_WORKFLOW and architecture/test-matrix sections that still teach repair/recover/restart_at/routes.error/Pipeline.
+[x] Add regression tests proving obsolete runtime contracts/assets are absent and current Dynamic/session-policy examples load.
+[x] Recheck deterministic matrix for routing, retry/error, session-policy, resume, UI catalog/save, Stage probe, dry-run and live preflight coverage.
+[x] Keep current Runner package shape unless a concrete bug proves a simplification is safe.
 [ ] Pass Studio + Ubuntu + Windows CI on the final review head.
 
 DYNAMIC ROLE SESSION + PROMPT CONSOLIDATION (2026-09-30)
