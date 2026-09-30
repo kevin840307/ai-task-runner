@@ -52,12 +52,15 @@ jobs:
 
       - name: Install Studio
         run: |
-          npm install
+          npm ci
           ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
           npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
 
       - name: Build Studio
         run: npm run build
+
+      - name: Verify committed Studio bundle
+        run: git diff --exit-code -- ../static/workflow-studio-app
 
       - name: Upload Studio build artifact
         uses: actions/upload-artifact@v4
