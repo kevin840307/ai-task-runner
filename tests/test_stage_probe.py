@@ -74,17 +74,45 @@ def test_stage_probe_accepts_disconnected_stage(tmp_path):
 def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
     draft = {
         "stages": {
-            "router": {"type": "handoff", "targets": ["worker", "final_review"]},
+            "router": {"type": "handoff", "targets": ["worker", "final_validate"]},
             "worker": {"type": "base"},
-            "final_review": {"type": "review"},
+            "final_validate": {"type": "ai_validator", "validator": "ai"},
         },
-        "flow": ["router", "worker", "final_review"],
+        "flow": ["router", "worker", "final_validate"],
     }
     result = StageResult(
         "router",
         "pass",
-        data={"target": "final_review", "reason": "ready"},
+        data={"target": "final_validate", "reason": "ready"},
         kind="handoff",
     )
 
-    assert _draft_next(draft, "router", result) == ("final_review", "handoff")
+    assert _draft_next(draft, "router", result) == ("final_validate", "handoff")
+
+
+def test_stage_probe_reports_discussion_controller_dispatch_without_running_target():
+    draft = {
+        "stages": {
+            "controller": {
+                "type": "discussion_controller",
+                "targets": ["participant", "judge"],
+                "round_end": "judge",
+                "max_rounds": 3,
+            },
+            "participant": {
+                "type": "discussion",
+                "controller": "controller",
+                "role": "participant",
+            },
+            "judge": {"type": "review"},
+        },
+        "flow": ["controller", "participant", "judge"],
+    }
+    result = StageResult(
+        "controller",
+        "pass",
+        data={"target": "participant", "reason": "need another view"},
+        kind="handoff",
+    )
+
+    assert _draft_next(draft, "controller", result) == ("participant", "dispatch")
