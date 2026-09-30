@@ -122,6 +122,37 @@ def test_finite_global_retry_budget_is_retries_after_first_attempt(tmp_path):
     assert len(stage.calls) == 3
 
 
+def test_per_stage_retry_limit_overrides_global_default(tmp_path):
+    stage = Stage([
+        RunnerError("one"),
+        RunnerError("two"),
+        "pass",
+    ])
+    result = StageExecutor(Hooks()).run(
+        stage,
+        context(tmp_path, retries=0),
+        retry_limit=2,
+    )
+    assert result.status == "pass"
+    assert len(stage.calls) == 3
+
+
+def test_per_stage_minus_one_keeps_retrying(tmp_path):
+    stage = Stage([
+        RunnerError("one"),
+        RunnerError("two"),
+        RunnerError("three"),
+        "pass",
+    ])
+    result = StageExecutor(Hooks()).run(
+        stage,
+        context(tmp_path, retries=0),
+        retry_limit=-1,
+    )
+    assert result.status == "pass"
+    assert len(stage.calls) == 4
+
+
 def test_configuration_error_fails_closed_without_retry(tmp_path):
     with pytest.raises(ConfigurationError, match="fixed configuration"):
         StageExecutor(Hooks()).run(ConfigStage([]), context(tmp_path))
