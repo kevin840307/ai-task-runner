@@ -194,14 +194,15 @@ WORKFLOW STUDIO - LINEAR FIRST
 [x] Add large dedicated Studio source package: React + TypeScript + @xyflow/react + Vite.
 [ ] Build and commit ui/static/workflow-studio-app/ static HTML/JS/CSS output.
 [ ] Add existing Studio/library button to open the full designer for the selected Workflow.
-[ ] Add node creation/deletion from the React canvas (+ Stage picker) and preserve YAML round-trip.
+[x] Add node creation/deletion from the React canvas (+ draggable Stage Palette) while disconnected nodes stay out of flow.
 [ ] Add explicit edge retarget UX and terminal target choice (done vs stop when needed).
 [ ] Add Stage rename transaction that updates flow/routes safely, or keep Stage key immutable with a clear UI label.
 [ ] Add graph dirty/unsaved-navigation guard and runtime edit-lock handling to the full page.
-[ ] Add Prompt selector/browse experience in the Stage inspector without editing Prompt content inline.
-[ ] Add graph CRUD browser tests: START/END, add/delete Stage, reorder, PASS/FAIL/ERROR connect/delete, scope:task, save/reload.
+[x] Add Prompt selector/browse experience in the Stage inspector and show the effective default Prompt explicitly.
+[ ] Add graph CRUD browser tests: START/END, delete Stage, reorder, PASS/FAIL/ERROR connect/delete/retarget, scope:task, save/reload. (Disconnected Stage + Prompt ownership contracts added.)
 [ ] Add catalog coverage test proving every runtime Stage option is editable by the generic inspector.
 [ ] Remove/retire the old Flow Map modal/card-list Visual editor only after the React Flow page has equivalent coverage.
+[x] Workflow Builder internal prompts stay outside assets/Studio; removed unused workflow_prompt.md and workflow_review.md from runner assets.
 
 Linear Studio completion rule:
 - Start/End visible and movable in the canvas (virtual only)
