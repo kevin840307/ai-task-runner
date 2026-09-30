@@ -82,8 +82,8 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     config = RuntimeConfig(project_root=str(EXAMPLES), script=str(script))
     workflow = build_script_item_config(config, items[9], 10).workflow
     assert [stage["name"] for stage in workflow] == ["ralphy", "validate_ai"]
-    assert workflow[0]["fresh_session_on_start"] is True
-    assert workflow[1]["fresh_session_on_start"] is True
+    assert workflow[0]["session_policy"] == "fresh"
+    assert workflow[1]["session_policy"] == "fresh"
     assert workflow[1]["routes"] == {"fail": "ralphy"}
     assert data[10]["workflow_file"] == "11_regression_workflow_demo/workflow.yaml"
     assert data[10]["validator"] == "ai"
@@ -93,10 +93,10 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         "project_discovery",
         "review_project_discovery",
         "project_documentation",
-        "grill_project_documentation",
+        "challenge_review_project_documentation",
         "review_project_documentation",
         "e2e_spec_generation",
-        "grill_e2e_spec",
+        "challenge_review_e2e_spec",
         "review_e2e_spec",
         "verification_design",
         "review_verification_design",
@@ -108,8 +108,8 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
     ]
     assert [stage.get("label", "") for stage in regression] == [
         "Project Discovery", "Review Project Discovery",
-        "Project Documentation", "Grill Project Documentation", "Review Project Documentation",
-        "E2E SPEC Generation", "Grill E2E SPEC", "Review E2E SPEC",
+        "Project Documentation", "Challenge Review Project Documentation", "Review Project Documentation",
+        "E2E SPEC Generation", "Challenge Review E2E SPEC", "Review E2E SPEC",
         "Verification Design", "Review Verification Design",
         "Regression DSL Generation", "Review Regression DSL",
         "Regression Execution & Qualification", "Review Execution & Qualification",
@@ -121,9 +121,9 @@ def test_examples_yaml_runs_01_to_11_with_per_item_project_roots():
         if stage.get("routes")
     }
     assert routed["review_project_discovery"] == {"fail": "project_discovery"}
-    assert routed["grill_project_documentation"] == {"fail": "project_documentation"}
+    assert routed["challenge_review_project_documentation"] == {"fail": "project_documentation"}
     assert routed["review_project_documentation"] == {"fail": "project_documentation"}
-    assert routed["grill_e2e_spec"] == {"fail": "e2e_spec_generation"}
+    assert routed["challenge_review_e2e_spec"] == {"fail": "e2e_spec_generation"}
     assert routed["review_e2e_spec"] == {"fail": "e2e_spec_generation"}
     assert routed["review_verification_design"] == {"fail": "verification_design"}
     assert routed["review_regression_dsl"] == {"fail": "regression_dsl_generation"}
