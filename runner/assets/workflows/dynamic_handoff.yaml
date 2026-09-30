@@ -38,6 +38,7 @@ stages:
     error_policy:
       retries: -1
     routes:
+      pass: done
       fail: coordinator
 
 flow:
