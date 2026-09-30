@@ -83,7 +83,7 @@
     return `M ${sx + dir * nodeW * 0.42} ${a.y} C ${routeX} ${a.y}, ${routeX} ${b.y}, ${tx - dir * nodeW * 0.42} ${b.y}`;
   }
 
-  function renderGraph(root, graph, mode = "auto") {
+  function renderGraph(root, graph, mode = "auto", options = {}) {
     const allNodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
     const allEdges = Array.isArray(graph?.edges) ? graph.edges : [];
     const dense = allNodes.length > 20 || allEdges.length > 28;
@@ -103,6 +103,20 @@
     const { coords, width, height, nodeW, nodeH } = buildLayout(nodes, edges);
     const defs = `<defs>\n      <marker id="flowArrowNormal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>\n      <marker id="flowArrowResult" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker>\n    </defs>`;
 
+    const taskScoped = nodes.filter((n) => !n.virtual && n.scope === "task" && coords.has(n.id));
+    let scopeGroup = "";
+    if (taskScoped.length) {
+      const scopedCoords = taskScoped.map((n) => coords.get(n.id));
+      const minX = Math.min(...scopedCoords.map((p) => p.x - nodeW / 2)) - 28;
+      const maxX = Math.max(...scopedCoords.map((p) => p.x + nodeW / 2)) + 28;
+      const minY = Math.min(...scopedCoords.map((p) => p.y - nodeH / 2)) - 42;
+      const maxY = Math.max(...scopedCoords.map((p) => p.y + nodeH / 2)) + 28;
+      scopeGroup = `<g class="flow-map-scope-group">
+        <rect x="${minX}" y="${minY}" width="${maxX - minX}" height="${maxY - minY}" rx="18"/>
+        <text x="${minX + 16}" y="${minY + 24}">↻ PER TASK</text>
+      </g>`;
+    }
+
     const lines = edges.map((e) => {
       const a = coords.get(e.from), b = coords.get(e.to);
       if (!a || !b) return "";
@@ -121,7 +135,7 @@
         <rect class="${n.virtual ? "virtual" : ""}" x="${c.x - nodeW / 2}" y="${c.y - nodeH / 2}" width="${nodeW}" height="${nodeH}" rx="12"/>
         <circle cx="${c.x - nodeW / 2 + 18}" cy="${c.y}" r="5" class="node-dot"/>
         <text x="${c.x - nodeW / 2 + 32}" y="${c.y - 5}" class="name">${esc(n.label || n.id)}</text>
-        <text x="${c.x - nodeW / 2 + 32}" y="${c.y + 14}" class="type">${esc(n.type || "base")}</text>
+        <text x="${c.x - nodeW / 2 + 32}" y="${c.y + 14}" class="type">${esc((n.type || "base") + (n.scope === "task" ? " · per task" : ""))}</text>
       </g>`;
     }).join("");
 
@@ -137,7 +151,7 @@
         </div>
       </div>
       <div class="flow-map-scroll" tabindex="0">
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Workflow stage flow map">${defs}${lines}${boxes}</svg>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Workflow stage flow map">${defs}${scopeGroup}${lines}${boxes}</svg>
       </div>
       <div id="flowMapDetails" class="flow-map-details">
         <div class="flow-map-detail-empty">Select a Stage to inspect routing.</div>
@@ -156,22 +170,27 @@
           <span><b>Outgoing</b>${esc(outgoing.map((e)=>`${e.label || e.kind} → ${(byId.get(e.to)?.label || e.to)}`).join(', ') || 'none')}</span>
           <span><b>Incoming</b>${esc(incoming.map((e)=>`${e.label || e.kind} ← ${(byId.get(e.from)?.label || e.from)}`).join(', ') || 'none')}</span>
         </div>`;
+      if (typeof options.onSelect === "function") options.onSelect(n.id, n);
     }
 
     const densityToggle = root.querySelector('.flow-map-density-toggle');
     if (densityToggle) densityToggle.addEventListener('click', () => {
-      renderGraph(root, graph, effectiveMode === "core" ? "all" : "core");
+      renderGraph(root, graph, effectiveMode === "core" ? "all" : "core", options);
     });
 
     root.querySelectorAll('.flow-map-node').forEach((el) => {
       el.addEventListener('click', () => selectNode(el));
+      el.addEventListener('dblclick', () => {
+        const n = byId.get(el.dataset.node);
+        if (typeof options.onEdit === "function" && n) options.onEdit(n.id, n);
+      });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNode(el); }
       });
     });
   }
 
-  function render(root, graph) { renderGraph(root, graph, "auto"); }
+  function render(root, graph, options = {}) { renderGraph(root, graph, "auto", options); }
 
   window.WorkflowFlowMap = Object.freeze({ render });
 })();
