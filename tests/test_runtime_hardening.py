@@ -151,16 +151,20 @@ def test_observability_model_snapshot_uses_shared_atomic_writer(tmp_path):
     assert (debug_dir / "last-result.txt").read_text(encoding="utf-8") == "result"
 
 
-def test_run_state_roundtrip_preserves_bounded_recovery_attempt():
+def test_run_state_roundtrip_preserves_latest_stage_transition():
     from runner.runtime.run_state import RunState
     state = RunState(run_id="r", goal="g", project_root=".")
-    state.recovery_attempt_key = "workflow:2"
-    state.recovery_attempt_count = 2
-    state.recovery_attempt_previous = {"stage": "grill", "data": {"missing_items": ["A"]}}
+    state.transition_previous = {
+        "stage": "review",
+        "status": "fail",
+        "output": "missing A",
+        "data": {"missing_items": ["A"]},
+        "kind": "review",
+    }
     loaded = RunState.load(state.dump())
-    assert loaded.recovery_attempt_key == "workflow:2"
-    assert loaded.recovery_attempt_count == 2
-    assert loaded.recovery_attempt_previous == state.recovery_attempt_previous
+    assert loaded.transition_previous == state.transition_previous
+    assert not hasattr(loaded, "recovery_attempt_key")
+    assert not hasattr(loaded, "recovery_attempt_count")
 
 
 def test_terminate_process_tree_waits_again_after_force_kill(monkeypatch):
