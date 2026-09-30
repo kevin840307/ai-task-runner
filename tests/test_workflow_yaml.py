@@ -840,6 +840,66 @@ flow:
     assert ctx.state.completed is True
 
 
+@pytest.mark.parametrize(
+    ("error_stage", "expected_calls", "expected_position"),
+    [
+        ("router", ["router"], 0),
+        ("worker", ["router", "worker"], 1),
+        ("final_validate", ["router", "final_validate"], 2),
+    ],
+)
+def test_dynamic_technical_error_stops_at_current_stage(
+    tmp_path, error_stage, expected_calls, expected_position
+):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  router:
+    type: handoff
+    targets: [worker, final_validate]
+  worker:
+    type: base
+    routes:
+      pass: router
+  final_validate:
+    type: ai_validator
+    validator: ai
+    routes:
+      pass: done
+      fail: router
+flow:
+  - router
+  - worker
+  - final_validate
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class DynamicErrorExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            if stage.name == error_stage:
+                return StageResult(stage.name, "error", output="technical failure")
+            if stage.name == "router":
+                target = error_stage
+                return StageResult(
+                    "router",
+                    "pass",
+                    output=f"handoff:{target}",
+                    data={"target": target, "reason": "exercise error boundary"},
+                    kind="handoff",
+                )
+            return StageResult(stage.name, "pass", output="pass")
+
+    executor = DynamicErrorExecutor()
+    assert FlowEngine(ctx).run(executor) == 1
+    assert [name for name, _ in executor.calls] == expected_calls
+    assert ctx.state.workflow_position == expected_position
+    assert ctx.state.completed is False
+
+
 def test_dynamic_final_validation_fail_returns_to_handoff(tmp_path):
     path = write_workflow(
         tmp_path,
