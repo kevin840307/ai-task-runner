@@ -137,3 +137,7 @@ def test_orchestration_stage_catalog_reuses_stage_executor_contract():
     assert base_options["session_policy"]["values"] == ["auto", "main", "role", "fresh"]
     assert "fresh_session_each_run" not in base_options
     assert "fresh_session_on_start" not in base_options
+    for stage_type, entry in catalog.items():
+        option_names = {item["name"] for item in entry["options"]}
+        assert "fresh_session_each_run" not in option_names, stage_type
+        assert "fresh_session_on_start" not in option_names, stage_type
