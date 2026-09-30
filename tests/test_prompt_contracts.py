@@ -139,7 +139,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
         execution=StageExecution(),
         task=task,
         state=state,
-        scratch={"prompt_contracts": {("common/execution.md", "session-1")}},
+        scratch={"prompt_contracts": {"execute": ("common/execution.md", "session-1")}},
     )
 
     continued = stage._shared_control_prompt(ctx, None, client)
@@ -156,6 +156,29 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
     recovered = stage._shared_control_prompt(ctx, None, SimpleNamespace(session_id=""))
     assert "mode: recover" in recovered
     assert "same_session: false" in recovered
+
+
+def test_prompt_contract_memory_is_bounded_per_stage():
+    from types import SimpleNamespace
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+
+    scratch = {}
+    first = BaseStage(BaseStageSpec(name="worker_a", prompt="common/execution.md"))
+    second = BaseStage(BaseStageSpec(name="worker_b", prompt="common/execution.md"))
+    ctx = SimpleNamespace(scratch=scratch)
+
+    client = SimpleNamespace(session_id="")
+    for index in range(100):
+        client.session_id = f"session-{index}"
+        first._remember_prompt(ctx, client)
+
+    client.session_id = "other-session"
+    second._remember_prompt(ctx, client)
+
+    assert scratch["prompt_contracts"] == {
+        "worker_a": ("common/execution.md", "session-99"),
+        "worker_b": ("common/execution.md", "other-session"),
+    }
 
 
 def test_obsolete_alternate_stage_prompts_are_removed():
