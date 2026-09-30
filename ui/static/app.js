@@ -1012,6 +1012,26 @@ function openFullDesigner() {
   window.location.href = `/workflow-studio-app/index.html?${params}`;
 }
 
+async function restoreWorkflowStudioNavigation() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("view") !== "workflow") return;
+
+  const projectPath = params.get("project") || "";
+  if (projectPath) {
+    const project = state.projects.find((item) => sameProjectPath(item.path, projectPath));
+    if (project && !sameProjectPath(state.project?.path, project.path)) await selectProject(project);
+  }
+
+  await switchView("workflow");
+  const studioId = params.get("studio") || "";
+  if (studioId) {
+    await refreshStudioFiles({ force: true });
+    const item = (state.studioFiles.workflows || []).find((row) => row.id === studioId);
+    if (item) await openStudioFile(item);
+  }
+  window.history.replaceState({}, "", window.location.pathname);
+}
+
 function renderStudioPanels() {
   const prompt = state.studioFile?.kind === "prompt";
   const workflow = state.studioFile?.kind === "workflow";
@@ -2100,6 +2120,9 @@ window.addEventListener("resize", () => {
   syncComposerReserve(); positionWorkflowDropdown(); if (!$("backendDropdownMenu").hidden) positionUpwardDropdown($("backendDropdownMenu"), $("backendDropdownButton"), $("backendDropdownMenu").children.length, 70); if (!$("themePanel").hidden) positionThemePanel();
   const menu = document.querySelector(".project-action-menu.project-action-menu-portal:not([hidden])"), owner = menu ? projectMenuOwners.get(menu) : null;
   if (menu && owner?.anchor) positionProjectMenu(menu, owner.anchor);
-}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(() => restoreActiveWorkflowGenerator()); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
+}); Promise.allSettled([refreshBackends(), refreshWorkflowCatalog(), loadProjects()]).then(async () => {
+  await restoreWorkflowStudioNavigation();
+  await restoreActiveWorkflowGenerator();
+}); refreshPromptTags(); startNonOverlappingPoll(refreshRuntime, 1200, 6000); setInterval(updateRuntimeFreshness, 1000); startNonOverlappingPoll(refreshProjectStatuses, projectStatusPollDelay, projectStatusHiddenPollDelay); startNonOverlappingPoll(refreshStudioGuard, 2500, 10000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) Promise.allSettled([refreshRuntime(), refreshProjectStatuses(), refreshStudioGuard()]); });
 
