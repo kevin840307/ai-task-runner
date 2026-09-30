@@ -61,7 +61,7 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
     from types import SimpleNamespace
 
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageResult
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
@@ -99,7 +99,7 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
     from types import SimpleNamespace
 
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageResult
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
