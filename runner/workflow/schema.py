@@ -54,6 +54,10 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} session_policy must be auto, main, role, or fresh"
         )
+    if session_policy != "auto" and values.get("session_key"):
+        raise RunnerError(
+            f"workflow stage {name} session_key is only valid with session_policy: auto"
+        )
 
     targets = values.get("targets")
     if stage_type == "handoff":
