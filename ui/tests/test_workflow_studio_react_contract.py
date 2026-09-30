@@ -57,7 +57,7 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_discussion():
     assert "autoPositions" in text
     assert "branchTargets" in text
     assert "branchColumnGap" in text
-    assert "maxBranchColumns" in text
+    assert "rowStartCenter" in text
     assert "cursorY" in text
     assert "discussion-return" in text
     assert 'title: "Discussion"' in text
