@@ -18,7 +18,8 @@ def main() -> int:
         print("npm is required only to build Workflow Studio.", file=sys.stderr)
         return 2
 
-    install = ["npm", "install"]
+    lockfile = SOURCE / "package-lock.json"
+    install = ["npm", "ci"] if lockfile.is_file() else ["npm", "install"]
     subprocess.run(install, cwd=SOURCE, check=True)
     subprocess.run(["npm", "run", "build"], cwd=SOURCE, check=True)
 
