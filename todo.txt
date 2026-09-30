@@ -39,7 +39,7 @@ Dynamic Handoff
 [x] Reuse StageResult + FlowEngine routing and keep technical ERROR handling in StageExecutor.
 [x] Final Review PASS routes to END; FAIL hands back to coordinator for another allowed worker handoff.
 [x] Workflow Studio renders one Stage with multiple handoff edges and edits them without a separate designer.
-[ ] Add process-resume/live reliability coverage for dynamic handoff. Loader/schema/runtime/UI/dry-run contracts are added.
+[x] Add durable StateStore process-resume coverage for dynamic handoff. Loader/schema/runtime/UI/dry-run contracts are covered; 24H live soak remains part of the existing reliability gate.
 
 Discussion / Group Chat
 [x] Add one built-in discussion.yaml example/profile.
@@ -48,7 +48,7 @@ Discussion / Group Chat
 [x] Reuse StageExecutor sessions/retry and StateStore durability; no AgentMessage framework or second runtime.
 [x] Judge PASS terminates to END; Judge FAIL starts the next bounded round.
 [x] Workflow Studio reuses the same Stage nodes/edges and exposes only discussion-specific bounded settings.
-[ ] Add process-resume/live reliability coverage for discussion. Loader/schema/runtime/UI/dry-run contracts are added.
+[x] Add durable StateStore process-resume coverage for discussion. Loader/schema/runtime/UI/dry-run contracts are covered; 24H live soak remains part of the existing reliability gate.
 
 Implementation constraints
 - No execution_mode selector in Chat; selecting the Workflow YAML selects the family.
