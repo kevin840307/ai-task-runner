@@ -67,7 +67,7 @@ def test_graph_renders_done_and_stop_as_terminal_nodes():
 def test_graph_does_not_inject_hidden_plan_nodes_or_retry_edges():
     graph = build_workflow_graph({
         "stages": {
-            "planning": {"type": "plan"},
+            "planning": {"type": "plan", "produces": "tasks"},
             "execute": {"type": "task", "scope": "task"},
             "review": {
                 "type": "review",
@@ -81,3 +81,8 @@ def test_graph_does_not_inject_hidden_plan_nodes_or_retry_edges():
     ids = {node["id"] for node in graph["nodes"]}
     assert ids == {"planning", "execute", "review"}
     assert all(edge["kind"] in {"normal", "result"} for edge in graph["edges"])
+
+    by_id = {node["id"]: node for node in graph["nodes"]}
+    assert by_id["planning"]["produces"] == "tasks"
+    assert by_id["execute"]["scope"] == "task"
+    assert by_id["review"]["scope"] == "task"
