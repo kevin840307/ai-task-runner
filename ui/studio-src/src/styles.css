@@ -155,6 +155,7 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .react-flow__edge.result.fail path { stroke: #f59e0b; }
 .react-flow__edge.result.error path { stroke: #dc2626; }
 .react-flow__edge.result.pass path { stroke: #2563eb; }
+.react-flow__edge.discussion-return path { stroke: #94a3b8; stroke-dasharray: 6 5; opacity: .72; }
 .react-flow__edge.normal path { stroke: #94a3b8; }
 .react-flow__edge-text { font-size: 10px; fill: #475569; }
 .react-flow__edge.muted { opacity: .17; }
