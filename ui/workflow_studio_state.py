@@ -595,13 +595,11 @@ class WorkflowStudioMixin:
             raise ValueError("Stage produces must be tasks when specified")
         policy = fields.get("error_policy")
         if policy is not None:
-            if not isinstance(policy, dict) or set(policy) != {"retries", "exhausted"}:
-                raise ValueError("Stage error_policy requires retries and exhausted")
+            if not isinstance(policy, dict) or set(policy) != {"retries"}:
+                raise ValueError("Stage error_policy requires only retries")
             retries = policy["retries"]
             if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
                 raise ValueError("Stage error_policy.retries must be -1 or non-negative")
-            if not isinstance(policy["exhausted"], str) or not policy["exhausted"].strip():
-                raise ValueError("Stage error_policy.exhausted must be a target")
         for key in ("structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
             value = fields.get(key)
             if value is None:
