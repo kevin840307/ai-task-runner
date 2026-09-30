@@ -211,24 +211,21 @@ Prompt reference 使用分類相對 key，例如 `common/review.md`。未來可�
 Workflow Studio 直接編輯正式 Runtime graph：
 
 - Stage = node
-- PASS/FAIL/ERROR route = edge
-- rollback / loop = edge 回前面 Stage
-- technical retry / session recovery 不畫成 edge
+- PASS / FAIL = semantic result edge
+- rollback / loop = PASS/FAIL edge 回前面 Stage
+- Handoff = 一顆 Stage 連多個允許 target，每次決策只選一個 target
+- ERROR 只屬於 technical retry，不建立 graph edge
 - node 設定只放 Stage behavior
 - edge 設定只放 semantic routing
 
 Global 與 Project assets 都可以直接修改。
 
-目前只實作：
+目前支援：
 
 1. **Linear Workflow with Rollback / Loop**
-
-未來才做：
-
 2. **Dynamic Handoff**
-3. **Discussion / Group Chat**
 
-未來兩種模式必須重用同一個 Stage、StageExecutor、StateStore、Plugin boundary、Workflow assets 與 Graph Designer，不建立第二套完整 Orchestrator。
+Dynamic Handoff 重用相同的 Stage、StageExecutor、StateStore、Plugin boundary、Workflow assets 與 Graph Designer。多角色 discussion/review-board/triage 以 Dynamic Handoff Workflow pattern 表達，不再建立另一套 runtime family。
 
 ## CLI
 
