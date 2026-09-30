@@ -413,7 +413,7 @@ function App() {
     setEdges(g.edges);
     setDirtyGraph(false);
     return result.visual;
-  }, []);
+  }, [catalog]);
 
   const saveGraph = useCallback(async (nextVisual = visual) => {
     if (!nextVisual) return;
@@ -467,7 +467,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
-  }, [visual]);
+  }, [visual, catalog]);
 
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
@@ -488,7 +488,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
-  }, [visual]);
+  }, [visual, catalog]);
 
   const reorderByPosition = useCallback((_event: unknown, moved: Node<StudioNodeData>) => {
     if (!visual || moved.data.kind !== "stage") return;
@@ -505,7 +505,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
-  }, [nodes, visual]);
+  }, [nodes, visual, catalog]);
 
   async function saveStage() {
     if (!visual || !draft) return;
