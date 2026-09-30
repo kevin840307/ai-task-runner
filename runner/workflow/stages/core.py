@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 
 from ...agent import parse_result, require_object, require_text
 from ...config.defaults import MIN_PLANNED_TASKS
+from ...errors import RunnerError
 from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
 from ...utils import bounded_text
@@ -204,16 +205,12 @@ class HandoffStage(BaseStage):
                 target = require_text(obj.get("target"), "handoff.target")
                 reason = require_text(obj.get("reason"), "handoff.reason")
                 if target not in allowed:
-                    raise ValueError(
+                    raise RunnerError(
                         f"handoff.target must be one of: {', '.join(allowed)}"
                     )
                 return {"target": target, "reason": reason}
 
-            try:
-                return parse_result(text, parse)
-            except ValueError as error:
-                from ...errors import RunnerError
-                raise RunnerError(str(error)) from error
+            return parse_result(text, parse)
 
         super().__init__(replace(spec, parser=parse_handoff))
 
