@@ -50,6 +50,10 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(f"workflow stage {name} scope must be task when specified")
 
     max_rounds = values.get("max_rounds")
+    if max_rounds is not None and stage_type != "discussion_controller":
+        raise RunnerError(
+            f"workflow stage {name} max_rounds requires type: discussion_controller"
+        )
     if max_rounds is not None and (
         not isinstance(max_rounds, int) or isinstance(max_rounds, bool) or max_rounds <= 0
     ):
