@@ -1789,6 +1789,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     type: handoff
     prompt: dynamic_router.md
     targets: [main_role, stable_role, fresh_role, final_gate]
+    session_policy: role
     error_policy:
       retries: 2
 
@@ -1805,7 +1806,6 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     prompt: dynamic_role.md
     instructions: On the first invocation in this Session return exactly STABLE_FIRST. On every later invocation in the same Session return exactly STABLE_REPEAT.
     session_policy: role
-    session_key: dynamic_live_stable_role
     routes:
       pass: coordinator
 
@@ -1814,7 +1814,6 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     prompt: dynamic_role.md
     instructions: Always return exactly FRESH_DONE.
     session_policy: fresh
-    session_key: dynamic_live_fresh_role
     routes:
       pass: coordinator
 
