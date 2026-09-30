@@ -1297,6 +1297,7 @@ function renderStageEditorContent(cfg, item) {
         <label id="stageParserRow" class="designer-form-row"><span class="designer-label">Parser</span><select id="stageParser" class="designer-select" ${disabled}>${parserOptions(cfg.parser)}</select></label>
         <label class="designer-form-row"><span class="designer-label">Produces</span><input id="stageProduces" class="designer-input" value="${escapeHtml(cfg.produces || "")}" placeholder="tasks" ${disabled} /></label>
         <label id="stageSessionKeyRow" class="designer-form-row"><span class="designer-label">Session key</span><input id="stageSessionKey" class="designer-input" value="${escapeHtml(cfg.session_key || "")}" placeholder="Optional session cache key" ${disabled} /></label>
+        <label id="stageSessionPolicyRow" class="designer-form-row"><span class="designer-label">Session policy</span><select id="stageSessionPolicy" class="designer-select" ${disabled}><option value="auto" ${(cfg.session_policy || "auto") === "auto" ? "selected" : ""}>auto</option><option value="main" ${cfg.session_policy === "main" ? "selected" : ""}>main</option><option value="role" ${cfg.session_policy === "role" ? "selected" : ""}>role</option><option value="fresh" ${cfg.session_policy === "fresh" ? "selected" : ""}>fresh</option></select></label>
         <label id="stageInstructionsRow" class="designer-form-row stage-form-wide"><span class="designer-label">Extra instructions</span><textarea id="stageInstructions" class="designer-textarea" rows="2" placeholder="Optional inline instructions" ${disabled}>${escapeHtml(cfg.instructions || "")}</textarea></label>
       </div>
     </details>`;
@@ -1329,7 +1330,7 @@ function renderStageEditorContent(cfg, item) {
 
   $("stageType").addEventListener("change", () => { state.stageEditorDirty = true; renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg); }); renderTypeSpecific(cfg, disabled); syncStageTypeUi(cfg);
 }
-function hasAdvancedStageOverrides(cfg) { return ["run_state", "actor", "mode", "readonly_safety", "parser", "produces", "session_key", "instructions"].some((key) => cfg[key] !== undefined && cfg[key] !== ""); }
+function hasAdvancedStageOverrides(cfg) { return ["run_state", "actor", "mode", "readonly_safety", "parser", "produces", "session_key", "session_policy", "instructions"].some((key) => cfg[key] !== undefined && cfg[key] !== ""); }
 function switchRow(id, title, hint, value, disabled) { return `<label class="designer-switch-row"><input id="${id}" type="checkbox" ${value ? "checked" : ""} ${disabled} /><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></span></label>`; }
 function helpMark(text) { return `<span class="stage-help" tabindex="0" title="${escapeHtml(text)}" aria-label="${escapeHtml(text)}">?</span>`; }
 function fieldLabel(title, help = "") { return `<span class="designer-label">${escapeHtml(title)}${help ? helpMark(help) : ""}</span>`; }
@@ -1349,6 +1350,7 @@ function syncStageTypeUi(cfg) {
   if ($("stagePromptSelectRow")) $("stagePromptSelectRow").hidden = !promptAllowed;
   const parserRow = $("stageParserRow"); if (parserRow) parserRow.hidden = !stageSupportsParser(type);
   if ($("stageSessionKeyRow")) $("stageSessionKeyRow").hidden = !aiBacked;
+  if ($("stageSessionPolicyRow")) $("stageSessionPolicyRow").hidden = !aiBacked;
   if ($("stageInstructionsRow")) $("stageInstructionsRow").hidden = !promptAllowed;
   for (const id of ["stageStructuredRetriesRow", "stageStructuredFreshRetriesRow", "stageFreshOnStartRow", "stageFreshEachRunRow", "stageAllowProjectReadRow"]) if ($(id)) $(id).hidden = !aiBacked;
   if ($("stageCleanWorkRow")) $("stageCleanWorkRow").hidden = type !== "command";
@@ -1388,6 +1390,7 @@ function changedFields(cfg) {
   if (stageSupportsParser(type)) candidates.parser = valueOrNull("stageParser");
   if (aiBacked) {
     candidates.session_key = valueOrNull("stageSessionKey");
+    candidates.session_policy = valueOrNull("stageSessionPolicy") || "auto";
     candidates.fresh_session_on_start = checked("stageFreshOnStart");
     candidates.fresh_session_each_run = checked("stageFreshEachRun");
     candidates.allow_project_read = checked("stageAllowProjectRead");
