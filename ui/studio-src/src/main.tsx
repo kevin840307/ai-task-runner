@@ -90,6 +90,39 @@ type InspectorTab = "settings" | "parameters" | "routing" | "test";
 type StageTestMode = "stage" | "agent_ping";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
 
+type DesignerLanguage = "zh-TW" | "en";
+const DESIGNER_LANGUAGE_KEY = "ai-task-runner.language";
+const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
+  "zh-TW": {
+    back: "← 返回 Workflow 設定", mode: "Workflow Designer · 編輯模式", unsaved: "未儲存草稿",
+    reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
+    palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
+    search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
+    stage_settings: "Stage 設定", basic: "基本", parameters: "參數", routing: "連線", test: "測試",
+    close: "關閉", duplicate: "複製積木", remove: "移除積木", draft_only: "修改先存為草稿",
+    type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
+    result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
+    fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
+    testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。"
+  },
+  en: {
+    back: "← Back to Workflow Settings", mode: "Workflow Designer · Edit Mode", unsaved: "Unsaved draft",
+    reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
+    palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
+    search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
+    stage_settings: "Stage Settings", basic: "Basic", parameters: "Parameters", routing: "Routing", test: "Test",
+    close: "Close", duplicate: "Duplicate", remove: "Remove", draft_only: "Changes stay in draft",
+    type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
+    result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
+    fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
+    testing: "Testing…", language: "Language", no_incoming: "No incoming edges."
+  },
+};
+function initialDesignerLanguage(): DesignerLanguage {
+  try { return localStorage.getItem(DESIGNER_LANGUAGE_KEY) === "en" ? "en" : "zh-TW"; } catch { return "zh-TW"; }
+}
+
+
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
 const STAGE_TEST_PROMPTS: Record<string, string> = {
@@ -532,6 +565,9 @@ function App() {
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
+  const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
   const displayEdges = useMemo<Edge[]>(() => edges.map((edge) => {
     const related = Boolean(selected && (edge.source === selected || edge.target === selected));
     const status = String(edge.data?.status || "pass").toUpperCase();
@@ -798,6 +834,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setSelected(name);
+    setEditorOpen(true);
     setPendingCreate(null);
     setCreatePrompt("");
     setCreateCommand("");
@@ -883,6 +920,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setSelected("");
+    setEditorOpen(false);
     setDirtyGraph(true);
     setMessage(`Stage ${draft.name} 已從草稿移除。`);
   }
@@ -900,13 +938,20 @@ function App() {
     window.location.href = workflowStudioUrl();
   }
 
-  function focusStageTitle(name: string) {
+  function openStageEditor(name: string) {
     setSelected(name);
     setInspectorTab("settings");
+    setEditorOpen(true);
     requestAnimationFrame(() => {
       titleInputRef.current?.focus();
       titleInputRef.current?.select();
     });
+  }
+
+  function changeLanguage(next: DesignerLanguage) {
+    setLanguage(next);
+    document.documentElement.lang = next === "zh-TW" ? "zh-Hant" : "en";
+    try { localStorage.setItem(DESIGNER_LANGUAGE_KEY, next); } catch { /* keep local UI usable */ }
   }
 
   if (!visual) return <main className="loading">{message || "Loading Workflow Studio…"}</main>;
@@ -915,26 +960,27 @@ function App() {
     <main className="studio-shell">
       <header className="studio-header">
         <div>
-          <button className="ghost" onClick={leaveStudio}>← 返回 Workflow 設定</button>
+          <button className="ghost" onClick={leaveStudio}>{tx("back")}</button>
           <strong>{visual.name}</strong>
-          <span>Workflow Designer · 編輯模式</span>
+          <span>{tx("mode")}</span>
         </div>
         <div>
           {message && <span className="message">{message}</span>}
-          {dirtyGraph && <span className="unsaved-badge">未儲存草稿</span>}
-          <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">重設排列</button>
-          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>重新載入</button>
+          {dirtyGraph && <span className="unsaved-badge">{tx("unsaved")}</span>}
+          <label className="language-picker"><span>{tx("language")}</span><select value={language} onChange={(e) => changeLanguage(e.target.value as DesignerLanguage)}><option value="zh-TW">繁中</option><option value="en">EN</option></select></label>
+          <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>
+          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
-            {busy ? "驗證與儲存中…" : "儲存"}
+            {busy ? tx("saving") : tx("save")}
           </button>
         </div>
       </header>
 
       <section className="studio-body">
         <aside className="palette">
-          <div className="palette-head"><span className="palette-eyebrow">Stage Palette</span><strong>新增積木</strong><small>拖曳積木到畫布才會新增</small></div>
+          <div className="palette-head"><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong><small>{tx("drag_hint")}</small></div>
           <input className="palette-search" value={paletteQuery} onChange={(e) => setPaletteQuery(e.target.value)}
-            placeholder="搜尋 Stage…" aria-label="搜尋 Stage" />
+            placeholder={tx("search_stage")} aria-label={tx("search_stage")} />
           {PALETTE_SECTIONS.map((section) => {
             const q = paletteQuery.trim().toLowerCase();
             const types = section.types.filter((type) => {
@@ -970,9 +1016,9 @@ function App() {
               }).map((type) =>
                 <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
                   onDragStart={(event) => dragStage(event, type)}>
-                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>自訂 Stage</small></span><span className="palette-add" aria-hidden="true">⠿</span>
+                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>{tx("custom_stage")}</small></span><span className="palette-add" aria-hidden="true">⠿</span>
                 </div>)}</div></div>}
-          <div className="palette-note"><small>畫布上的修改會先保留為草稿，按「儲存 Workflow」後才更新 YAML。</small></div>
+          <div className="palette-note"><small>{tx("draft_hint")}</small></div>
         </aside>
         <div
           ref={canvasRef}
@@ -990,7 +1036,7 @@ function App() {
             onEdgesDelete={deleteEdges}
             onNodeDragStop={rememberPosition}
             onNodeClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
-            onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && focusStageTitle(n.id)}
+            onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && openStageEditor(n.id)}
             onPaneClick={() => setSelected("")}
             connectionLineStyle={{ strokeWidth: 2.5 }}
             defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
@@ -1038,37 +1084,31 @@ function App() {
             </div>
           </div>
         )}
-        <aside className="inspector">
-          {!draft ? (
-            <div className="empty">
-              <h2>Stage settings</h2>
-              <p>左側可搜尋並拖入 Stage；選取後可分頁設定、單 Stage 測試、複製或移除。Handoff 動態選下一跳；ERROR 與 Review semantic FAIL 使用不同 policy。</p>
-            </div>
-          ) : (
-            <>
+        {editorOpen && draft && <div className="stage-editor-backdrop" role="dialog" aria-modal="true" aria-label={tx("stage_settings")} onMouseDown={(e) => { if (e.target === e.currentTarget) setEditorOpen(false); }}>
+          <aside className="inspector stage-editor-modal">
               <div className="inspector-head">
                 <div><small>STAGE</small><h2>{draft.name}</h2></div>
-                <span>{draft.type}</span>
+                <div className="inspector-head-actions"><span>{draft.type}</span><button type="button" className="modal-close-button" onClick={() => setEditorOpen(false)} aria-label={tx("close")}>×</button></div>
               </div>
               <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
                 {(["settings", "parameters", "routing", "test"] as const).map((tab) => (
                   <button key={tab} type="button" role="tab" aria-selected={inspectorTab === tab}
                     className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)}>
-                    {{ settings: "基本", parameters: `參數${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, routing: "連線", test: "測試" }[tab]}
+                    {{ settings: tx("basic"), parameters: `${tx("parameters")}${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, routing: tx("routing"), test: tx("test") }[tab]}
                   </button>
                 ))}
               </div>
               {inspectorTab === "settings" && <div className="fields" role="tabpanel">
                 <label>
-                  <span>類型（建立後固定；要更換請刪除後重新拖入）</span>
+                  <span>{tx("type_fixed")}</span>
                   <select value={draft.type} disabled>
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
-                <label><span>顯示名稱（Stage key 不變；雙擊積木可快速編輯）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
-                <label><span>執行狀態文字</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
+                <label><span>{tx("display_name")}（Stage key 不變）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>{tx("run_status")}</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 <label>
-                  <span>執行範圍</span>
+                  <span>{tx("scope")}</span>
                   <select value={String(draft.scope || "")} onChange={(e) => editDraft({ ...draft, scope: e.target.value })}>
                     <option value="">Workflow</option><option value="task">Per task</option>
                   </select>
@@ -1111,7 +1151,7 @@ function App() {
                   ))}
               </div>}
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
-                <strong>結果連線</strong>
+                <strong>{tx("result_edges")}</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
                 {draft.type === "review"
                   ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。允許真的 FAIL N 次；下一次進入 Review 時不呼叫 Agent，直接走 fail-soft PASS 並清零。正常 PASS 也會清零。</p>
@@ -1170,8 +1210,8 @@ function App() {
                     <strong>{status.toUpperCase()}</strong><span>{target}</span>
                   </div>;
                 })}
-                <div className="route-section-title">連到這個積木</div>
-                {edges.filter((edge) => edge.target === draft.name).length === 0 && <p>目前沒有連入線。</p>}
+                <div className="route-section-title">{tx("incoming")}</div>
+                {edges.filter((edge) => edge.target === draft.name).length === 0 && <p>{tx("no_incoming")}</p>}
                 {edges.filter((edge) => edge.target === draft.name).map((edge) => {
                   const status = String(edge.data?.status || "pass").toLowerCase();
                   return <div className="route-row" key={edge.id}><span className={`route-dot ${status}`} />
@@ -1191,10 +1231,10 @@ function App() {
                   {(backendCatalog.backends || []).map((name) => <option key={name} value={name}>{name}{name === backendCatalog.default ? "（default）" : ""}</option>)}
                 </select></label>
                 {testMode === "stage"
-                  ? <label><span>Stage Input</span>
+                  ? <label><span>{tx("stage_input")}</span>
                       <div className="test-input-actions">
-                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft))}>填入簡易測試 Prompt</button>
-                        {testInput && <button type="button" onClick={() => setTestInput("")}>清除</button>}
+                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft))}>{tx("fill_test")}</button>
+                        {testInput && <button type="button" onClick={() => setTestInput("")}>{tx("clear")}</button>}
                       </div>
                       <textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5}
                         placeholder={stageTestPrompt(draft) || "輸入這個積木要接收的內容"} />
@@ -1202,7 +1242,7 @@ function App() {
                     </label>
                   : <div className="ping-prompt"><strong>固定 Prompt</strong><code>{AGENT_PING_PROMPT}</code><small>不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。</small></div>}
                 <button type="button" className="primary" onClick={() => void testStage()}
-                  disabled={testing || busy || !testBackend}>{testing ? "測試中…" : testMode === "stage" ? "執行 Real Stage" : "執行 Agent Ping"}</button>
+                  disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
                   <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
@@ -1216,14 +1256,13 @@ function App() {
               </div>}
               <footer>
                 <div className="footer-actions">
-                  <button onClick={() => void duplicateStage()} disabled={busy} title="複製目前設定，但不複製結果連線">複製積木</button>
-                  <button className="danger" onClick={() => void deleteStage()} disabled={busy}>移除積木</button>
+                  <button onClick={() => void duplicateStage()} disabled={busy} title="複製目前設定，但不複製結果連線">{tx("duplicate")}</button>
+                  <button className="danger" onClick={() => void deleteStage()} disabled={busy}>{tx("remove")}</button>
                 </div>
-                <span className="draft-hint">修改先存為草稿</span>
+                <span className="draft-hint">{tx("draft_only")}</span>
               </footer>
-            </>
-          )}
-        </aside>
+          </aside>
+        </div>}
       </section>
     </main>
   );
