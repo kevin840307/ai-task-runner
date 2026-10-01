@@ -69,7 +69,7 @@ targets:
   - final_validate
 ```
 
-ERROR is configured with `error_policy.retries` or the global retry setting. There is no ERROR edge, repair/recover/restart_at/repeat/max_attempts/on_exhausted UI contract.
+ERROR is configured with `error_policy.retries` or the global retry setting. A Review with a finite local retry count is shown as `retry -> Skip`; other Stages remain fail-closed after finite exhaustion. There is no ERROR edge, repair/recover/restart_at/repeat/max_attempts/on_exhausted UI contract.
 
 ## Stage Test
 
