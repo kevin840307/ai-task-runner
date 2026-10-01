@@ -9,7 +9,7 @@ from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
 NODE_FIELDS = frozenset({"routes", "label", "scope", "error_policy"})
-META_FIELDS = frozenset({"name", "type", "validator", *NODE_FIELDS})
+META_FIELDS = frozenset({"name", "type", "validator", "max_failures", *NODE_FIELDS})
 
 
 def validate_stage(name: str, values: dict[str, Any]) -> None:
