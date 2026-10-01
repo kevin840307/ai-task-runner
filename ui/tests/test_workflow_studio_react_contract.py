@@ -11,7 +11,7 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert "Stage Palette" in text
     assert "workflowStudioUrl" in text
     assert 'view: "workflow", studio: id' in text
-    assert "← 返回 Workflow 設定" in text
+    assert 'back: "← Workflows"' in text
     assert "Workflow Editor" in text
     assert "history.back()" not in text
     assert "application/x-ai-stage" in text
@@ -326,7 +326,7 @@ def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_edit
     assert 'item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item)' in app
     assert '"Import YAML"' in app
     assert 'source: "prompt"' not in app  # URLSearchParams is built from literal source query instead.
-    assert 'requestedView !== "workflow" && requestedView !== "prompt"' in app
+    assert 'switchView("prompt")' in app
     assert 'state.studioSourceKind = kind' in app
 
 
