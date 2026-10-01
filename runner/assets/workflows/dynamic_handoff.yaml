@@ -12,8 +12,6 @@ stages:
       - risk_reviewer
       - final_validate
     session_policy: role
-    error_policy:
-      retries: -1
 
   requirements_analyst:
     type: base
@@ -91,8 +89,6 @@ stages:
     instructions: Validate the overall Goal and concrete project evidence before completion.
     session_policy: fresh
     readonly_safety: observe
-    error_policy:
-      retries: -1
     routes:
       pass: done
       fail: coordinator
