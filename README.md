@@ -230,7 +230,7 @@ Supported workflow families:
 1. **Linear Workflow with Rollback / Loop**
 2. **Dynamic Handoff**
 
-Dynamic Handoff reuses the same Stage, StageExecutor, StateStore, plugin boundary, Workflow assets and Graph Designer. Multi-role discussion/review-board/triage behavior is expressed as a Dynamic Handoff Workflow pattern rather than a separate runtime family. Handoff and specialist roles default to durable per-role Sessions; a role may explicitly choose `session_policy: main`, `role`, or `fresh`, while independent final validation should normally stay `fresh`.
+Dynamic Handoff is already supported and reuses the same Stage, StageExecutor, StateStore, plugin boundary, Workflow assets and Workflow Editor. One Handoff Stage selects exactly one allowed next Stage per decision. Handoff and specialist roles default to durable per-role Sessions; a role may explicitly choose `session_policy: main`, `role`, or `fresh`, while independent final validation should normally stay `fresh`. Discussion / Group Chat is not planned.
 
 ## CLI
 
