@@ -244,3 +244,39 @@ def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
     assert _draft_next(draft, "router", result) == ("final_validate", "handoff")
 
 
+
+
+def test_stage_probe_error_mock_injects_one_error_then_uses_real_retry(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        yaml.safe_dump({
+            "stages": {
+                "cmd": {
+                    "type": "command",
+                    "command": ["{python}", "-c", "print('REAL_STAGE_OK')"],
+                    "error_policy": {"retries": 1},
+                },
+            },
+            "flow": ["cmd"],
+        }),
+        encoding="utf-8",
+    )
+
+    result = run_probe(Namespace(
+        project_root=str(project),
+        workflow=str(workflow),
+        stage="cmd",
+        input="",
+        backend="qwen",
+        probe_mode="stage",
+        test_scenario="error_mock",
+        keep_work=False,
+    ))
+
+    assert result["status"] == "pass"
+    assert result["output"].strip() == "REAL_STAGE_OK"
+    assert result["test_retry_limit"] == 1
+    assert result["test_scenario"] == "error_mock"
+    assert result["mock_error_injected"] is True
