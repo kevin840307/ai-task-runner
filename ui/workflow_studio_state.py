@@ -435,6 +435,8 @@ class WorkflowStudioMixin:
         if mode == "format":
             candidate = dict(fields) if isinstance(fields, dict) else dict(current)
             candidate.pop("name", None)
+            candidate.pop("routes", None)
+            candidate.pop("targets", None)
             return {
                 "ok": True,
                 "source": yaml.safe_dump(candidate, sort_keys=False, allow_unicode=True).rstrip() + "\n",
@@ -450,6 +452,8 @@ class WorkflowStudioMixin:
             raise ValueError("Stage YAML must be a mapping")
         if "name" in parsed:
             raise ValueError("Stage key/name is managed by the Workflow and cannot be changed here")
+        if "routes" in parsed or "targets" in parsed:
+            raise ValueError("Stage routing is managed by the Routing tab and cannot be changed in Stage YAML")
 
         allowed = self._stage_editor_fields()
         for key in parsed:
