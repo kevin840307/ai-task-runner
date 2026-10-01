@@ -103,7 +103,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
-    testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。"
+    testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。",
+    section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階"
   },
   en: {
     back: "← Back to Workflow Settings", mode: "Workflow Designer · Edit Mode", unsaved: "Unsaved draft",
@@ -115,7 +116,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
-    testing: "Testing…", language: "Language", no_incoming: "No incoming edges."
+    testing: "Testing…", language: "Language", no_incoming: "No incoming edges.",
+    section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced"
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -613,6 +615,13 @@ function App() {
   }, [graphFor]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && editorOpen) setEditorOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editorOpen]);
 
   useEffect(() => {
     if (!dirtyGraph) return;
@@ -1120,7 +1129,7 @@ function App() {
                   {parameterGroups.map((section) => <button key={section.id} type="button" role="tab"
                     aria-selected={visibleParameters === section.options}
                     className={visibleParameters === section.options ? "active" : ""}
-                    onClick={() => setParameterSection(section.id)}>{section.label}<small>{section.options.length}</small></button>)}
+                    onClick={() => setParameterSection(section.id)}>{tx(`section_${section.id}`)}<small>{section.options.length}</small></button>)}
                 </div>}
                 {visibleParameters.map((option) => option.name === "prompt" ? (
                     <label key={option.name}>
