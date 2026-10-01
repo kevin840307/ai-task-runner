@@ -76,6 +76,7 @@ class RunState:
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
     stage_sessions: dict[str, str] = field(default_factory=dict)
+    review_failures: dict[str, int] = field(default_factory=dict)
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -106,6 +107,13 @@ class RunState:
             raise ValueError("state.transition_previous must be an object")
         if not isinstance(self.stage_sessions, dict):
             raise ValueError("state.stage_sessions must be an object")
+        if not isinstance(self.review_failures, dict):
+            raise ValueError("state.review_failures must be an object")
+        for name, value in self.review_failures.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("state.review_failures keys must be non-empty strings")
+            if not is_integer(value) or value < 0:
+                raise ValueError(f"state.review_failures.{name} must be non-negative")
         for name, value in self.stage_sessions.items():
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("state.stage_sessions keys must be non-empty strings")
