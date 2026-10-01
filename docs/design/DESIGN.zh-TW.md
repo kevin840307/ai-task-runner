@@ -50,7 +50,8 @@ Version: 1.2.66
 - 其他 technical Stage error 先在 Same Session retry；達到 per-session attempt budget 後，只輪替失敗的 Stage 到 Fresh Session，並用共用 recovery envelope 繼續。
 - 無人值守全域預設是 `stage_retries=-1`。Stage 可用 local `error_policy.retries` 明確覆寫。
 - Write Stage 若已落盤部分變更後發生 technical ERROR，保留目前 project evidence、輪替該 Stage Session，再從現況 recover，不盲目重播相同行為。
-- Review 若有有限 local `error_policy`，retry 用盡後 fail-soft Skip 到下一 Stage；Final Validator 仍是 authoritative gate。
+- Review 若有有限 local `error_policy`，technical ERROR retry 用盡後 fail-soft Skip 到下一 Stage；Final Validator 仍是 authoritative gate。
+- Review semantic FAIL 使用獨立、只允許 Review 使用的 `max_failures`。`max_failures=3` 會保留 3 次真正 FAIL；第 4 次進入 Review 時不執行 reviewer，直接 fail-soft PASS，清除 durable 的 per-Review/per-Task counter，再走 PASS route。真正 Review PASS 也會清 0。
 - 非 Review Stage 的有限 retry 用盡後維持 fail-closed。
 
 ## Validation Modes
