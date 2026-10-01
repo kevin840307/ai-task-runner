@@ -464,6 +464,22 @@ flow:
     assert ctx.state.review_failures == {}
 
 
+def test_finish_task_clears_task_review_failure_counters(tmp_path):
+    workflow = [{"name": "review", "type": "review", "scope": "task", "max_failures": 3}]
+    ctx = context(tmp_path, workflow)
+    ctx.state.tasks = [Task(id="task-1", title="one", description="one")]
+    ctx.state.review_failures = {
+        "review::task-1": 2,
+        "other_review::task-1": 1,
+        "review::task-2": 3,
+    }
+
+    from runner.workflow.results import finish_task
+    finish_task(ctx)
+
+    assert ctx.state.review_failures == {"review::task-2": 3}
+
+
 def test_review_max_failures_counter_survives_state_roundtrip(tmp_path):
     state = RunState("run", "goal", str(tmp_path))
     state.review_failures["review::task-1"] = 2
