@@ -144,7 +144,7 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 }
 .wf-stage.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.17), 0 9px 24px rgba(15,23,42,.10); }
 .react-flow__node.disconnected .wf-stage { border-style: dashed; opacity: .78; }
-.wf-stage-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+.wf-stage-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; margin-bottom: 11px; }
 .wf-stage-head .stage-type { color: #2563eb; font-size: 10px; font-weight: 800; letter-spacing: .03em; }
 .wf-stage-head b { font-size: 9px; color: #7c3aed; background: #f3e8ff; border-radius: 999px; padding: 3px 6px; }
 .wf-stage-head b.error-skip { color: #b45309; background: #fff7ed; }
