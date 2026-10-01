@@ -28,7 +28,7 @@ Workflow 只剩：
 
 - `stages.<name>`：一個 Stage node
 - `flow`：依序執行的唯一 Stage 名稱
-- 可選 `routes.pass/fail/error`：明確 result edge
+- 可選 `routes.pass/fail`：明確 semantic result edge
 
 例如：
 
@@ -64,7 +64,7 @@ flow:
 
 - PASS -> 下一個 Stage
 - FAIL -> stop
-- ERROR -> 由 StageExecutor 處理技術性 retry/recovery；無人值守預設為無上限（`stage_retries: -1`），並搭配 Fresh Session 輪替與 capped backoff。只有明確設定有限次數時才會用盡後停止。
+- ERROR -> 由 StageExecutor 處理技術性 retry/recovery；無人值守預設為無上限（`stage_retries: -1`），並搭配 Fresh Session 輪替與 capped backoff。Review 若明確設定有限的 `error_policy.retries`，耗盡後會 fail-soft Skip 到下一個 Stage；其他 Stage 的有限 retry 用盡後仍 fail-closed。
 
 Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 
