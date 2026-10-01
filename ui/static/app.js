@@ -841,22 +841,30 @@ async function browseAiValidatorPrompt() {
 }
 
 async function switchView(view) {
-  if (view === "workflow") {
-    state.view = "workflow"; $("chatView").hidden = true; $("workflowView").hidden = false; $("workflowNav").classList.add("active"); $("chatNav").classList.remove("active");
+  if (view === "workflow" || view === "prompt") {
+    const kind = view === "prompt" ? "prompt" : "workflow";
+    state.view = view;
+    state.studioSourceKind = kind;
+    $("chatView").hidden = true;
+    $("workflowView").hidden = false;
+    $("chatNav").classList.remove("active");
+    $("workflowNav").classList.toggle("active", kind === "workflow");
+    $("promptNav").classList.toggle("active", kind === "prompt");
+    $("settingsNav").classList.remove("active");
     renderStudioFiles(); renderWorkflowPicker();
-    setViewLoading("workflowView", true, "Loading workflows…");
+    setViewLoading("workflowView", true, kind === "prompt" ? "Loading prompts…" : "Loading workflows…");
     try { await refreshStudioFiles(); }
-    catch (error) { showActionError(error.message, "Workflow loading failed"); }
+    catch (error) { showActionError(error.message, kind === "prompt" ? "Prompt loading failed" : "Workflow loading failed"); }
     finally { setViewLoading("workflowView", false); }
     return true;
   }
-  if (state.view === "workflow" && !$("workflowGeneratorPage").hidden) { if (!(await leaveGenerateWorkflowPage())) return false; }
+  if ((state.view === "workflow" || state.view === "prompt") && !$("workflowGeneratorPage").hidden) { if (!(await leaveGenerateWorkflowPage())) return false; }
   // Global Workflow Studio keeps its main draft when navigating to Project Tasks.
   // Only modal-local drafts need confirmation because closing those dialogs would destroy them.
   if (document.querySelector(".designer-step-modal-box") && !(await closeStageEditor())) return false;
   if (!$("addStageBackdrop").hidden && !(await closeAddStageModal())) return false;
   if (!$("newWorkflowBackdrop").hidden && !(await closeNewWorkflowModal())) return false;
-  state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active");
+  state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active"); $("promptNav").classList.remove("active"); $("settingsNav").classList.remove("active");
   return true;
 }
 function visibleStudioFiles() { return state.studioSourceKind === "prompt" ? (state.studioFiles.prompts || []) : (state.studioFiles.workflows || []); }
@@ -896,12 +904,19 @@ function appendStudioItem(root, item) {
 }
 function renderStudioFiles() {
   const root = $("studioFileList");
+  const isPrompt = state.studioSourceKind === "prompt";
+  if ($("assetPageTitle")) $("assetPageTitle").textContent = isPrompt ? t("assets.prompts_title", "Prompts") : t("assets.workflows_title", "Workflows");
+  if ($("assetPageDescription")) $("assetPageDescription").textContent = isPrompt
+    ? t("assets.prompts_desc", "Manage reusable Prompt assets used by Workflow Stages.")
+    : t("assets.workflows_desc", "Manage Workflows available to Project Chat.");
+  $("generateWorkflowButton").hidden = isPrompt;
+
   const body = document.querySelector(".studio-designer-body");
   const workflowManager = state.studioSourceKind === "workflow";
   body?.classList.toggle("workflow-manager-mode", workflowManager);
   body?.classList.toggle("prompt-manager-mode", !workflowManager);
   root.innerHTML = "";
-  $("studioSourceTabs").hidden = false;
+  $("studioSourceTabs").hidden = true;
   $("studioListTitle").textContent =
     state.studioSourceKind === "prompt" ? "Prompts" : "Workflows";
   $("yamlWorkflowSource").classList.toggle(
@@ -2017,7 +2032,10 @@ async function confirmProjectModal() {
 $("openProject").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
-$("chatNav").onclick = () => switchView("chat"); $("workflowNav").onclick = () => switchView("workflow");
+$("chatNav").onclick = () => switchView("chat");
+$("workflowNav").onclick = () => switchView("workflow");
+$("promptNav").onclick = () => switchView("prompt");
+$("settingsNav").onclick = (event) => { event.stopPropagation(); toggleThemePanel(event); };
 $("visualModeButton").onclick = () => setStudioMode("visual"); $("yamlModeButton").onclick = () => setStudioMode("yaml"); $("yamlWorkflowSource").onclick = () => setStudioSource("workflow"); $("yamlPromptSource").onclick = () => setStudioSource("prompt"); $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceKind] = $("studioSearchInput").value; renderStudioFiles(); }; $("studioSearchClear").onclick = () => { state.studioFilters[state.studioSourceKind] = ""; renderStudioFiles(); $("studioSearchInput").focus(); };
 $("studioTextarea").addEventListener("input", () => { updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); }); $("studioTextarea").addEventListener("keydown", handleEditorKeydown); $("studioTextarea").addEventListener("scroll", () => { $("studioLineNumbers").scrollTop = $("studioTextarea").scrollTop; });
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
