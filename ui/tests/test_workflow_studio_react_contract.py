@@ -153,3 +153,13 @@ def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
     assert "ERR×{errorRetries} → Skip" in text
     assert ".wf-stage.type-review, .wf-stage.type-ai_validator" in styles
     assert ".wf-stage-meta span" in styles
+
+
+def test_react_studio_has_stage_specific_test_prompt_presets():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "STAGE_TEST_PROMPTS" in text
+    assert "填入簡易測試 Prompt" in text
+    assert "stageTestPrompt(draft)" in text
+    assert "只作用於本次 isolated Stage Test" in text
+    assert "Stage Test API not found. Restart the local UI server" in text
