@@ -1028,14 +1028,14 @@ async function restoreWorkflowStudioNavigation() {
   }
 
   await switchView("workflow");
+  const source = params.get("source") === "prompt" ? "prompt" : "workflow";
+  state.studioSourceKind = source;
+  await refreshStudioFiles({ force: true });
+  renderStudioFiles();
   const studioId = params.get("studio") || "";
-  if (studioId) {
-    await refreshStudioFiles({ force: true });
-    const item = (state.studioFiles.workflows || []).find((row) => row.id === studioId);
-    if (item) {
-      state.studioSourceKind = "workflow";
-      renderStudioFiles();
-    }
+  if (studioId && source === "prompt") {
+    const item = (state.studioFiles.prompts || []).find((row) => row.id === studioId);
+    if (item) await openStudioFile(item);
   }
   window.history.replaceState({}, "", window.location.pathname);
 }
