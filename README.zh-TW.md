@@ -214,9 +214,11 @@ Prompt reference 使用分類相對 key，例如 `common/review.md`。未來可�
 
 Project Chat 仍是主要執行介面。Workflow UI 收斂成單一路徑：
 
-- **Workflow Settings** 只管理 Workflow / Prompt 資產（建立、Import、Rename、Duplicate、Export、Delete）。
+- **Workflows** 是 Workflow 資產庫（搜尋、建立、Import、Rename、Duplicate、Export、Delete），點選後進入獨立 Workflow Editor。
+- **Prompts** 是獨立 Prompt workspace，包含自己的資產清單與 Prompt Editor。
 - **Workflow Editor** 是唯一 Workflow 編輯器，提供 `Designer | YAML`，兩者共用同一份 canonical Workflow YAML。
-- **Prompt Editor** 保持獨立；Stage 只 reference Prompt file，不把 Prompt 本文塞進 Workflow YAML。
+- Stage 設定提供 `Form | YAML | Routing | Test`；Stage YAML 由同一套 Python YAML/schema 驗證後才回寫 draft。
+- Stage 只 reference Prompt file，不把 Prompt 本文塞進 Workflow YAML。
 - Stage = node。
 - PASS / FAIL = semantic result edge。
 - rollback / loop = PASS/FAIL edge 回前面 Stage。
