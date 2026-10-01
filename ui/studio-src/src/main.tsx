@@ -1475,6 +1475,7 @@ function App() {
                   {!!testResult.changed_files?.length && <details><summary>變更檔案 · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
                 </div>}
               </div>}
+              </div>
               <footer>
                 <div className="footer-actions">
                   <button onClick={() => void duplicateStage()} disabled={busy} title="複製目前設定，但不複製結果連線">{tx("duplicate")}</button>
