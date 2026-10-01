@@ -50,7 +50,8 @@ Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Valid
 - Other technical Stage errors retry the same usable Session first; after the per-session attempt budget, StageExecutor rotates only that Stage to a Fresh Session and continues with the shared recovery envelope.
 - The unattended global default is `stage_retries=-1` (unlimited). A finite Stage-local `error_policy.retries` overrides it.
 - A write attempt that fails after making project changes preserves those changes, rotates the Stage Session, and recovers from current project evidence rather than blindly replaying the same conversation.
-- Review is intentionally fail-soft when it has a finite local `error_policy`: after retries are exhausted it skips to the next Stage. Final validation remains authoritative.
+- Review is intentionally fail-soft when it has a finite local `error_policy`: after technical ERROR retries are exhausted it skips to the next Stage. Final validation remains authoritative.
+- Review semantic FAIL uses the separate Review-only `max_failures` guard. `max_failures=3` records three real FAIL verdicts; on the fourth entry Runner bypasses reviewer execution, emits fail-soft PASS, clears the durable per-Review/per-Task counter, and continues through the PASS route. Any real PASS also clears the counter.
 - Non-Review Stages remain fail-closed after a finite retry budget is exhausted.
 
 ## Validation modes
