@@ -214,3 +214,49 @@ def test_node_library_scales_with_favorites_recent_and_extensions():
     assert "palettePrefs.collapsed" in text
     assert ".palette-favorite.active" in styles
     assert ".palette-section-head:hover" in styles
+
+
+def test_designer_shortcuts_context_menu_and_command_add_are_workflow_aware():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'deleteKeyCode={null}' in text
+    assert 'event.key.toLowerCase() === "c"' in text
+    assert 'event.key.toLowerCase() === "v"' in text
+    assert 'event.key === "Delete" || event.key === "Backspace"' in text
+    assert "copyStageByName" in text
+    assert "pasteStage" in text
+    assert "deleteStage(selected)" in text
+    assert "onNodeContextMenu" in text
+    assert 'className="stage-context-menu"' in text
+    assert "contextMenu.stage" in text
+    assert 'className="add-stage-command-backdrop"' in text
+    assert 'className="palette-command-add"' in text
+    assert "addStageQuery" in text
+    assert ".stage-context-menu" in styles
+    assert ".add-stage-command" in styles
+
+
+def test_stage_test_has_pass_fail_error_retry_prompt_scenarios():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'type StageTestScenario = "pass" | "fail" | "error"' in text
+    assert 'testScenario' in text
+    assert 'test_error: "ERROR / Retry"' in text
+    assert 'stageTestPrompt(draft, scenario)' in text
+    assert 'structured-output correction/retry' in text
+    assert 'className="test-scenario-tabs"' in text
+    assert ".scenario-error.active" in styles
+
+
+def test_stage_editor_dialog_height_is_hard_locked_across_tabs():
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "min-block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "max-block-size: min(680px, calc(100dvh - 56px))" in styles
+    assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
+    assert ".stage-editor-content { min-width: 0; min-height: 0; height: 100%; overflow: auto;" in styles
+    assert ".inspector footer { margin:" in styles
+    assert "position: sticky" not in styles.split(".inspector footer", 1)[1].split("}", 1)[0]
