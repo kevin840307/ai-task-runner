@@ -20,7 +20,7 @@
 | Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
 | Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
 | Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
-| Studio React | PASS/FAIL/Handoff handle、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge/Discussion runtime |
+| Studio React | PASS/FAIL/Handoff handle、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge/Discussion runtime |
 | Process/runtime | ownership/orphan/supervisor/control-file probes、同 checkpoint 重複 crash 持續 restart、capped process backoff |
 
 ## 負向 / 已移除契約
@@ -51,7 +51,7 @@ tool\qwen_live_reliability_0_5h.bat
 - Dynamic Handoff target 選擇；
 - main / reusable role / fresh session policy；
 - 同一 role 被再次選中時必須沿用相同 Session；
-- Review FAIL rollback；
+- Review FAIL rollback 與 durable `max_failures` 第四次進入 bypass/reset；
 - Validator FAIL rollback；
 - HTTP 429 / 502 / 503；
 - raw disconnect；
