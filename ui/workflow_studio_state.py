@@ -379,7 +379,12 @@ class WorkflowStudioMixin:
                     raise ValueError(f"Unsupported Stage field: {key}")
                 clean[key] = value
 
-            self._validate_stage_editor_fields(clean)
+            current_stage = stages.get(stage_name)
+            effective_fields = {
+                **(current_stage if isinstance(current_stage, dict) else {}),
+                **clean,
+            }
+            self._validate_stage_editor_fields(effective_fields)
             self._validate_node_editor_fields(clean, data)
             updated = self._patch_stage_fields(content, stage_name, clean)
 
@@ -1308,7 +1313,7 @@ class WorkflowStudioMixin:
                         if value != previous:
                             changes[key] = None if key in {"status", "prompt", "label", "scope"} and value == "" else value
                     if changes:
-                        self._validate_stage_editor_fields(changes)
+                        self._validate_stage_editor_fields(config)
                         self._validate_node_editor_fields(changes, {"stages": desired})
                         updated = self._patch_stage_fields(updated, name, changes)
             updated = self._replace_flow_block(updated, flow)
