@@ -134,36 +134,43 @@ function initialDesignerLanguage(): DesignerLanguage {
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
 type StageTestScenario = "pass" | "fail" | "error";
+type DesignerConfirmDialog = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  action: () => void | Promise<void>;
+};
 const STAGE_TEST_PROMPTS: Record<string, Record<StageTestScenario, string>> = {
   plan: {
     pass: "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Return valid structured output.",
     fail: "Create a plan that intentionally leaves one acceptance criterion unresolved, so downstream review can identify a concrete missing item. Return valid structured output.",
-    error: "Intentionally return malformed structured output once so Runner must use its structured-output correction/retry path before producing a valid result.",
+    error: "Technical ERROR is injected by the Stage Test harness; the model is not asked to fail.",
   },
   task: {
     pass: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
     fail: "Do not satisfy the isolated task acceptance criterion. Explain what remains incomplete without pretending it is finished.",
-    error: "Trigger a recoverable technical/structured-output failure if possible, then allow Runner retry/recovery to complete the isolated Stage.",
+    error: "Technical ERROR is injected by the Stage Test harness before the real Stage runs.",
   },
   review: {
     pass: "Treat the isolated task evidence as complete and return the normal Review PASS contract with no missing items.",
     fail: "Treat one concrete acceptance criterion as unsatisfied and return the normal Review FAIL contract with one actionable missing item.",
-    error: "Return malformed Review structured output on the first response so Runner must use structured-output correction/retry, then return a valid Review contract.",
+    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Review Stage.",
   },
   ai_validator: {
     pass: "Validate the isolated evidence as complete and return the normal validator PASS contract.",
     fail: "Validate the isolated evidence as incomplete and return the normal validator FAIL contract with one concrete missing item.",
-    error: "Return malformed validator structured output on the first response so Runner must retry/correct it, then return a valid validator contract.",
+    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real validator.",
   },
   handoff: {
     pass: "Choose one valid allowed target for this isolated test and return a valid handoff decision.",
     fail: "Return a valid handoff decision that explains why no preferred route is suitable, while still respecting the allowed-target contract.",
-    error: "Return an invalid handoff shape once so Runner exercises correction/retry, then return one valid allowed target.",
+    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Handoff Stage.",
   },
   base: {
     pass: "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
     fail: "Reply that the isolated test condition is not satisfied and give one concrete reason.",
-    error: "Produce one recoverable malformed/invalid response first, then succeed when Runner retries.",
+    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real AI Stage.",
   },
 };
 
@@ -624,6 +631,7 @@ function App() {
   const [addStageQuery, setAddStageQuery] = useState("");
   const [copiedStage, setCopiedStage] = useState<Stage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stage: string } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<DesignerConfirmDialog | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
@@ -782,7 +790,9 @@ function App() {
         method: "POST",
         body: JSON.stringify({
           id: visual.id, project: query().project, stage: draft.name, input: testInput,
-          backend: testBackend, probe_mode: testMode, graph: graphDraft(visual),
+          backend: testBackend, probe_mode: testMode,
+          test_scenario: testMode === "stage" ? (testScenario === "error" ? "error_mock" : testScenario) : "pass",
+          graph: graphDraft(visual),
         }),
       });
       setTestResult(result);
@@ -1070,6 +1080,11 @@ function App() {
     setMessage(`Stage ${name} 已複製為 ${newName}；結果連線不會一起複製。`);
   }
 
+  function requestConfirm(dialog: DesignerConfirmDialog) {
+    setContextMenu(null);
+    setConfirmDialog(dialog);
+  }
+
   async function deleteStage(name = draft?.name || selected) {
     if (!visual || !name) return;
     if (visual.stages.some((stage) => stage.name !== name && (
@@ -1078,17 +1093,25 @@ function App() {
       setMessage(`請先移除指向 ${name} 的結果連線。`);
       return;
     }
-    if (!window.confirm(`從草稿移除 Stage "${name}"？儲存 Workflow 後才會更新 YAML。`)) return;
-    const next = { ...visual, flow: visual.flow.filter((item) => item !== name), stages: visual.stages.filter((stage) => stage.name !== name) };
-    setVisual(next);
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
-    setSelected("");
-    setEditorOpen(false);
-    setContextMenu(null);
-    setDirtyGraph(true);
-    setMessage(`Stage ${name} 已從草稿移除。`);
+    requestConfirm({
+      title: "移除 Stage",
+      message: `從草稿移除 Stage "${name}"？儲存 Workflow 後才會更新 YAML。`,
+      confirmLabel: "移除",
+      danger: true,
+      action: () => {
+        const current = visual;
+        const next = { ...current, flow: current.flow.filter((item) => item !== name), stages: current.stages.filter((stage) => stage.name !== name) };
+        setVisual(next);
+        const g = graphFor(next, catalog);
+        setNodes(g.nodes);
+        setEdges(g.edges);
+        setSelected("");
+        setEditorOpen(false);
+        setContextMenu(null);
+        setDirtyGraph(true);
+        setMessage(`Stage ${name} 已從草稿移除。`);
+      },
+    });
   }
 
   function resetLayout() {
@@ -1100,8 +1123,26 @@ function App() {
   }
 
   function leaveStudio() {
-    if (dirtyGraph && !window.confirm("捨棄未儲存的 Workflow 草稿？")) return;
-    window.location.href = workflowStudioUrl();
+    const leave = () => { window.location.href = workflowStudioUrl(); };
+    if (!dirtyGraph) { leave(); return; }
+    requestConfirm({
+      title: "捨棄未儲存變更？",
+      message: "目前 Workflow 還有未儲存的草稿。離開後這些變更會遺失。",
+      confirmLabel: "捨棄並離開",
+      danger: true,
+      action: leave,
+    });
+  }
+
+  function reloadStudio() {
+    if (!dirtyGraph) { void load(); return; }
+    requestConfirm({
+      title: "重新載入 Workflow？",
+      message: "目前未儲存的 Workflow 草稿會被捨棄，並重新載入磁碟上的版本。",
+      confirmLabel: "捨棄並重新載入",
+      danger: true,
+      action: () => { void load(); },
+    });
   }
 
   function openStageEditor(name: string) {
@@ -1128,7 +1169,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           {message && <span className="message">{message}</span>}
           {dirtyGraph && <span className="unsaved-badge">{tx("unsaved")}</span>}
           <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>
-          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>{tx("reload")}</button>
+          <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
             {busy ? tx("saving") : tx("save")}
           </button>
@@ -1298,6 +1339,26 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             </div>
           </div>
         )}
+        {confirmDialog && <div className="designer-confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="designer-confirm-title"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmDialog(null); }}>
+          <div className="designer-confirm-dialog">
+            <div className={`designer-confirm-icon ${confirmDialog.danger ? "danger" : ""}`} aria-hidden="true">{confirmDialog.danger ? "!" : "?"}</div>
+            <div className="designer-confirm-copy">
+              <h3 id="designer-confirm-title">{confirmDialog.title}</h3>
+              <p>{confirmDialog.message}</p>
+            </div>
+            <div className="designer-confirm-actions">
+              <button type="button" onClick={() => setConfirmDialog(null)}>取消</button>
+              <button type="button" className={confirmDialog.danger ? "danger-confirm" : "primary"}
+                onClick={() => {
+                  const action = confirmDialog.action;
+                  setConfirmDialog(null);
+                  void action();
+                }}>{confirmDialog.confirmLabel}</button>
+            </div>
+          </div>
+        </div>}
+
         {editorOpen && draft && <div className="stage-editor-backdrop" role="dialog" aria-modal="true" aria-label={tx("stage_settings")} onMouseDown={(e) => { if (e.target === e.currentTarget) setEditorOpen(false); }}>
           <aside className="inspector stage-editor-modal">
               <div className="inspector-head">
