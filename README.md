@@ -44,6 +44,9 @@ stages:
   review:
     type: review
     scope: task
+    error_policy:
+      retries: 2
+    max_failures: 3
     routes:
       fail: execute
 
@@ -65,6 +68,7 @@ Default routing is:
 - PASS -> next Stage
 - FAIL -> stop
 - ERROR -> StageExecutor technical retry/recovery; the unattended default is unlimited (`stage_retries: -1`), with Fresh Session rotation and capped backoff. A Review with a finite local `error_policy.retries` is fail-soft and skips to the next Stage after retries are exhausted; other Stage types fail closed when a finite retry budget is exhausted.
+- Review semantic FAIL is separate from ERROR. `max_failures: 3` allows three real FAIL verdicts; on the fourth entry to that Review Stage, Runner does not invoke the reviewer, emits fail-soft PASS, and clears the durable counter. Any real Review PASS also clears the counter.
 
 Rollback and loop are ordinary result edges to an earlier Stage.
 
