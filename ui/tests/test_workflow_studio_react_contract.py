@@ -195,3 +195,22 @@ def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
     assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
     assert ".stage-editor-content { min-height: 0; overflow: auto;" in styles
     assert ".palette-quick-add" in styles
+
+
+def test_node_library_scales_with_favorites_recent_and_extensions():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'PALETTE_PREF_KEY = "workflow-designer.palette:v1"' in text
+    assert "favorites" in text
+    assert "recent" in text
+    assert "extensions" in text
+    assert "toggleFavoriteStage" in text
+    assert "togglePaletteSection" in text
+    assert "rememberPaletteStage" in text
+    assert "knownTypes" in text
+    assert 'className="palette-favorite' in text
+    assert 'className="palette-section-head"' in text
+    assert "palettePrefs.collapsed" in text
+    assert ".palette-favorite.active" in styles
+    assert ".palette-section-head:hover" in styles
