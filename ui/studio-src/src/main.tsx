@@ -686,9 +686,14 @@ function App() {
       nextFlow.push(connection.source);
     }
     if (connection.target !== END && !nextFlow.includes(connection.target)) {
-      const sourceIndex = nextFlow.indexOf(connection.source);
-      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
-      nextFlow.splice(insertAt, 0, connection.target);
+      if (status === "pass" || status === "handoff") {
+        const sourceIndex = nextFlow.indexOf(connection.source);
+        const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
+        nextFlow.splice(insertAt, 0, connection.target);
+      } else {
+        // A FAIL branch must not change the source Stage's implicit PASS -> next.
+        nextFlow.push(connection.target);
+      }
     }
     const stages = visual.stages.map((stage) => {
       if (stage.name !== connection.source) return stage;
