@@ -44,6 +44,9 @@ stages:
   review:
     type: review
     scope: task
+    error_policy:
+      retries: 2
+    max_failures: 3
     routes:
       fail: execute
 
@@ -65,6 +68,7 @@ flow:
 - PASS -> 下一個 Stage
 - FAIL -> stop
 - ERROR -> 由 StageExecutor 處理技術性 retry/recovery；無人值守預設為無上限（`stage_retries: -1`），並搭配 Fresh Session 輪替與 capped backoff。Review 若明確設定有限的 `error_policy.retries`，耗盡後會 fail-soft Skip 到下一個 Stage；其他 Stage 的有限 retry 用盡後仍 fail-closed。
+- Review 的 semantic FAIL 與 ERROR 分開計算。`max_failures: 3` 允許真的 FAIL 3 次；第 4 次進入同一 Review Stage 時不呼叫 reviewer，直接 fail-soft PASS 並清除 durable counter。Review 真正 PASS 也會立即清 0。
 
 Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 
