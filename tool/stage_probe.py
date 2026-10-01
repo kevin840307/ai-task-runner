@@ -135,13 +135,21 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     input_text = str(args.input or "").strip()
     goal = input_text or f"Test Workflow Stage {args.stage}"
 
+    probe_mode = str(getattr(args, "probe_mode", "stage") or "stage")
+    configured_command = getattr(args, "command", None)
     config = RuntimeConfig(
         goal=goal,
         project_root=str(project),
         backend=str(args.backend or DEFAULT_BACKEND),
         workflow=workflow,
         workflow_explicit=True,
-        command=None if isinstance(stage, BaseStage) else sys.executable,
+        command=(
+            configured_command
+            if configured_command
+            else None
+            if probe_mode == "agent_ping" or isinstance(stage, BaseStage)
+            else sys.executable
+        ),
         work_dir=work_dir,
         force_new=True,
         stage_retries=0,
@@ -153,7 +161,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         with runtime_scope(config):
             runner = WorkflowRunner(config)
 
-            if str(getattr(args, "probe_mode", "stage") or "stage") == "agent_ping":
+            if probe_mode == "agent_ping":
                 output, elapsed = _agent_ping(runner.context.ai_client, config.agent_timeout)
                 return {
                     "ok": True,
