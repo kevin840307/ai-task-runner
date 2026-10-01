@@ -260,3 +260,19 @@ def test_stage_editor_dialog_height_is_hard_locked_across_tabs():
     assert ".stage-editor-content { min-width: 0; min-height: 0; height: 100%; overflow: auto;" in styles
     assert ".inspector footer { margin:" in styles
     assert "position: sticky" not in styles.split(".inspector footer", 1)[1].split("}", 1)[0]
+
+
+def test_designer_reuses_interface_language_and_has_fixed_add_stage_width():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'DESIGNER_LANGUAGE_KEY = "ai-task-runner.language"' in text
+    assert "changeLanguage" not in text
+    assert 'className="language-picker"' not in text
+    assert 'event.key !== DESIGNER_LANGUAGE_KEY' in text
+    assert 'palette-chevron' in text
+    assert '{collapsed ? "›" : "⌄"}' not in text
+    assert "grid-template-columns: 220px minmax(0,1fr)" in styles
+    assert "width: 220px; min-width: 220px; max-width: 220px" in styles
+    assert "width: 520px; max-width: calc(100vw - 32px)" in styles
+    assert ".palette-chevron.collapsed" in styles
