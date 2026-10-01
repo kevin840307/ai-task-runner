@@ -63,13 +63,13 @@ Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Valid
 
 ## Prompt contract
 
-All bundled prompts use Jinja + `StrictUndefined`. `prompts/context.py` is the only Stage template-data contract. Templates do not directly access `RunState`, `RuntimeConfig`, or arbitrary scratch objects.
+All bundled prompts use Jinja + `StrictUndefined`. `runner/prompting.py` owns the Stage template-data contract and rendering helpers. Templates do not directly access `RunState`, `RuntimeConfig`, or arbitrary scratch objects.
 
-Ordinary AI Stage configuration points to `prompts/stages/*.md` directly. Planning-specific computed context is owned directly by `PlanStage`; there is no prompt-builder registry. Shared prompt fragments use Jinja `{% include %}`.
+Bundled Stage prompts live under `runner/assets/prompts/<category>/*.md`. Each Stage behavior has one core prompt; Runner-owned retry/continue/recover context is appended by the shared control envelope instead of being maintained as parallel prompt files.
 
 ## Project safety
 
-`project/policy.py` loads `.ai-task-runner.yaml`. `project/files.py` owns project manifests/change detection/restore plus stale Safety snapshot cleanup. `project/instructions.py` owns the Runner-managed sections of QWEN.md/AGENTS.md. Safety/Git/readonly behavior is injected through plugins/hooks rather than Workflow imports.
+`runner/workspace.py` owns project manifests/change detection, protected-path policy, reusable snapshots, and project-level workspace helpers around `.ai-task-runner.yaml`. Safety/Git/readonly behavior is injected through plugins/hooks rather than Workflow imports.
 
 ## Durable state
 
@@ -88,4 +88,4 @@ Each `execute()` call owns a scoped runtime. Nested YAML-list items temporarily 
 
 ## OpenCode backend parity
 
-Qwen and OpenCode share `BaseBackend` stdin transport, timeout/idle-timeout handling, process-tree cleanup, and stable recovery identity. Backend adapters own only transport/capability differences: Qwen uses `--resume` plus its native `-s` sandbox; OpenCode uses `--session`, JSON events, `--auto`, and `OPENCODE_CONFIG_CONTENT.permission` for planning/no-tool/review policy and Runner `--sandbox` confinement. Workflow, StageExecutor, and Pipeline must never branch on backend names.
+Qwen and OpenCode share `BaseBackend` stdin transport, timeout/idle-timeout handling, process-tree cleanup, and stable recovery identity. Backend adapters own only transport/capability differences: Qwen uses `--resume` plus its native `-s` sandbox; OpenCode uses `--session`, JSON events, `--auto`, and `OPENCODE_CONFIG_CONTENT.permission` for planning/no-tool/review policy and Runner `--sandbox` confinement. Workflow, StageExecutor, and FlowEngine must never branch on backend names.
