@@ -318,15 +318,16 @@ def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_edit
     index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
 
-    assert "<h1>Workflow Settings</h1>" in index
-    assert "Workflow 使用統一的 Workflow Editor（Designer / YAML）" in index
+    assert 'id="assetPageTitle">Workflows</h1>' in index
+    assert 'id="promptNav"' in index
+    assert 'id="settingsNav"' in index
     assert 'id="studioEditorModeSwitch"' in index and "hidden" in index
     assert "openWorkflowEditorItem" in app
     assert 'item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item)' in app
     assert '"Import YAML"' in app
     assert 'source: "prompt"' not in app  # URLSearchParams is built from literal source query instead.
-    assert 'params.get("source") === "prompt"' in app
-    assert "state.studioSourceKind = source" in app
+    assert 'requestedView !== "workflow" && requestedView !== "prompt"' in app
+    assert 'state.studioSourceKind = kind' in app
 
 
 def test_stage_prompt_can_open_the_shared_prompt_editor():
@@ -334,7 +335,7 @@ def test_stage_prompt_can_open_the_shared_prompt_editor():
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
     assert "promptEditorUrl" in text
-    assert 'source: "prompt"' in text
+    assert 'view: "prompt"' in text
     assert "Edit Prompt" in text
     assert 'className="inline-prompt-edit"' in text
     assert ".inline-prompt-edit" in styles
@@ -369,3 +370,37 @@ def test_workflow_editor_desktop_responsive_contract_prevents_1024_overflow():
         assert f'"width": {width}' in browser_test
     assert "document.documentElement.scrollWidth <= window.innerWidth" in browser_test
     assert 'get_by_role("tab", name="YAML")' in browser_test
+
+
+def test_stage_dialog_has_shared_yaml_source_tab():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+    server = (ROOT / "ui" / "server.py").read_text(encoding="utf-8")
+    state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+    assert 'type InspectorTab = "settings" | "parameters" | "yaml" | "routing" | "test"' in text
+    assert '"/api/studio/stage/source"' in text
+    assert "loadStageYaml" in text
+    assert "applyStageYaml" in text
+    assert 'className="stage-yaml-panel"' in text
+    assert ".stage-yaml-panel textarea" in styles
+    assert '"/api/studio/stage/source"' in server
+    assert "def studio_stage_source(" in state
+    assert "yaml.safe_load(source)" in state
+    assert "Stage type is immutable" in state
+
+
+def test_primary_navigation_separates_workflows_prompts_and_settings():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'id="workflowNav"' in index
+    assert 'id="promptNav"' in index
+    assert 'id="settingsNav"' in index
+    assert 'id="studioSourceTabs"' in index and "hidden" in index.split('id="studioSourceTabs"', 1)[1].split(">", 1)[0]
+    assert 'switchView("workflow")' in app
+    assert 'switchView("prompt")' in app
+    assert 'toggleThemePanel(event)' in app
+    assert '"nav.prompts": "Prompts"' in i18n
+    assert '"nav.settings": "設定"' in i18n
