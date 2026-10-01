@@ -209,19 +209,21 @@ Prompt references are category-relative keys such as `common/review.md`. New pro
 
 There is no System/Custom split and no read-only built-in asset class.
 
-## n8n-style UI
+## Workflow UI
 
-Workflow Studio edits the same runtime graph:
+Project Chat remains the primary run surface. Workflow editing is intentionally converged:
 
-- Stage = node
-- PASS / FAIL = semantic result edges
-- rollback/loop = PASS/FAIL edge to an earlier Stage
-- Handoff = one Stage with multiple allowed target edges, selecting exactly one target per decision
-- ERROR is technical retry only and is never drawn as a graph edge
-- node settings contain Stage behavior
-- edge settings contain semantic routing only
+- **Workflow Settings** manages Workflow and Prompt assets (create/import/rename/duplicate/export/delete).
+- **Workflow Editor** is the only Workflow editor and provides `Designer | YAML` views over the same canonical Workflow YAML.
+- **Prompt Editor** remains a separate asset editor; Stages reference Prompt files instead of embedding Prompt bodies.
+- Stage = node.
+- PASS / FAIL = semantic result edges.
+- rollback/loop = PASS/FAIL edge to an earlier Stage.
+- Handoff = one Stage with multiple allowed target edges, selecting exactly one target per decision.
+- ERROR is technical retry only and is never drawn as a graph edge.
+- Stage Test supports real PASS/FAIL probes and a deterministic mocked technical ERROR probe for retry verification.
 
-Global and Project assets are both editable.
+Global and Project assets are both editable. Workflow YAML remains the source of truth used by UI, CLI, Git and Runner.
 
 Supported workflow families:
 
