@@ -136,7 +136,7 @@ def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     ]
     assert workflow[1]["scope"] == "task"
     assert workflow[2]["scope"] == "task"
-    assert "error_policy" not in workflow[2]
+    assert workflow[2]["error_policy"] == {"retries": 2}
     assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["routes"] == {"fail": "planning"}
 
@@ -362,6 +362,73 @@ flow:
         "review",
     ]
     assert ctx.state.completed is True
+
+
+def test_review_finite_error_policy_skips_after_exhausted_error(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  review:
+    type: review
+    error_policy:
+      retries: 2
+  validate:
+    type: command
+    command: "echo validate"
+flow:
+  - review
+  - validate
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class ErrorExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            if stage.name == "review":
+                return StageResult(stage.name, "error", output="review backend unavailable")
+            return StageResult(stage.name, "pass", output="validated")
+
+    executor = ErrorExecutor()
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == ["review", "validate"]
+    assert executor.retry_limits == [2, None]
+    assert ctx.state.completed is True
+
+
+def test_non_review_finite_error_policy_still_fails_closed(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  execute:
+    type: base
+    error_policy:
+      retries: 2
+  after:
+    type: command
+    command: "echo after"
+flow:
+  - execute
+  - after
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+
+    class ErrorExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            return StageResult(stage.name, "error", output="technical failure")
+
+    executor = ErrorExecutor()
+    assert FlowEngine(ctx).run(executor) == 1
+    assert [name for name, _ in executor.calls] == ["execute"]
+    assert ctx.state.workflow_position == 0
+    assert ctx.state.completed is False
 
 
 def test_stage_error_policy_overrides_global_retry_limit(tmp_path):
