@@ -37,7 +37,6 @@ class UIState(ProjectRuntimeMixin, WorkflowStudioMixin, WorkflowBuilderMixin):
         self._builder_lock = threading.RLock()
         self._process_module = subprocess
         self._workflow_requirement_cache: dict[str, tuple[int, int, dict]] = {}
-        self._projects_payload_cache: tuple[int, float, dict] | None = None
         if not self.projects_file.exists():
             self._write_projects([])
         if not self.workflow_visibility_file.exists():
