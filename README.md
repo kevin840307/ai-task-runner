@@ -28,7 +28,7 @@ A Workflow is only:
 
 - `stages.<name>`: one Stage node
 - `flow`: ordered unique Stage names
-- optional `routes.pass/fail/error`: explicit result edges
+- optional `routes.pass/fail`: explicit semantic result edges
 
 Example:
 
@@ -64,7 +64,7 @@ Default routing is:
 
 - PASS -> next Stage
 - FAIL -> stop
-- ERROR -> StageExecutor technical retry/recovery; the unattended default is unlimited (`stage_retries: -1`), with Fresh Session rotation and capped backoff. A finite per-Stage/global retry limit is an explicit opt-in.
+- ERROR -> StageExecutor technical retry/recovery; the unattended default is unlimited (`stage_retries: -1`), with Fresh Session rotation and capped backoff. A Review with a finite local `error_policy.retries` is fail-soft and skips to the next Stage after retries are exhausted; other Stage types fail closed when a finite retry budget is exhausted.
 
 Rollback and loop are ordinary result edges to an earlier Stage.
 
