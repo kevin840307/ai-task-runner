@@ -978,3 +978,69 @@
 .validation-details-content{margin:0;min-height:120px;max-height:440px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .validation-details-card>.modal-actions{margin:0;padding:11px 17px;border-top:1px solid var(--line);background:var(--panel)}
 @media(max-width:900px){.studio-designer-body{grid-template-columns:210px minmax(0,1fr)}}
+
+
+/* Workflow Settings ownership: Workflows are managed as a full-width asset list;
+   Prompts keep the master-detail layout because Prompt Editor lives on this page. */
+.studio-designer-body.workflow-manager-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+.workflow-manager-mode .studio-workflow-main {
+  display: none;
+}
+.workflow-manager-mode .studio-workflow-sidebar {
+  width: 100%;
+  max-width: none;
+  padding: 14px;
+}
+.workflow-manager-mode .studio-file-list {
+  display: grid;
+  gap: 6px;
+}
+.workflow-manager-mode .studio-file-group {
+  margin-top: 14px;
+  padding: 0 10px 4px;
+}
+.workflow-manager-mode .studio-file-item {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .34fr) auto;
+  align-items: center;
+  column-gap: 18px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.workflow-manager-mode .studio-file-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 3%, var(--panel));
+}
+.workflow-manager-mode .studio-file-item .studio-file-item-top {
+  min-width: 0;
+}
+.workflow-manager-mode .studio-file-item > small {
+  justify-self: start;
+  white-space: nowrap;
+}
+.studio-file-item-action {
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.prompt-manager-mode .studio-file-item-action { display: none; }
+
+@media (max-width: 1180px) {
+  .workflow-manager-mode .studio-file-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .workflow-manager-mode .studio-file-item > small {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .workflow-manager-mode .studio-file-item-action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
