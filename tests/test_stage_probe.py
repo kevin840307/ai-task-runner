@@ -178,7 +178,7 @@ def test_real_stage_probe_caps_local_unlimited_retry_policy(tmp_path):
         keep_work=False,
     ))
 
-    assert result["status"] == "error"
+    assert result["status"] == "fail"
     assert result["test_retry_limit"] == STAGE_TEST_UNLIMITED_RETRY_CAP
     assert result["test_retry_policy"] == f"test_cap:{STAGE_TEST_UNLIMITED_RETRY_CAP}"
 
