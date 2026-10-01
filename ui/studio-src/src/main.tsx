@@ -104,7 +104,9 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
     testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。",
-    section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階"
+    section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
+    favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage",
+    group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
   },
   en: {
     back: "← Back to Workflow Settings", mode: "Workflow Designer · Edit Mode", unsaved: "Unsaved draft",
@@ -117,7 +119,9 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
     testing: "Testing…", language: "Language", no_incoming: "No incoming edges.",
-    section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced"
+    section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
+    favorites: "Favorites", recent: "Recent", extensions: "Extensions",
+    group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools"
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -258,11 +262,30 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
 };
 
 const PALETTE_SECTIONS = [
-  { title: "建立與執行", types: ["plan", "task", "base"], icon: "✦" },
-  { title: "檢查與驗證", types: ["review", "ai_validator"], icon: "✓" },
-  { title: "協作", types: ["handoff"], icon: "↔" },
-  { title: "工具", types: ["command"], icon: "›" },
+  { id: "build", types: ["plan", "task", "base"], icon: "✦" },
+  { id: "validate", types: ["review", "ai_validator"], icon: "✓" },
+  { id: "handoff", types: ["handoff"], icon: "↔" },
+  { id: "tools", types: ["command"], icon: "›" },
 ];
+const PALETTE_PREF_KEY = "workflow-designer.palette:v1";
+type PalettePrefs = { favorites: string[]; recent: string[]; collapsed: string[] };
+
+function readPalettePrefs(): PalettePrefs {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PALETTE_PREF_KEY) || "{}");
+    return {
+      favorites: Array.isArray(raw.favorites) ? raw.favorites.filter((v: unknown) => typeof v === "string") : [],
+      recent: Array.isArray(raw.recent) ? raw.recent.filter((v: unknown) => typeof v === "string").slice(0, 5) : [],
+      collapsed: Array.isArray(raw.collapsed) ? raw.collapsed.filter((v: unknown) => typeof v === "string") : [],
+    };
+  } catch {
+    return { favorites: [], recent: [], collapsed: [] };
+  }
+}
+
+function writePalettePrefs(prefs: PalettePrefs): void {
+  try { localStorage.setItem(PALETTE_PREF_KEY, JSON.stringify(prefs)); } catch { /* local-only convenience */ }
+}
 
 function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
   return catalog?.stage_types?.[stageType]?.options?.find((item) => item.name === name)?.default;
@@ -567,6 +590,7 @@ function App() {
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
@@ -851,7 +875,38 @@ function App() {
     setMessage(`Stage ${name} 已加入草稿。儲存 Workflow 後才會寫入 YAML。`);
   }
 
+  function rememberPaletteStage(stageType: string) {
+    setPalettePrefs((current) => {
+      const next = { ...current, recent: [stageType, ...current.recent.filter((item) => item !== stageType)].slice(0, 5) };
+      writePalettePrefs(next);
+      return next;
+    });
+  }
+
+  function toggleFavoriteStage(stageType: string) {
+    setPalettePrefs((current) => {
+      const favorites = current.favorites.includes(stageType)
+        ? current.favorites.filter((item) => item !== stageType)
+        : [stageType, ...current.favorites];
+      const next = { ...current, favorites };
+      writePalettePrefs(next);
+      return next;
+    });
+  }
+
+  function togglePaletteSection(sectionId: string) {
+    setPalettePrefs((current) => {
+      const collapsed = current.collapsed.includes(sectionId)
+        ? current.collapsed.filter((item) => item !== sectionId)
+        : [...current.collapsed, sectionId];
+      const next = { ...current, collapsed };
+      writePalettePrefs(next);
+      return next;
+    });
+  }
+
   async function addStage(stageType = "task", position?: { x: number; y: number }) {
+    rememberPaletteStage(stageType);
     if (stageType === "base" || stageType === "command") {
       setPendingCreate({ type: stageType, position });
       setCreatePrompt(stageType === "base" ? String(defaultOption(catalog, stageType, "prompt") || "") : "");
@@ -990,50 +1045,55 @@ function App() {
           <div className="palette-head"><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong><small>{tx("drag_hint")}</small></div>
           <input className="palette-search" value={paletteQuery} onChange={(e) => setPaletteQuery(e.target.value)}
             placeholder={tx("search_stage")} aria-label={tx("search_stage")} />
-          {PALETTE_SECTIONS.map((section) => {
+          {(() => {
             const q = paletteQuery.trim().toLowerCase();
-            const types = section.types.filter((type) => {
-              if (!catalog?.stage_types?.[type]) return false;
+            const allTypes = Object.keys(catalog?.stage_types || {});
+            const knownTypes = new Set(PALETTE_SECTIONS.flatMap((section) => section.types));
+            const matches = (type: string) => {
               if (!q) return true;
               const meta = STAGE_META[type];
               return [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
+            };
+            const item = (type: string, icon = "◇") => {
+              const meta = STAGE_META[type] || { title: type, description: tx("custom_stage") };
+              const favorite = palettePrefs.favorites.includes(type);
+              return <div key={type} className="palette-item" draggable={!busy} title={meta.description}
+                onDragStart={(event) => dragStage(event, type)}>
+                <span className={`palette-icon type-${type}`} aria-hidden="true">{icon}</span>
+                <span className="palette-copy"><strong>{meta.title}</strong></span>
+                <button type="button" className={`palette-favorite ${favorite ? "active" : ""}`} disabled={busy}
+                  aria-label={favorite ? `Unfavorite ${meta.title}` : `Favorite ${meta.title}`}
+                  title={favorite ? "Remove favorite" : "Favorite"}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => { event.stopPropagation(); toggleFavoriteStage(type); }}>{favorite ? "★" : "☆"}</button>
+                <button type="button" className="palette-quick-add" disabled={busy}
+                  aria-label={`Add ${meta.title}`} title={`Add ${meta.title}`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
+              </div>;
+            };
+            const groups: { id: string; title: string; icon: string; types: string[] }[] = [];
+            const favoriteTypes = palettePrefs.favorites.filter((type) => allTypes.includes(type) && matches(type));
+            if (favoriteTypes.length) groups.push({ id: "favorites", title: tx("favorites"), icon: "★", types: favoriteTypes });
+            const recentTypes = palettePrefs.recent.filter((type) => allTypes.includes(type) && !favoriteTypes.includes(type) && matches(type));
+            if (recentTypes.length) groups.push({ id: "recent", title: tx("recent"), icon: "↺", types: recentTypes });
+            PALETTE_SECTIONS.forEach((section) => {
+              const types = section.types.filter((type) => allTypes.includes(type) && matches(type));
+              if (types.length) groups.push({ id: section.id, title: tx(`group_${section.id}`), icon: section.icon, types });
             });
-            if (!types.length) return null;
-            return <div className="palette-section" key={section.title}>
-              <div className="palette-section-head"><span>{section.title}</span><small>{types.length}</small></div>
-              <div className="palette-list">{types.map((type) => {
-                const meta = STAGE_META[type];
-                return <div key={type} className="palette-item" draggable={!busy} title={meta.description}
-                  onDragStart={(event) => dragStage(event, type)}>
-                  <span className={`palette-icon type-${type}`} aria-hidden="true">{section.icon}</span>
-                  <span className="palette-copy"><strong>{meta.title}</strong></span>
-                  <button type="button" className="palette-quick-add" disabled={busy}
-                    aria-label={`Add ${meta.title}`} title={`Add ${meta.title}`}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
-                </div>;
-              })}</div>
-            </div>;
-          })}
-          {Object.keys(catalog?.stage_types || {}).filter((type) => {
-              if (PALETTE_SECTIONS.some((section) => section.types.includes(type))) return false;
-              const q = paletteQuery.trim().toLowerCase();
-              return !q || type.toLowerCase().includes(q);
-            }).length > 0 &&
-            <div className="palette-section"><div className="palette-section-head"><span>擴充積木</span></div><div className="palette-list">
-              {Object.keys(catalog?.stage_types || {}).filter((type) => {
-                if (PALETTE_SECTIONS.some((section) => section.types.includes(type))) return false;
-                const q = paletteQuery.trim().toLowerCase();
-                return !q || type.toLowerCase().includes(q);
-              }).map((type) =>
-                <div key={type} className="palette-item" draggable={!busy} title={tx("custom_stage")}
-                  onDragStart={(event) => dragStage(event, type)}>
-                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong></span>
-                  <button type="button" className="palette-quick-add" disabled={busy}
-                    aria-label={`Add ${type}`} title={`Add ${type}`}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
-                </div>)}</div></div>}
+            const extensionTypes = allTypes.filter((type) => !knownTypes.has(type) && matches(type));
+            if (extensionTypes.length) groups.push({ id: "extensions", title: tx("extensions"), icon: "◇", types: extensionTypes });
+            return groups.map((group) => {
+              const collapsed = !q && palettePrefs.collapsed.includes(group.id);
+              return <div className="palette-section" key={group.id}>
+                <button type="button" className="palette-section-head" onClick={() => togglePaletteSection(group.id)}
+                  aria-expanded={!collapsed}>
+                  <span><i aria-hidden="true">{collapsed ? "›" : "⌄"}</i>{group.title}</span><small>{group.types.length}</small>
+                </button>
+                {!collapsed && <div className="palette-list">{group.types.map((type) => item(type, group.icon))}</div>}
+              </div>;
+            });
+          })()}
           <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ = quick add</small></div>
         </aside>
         <div
