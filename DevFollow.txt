@@ -31,3 +31,11 @@
 29. 只有實際通過 Windows + Ubuntu CI、real-Qwen reliability probes 與必要 soak 證據後，才可宣稱 24H 重構完成。
 
 核心：Stage 做事；StageExecutor 讓 Stage 穩定；FlowEngine 決定下一步；StateStore 讓進度可 Resume。
+
+
+Workflow UI ownership
+- Project Chat is the primary run surface.
+- Workflow Settings manages Workflow/Prompt assets only.
+- Workflow Editor is the single Workflow editing surface with Designer/YAML views over canonical YAML.
+- Prompt Editor remains independent; Stages reference Prompt assets.
+- Do not reintroduce a second Visual Workflow editor in Workflow Settings.
