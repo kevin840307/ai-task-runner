@@ -11,7 +11,8 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert "Stage Palette" in text
     assert "workflowStudioUrl" in text
     assert 'view: "workflow", studio: id' in text
-    assert "← Workflow Studio" in text
+    assert "← 返回 Workflow 設定" in text
+    assert "Workflow Designer · 編輯模式" in text
     assert "history.back()" not in text
     assert "application/x-ai-stage" in text
     assert 'sourceHandle: "pass"' in text
@@ -140,3 +141,15 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
     assert "rowStartCenter" in text
     assert "cursorY" in text
 
+
+
+def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'className="wf-stage-meta"' in text
+    assert "未連線" in text
+    assert "FAIL×{reviewMaxFailures} → 下次 Pass" in text
+    assert "ERR×{errorRetries} → Skip" in text
+    assert ".wf-stage.type-review, .wf-stage.type-ai_validator" in styles
+    assert ".wf-stage-meta span" in styles
