@@ -46,7 +46,6 @@ stages:
     scope: task
     routes:
       fail: execute
-      error: stop
 
   validate_ai:
     type: ai_validator
@@ -65,7 +64,7 @@ Default routing is:
 
 - PASS -> next Stage
 - FAIL -> stop
-- ERROR -> StageExecutor retry/recovery; exhausted ERROR stops at the current Stage
+- ERROR -> StageExecutor technical retry/recovery; the unattended default is unlimited (`stage_retries: -1`), with Fresh Session rotation and capped backoff. A finite per-Stage/global retry limit is an explicit opt-in.
 
 Rollback and loop are ordinary result edges to an earlier Stage.
 
