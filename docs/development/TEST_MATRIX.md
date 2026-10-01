@@ -20,7 +20,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
 | Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
-| Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge/Discussion runtime |
+| Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge, Workflow Manager/Prompt Editor ownership, common desktop viewport overflow checks |
 | Process/runtime | ownership/orphan/supervisor/control-file probes, repeated same-checkpoint crash restart, capped process backoff |
 
 ## Negative/removed-contract coverage
@@ -29,7 +29,7 @@ Tests must reject or prove absence of:
 
 - `routes.error`;
 - repair/recover/restart_at/repeat/max_attempts/on_exhausted graph controls;
-- removed Discussion runtime Stage types/state;
+- Discussion / Group Chat runtime or UI mode is absent;
 - deleted compatibility runtime modules;
 - obsolete Workflow/Prompt asset paths.
 
