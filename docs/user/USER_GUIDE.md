@@ -19,7 +19,7 @@ A Workflow is a list of Stages.
 - PASS normally advances to the next Stage.
 - FAIL normally stops unless `routes.fail` points somewhere else.
 - PASS/FAIL may route backward to implement rollback/loop.
-- ERROR is technical failure only; StageExecutor retries/rebuilds the Session and stops at the current Stage when retry policy is exhausted.
+- ERROR is technical failure only; StageExecutor retries/rebuilds the Session. Review with a finite local `error_policy.retries` is fail-soft and skips to the next Stage after exhaustion; other Stage types stop at the current Stage when a finite retry policy is exhausted.
 - There is no repair/recover/restart_at/repeat/max_attempts/on_exhausted graph model.
 
 ## Plan and task scope
@@ -103,7 +103,7 @@ A Stage may override only the retry count:
 
 ```yaml
 error_policy:
-  retries: 2
+  retries: 2   # Review: retry twice, then fail-soft Skip to next Stage
 ```
 
 HTTP 429/502/503 and other classified transient backend errors use delay/backoff without moving graph position.
