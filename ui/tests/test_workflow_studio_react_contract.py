@@ -44,6 +44,8 @@ def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection
     assert "probe_mode: testMode" in text
     assert "backend: testBackend" in text
     assert "AGENT_PING_PROMPT" in text
+    assert "local -1 在測試中最多 retry 2 次" in text
+    assert "test_retry_policy" in text
     assert "不使用工具、不讀專案、不修改檔案" in text
 
 
