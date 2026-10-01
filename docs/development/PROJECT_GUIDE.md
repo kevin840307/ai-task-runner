@@ -47,10 +47,7 @@ For the current product model, one Project has at most one active Runtime. Conve
 ## Project policy
 Every maintained smoke/example project root includes `.ai-task-runner.yaml`. The file itself is automatically protected. Immutable inputs/reference fixtures should be listed as protected directories/files; files that the task is expected to edit must not be protected.
 
-Project responsibilities are centralized in:
-- `runner/project/files.py`: manifest/change detection/restore/stale snapshot cleanup.
-- `runner/project/policy.py`: project policy and protected paths.
-- `runner/project/instructions.py`: Runner-managed QWEN.md/AGENTS.md sections.
+Project filesystem/policy responsibilities are centralized in `runner/workspace.py`: manifest/change detection, protected paths, reusable snapshots, and project-level workspace helpers. Do not recreate a parallel `project/` service layer.
 
 ## Current task execution contract
 A fresh/rebuilt Executor receives the Current Task, Original Goal as global context, necessary validator/review feedback, and the full Stage instruction. When a normal same session already knows the same Stage prompt contract, `continuation_prompt` sends only the next TODO or newly produced Review/Validator evidence. Recovery continuations remain even smaller: Stage identity, new failure evidence, a readonly reminder when applicable, and the required next action/output contract.
@@ -79,7 +76,7 @@ Workflow YAML has only two top-level keys: `stages` defines named nodes and `flo
 PASS/FAIL result edges are the only semantic routing mechanism. Backward edges implement rollback/loops. Technical ERROR stays inside StageExecutor retry/recovery and is never a graph edge. There is no public `recover`, `restart_at`, Repair Stage, repeat/max-attempt graph, or hidden replan topology. A Review may intentionally use a finite local `error_policy.retries`; after exhaustion it fail-soft skips to the next Stage, so an authoritative validator should remain later in the flow.
 
 ## Prompt contract
-All bundled Stage prompts use Jinja + `StrictUndefined`. Top-level template variables come only from `runner/prompts/context.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly.
+All bundled Stage prompts use Jinja + `StrictUndefined`. Template context/rendering is owned by `runner/prompting.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly. Bundled prompt resources live under `runner/assets/prompts/<category>/`.
 
 Ordinary write work should use `type: task`, and read-only verdict work should use `type: review`; use `type: base` only for intentionally generic AI behavior. A genuinely new behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader and FlowEngine must not gain Stage-name-specific branches.
 
