@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from runner.workflow.stages import StageResult
-from tool.stage_probe import _draft_next, run_probe
+from tool.stage_probe import AGENT_PING_PROMPT, _agent_ping, _draft_next, run_probe
 
 
 def test_stage_probe_reports_input_output_and_next_without_running_next(tmp_path):
@@ -82,6 +82,30 @@ def test_stage_probe_draft_reports_review_error_exhaustion_as_skip():
     result = StageResult("review", "error", output="review unavailable")
 
     assert _draft_next(draft, "review", result) == ("validate", "next")
+
+
+def test_agent_ping_uses_fixed_no_tool_prompt_and_fresh_session():
+    class FakeClient:
+        def __init__(self):
+            self.session_id = "old-session"
+            self.runtime = None
+            self.calls = []
+
+        def set_runtime(self, mode, *, allow_project_read=False, sandbox=False):
+            self.runtime = (mode, allow_project_read, sandbox)
+
+        def ask(self, prompt, timeout=None):
+            self.calls.append((prompt, timeout, self.session_id))
+            return "AGENT_PING_OK"
+
+    client = FakeClient()
+    result = _agent_ping(client, 17)
+
+    assert result == "AGENT_PING_OK"
+    assert client.runtime == ("no_tool", False, False)
+    assert client.calls == [(AGENT_PING_PROMPT, 17, "")]
+    assert "Do not use tools" in AGENT_PING_PROMPT
+    assert "do not modify files" in AGENT_PING_PROMPT
 
 
 def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
