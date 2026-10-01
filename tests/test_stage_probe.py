@@ -2,6 +2,7 @@
 
 from argparse import Namespace
 from pathlib import Path
+import sys
 
 import yaml
 
@@ -107,6 +108,86 @@ def test_agent_ping_uses_fixed_no_tool_prompt_and_fresh_session():
     assert client.calls == [(AGENT_PING_PROMPT, AGENT_PING_TIMEOUT_SECONDS, "")]
     assert "Do not use tools" in AGENT_PING_PROMPT
     assert "do not modify files" in AGENT_PING_PROMPT
+
+
+def test_real_stage_probe_calls_real_fake_agent_once_and_stops_at_stage(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        yaml.safe_dump({
+            "stages": {
+                "review": {
+                    "type": "review",
+                    "error_policy": {"retries": 2},
+                },
+                "after": {
+                    "type": "command",
+                    "command": ["{python}", "-c", "raise SystemExit('must not run')"],
+                },
+            },
+            "flow": ["review", "after"],
+        }),
+        encoding="utf-8",
+    )
+    fake_agent = Path(__file__).with_name("fake_agent.py")
+    result = run_probe(Namespace(
+        project_root=str(project),
+        workflow=str(workflow),
+        stage="review",
+        input="verify only this stage",
+        backend="qwen",
+        command=f'"{sys.executable}" "{fake_agent}"',
+        probe_mode="stage",
+        keep_work=False,
+    ))
+
+    assert result["status"] == "fail"
+    assert result["next"] == "stop"
+    assert result["kind"] == "review"
+    assert not Path(result["work_dir"]).exists()
+
+
+def test_agent_ping_on_command_stage_uses_configured_agent_not_dummy_python(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        yaml.safe_dump({
+            "stages": {
+                "cmd": {
+                    "type": "command",
+                    "command": ["{python}", "-c", "print('stage command')"],
+                },
+            },
+            "flow": ["cmd"],
+        }),
+        encoding="utf-8",
+    )
+    ping_agent = tmp_path / "ping_agent.py"
+    ping_agent.write_text(
+        "import json\n"
+        "print(json.dumps([{\"type\":\"system\",\"subtype\":\"session_start\",\"session_id\":\"ping-session\"},"
+        "{\"type\":\"result\",\"subtype\":\"success\",\"session_id\":\"ping-session\",\"result\":\"AGENT_PING_OK\"}]))\n",
+        encoding="utf-8",
+    )
+
+    result = run_probe(Namespace(
+        project_root=str(project),
+        workflow=str(workflow),
+        stage="cmd",
+        input="",
+        backend="qwen",
+        command=f'"{sys.executable}" "{ping_agent}"',
+        probe_mode="agent_ping",
+        keep_work=False,
+    ))
+
+    assert result["status"] == "pass"
+    assert result["output"] == "AGENT_PING_OK"
+    assert result["route"] == "agent_ping"
+    assert result["next"] == "not-run"
+    assert result["changed_files"] == []
 
 
 def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
