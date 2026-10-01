@@ -155,7 +155,14 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 else None
             )
 
-            result = runner.stage_executor.run(stage, runner.context, previous)
+            policy = definition.get("error_policy")
+            retry_limit = policy.get("retries") if isinstance(policy, dict) else None
+            result = runner.stage_executor.run(
+                stage,
+                runner.context,
+                previous,
+                retry_limit=retry_limit,
+            )
             next_target, route = _draft_next(draft_workflow, args.stage, result) if draft_workflow is not None else (
                 _resolved_next(workflow, index, result), resolve_stage_target(definition, result.status)
             )
