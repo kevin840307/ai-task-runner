@@ -27,6 +27,7 @@ from runner.workflow.stages import BaseStage, StageResult
 from runner.workflow_runner import WorkflowRunner
 
 AGENT_PING_TIMEOUT_SECONDS = 60
+STAGE_TEST_UNLIMITED_RETRY_CAP = 2
 AGENT_PING_PROMPT = (
     "Reply with exactly AGENT_PING_OK and nothing else. "
     "Do not use tools, do not modify files, and do not inspect the project."
@@ -203,7 +204,16 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             )
 
             policy = definition.get("error_policy")
-            retry_limit = policy.get("retries") if isinstance(policy, dict) else None
+            configured_retry = policy.get("retries") if isinstance(policy, dict) else None
+            if configured_retry == -1:
+                retry_limit = STAGE_TEST_UNLIMITED_RETRY_CAP
+                retry_policy = f"test_cap:{STAGE_TEST_UNLIMITED_RETRY_CAP}"
+            elif isinstance(configured_retry, int) and not isinstance(configured_retry, bool):
+                retry_limit = configured_retry
+                retry_policy = f"local:{configured_retry}"
+            else:
+                retry_limit = 0
+                retry_policy = "single_attempt_default"
             result = runner.stage_executor.run(
                 stage,
                 runner.context,
@@ -224,6 +234,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 "route": route,
                 "kind": result.kind,
                 "work_dir": str((project / work_dir).resolve()),
+                "test_retry_limit": retry_limit,
+                "test_retry_policy": retry_policy,
             }
     finally:
         if not args.keep_work:
