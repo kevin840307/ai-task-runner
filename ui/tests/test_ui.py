@@ -949,6 +949,20 @@ class WorkflowStudioTests(unittest.TestCase):
             [stage["name"] for stage in result["visual"]["stages"]],
         )
 
+    def test_backend_created_review_defaults_to_finite_fail_soft_retries(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        result = self.state.studio_stage_add(
+            item["id"],
+            "review_2",
+            "review",
+            opened["hash"],
+            self.project,
+            add_to_flow=False,
+        )
+        data = __import__("yaml").safe_load(result["file"]["content"])
+        self.assertEqual(data["stages"]["review_2"]["error_policy"], {"retries": 2})
+
     def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
