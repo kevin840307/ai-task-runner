@@ -110,9 +110,16 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .route-dot.pass { background: #16a34a; }.route-dot.fail { background: #f59e0b; }.route-dot.error { background: #dc2626; }
 .error-skip-row { margin-top: 10px; padding: 10px 9px; border: 1px solid #fed7aa; border-radius: 9px; background: #fff7ed; }
 .stage-test { display: grid; gap: 13px; font-size: 13px; color: #475569; }
+.test-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: #f1f5f9; }
+.test-mode-tabs button { border: 0; background: transparent; color: #64748b; padding: 8px; font-size: 12px; font-weight: 800; }
+.test-mode-tabs button.active { color: #1d4ed8; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(15,23,42,.1); }
+.ping-prompt { display: grid; gap: 7px; padding: 11px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff; }
+.ping-prompt code { white-space: pre-wrap; overflow-wrap: anywhere; color: #334155; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ping-prompt small { color: #64748b; }
 .stage-test p { margin: 0; line-height: 1.5; }
 .stage-test label { display: grid; gap: 6px; font-weight: 700; }
-.stage-test textarea { width: 100%; min-height: 112px; padding: 10px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 9px; color: #0f172a; }
+.stage-test textarea, .stage-test select { width: 100%; min-height: 40px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #0f172a; background: #fff; }
+.stage-test textarea { min-height: 112px; resize: vertical; }
 .stage-test > button { justify-self: start; }
 .test-notice { padding: 10px; border-radius: 9px; background: #fffbeb; color: #92400e; }
 .test-error { padding: 10px; border-radius: 9px; background: #fef2f2; color: #b91c1c; overflow-wrap: anywhere; }
