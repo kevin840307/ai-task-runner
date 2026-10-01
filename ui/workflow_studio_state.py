@@ -559,7 +559,9 @@ class WorkflowStudioMixin:
             if prompt.strip(): config["prompt"] = prompt.strip()
             if stage_type == "command": config["command"] = command.strip()
             if stage_type == "ai_validator": config.setdefault("validator", "ai")
-            if stage_type == "review": config.setdefault("error_policy", {"retries": 2})
+            if stage_type == "review":
+                config.setdefault("error_policy", {"retries": 2})
+                config.setdefault("max_failures", 3)
             updated = self._insert_stage_block(content, name, config)
             if add_to_flow:
                 parsed = self._load_workflow_yaml(updated)
