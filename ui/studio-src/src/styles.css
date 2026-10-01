@@ -121,6 +121,9 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .ping-prompt small { color: #64748b; }
 .stage-test p { margin: 0; line-height: 1.5; }
 .stage-test label { display: grid; gap: 6px; font-weight: 700; }
+.test-input-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.test-input-actions button { padding: 6px 9px; border-radius: 8px; background: #fff; color: #475569; font-size: 11px; font-weight: 750; }
+.test-input-actions button:hover { border-color: #93b4f8; color: #1d4ed8; background: #f8fbff; }
 .stage-test textarea, .stage-test select { width: 100%; min-height: 40px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #0f172a; background: #fff; }
 .stage-test textarea { min-height: 112px; resize: vertical; }
 .stage-test > button { justify-self: start; }
