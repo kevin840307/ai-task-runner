@@ -137,6 +137,7 @@ def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     assert workflow[1]["scope"] == "task"
     assert workflow[2]["scope"] == "task"
     assert workflow[2]["error_policy"] == {"retries": 2}
+    assert workflow[2]["max_failures"] == 3
     assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["routes"] == {"fail": "planning"}
 
@@ -362,6 +363,122 @@ flow:
         "review",
     ]
     assert ctx.state.completed is True
+
+
+def test_review_max_failures_fail_soft_passes_on_configured_count(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  execute:
+    type: base
+  review:
+    type: review
+    max_failures: 3
+    routes:
+      fail: execute
+flow:
+  - execute
+  - review
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    executor = Executor({"review": ["fail", "fail", "fail"]})
+
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "execute", "review",
+        "execute", "review",
+        "execute", "review",
+    ]
+    assert ctx.state.review_failures == {}
+    assert ctx.state.completed is True
+    assert ctx.state.transition_previous == {}
+
+
+def test_review_max_failures_pass_clears_consecutive_counter(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  review:
+    type: review
+    max_failures: 3
+flow:
+  - review
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    engine = FlowEngine(ctx)
+    definition = workflow[0]
+
+    first = engine._apply_review_failure_policy(
+        definition,
+        StageResult("review", "fail", data={
+            "completed": False, "reason": "missing one", "missing_items": ["one"],
+        }, kind="review"),
+    )
+    assert first.status == "fail"
+    assert list(ctx.state.review_failures.values()) == [1]
+
+    passed = engine._apply_review_failure_policy(
+        definition,
+        StageResult("review", "pass", data={
+            "completed": True, "reason": "done", "missing_items": [],
+        }, kind="review"),
+    )
+    assert passed.status == "pass"
+    assert ctx.state.review_failures == {}
+
+    again = engine._apply_review_failure_policy(
+        definition,
+        StageResult("review", "fail", data={
+            "completed": False, "reason": "missing again", "missing_items": ["again"],
+        }, kind="review"),
+    )
+    assert again.status == "fail"
+    assert list(ctx.state.review_failures.values()) == [1]
+
+
+def test_review_max_failures_counter_survives_state_roundtrip(tmp_path):
+    state = RunState("run", "goal", str(tmp_path))
+    state.review_failures["review::task-1"] = 2
+
+    restored = RunState.load(state.dump())
+
+    assert restored.review_failures == {"review::task-1": 2}
+
+
+def test_max_failures_is_review_only_and_positive(tmp_path):
+    invalid_type = write_workflow(
+        tmp_path,
+        """
+stages:
+  execute:
+    type: task
+    max_failures: 3
+flow:
+  - execute
+""",
+    )
+    with pytest.raises(RunnerError, match="max_failures is only valid for type: review"):
+        load_workflow(invalid_type)
+
+    invalid_value = write_workflow(
+        tmp_path,
+        """
+stages:
+  review:
+    type: review
+    max_failures: 0
+flow:
+  - review
+""",
+    )
+    with pytest.raises(RunnerError, match="max_failures must be a positive integer"):
+        load_workflow(invalid_value)
 
 
 def test_review_finite_error_policy_skips_after_exhausted_error(tmp_path):
