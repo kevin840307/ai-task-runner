@@ -30,9 +30,10 @@ Owns semantic navigation only:
 - FAIL -> stop by default;
 - explicit `routes.pass` / `routes.fail`;
 - task-scope iteration;
-- one-of-many Handoff target routing.
+- one-of-many Handoff target routing;
+- Review fail-soft continuation after a finite local technical retry policy is exhausted.
 
-ERROR never routes through the graph.
+ERROR never becomes a graph edge. Review skip is a Stage-type policy that resolves to the ordinary next Stage; other finite ERROR exhaustion remains fail-closed.
 
 ### StateStore
 Persists committed workflow position, task position, previous transition evidence, primary Session ID and durable per-role Session IDs.
