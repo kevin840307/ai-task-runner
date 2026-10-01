@@ -119,6 +119,7 @@ class FlowEngine:
             )
         else:
             result = executor.run(stage, self.context, previous, label=label)
+        result = self._apply_review_failure_policy(definition, result)
         self._remember_previous(result)
 
         target = (
@@ -145,6 +146,73 @@ class FlowEngine:
         self._route_to(target, index, result)
         self.context.save_state()
         return result, False
+
+    def _apply_review_failure_policy(
+        self,
+        definition: dict[str, Any],
+        result: StageResult,
+    ) -> StageResult:
+        """Bound semantic Review FAIL loops without weakening technical ERROR policy.
+
+        max_failures is Review-only. The counter is durable and scoped to
+        Stage + current Task (or run scope when no Task is active). PASS clears
+        the counter. Reaching the configured FAIL count converts that verdict
+        into an explicit fail-soft PASS so the workflow advances to the normal
+        PASS target and the next Review starts from zero.
+        """
+        if definition.get("type") != "review" or result.status not in {"pass", "fail"}:
+            return result
+
+        maximum = definition.get("max_failures")
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
+            return result
+
+        task = self.context.task
+        scope = task.id if task is not None else "__run__"
+        key = f"{definition['name']}::{scope}"
+        counters = self.context.state.review_failures
+
+        if result.status == "pass":
+            counters.pop(key, None)
+            return result
+
+        count = counters.get(key, 0) + 1
+        if count < maximum:
+            counters[key] = count
+            return result
+
+        counters.pop(key, None)
+        original = result.data if isinstance(result.data, dict) else {}
+        missing = original.get("missing_items")
+        data = {
+            "completed": True,
+            "reason": (
+                f"Review fail-soft PASS after {count} consecutive semantic FAIL results "
+                f"(max_failures={maximum})."
+            ),
+            "missing_items": [],
+            "fail_soft": True,
+            "failure_count": count,
+            "last_failed_reason": str(original.get("reason", "") or ""),
+            "last_failed_missing_items": (
+                [str(item) for item in missing if isinstance(item, str)]
+                if isinstance(missing, list)
+                else []
+            ),
+        }
+        if task is not None:
+            task.last_review = data
+        return StageResult(
+            stage=result.stage,
+            status="pass",
+            output=(
+                f"Review fail-soft PASS after {count} consecutive FAIL results; "
+                f"max_failures={maximum}. Last review: {result.output}"
+            ),
+            changed_files=list(result.changed_files),
+            data=data,
+            kind=result.kind,
+        )
 
     def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
