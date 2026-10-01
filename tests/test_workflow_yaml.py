@@ -365,7 +365,7 @@ flow:
     assert ctx.state.completed is True
 
 
-def test_review_max_failures_fail_soft_passes_on_configured_count(tmp_path):
+def test_review_max_failures_bypasses_on_entry_after_configured_failures(tmp_path):
     path = write_workflow(
         tmp_path,
         """
@@ -391,7 +391,9 @@ flow:
         "execute", "review",
         "execute", "review",
         "execute", "review",
+        "execute",
     ]
+    assert executor.counts["review"] == 3
     assert ctx.state.review_failures == {}
     assert ctx.state.completed is True
     assert ctx.state.transition_previous == {}
@@ -414,32 +416,52 @@ flow:
     engine = FlowEngine(ctx)
     definition = workflow[0]
 
-    first = engine._apply_review_failure_policy(
-        definition,
-        StageResult("review", "fail", data={
-            "completed": False, "reason": "missing one", "missing_items": ["one"],
-        }, kind="review"),
-    )
-    assert first.status == "fail"
+    assert engine._review_bypass_result(definition) is None
+    first = StageResult("review", "fail", data={
+        "completed": False, "reason": "missing one", "missing_items": ["one"],
+    }, kind="review")
+    engine._record_review_result(definition, first)
     assert list(ctx.state.review_failures.values()) == [1]
 
-    passed = engine._apply_review_failure_policy(
-        definition,
-        StageResult("review", "pass", data={
-            "completed": True, "reason": "done", "missing_items": [],
-        }, kind="review"),
-    )
-    assert passed.status == "pass"
+    passed = StageResult("review", "pass", data={
+        "completed": True, "reason": "done", "missing_items": [],
+    }, kind="review")
+    engine._record_review_result(definition, passed)
     assert ctx.state.review_failures == {}
 
-    again = engine._apply_review_failure_policy(
-        definition,
-        StageResult("review", "fail", data={
-            "completed": False, "reason": "missing again", "missing_items": ["again"],
-        }, kind="review"),
-    )
-    assert again.status == "fail"
+    again = StageResult("review", "fail", data={
+        "completed": False, "reason": "missing again", "missing_items": ["again"],
+    }, kind="review")
+    engine._record_review_result(definition, again)
     assert list(ctx.state.review_failures.values()) == [1]
+
+
+def test_review_max_failures_fourth_entry_is_synthetic_pass(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  review:
+    type: review
+    max_failures: 3
+flow:
+  - review
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    engine = FlowEngine(ctx)
+    definition = workflow[0]
+    key = "review::__run__"
+    ctx.state.review_failures[key] = 3
+
+    result = engine._review_bypass_result(definition)
+
+    assert result is not None
+    assert result.status == "pass"
+    assert result.data["bypassed"] is True
+    assert result.data["failure_count"] == 3
+    assert ctx.state.review_failures == {}
 
 
 def test_review_max_failures_counter_survives_state_roundtrip(tmp_path):
