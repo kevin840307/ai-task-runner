@@ -7,7 +7,7 @@ import sys
 import yaml
 
 from runner.workflow.stages import StageResult
-from tool.stage_probe import AGENT_PING_PROMPT, AGENT_PING_TIMEOUT_SECONDS, _agent_ping, _draft_next, run_probe
+from tool.stage_probe import AGENT_PING_PROMPT, AGENT_PING_TIMEOUT_SECONDS, STAGE_TEST_UNLIMITED_RETRY_CAP, _agent_ping, _draft_next, run_probe
 
 
 def test_stage_probe_reports_input_output_and_next_without_running_next(tmp_path):
@@ -145,7 +145,42 @@ def test_real_stage_probe_calls_real_fake_agent_once_and_stops_at_stage(tmp_path
     assert result["status"] == "fail"
     assert result["next"] == "stop"
     assert result["kind"] == "review"
+    assert result["test_retry_limit"] == 2
+    assert result["test_retry_policy"] == "local:2"
     assert not Path(result["work_dir"]).exists()
+
+
+def test_real_stage_probe_caps_local_unlimited_retry_policy(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        yaml.safe_dump({
+            "stages": {
+                "cmd": {
+                    "type": "command",
+                    "command": ["{python}", "-c", "raise SystemExit(3)"],
+                    "error_policy": {"retries": -1},
+                },
+            },
+            "flow": ["cmd"],
+        }),
+        encoding="utf-8",
+    )
+
+    result = run_probe(Namespace(
+        project_root=str(project),
+        workflow=str(workflow),
+        stage="cmd",
+        input="",
+        backend="qwen",
+        probe_mode="stage",
+        keep_work=False,
+    ))
+
+    assert result["status"] == "error"
+    assert result["test_retry_limit"] == STAGE_TEST_UNLIMITED_RETRY_CAP
+    assert result["test_retry_policy"] == f"test_cap:{STAGE_TEST_UNLIMITED_RETRY_CAP}"
 
 
 def test_agent_ping_on_command_stage_uses_configured_agent_not_dummy_python(tmp_path):
