@@ -71,6 +71,19 @@ def test_stage_probe_accepts_disconnected_stage(tmp_path):
     assert result["next"] == "done"
 
 
+def test_stage_probe_draft_reports_review_error_exhaustion_as_skip():
+    draft = {
+        "stages": {
+            "review": {"type": "review", "error_policy": {"retries": 2}},
+            "validate": {"type": "command", "command": "echo validate"},
+        },
+        "flow": ["review", "validate"],
+    }
+    result = StageResult("review", "error", output="review unavailable")
+
+    assert _draft_next(draft, "review", result) == ("validate", "next")
+
+
 def test_stage_probe_reports_dynamic_handoff_target_without_running_it():
     draft = {
         "stages": {
