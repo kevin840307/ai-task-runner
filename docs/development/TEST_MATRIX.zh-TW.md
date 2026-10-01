@@ -4,13 +4,13 @@
 
 ## Deterministic CI
 
-一般 GitHub gate 會跑 Ubuntu + Windows compile/pytest，以及 React Studio build。
+一般 GitHub gate 會跑 Ubuntu + Windows compile/pytest，以及 React Studio build。CI 也會重新建置 Full Designer，並驗證已提交的 `ui/static/workflow-studio-app` 與 `ui/studio-src` 完全一致；CI 只做 verify，不會自行改寫 branch。
 
 | 區域 | 覆蓋 |
 | --- | --- |
 | Workflow schema | Stage type/options、未知欄位拒絕、只允許 PASS/FAIL route、target 存在性、task-scope topology |
 | Semantic routing | PASS next、顯式 PASS/FAIL、done/stop、backward loop、未 routing FAIL 安全停止 |
-| Technical ERROR | Stage/global retry、無限 `-1`、Same Session retry、per-Stage Fresh Session rotation、KeyboardInterrupt/SystemExit 不被吞掉 |
+| Technical ERROR | Stage/global retry、無限 `-1`、Same Session retry、Fresh Session rotation、partial-write recovery、Review finite-retry fail-soft Skip、非 Review finite exhaustion fail-closed、KeyboardInterrupt/SystemExit 不被吞掉 |
 | Session policy | main/role/fresh、非法 mode、role durable restore/persist、fresh 不持久化、單一 role reset、global reset、錯誤後 session rotation |
 | Dynamic Handoff | target allow-list、非法 target、一次只選一個 target、role -> coordinator、final validator FAIL -> coordinator、durable resume |
 | Prompt | Dynamic shared worker 會 render role `instructions`；prompt category ownership；共用 retry/continue/recover control envelope |
@@ -18,10 +18,10 @@
 | Task production | Plan Task[]、custom command/Python `produces: tasks`、連續 task scope |
 | Resume/state | workflow position、task step、transition_previous、role Sessions、損壞 state 拒絕 |
 | Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
-| Stage Probe | 只執行單一 Stage，回傳結果與 next target，不繼續 workflow |
+| Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
 | Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
 | Studio React | PASS/FAIL/Handoff handle、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge/Discussion runtime |
-| Process/runtime | ownership/orphan/supervisor/control-file 的 deterministic unit/integration probes |
+| Process/runtime | ownership/orphan/supervisor/control-file probes、同 checkpoint 重複 crash 持續 restart、capped process backoff |
 
 ## 負向 / 已移除契約
 
