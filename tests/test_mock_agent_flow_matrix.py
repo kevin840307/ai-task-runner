@@ -126,6 +126,7 @@ flow:
     )
 
     assert result.completed is True
+    assert all(row["stage"] != "unknown" for row in rows)
     assert [row["stage"] for row in rows] == [
         "handoff",
         "execute",
