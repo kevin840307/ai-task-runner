@@ -46,6 +46,8 @@ error_policy:
   retries: -1   # unlimited technical retry
 ```
 
+For a `review` Stage only, a finite local `error_policy.retries` is also the fail-soft contract: once those technical retries are exhausted, Review is skipped and the Workflow continues to the next Stage. Keep an authoritative Validator after such a Review. Other Stage types fail closed when a finite retry budget is exhausted.
+
 Do not use `routes.error`, repair/recover/restart_at/repeat/max_attempts/on_exhausted; they are not part of the current runtime contract.
 
 ## Stage types
