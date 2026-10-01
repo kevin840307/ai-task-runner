@@ -150,7 +150,7 @@ def test_real_stage_probe_calls_real_fake_agent_once_and_stops_at_stage(tmp_path
     assert not Path(result["work_dir"]).exists()
 
 
-def test_real_stage_probe_caps_local_unlimited_retry_policy(tmp_path, monkeypatch):
+def test_real_stage_probe_caps_local_unlimited_retry_policy(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
     workflow = tmp_path / "workflow.yaml"
