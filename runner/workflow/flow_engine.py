@@ -19,7 +19,8 @@ class FlowEngine:
     Workflow semantics are intentionally small:
     - PASS defaults to the next Stage.
     - FAIL defaults to stop unless routes.fail overrides it.
-    - ERROR is not routable: StageExecutor applies retry policy, then stops here.
+    - ERROR is not graph-routable: StageExecutor applies retry policy.
+    - Review with a finite local error_policy is fail-soft: exhausted ERROR skips to next.
     - routes may override PASS/FAIL with next/done/stop/or another Stage.
     - contiguous scope: task nodes repeat once per durable Task.
 
@@ -233,8 +234,24 @@ def resolve_handoff_target(
 
 
 def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
-    """Resolve semantic PASS/FAIL routing; technical ERROR always stops."""
+    """Resolve semantic routing while keeping technical ERROR off the graph.
+
+    Review is intentionally a local, fail-soft gate. A finite Stage-local
+    error_policy means retry this many times, then skip Review so an
+    unavailable reviewer cannot stop a 24H run. Other Stage types fail closed
+    after their technical retry budget is exhausted. retries=-1 does not
+    normally exhaust and therefore does not reach the skip path.
+    """
     if status == "error":
+        policy = definition.get("error_policy")
+        retries = policy.get("retries") if isinstance(policy, dict) else None
+        if (
+            definition.get("type") == "review"
+            and isinstance(retries, int)
+            and not isinstance(retries, bool)
+            and retries >= 0
+        ):
+            return "next"
         return "stop"
     routes = definition.get("routes")
     if isinstance(routes, dict) and status in routes:
