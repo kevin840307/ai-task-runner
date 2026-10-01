@@ -885,7 +885,7 @@ function appendStudioItem(root, item) {
         : "Available in Tasks";
   if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
   button.append(top, metaNode);
-  button.onclick = () => openStudioFile(item);
+  button.onclick = () => item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item);
   root.appendChild(button);
 }
 function renderStudioFiles() {
@@ -1005,11 +1005,16 @@ async function probeFullDesigner() {
   button.hidden = !state.fullDesignerAvailable || state.studioFile?.kind !== "workflow";
 }
 
-function openFullDesigner() {
-  if (!state.studioFile || state.studioFile.kind !== "workflow" || !state.fullDesignerAvailable) return;
-  const params = new URLSearchParams({ id: state.studioFile.id });
+function openWorkflowEditorItem(item) {
+  if (!item || item.kind !== "workflow") return;
+  const params = new URLSearchParams({ id: item.id });
   if (state.project?.path) params.set("project", state.project.path);
   window.location.href = `/workflow-studio-app/index.html?${params}`;
+}
+
+function openFullDesigner() {
+  if (!state.studioFile || state.studioFile.kind !== "workflow") return;
+  openWorkflowEditorItem(state.studioFile);
 }
 
 async function restoreWorkflowStudioNavigation() {
@@ -1027,7 +1032,10 @@ async function restoreWorkflowStudioNavigation() {
   if (studioId) {
     await refreshStudioFiles({ force: true });
     const item = (state.studioFiles.workflows || []).find((row) => row.id === studioId);
-    if (item) await openStudioFile(item);
+    if (item) {
+      state.studioSourceKind = "workflow";
+      renderStudioFiles();
+    }
   }
   window.history.replaceState({}, "", window.location.pathname);
 }
@@ -1567,7 +1575,7 @@ function updateDirtyState() {
   $("saveStudioButton").disabled = locked || !saveNeeded; $("validateStudioButton").hidden = !state.studioFile; $("validateStudioButton").disabled = !state.studioFile; $("validateStudioButton").textContent = state.studioFile?.kind === "prompt" ? "Validate Prompt" : "Validate Workflow"; $("addFlowStepButton").disabled = locked || !state.studioFile || state.studioFile.kind !== "workflow"; if ($("flowMapButton")) $("flowMapButton").disabled = !state.studioFile || state.studioFile.kind !== "workflow";
   const workflowSource = state.studioSourceKind === "workflow";
   if ($("openFullDesignerButton")) $("openFullDesignerButton").hidden = !state.fullDesignerAvailable || state.studioFile?.kind !== "workflow";
-  $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable; $("importAssetButton").textContent = "Import";
+  $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable; $("importAssetButton").textContent = state.studioSourceKind === "workflow" ? "Import YAML" : "Import Prompt";
   $("exportStudioButton").textContent = "Export";
   $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
   $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Tasks" : "Hide from Tasks"; }
@@ -1699,7 +1707,7 @@ async function confirmNewWorkflow() {
     state.studioSourceKind = "workflow";
     await refreshStudioFiles({ force: true });
     const item = (state.studioFiles.workflows || []).find((row) => row.id === result.item.id) || result.item;
-    if (item) await openStudioFile(item);
+    if (item) openWorkflowEditorItem(item);
     showToast(`Workflow ${result.file.name} created`);
   } catch (error) {
     $("newWorkflowHint").textContent = error.message;
