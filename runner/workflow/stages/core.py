@@ -99,6 +99,7 @@ class ReviewStageSpec(BaseStageSpec):
     mode: str = MODE_READONLY
     actor: str = "ai"
     prompt: str = "common/review.md"
+    max_failures: int | None = None
 
 
 class ReviewStage(BaseStage):
