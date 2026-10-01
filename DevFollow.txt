@@ -35,7 +35,9 @@
 
 Workflow UI ownership
 - Project Chat is the primary run surface.
-- Workflow Settings manages Workflow/Prompt assets only.
+- Workflows and Prompts are separate primary navigation workspaces.
+- Workflows manages Workflow assets and opens the single Workflow Editor.
+- Prompts owns Prompt asset management and Prompt Editor.
 - Workflow Editor is the single Workflow editing surface with Designer/YAML views over canonical YAML.
-- Prompt Editor remains independent; Stages reference Prompt assets.
-- Do not reintroduce a second Visual Workflow editor in Workflow Settings.
+- Stage settings may expose Form/YAML/Routes/Test, but all views update one Stage draft and use backend YAML/schema validation.
+- Do not reintroduce a second Visual Workflow editor in the asset library.
