@@ -399,6 +399,58 @@ flow:
     assert ctx.state.completed is True
 
 
+def test_task_scoped_review_error_skip_finishes_current_task_and_continues(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  planning:
+    type: plan
+  execute:
+    type: task
+    scope: task
+  review:
+    type: review
+    scope: task
+    error_policy:
+      retries: 2
+  validate:
+    type: command
+    command: "echo validate"
+flow:
+  - planning
+  - execute
+  - review
+  - validate
+""",
+    )
+    workflow = load_workflow(path)
+    ctx = context(tmp_path, workflow)
+    ctx.state.tasks = [
+        Task(id="t1", title="one", description="one"),
+        Task(id="t2", title="two", description="two"),
+    ]
+
+    class ErrorReviewExecutor(Executor):
+        def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
+            self.calls.append((stage.name, previous))
+            self.retry_limits.append(retry_limit)
+            if stage.name == "review":
+                return StageResult(stage.name, "error", output="review unavailable")
+            return StageResult(stage.name, "pass", output=stage.name)
+
+    executor = ErrorReviewExecutor()
+    ctx.state.workflow_position = 1
+    assert FlowEngine(ctx).run(executor) == 0
+    assert [name for name, _ in executor.calls] == [
+        "execute", "review", "execute", "review", "validate",
+    ]
+    assert executor.retry_limits == [None, 2, None, 2, None]
+    assert ctx.state.current == 2
+    assert ctx.state.completed is True
+
+
+
 def test_non_review_finite_error_policy_still_fails_closed(tmp_path):
     path = write_workflow(
         tmp_path,
