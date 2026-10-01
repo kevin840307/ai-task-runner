@@ -1382,6 +1382,8 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertTrue(formatted["ok"])
         self.assertIn("type: review", formatted["source"])
         self.assertNotIn("name:", formatted["source"])
+        self.assertNotIn("routes:", formatted["source"])
+        self.assertNotIn("targets:", formatted["source"])
 
         parsed = self.state.studio_stage_source(
             item["id"],
@@ -1400,6 +1402,10 @@ class WorkflowStudioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot be changed"):
             self.state.studio_stage_source(
                 item["id"], "review", "parse", self.project, source="name: other\ntype: review\n"
+            )
+        with self.assertRaisesRegex(ValueError, "Routing tab"):
+            self.state.studio_stage_source(
+                item["id"], "review", "parse", self.project, source="type: review\nroutes:\n  fail: work\n"
             )
         with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
             self.state.studio_stage_source(
