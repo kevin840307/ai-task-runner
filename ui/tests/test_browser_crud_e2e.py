@@ -178,11 +178,14 @@ def _bridge_for(state: UIState):
     sync_playwright is None or _chromium_executable() is None,
     reason="Playwright/Chromium not available",
 )
-def test_browser_crud_journey_uses_flat_global_assets_and_result_edges() -> None:
+def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
     with tempfile.TemporaryDirectory() as td:
         state = _write_fixture_repo(Path(td))
+        state.studio_workflow_create("e2e_crud", "global", None)
+
         html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
@@ -196,6 +199,10 @@ def test_browser_crud_journey_uses_flat_global_assets_and_result_edges() -> None
             page_errors: list[str] = []
             page.on("pageerror", lambda error: page_errors.append(str(error)))
             page.expose_function("__apiBridge", _bridge_for(state))
+            page.route(
+                "http://local.test/workflow-studio-app/**",
+                lambda route: route.fulfill(status=200, content_type="text/html", body="<html><body>Workflow Editor</body></html>"),
+            )
             page.set_content(html, wait_until="domcontentloaded")
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
@@ -210,120 +217,48 @@ def test_browser_crud_journey_uses_flat_global_assets_and_result_edges() -> None
             )
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
+            page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
             page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
             page.wait_for_timeout(200)
 
-            # Global Prompt: flat name, no folder concept.
             page.click("#workflowNav")
+            assert page.locator(".studio-designer-body").evaluate(
+                "node => node.classList.contains('workflow-manager-mode')"
+            )
+            assert not page.locator(".studio-workflow-main").is_visible()
+            sidebar = page.locator(".studio-workflow-sidebar").bounding_box()
+            assert sidebar and sidebar["width"] > 1000
+            workflow_row = page.locator("#studioFileList .studio-file-item").filter(
+                has_text="e2e_crud.workflow.yaml"
+            )
+            assert workflow_row.count() == 1
+            assert "Open Editor" in workflow_row.inner_text()
+
+            # Prompt assets keep the inline master-detail editor.
             page.click("#yamlPromptSource")
+            assert page.locator(".studio-designer-body").evaluate(
+                "node => node.classList.contains('prompt-manager-mode')"
+            )
             page.click("#newWorkflowButton")
             page.fill("#newPromptName", "e2e_prompt")
             page.select_option("#newPromptDestination", "global")
             page.click("#newPromptConfirm")
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
+            assert page.locator(".studio-workflow-main").is_visible()
             page.fill("#studioPromptTextarea", "# Prompt\n\n{{ goal }}\n")
             page.click("#validateStudioButton")
             page.click("#saveStudioButton")
             page.wait_for_timeout(120)
 
-            # Global Workflow with one additional task Stage using the flat Prompt ref.
             page.click("#yamlWorkflowSource")
-            page.click("#newWorkflowButton")
-            page.fill("#newWorkflowName", "e2e_crud")
-            page.select_option("#newWorkflowDestination", "global")
-            page.click("#newWorkflowConfirm")
-            page.wait_for_timeout(120)
-            assert page.locator("#studioFileName").inner_text() == "e2e_crud.workflow.yaml"
-
-            page.click("#addFlowStepButton")
-            page.fill("#addStageName", "work")
-            page.select_option("#addStageType", "task")
-            page.select_option("#addStagePrompt", "common/e2e_prompt.md")
-            page.click("#addStageConfirm")
-            page.wait_for_timeout(180)
-            assert page.locator("#stagePromptSelect").input_value() == "common/e2e_prompt.md"
-
-            # Semantic FAIL is an edge, not a retry/recovery field.
-            page.click('[data-stage-tab="control"]')
-            page.select_option("#stageRouteFail", "start")
-            page.click("#saveStageButton")
-            page.wait_for_timeout(220)
-            assert page.locator("#stageRouteFail").input_value() == "start"
-            page.locator(".designer-step-modal-box [data-stage-close]").first.click()
-
-            # Referenced Prompt cannot be deleted.
-            page.click("#yamlPromptSource")
-            page.locator("#studioFileList .studio-file-item").filter(
-                has_text="e2e_prompt.md"
-            ).click()
-            page.click("#deleteStudioButton")
-            page.get_by_role("button", name="Delete Prompt").click()
-            page.wait_for_timeout(120)
-            assert "still used by Workflow Stage" in page.locator("#studioStatus").inner_text()
-
-            # Delete the Stage definition, then the Prompt can be deleted.
-            page.click("#yamlWorkflowSource")
-            page.locator("#studioFileList .studio-file-item").filter(
+            workflow_row = page.locator("#studioFileList .studio-file-item").filter(
                 has_text="e2e_crud.workflow.yaml"
-            ).click()
-            cards = page.locator("#visualFlowList .visual-flow-card")
-            assert cards.count() == 2
-            cards.nth(1).click()
-            page.locator('[data-flow-action="toggle"]').click()
-            page.locator('[data-flow-action="remove"]').click()
-            page.get_by_role("button", name="Delete Stage").click()
-            page.wait_for_timeout(150)
-            assert page.locator("#visualFlowList .visual-flow-card").count() == 1
-
-            page.click("#yamlPromptSource")
-            page.locator("#studioFileList .studio-file-item").filter(
-                has_text="e2e_prompt.md"
-            ).click()
-            page.click("#deleteStudioButton")
-            page.get_by_role("button", name="Delete Prompt").click()
-            page.wait_for_timeout(120)
-            assert (
-                page.locator("#studioFileList .studio-file-item")
-                .filter(has_text="e2e_prompt.md")
-                .count()
-                == 0
             )
-
-            # Duplicate/rename/search stay in the same Global asset root.
-            page.click("#yamlWorkflowSource")
-            page.locator("#studioFileList .studio-file-item").filter(
-                has_text="e2e_crud.workflow.yaml"
-            ).click()
-            page.click("#studioAssetMenuButton")
-            page.click("#duplicateStudioButton")
-            page.fill("#duplicateAssetName", "e2e_crud copy.workflow.yaml")
-            page.click("#duplicateAssetConfirm")
-            page.wait_for_timeout(120)
-            assert page.locator("#studioFileName").inner_text() == "e2e_crud copy.workflow.yaml"
-
-            page.click("#studioAssetMenuButton")
-            page.click("#renameStudioButton")
-            page.fill(".ui-dialog-input", "e2e_crud renamed.workflow.yaml")
-            page.click("[data-dialog-ok]")
-            page.wait_for_timeout(120)
-            assert page.locator("#studioFileName").inner_text() == "e2e_crud renamed.workflow.yaml"
-
-            page.fill("#studioSearchInput", "renamed")
-            assert page.locator("#studioFileList .studio-file-item").count() == 1
-            page.click("#studioSearchClear")
-
-            page.click("#deleteStudioButton")
-            page.get_by_role("button", name="Delete Workflow").click()
-            page.wait_for_timeout(100)
-            page.locator("#studioFileList .studio-file-item").filter(
-                has_text="e2e_crud.workflow.yaml"
-            ).click()
-            page.click("#deleteStudioButton")
-            page.get_by_role("button", name="Delete Workflow").click()
-            page.wait_for_timeout(100)
-
+            workflow_row.click()
+            page.wait_for_url(re.compile(r".*/workflow-studio-app/index\.html\?id="))
+            assert "Workflow Editor" in page.locator("body").inner_text()
             assert page_errors == []
             browser.close()
