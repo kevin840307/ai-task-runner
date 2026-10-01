@@ -22,6 +22,14 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert '"/api/studio/stage/add"' not in text  # Palette additions stay in the draft until Save.
 
 
+def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flow():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "if (!nextFlow.includes(connection.source))" in text
+    assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in text
+    assert "const index = nextFlow.indexOf(stage.name)" in text
+
+
 def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
     text = SOURCE.read_text(encoding="utf-8")
 
@@ -41,7 +49,8 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     text = SOURCE.read_text(encoding="utf-8")
 
     assert "ERROR 重試次數" in text
-    assert "重試用盡後" not in text
+    assert "Skip Review" in text
+    assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
     assert '["pass", "fail", "error"]' not in text
