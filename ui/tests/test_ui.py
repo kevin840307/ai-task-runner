@@ -1197,6 +1197,49 @@ class WorkflowStudioTests(unittest.TestCase):
             )
 
 
+    def test_graph_save_round_trips_explicit_session_policy(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        stages = [dict(stage) for stage in visual["stages"]]
+        for stage in stages:
+            if stage["name"] == "work":
+                stage["session_policy"] = "role"
+                stage.pop("session_key", None)
+        draft = {
+            "stages": stages,
+            "flow": list(visual["flow"]),
+            "routes": {"review": {"fail": "work"}},
+        }
+
+        saved = self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+
+        data = __import__("yaml").safe_load(saved["file"]["content"])
+        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
+
+    def test_graph_save_rejects_conflicting_session_policy_and_key(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        stages = [dict(stage) for stage in visual["stages"]]
+        for stage in stages:
+            if stage["name"] == "work":
+                stage["session_policy"] = "role"
+                stage["session_key"] = "legacy-conflict"
+        draft = {
+            "stages": stages,
+            "flow": list(visual["flow"]),
+            "routes": {"review": {"fail": "work"}},
+        }
+
+        with self.assertRaisesRegex(
+            ValueError, "session_key is only valid with session_policy: auto"
+        ):
+            self.state.studio_graph_save(
+                item["id"], draft, visual["hash"], self.project
+            )
+
+
     def test_global_and_project_assets_use_identical_split_shape(self) -> None:
         global_workflow = self.state.studio_workflow_create("global_job", "global", self.project)
         global_prompt = self.state.studio_prompt_create("common/global_review", "global", self.project)
