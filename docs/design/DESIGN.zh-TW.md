@@ -27,33 +27,31 @@ Version: 1.2.66
 - `PlanStage` 是內建 AI Task Producer，透過通用 `tasks` result effect 安裝 durable TODO。
 - Review 是局部 semantic gate；有設定 retry 時可 fail-soft/skip，但不能取代 Final Validator。
 - 內建 CLI `mixed` Workflow 會先跑 deterministic File Validator，再跑 Final AI Validator。明確指定的 custom Workflow 可在 top-level `flow` 任意位置放置多個 File / AI Validator，Validator 後也可繼續一般 Stage。
-- Validator FAIL 走該 Stage 設定的 recovery path，通常是 Repair Plan -> task-scoped SOP -> validators again。
-- Stage 可用共用的 1-based YAML `restart_at` 覆蓋 FAIL/replan recovery；未設定時保留上述內建路由。
-- 內建 Regression Workflow 只有 configured final validation path PASS 才完成；明確指定的 generic Workflow 可以沒有 Validator，flow 全部成功結束即可完成。
-- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。`PlanStage` 會自動使用內建 `Task -> Review -> Repair（FAIL 時）-> Review` task lifecycle，因此一般 Plan-driven flow 只需要列 Planning 與後續頂層 gate。其他 Stage 仍可用 `produces: tasks` 產生公開 Task contract；顯式 `scope: task` 保留給進階／自訂逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不再產生 `next_steps`、`expand` 或 `foreach` topology。
+- Validator FAIL 只依顯式 `routes.fail` edge 回到 Planning、Execute 或其他指定 Stage。
+- Backward PASS/FAIL edge 是唯一 rollback/loop 機制；沒有 `restart_at`、Repair Stage 或 hidden recovery graph。
+- 內建 Workflow 只有 configured validation path PASS 才完成；明確指定的 generic Workflow 可以沒有 Validator，flow 成功走完即可完成。
+- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。Task Producer 以公開 Task contract 產生 durable TODO；連續的 `scope: task` Stage 定義逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不產生 `next_steps`、`expand` 或 hidden `foreach` topology。
 
 ## 責任
 
-- `workflow/system/*.yaml`、`workflow/loader.py`：依 validator 選擇的內建拓樸、自訂拓樸與唯一 normalization 路徑。
-- `workflow/registry.py`：明確的 `type -> Stage class` Registry，並提供 UI/editor catalog metadata；不持有 Workflow topology 或 Stage instance。
-- `workflow/rules.py`：少量 `StageResult.kind` reducer 與 durable-state transition（`tasks`、`task`、`review`、`validation`、`generic`）。
-- `workflow/stages/executor.py`：共用 retry/session recovery、hooks、semantic progress reporting、project change tracking。
+- `assets/workflows/*.yaml` 與 `workflow/loader.py`：內建／自訂 topology 與唯一 normalization path。
+- `workflow/registry.py`：明確的 `type -> Stage class` Registry 與 UI/editor catalog metadata。
+- `workflow/results.py`：StageResult parsing/reduction 與 durable task/validation effect。
+- `workflow/stages/executor.py`：共用 retry/session recovery、hooks、progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。
-- `ai/`：AI interaction/session/structured output。
-- `backends/`：Qwen/OpenCode transport implementation。
-- `project/`：workspace files/policy/instruction files。
-- `runtime/`：run state/process/event infrastructure。
+- `agent/`：Qwen/OpenCode transport、Session 與 structured-output adapter。
+- `workspace.py`：project files、policy、manifest/change detection 與 protection helper。
+- `runtime/`：run state、process supervisor、heartbeat 與 event infrastructure。
 - `plugins/`：可插拔橫切功能。
 
 ## Retry / Recovery
 
-- API/network/rate-limit/service 暫時性錯誤由 `AIClient.run_with_retry()` 做 bounded exponential backoff，保留 state/session。
-- 真實 Stage error 先沿用可用 Same Session retry，使用短 Stage-aware delta prompt，只補 Stage 身分、新 failure evidence 與下一步，不重送完整 Goal/Task Context。
-- Same-session retry budget 用完後，StageExecutor 清除 cached session，Fresh retry。
-- Fresh 後仍持續相同 failure 才回 `replan`。
-- Failure fingerprint 改變時重新計數。Backend timeout 會提供穩定的語意 recovery key；sandbox/container identifier 等動態 stderr 仍保留在 diagnostics，但不參與 failure identity。
-- Write attempt 只要產生實際 project changes 就視為 progress，交給 Review/Validator 判斷，不直接丟棄。
-- Review skip 不代表完成；Final Validator 仍需把關。
+- Classified API/network/rate-limit/service transient error 會保留可用 Session，使用秒級 capped exponential backoff。
+- 其他 technical Stage error 先在 Same Session retry；達到 per-session attempt budget 後，只輪替失敗的 Stage 到 Fresh Session，並用共用 recovery envelope 繼續。
+- 無人值守全域預設是 `stage_retries=-1`。Stage 可用 local `error_policy.retries` 明確覆寫。
+- Write Stage 若已落盤部分變更後發生 technical ERROR，保留目前 project evidence、輪替該 Stage Session，再從現況 recover，不盲目重播相同行為。
+- Review 若有有限 local `error_policy`，retry 用盡後 fail-soft Skip 到下一 Stage；Final Validator 仍是 authoritative gate。
+- 非 Review Stage 的有限 retry 用盡後維持 fail-closed。
 
 ## Validation Modes
 
