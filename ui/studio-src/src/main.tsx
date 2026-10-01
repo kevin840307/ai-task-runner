@@ -81,6 +81,8 @@ type StageTestResult = {
   route: string;
   kind?: string;
   changed_files?: string[];
+  test_retry_limit?: number;
+  test_retry_policy?: string;
 };
 
 type InspectorTab = "settings" | "parameters" | "routing" | "test";
@@ -1084,7 +1086,7 @@ function App() {
                 })}
               </div>}
               {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
-                <p>測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 會使用目前草稿的 Prompt、Parser、Session Policy 與 Error Policy；Agent Ping 只驗證 backend/agent transport。</p>
+                <p>測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 使用目前草稿的 Prompt、Parser、Session Policy 與 local Error Policy；為避免測試掛死，local -1 在測試中最多 retry 2 次，未設定 local policy 則只做單次 attempt。正式 Runtime 的全域 stage_retries 不受影響。Agent Ping 只驗證 backend/agent transport。</p>
                 <div className="test-mode-tabs" role="tablist" aria-label="Stage test mode">
                   <button type="button" role="tab" aria-selected={testMode === "stage"} className={testMode === "stage" ? "active" : ""}
                     onClick={() => { setTestMode("stage"); setTestResult(null); setTestError(""); }}>Real Stage</button>
@@ -1103,6 +1105,7 @@ function App() {
                 {testResult && <div className="test-result" aria-live="polite">
                   <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
                     {testMode === "stage" && <span>下一個：<strong>{testResult.next}</strong></span>}
+                    {testMode === "stage" && testResult.test_retry_policy && <span>測試 Retry：<strong>{testResult.test_retry_policy}</strong></span>}
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">Retry 用盡 → Skip</span>}</div>
                   <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
                   {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
