@@ -105,13 +105,24 @@ class StageExecutor:
             error = result.error or RunnerError(result.output or "stage error")
             if isinstance(error, ConfigurationError):
                 raise error
-            if result.changed_files:
-                break
             if not unlimited and retries_used >= retry_limit:
                 break
 
             retries_used += 1
             previous_error = str(error)
+
+            if result.changed_files:
+                # A write-side Stage may fail after leaving valid partial work.
+                # Do not replay the same conversation blindly and do not turn
+                # that recoverable condition into a 24H stop. Preserve disk
+                # state, rotate only this Stage session, and let the shared
+                # recovery envelope inspect/continue from current evidence.
+                self._fresh_session(stage, ctx)
+                failures_in_session = 0
+                retry_mode = "recover"
+                service_delay = float(ctx.config.retry_delay)
+                self._sleep(ctx, service_delay)
+                continue
 
             if is_transient_error(error):
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
