@@ -410,6 +410,62 @@ class WorkflowStudioMixin:
                 "visual": self.studio_visual(file_id, project),
             }
 
+    def studio_stage_source(
+        self,
+        file_id: str,
+        stage_name: str,
+        mode: str,
+        project: Path | None = None,
+        *,
+        fields: dict | None = None,
+        source: str = "",
+    ) -> dict:
+        """Format/parse one Stage YAML fragment without writing the Workflow."""
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Stage source editor is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        stages = data.get("stages") if isinstance(data, dict) else None
+        if not isinstance(stages, dict) or stage_name not in stages:
+            raise ValueError(f"Stage not found: {stage_name}")
+        current = stages.get(stage_name)
+        if not isinstance(current, dict):
+            raise ValueError(f"Stage must be a mapping: {stage_name}")
+
+        if mode == "format":
+            candidate = dict(fields) if isinstance(fields, dict) else dict(current)
+            candidate.pop("name", None)
+            return {
+                "ok": True,
+                "source": yaml.safe_dump(candidate, sort_keys=False, allow_unicode=True).rstrip() + "\n",
+            }
+
+        if mode != "parse":
+            raise ValueError("Stage source mode must be format or parse")
+        try:
+            parsed = yaml.safe_load(source) or {}
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Stage YAML is invalid: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Stage YAML must be a mapping")
+        if "name" in parsed:
+            raise ValueError("Stage key/name is managed by the Workflow and cannot be changed here")
+
+        allowed = self._stage_editor_fields()
+        for key in parsed:
+            if key not in allowed:
+                raise ValueError(f"Unsupported Stage field: {key}")
+        original_type = str(current.get("type") or "")
+        parsed_type = str(parsed.get("type") or original_type)
+        if original_type and parsed_type != original_type:
+            raise ValueError("Stage type is immutable; create a new Stage to change type")
+        if original_type and "type" not in parsed:
+            parsed["type"] = original_type
+
+        self._validate_stage_editor_fields(parsed)
+        self._validate_node_editor_fields(parsed, data)
+        return {"ok": True, "fields": parsed}
+
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
