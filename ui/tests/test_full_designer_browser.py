@@ -109,6 +109,15 @@ def test_full_designer_common_desktop_viewports_do_not_overflow(viewport) -> Non
             assert modal["x"] >= 0 and modal["y"] >= 0
             assert modal["x"] + modal["width"] <= viewport["width"] + 1
             assert modal["y"] + modal["height"] <= viewport["height"] + 1
+
+            stage_yaml_tab = page.get_by_role("tab", name="YAML").last
+            stage_yaml_tab.click()
+            page.locator(".stage-yaml-panel textarea").wait_for()
+            stage_yaml_box = page.locator(".stage-yaml-panel textarea").bounding_box()
+            assert stage_yaml_box
+            assert stage_yaml_box["x"] >= modal["x"]
+            assert stage_yaml_box["x"] + stage_yaml_box["width"] <= modal["x"] + modal["width"] + 1
+            assert stage_yaml_box["y"] + stage_yaml_box["height"] <= modal["y"] + modal["height"] + 1
             page.get_by_role("button", name="Close").click()
 
             page.locator('.react-flow__node[data-id="review"]').dispatch_event(
