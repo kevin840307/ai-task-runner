@@ -229,6 +229,16 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("hash", "")),
                     project,
                 ))
+            if parsed.path == "/api/studio/stage/source":
+                project = self._optional_project(str(body.get("project", "")))
+                return self._json(self.state.studio_stage_source(
+                    str(body.get("id", "")),
+                    str(body.get("stage", "")),
+                    str(body.get("mode", "")),
+                    project,
+                    fields=body.get("fields"),
+                    source=str(body.get("source", "")),
+                ))
             if parsed.path == "/api/studio/stage/validate":
                 project = self._optional_project(str(body.get("project", "")))
                 return self._json(self.state.studio_stage_save(
