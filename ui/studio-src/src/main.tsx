@@ -1003,11 +1003,14 @@ function App() {
               <div className="palette-section-head"><span>{section.title}</span><small>{types.length}</small></div>
               <div className="palette-list">{types.map((type) => {
                 const meta = STAGE_META[type];
-                return <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
+                return <div key={type} className="palette-item" draggable={!busy} title={meta.description}
                   onDragStart={(event) => dragStage(event, type)}>
                   <span className={`palette-icon type-${type}`} aria-hidden="true">{section.icon}</span>
-                  <span className="palette-copy"><strong>{meta.title}</strong><small>{meta.description}</small></span>
-                  <span className="palette-add" aria-hidden="true">⠿</span>
+                  <span className="palette-copy"><strong>{meta.title}</strong></span>
+                  <button type="button" className="palette-quick-add" disabled={busy}
+                    aria-label={`Add ${meta.title}`} title={`Add ${meta.title}`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
                 </div>;
               })}</div>
             </div>;
@@ -1023,11 +1026,15 @@ function App() {
                 const q = paletteQuery.trim().toLowerCase();
                 return !q || type.toLowerCase().includes(q);
               }).map((type) =>
-                <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
+                <div key={type} className="palette-item" draggable={!busy} title={tx("custom_stage")}
                   onDragStart={(event) => dragStage(event, type)}>
-                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>{tx("custom_stage")}</small></span><span className="palette-add" aria-hidden="true">⠿</span>
+                  <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong></span>
+                  <button type="button" className="palette-quick-add" disabled={busy}
+                    aria-label={`Add ${type}`} title={`Add ${type}`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
                 </div>)}</div></div>}
-          <div className="palette-note"><small>{tx("draft_hint")}</small></div>
+          <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ = quick add</small></div>
         </aside>
         <div
           ref={canvasRef}
@@ -1107,6 +1114,7 @@ function App() {
                   </button>
                 ))}
               </div>
+              <div className="stage-editor-content">
               {inspectorTab === "settings" && <div className="fields" role="tabpanel">
                 <label>
                   <span>{tx("type_fixed")}</span>
