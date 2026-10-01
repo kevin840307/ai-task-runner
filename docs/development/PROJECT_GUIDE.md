@@ -57,12 +57,14 @@ Do not preload future TODOs into the Execute prompt. The project filesystem is t
 
 ## Session / recovery contract
 - Initial call: full Stage prompt.
-- Real failure: bounded same-session retry, default maximum two retries.
-- Same session still fails: fresh session + complete necessary context.
-- Same persistent failure after fresh recovery: return `replan` and create a new plan.
-- Different failure fingerprint: reset the persistent-failure streak. Timeout identity must come from the backend semantic recovery key, not volatile raw stderr; keep the full stderr only for diagnostics.
-- Transient API/service failure: AI transport backoff; do not consume Stage failure budget. Canonical API resumes durable state after an exhausted wait window.
-- Final AI voting: every validation run starts a different fresh session.
+- Technical failure: retry the same usable Session first. After the bounded per-session attempt budget, rotate only the failing Stage to a Fresh Session and continue with the shared recovery envelope.
+- Global unattended default: `stage_retries=-1`, so technical recovery is unlimited unless a Stage explicitly overrides it with finite `error_policy.retries`.
+- Finite non-Review exhaustion: return ERROR and fail closed at the current Stage.
+- Finite Review exhaustion: fail-soft Skip to the ordinary next Stage; keep a later authoritative validator.
+- Classified transient API/service failures preserve the usable Session and use capped exponential backoff.
+- If a write attempt already changed project files before ERROR, preserve those files, rotate that Stage Session, inspect current project evidence, and recover rather than blindly replaying the same write.
+- There is no hidden automatic replan/restart path. Planning is revisited only through explicit semantic PASS/FAIL routing.
+- Final AI voting: every validation run starts a different Fresh Session.
 
 ## Validation and YAML List
 Validator feedback in state is bounded to 20,000 characters with the start and end preserved. Runner sets `AI_TASK_RUNNER_WORK_DIR` for validator processes, and maintained templates write reports under its `validator-reports/` directory (falling back to `.ai-task-runner` when run standalone). External validators such as exe, bat, jar, or Java CLIs should use `docs/validator_templates/external_command_validator.py`.
