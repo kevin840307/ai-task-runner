@@ -236,21 +236,6 @@ def exclude_qwen_tools(args: list[str], tool_names: Sequence[str]) -> None:
         if tool_name not in args:
             args.extend(["--exclude-tools", tool_name])
 
-import json
-import os
-import re
-from collections.abc import Sequence
-from pathlib import Path
-
-from ..utils import io_path
-from typing import Any
-
-from ..config.defaults import DEFAULT_QWEN_COMMAND
-from ..runtime.process_runner import run_process
-
-from ..workspace import ensure_instruction_file, update_goal_reference
-
-
 class QwenBackend(BaseBackend):
     name = "qwen"
     default_command = DEFAULT_QWEN_COMMAND
