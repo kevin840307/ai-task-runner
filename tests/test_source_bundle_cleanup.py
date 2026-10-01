@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tool.bundle import DEFAULT_EXCLUDES, excluded
+from tool.bundle import DEFAULT_EXCLUDES, excluded, pack, read_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,6 +15,16 @@ def test_default_bundle_excludes_runtime_and_cache_artifacts():
         "tests/x.pyc",
     ]
     assert all(excluded(path, DEFAULT_EXCLUDES) for path in excluded_paths)
+
+
+def test_pack_skips_output_when_bundle_lives_inside_source_root(tmp_path):
+    (tmp_path / "source.txt").write_text("hello", encoding="utf-8")
+    output = tmp_path / "project.bundle.txt"
+
+    pack(tmp_path, output, DEFAULT_EXCLUDES)
+
+    paths = [item["path"] for item in read_bundle(output)]
+    assert paths == ["source.txt"]
 
 
 def test_obsolete_multi_agent_and_grill_assets_stay_absent():
