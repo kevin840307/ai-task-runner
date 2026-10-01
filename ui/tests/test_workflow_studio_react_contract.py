@@ -84,7 +84,7 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
 def test_react_studio_has_searchable_palette_and_safe_stage_duplicate():
     text = SOURCE.read_text(encoding="utf-8")
 
-    assert 'placeholder="搜尋 Stage…"' in text
+    assert 'placeholder={tx("search_stage")}' in text
     assert "paletteQuery" in text
     assert "duplicateStage" in text
     assert "結果連線不會一起複製" in text
@@ -163,3 +163,21 @@ def test_react_studio_has_stage_specific_test_prompt_presets():
     assert "stageTestPrompt(draft)" in text
     assert "只作用於本次 isolated Stage Test" in text
     assert "Stage Test API not found. Restart the local UI server" in text
+
+
+def test_react_studio_opens_stage_settings_as_modal_on_double_click_and_shares_language():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "onNodeClick" in text
+    assert "setSelected(n.id)" in text
+    assert "onNodeDoubleClick" in text
+    assert "openStageEditor(n.id)" in text
+    assert "stage-editor-backdrop" in text
+    assert "stage-editor-modal" in text
+    assert "editorOpen" in text
+    assert 'event.key === "Escape"' in text
+    assert 'DESIGNER_LANGUAGE_KEY = "ai-task-runner.language"' in text
+    assert '"zh-TW"' in text and '"en"' in text
+    assert "changeLanguage" in text
+    assert "grid-template-columns: 200px minmax(0,1fr)" in styles
