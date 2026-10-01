@@ -10,7 +10,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | --- | --- |
 | Workflow schema | supported Stage types/options, unknown option rejection, PASS/FAIL-only routes, target existence, task-scope topology |
 | Semantic routing | PASS next, explicit PASS/FAIL, done/stop, backward loop, unrouted FAIL safe stop |
-| Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, per-Stage Fresh Session rotation, KeyboardInterrupt/SystemExit propagation |
+| Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, Fresh Session rotation, partial-write recovery, KeyboardInterrupt/SystemExit propagation |
 | Session policy | main/role/fresh acceptance, invalid mode, role durable restore/persist, fresh non-persistence, per-role reset, global reset, recovery rotation |
 | Dynamic Handoff | target allow-list, disallowed target rejection, exactly-one target routing, role -> coordinator loop, final validator FAIL -> coordinator, durable resume |
 | Prompts | shared Dynamic worker renders role `instructions`; prompt ownership/category references; shared retry/continue/recover control envelope |
@@ -21,7 +21,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Stage Probe | one-Stage execution/result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
 | Studio React | PASS/FAIL/Handoff handles, Dynamic branch layout, session-policy UI normalization, no ERROR edge/Discussion runtime |
-| Process/runtime | ownership/orphan/supervisor/control-file deterministic probes already covered by their unit/integration tests |
+| Process/runtime | ownership/orphan/supervisor/control-file probes, repeated same-checkpoint crash restart, capped process backoff |
 
 ## Negative/removed-contract coverage
 
