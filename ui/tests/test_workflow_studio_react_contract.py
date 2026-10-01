@@ -276,3 +276,21 @@ def test_designer_reuses_interface_language_and_has_fixed_add_stage_width():
     assert "width: 220px; min-width: 220px; max-width: 220px" in styles
     assert "width: 520px; max-width: calc(100vw - 32px)" in styles
     assert ".palette-chevron.collapsed" in styles
+
+
+def test_designer_uses_shared_confirmation_dialog_and_thin_visible_scrollbars():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "window.confirm" not in text
+    assert "DesignerConfirmDialog" in text
+    assert "requestConfirm" in text
+    assert 'className="designer-confirm-backdrop"' in text
+    assert "捨棄未儲存變更？" in text
+    assert "重新載入 Workflow？" in text
+    assert "移除 Stage" in text
+    assert ".designer-confirm-dialog" in styles
+    assert "overflow-y: scroll" in styles
+    assert "scrollbar-width: thin" in styles
+    assert ".add-stage-command-list::-webkit-scrollbar { width: 6px; }" in styles
+    assert ".palette::-webkit-scrollbar { width: 6px; }" in styles
