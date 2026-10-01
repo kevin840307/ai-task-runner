@@ -237,7 +237,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert "Open Editor" in workflow_row.inner_text()
 
             # Prompt assets keep the inline master-detail editor.
-            page.click("#yamlPromptSource")
+            page.click("#promptNav")
+            assert page.locator("#promptNav").evaluate("node => node.classList.contains('active')")
             assert page.locator(".studio-designer-body").evaluate(
                 "node => node.classList.contains('prompt-manager-mode')"
             )
@@ -253,7 +254,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.click("#saveStudioButton")
             page.wait_for_timeout(120)
 
-            page.click("#yamlWorkflowSource")
+            page.click("#workflowNav")
             workflow_row = page.locator("#studioFileList .studio-file-item").filter(
                 has_text="e2e_crud.workflow.yaml"
             )
@@ -314,6 +315,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.wait_for_timeout(160)
 
             page.click("#workflowNav")
+            assert page.locator("#workflowNav").evaluate("node => node.classList.contains('active')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             body = page.locator(".studio-designer-body").bounding_box()
             sidebar = page.locator(".studio-workflow-sidebar").bounding_box()
@@ -321,7 +323,8 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             assert body["x"] >= 0 and body["x"] + body["width"] <= viewport["width"] + 1
             assert sidebar["x"] >= 0 and sidebar["x"] + sidebar["width"] <= viewport["width"] + 1
 
-            page.click("#yamlPromptSource")
+            page.click("#promptNav")
+            assert page.locator("#promptNav").evaluate("node => node.classList.contains('active')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             prompt_body = page.locator(".studio-designer-body").bounding_box()
             assert prompt_body and prompt_body["x"] + prompt_body["width"] <= viewport["width"] + 1
