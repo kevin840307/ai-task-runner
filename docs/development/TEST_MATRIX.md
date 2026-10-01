@@ -4,7 +4,7 @@ This file describes what is covered by deterministic CI and what still requires 
 
 ## Deterministic CI
 
-The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the React Studio build.
+The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the React Studio build. It also rebuilds Full Designer and verifies the committed `ui/static/workflow-studio-app` exactly matches `ui/studio-src`; CI is verify-only and never rewrites the branch.
 
 | Area | Coverage |
 | --- | --- |
@@ -18,7 +18,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Task production | Plan Task[], custom command/Python `produces: tasks`, contiguous task scope |
 | Resume/state | workflow position, task step, transition_previous, role Sessions, corrupt/incompatible state rejection |
 | Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
-| Stage Probe | one-Stage execution/result/next target without continuing the workflow |
+| Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
 | Studio React | PASS/FAIL/Handoff handles, Dynamic branch layout, session-policy UI normalization, no ERROR edge/Discussion runtime |
 | Process/runtime | ownership/orphan/supervisor/control-file probes, repeated same-checkpoint crash restart, capped process backoff |
