@@ -256,6 +256,7 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("input", "")),
                     project,
                     backend=str(body.get("backend", "")),
+                    probe_mode=str(body.get("probe_mode", "stage")),
                     graph=body.get("graph"),
                 ))
             if parsed.path == "/api/studio/stage/add":
