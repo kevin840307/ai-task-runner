@@ -1065,13 +1065,14 @@ function App() {
                 })}
               </div>}
               {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
-                <p>只執行目前積木一次，顯示結果及下一個目標。每次測試會建立隔離的臨時 Project，使用目前畫布草稿；測完自動清除，不修改原始 YAML。</p>
+                <p>只測目前積木，不會繼續執行下一個 Stage。Technical ERROR 會依目前 error_policy 執行 retry/recover；測試完成後顯示最終結果與下一個目標。每次測試都使用隔離的臨時 Project，測完自動清除，不修改原始 YAML。</p>
                 <label><span>測試 Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
                 <button type="button" className="primary" onClick={() => void testStage()}
                   disabled={testing || busy}>{testing ? "測試中…" : "執行單一積木"}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>下一個：<strong>{testResult.next}</strong></span></div>
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>下一個：<strong>{testResult.next}</strong></span>
+                    {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">Retry 用盡 → Skip</span>}</div>
                   <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
                   {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
                   {!!testResult.changed_files?.length && <details><summary>變更檔案 · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
