@@ -10,7 +10,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | --- | --- |
 | Workflow schema | supported Stage types/options, unknown option rejection, PASS/FAIL-only routes, target existence, task-scope topology |
 | Semantic routing | PASS next, explicit PASS/FAIL, done/stop, backward loop, unrouted FAIL safe stop |
-| Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, Fresh Session rotation, partial-write recovery, KeyboardInterrupt/SystemExit propagation |
+| Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, Fresh Session rotation, partial-write recovery, Review finite-retry fail-soft Skip, non-Review fail-closed exhaustion, KeyboardInterrupt/SystemExit propagation |
 | Session policy | main/role/fresh acceptance, invalid mode, role durable restore/persist, fresh non-persistence, per-role reset, global reset, recovery rotation |
 | Dynamic Handoff | target allow-list, disallowed target rejection, exactly-one target routing, role -> coordinator loop, final validator FAIL -> coordinator, durable resume |
 | Prompts | shared Dynamic worker renders role `instructions`; prompt ownership/category references; shared retry/continue/recover control envelope |
