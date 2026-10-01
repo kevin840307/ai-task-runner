@@ -98,6 +98,7 @@ Built-in types:
 - `review`
 - `ai_validator`
 - `command`
+- `handoff`
 
 A Stage does one responsibility and returns `StageResult`. It does not implement retry, recovery, session rotation or graph navigation.
 
