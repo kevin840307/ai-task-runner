@@ -136,7 +136,7 @@ def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
     ]
     assert workflow[1]["scope"] == "task"
     assert workflow[2]["scope"] == "task"
-    assert workflow[2]["error_policy"] == {"retries": 2}
+    assert "error_policy" not in workflow[2]
     assert workflow[2]["routes"] == {"fail": "execute"}
     assert workflow[3]["routes"] == {"fail": "planning"}
 
