@@ -30,6 +30,19 @@ def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flo
     assert "const index = nextFlow.indexOf(stage.name)" in text
 
 
+def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert '"agent_ping"' in text
+    assert "Real Stage" in text
+    assert "Agent Ping" in text
+    assert 'api<BackendCatalog>("/api/backends")' in text
+    assert "probe_mode: testMode" in text
+    assert "backend: testBackend" in text
+    assert "AGENT_PING_PROMPT" in text
+    assert "不使用工具、不讀專案、不修改檔案" in text
+
+
 def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
     text = SOURCE.read_text(encoding="utf-8")
 
