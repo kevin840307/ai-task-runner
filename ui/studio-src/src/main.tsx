@@ -156,7 +156,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
         {s.scope === "task" && <b>↻ Task</b>}
         {reviewErrorSkip && <b className="error-skip">ERR retry×{errorRetries} → SKIP</b>}
-        {reviewMaxFailures > 0 && <b className="failure-cap">FAIL×{reviewMaxFailures} → PASS</b>}
+        {reviewMaxFailures > 0 && <b className="failure-cap">FAIL×{reviewMaxFailures} → NEXT PASS</b>}
         {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
       </div>
       <strong title={title}>{title}</strong>
@@ -1087,7 +1087,7 @@ function App() {
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
                 {draft.type === "review"
-                  ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。達到 max_failures 後視為 fail-soft PASS 並清零；正常 PASS 也會清零。</p>
+                  ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。允許真的 FAIL N 次；下一次進入 Review 時不呼叫 Agent，直接走 fail-soft PASS 並清零。正常 PASS 也會清零。</p>
                   : <p>ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。</p>}
                 <label className="route-policy-field"><span>{draft.type === "review" ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
@@ -1120,11 +1120,11 @@ function App() {
                         editDraft({ ...draft, max_failures: value });
                       }
                     }} />
-                    <small>連續 FAIL 達到此數量時 fail-soft PASS；PASS 或放行後 counter 清 0。</small>
+                    <small>允許連續 FAIL 此次數；下一次進入 Review 直接 PASS，不呼叫 Agent。PASS 或放行後 counter 清 0。</small>
                   </label>
                   {Number.isInteger(draft.max_failures) && Number(draft.max_failures) > 0 &&
                     <div className="route-row failure-cap-row"><span className="route-dot fail" />
-                      <strong>FAIL×{Number(draft.max_failures)}</strong><span>達上限 → PASS 路徑（counter 清 0）</span>
+                      <strong>FAIL×{Number(draft.max_failures)}</strong><span>下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）</span>
                     </div>}
                 </>}
                 <div className="route-section-title">從這個積木出去</div>
