@@ -157,6 +157,14 @@ def test_live_builtin_review_error_policy_contract_matches_bundled_workflows():
     }
 
 
+def test_live_builtin_review_max_failures_contract_matches_bundled_workflows():
+    assert live.builtin_review_max_failures_contract() == {
+        "file": 3,
+        "ai": 3,
+        "mixed": 3,
+    }
+
+
 def test_live_builtin_review_error_policy_contract_rejects_missing_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
