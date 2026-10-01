@@ -239,8 +239,18 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .wf-scope-handle:active { cursor: grabbing; }
 .react-flow__node-scope { z-index: 0 !important; pointer-events: none !important; }
 .react-flow__node-stage, .react-flow__node-terminal { z-index: 1 !important; }
+@media (max-width: 1180px) {
+  .studio-header { gap: 8px; padding: 0 10px; }
+  .studio-header > div { gap: 6px; }
+  .studio-header > div:first-child > span { display: none; }
+  .studio-header .message { max-width: 180px; }
+  .studio-header button { padding: 7px 9px; }
+  .workflow-editor-view-switch button { padding: 5px 8px; }
+}
 @media (max-width: 1050px) {
   .studio-body { grid-template-columns: 180px minmax(0,1fr); }
+  .palette { width: 180px; min-width: 180px; max-width: 180px; padding-inline: 8px; }
+  .studio-header strong { max-width: 220px; }
 }
 @media (max-width: 760px) {
   .studio-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(520px,1fr); overflow: auto; }
