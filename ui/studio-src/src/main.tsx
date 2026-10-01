@@ -1015,7 +1015,7 @@ function App() {
           {!draft ? (
             <div className="empty">
               <h2>Stage settings</h2>
-              <p>選取 Stage 編輯。Handoff 動態選一個下一跳；角色可選 main / role / fresh Session Policy；ERROR 使用 Error Policy。</p>
+              <p>左側可搜尋並拖入 Stage；選取後可分頁設定、單 Stage 測試、複製或移除。Handoff 動態選下一跳；ERROR 與 Review semantic FAIL 使用不同 policy。</p>
             </div>
           ) : (
             <>
@@ -1181,7 +1181,7 @@ function App() {
               </div>}
               <footer>
                 <div className="footer-actions">
-                  <button onClick={() => void duplicateStage()} disabled={busy}>複製積木</button>
+                  <button onClick={() => void duplicateStage()} disabled={busy} title="複製目前設定，但不複製結果連線">複製積木</button>
                   <button className="danger" onClick={() => void deleteStage()} disabled={busy}>移除積木</button>
                 </div>
                 <span className="draft-hint">修改先存為草稿</span>
