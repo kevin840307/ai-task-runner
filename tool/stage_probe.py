@@ -25,6 +25,11 @@ from runner.workflow.registry import create_stage
 from runner.workflow.stages import BaseStage, StageResult
 from runner.workflow_runner import WorkflowRunner
 
+AGENT_PING_PROMPT = (
+    "Reply with exactly AGENT_PING_OK and nothing else. "
+    "Do not use tools, do not modify files, and do not inspect the project."
+)
+
 
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(description="Execute one Workflow Stage only")
@@ -34,6 +39,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--input", default="")
     value.add_argument("--request-stdin", action="store_true")
     value.add_argument("--backend", default="")
+    value.add_argument("--probe-mode", choices=("stage", "agent_ping"), default="stage")
     value.add_argument("--keep-work", action="store_true")
     return value
 
@@ -74,6 +80,13 @@ def _draft_next(
     flow = draft.get("flow") or []
     index = flow.index(stage_name) if stage_name in flow else -1
     return (str(flow[index + 1]) if index >= 0 and index + 1 < len(flow) else "done"), route
+
+
+def _agent_ping(client, timeout: int | float) -> str:
+    """Call the configured backend once with a fixed no-tool transport probe."""
+    client.session_id = ""
+    client.set_runtime("no_tool", allow_project_read=False, sandbox=False)
+    return client.ask(AGENT_PING_PROMPT, timeout=int(timeout))
 
 
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
@@ -132,6 +145,21 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     try:
         with runtime_scope(config):
             runner = WorkflowRunner(config)
+
+            if str(getattr(args, "probe_mode", "stage") or "stage") == "agent_ping":
+                output = _agent_ping(runner.context.ai_client, config.agent_timeout)
+                return {
+                    "ok": True,
+                    "stage": args.stage,
+                    "status": "pass",
+                    "output": output,
+                    "data": {"prompt": AGENT_PING_PROMPT, "backend": config.backend},
+                    "changed_files": [],
+                    "next": "not-run",
+                    "route": "agent_ping",
+                    "kind": "agent_ping",
+                    "work_dir": str((project / work_dir).resolve()),
+                }
 
             if definition.get("scope") == "task" or str(definition.get("type") or "") in {"task", "review"}:
                 runner.state.tasks = [
@@ -197,6 +225,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("Stage test request must be an object")
             args.input = str(request.get("input") or "")
             args.draft_workflow = request.get("workflow")
+            args.probe_mode = str(request.get("probe_mode") or "stage")
+            if args.probe_mode not in {"stage", "agent_ping"}:
+                raise ValueError("Stage test probe_mode must be stage or agent_ping")
         payload = run_probe(args)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
