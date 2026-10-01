@@ -57,11 +57,13 @@ Current TODO 之外的後續 TODO 不應塞入 Execute prompt。Project filesyst
 
 ## Session / Recovery 契約
 - Initial call：完整 Stage Prompt。
-- Real failure：Same Session bounded retry，預設最多 2 次。
-- Same Session 仍失敗：Fresh Session + 完整必要 Context。
-- Fresh Session 出現相同 persistent failure：回傳 `replan`，重新建立 Plan。
-- 不同 failure fingerprint：重新計數，不沿用舊 failure streak。Timeout identity 必須使用 backend 提供的穩定語意 recovery key，不可直接依賴會變動的 raw stderr；完整 stderr 只保留給 diagnostics。
-- API/service transient failure：使用 AI transport backoff，不消耗 Stage failure budget；等待視窗用盡後由 canonical API resume durable state。
+- Technical failure：先 retry 可用 Same Session；達到 bounded per-session attempt budget 後，只輪替失敗的 Stage 到 Fresh Session，再用共用 recovery envelope 繼續。
+- 無人值守全域預設：`stage_retries=-1`，除非 Stage 明確設定有限 `error_policy.retries`，否則 technical recovery 不因次數耗盡而停止。
+- 非 Review Stage 的有限 retry 用盡：回傳 ERROR，停在目前 Stage（fail closed）。
+- Review 的有限 retry 用盡：fail-soft Skip 到一般 next Stage；後面必須保留 authoritative Validator。
+- Classified API/service transient failure：保留可用 Session，使用 capped exponential backoff。
+- Write attempt 若 ERROR 前已修改 project files：保留落盤成果、輪替該 Stage Session、先讀目前 project evidence 再 recover，不盲目重播相同寫入。
+- 不存在 hidden automatic replan/restart path；只有顯式 semantic PASS/FAIL routing 才能回 Planning。
 - Final AI voting：每個 validation run 都建立不同 Fresh Session。
 
 ## Validation 與 YAML List
