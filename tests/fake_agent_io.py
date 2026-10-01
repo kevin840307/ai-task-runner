@@ -51,6 +51,11 @@ def prompt_stage(prompt: str) -> PromptStage:
     if "RUNNER_SHARED_STAGE_CONTROL" in prompt:
         return "execute"
     if (
+        "Work on the Goal as the currently selected specialist." in prompt
+        and "Assigned responsibility:" in prompt
+    ):
+        return "execute"
+    if (
         "Review only. You are a read-only task reviewer" in prompt
         or "Review only. Read-only: do not modify project files." in prompt
         or "Review only. Read-only means inspect project evidence" in prompt
