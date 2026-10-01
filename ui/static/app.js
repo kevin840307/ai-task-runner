@@ -885,11 +885,21 @@ function appendStudioItem(root, item) {
         : "Available in Tasks";
   if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
   button.append(top, metaNode);
+  if (item.kind === "workflow") {
+    const action = document.createElement("span");
+    action.className = "studio-file-item-action";
+    action.textContent = "Open Editor →";
+    button.appendChild(action);
+  }
   button.onclick = () => item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item);
   root.appendChild(button);
 }
 function renderStudioFiles() {
   const root = $("studioFileList");
+  const body = document.querySelector(".studio-designer-body");
+  const workflowManager = state.studioSourceKind === "workflow";
+  body?.classList.toggle("workflow-manager-mode", workflowManager);
+  body?.classList.toggle("prompt-manager-mode", !workflowManager);
   root.innerHTML = "";
   $("studioSourceTabs").hidden = false;
   $("studioListTitle").textContent =
