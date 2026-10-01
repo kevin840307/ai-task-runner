@@ -76,6 +76,7 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "stage.max_failures = 3" in text
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
+    assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
     assert '["pass", "fail", "error"]' not in text
 
 
