@@ -72,7 +72,7 @@ function renderThemeControls() {
   document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
 function positionThemePanel() {
-  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
+  const panel = $("themePanel"), button = $("settingsNav") || $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
   const width = panel.getBoundingClientRect().width || Math.min(320, window.innerWidth - pad * 2); let left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad)); let top = rect.bottom + gap;
   const height = panel.getBoundingClientRect().height || 320; if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap); panel.style.left = `${Math.round(left)}px`; panel.style.top = `${Math.round(top)}px`;
 }
