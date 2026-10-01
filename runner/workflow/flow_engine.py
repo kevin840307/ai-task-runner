@@ -109,17 +109,19 @@ class FlowEngine:
         task_scoped: bool,
     ) -> tuple[StageResult, bool]:
         definition = self.workflow[index]
-        stage = create_stage(definition)
-        label = str(definition.get("label", "") or "")
-        policy = definition.get("error_policy")
-        if policy:
-            result = executor.run(
-                stage, self.context, previous, label=label,
-                retry_limit=policy["retries"],
-            )
-        else:
-            result = executor.run(stage, self.context, previous, label=label)
-        result = self._apply_review_failure_policy(definition, result)
+        result = self._review_bypass_result(definition)
+        if result is None:
+            stage = create_stage(definition)
+            label = str(definition.get("label", "") or "")
+            policy = definition.get("error_policy")
+            if policy:
+                result = executor.run(
+                    stage, self.context, previous, label=label,
+                    retry_limit=policy["retries"],
+                )
+            else:
+                result = executor.run(stage, self.context, previous, label=label)
+            self._record_review_result(definition, result)
         self._remember_previous(result)
 
         target = (
@@ -147,72 +149,77 @@ class FlowEngine:
         self.context.save_state()
         return result, False
 
-    def _apply_review_failure_policy(
-        self,
-        definition: dict[str, Any],
-        result: StageResult,
-    ) -> StageResult:
-        """Bound semantic Review FAIL loops without weakening technical ERROR policy.
-
-        max_failures is Review-only. The counter is durable and scoped to
-        Stage + current Task (or run scope when no Task is active). PASS clears
-        the counter. Reaching the configured FAIL count converts that verdict
-        into an explicit fail-soft PASS so the workflow advances to the normal
-        PASS target and the next Review starts from zero.
-        """
-        if definition.get("type") != "review" or result.status not in {"pass", "fail"}:
-            return result
-
-        maximum = definition.get("max_failures")
-        if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
-            return result
-
+    def _review_failure_key(self, definition: dict[str, Any]) -> str:
         task = self.context.task
         scope = task.id if task is not None else "__run__"
-        key = f"{definition['name']}::{scope}"
+        return f"{definition['name']}::{scope}"
+
+    def _review_bypass_result(
+        self,
+        definition: dict[str, Any],
+    ) -> StageResult | None:
+        """Skip Review execution on the entry after max_failures consecutive FAILs.
+
+        max_failures=3 means three real semantic FAIL verdicts are allowed.
+        On the fourth entry to that Review Stage, Runner does not call the
+        reviewer; it emits a fail-soft PASS and clears the durable counter.
+        """
+        if definition.get("type") != "review":
+            return None
+        maximum = definition.get("max_failures")
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
+            return None
+
+        key = self._review_failure_key(definition)
         counters = self.context.state.review_failures
-
-        if result.status == "pass":
-            counters.pop(key, None)
-            return result
-
-        count = counters.get(key, 0) + 1
+        count = counters.get(key, 0)
         if count < maximum:
-            counters[key] = count
-            return result
+            return None
 
         counters.pop(key, None)
-        original = result.data if isinstance(result.data, dict) else {}
-        missing = original.get("missing_items")
         data = {
             "completed": True,
             "reason": (
-                f"Review fail-soft PASS after {count} consecutive semantic FAIL results "
-                f"(max_failures={maximum})."
+                f"Review fail-soft PASS on entry after {count} consecutive semantic FAIL "
+                f"results (max_failures={maximum})."
             ),
             "missing_items": [],
             "fail_soft": True,
             "failure_count": count,
-            "last_failed_reason": str(original.get("reason", "") or ""),
-            "last_failed_missing_items": (
-                [str(item) for item in missing if isinstance(item, str)]
-                if isinstance(missing, list)
-                else []
-            ),
+            "bypassed": True,
         }
+        task = self.context.task
         if task is not None:
             task.last_review = data
         return StageResult(
-            stage=result.stage,
+            stage=str(definition["name"]),
             status="pass",
             output=(
-                f"Review fail-soft PASS after {count} consecutive FAIL results; "
-                f"max_failures={maximum}. Last review: {result.output}"
+                f"Review fail-soft PASS without reviewer execution after {count} "
+                f"consecutive FAIL results; max_failures={maximum}."
             ),
-            changed_files=list(result.changed_files),
             data=data,
-            kind=result.kind,
+            kind="review",
         )
+
+    def _record_review_result(
+        self,
+        definition: dict[str, Any],
+        result: StageResult,
+    ) -> None:
+        """Persist consecutive semantic Review FAIL count; PASS resets it."""
+        if definition.get("type") != "review" or result.status not in {"pass", "fail"}:
+            return
+        maximum = definition.get("max_failures")
+        if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
+            return
+
+        key = self._review_failure_key(definition)
+        counters = self.context.state.review_failures
+        if result.status == "pass":
+            counters.pop(key, None)
+            return
+        counters[key] = counters.get(key, 0) + 1
 
     def _route_to(self, target: str, source_index: int, result: StageResult) -> None:
         position = self.positions[target]
