@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from runner.runtime.run_state import RunState, Task, set_stage
-from runner.workflow.flow_engine import FlowEngine
+from runner.workflow.flow_engine import FlowEngine, resolve_stage_target
 from runner.workflow.loader import load_workflow
 from runner.workflow.results import reduce_result
 from runner.workflow.registry import stage_result_kind
@@ -269,10 +269,9 @@ def _matrix_cases(workflow: list[dict[str, Any]]) -> list[MatrixCase]:
     cases = [MatrixCase("happy path", Scenario(), True)]
     for definition in workflow:
         name = str(definition["name"])
-        routes = definition.get("routes") or {}
         handoffs = _handoff_selector(workflow, name)
         for status in ("fail", "error"):
-            target = str(routes.get(status, "stop"))
+            target = str(resolve_stage_target(definition, status))
             scenario_data: dict[str, Any] = {"stages": {name: status}}
             if handoffs:
                 scenario_data["handoffs"] = handoffs
