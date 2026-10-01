@@ -214,9 +214,11 @@ There is no System/Custom split and no read-only built-in asset class.
 
 Project Chat remains the primary run surface. Workflow editing is intentionally converged:
 
-- **Workflow Settings** manages Workflow and Prompt assets (create/import/rename/duplicate/export/delete).
+- **Workflows** is the Workflow asset library (search/create/import/rename/duplicate/export/delete) and opens the dedicated Workflow Editor.
+- **Prompts** is a separate Prompt workspace with its own asset list and Prompt Editor.
 - **Workflow Editor** is the only Workflow editor and provides `Designer | YAML` views over the same canonical Workflow YAML.
-- **Prompt Editor** remains a separate asset editor; Stages reference Prompt files instead of embedding Prompt bodies.
+- Stage settings provide `Form | YAML | Routing | Test`; Stage YAML is parsed/validated by the same Python YAML/schema path before it updates the draft.
+- Stages reference Prompt files instead of embedding Prompt bodies.
 - Stage = node.
 - PASS / FAIL = semantic result edges.
 - rollback/loop = PASS/FAIL edge to an earlier Stage.
