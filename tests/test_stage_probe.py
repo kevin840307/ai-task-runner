@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 
 from runner.workflow.stages import StageResult
-from tool.stage_probe import AGENT_PING_PROMPT, _agent_ping, _draft_next, run_probe
+from tool.stage_probe import AGENT_PING_PROMPT, AGENT_PING_TIMEOUT_SECONDS, _agent_ping, _draft_next, run_probe
 
 
 def test_stage_probe_reports_input_output_and_next_without_running_next(tmp_path):
@@ -99,11 +99,12 @@ def test_agent_ping_uses_fixed_no_tool_prompt_and_fresh_session():
             return "AGENT_PING_OK"
 
     client = FakeClient()
-    result = _agent_ping(client, 17)
+    result, elapsed = _agent_ping(client, 170)
 
     assert result == "AGENT_PING_OK"
+    assert elapsed >= 0
     assert client.runtime == ("no_tool", False, False)
-    assert client.calls == [(AGENT_PING_PROMPT, 17, "")]
+    assert client.calls == [(AGENT_PING_PROMPT, AGENT_PING_TIMEOUT_SECONDS, "")]
     assert "Do not use tools" in AGENT_PING_PROMPT
     assert "do not modify files" in AGENT_PING_PROMPT
 
