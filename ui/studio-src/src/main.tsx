@@ -105,7 +105,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
     testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
-    favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage",
+    favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
+    copy: "複製", paste: "貼上", delete: "刪除", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
     group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
   },
   en: {
@@ -120,7 +121,8 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
     testing: "Testing…", language: "Language", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
-    favorites: "Favorites", recent: "Recent", extensions: "Extensions",
+    favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
+    copy: "Copy", paste: "Paste", delete: "Delete", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
     group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools"
   },
 };
@@ -131,18 +133,44 @@ function initialDesignerLanguage(): DesignerLanguage {
 
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
-const STAGE_TEST_PROMPTS: Record<string, string> = {
-  plan: "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Do not modify project files.",
-  task: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
-  review: "Review the isolated test task against its acceptance criteria and current evidence. Return PASS only if it is complete; otherwise return FAIL with concrete missing items.",
-  ai_validator: "Validate the isolated test result using the available evidence. Return the validator contract with a clear PASS/FAIL decision and concrete missing items when it fails.",
-  handoff: "Choose the most appropriate allowed next Stage for a simple implementation task and briefly explain the choice.",
-  base: "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
+type StageTestScenario = "pass" | "fail" | "error";
+const STAGE_TEST_PROMPTS: Record<string, Record<StageTestScenario, string>> = {
+  plan: {
+    pass: "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Return valid structured output.",
+    fail: "Create a plan that intentionally leaves one acceptance criterion unresolved, so downstream review can identify a concrete missing item. Return valid structured output.",
+    error: "Intentionally return malformed structured output once so Runner must use its structured-output correction/retry path before producing a valid result.",
+  },
+  task: {
+    pass: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
+    fail: "Do not satisfy the isolated task acceptance criterion. Explain what remains incomplete without pretending it is finished.",
+    error: "Trigger a recoverable technical/structured-output failure if possible, then allow Runner retry/recovery to complete the isolated Stage.",
+  },
+  review: {
+    pass: "Treat the isolated task evidence as complete and return the normal Review PASS contract with no missing items.",
+    fail: "Treat one concrete acceptance criterion as unsatisfied and return the normal Review FAIL contract with one actionable missing item.",
+    error: "Return malformed Review structured output on the first response so Runner must use structured-output correction/retry, then return a valid Review contract.",
+  },
+  ai_validator: {
+    pass: "Validate the isolated evidence as complete and return the normal validator PASS contract.",
+    fail: "Validate the isolated evidence as incomplete and return the normal validator FAIL contract with one concrete missing item.",
+    error: "Return malformed validator structured output on the first response so Runner must retry/correct it, then return a valid validator contract.",
+  },
+  handoff: {
+    pass: "Choose one valid allowed target for this isolated test and return a valid handoff decision.",
+    fail: "Return a valid handoff decision that explains why no preferred route is suitable, while still respecting the allowed-target contract.",
+    error: "Return an invalid handoff shape once so Runner exercises correction/retry, then return one valid allowed target.",
+  },
+  base: {
+    pass: "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
+    fail: "Reply that the isolated test condition is not satisfied and give one concrete reason.",
+    error: "Produce one recoverable malformed/invalid response first, then succeed when Runner retries.",
+  },
 };
 
-function stageTestPrompt(stage: Stage | null): string {
+function stageTestPrompt(stage: Stage | null, scenario: StageTestScenario = "pass"): string {
   if (!stage) return "";
-  return STAGE_TEST_PROMPTS[stage.type] || "Perform one minimal isolated test for this Stage and return a concise result.";
+  return STAGE_TEST_PROMPTS[stage.type]?.[scenario]
+    || STAGE_TEST_PROMPTS.base[scenario];
 }
 
 
@@ -584,6 +612,7 @@ function App() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("settings");
   const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
   const [testMode, setTestMode] = useState<StageTestMode>("stage");
+  const [testScenario, setTestScenario] = useState<StageTestScenario>("pass");
   const [testBackend, setTestBackend] = useState("");
   const [testInput, setTestInput] = useState("");
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
@@ -591,6 +620,10 @@ function App() {
   const [testing, setTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
+  const [addStageOpen, setAddStageOpen] = useState(false);
+  const [addStageQuery, setAddStageQuery] = useState("");
+  const [copiedStage, setCopiedStage] = useState<Stage | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stage: string } | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
@@ -641,11 +674,30 @@ function App() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && editorOpen) setEditorOpen(false);
+      const target = event.target as HTMLElement | null;
+      const typing = Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable));
+      if (event.key === "Escape") {
+        setContextMenu(null);
+        if (addStageOpen) setAddStageOpen(false);
+        else if (editorOpen) setEditorOpen(false);
+        return;
+      }
+      if (typing || editorOpen || addStageOpen) return;
+      const ctrl = event.ctrlKey || event.metaKey;
+      if (ctrl && event.key.toLowerCase() === "c" && selected) {
+        event.preventDefault();
+        copyStageByName(selected);
+      } else if (ctrl && event.key.toLowerCase() === "v" && copiedStage) {
+        event.preventDefault();
+        pasteStage();
+      } else if ((event.key === "Delete" || event.key === "Backspace") && selected) {
+        event.preventDefault();
+        void deleteStage(selected);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editorOpen]);
+  });
 
   useEffect(() => {
     if (!dirtyGraph) return;
@@ -666,6 +718,7 @@ function App() {
     setTestResult(null);
     setTestError("");
     setTestInput("");
+    setTestScenario("pass");
   }, [selected]);
 
   const options = useMemo(() => {
@@ -942,23 +995,32 @@ function App() {
     await addStage(stageType, position);
   }
 
-  async function duplicateStage() {
-    if (!visual || !draft) return;
-    const name = nextStageKey(visual, draft.type);
-    const copy: Stage = structuredClone({ ...draft, name });
+  function copyStageByName(name: string) {
+    if (!visual) return;
+    const source = stageByName(visual, name);
+    if (!source) return;
+    const copy = structuredClone(source);
     delete copy.routes;
     if (copy.type === "handoff") copy.targets = [];
-    const sourceIndex = visual.flow.indexOf(draft.name);
+    setCopiedStage(copy);
+    setMessage(`已複製 Stage ${name} 設定；貼上時不會複製結果連線。`);
+  }
+
+  function pasteStage(position?: { x: number; y: number }) {
+    if (!visual || !copiedStage) return;
+    const name = nextStageKey(visual, copiedStage.type);
+    const copy: Stage = structuredClone({ ...copiedStage, name });
+    delete copy.routes;
+    if (copy.type === "handoff") copy.targets = [];
+    const sourceIndex = selected ? visual.flow.indexOf(selected) : -1;
     const flow = [...visual.flow];
     if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, name);
     const next = { ...visual, flow, stages: [...visual.stages, copy] };
     setVisual(next);
-    const sourcePosition = layoutRef.current[draft.name];
-    if (sourcePosition) {
-      layoutRef.current = {
-        ...layoutRef.current,
-        [name]: { x: sourcePosition.x + 260, y: sourcePosition.y + 40 },
-      };
+    const sourcePosition = selected ? layoutRef.current[selected] : undefined;
+    const targetPosition = position || (sourcePosition ? { x: sourcePosition.x + 260, y: sourcePosition.y + 40 } : undefined);
+    if (targetPosition) {
+      layoutRef.current = { ...layoutRef.current, [name]: targetPosition };
       writeLayout(visual.id, layoutRef.current);
     }
     const g = graphFor(next, catalog);
@@ -966,27 +1028,59 @@ function App() {
     setEdges(g.edges);
     setSelected(name);
     setDirtyGraph(true);
-    setMessage(`Stage ${draft.name} 已複製為 ${name}；結果連線不會一起複製。`);
+    setMessage(`Stage 已貼上為 ${name}；結果連線未複製。`);
   }
 
-  async function deleteStage() {
-    if (!visual || !draft) return;
-    if (visual.stages.some((stage) => stage.name !== draft.name && (
-      Object.values(stage.routes || {}).includes(draft.name) || (stage.targets || []).includes(draft.name)
+  async function duplicateStage(name = draft?.name || selected) {
+    if (!name || !visual) return;
+    copyStageByName(name);
+    const source = stageByName(visual, name);
+    if (!source) return;
+    const stageCopy = structuredClone(source);
+    delete stageCopy.routes;
+    if (stageCopy.type === "handoff") stageCopy.targets = [];
+    const newName = nextStageKey(visual, stageCopy.type);
+    const copy: Stage = { ...stageCopy, name: newName };
+    const sourceIndex = visual.flow.indexOf(name);
+    const flow = [...visual.flow];
+    if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, newName);
+    const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    setVisual(next);
+    const sourcePosition = layoutRef.current[name];
+    if (sourcePosition) {
+      layoutRef.current = {
+        ...layoutRef.current,
+        [newName]: { x: sourcePosition.x + 260, y: sourcePosition.y + 40 },
+      };
+      writeLayout(visual.id, layoutRef.current);
+    }
+    const g = graphFor(next, catalog);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setSelected(newName);
+    setDirtyGraph(true);
+    setMessage(`Stage ${name} 已複製為 ${newName}；結果連線不會一起複製。`);
+  }
+
+  async function deleteStage(name = draft?.name || selected) {
+    if (!visual || !name) return;
+    if (visual.stages.some((stage) => stage.name !== name && (
+      Object.values(stage.routes || {}).includes(name) || (stage.targets || []).includes(name)
     ))) {
-      setMessage(`請先移除指向 ${draft.name} 的結果連線。`);
+      setMessage(`請先移除指向 ${name} 的結果連線。`);
       return;
     }
-    if (!window.confirm(`從草稿移除 Stage "${draft.name}"？儲存 Workflow 後才會更新 YAML。`)) return;
-    const next = { ...visual, flow: visual.flow.filter((name) => name !== draft.name), stages: visual.stages.filter((stage) => stage.name !== draft.name) };
+    if (!window.confirm(`從草稿移除 Stage "${name}"？儲存 Workflow 後才會更新 YAML。`)) return;
+    const next = { ...visual, flow: visual.flow.filter((item) => item !== name), stages: visual.stages.filter((stage) => stage.name !== name) };
     setVisual(next);
     const g = graphFor(next, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
     setSelected("");
     setEditorOpen(false);
+    setContextMenu(null);
     setDirtyGraph(true);
-    setMessage(`Stage ${draft.name} 已從草稿移除。`);
+    setMessage(`Stage ${name} 已從草稿移除。`);
   }
 
   function resetLayout() {
@@ -1042,7 +1136,12 @@ function App() {
 
       <section className="studio-body">
         <aside className="palette">
-          <div className="palette-head"><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong><small>{tx("drag_hint")}</small></div>
+          <div className="palette-head">
+            <div className="palette-title-row"><span><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong></span>
+              <button type="button" className="palette-command-add" onClick={() => { setAddStageOpen(true); setAddStageQuery(""); }}>＋</button>
+            </div>
+            <small>{tx("drag_hint")}</small>
+          </div>
           <input className="palette-search" value={paletteQuery} onChange={(e) => setPaletteQuery(e.target.value)}
             placeholder={tx("search_stage")} aria-label={tx("search_stage")} />
           {(() => {
@@ -1113,13 +1212,20 @@ function App() {
             onNodeDragStop={rememberPosition}
             onNodeClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
             onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && openStageEditor(n.id)}
-            onPaneClick={() => setSelected("")}
+            onNodeContextMenu={(event, n) => {
+              if (n.data.kind !== "stage") return;
+              event.preventDefault();
+              setSelected(n.id);
+              setContextMenu({ x: event.clientX, y: event.clientY, stage: n.id });
+            }}
+            onPaneContextMenu={(event) => { event.preventDefault(); setContextMenu(null); }}
+            onPaneClick={() => { setSelected(""); setContextMenu(null); }}
             connectionLineStyle={{ strokeWidth: 2.5 }}
             defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
             fitView
             minZoom={0.25}
             maxZoom={1.8}
-            deleteKeyCode={["Backspace", "Delete"]}
+            deleteKeyCode={null}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={22} size={1} />
@@ -1127,6 +1233,37 @@ function App() {
             <Controls />
           </ReactFlow>
         </div>
+
+        {addStageOpen && <div className="add-stage-command-backdrop" role="dialog" aria-modal="true" aria-label={tx("add_stage_dialog")}
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setAddStageOpen(false); }}>
+          <div className="add-stage-command">
+            <div className="add-stage-command-head"><strong>{tx("add_stage_dialog")}</strong><button type="button" onClick={() => setAddStageOpen(false)}>×</button></div>
+            <input autoFocus value={addStageQuery} onChange={(event) => setAddStageQuery(event.target.value)} placeholder={tx("search_stage")} />
+            <div className="add-stage-command-list">
+              {Object.keys(catalog?.stage_types || {}).filter((type) => {
+                const q = addStageQuery.trim().toLowerCase();
+                const meta = STAGE_META[type];
+                return !q || [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
+              }).map((type) => {
+                const meta = STAGE_META[type] || { title: type, description: tx("custom_stage") };
+                return <button type="button" key={type} onClick={() => { setAddStageOpen(false); void addStage(type); }}>
+                  <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.types.includes(type))?.icon || "◇"}</span>
+                  <span><strong>{meta.title}</strong><small>{meta.description}</small></span><b>＋</b>
+                </button>;
+              })}
+            </div>
+          </div>
+        </div>}
+
+        {contextMenu && <div className="stage-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseLeave={() => setContextMenu(null)}>
+          <button type="button" onClick={() => { openStageEditor(contextMenu.stage); setContextMenu(null); }}>⚙ {tx("stage_settings")}</button>
+          <button type="button" onClick={() => { copyStageByName(contextMenu.stage); setContextMenu(null); }}>⧉ {tx("copy")} <kbd>Ctrl+C</kbd></button>
+          <button type="button" disabled={!copiedStage} onClick={() => { pasteStage(); setContextMenu(null); }}>▣ {tx("paste")} <kbd>Ctrl+V</kbd></button>
+          <button type="button" onClick={() => { void duplicateStage(contextMenu.stage); setContextMenu(null); }}>⊕ {tx("duplicate")}</button>
+          <hr />
+          <button type="button" className="danger-item" onClick={() => { void deleteStage(contextMenu.stage); }}>⌫ {tx("delete")} <kbd>Del</kbd></button>
+        </div>}
 
         {pendingCreate && (
           <div className="create-stage-backdrop" role="dialog" aria-modal="true" aria-label="Create Stage">
@@ -1309,12 +1446,19 @@ function App() {
                 </select></label>
                 {testMode === "stage"
                   ? <label><span>{tx("stage_input")}</span>
+                      <div className="test-scenario-tabs" role="group" aria-label="Stage test prompt scenario">
+                        {(["pass", "fail", "error"] as StageTestScenario[]).map((scenario) => <button type="button" key={scenario}
+                          className={testScenario === scenario ? `active scenario-${scenario}` : `scenario-${scenario}`}
+                          onClick={() => { setTestScenario(scenario); setTestInput(stageTestPrompt(draft, scenario)); }}>
+                          {{ pass: tx("test_pass"), fail: tx("test_fail"), error: tx("test_error") }[scenario]}
+                        </button>)}
+                      </div>
                       <div className="test-input-actions">
-                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft))}>{tx("fill_test")}</button>
+                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft, testScenario))}>{tx("fill_test")}</button>
                         {testInput && <button type="button" onClick={() => setTestInput("")}>{tx("clear")}</button>}
                       </div>
                       <textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5}
-                        placeholder={stageTestPrompt(draft) || "輸入這個積木要接收的內容"} />
+                        placeholder={stageTestPrompt(draft, testScenario) || "輸入這個積木要接收的內容"} />
                       <small>依 Stage 類型提供最小合法測試內容；只作用於本次 isolated Stage Test，不會修改 Workflow Prompt。</small>
                     </label>
                   : <div className="ping-prompt"><strong>固定 Prompt</strong><code>{AGENT_PING_PROMPT}</code><small>不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。</small></div>}
