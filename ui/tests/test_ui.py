@@ -983,6 +983,55 @@ class WorkflowStudioTests(unittest.TestCase):
                 item["id"], bad_draft, bad["hash"], self.project
             )
 
+    def test_graph_save_round_trips_explicit_session_policy(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        stages = [
+            {**stage, "session_policy": "role"} if stage["name"] == "work" else stage
+            for stage in visual["stages"]
+        ]
+        draft = {
+            "stages": stages,
+            "flow": visual["flow"],
+            "routes": visual.get("routes", {}),
+        }
+
+        self.state.studio_graph_save(
+            item["id"], draft, visual["hash"], self.project
+        )
+
+        data = __import__("yaml").safe_load(
+            self.workflow.read_text(encoding="utf-8")
+        )
+        self.assertEqual(data["stages"]["work"]["session_policy"], "role")
+
+    def test_graph_save_rejects_conflicting_session_policy_and_key(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        before = self.workflow.read_text(encoding="utf-8")
+        stages = [
+            {
+                **stage,
+                "session_policy": "role",
+                "session_key": "legacy-shared",
+            }
+            if stage["name"] == "work"
+            else stage
+            for stage in visual["stages"]
+        ]
+        draft = {
+            "stages": stages,
+            "flow": visual["flow"],
+            "routes": visual.get("routes", {}),
+        }
+
+        with self.assertRaisesRegex(ValueError, "session_key is only valid"):
+            self.state.studio_graph_save(
+                item["id"], draft, visual["hash"], self.project
+            )
+
+        self.assertEqual(self.workflow.read_text(encoding="utf-8"), before)
+
     def test_graph_draft_validates_before_one_atomic_yaml_write(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
