@@ -328,9 +328,9 @@ def test_supervisor_runtime_marker_tracks_restarted_worker(tmp_path, monkeypatch
 
     monkeypatch.delenv(supervisor_module.WORKER_ENV, raising=False)
     monkeypatch.setattr(supervisor_module.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(supervisor_module.time, "sleep", lambda _: None)
     monkeypatch.setattr(supervisor_module, "cleanup_orphans", lambda *args: None)
     monkeypatch.setattr(supervisor_module, "_report_retry", lambda *args: None)
+    monkeypatch.setattr(supervisor_module, "_sleep_until_retry", lambda *args: False)
 
     result = supervisor_module.supervise_cli(
         [],
@@ -580,7 +580,7 @@ def test_supervisor_worker_marker_failure_terminates_worker_before_unlock(tmp_pa
     assert not lock.exists()
 
 
-def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_path, monkeypatch):
+def test_supervisor_keeps_restarting_after_same_state_crashes_until_success(tmp_path, monkeypatch):
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
@@ -594,6 +594,7 @@ def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_pa
         FakeWorker(9, 101),
         FakeWorker(9, 102),
         FakeWorker(9, 103),
+        FakeWorker(0, 104),
     ])
     calls = []
 
@@ -615,8 +616,20 @@ def test_supervisor_stops_restarting_after_same_state_crashes_three_times(tmp_pa
         state_locator=lambda current: [state],
     )
 
-    assert result == 9
-    assert len(calls) == 3
+    assert result == 0
+    assert len(calls) == 4
+
+
+def test_worker_retry_delay_uses_capped_exponential_backoff(tmp_path):
+    request = _request(tmp_path)
+    request.retry_delay = 2
+    request.retry_max_delay = 10
+
+    assert supervisor_module._worker_retry_delay(request, 1) == 2
+    assert supervisor_module._worker_retry_delay(request, 2) == 4
+    assert supervisor_module._worker_retry_delay(request, 3) == 8
+    assert supervisor_module._worker_retry_delay(request, 4) == 10
+    assert supervisor_module._worker_retry_delay(request, 1000) == 10
 
 
 def test_clear_stop_request_can_fail_closed(monkeypatch, tmp_path):
