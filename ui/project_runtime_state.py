@@ -29,7 +29,6 @@ CHAT_STATE_FILE = "chat-state.json"
 LAUNCH_STATE_FILE = "launching.json"
 LAUNCH_RESERVATION_GRACE = 30.0
 RUNTIME_DIR = ".ai-task-runner"
-PROJECTS_PAYLOAD_CACHE_SECONDS = 1.5
 
 
 class ProjectRuntimeMixin:
@@ -262,7 +261,6 @@ class ProjectRuntimeMixin:
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
-        self._projects_payload_cache = None
 
     def runtime_dir(self, project: Path) -> Path:
         return project / RUNTIME_DIR
@@ -1157,7 +1155,6 @@ __all__ = [
     "LAUNCH_RESERVATION_GRACE",
     "LAUNCH_STATE_FILE",
     "MESSAGES_FILE",
-    "PROJECTS_PAYLOAD_CACHE_SECONDS",
     "ProjectRuntimeMixin",
     "RUNTIME_DIR",
     "UI_STATE_DIR",
