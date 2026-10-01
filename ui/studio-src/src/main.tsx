@@ -934,7 +934,11 @@ function App() {
               })}</div>
             </div>;
           })}
-          {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).length > 0 &&
+          {Object.keys(catalog?.stage_types || {}).filter((type) => {
+              if (PALETTE_SECTIONS.some((section) => section.types.includes(type))) return false;
+              const q = paletteQuery.trim().toLowerCase();
+              return !q || type.toLowerCase().includes(q);
+            }).length > 0 &&
             <div className="palette-section"><div className="palette-section-head"><span>擴充積木</span></div><div className="palette-list">
               {Object.keys(catalog?.stage_types || {}).filter((type) => {
                 if (PALETTE_SECTIONS.some((section) => section.types.includes(type))) return false;
