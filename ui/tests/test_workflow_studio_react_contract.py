@@ -338,3 +338,34 @@ def test_stage_prompt_can_open_the_shared_prompt_editor():
     assert "Edit Prompt" in text
     assert 'className="inline-prompt-edit"' in text
     assert ".inline-prompt-edit" in styles
+
+
+def test_workflow_settings_uses_full_width_workflow_manager_and_prompt_master_detail():
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "static" / "css" / "workflow-studio.css").read_text(encoding="utf-8")
+    i18n = (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
+
+    assert 'classList.toggle("workflow-manager-mode", workflowManager)' in app
+    assert 'classList.toggle("prompt-manager-mode", !workflowManager)' in app
+    assert 'studio-file-item-action' in app
+    assert 't("studio.open_editor", "Open Editor")' in app
+    assert ".studio-designer-body.workflow-manager-mode" in styles
+    assert ".workflow-manager-mode .studio-workflow-main" in styles
+    assert "display: none" in styles.split(".workflow-manager-mode .studio-workflow-main", 1)[1].split("}", 1)[0]
+    assert ".workflow-manager-mode .studio-file-item" in styles
+    assert '"studio.open_editor": "開啟 Editor"' in i18n
+    assert '"studio.open_editor": "Open Editor"' in i18n
+
+
+def test_workflow_editor_desktop_responsive_contract_prevents_1024_overflow():
+    source_styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+    browser_test = (ROOT / "ui" / "tests" / "test_full_designer_browser.py").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 1180px)" in source_styles
+    assert "@media (max-width: 1050px)" in source_styles
+    assert ".palette { width: 180px; min-width: 180px; max-width: 180px;" in source_styles
+    assert "window.innerWidth - menuWidth - 8" in SOURCE.read_text(encoding="utf-8")
+    for width in ("1024", "1280", "1366", "1440", "1920"):
+        assert f'"width": {width}' in browser_test
+    assert "document.documentElement.scrollWidth <= window.innerWidth" in browser_test
+    assert 'get_by_role("tab", name="YAML")' in browser_test
