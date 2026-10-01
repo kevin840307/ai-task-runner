@@ -69,7 +69,7 @@ targets:
   - final_validate
 ```
 
-ERROR 只設定 `error_policy.retries` 或全域 retry。UI 不支援 ERROR edge、repair/recover/restart_at/repeat/max_attempts/on_exhausted。
+ERROR 只設定 `error_policy.retries` 或全域 retry。Review 若設定有限 local retry，Full Designer 會明確顯示 `retry -> Skip`；其他 Stage 的有限 retry 用盡仍 fail-closed。UI 不支援 ERROR edge、repair/recover/restart_at/repeat/max_attempts/on_exhausted。
 
 ## Stage Test
 
