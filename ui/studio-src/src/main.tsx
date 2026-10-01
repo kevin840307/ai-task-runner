@@ -154,13 +154,16 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
-        {s.scope === "task" && <b>↻ Task</b>}
-        {reviewErrorSkip && <b className="error-skip">ERR retry×{errorRetries} → SKIP</b>}
-        {reviewMaxFailures > 0 && <b className="failure-cap">FAIL×{reviewMaxFailures} → NEXT PASS</b>}
-        {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
+        {s.scope === "task" && <b className="scope-chip">↻ Task</b>}
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
+      <div className="wf-stage-meta">
+        {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">未連線</span>}
+        {reviewErrorSkip && <span>ERR×{errorRetries} → Skip</span>}
+        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → 下次 Pass</span>}
+        {dynamicRouter && <span>{(s.targets || []).length} targets</span>}
+      </div>
       <div className={`wf-handles ${dynamicRouter ? "single" : ""}`}>
         {dynamicRouter ? <span>HANDOFF</span> : <><span>PASS</span><span>FAIL</span></>}
       </div>
@@ -892,17 +895,17 @@ function App() {
     <main className="studio-shell">
       <header className="studio-header">
         <div>
-          <button className="ghost" onClick={leaveStudio}>← Workflow Studio</button>
+          <button className="ghost" onClick={leaveStudio}>← 返回 Workflow 設定</button>
           <strong>{visual.name}</strong>
-          <span>Workflow Studio</span>
+          <span>Workflow Designer · 編輯模式</span>
         </div>
         <div>
           {message && <span className="message">{message}</span>}
           {dirtyGraph && <span className="unsaved-badge">未儲存草稿</span>}
           <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">重設排列</button>
-          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>Reload</button>
+          <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>重新載入</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
-            {busy ? "驗證與儲存中…" : "儲存 Workflow"}
+            {busy ? "驗證與儲存中…" : "儲存"}
           </button>
         </div>
       </header>
