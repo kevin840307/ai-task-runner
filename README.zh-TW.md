@@ -46,7 +46,6 @@ stages:
     scope: task
     routes:
       fail: execute
-      error: stop
 
   validate_ai:
     type: ai_validator
@@ -65,7 +64,7 @@ flow:
 
 - PASS -> 下一個 Stage
 - FAIL -> stop
-- ERROR -> 由 StageExecutor retry/recovery；用盡後停在目前 Stage
+- ERROR -> 由 StageExecutor 處理技術性 retry/recovery；無人值守預設為無上限（`stage_retries: -1`），並搭配 Fresh Session 輪替與 capped backoff。只有明確設定有限次數時才會用盡後停止。
 
 Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 
