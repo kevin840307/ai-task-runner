@@ -228,6 +228,13 @@ function workflowStudioUrl() {
   return `/index.html?${p}`;
 }
 
+function promptEditorUrl(promptId: string) {
+  const { project } = query();
+  const p = new URLSearchParams({ view: "workflow", source: "prompt", studio: promptId });
+  if (project) p.set("project", project);
+  return `/index.html?${p}`;
+}
+
 function TerminalNode({ data }: NodeProps<Node<StudioNodeData>>) {
   const start = data.kind === "start";
   return (
@@ -1508,6 +1515,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         })}
                       </select>
                       <small className="effective-value">Effective: <code>{effectivePrompt(catalog, draft) || "(none)"}</code></small>
+                      {(() => {
+                        const ref = String(draft.prompt || effectivePrompt(catalog, draft) || "").trim();
+                        const item = prompts.find((prompt) => String(prompt.reference || prompt.display_name || prompt.name) === ref);
+                        return item ? <button type="button" className="inline-prompt-edit"
+                          onClick={() => { window.location.href = promptEditorUrl(item.id); }}>Edit Prompt</button> : null;
+                      })()}
                     </label>
                   ) : (
                     <Field
