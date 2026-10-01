@@ -88,7 +88,7 @@ type StageTestResult = {
   test_retry_policy?: string;
 };
 
-type InspectorTab = "settings" | "parameters" | "routing" | "test";
+type InspectorTab = "settings" | "parameters" | "yaml" | "routing" | "test";
 type WorkflowEditorView = "designer" | "yaml";
 type StageTestMode = "stage" | "agent_ping";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
@@ -101,7 +101,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
-    stage_settings: "Stage 設定", basic: "基本", parameters: "參數", routing: "連線", test: "測試",
+    stage_settings: "Stage 設定", basic: "基本", parameters: "參數", yaml_stage: "YAML", routing: "連線", test: "測試", apply_yaml: "套用 YAML",
     close: "關閉", duplicate: "複製積木", remove: "移除積木", draft_only: "修改先存為草稿",
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
@@ -117,7 +117,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
-    stage_settings: "Stage Settings", basic: "Basic", parameters: "Parameters", routing: "Routing", test: "Test",
+    stage_settings: "Stage Settings", basic: "Basic", parameters: "Parameters", yaml_stage: "YAML", routing: "Routing", test: "Test", apply_yaml: "Apply YAML",
     close: "Close", duplicate: "Duplicate", remove: "Remove", draft_only: "Changes stay in draft",
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
@@ -632,6 +632,9 @@ function App() {
   const [createCommand, setCreateCommand] = useState("");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("settings");
   const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
+  const [stageYaml, setStageYaml] = useState("");
+  const [stageYamlError, setStageYamlError] = useState("");
+  const [stageYamlLoading, setStageYamlLoading] = useState(false);
   const [testMode, setTestMode] = useState<StageTestMode>("stage");
   const [testScenario, setTestScenario] = useState<StageTestScenario>("pass");
   const [testBackend, setTestBackend] = useState("");
@@ -757,6 +760,8 @@ function App() {
     setTestError("");
     setTestInput("");
     setTestScenario("pass");
+    setStageYaml("");
+    setStageYamlError("");
   }, [selected]);
 
   const options = useMemo(() => {
@@ -777,6 +782,53 @@ function App() {
   const visibleParameters = parameterOptions.length > 8
     ? (parameterGroups.find((section) => section.id === parameterSection) || parameterGroups[0])?.options || []
     : parameterOptions;
+  async function loadStageYaml() {
+    if (!draft || !visual || stageYamlLoading) return;
+    setStageYamlLoading(true);
+    setStageYamlError("");
+    try {
+      const result = await api<{ ok: boolean; source: string }>("/api/studio/stage/source", {
+        method: "POST",
+        body: JSON.stringify({
+          id: visual.id,
+          project: query().project,
+          stage: draft.name,
+          mode: "format",
+          fields: draft,
+        }),
+      });
+      setStageYaml(result.source || "");
+    } catch (error) {
+      setStageYamlError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setStageYamlLoading(false);
+    }
+  }
+
+  async function applyStageYaml() {
+    if (!draft || !visual || stageYamlLoading) return;
+    setStageYamlLoading(true);
+    setStageYamlError("");
+    try {
+      const result = await api<{ ok: boolean; fields: Stage }>("/api/studio/stage/source", {
+        method: "POST",
+        body: JSON.stringify({
+          id: visual.id,
+          project: query().project,
+          stage: draft.name,
+          mode: "parse",
+          source: stageYaml,
+        }),
+      });
+      editDraft({ ...result.fields, name: draft.name });
+      setMessage("Stage YAML applied to draft");
+    } catch (error) {
+      setStageYamlError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setStageYamlLoading(false);
+    }
+  }
+
   function editDraft(next: Stage) {
     setDraft(next);
     if (visual) {
@@ -1478,10 +1530,13 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 <div className="inspector-head-actions"><span>{draft.type}</span><button type="button" className="modal-close-button" onClick={() => setEditorOpen(false)} aria-label={tx("close")}>×</button></div>
               </div>
               <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
-                {(["settings", "parameters", "routing", "test"] as const).map((tab) => (
+                {(["settings", "parameters", "yaml", "routing", "test"] as const).map((tab) => (
                   <button key={tab} type="button" role="tab" aria-selected={inspectorTab === tab}
-                    className={inspectorTab === tab ? "active" : ""} onClick={() => setInspectorTab(tab)}>
-                    {{ settings: tx("basic"), parameters: `${tx("parameters")}${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, routing: tx("routing"), test: tx("test") }[tab]}
+                    className={inspectorTab === tab ? "active" : ""} onClick={() => {
+                      setInspectorTab(tab);
+                      if (tab === "yaml") void loadStageYaml();
+                    }}>
+                    {{ settings: tx("basic"), parameters: `${tx("parameters")}${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, yaml: tx("yaml_stage"), routing: tx("routing"), test: tx("test") }[tab]}
                   </button>
                 ))}
               </div>
@@ -1543,6 +1598,15 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       }}
                     />
                   ))}
+              </div>}
+              {inspectorTab === "yaml" && <div className="stage-yaml-panel" role="tabpanel">
+                <div className="stage-yaml-toolbar">
+                  <div><strong>Stage YAML</strong><small>同一份 Stage draft；type 與 key 不可在此變更。</small></div>
+                  <button type="button" onClick={() => void applyStageYaml()} disabled={stageYamlLoading}>{stageYamlLoading ? "…" : tx("apply_yaml")}</button>
+                </div>
+                {stageYamlError && <div className="stage-yaml-error">{stageYamlError}</div>}
+                <textarea value={stageYaml} onChange={(event) => { setStageYaml(event.target.value); setStageYamlError(""); }}
+                  spellCheck={false} autoCapitalize="off" autoComplete="off" />
               </div>}
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>{tx("result_edges")}</strong>
