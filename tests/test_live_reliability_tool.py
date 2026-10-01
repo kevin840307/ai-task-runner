@@ -43,7 +43,9 @@ def _fake_qwen_command(tmp_path: Path) -> str:
         "prompt = sys.stdin.buffer.read().decode('utf-8')\n"
         "resume = args[args.index('--resume') + 1] if '--resume' in args else ''\n"
         "session = resume or f'fake-session-{os.getpid()}'\n"
-        "if '[RUNNER_IMMUTABLE_PLAN_PROTOCOL]' in prompt:\n"
+        "if 'Reply with exactly AGENT_PING_OK' in prompt:\n"
+        "    answer = 'AGENT_PING_OK'\n"
+        "elif '[RUNNER_IMMUTABLE_PLAN_PROTOCOL]' in prompt:\n"
         "    answer = json.dumps({'tasks':[{'title':'Create health probe','description':'Create health.txt exactly as required','deliverable':'health.txt','acceptance_criteria':['health.txt has exact requested text']}]})\n"
         "elif '[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]' in prompt:\n"
         "    answer = json.dumps({'completed':True,'reason':'checked','missing_items':[]})\n"
@@ -56,6 +58,18 @@ def _fake_qwen_command(tmp_path: Path) -> str:
         encoding="utf-8",
     )
     return f'"{sys.executable}" "{fake}"'
+
+
+def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(tmp_path: Path):
+    config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
+
+    result = live.stage_probe_live_preflight(config)
+
+    assert result == {
+        "agent_ping": True,
+        "real_stage_status": "pass",
+        "real_stage_next": "validate_ai",
+    }
 
 
 def test_script_command_uses_canonical_yaml_entry(tmp_path: Path):
