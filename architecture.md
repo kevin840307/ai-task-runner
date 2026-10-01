@@ -32,7 +32,7 @@ A normal Stage returns PASS, FAIL or ERROR.
 - PASS defaults to the next Stage.
 - FAIL defaults to stop.
 - `routes.pass` / `routes.fail` may target another Stage, `done` or `stop`.
-- ERROR is never a graph edge. StageExecutor applies retry policy; exhausted ERROR stops at the current Stage.
+- ERROR is never a graph edge. StageExecutor applies retry policy. A Review with finite local `error_policy.retries` fail-soft skips to the next Stage after exhaustion; other Stage types fail closed after finite exhaustion.
 - A backward PASS/FAIL edge is the rollback/loop mechanism. There is no repair/recover Stage model.
 
 `scope: task` Stages form one contiguous block and execute per durable Task.
