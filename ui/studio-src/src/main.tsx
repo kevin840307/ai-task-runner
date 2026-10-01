@@ -28,6 +28,7 @@ type Stage = Record<string, unknown> & {
   scope?: string;
   routes?: Record<string, string>;
   error_policy?: { retries: number };
+  max_failures?: number;
   targets?: string[];
 };
 
@@ -147,6 +148,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const dynamicRouter = s.type === "handoff";
   const errorRetries = s.error_policy?.retries;
   const reviewErrorSkip = s.type === "review" && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
+  const reviewMaxFailures = s.type === "review" && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
@@ -154,6 +156,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
         {s.scope === "task" && <b>↻ Task</b>}
         {reviewErrorSkip && <b className="error-skip">ERR retry×{errorRetries} → SKIP</b>}
+        {reviewMaxFailures > 0 && <b className="failure-cap">FAIL×{reviewMaxFailures} → PASS</b>}
         {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
       </div>
       <strong title={title}>{title}</strong>
@@ -505,6 +508,7 @@ function App() {
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
   const displayEdges = useMemo<Edge[]>(() => edges.map((edge) => {
     const related = Boolean(selected && (edge.source === selected || edge.target === selected));
     const status = String(edge.data?.status || "pass").toUpperCase();
@@ -577,7 +581,7 @@ function App() {
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
   const parameterOptions = options.filter((o) => {
-    if (["name", "type", "status", "label", "scope", "routes", "targets"].includes(o.name)) return false;
+    if (["name", "type", "status", "label", "scope", "routes", "targets", "max_failures"].includes(o.name)) return false;
     if (o.name === "session_key" && String(draft?.session_policy || "auto") !== "auto") return false;
     return true;
   });
@@ -757,7 +761,10 @@ function App() {
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
-    if (stageType === "review") stage.error_policy = { retries: 2 };
+    if (stageType === "review") {
+      stage.error_policy = { retries: 2 };
+      stage.max_failures = 3;
+    }
     const next = { ...visual, stages: [...visual.stages, stage] };
     setVisual(next);
     if (position) {
@@ -809,6 +816,33 @@ function App() {
     if (!stageType) return;
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
     await addStage(stageType, position);
+  }
+
+  async function duplicateStage() {
+    if (!visual || !draft) return;
+    const name = nextStageKey(visual, draft.type);
+    const copy: Stage = structuredClone({ ...draft, name });
+    delete copy.routes;
+    if (copy.type === "handoff") copy.targets = [];
+    const sourceIndex = visual.flow.indexOf(draft.name);
+    const flow = [...visual.flow];
+    if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, name);
+    const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    setVisual(next);
+    const sourcePosition = layoutRef.current[draft.name];
+    if (sourcePosition) {
+      layoutRef.current = {
+        ...layoutRef.current,
+        [name]: { x: sourcePosition.x + 260, y: sourcePosition.y + 40 },
+      };
+      writeLayout(visual.id, layoutRef.current);
+    }
+    const g = graphFor(next, catalog);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setSelected(name);
+    setDirtyGraph(true);
+    setMessage(`Stage ${draft.name} 已複製為 ${name}；結果連線不會一起複製。`);
   }
 
   async function deleteStage() {
@@ -876,8 +910,16 @@ function App() {
       <section className="studio-body">
         <aside className="palette">
           <div className="palette-head"><span className="palette-eyebrow">Stage Palette</span><strong>新增積木</strong><small>拖曳積木到畫布才會新增</small></div>
+          <input className="palette-search" value={paletteQuery} onChange={(e) => setPaletteQuery(e.target.value)}
+            placeholder="搜尋 Stage…" aria-label="搜尋 Stage" />
           {PALETTE_SECTIONS.map((section) => {
-            const types = section.types.filter((type) => catalog?.stage_types?.[type]);
+            const q = paletteQuery.trim().toLowerCase();
+            const types = section.types.filter((type) => {
+              if (!catalog?.stage_types?.[type]) return false;
+              if (!q) return true;
+              const meta = STAGE_META[type];
+              return [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
+            });
             if (!types.length) return null;
             return <div className="palette-section" key={section.title}>
               <div className="palette-section-head"><span>{section.title}</span><small>{types.length}</small></div>
@@ -894,7 +936,11 @@ function App() {
           })}
           {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).length > 0 &&
             <div className="palette-section"><div className="palette-section-head"><span>擴充積木</span></div><div className="palette-list">
-              {Object.keys(catalog?.stage_types || {}).filter((type) => !PALETTE_SECTIONS.some((section) => section.types.includes(type))).map((type) =>
+              {Object.keys(catalog?.stage_types || {}).filter((type) => {
+                if (PALETTE_SECTIONS.some((section) => section.types.includes(type))) return false;
+                const q = paletteQuery.trim().toLowerCase();
+                return !q || type.toLowerCase().includes(q);
+              }).map((type) =>
                 <div key={type} className="palette-item" draggable={!busy} title="拖曳到畫布新增積木"
                   onDragStart={(event) => dragStage(event, type)}>
                   <span className="palette-icon" aria-hidden="true">◇</span><span className="palette-copy"><strong>{type}</strong><small>自訂 Stage</small></span><span className="palette-add" aria-hidden="true">⠿</span>
@@ -1041,7 +1087,7 @@ function App() {
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
                 {draft.type === "review"
-                  ? <p>Review 是 fail-soft gate：設定有限次數時，ERROR retry 用盡後會 Skip 到下一個 Stage；-1 代表無限 retry。留空則沿用全域 stage_retries，且不啟用 Review 專屬 Skip。</p>
+                  ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。達到 max_failures 後視為 fail-soft PASS 並清零；正常 PASS 也會清零。</p>
                   : <p>ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。</p>}
                 <label className="route-policy-field"><span>{draft.type === "review" ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
@@ -1060,6 +1106,27 @@ function App() {
                   <div className="route-row error-skip-row"><span className="route-dot error" />
                     <strong>ERROR</strong><span>重試耗盡 → 下一個積木（Skip Review）</span>
                   </div>}
+                {draft.type === "review" && <>
+                  <label className="route-policy-field"><span>Semantic FAIL 上限（max_failures）</span><input type="number" min={1}
+                    value={draft.max_failures ?? ""} placeholder="不限制"
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (raw === "") {
+                        const { max_failures: _removed, ...rest } = draft;
+                        editDraft(rest);
+                      } else {
+                        const value = Number(raw);
+                        if (!Number.isInteger(value) || value <= 0) return;
+                        editDraft({ ...draft, max_failures: value });
+                      }
+                    }} />
+                    <small>連續 FAIL 達到此數量時 fail-soft PASS；PASS 或放行後 counter 清 0。</small>
+                  </label>
+                  {Number.isInteger(draft.max_failures) && Number(draft.max_failures) > 0 &&
+                    <div className="route-row failure-cap-row"><span className="route-dot fail" />
+                      <strong>FAIL×{Number(draft.max_failures)}</strong><span>達上限 → PASS 路徑（counter 清 0）</span>
+                    </div>}
+                </>}
                 <div className="route-section-title">從這個積木出去</div>
                 {draft.type === "handoff"
                   ? edges.filter((edge) => edge.source === draft.name && edge.data?.status === "handoff").map((edge) =>
@@ -1113,7 +1180,10 @@ function App() {
                 </div>}
               </div>}
               <footer>
-                <button className="danger" onClick={() => void deleteStage()} disabled={busy}>移除積木</button>
+                <div className="footer-actions">
+                  <button onClick={() => void duplicateStage()} disabled={busy}>複製積木</button>
+                  <button className="danger" onClick={() => void deleteStage()} disabled={busy}>移除積木</button>
+                </div>
                 <span className="draft-hint">修改先存為草稿</span>
               </footer>
             </>
