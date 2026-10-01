@@ -262,3 +262,67 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert "Workflow Editor" in page.locator("body").inner_text()
             assert page_errors == []
             browser.close()
+
+
+
+@pytest.mark.skipif(
+    sync_playwright is None or _chromium_executable() is None,
+    reason="Playwright/Chromium not available",
+)
+@pytest.mark.parametrize("viewport", [
+    {"width": 1024, "height": 768},
+    {"width": 1280, "height": 800},
+    {"width": 1366, "height": 768},
+    {"width": 1440, "height": 900},
+    {"width": 1920, "height": 1080},
+])
+def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        state = _write_fixture_repo(Path(td))
+        state.studio_workflow_create("layout_check", "global", None)
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=_chromium_executable(),
+                args=["--no-sandbox"],
+            )
+            page = browser.new_page(viewport=viewport)
+            page.expose_function("__apiBridge", _bridge_for(state))
+            page.set_content(html, wait_until="domcontentloaded")
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
+            page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
+            page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
+            page.add_script_tag(path=str(static_root / "app.js"))
+            page.wait_for_timeout(160)
+
+            page.click("#workflowNav")
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            body = page.locator(".studio-designer-body").bounding_box()
+            sidebar = page.locator(".studio-workflow-sidebar").bounding_box()
+            assert body and sidebar
+            assert body["x"] >= 0 and body["x"] + body["width"] <= viewport["width"] + 1
+            assert sidebar["x"] >= 0 and sidebar["x"] + sidebar["width"] <= viewport["width"] + 1
+
+            page.click("#yamlPromptSource")
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            prompt_body = page.locator(".studio-designer-body").bounding_box()
+            assert prompt_body and prompt_body["x"] + prompt_body["width"] <= viewport["width"] + 1
+            browser.close()
