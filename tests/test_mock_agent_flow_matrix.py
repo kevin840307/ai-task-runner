@@ -79,12 +79,13 @@ def test_technical_failures_use_shared_stage_retry_for_both_backends(
 
 
 @pytest.mark.parametrize("backend", ["qwen", "opencode"])
+@pytest.mark.parametrize("worker_policy", ["main", "role", "fresh"])
 def test_dynamic_handoff_uses_same_runtime_contract_for_both_backends(
-    tmp_path, monkeypatch, backend
+    tmp_path, monkeypatch, backend, worker_policy
 ):
     workflow = tmp_path / "dynamic.workflow.yaml"
     workflow.write_text(
-        """stages:
+        f"""stages:
   coordinator:
     type: handoff
     targets: [worker, final_validate]
@@ -93,7 +94,7 @@ def test_dynamic_handoff_uses_same_runtime_contract_for_both_backends(
     type: base
     prompt: common/dynamic_worker.md
     instructions: Create done.txt and return.
-    session_policy: role
+    session_policy: {worker_policy}
     mode: write
     track_changes: true
     routes:
