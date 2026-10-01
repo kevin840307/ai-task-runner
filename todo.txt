@@ -36,7 +36,7 @@ RELEASE READINESS REVIEW (2026-09-30)
 [x] Add regression tests proving obsolete runtime contracts/assets are absent and current Dynamic/session-policy examples load.
 [x] Recheck deterministic matrix for routing, retry/error, session-policy, resume, UI catalog/save, Stage probe, dry-run and live preflight coverage.
 [x] Keep current Runner package shape unless a concrete bug proves a simplification is safe.
-[ ] Pass Studio + Ubuntu + Windows CI on the final review head.
+[x] Pass Studio + Ubuntu + Windows CI on the final review head.
 
 DYNAMIC ROLE SESSION + PROMPT CONSOLIDATION (2026-09-30)
 -----------------------------------------------------
