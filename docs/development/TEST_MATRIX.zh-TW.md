@@ -4,7 +4,7 @@
 
 ## Deterministic CI
 
-一般 GitHub gate 會跑 Ubuntu + Windows compile/pytest，以及 React Studio build。CI 也會重新建置 Full Designer，並驗證已提交的 `ui/static/workflow-studio-app` 與 `ui/studio-src` 完全一致；CI 只做 verify，不會自行改寫 branch。
+一般 GitHub gate 會跑 Ubuntu + Windows compile/pytest，以及 React Studio build。CI 也會重新建置 Workflow Editor，並驗證已提交的 `ui/static/workflow-studio-app` 與 `ui/studio-src` 完全一致；CI 只做 verify，不會自行改寫 branch。
 
 | 區域 | 覆蓋 |
 | --- | --- |
@@ -20,7 +20,7 @@
 | Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
 | Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
 | Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
-| Studio React | PASS/FAIL/Handoff handle、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge/Discussion runtime |
+| Studio React | PASS/FAIL/Handoff handle、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge、Workflow Manager/Prompt Editor ownership、常見桌面解析度 overflow 檢查 |
 | Process/runtime | ownership/orphan/supervisor/control-file probes、同 checkpoint 重複 crash 持續 restart、capped process backoff |
 
 ## 負向 / 已移除契約
@@ -29,7 +29,7 @@
 
 - `routes.error`；
 - repair/recover/restart_at/repeat/max_attempts/on_exhausted graph control；
-- 已移除的 Discussion runtime Stage/state；
+- 不存在 Discussion / Group Chat runtime 或 UI mode；
 - 已刪 compatibility runtime module；
 - 舊 Workflow/Prompt asset path。
 
