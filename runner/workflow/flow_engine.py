@@ -191,6 +191,10 @@ class FlowEngine:
         task = self.context.task
         if task is not None:
             task.last_review = data
+        self.context.set_stage(
+            "reviewing",
+            f"Review bypass after {count} consecutive FAIL results; max_failures={maximum}",
+        )
         return StageResult(
             stage=str(definition["name"]),
             status="pass",
