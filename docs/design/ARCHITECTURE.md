@@ -50,7 +50,7 @@ Session policy is independent from routing:
 - `fresh` = isolated invocation;
 - `auto` = built-in/default profile behavior.
 
-This separation lets the same Handoff graph express coding teams, review boards, triage or discussion without adding runtime types.
+This separation lets the same Handoff graph express dynamic specialist routing without adding another runtime family.
 
 ## Prompt/session contract
 
@@ -77,7 +77,7 @@ Do not restore:
 - Pipeline/TaskRunner compatibility runtimes;
 - repair/recover/restart_at/repeat/max_attempts/on_exhausted graph controls;
 - `routes.error`;
-- separate Discussion controller runtime;
+- Discussion / Group Chat runtime or UI mode;
 - generic AgentMessage or scheduler framework;
 - generic parallel DAG execution.
 
