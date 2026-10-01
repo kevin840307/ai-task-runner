@@ -962,6 +962,7 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
         self.assertEqual(data["stages"]["review_2"]["error_policy"], {"retries": 2})
+        self.assertEqual(data["stages"]["review_2"]["max_failures"], 3)
 
     def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
         item = self._workflow_item()
@@ -1333,6 +1334,30 @@ class WorkflowStudioTests(unittest.TestCase):
                 item["id"],
                 "review",
                 {"retry": -1},
+                opened["hash"],
+                self.project,
+            )
+
+    def test_stage_editor_rejects_max_failures_outside_review(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "max_failures is only valid for Review"):
+            self.state.studio_stage_save(
+                item["id"],
+                "work",
+                {"max_failures": 3},
+                opened["hash"],
+                self.project,
+            )
+
+    def test_stage_editor_rejects_non_positive_review_max_failures(self) -> None:
+        item = self._workflow_item()
+        opened = self.state.studio_read(item["id"], self.project)
+        with self.assertRaisesRegex(ValueError, "max_failures must be a positive integer"):
+            self.state.studio_stage_save(
+                item["id"],
+                "review",
+                {"max_failures": 0},
                 opened["hash"],
                 self.project,
             )
