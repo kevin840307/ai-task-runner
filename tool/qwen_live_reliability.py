@@ -482,6 +482,54 @@ def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     return runs, required, yolo
 
 
+def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
+    """Exercise the isolated Full Designer Stage Probe against the real Qwen backend."""
+    tool = ROOT / "tool" / "stage_probe.py"
+    workflow = WORKFLOWS["ai"]
+
+    def run_probe(root: Path, mode: str, log: Path) -> dict[str, object]:
+        command = [
+            sys.executable,
+            str(tool),
+            "--project-root", str(root),
+            "--workflow", str(workflow),
+            "--stage", "review",
+            "--backend", "qwen",
+            "--command", settings.command,
+            "--probe-mode", mode,
+        ]
+        if mode == "stage":
+            command += ["--input", "Review only this isolated test task and return the required structured verdict."]
+        code = run_command(command, log, min(settings.run_timeout, max(180.0, settings.agent_timeout + 60)))
+        raw = [line.strip() for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
+        if not raw:
+            raise RuntimeError(f"Stage Probe {mode} produced no output")
+        try:
+            payload = json.loads(raw[-1])
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Stage Probe {mode} returned invalid JSON: {_tail_text(raw[-1])}") from error
+        if code != 0 or not isinstance(payload, dict):
+            raise RuntimeError(f"Stage Probe {mode} failed: code={code}, payload={payload!r}")
+        return payload
+
+    with tempfile.TemporaryDirectory(prefix="ai-runner-stage-probe-live-") as directory:
+        root = Path(directory) / "project"
+        root.mkdir()
+        ping = run_probe(root, "agent_ping", Path(directory) / "agent-ping.log")
+        if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
+            raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
+        stage = run_probe(root, "stage", Path(directory) / "real-stage.log")
+        if stage.get("status") not in {"pass", "fail"} or stage.get("kind") != "review":
+            raise RuntimeError(f"real Review Stage Probe contract mismatch: {stage!r}")
+        if stage.get("next") not in {"execute", "validate_ai"}:
+            raise RuntimeError(f"real Review Stage Probe next target mismatch: {stage!r}")
+        return {
+            "agent_ping": True,
+            "real_stage_status": stage.get("status"),
+            "real_stage_next": stage.get("next"),
+        }
+
+
 def builtin_review_error_policy_contract() -> dict[str, int]:
     """Verify bundled Review stages keep the intentional finite fail-soft policy."""
     from runner.workflow.loader import load_workflow
@@ -3341,6 +3389,9 @@ def main() -> int:
     session_expiry_recovery_preflight()
     print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
 
+    stage_probe_live = stage_probe_live_preflight(settings)
+    print("PASS real-Qwen isolated Agent Ping + Review Stage Probe preflight", flush=True)
+
     dryrun_results = workflow_dryrun_preflight()
     print(
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
@@ -3454,6 +3505,7 @@ def main() -> int:
         "http_502_recovered": True,
         "http_503_recovered": True,
         "single_process_yaml_items": args.single_process_yaml_items,
+        "stage_probe_live_preflight": stage_probe_live,
         "workflow_dryrun_preflight": True,
         "builtin_review_error_policy_contract": review_error_policy,
         "builtin_readonly_safety_contract": readonly_contract,
