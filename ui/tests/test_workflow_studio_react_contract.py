@@ -181,3 +181,17 @@ def test_react_studio_opens_stage_settings_as_modal_on_double_click_and_shares_l
     assert '"zh-TW"' in text and '"en"' in text
     assert "changeLanguage" in text
     assert "grid-template-columns: 200px minmax(0,1fr)" in styles
+
+
+def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'className="stage-editor-content"' in text
+    assert 'className="palette-quick-add"' in text
+    assert "void addStage(type)" in text
+    assert "title={meta.description}" in text
+    assert "height: min(680px, 86vh)" in styles
+    assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
+    assert ".stage-editor-content { min-height: 0; overflow: auto;" in styles
+    assert ".palette-quick-add" in styles
