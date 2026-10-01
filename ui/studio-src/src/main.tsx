@@ -97,7 +97,7 @@ type DesignerLanguage = "zh-TW" | "en";
 const DESIGNER_LANGUAGE_KEY = "ai-task-runner.language";
 const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
   "zh-TW": {
-    back: "← 返回 Workflow 設定", mode: "Workflow Editor", unsaved: "未儲存草稿", designer_view: "Designer", yaml_view: "YAML",
+    back: "← Workflows", mode: "Workflow Editor", unsaved: "未儲存草稿", designer_view: "Designer", yaml_view: "YAML",
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
@@ -113,7 +113,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
   },
   en: {
-    back: "← Back to Workflow Settings", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
+    back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
@@ -230,7 +230,7 @@ function workflowStudioUrl() {
 
 function promptEditorUrl(promptId: string) {
   const { project } = query();
-  const p = new URLSearchParams({ view: "workflow", source: "prompt", studio: promptId });
+  const p = new URLSearchParams({ view: "prompt", studio: promptId });
   if (project) p.set("project", project);
   return `/index.html?${p}`;
 }
