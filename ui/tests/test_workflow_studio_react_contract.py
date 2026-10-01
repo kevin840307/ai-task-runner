@@ -12,7 +12,7 @@ def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
     assert "workflowStudioUrl" in text
     assert 'view: "workflow", studio: id' in text
     assert "← 返回 Workflow 設定" in text
-    assert "Workflow Designer · 編輯模式" in text
+    assert "Workflow Editor" in text
     assert "history.back()" not in text
     assert "application/x-ai-stage" in text
     assert 'sourceHandle: "pass"' in text
@@ -134,7 +134,7 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
     assert 'o.name === "session_key"' in text
     assert 'session_key: _sessionKey' in text
     assert "leaveStudio()" in text
-    assert 'window.confirm("捨棄未儲存的 Workflow 草稿？")' in text
+    assert "requestConfirm" in text
     assert "autoPositions" in text
     assert "branchTargets" in text
     assert "branchColumnGap" in text
@@ -160,7 +160,7 @@ def test_react_studio_has_stage_specific_test_prompt_presets():
 
     assert "STAGE_TEST_PROMPTS" in text
     assert "填入簡易測試 Prompt" in text
-    assert "stageTestPrompt(draft)" in text
+    assert "stageTestPrompt(draft, testScenario)" in text
     assert "只作用於本次 isolated Stage Test" in text
     assert "Stage Test API not found. Restart the local UI server" in text
 
@@ -179,8 +179,8 @@ def test_react_studio_opens_stage_settings_as_modal_on_double_click_and_shares_l
     assert 'event.key === "Escape"' in text
     assert 'DESIGNER_LANGUAGE_KEY = "ai-task-runner.language"' in text
     assert '"zh-TW"' in text and '"en"' in text
-    assert "changeLanguage" in text
-    assert "grid-template-columns: 200px minmax(0,1fr)" in styles
+    assert "changeLanguage" not in text
+    assert "grid-template-columns: 220px minmax(0,1fr)" in styles
 
 
 def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
@@ -191,9 +191,9 @@ def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
     assert 'className="palette-quick-add"' in text
     assert "void addStage(type)" in text
     assert "title={meta.description}" in text
-    assert "height: min(680px, 86vh)" in styles
+    assert "block-size: min(680px, calc(100dvh - 56px))" in styles
     assert "grid-template-rows: auto auto minmax(0,1fr) auto" in styles
-    assert ".stage-editor-content { min-height: 0; overflow: auto;" in styles
+    assert ".stage-editor-content { min-width: 0; min-height: 0; height: 100%; overflow: auto;" in styles
     assert ".palette-quick-add" in styles
 
 
@@ -245,7 +245,8 @@ def test_stage_test_has_pass_fail_error_retry_prompt_scenarios():
     assert 'testScenario' in text
     assert 'test_error: "ERROR / Retry"' in text
     assert 'stageTestPrompt(draft, scenario)' in text
-    assert 'structured-output correction/retry' in text
+    assert '"error_mock"' in text
+    assert "Technical ERROR is injected by the Stage Test harness" in text
     assert 'className="test-scenario-tabs"' in text
     assert ".scenario-error.active" in styles
 
@@ -294,3 +295,46 @@ def test_designer_uses_shared_confirmation_dialog_and_thin_visible_scrollbars():
     assert "scrollbar-width: thin" in styles
     assert ".add-stage-command-list::-webkit-scrollbar { width: 6px; }" in styles
     assert ".palette::-webkit-scrollbar { width: 6px; }" in styles
+
+
+def test_workflow_editor_converges_designer_and_yaml_on_one_canonical_file():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'type WorkflowEditorView = "designer" | "yaml"' in text
+    assert 'setEditorView("designer")' in text
+    assert 'workflow-editor-view-switch' in text
+    assert 'workflow-yaml-editor' in text
+    assert '"/api/studio/save"' in text
+    assert '"/api/studio/graph/save"' in text
+    assert "儲存並切換視圖？" in text
+    assert "Workflow Editor 只維護一份 canonical YAML" in text
+    assert "editorDirty" in text
+    assert ".workflow-yaml-view" in styles
+    assert ".workflow-editor-view-switch" in styles
+
+
+def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_editor():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "<h1>Workflow Settings</h1>" in index
+    assert "Workflow 使用統一的 Workflow Editor（Designer / YAML）" in index
+    assert 'id="studioEditorModeSwitch"' in index and "hidden" in index
+    assert "openWorkflowEditorItem" in app
+    assert 'item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item)' in app
+    assert '"Import YAML"' in app
+    assert 'source: "prompt"' not in app  # URLSearchParams is built from literal source query instead.
+    assert 'params.get("source") === "prompt"' in app
+    assert "state.studioSourceKind = source" in app
+
+
+def test_stage_prompt_can_open_the_shared_prompt_editor():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "promptEditorUrl" in text
+    assert 'source: "prompt"' in text
+    assert "Edit Prompt" in text
+    assert 'className="inline-prompt-edit"' in text
+    assert ".inline-prompt-edit" in styles
