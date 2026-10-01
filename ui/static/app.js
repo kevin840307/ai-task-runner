@@ -888,7 +888,7 @@ function appendStudioItem(root, item) {
   if (item.kind === "workflow") {
     const action = document.createElement("span");
     action.className = "studio-file-item-action";
-    action.textContent = "Open Editor →";
+    action.textContent = `${t("studio.open_editor", "Open Editor")} →`;
     button.appendChild(action);
   }
   button.onclick = () => item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item);
