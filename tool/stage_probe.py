@@ -28,6 +28,29 @@ from runner.workflow_runner import WorkflowRunner
 
 AGENT_PING_TIMEOUT_SECONDS = 60
 STAGE_TEST_UNLIMITED_RETRY_CAP = 2
+
+
+class _MockErrorOnceStage:
+    """Stage-test-only wrapper that injects one deterministic technical ERROR."""
+
+    def __init__(self, stage) -> None:
+        self._stage = stage
+        self._injected = False
+
+    def __getattr__(self, name):
+        return getattr(self._stage, name)
+
+    def run(self, ctx, previous=None):
+        if not self._injected:
+            self._injected = True
+            return StageResult.error_result(
+                self._stage.name,
+                RuntimeError("MOCK_STAGE_TEST_ERROR: injected recoverable technical failure"),
+            )
+        return self._stage.run(ctx, previous)
+
+    def finish(self, ctx, result):
+        return self._stage.finish(ctx, result)
 AGENT_PING_PROMPT = (
     "Reply with exactly AGENT_PING_OK and nothing else. "
     "Do not use tools, do not modify files, and do not inspect the project."
@@ -138,6 +161,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     goal = input_text or f"Test Workflow Stage {args.stage}"
 
     probe_mode = str(getattr(args, "probe_mode", "stage") or "stage")
+    test_scenario = str(getattr(args, "test_scenario", "pass") or "pass")
     configured_command = getattr(args, "command", None)
     config = RuntimeConfig(
         goal=goal,
@@ -215,8 +239,9 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 retry_limit = 0
                 retry_policy = "single_attempt_default"
+            stage_under_test = _MockErrorOnceStage(stage) if test_scenario == "error_mock" else stage
             result = runner.stage_executor.run(
-                stage,
+                stage_under_test,
                 runner.context,
                 previous,
                 retry_limit=retry_limit,
@@ -237,6 +262,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 "work_dir": str((project / work_dir).resolve()),
                 "test_retry_limit": retry_limit,
                 "test_retry_policy": retry_policy,
+                "test_scenario": test_scenario,
+                "mock_error_injected": test_scenario == "error_mock",
             }
     finally:
         if not args.keep_work:
@@ -260,6 +287,9 @@ def main(argv: list[str] | None = None) -> int:
             args.probe_mode = str(request.get("probe_mode") or "stage")
             if args.probe_mode not in {"stage", "agent_ping"}:
                 raise ValueError("Stage test probe_mode must be stage or agent_ping")
+            args.test_scenario = str(request.get("test_scenario") or "pass")
+            if args.test_scenario not in {"pass", "fail", "error_mock"}:
+                raise ValueError("Stage test test_scenario must be pass, fail, or error_mock")
         payload = run_probe(args)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False))
