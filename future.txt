@@ -33,14 +33,14 @@ StageExecutor owns all technical reliability:
 
 Stage implementations do not own retry/recover/session logic.
 
-UI workflow families
---------------------
-1. Linear Workflow with Rollback / Loop - current production mode.
+Current Workflow capabilities
+-----------------------------
+1. Linear Workflow with Rollback / Loop - supported.
 2. Dynamic Handoff - supported; one Handoff Stage dynamically chooses exactly one next Stage.
 
-Discussion / Group Chat is not a separate runtime family. Build it as a Dynamic Handoff Workflow pattern using ordinary role Stages and an optional final AI Validator.
+Discussion / Group Chat is not planned and must not be introduced as a runtime family or UI mode.
 
-The user entry stays the same for every family: choose a Workflow/Profile in Chat,
+The user entry stays the same: choose a Workflow/Profile in Chat,
 enter the prompt, then run. Do not add a separate mode selector.
 
 Workflow Studio product contract
@@ -74,7 +74,6 @@ Dynamic Handoff is the only multi-agent runtime primitive:
 - one Handoff Stage chooses exactly one next Stage per decision;
 - every role is an ordinary Stage;
 - Dynamic specialist roles default to session_policy: role; main and fresh remain explicit per-role alternatives, and independent final validation stays fresh;
-- discussion/review-board/triage behaviors remain YAML Workflow patterns, not runtime types.
 It reuses the same node registry, catalog-driven settings panel, YAML assets, FlowEngine, StageExecutor, StateStore, and plugins.
 
 
