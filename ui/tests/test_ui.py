@@ -1402,6 +1402,50 @@ class WorkflowStudioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "still referenced"):
             self.state.studio_rename(item["id"], "renamed.md", self.project)
 
+    def test_stage_test_forwards_backend_probe_mode_and_draft(self) -> None:
+        item = self._workflow_item()
+        fake = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps({
+                "ok": True,
+                "stage": "review",
+                "status": "pass",
+                "output": "AGENT_PING_OK",
+                "data": {"backend": "qwen"},
+                "changed_files": [],
+                "next": "not-run",
+                "route": "agent_ping",
+                "kind": "agent_ping",
+            }),
+            stderr="",
+        )
+        graph = self.state.studio_visual(item["id"], self.project)
+        with patch("ui.workflow_studio_state.subprocess.run", return_value=fake) as run:
+            result = self.state.studio_stage_test(
+                item["id"],
+                "review",
+                "",
+                self.project,
+                backend="qwen",
+                probe_mode="agent_ping",
+                graph={
+                    "stages": graph["stages"],
+                    "flow": graph["flow"],
+                    "routes": {
+                        stage["name"]: stage.get("routes", {})
+                        for stage in graph["stages"]
+                    },
+                },
+            )
+
+        self.assertEqual(result["route"], "agent_ping")
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--backend") + 1], "qwen")
+        request = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual(request["probe_mode"], "agent_ping")
+        self.assertIn("workflow", request)
+
     def test_workflow_validation_uses_real_dryrun_boundary(self) -> None:
         item = self._workflow_item()
         fake = subprocess.CompletedProcess(
