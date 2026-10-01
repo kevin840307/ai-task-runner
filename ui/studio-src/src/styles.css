@@ -25,7 +25,15 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .studio-header .unsaved-badge { color: #a16207; background: #fef9c3; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .studio-body { min-height: 0; display: grid; grid-template-columns: 220px minmax(0,1fr); }
 
-.palette { width: 220px; min-width: 220px; max-width: 220px; overflow: auto; background: #fbfcff; border-right: 1px solid #e5e7eb; padding: 14px 10px; }
+.palette {
+  width: 220px; min-width: 220px; max-width: 220px; overflow-y: scroll; overflow-x: hidden;
+  scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+  background: #fbfcff; border-right: 1px solid #e5e7eb; padding: 14px 10px;
+}
+.palette::-webkit-scrollbar { width: 6px; }
+.palette::-webkit-scrollbar-track { background: transparent; }
+.palette::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.palette::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 .palette-head { display: grid; gap: 2px; margin: 0 3px 14px; }
 .palette-head strong { font-size: 16px; letter-spacing: -.02em; }
 .palette-eyebrow { color: #4870b7; font-size: 10px; font-weight: 900; letter-spacing: .14em; }
@@ -267,7 +275,14 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .add-stage-command-head strong { font-size: 15px; }
 .add-stage-command-head button { width: 30px; height: 30px; padding: 0; border: 0; background: #f8fafc; color: #64748b; font-size: 18px; }
 .add-stage-command > input { width: 100%; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #0f172a; }
-.add-stage-command-list { min-height: 0; overflow: auto; display: grid; gap: 4px; }
+.add-stage-command-list {
+  min-height: 0; overflow-y: scroll; overflow-x: hidden; display: grid; gap: 4px;
+  scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent;
+}
+.add-stage-command-list::-webkit-scrollbar { width: 6px; }
+.add-stage-command-list::-webkit-scrollbar-track { background: transparent; }
+.add-stage-command-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.add-stage-command-list::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 .add-stage-command-list > button {
   width: 100%; display: grid; grid-template-columns: 30px minmax(0,1fr) auto; align-items: center; gap: 9px;
   padding: 7px 9px; border: 1px solid transparent; border-radius: 10px; background: #fff; text-align: left;
@@ -299,3 +314,28 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .test-scenario-tabs button.active { border-color: #93b4f8; background: #eff6ff; color: #1d4ed8; }
 .test-scenario-tabs .scenario-fail.active { border-color: #fcd34d; background: #fffbeb; color: #a16207; }
 .test-scenario-tabs .scenario-error.active { border-color: #fca5a5; background: #fff1f2; color: #b91c1c; }
+
+.designer-confirm-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  padding: 24px; background: rgba(15,23,42,.32); backdrop-filter: blur(2px);
+}
+.designer-confirm-dialog {
+  width: 420px; max-width: calc(100vw - 32px);
+  display: grid; grid-template-columns: 42px minmax(0,1fr); gap: 12px 14px;
+  padding: 18px; border: 1px solid #dbe3ef; border-radius: 15px; background: #fff;
+  box-shadow: 0 22px 64px rgba(15,23,42,.24);
+}
+.designer-confirm-icon {
+  width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px;
+  background: #eff6ff; color: #2563eb; font-size: 18px; font-weight: 900;
+}
+.designer-confirm-icon.danger { background: #fff1f2; color: #dc2626; }
+.designer-confirm-copy { min-width: 0; }
+.designer-confirm-copy h3 { margin: 0 0 5px; color: #0f172a; font-size: 15px; }
+.designer-confirm-copy p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.designer-confirm-actions {
+  grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;
+}
+.designer-confirm-actions button { min-width: 76px; }
+.designer-confirm-actions .danger-confirm { border-color: #dc2626; background: #dc2626; color: #fff; }
+.designer-confirm-actions .danger-confirm:hover { border-color: #b91c1c; background: #b91c1c; }
