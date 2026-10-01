@@ -1364,7 +1364,13 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               if (n.data.kind !== "stage") return;
               event.preventDefault();
               setSelected(n.id);
-              setContextMenu({ x: event.clientX, y: event.clientY, stage: n.id });
+              const menuWidth = 200;
+              const menuHeight = 230;
+              setContextMenu({
+                x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+                y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+                stage: n.id,
+              });
             }}
             onPaneContextMenu={(event) => { event.preventDefault(); setContextMenu(null); }}
             onPaneClick={() => { setSelected(""); setContextMenu(null); }}
