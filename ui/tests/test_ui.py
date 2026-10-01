@@ -1487,6 +1487,7 @@ class WorkflowStudioTests(unittest.TestCase):
                 self.project,
                 backend="qwen",
                 probe_mode="agent_ping",
+                test_scenario="error_mock",
                 graph={
                     "stages": graph["stages"],
                     "flow": graph["flow"],
@@ -1502,6 +1503,7 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertEqual(command[command.index("--backend") + 1], "qwen")
         request = json.loads(run.call_args.kwargs["input"])
         self.assertEqual(request["probe_mode"], "agent_ping")
+        self.assertEqual(request["test_scenario"], "error_mock")
         self.assertIn("workflow", request)
 
     def test_workflow_validation_uses_real_dryrun_boundary(self) -> None:
