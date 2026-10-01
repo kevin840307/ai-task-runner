@@ -7,7 +7,7 @@ import pytest
 
 from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
-from runner.runtime.run_state import RunState, StateStore, set_stage
+from runner.runtime.run_state import RunState, StateStore, Task, set_stage
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.loader import WORKFLOWS, load_workflow
 from runner.workflow.stages import HandoffStageSpec, StageContext, StageResult
