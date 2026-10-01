@@ -226,6 +226,7 @@ def install_plan(
     session_id: str,
 ) -> None:
     state.ai_session_id = session_id
+    state.review_failures.clear()
     state.tasks = list(tasks)
     state.current = 0
     state.completed = False
@@ -238,6 +239,9 @@ def finish_task(ctx: StageContext) -> None:
     task = state.tasks[state.current]
     task.status = "completed"
     task.last_output = ""
+    suffix = f"::{task.id}"
+    for key in [key for key in state.review_failures if key.endswith(suffix)]:
+        state.review_failures.pop(key, None)
     state.ai_session_id = ctx.ai_client.session_id
     state.current += 1
     progress.set_status("任務完成", task.title)
