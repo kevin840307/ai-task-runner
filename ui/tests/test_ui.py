@@ -797,6 +797,39 @@ class HTTPServerSmokeTests(unittest.TestCase):
             finally:
                 server.shutdown(); server.server_close(); thread.join(timeout=2)
 
+    def test_stage_test_post_route_exists(self) -> None:
+        import threading
+        import urllib.error
+        import urllib.request
+        from ui.server import UIServer
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "ui" / "data").mkdir(parents=True)
+            (root / "ui" / "static").mkdir(parents=True)
+            server = UIServer(root, "127.0.0.1", 0)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{server.port}/api/studio/stage/test",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                try:
+                    urllib.request.urlopen(request, timeout=2)
+                except urllib.error.HTTPError as exc:
+                    self.assertNotEqual(exc.code, 404)
+                    self.assertEqual(exc.code, 400)
+                    payload = json.loads(exc.read().decode("utf-8"))
+                    self.assertIn("error", payload)
+                else:
+                    self.fail("invalid Stage Test request unexpectedly succeeded")
+            finally:
+                server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+
     def test_invalid_studio_get_returns_json_400(self) -> None:
         import threading
         import urllib.error
