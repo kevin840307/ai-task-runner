@@ -79,6 +79,21 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     if produces not in {None, "", "tasks"}:
         raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
 
+    max_failures = values.get("max_failures")
+    if max_failures is not None:
+        if stage_type != "review":
+            raise RunnerError(
+                f"workflow stage {name} max_failures is only valid for type: review"
+            )
+        if (
+            not isinstance(max_failures, int)
+            or isinstance(max_failures, bool)
+            or max_failures <= 0
+        ):
+            raise RunnerError(
+                f"workflow stage {name} max_failures must be a positive integer"
+            )
+
     runs = values.get("runs")
     required = values.get("required_passes")
     if runs is not None and (
