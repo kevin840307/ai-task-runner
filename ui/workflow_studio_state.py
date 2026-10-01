@@ -610,6 +610,16 @@ class WorkflowStudioMixin:
             raise ValueError(
                 "Stage session_key is only valid with session_policy: auto"
             )
+        max_failures = fields.get("max_failures")
+        if max_failures is not None:
+            if stage_type != "review":
+                raise ValueError("Stage max_failures is only valid for Review")
+            if (
+                not isinstance(max_failures, int)
+                or isinstance(max_failures, bool)
+                or max_failures <= 0
+            ):
+                raise ValueError("Stage max_failures must be a positive integer")
         policy = fields.get("error_policy")
         if policy is not None:
             if not isinstance(policy, dict) or set(policy) != {"retries"}:
