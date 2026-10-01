@@ -135,6 +135,36 @@ def test_live_builtin_final_ai_contract_matches_bundled_workflows():
     assert live.builtin_final_ai_contract("mixed") == (3, 2, True)
 
 
+def test_live_builtin_review_error_policy_contract_matches_bundled_workflows():
+    assert live.builtin_review_error_policy_contract() == {
+        "file": 2,
+        "ai": 2,
+        "mixed": 2,
+    }
+
+
+def test_live_builtin_review_error_policy_contract_rejects_missing_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    bad = tmp_path / "file.yaml"
+    bad.write_text(
+        """
+stages:
+  review:
+    type: review
+flow: [review]
+""",
+        encoding="utf-8",
+    )
+    workflows = dict(live.WORKFLOWS)
+    workflows["file"] = bad
+    monkeypatch.setattr(live, "WORKFLOWS", workflows)
+
+    with pytest.raises(RuntimeError, match="Review error_policy mismatch"):
+        live.builtin_review_error_policy_contract()
+
+
 def test_live_builtin_readonly_safety_contract_matches_bundled_workflows():
     assert live.builtin_readonly_safety_contract() == {
         "file": {"planning": "observe", "review": "observe"},
