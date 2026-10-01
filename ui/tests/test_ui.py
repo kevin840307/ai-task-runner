@@ -1371,6 +1371,41 @@ class WorkflowStudioTests(unittest.TestCase):
                 self.project,
             )
 
+    def test_stage_source_round_trip_uses_shared_yaml_validation(self) -> None:
+        item = self._workflow_item()
+        visual = self.state.studio_visual(item["id"], self.project)
+        review = next(stage for stage in visual["stages"] if stage["name"] == "review")
+
+        formatted = self.state.studio_stage_source(
+            item["id"], "review", "format", self.project, fields=review
+        )
+        self.assertTrue(formatted["ok"])
+        self.assertIn("type: review", formatted["source"])
+        self.assertNotIn("name:", formatted["source"])
+
+        parsed = self.state.studio_stage_source(
+            item["id"],
+            "review",
+            "parse",
+            self.project,
+            source="type: review\nscope: task\nmax_failures: 3\n",
+        )
+        self.assertEqual(parsed["fields"]["type"], "review")
+        self.assertEqual(parsed["fields"]["max_failures"], 3)
+
+        with self.assertRaisesRegex(ValueError, "immutable"):
+            self.state.studio_stage_source(
+                item["id"], "review", "parse", self.project, source="type: task\n"
+            )
+        with self.assertRaisesRegex(ValueError, "cannot be changed"):
+            self.state.studio_stage_source(
+                item["id"], "review", "parse", self.project, source="name: other\ntype: review\n"
+            )
+        with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
+            self.state.studio_stage_source(
+                item["id"], "review", "parse", self.project, source="type: review\nunknown_field: true\n"
+            )
+
     def test_stage_editor_rejects_max_failures_outside_review(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
