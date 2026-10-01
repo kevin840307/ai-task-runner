@@ -551,6 +551,26 @@ def builtin_review_error_policy_contract() -> dict[str, int]:
     return observed
 
 
+def builtin_review_max_failures_contract() -> dict[str, int]:
+    """Verify bundled Review stages keep the bounded semantic FAIL loop."""
+    from runner.workflow.loader import load_workflow
+
+    observed: dict[str, int] = {}
+    for workflow in ("file", "ai", "mixed"):
+        loaded = load_workflow(WORKFLOWS[workflow])
+        review = next(
+            (node for node in loaded if node.get("name") == "review" and node.get("type") == "review"),
+            None,
+        )
+        maximum = review.get("max_failures") if isinstance(review, dict) else None
+        if maximum != 3:
+            raise RuntimeError(
+                f"workflow/{workflow} Review max_failures mismatch: expected 3, got {maximum!r}"
+            )
+        observed[workflow] = int(maximum)
+    return observed
+
+
 def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
     """Verify bundled workflows default read-only AI stages to observe."""
     from runner.workflow.loader import load_workflow
@@ -3399,6 +3419,8 @@ def main() -> int:
     )
     review_error_policy = builtin_review_error_policy_contract()
     print("PASS built-in Review retries=2 -> fail-soft Skip contract preflight", flush=True)
+    review_max_failures = builtin_review_max_failures_contract()
+    print("PASS built-in Review max_failures=3 semantic FAIL cap preflight", flush=True)
     readonly_contract = builtin_readonly_safety_contract()
     print("PASS built-in Workflow readonly_safety observe contract preflight", flush=True)
     workflow_dryrun_negative_preflight()
@@ -3508,6 +3530,7 @@ def main() -> int:
         "stage_probe_live_preflight": stage_probe_live,
         "workflow_dryrun_preflight": True,
         "builtin_review_error_policy_contract": review_error_policy,
+        "builtin_review_max_failures_contract": review_max_failures,
         "builtin_readonly_safety_contract": readonly_contract,
         "workflow_dryrun_negative_preflight": True,
         "stage_result_mapping_preflight": True,
