@@ -47,10 +47,7 @@ UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。FlowEngine、StageExe
 ## Project policy
 所有維護中的 smoke/example project root 都應有 `.ai-task-runner.yaml`。Policy 本身自動 protected。Immutable input/reference fixture 應列成 protected；Task 本來要修改的檔案不可 protected。
 
-Project 責任集中在：
-- `runner/project/files.py`：manifest/change detection/restore/stale snapshot cleanup。
-- `runner/project/policy.py`：project policy 與 protected path。
-- `runner/project/instructions.py`：Runner-managed QWEN.md/AGENTS.md section。
+Project filesystem/policy 責任統一集中在 `runner/workspace.py`：manifest/change detection、protected path、reusable snapshot 與 project-level workspace helper。不要再建立平行的 `project/` service layer。
 
 ## Current Task 執行契約
 Fresh/Rebuilt Executor 收到 Current Task、Original Goal 作為 global context、必要 validator/review feedback 與完整 Stage instruction。正常 Same Session 已看過同一份 Stage Prompt contract 時，`continuation_prompt` 只補下一個 TODO 或新產生的 Review/Validator evidence；Recovery continuation 則更小，只帶 Stage identity、新 failure evidence、需要時的 readonly reminder 與下一步要求。
@@ -79,7 +76,7 @@ Workflow YAML 只保留兩個頂層 key：`stages` 定義命名 node，`flow` �
 PASS/FAIL result edge 是唯一 semantic routing 機制；backward edge 就是 rollback/loop。Technical ERROR 只由 StageExecutor retry/recovery，不建立 graph edge。不存在 public `recover`、`restart_at`、Repair Stage、repeat/max-attempt graph 或 hidden replan topology。Review 可刻意設定有限 local `error_policy.retries`；耗盡後 fail-soft Skip 到下一 Stage，因此後面仍應保留 authoritative Validator。
 
 ## Prompt Contract
-所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Top-level template variable 只能由 `runner/prompts/context.py` 提供，不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。
+所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Template context/rendering 統一由 `runner/prompting.py` 負責；不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。Bundled Prompt resource 位於 `runner/assets/prompts/<category>/`。
 
 一般寫入型 AI 工作使用 `type: task`，唯讀 verdict 工作使用 `type: review`；只有刻意需要通用 AI 行為時才使用 `type: base`。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、FlowEngine 禁止增加 Stage-name-specific branch。
 
