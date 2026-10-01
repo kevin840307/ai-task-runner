@@ -92,6 +92,21 @@ type ParameterSection = "content" | "execution" | "result" | "advanced";
 
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
+const STAGE_TEST_PROMPTS: Record<string, string> = {
+  plan: "Create a short, concrete implementation plan with 2-3 verifiable tasks for adding a simple health-check feature. Do not modify project files.",
+  task: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
+  review: "Review the isolated test task against its acceptance criteria and current evidence. Return PASS only if it is complete; otherwise return FAIL with concrete missing items.",
+  ai_validator: "Validate the isolated test result using the available evidence. Return the validator contract with a clear PASS/FAIL decision and concrete missing items when it fails.",
+  handoff: "Choose the most appropriate allowed next Stage for a simple implementation task and briefly explain the choice.",
+  base: "Reply with a concise confirmation that this isolated AI Stage test ran successfully.",
+};
+
+function stageTestPrompt(stage: Stage | null): string {
+  if (!stage) return "";
+  return STAGE_TEST_PROMPTS[stage.type] || "Perform one minimal isolated test for this Stage and return a concise result.";
+}
+
+
 const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[] }[] = [
   { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
   { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
@@ -108,7 +123,12 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.error) throw new Error(data?.error || response.statusText);
+  if (!response.ok || data?.error) {
+    if (response.status === 404 && url.includes("/api/studio/stage/test")) {
+      throw new Error("Stage Test API not found. Restart the local UI server so the backend matches this Full Designer build.");
+    }
+    throw new Error(data?.error || response.statusText);
+  }
   return data as T;
 }
 
@@ -1171,7 +1191,15 @@ function App() {
                   {(backendCatalog.backends || []).map((name) => <option key={name} value={name}>{name}{name === backendCatalog.default ? "（default）" : ""}</option>)}
                 </select></label>
                 {testMode === "stage"
-                  ? <label><span>Stage Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
+                  ? <label><span>Stage Input</span>
+                      <div className="test-input-actions">
+                        <button type="button" onClick={() => setTestInput(stageTestPrompt(draft))}>填入簡易測試 Prompt</button>
+                        {testInput && <button type="button" onClick={() => setTestInput("")}>清除</button>}
+                      </div>
+                      <textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5}
+                        placeholder={stageTestPrompt(draft) || "輸入這個積木要接收的內容"} />
+                      <small>依 Stage 類型提供最小合法測試內容；只作用於本次 isolated Stage Test，不會修改 Workflow Prompt。</small>
+                    </label>
                   : <div className="ping-prompt"><strong>固定 Prompt</strong><code>{AGENT_PING_PROMPT}</code><small>不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。</small></div>}
                 <button type="button" className="primary" onClick={() => void testStage()}
                   disabled={testing || busy || !testBackend}>{testing ? "測試中…" : testMode === "stage" ? "執行 Real Stage" : "執行 Agent Ping"}</button>
