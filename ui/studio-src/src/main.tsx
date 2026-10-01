@@ -52,6 +52,11 @@ type Catalog = {
   node_options?: Record<string, unknown>;
 };
 
+type BackendCatalog = {
+  default: string;
+  backends: string[];
+};
+
 type StudioFile = {
   id: string;
   kind: "workflow" | "prompt";
@@ -79,7 +84,10 @@ type StageTestResult = {
 };
 
 type InspectorTab = "settings" | "parameters" | "routing" | "test";
+type StageTestMode = "stage" | "agent_ping";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
+
+const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
 const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[] }[] = [
   { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
@@ -475,6 +483,7 @@ function App() {
   const { screenToFlowPosition } = useReactFlow();
   const [visual, setVisual] = useState<Visual | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [backendCatalog, setBackendCatalog] = useState<BackendCatalog>({ default: "", backends: [] });
   const [nodes, setNodes] = useState<Node<StudioNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selected, setSelected] = useState<string>("");
@@ -488,6 +497,8 @@ function App() {
   const [createCommand, setCreateCommand] = useState("");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("settings");
   const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
+  const [testMode, setTestMode] = useState<StageTestMode>("stage");
+  const [testBackend, setTestBackend] = useState("");
   const [testInput, setTestInput] = useState("");
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
   const [testError, setTestError] = useState("");
@@ -514,14 +525,17 @@ function App() {
       const filesUrl = query().project
         ? `/api/studio/files?project=${encodeURIComponent(query().project)}`
         : "/api/studio/files";
-      const [v, c, files] = await Promise.all([
+      const [v, c, files, backends] = await Promise.all([
         api<Visual>(endpoint("/api/studio/visual")),
         api<Catalog>("/api/workflow/catalog"),
         api<{ prompts?: StudioFile[] }>(filesUrl),
+        api<BackendCatalog>("/api/backends"),
       ]);
       setVisual(v);
       setCatalog(c);
       setPrompts(files.prompts || []);
+      setBackendCatalog(backends);
+      setTestBackend((current) => current || backends.default || backends.backends?.[0] || "");
       layoutRef.current = readLayout(v.id);
       const g = graphFor(v, c);
       setNodes(g.nodes);
@@ -609,7 +623,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({
           id: visual.id, project: query().project, stage: draft.name, input: testInput,
-          graph: graphDraft(visual),
+          backend: testBackend, probe_mode: testMode, graph: graphDraft(visual),
         }),
       });
       setTestResult(result);
@@ -1065,13 +1079,24 @@ function App() {
                 })}
               </div>}
               {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
-                <p>只測目前積木，不會繼續執行下一個 Stage。Technical ERROR 會依目前 error_policy 執行 retry/recover；測試完成後顯示最終結果與下一個目標。每次測試都使用隔離的臨時 Project，測完自動清除，不修改原始 YAML。</p>
-                <label><span>測試 Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
+                <p>測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 會使用目前草稿的 Prompt、Parser、Session Policy 與 Error Policy；Agent Ping 只驗證 backend/agent transport。</p>
+                <div className="test-mode-tabs" role="tablist" aria-label="Stage test mode">
+                  <button type="button" role="tab" aria-selected={testMode === "stage"} className={testMode === "stage" ? "active" : ""}
+                    onClick={() => { setTestMode("stage"); setTestResult(null); setTestError(""); }}>Real Stage</button>
+                  <button type="button" role="tab" aria-selected={testMode === "agent_ping"} className={testMode === "agent_ping" ? "active" : ""}
+                    onClick={() => { setTestMode("agent_ping"); setTestResult(null); setTestError(""); }}>Agent Ping</button>
+                </div>
+                <label><span>Backend</span><select value={testBackend} onChange={(e) => setTestBackend(e.target.value)}>
+                  {(backendCatalog.backends || []).map((name) => <option key={name} value={name}>{name}{name === backendCatalog.default ? "（default）" : ""}</option>)}
+                </select></label>
+                {testMode === "stage"
+                  ? <label><span>Stage Input</span><textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5} placeholder="輸入這個積木要接收的內容" /></label>
+                  : <div className="ping-prompt"><strong>固定 Prompt</strong><code>{AGENT_PING_PROMPT}</code><small>不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。</small></div>}
                 <button type="button" className="primary" onClick={() => void testStage()}
-                  disabled={testing || busy}>{testing ? "測試中…" : "執行單一積木"}</button>
+                  disabled={testing || busy || !testBackend}>{testing ? "測試中…" : testMode === "stage" ? "執行 Real Stage" : "執行 Agent Ping"}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>下一個：<strong>{testResult.next}</strong></span>
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span><span>下一個：<strong>{testResult.next}</strong></span>
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">Retry 用盡 → Skip</span>}</div>
                   <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
                   {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
