@@ -98,6 +98,7 @@ Stage 是唯一 execution / agent extension unit。
 - `review`
 - `ai_validator`
 - `command`
+- `handoff`
 
 Stage 只做一件事並回傳 `StageResult`。Stage 不實作 retry、recover、session rotation，也不決定 Workflow 下一步。
 
