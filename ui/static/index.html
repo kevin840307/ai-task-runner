@@ -165,11 +165,11 @@
       <div id="workflowStudioPage" class="designer-main studio-main">
         <header class="designer-topbar studio-topbar">
           <div>
-            <h1>Workflow Studio</h1>
-            <p data-i18n="studio.description">以 Visual 編排 Workflow；單擊 Stage 選取、雙擊編輯，右下角浮動工具可調整順序。YAML 模式可直接編輯 Workflow 或 Prompt。</p>
+            <h1>Workflow Settings</h1>
+            <p data-i18n="studio.description">管理 Workflow 與 Prompt。Workflow 使用統一的 Workflow Editor（Designer / YAML）；Prompt 使用獨立 Prompt Editor。</p>
           </div>
           <div class="designer-topbar-actions">
-            <div class="designer-mode-switch" role="group" aria-label="Workflow editor mode">
+            <div id="studioEditorModeSwitch" class="designer-mode-switch" role="group" aria-label="Legacy workflow editor mode" hidden>
               <button id="visualModeButton" class="active" type="button">Visual</button>
               <button id="yamlModeButton" type="button">YAML</button>
             </div>
@@ -201,7 +201,7 @@
           <main class="studio-workflow-main">
             <div id="studioEmpty" class="studio-empty">
               <h2>Select a Workflow or Prompt</h2>
-              <p data-i18n="studio.empty_desc">Workflow 可用 Visual / YAML；Prompt 在兩種模式都使用相同的 Prompt Editor。</p>
+              <p data-i18n="studio.empty_desc">Workflow 會在 Workflow Editor 中開啟；Prompt 會在這裡使用 Prompt Editor 編輯。</p>
             </div>
 
             <div id="studioEditor" class="studio-workflow-editor" hidden>
@@ -230,7 +230,7 @@
                         <button id="deleteStudioButton" class="designer-danger studio-menu-danger" type="button" role="menuitem">Delete</button>
                       </div>
                     </div>
-                    <button id="openFullDesignerButton" class="studio-secondary-action" type="button" hidden>Full Designer</button>
+                    <button id="openFullDesignerButton" class="studio-secondary-action" type="button" hidden>Edit Workflow</button>
                     <button id="validateStudioButton" class="studio-validate-action" type="button">Validate</button>
                     <button id="saveStudioButton" class="primary studio-save-action" type="button">Save</button>
                   </div>
