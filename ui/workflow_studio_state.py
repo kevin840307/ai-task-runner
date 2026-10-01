@@ -496,6 +496,7 @@ class WorkflowStudioMixin:
                             "input": input_text,
                             "workflow": data,
                             "probe_mode": str(probe_mode or "stage"),
+                            "test_scenario": str(test_scenario or "pass"),
                         },
                         ensure_ascii=False,
                     ),
