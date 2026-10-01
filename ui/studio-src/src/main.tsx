@@ -151,7 +151,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <div className="wf-stage-head">
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
         {s.scope === "task" && <b>↻ Task</b>}
-        {reviewErrorSkip && <b className="error-skip">ERR×{errorRetries} → SKIP</b>}
+        {reviewErrorSkip && <b className="error-skip">ERR retry×{errorRetries} → SKIP</b>}
         {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
       </div>
       <strong title={title}>{title}</strong>
@@ -163,8 +163,8 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
         <Handle className="pass handoff" type="source" position={Position.Bottom}
           id="handoff" style={{ left: "50%" }} />
       ) : <>
-        <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "34%" }} />
-        <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "66%" }} />
+        <Handle className="pass" type="source" position={Position.Bottom} id="pass" style={{ left: "25%" }} />
+        <Handle className="fail" type="source" position={Position.Bottom} id="fail" style={{ left: "75%" }} />
       </>}
     </div>
   );
@@ -1101,7 +1101,8 @@ function App() {
                   disabled={testing || busy || !testBackend}>{testing ? "測試中…" : testMode === "stage" ? "執行 Real Stage" : "執行 Agent Ping"}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span><span>下一個：<strong>{testResult.next}</strong></span>
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
+                    {testMode === "stage" && <span>下一個：<strong>{testResult.next}</strong></span>}
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">Retry 用盡 → Skip</span>}</div>
                   <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
                   {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
