@@ -27,6 +27,8 @@ def test_react_studio_connecting_any_result_edge_adds_disconnected_stages_to_flo
 
     assert "if (!nextFlow.includes(connection.source))" in text
     assert "if (connection.target !== END && !nextFlow.includes(connection.target))" in text
+    assert 'if (status === "pass" || status === "handoff")' in text
+    assert "A FAIL branch must not change the source Stage's implicit PASS -> next." in text
     assert "const index = nextFlow.indexOf(stage.name)" in text
 
 
