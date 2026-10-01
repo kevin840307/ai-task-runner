@@ -441,6 +441,7 @@ class WorkflowStudioMixin:
         *,
         backend: str = "",
         probe_mode: str = "stage",
+        test_scenario: str = "pass",
         graph: dict | None = None,
     ) -> dict:
         """Execute one Stage in a disposable Project, including unsaved graph drafts."""
