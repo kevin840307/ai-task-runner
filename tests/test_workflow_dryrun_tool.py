@@ -81,6 +81,7 @@ def test_dryrun_matrix_covers_semantic_routes_and_safe_stop():
     assert "validate_file FAIL -> planning -> closure" in names
     assert "validate_ai FAIL -> planning -> closure" in names
     assert "planning ERROR -> stop" in names
+    assert "review ERROR -> next -> closure" in names
 
 
 def test_dryrun_supports_custom_task_producer():
