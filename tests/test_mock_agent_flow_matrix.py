@@ -120,7 +120,7 @@ flow:
         monkeypatch,
         "dynamic_handoff",
         backend=backend,
-        workflow=str(workflow),
+        workflow_file=str(workflow),
         final_ai_validations=1,
         final_ai_required_passes=1,
     )
