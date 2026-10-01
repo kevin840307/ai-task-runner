@@ -49,7 +49,7 @@ Session policy 與 routing 解耦：
 - `fresh`：每次 invocation 獨立 Session；
 - `auto`：built-in/default profile 行為。
 
-因此 coding team、review board、triage、discussion 都能用同一 Handoff graph 表達，不需要新增 runtime type。
+因此可用同一 Handoff graph 表達動態 specialist routing，不需要新增另一套 runtime family。
 
 ## Prompt / Session 契約
 
@@ -76,7 +76,7 @@ UI backend 使用與 runtime loader 相同的 catalog/schema 驗證。
 - Pipeline/TaskRunner compatibility runtime；
 - repair/recover/restart_at/repeat/max_attempts/on_exhausted graph control；
 - `routes.error`；
-- Discussion controller runtime；
+- Discussion / Group Chat runtime 或 UI mode；
 - generic AgentMessage / scheduler framework；
 - generic parallel DAG engine。
 
