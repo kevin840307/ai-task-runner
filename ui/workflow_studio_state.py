@@ -435,6 +435,7 @@ class WorkflowStudioMixin:
         project: Path | None = None,
         *,
         backend: str = "",
+        probe_mode: str = "stage",
         graph: dict | None = None,
     ) -> dict:
         """Execute one Stage in a disposable Project, including unsaved graph drafts."""
@@ -484,7 +485,14 @@ class WorkflowStudioMixin:
                     cwd=str(self.repo_root),
                     capture_output=True,
                     text=True,
-                    input=json.dumps({"input": input_text, "workflow": data}, ensure_ascii=False),
+                    input=json.dumps(
+                        {
+                            "input": input_text,
+                            "workflow": data,
+                            "probe_mode": str(probe_mode or "stage"),
+                        },
+                        ensure_ascii=False,
+                    ),
                     timeout=900,
                     check=False,
                 )
