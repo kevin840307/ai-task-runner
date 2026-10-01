@@ -317,6 +317,18 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.click("#workflowNav")
             assert page.locator("#workflowNav").evaluate("node => node.classList.contains('active')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+            page.click("#settingsNav")
+            assert page.locator("#themePanel").is_visible()
+            assert page.locator("#settingsNav").evaluate("node => node.classList.contains('active')")
+            settings_box = page.locator("#themePanel").bounding_box()
+            assert settings_box
+            assert settings_box["x"] >= 0 and settings_box["y"] >= 0
+            assert settings_box["x"] + settings_box["width"] <= viewport["width"] + 1
+            assert settings_box["y"] + settings_box["height"] <= viewport["height"] + 1
+            page.keyboard.press("Escape")
+            assert not page.locator("#themePanel").is_visible()
+            assert page.locator("#workflowNav").evaluate("node => node.classList.contains('active')")
             body = page.locator(".studio-designer-body").bounding_box()
             sidebar = page.locator(".studio-workflow-sidebar").bounding_box()
             assert body and sidebar
