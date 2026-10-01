@@ -413,7 +413,7 @@ class WorkflowStudioMixin:
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
-            "type", "status", "label", "scope", "routes", "error_policy", "validator",
+            "type", "status", "label", "scope", "routes", "error_policy", "max_failures", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
