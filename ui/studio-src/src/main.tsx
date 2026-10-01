@@ -135,12 +135,15 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const s = data.stage!;
   const title = String(s.label || s.name);
   const dynamicRouter = s.type === "handoff";
+  const errorRetries = s.error_policy?.retries;
+  const reviewErrorSkip = s.type === "review" && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
         <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
         {s.scope === "task" && <b>↻ Task</b>}
+        {reviewErrorSkip && <b className="error-skip">ERR×{errorRetries} → SKIP</b>}
         {dynamicRouter && <b>{(s.targets || []).length} targets</b>}
       </div>
       <strong title={title}>{title}</strong>
@@ -664,18 +667,20 @@ function App() {
     }
     if (connection.source === END || connection.target === START || !["pass", "fail", "handoff"].includes(status)) return;
     if (status === "handoff" && connection.target === END) return;
-    let nextFlow = visual.flow;
-    if ((status === "pass" || status === "handoff") && connection.target !== END && !visual.flow.includes(connection.target)) {
-      const sourceIndex = visual.flow.indexOf(connection.source);
-      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : visual.flow.length;
-      nextFlow = [...visual.flow];
+    let nextFlow = [...visual.flow];
+    if (!nextFlow.includes(connection.source)) {
+      nextFlow.push(connection.source);
+    }
+    if (connection.target !== END && !nextFlow.includes(connection.target)) {
+      const sourceIndex = nextFlow.indexOf(connection.source);
+      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
       nextFlow.splice(insertAt, 0, connection.target);
     }
     const stages = visual.stages.map((stage) => {
       if (stage.name !== connection.source) return stage;
       const routes = { ...(stage.routes || {}) };
-      const index = visual.flow.indexOf(stage.name);
-      const nextName = visual.flow[index + 1];
+      const index = nextFlow.indexOf(stage.name);
+      const nextName = nextFlow[index + 1];
       let target = connection.target!;
       if (status === "handoff") {
         const targets = Array.from(new Set([...(stage.targets || []), target]));
@@ -1013,8 +1018,10 @@ function App() {
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>結果連線</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
-                <p>ERROR 只依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。重試用盡會記錄錯誤並停在目前 Stage。</p>
-                <label className="route-policy-field"><span>ERROR 重試次數</span><input type="number" min={-1}
+                {draft.type === "review"
+                  ? <p>Review 是 fail-soft gate：設定有限次數時，ERROR retry 用盡後會 Skip 到下一個 Stage；-1 代表無限 retry。留空則沿用全域 stage_retries，且不啟用 Review 專屬 Skip。</p>
+                  : <p>ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。</p>}
+                <label className="route-policy-field"><span>{draft.type === "review" ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
                   onChange={(event) => {
                     const raw = event.target.value;
@@ -1027,6 +1034,10 @@ function App() {
                       editDraft({ ...draft, error_policy: { retries } });
                     }
                   }} /></label>
+                {draft.type === "review" && Number.isInteger(draft.error_policy?.retries) && Number(draft.error_policy?.retries) >= 0 &&
+                  <div className="route-row error-skip-row"><span className="route-dot error" />
+                    <strong>ERROR</strong><span>重試耗盡 → 下一個積木（Skip Review）</span>
+                  </div>}
                 <div className="route-section-title">從這個積木出去</div>
                 {draft.type === "handoff"
                   ? edges.filter((edge) => edge.source === draft.name && edge.data?.status === "handoff").map((edge) =>
