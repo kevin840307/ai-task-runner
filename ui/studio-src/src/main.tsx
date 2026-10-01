@@ -148,7 +148,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
-      <div className="wf-handles">
+      <div className={`wf-handles ${dynamicRouter ? "single" : ""}`}>
         {dynamicRouter ? <span>HANDOFF</span> : <><span>PASS</span><span>FAIL</span></>}
       </div>
       {dynamicRouter ? (
@@ -736,6 +736,7 @@ function App() {
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
+    if (stageType === "review") stage.error_policy = { retries: 2 };
     const next = { ...visual, stages: [...visual.stages, stage] };
     setVisual(next);
     if (position) {
