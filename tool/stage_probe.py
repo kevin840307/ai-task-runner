@@ -6,6 +6,7 @@ import argparse
 import json
 import shutil
 import sys
+import time
 import uuid
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ from runner.workflow.registry import create_stage
 from runner.workflow.stages import BaseStage, StageResult
 from runner.workflow_runner import WorkflowRunner
 
+AGENT_PING_TIMEOUT_SECONDS = 60
 AGENT_PING_PROMPT = (
     "Reply with exactly AGENT_PING_OK and nothing else. "
     "Do not use tools, do not modify files, and do not inspect the project."
@@ -82,11 +84,16 @@ def _draft_next(
     return (str(flow[index + 1]) if index >= 0 and index + 1 < len(flow) else "done"), route
 
 
-def _agent_ping(client, timeout: int | float) -> str:
+def _agent_ping(client, timeout: int | float) -> tuple[str, float]:
     """Call the configured backend once with a fixed no-tool transport probe."""
     client.session_id = ""
     client.set_runtime("no_tool", allow_project_read=False, sandbox=False)
-    return client.ask(AGENT_PING_PROMPT, timeout=int(timeout))
+    started = time.monotonic()
+    output = client.ask(
+        AGENT_PING_PROMPT,
+        timeout=min(AGENT_PING_TIMEOUT_SECONDS, max(1, int(timeout))),
+    )
+    return output, time.monotonic() - started
 
 
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
@@ -147,13 +154,17 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             runner = WorkflowRunner(config)
 
             if str(getattr(args, "probe_mode", "stage") or "stage") == "agent_ping":
-                output = _agent_ping(runner.context.ai_client, config.agent_timeout)
+                output, elapsed = _agent_ping(runner.context.ai_client, config.agent_timeout)
                 return {
                     "ok": True,
                     "stage": args.stage,
                     "status": "pass",
                     "output": output,
-                    "data": {"prompt": AGENT_PING_PROMPT, "backend": config.backend},
+                    "data": {
+                        "prompt": AGENT_PING_PROMPT,
+                        "backend": config.backend,
+                        "elapsed_seconds": round(elapsed, 3),
+                    },
                     "changed_files": [],
                     "next": "not-run",
                     "route": "agent_ping",
