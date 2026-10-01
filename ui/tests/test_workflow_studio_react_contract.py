@@ -72,8 +72,20 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
-    assert 'if (stageType === "review") stage.error_policy = { retries: 2 };' in text
+    assert 'stage.error_policy = { retries: 2 };' in text
+    assert "stage.max_failures = 3" in text
+    assert "Semantic FAIL 上限（max_failures）" in text
+    assert "FAIL×{Number(draft.max_failures)}" in text
     assert '["pass", "fail", "error"]' not in text
+
+
+def test_react_studio_has_searchable_palette_and_safe_stage_duplicate():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'placeholder="搜尋 Stage…"' in text
+    assert "paletteQuery" in text
+    assert "duplicateStage" in text
+    assert "結果連線不會一起複製" in text
 
 
 def test_full_designer_generated_output_has_one_source_and_build_path():
