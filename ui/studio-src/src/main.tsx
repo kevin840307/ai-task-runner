@@ -64,6 +64,8 @@ type StudioFile = {
   name: string;
   display_name?: string;
   reference?: string;
+  content?: string;
+  hash?: string;
 };
 
 type StudioNodeData = {
@@ -87,6 +89,7 @@ type StageTestResult = {
 };
 
 type InspectorTab = "settings" | "parameters" | "routing" | "test";
+type WorkflowEditorView = "designer" | "yaml";
 type StageTestMode = "stage" | "agent_ping";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
 
@@ -94,7 +97,7 @@ type DesignerLanguage = "zh-TW" | "en";
 const DESIGNER_LANGUAGE_KEY = "ai-task-runner.language";
 const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
   "zh-TW": {
-    back: "← 返回 Workflow 設定", mode: "Workflow Designer · 編輯模式", unsaved: "未儲存草稿",
+    back: "← 返回 Workflow 設定", mode: "Workflow Editor", unsaved: "未儲存草稿", designer_view: "Designer", yaml_view: "YAML",
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
@@ -110,7 +113,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
   },
   en: {
-    back: "← Back to Workflow Settings", mode: "Workflow Designer · Edit Mode", unsaved: "Unsaved draft",
+    back: "← Back to Workflow Settings", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
@@ -603,6 +606,10 @@ function App() {
   }, []);
   const { screenToFlowPosition } = useReactFlow();
   const [visual, setVisual] = useState<Visual | null>(null);
+  const [editorView, setEditorView] = useState<WorkflowEditorView>("designer");
+  const [yamlContent, setYamlContent] = useState("");
+  const [yamlOriginal, setYamlOriginal] = useState("");
+  const [yamlError, setYamlError] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [backendCatalog, setBackendCatalog] = useState<BackendCatalog>({ default: "", backends: [] });
   const [nodes, setNodes] = useState<Node<StudioNodeData>[]>([]);
@@ -657,13 +664,17 @@ function App() {
       const filesUrl = query().project
         ? `/api/studio/files?project=${encodeURIComponent(query().project)}`
         : "/api/studio/files";
-      const [v, c, files, backends] = await Promise.all([
+      const [v, file, c, files, backends] = await Promise.all([
         api<Visual>(endpoint("/api/studio/visual")),
+        api<StudioFile>(endpoint("/api/studio/file")),
         api<Catalog>("/api/workflow/catalog"),
         api<{ prompts?: StudioFile[] }>(filesUrl),
         api<BackendCatalog>("/api/backends"),
       ]);
       setVisual(v);
+      setYamlContent(String(file.content || ""));
+      setYamlOriginal(String(file.content || ""));
+      setYamlError("");
       setCatalog(c);
       setPrompts(files.prompts || []);
       setBackendCatalog(backends);
@@ -673,6 +684,7 @@ function App() {
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(false);
+      setEditorView("designer");
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -715,12 +727,15 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
+  const yamlDirty = yamlContent !== yamlOriginal;
+  const editorDirty = dirtyGraph || yamlDirty;
+
   useEffect(() => {
-    if (!dirtyGraph) return;
+    if (!editorDirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirtyGraph]);
+  }, [editorDirty]);
 
   useEffect(() => {
     if (!visual || !selected) { setDraft(null); return; }
@@ -804,7 +819,7 @@ function App() {
   }
 
   const persistGraph = useCallback(async (nextVisual: Visual): Promise<Visual> => {
-    const result = await api<{ visual: Visual }>("/api/studio/graph/save", {
+    const result = await api<{ visual: Visual; file?: StudioFile }>("/api/studio/graph/save", {
       method: "POST",
       body: JSON.stringify({
         id: nextVisual.id,
@@ -814,6 +829,10 @@ function App() {
       }),
     });
     setVisual(result.visual);
+    if (result.file?.content != null) {
+      setYamlContent(String(result.file.content));
+      setYamlOriginal(String(result.file.content));
+    }
     const g = graphFor(result.visual, catalog);
     setNodes(g.nodes);
     setEdges(g.edges);
@@ -821,18 +840,94 @@ function App() {
     return result.visual;
   }, [catalog, graphFor]);
 
-  const saveGraph = useCallback(async (nextVisual = visual) => {
-    if (!nextVisual) return;
+  const saveGraph = useCallback(async (nextVisual = visual): Promise<boolean> => {
+    if (!nextVisual) return false;
     setBusy(true);
     try {
       await persistGraph(nextVisual);
       setMessage("Workflow saved");
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       setBusy(false);
     }
   }, [visual, persistGraph]);
+
+  async function saveYaml(): Promise<boolean> {
+    if (!visual || !yamlDirty) return true;
+    setBusy(true);
+    setYamlError("");
+    try {
+      const check = await api<{ ok: boolean; summary?: string; line?: number; column?: number }>("/api/studio/check", {
+        method: "POST",
+        body: JSON.stringify({ id: visual.id, project: query().project, content: yamlContent }),
+      });
+      if (!check.ok) {
+        const detail = `YAML ${check.line || "?"}:${check.column || "?"} · ${check.summary || "invalid"}`;
+        setYamlError(detail);
+        setMessage(detail);
+        return false;
+      }
+      const saved = await api<StudioFile>("/api/studio/save", {
+        method: "POST",
+        body: JSON.stringify({ id: visual.id, project: query().project, content: yamlContent, hash: visual.hash }),
+      });
+      const refreshed = await api<Visual>(endpoint("/api/studio/visual"));
+      setYamlContent(String(saved.content || yamlContent));
+      setYamlOriginal(String(saved.content || yamlContent));
+      setVisual(refreshed);
+      const g = graphFor(refreshed, catalog);
+      setNodes(g.nodes);
+      setEdges(g.edges);
+      setDirtyGraph(false);
+      setMessage("Workflow saved");
+      return true;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setYamlError(detail);
+      setMessage(detail);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveCurrent(): Promise<boolean> {
+    return editorView === "yaml" ? saveYaml() : saveGraph();
+  }
+
+  function switchEditorView(next: WorkflowEditorView) {
+    if (next === editorView) return;
+    const currentDirty = editorView === "yaml" ? yamlDirty : dirtyGraph;
+    const apply = async () => {
+      if (currentDirty) {
+        const saved = await saveCurrent();
+        if (!saved) return;
+      }
+      if (next === "designer" && visual) {
+        const refreshed = await api<Visual>(endpoint("/api/studio/visual"));
+        setVisual(refreshed);
+        const g = graphFor(refreshed, catalog);
+        setNodes(g.nodes);
+        setEdges(g.edges);
+      } else if (next === "yaml" && visual) {
+        const file = await api<StudioFile>(endpoint("/api/studio/file"));
+        setYamlContent(String(file.content || ""));
+        setYamlOriginal(String(file.content || ""));
+      }
+      setEditorView(next);
+      setYamlError("");
+    };
+    if (!currentDirty) { void apply(); return; }
+    requestConfirm({
+      title: "儲存並切換視圖？",
+      message: "Workflow Editor 只維護一份 canonical YAML。先儲存目前修改，再切換 Designer / YAML，避免兩份草稿分岔。",
+      confirmLabel: "儲存並切換",
+      action: apply,
+    });
+  }
 
   const connect = useCallback((connection: Connection) => {
     if (!visual || !connection.source || !connection.target) return;
@@ -1124,7 +1219,7 @@ function App() {
 
   function leaveStudio() {
     const leave = () => { window.location.href = workflowStudioUrl(); };
-    if (!dirtyGraph) { leave(); return; }
+    if (!editorDirty) { leave(); return; }
     requestConfirm({
       title: "捨棄未儲存變更？",
       message: "目前 Workflow 還有未儲存的草稿。離開後這些變更會遺失。",
@@ -1135,7 +1230,7 @@ function App() {
   }
 
   function reloadStudio() {
-    if (!dirtyGraph) { void load(); return; }
+    if (!editorDirty) { void load(); return; }
     requestConfirm({
       title: "重新載入 Workflow？",
       message: "目前未儲存的 Workflow 草稿會被捨棄，並重新載入磁碟上的版本。",
@@ -1164,19 +1259,23 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           <button className="ghost" onClick={leaveStudio}>{tx("back")}</button>
           <strong>{visual.name}</strong>
           <span>{tx("mode")}</span>
+          <div className="workflow-editor-view-switch" role="tablist" aria-label="Workflow editor view">
+            <button type="button" role="tab" aria-selected={editorView === "designer"} className={editorView === "designer" ? "active" : ""} onClick={() => switchEditorView("designer")}>{tx("designer_view")}</button>
+            <button type="button" role="tab" aria-selected={editorView === "yaml"} className={editorView === "yaml" ? "active" : ""} onClick={() => switchEditorView("yaml")}>{tx("yaml_view")}</button>
+          </div>
         </div>
         <div>
           {message && <span className="message">{message}</span>}
-          {dirtyGraph && <span className="unsaved-badge">{tx("unsaved")}</span>}
-          <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>
+          {editorDirty && <span className="unsaved-badge">{tx("unsaved")}</span>}
+          {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>}
           <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
-          <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
+          <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}>
             {busy ? tx("saving") : tx("save")}
           </button>
         </div>
       </header>
 
-      <section className="studio-body">
+      {editorView === "designer" ? <section className="studio-body">
         <aside className="palette">
           <div className="palette-head">
             <div className="palette-title-row"><span><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong></span>
@@ -1547,7 +1646,21 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </footer>
           </aside>
         </div>}
-      </section>
+      </section> : <section className="workflow-yaml-view">
+        <div className="workflow-yaml-toolbar">
+          <div><strong>Workflow YAML</strong><small>Canonical workflow definition · Ctrl+S = Save</small></div>
+          {yamlError && <span className="workflow-yaml-error">{yamlError}</span>}
+        </div>
+        <textarea className="workflow-yaml-editor" value={yamlContent}
+          onChange={(event) => { setYamlContent(event.target.value); setYamlError(""); }}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+              event.preventDefault();
+              void saveYaml();
+            }
+          }}
+          spellCheck={false} autoCapitalize="off" autoComplete="off" />
+      </section>}
     </main>
   );
 }
