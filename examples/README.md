@@ -21,21 +21,21 @@ examples\11_regression_workflow_demo\run_example.bat --backend qwen
 The suite is intentionally small and diagnostic:
 
 1. `01_basic_command_validator` — baseline Python hard validation.
-2. `02_repair_cycle` — starter bug intended to exercise Validator FAIL → repair.
+2. `02_repair_cycle` — starter bug retained by folder name only; it exercises Validator FAIL → route back to an earlier execution stage.
 3. `03_ai_validator_voting` — AI-only final validation with 3 independent fresh-session votes.
 4. `04_mixed_validation` — Python hard gate plus AI semantic majority vote.
-5. `05_ai_quality_repair` — hard behavior checks plus an AI genericity/quality gate.
+5. `05_ai_quality_repair` — hard behavior checks plus an AI genericity/quality gate; the folder name is historical and does not represent a Repair Stage.
 6. `06_yaml_driven_tool` — a small application that consumes YAML; the outer `examples.yaml` simultaneously exercises Runner YAML batch mode.
 7. `07_blackbox_medium` — medium task whose validator inspects only CLI outputs, never implementation structure.
 8. `08_config_driven_data_pipeline` — mixed-validation data pipeline with black-box behavioral checks.
 9. `09_config_environment_auditor` — mixed-validation config auditor covering multiple file formats and clean reruns.
 10. `10_skill_prompt_review_workflow` — runnable custom Workflow project retained at the legacy example path, now exercised with the two-stage Ralphy + mandatory AI validation Workflow.
-11. `11_regression_workflow_demo` — six-action Regression workflow with shared Review/Grill/Fix skills, bounded recovery feedback, continuation prompts, and 5-agent fresh-session final validation.
+11. `11_regression_workflow_demo` — Regression workflow using ordinary Stages, PASS/FAIL result edges, shared feedback, and independent fresh-session final validation.
 
 Each YAML item has its own `project_root`. Relative item roots are resolved against the outer `--project-root`. Each project keeps `prompt.md`, Python `validation.py`, and optional `ai_validation.md` inside its root but lists them in `.ai-task-runner.yaml` `protected_paths`; the policy file itself is automatically protected. `examples.yaml` references the prompt and AI validation files through `goal_file` and `ai_validator_prompt_file`. YAML items may also override task-scoped CLI settings such as `validator_args`, timeouts/retry policy, and Final-AI quorum.
 All Python example validators use the shared `ai_task_runner_validator.ValidatorReport` contract. Functional failures are reported through `ValidatorReport.error()`, JSON outputs use `parse_json()` where applicable, and full reports are written under each project's `.ai-task-runner/validator-reports/`.
 
-Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability custom workflow lives at `../runner/workflow/custom/common/ralphy_ai_validate.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project; the legacy example folder name is kept for compatibility.
+Workflow schema examples live in the folder that owns them. `workflow_multi_prompt.yaml` is the original compact multi-prompt example. The Qwen live reliability workflow is `../runner/assets/workflows/ralphy_ai_validate.yaml`; `10_skill_prompt_review_workflow` runs that workflow against a real project. Historical example folder names do not define runtime contracts.
 
 Validation-mode workflow example: `validation_modes.yaml` shows the automatic built-in mapping:
 
