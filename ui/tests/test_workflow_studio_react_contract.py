@@ -53,6 +53,7 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
+    assert 'if (stageType === "review") stage.error_policy = { retries: 2 };' in text
     assert '["pass", "fail", "error"]' not in text
 
 
