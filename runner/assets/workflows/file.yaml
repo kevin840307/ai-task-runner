@@ -14,6 +14,8 @@ stages:
     scope: task
     status: AI 正在確認任務是否完成
     readonly_safety: observe
+    error_policy:
+      retries: 2
     routes:
       fail: execute
 
