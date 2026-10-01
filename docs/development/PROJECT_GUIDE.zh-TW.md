@@ -38,7 +38,7 @@ CLI／programmatic UI／Skill／Python 都應使用 `runner.api.RunRequest` / `r
 `runner/bootstrap.py` 是 composition root；Backend/Plugin registry 只在邊界組裝依賴。Workflow 不應自行 discover Plugin 或 Backend。
 
 ## UI／Extension 維護邊界
-UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。Pipeline、StageExecutor、Stage、AI client、Workflow loader 都不得 import UI。外部 Stage／Backend 先透過 installed extension 在 Workflow validation 前註冊；runtime-only Plugin 之後才透過 Hook/Event boundary attach。新增外部 Stage 不得要求 Pipeline 增加 Stage-name branch。
+UI 是與 CLI 同層的 Adapter，不是 Workflow Plugin。FlowEngine、StageExecutor、Stage、AI client、Workflow loader 都不得 import UI。外部 Stage／Backend 先透過 installed extension 在 Workflow validation 前註冊；runtime-only Plugin 之後才透過 Hook/Event boundary attach。新增外部 Stage 不得要求 FlowEngine 增加 Stage-name branch。
 
 可編輯 Workflow／Prompt 使用共用 atomic resource function 與 optimistic `expected_hash`；active Run 一律使用自己的 durable Workflow／Stage Prompt／Goal／Final-AI Prompt snapshot。UI 多 Run 優先採一個 Run 一個 worker process 做隔離，不要只為 UI 把全域 runtime 改造成複雜的 in-process concurrency。
 
@@ -74,18 +74,18 @@ Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭
 
 YAML batch mode 已支援，並支援每筆獨立 `project_root`、`goal_file`、`workflow_file`、AI validation count/required passes。每筆使用自己的 nested state；runtime scope 必須在 child item 結束後恢復 parent，禁止全域 state leakage。
 
-Workflow YAML 只保留兩個頂層 key：`stages` 定義可重用命名 node，`flow` 定義靜態頂層順序。`recover` 可以直接包含靜態 recovery Stage sequence；不再有 reusable-subflow、`expand` 或 `foreach` DSL。Registry 只保留 `type -> class`。優先使用語意化內建 Stage（`plan`、`task`、`review`、`ai_validator`、`command`），讓安全預設留在 Stage 本身；只有刻意需要通用 AI 行為時才用 `base`。`PlanStage` 是內建 Task Producer。頂層 Plan 會透過 Loader normalization 自動進入內建 `Task -> Review -> Repair（FAIL 時）-> Review` task lifecycle，因此一般 YAML 不需要重複寫這兩個 flow node。任何 Stage 仍可宣告 `produces: tasks`；顯式連續 `scope: task` 只保留給進階／自訂 Task Producer 或自訂逐 TODO SOP，一般 Stage class 仍完全不知道 routing。
+Workflow YAML 只保留兩個頂層 key：`stages` 定義命名 node，`flow` 定義其順序與 membership。Registry 只保留 `type -> class`。優先使用語意化內建 Stage（`plan`、`task`、`review`、`ai_validator`、`command`）；只有刻意需要通用 AI 行為時才用 `base`。Task Producer 產生公開 Task contract；連續的 `scope: task` Stage 定義逐 TODO SOP。
 
-頂層 Stage 的有效 FAIL 或 recovery 用盡後需要回到目前／更前面的 Workflow 位置時，使用共用的 1-based YAML `restart_at`。Session recovery、Task production 與 completion rule 應留在既有語意 owner，不做成任意 YAML topology。
+PASS/FAIL result edge 是唯一 semantic routing 機制；backward edge 就是 rollback/loop。Technical ERROR 只由 StageExecutor retry/recovery，不建立 graph edge。不存在 public `recover`、`restart_at`、Repair Stage、repeat/max-attempt graph 或 hidden replan topology。Review 可刻意設定有限 local `error_policy.retries`；耗盡後 fail-soft Skip 到下一 Stage，因此後面仍應保留 authoritative Validator。
 
 ## Prompt Contract
 所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Top-level template variable 只能由 `runner/prompts/context.py` 提供，不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。
 
-一般寫入型 AI 工作使用 `type: task`，唯讀 verdict 工作使用 `type: review`；只有刻意需要通用 AI 行為時才使用 `type: base`。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、Pipeline 禁止增加 Stage-name-specific branch。
+一般寫入型 AI 工作使用 `type: task`，唯讀 verdict 工作使用 `type: review`；只有刻意需要通用 AI 行為時才使用 `type: base`。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、FlowEngine 禁止增加 Stage-name-specific branch。
 
-Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 由 `StageResult.kind` 選擇少量 reducer（`tasks`、`task`、`review`、`validation`、`generic`），串接留在通用 Pipeline/routing data。
+Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 由 `StageResult.kind` 選擇少量 reducer（`tasks`、`task`、`review`、`validation`、`generic`），串接留在通用 FlowEngine/routing data。
 
-共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。User-facing Stage spec 只 expose 直接 override，例如 `retry`、`timeout`、`skip_on_error`、`track_changes`、`session_key`、`prompt`、`parser`；`retry_attr`、`timeout_attr`、`client_cache_key` 這類 implementation lookup name 只由舊版 YAML Loader 相容層接受；Stage 執行本身只使用直接的 `retry` / `timeout` 或 Stage-owned default。Routing-only 欄位（`recover`、`repeat`、`max_attempts`、`on_exhausted`、`fresh_after_same_failures`、`restart_at`、`label`、`scope`）屬於 `FlowNode`，建立 Stage 前會移除。`retry: 0` 表示不做 Same Session retry，錯誤會直接升級到既有 Fresh Session recovery；retry budget 為 0 時不允許 `skip_on_error`。
+共通 Stage 執行能力由 `StageExecutor` 統一擁有，不得在各 Stage 內重寫。Public common control 刻意維持很小：`error_policy.retries`、`timeout`、`track_changes`、`readonly_safety`、`session_policy`、`session_key`、`prompt`，以及 registry catalog 暴露的 Stage-specific option。`routes` 只接受 PASS/FAIL semantic target。已移除的 `retry`、`skip_on_error`、`recover`、`repeat`、`max_attempts`、`on_exhausted`、`fresh_after_same_failures`、`restart_at` 不得再以 compatibility shim 形式復活。
 
 如果只是字串條件/format，優先用 Jinja；只有真正需要計算的 planning-specific context 才放在 `PlanStage`。
 
