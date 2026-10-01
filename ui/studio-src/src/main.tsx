@@ -103,7 +103,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
-    testing: "測試中…", language: "語言", no_incoming: "目前沒有連入線。",
+    testing: "測試中…", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
     favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
     copy: "複製", paste: "貼上", delete: "刪除", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
@@ -119,7 +119,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
-    testing: "Testing…", language: "Language", no_incoming: "No incoming edges.",
+    testing: "Testing…", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
     favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
     copy: "Copy", paste: "Paste", delete: "Delete", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
@@ -673,6 +673,14 @@ function App() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
+    const syncLanguage = (event: StorageEvent) => {
+      if (event.key !== DESIGNER_LANGUAGE_KEY) return;
+      setLanguage(event.newValue === "en" ? "en" : "zh-TW");
+    };
+    window.addEventListener("storage", syncLanguage);
+    return () => window.removeEventListener("storage", syncLanguage);
+  }, []);
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const typing = Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable));
@@ -1106,13 +1114,7 @@ function App() {
     });
   }
 
-  function changeLanguage(next: DesignerLanguage) {
-    setLanguage(next);
-    document.documentElement.lang = next === "zh-TW" ? "zh-Hant" : "en";
-    try { localStorage.setItem(DESIGNER_LANGUAGE_KEY, next); } catch { /* keep local UI usable */ }
-  }
-
-  if (!visual) return <main className="loading">{message || "Loading Workflow Studio…"}</main>;
+if (!visual) return <main className="loading">{message || "Loading Workflow Studio…"}</main>;
 
   return (
     <main className="studio-shell">
@@ -1125,7 +1127,6 @@ function App() {
         <div>
           {message && <span className="message">{message}</span>}
           {dirtyGraph && <span className="unsaved-badge">{tx("unsaved")}</span>}
-          <label className="language-picker"><span>{tx("language")}</span><select value={language} onChange={(e) => changeLanguage(e.target.value as DesignerLanguage)}><option value="zh-TW">繁中</option><option value="en">EN</option></select></label>
           <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>
           <button onClick={() => { if (!dirtyGraph || window.confirm("捨棄未儲存的 Workflow 草稿？")) void load(); }} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveGraph()} disabled={busy || !dirtyGraph}>
@@ -1187,7 +1188,7 @@ function App() {
               return <div className="palette-section" key={group.id}>
                 <button type="button" className="palette-section-head" onClick={() => togglePaletteSection(group.id)}
                   aria-expanded={!collapsed}>
-                  <span><i aria-hidden="true">{collapsed ? "›" : "⌄"}</i>{group.title}</span><small>{group.types.length}</small>
+                  <span><i className={`palette-chevron ${collapsed ? "collapsed" : "expanded"}`} aria-hidden="true" />{group.title}</span><small>{group.types.length}</small>
                 </button>
                 {!collapsed && <div className="palette-list">{group.types.map((type) => item(type, group.icon))}</div>}
               </div>;
