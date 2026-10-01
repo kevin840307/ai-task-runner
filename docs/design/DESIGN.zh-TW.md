@@ -63,13 +63,13 @@ Version: 1.2.66
 
 ## Prompt Contract
 
-所有 bundled Prompt 統一 Jinja + `StrictUndefined`。`prompts/context.py` 是唯一 Stage Template Data Contract；Template 禁止直接讀 `RunState`、`RuntimeConfig`、任意 scratch object。
+所有 bundled Prompt 統一使用 Jinja + `StrictUndefined`。`runner/prompting.py` 負責 Stage template-data contract 與 rendering helper；Template 禁止直接讀 `RunState`、`RuntimeConfig` 或任意 scratch object。
 
-一般 AI Stage 直接指定 `prompts/stages/*.md`；Planning computed context 直接由 `PlanStage` 管理，不再有 prompt-builder registry。共用 Prompt fragment 使用 Jinja `{% include %}`。
+Bundled Stage Prompt 位於 `runner/assets/prompts/<category>/*.md`。每種 Stage behavior 只維護一份核心 Prompt；retry/continue/recover context 由 Runner 共用 control envelope 動態附加，不再維護平行 Prompt 檔。
 
 ## Project Safety
 
-`project/policy.py` 讀 `.ai-task-runner.yaml`；`project/files.py` 管 manifest/change detection/restore 與 stale Safety snapshot cleanup；`project/instructions.py` 管 QWEN.md/AGENTS.md 的 Runner-managed section。Safety/Git/Readonly 透過 Plugin/Hook 注入，Workflow 不 import 具體實作。
+`runner/workspace.py` 統一負責 project manifest/change detection、protected-path policy、reusable snapshot 與 `.ai-task-runner.yaml` 相關 project-level workspace helper。Safety/Git/Readonly 透過 Plugin/Hook boundary 注入，Workflow 不 import 具體實作。
 
 ## Durable State
 
@@ -87,4 +87,4 @@ Version: 1.2.66
 
 ## OpenCode backend parity
 
-Qwen 與 OpenCode 共用 `BaseBackend` 的 stdin、timeout、idle-timeout、process-tree cleanup 與 stable recovery identity。Backend adapter 只擁有 transport/capability 差異：Qwen 使用 `--resume` + native `-s` sandbox；OpenCode 使用 `--session` + JSON event stream + `--auto`，並透過 `OPENCODE_CONFIG_CONTENT.permission` 套用 planning/no-tool/review 與 `--sandbox` 的 permission policy。Workflow、StageExecutor 與 Pipeline 不得依 backend 名稱分支。
+Qwen 與 OpenCode 共用 `BaseBackend` 的 stdin、timeout、idle-timeout、process-tree cleanup 與 stable recovery identity。Backend adapter 只擁有 transport/capability 差異：Qwen 使用 `--resume` + native `-s` sandbox；OpenCode 使用 `--session` + JSON event stream + `--auto`，並透過 `OPENCODE_CONFIG_CONTENT.permission` 套用 planning/no-tool/review 與 `--sandbox` 的 permission policy。Workflow、StageExecutor 與 FlowEngine 不得依 backend 名稱分支。
