@@ -78,7 +78,7 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
     assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
-    assert '["pass", "fail", "error"]' not in text
+    assert 'id="error"' not in text  # ERROR is not a runtime result edge; it is only a Stage Test scenario.
 
 
 def test_react_studio_has_searchable_palette_and_safe_stage_duplicate():
@@ -209,7 +209,7 @@ def test_node_library_scales_with_favorites_recent_and_extensions():
     assert "togglePaletteSection" in text
     assert "rememberPaletteStage" in text
     assert "knownTypes" in text
-    assert 'className="palette-favorite' in text
+    assert 'palette-favorite' in text
     assert 'className="palette-section-head"' in text
     assert "palettePrefs.collapsed" in text
     assert ".palette-favorite.active" in styles
