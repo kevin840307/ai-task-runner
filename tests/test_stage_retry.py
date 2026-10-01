@@ -181,7 +181,31 @@ def test_transient_service_errors_stay_in_same_session_and_backoff_in_seconds(
     assert sleeps == [1, 2, 4]
 
 
-def test_error_after_project_change_is_not_blindly_retried(tmp_path):
+def test_error_after_project_change_rotates_session_and_recovers(tmp_path):
+    class Changed(Stage):
+        def __init__(self):
+            super().__init__([])
+            self.count = 0
+
+        def run(self, ctx, previous=None):
+            self.calls.append(ctx.ai_client.session_id)
+            self.count += 1
+            if self.count == 1:
+                return StageResult(
+                    self.name,
+                    "error",
+                    error=RunnerError("partial side effect"),
+                    changed_files=["x.txt"],
+                )
+            return StageResult(self.name, "pass")
+
+    stage = Changed()
+    result = StageExecutor(Hooks()).run(stage, context(tmp_path))
+    assert result.status == "pass"
+    assert stage.calls == ["session-A", ""]
+
+
+def test_error_after_project_change_respects_explicit_zero_retry_budget(tmp_path):
     class Changed(Stage):
         def run(self, ctx, previous=None):
             return StageResult(
@@ -192,6 +216,6 @@ def test_error_after_project_change_is_not_blindly_retried(tmp_path):
             )
 
     stage = Changed([])
-    result = StageExecutor(Hooks()).run(stage, context(tmp_path))
+    result = StageExecutor(Hooks()).run(stage, context(tmp_path, retries=0))
     assert result.status == "error"
     assert result.changed_files == ["x.txt"]
