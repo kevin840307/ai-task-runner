@@ -42,6 +42,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--input", default="")
     value.add_argument("--request-stdin", action="store_true")
     value.add_argument("--backend", default="")
+    value.add_argument("--command", default="")
     value.add_argument("--probe-mode", choices=("stage", "agent_ping"), default="stage")
     value.add_argument("--keep-work", action="store_true")
     return value
