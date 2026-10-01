@@ -34,7 +34,7 @@ flow:
   - verify
 ```
 
-Only `routes.pass` and `routes.fail` are graph edges. Technical exceptions/timeouts/API failures are owned by `StageExecutor` and use `error_policy.retries` or the global `stage_retries`; there is no `routes.error`, repair Stage, recover edge, restart_at, repeat, max_attempts, or on_exhausted graph contract.
+Only `routes.pass` and `routes.fail` are graph edges. Technical exceptions/timeouts/API failures are owned by `StageExecutor` and use `error_policy.retries` or the global `stage_retries`. For `review`, a finite local retry count means retry and then fail-soft Skip to the next Stage; keep an authoritative validator after it. Other Stage types fail closed after finite exhaustion. There is no `routes.error`, repair Stage, recover edge, restart_at, repeat, max_attempts, or on_exhausted graph contract.
 
 Dynamic Handoff uses one Handoff Stage with multiple allowed targets:
 
