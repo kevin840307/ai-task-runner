@@ -482,6 +482,27 @@ def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     return runs, required, yolo
 
 
+def builtin_review_error_policy_contract() -> dict[str, int]:
+    """Verify bundled Review stages keep the intentional finite fail-soft policy."""
+    from runner.workflow.loader import load_workflow
+
+    observed: dict[str, int] = {}
+    for workflow in ("file", "ai", "mixed"):
+        loaded = load_workflow(WORKFLOWS[workflow])
+        review = next(
+            (node for node in loaded if node.get("name") == "review" and node.get("type") == "review"),
+            None,
+        )
+        policy = review.get("error_policy") if isinstance(review, dict) else None
+        retries = policy.get("retries") if isinstance(policy, dict) else None
+        if retries != 2:
+            raise RuntimeError(
+                f"workflow/{workflow} Review error_policy mismatch: expected retries=2, got {retries!r}"
+            )
+        observed[workflow] = int(retries)
+    return observed
+
+
 def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
     """Verify bundled workflows default read-only AI stages to observe."""
     from runner.workflow.loader import load_workflow
@@ -3325,6 +3346,8 @@ def main() -> int:
         f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
         flush=True,
     )
+    review_error_policy = builtin_review_error_policy_contract()
+    print("PASS built-in Review retries=2 -> fail-soft Skip contract preflight", flush=True)
     readonly_contract = builtin_readonly_safety_contract()
     print("PASS built-in Workflow readonly_safety observe contract preflight", flush=True)
     workflow_dryrun_negative_preflight()
@@ -3432,6 +3455,7 @@ def main() -> int:
         "http_503_recovered": True,
         "single_process_yaml_items": args.single_process_yaml_items,
         "workflow_dryrun_preflight": True,
+        "builtin_review_error_policy_contract": review_error_policy,
         "builtin_readonly_safety_contract": readonly_contract,
         "workflow_dryrun_negative_preflight": True,
         "stage_result_mapping_preflight": True,
