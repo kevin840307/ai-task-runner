@@ -209,19 +209,21 @@ Prompt reference 使用分類相對 key，例如 `common/review.md`。未來可�
 
 沒有 System / Custom 分類，也沒有唯讀 built-in asset。
 
-## n8n-style UI
+## Workflow UI
 
-Workflow Studio 直接編輯正式 Runtime graph：
+Project Chat 仍是主要執行介面。Workflow UI 收斂成單一路徑：
 
-- Stage = node
-- PASS / FAIL = semantic result edge
-- rollback / loop = PASS/FAIL edge 回前面 Stage
-- Handoff = 一顆 Stage 連多個允許 target，每次決策只選一個 target
-- ERROR 只屬於 technical retry，不建立 graph edge
-- node 設定只放 Stage behavior
-- edge 設定只放 semantic routing
+- **Workflow Settings** 只管理 Workflow / Prompt 資產（建立、Import、Rename、Duplicate、Export、Delete）。
+- **Workflow Editor** 是唯一 Workflow 編輯器，提供 `Designer | YAML`，兩者共用同一份 canonical Workflow YAML。
+- **Prompt Editor** 保持獨立；Stage 只 reference Prompt file，不把 Prompt 本文塞進 Workflow YAML。
+- Stage = node。
+- PASS / FAIL = semantic result edge。
+- rollback / loop = PASS/FAIL edge 回前面 Stage。
+- Handoff = 一顆 Stage 連多個允許 target，每次決策只選一個 target。
+- ERROR 只屬於 technical retry，不建立 graph edge。
+- Stage Test 的 PASS / FAIL 使用真 Stage；ERROR 使用 deterministic mock technical error 驗證 retry。
 
-Global 與 Project assets 都可以直接修改。
+Global 與 Project assets 都可直接修改；YAML 同時是 UI、CLI、Git 與 Runner 的單一真實來源。
 
 目前支援：
 
