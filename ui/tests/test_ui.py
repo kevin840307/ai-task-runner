@@ -1435,7 +1435,7 @@ class WorkflowStudioTests(unittest.TestCase):
     def test_stage_editor_rejects_max_failures_outside_review(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "max_failures is only valid for Review"):
+        with self.assertRaisesRegex(ValueError, "max_failures is only valid for AI Stage Review profile"):
             self.state.studio_stage_save(
                 item["id"],
                 "work",
