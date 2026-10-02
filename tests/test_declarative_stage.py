@@ -7,8 +7,6 @@ from runner.workflow.stages import (
     CommandStage,
     HandoffStage,
     PlanStage,
-    ReviewStage,
-    TaskStage,
 )
 
 
@@ -16,8 +14,6 @@ def test_registry_contains_only_behavior_types():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
         "handoff": HandoffStage,
-        "task": TaskStage,
-        "review": ReviewStage,
         "ai_validator": AIValidatorStage,
         "command": CommandStage,
         "plan": PlanStage,
@@ -54,14 +50,19 @@ def test_graph_metadata_is_not_copied_to_stage_behavior():
         "name": "write",
         "status": "Write",
         "label": "Concrete work",
-        "scope": "task",
         "routes": {"fail": "stop"},
     })
     assert not hasattr(stage, "label")
-    assert not hasattr(stage, "scope")
     assert not hasattr(stage, "routes")
 
 
 def test_yaml_references_expose_only_structured_parsers():
     from runner.workflow.results import PARSERS
     assert set(PARSERS) == {"review", "validation"}
+
+
+def test_scope_is_rejected_as_removed_contract():
+    import pytest
+    from runner.errors import ConfigurationError
+    with pytest.raises((ConfigurationError, TypeError, ValueError)):
+        create_stage({"name": "legacy", "type": "base", "scope": "task"})
