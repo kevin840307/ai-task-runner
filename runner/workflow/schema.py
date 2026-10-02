@@ -36,6 +36,16 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
             f"workflow stage {name} missing required options: {', '.join(missing)}"
         )
 
+    profile = values.get("profile")
+    if stage_type != "base" and profile not in {None, "generic"}:
+        raise RunnerError(
+            f"workflow stage {name} profile is only valid for type: base"
+        )
+    if stage_type == "base" and profile not in {None, "generic", "execute", "review"}:
+        raise RunnerError(
+            f"workflow stage {name} profile must be generic, execute, or review"
+        )
+
     if values.get("validator") not in {None, "ai"}:
         raise RunnerError(f"workflow stage {name} validator must be ai")
     if values.get("validator") == "ai" and stage_type != "ai_validator":
