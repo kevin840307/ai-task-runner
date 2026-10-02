@@ -15,7 +15,7 @@ from ...runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
-StageResultKind = Literal["generic", "tasks", "task", "review", "validation", "handoff"]
+StageResultKind = Literal["generic", "tasks", "stages", "task", "review", "validation", "handoff"]
 AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
 MODE_READONLY: StageMode = "readonly"
@@ -190,6 +190,7 @@ class BaseStage:
             self.result_kind = "review"
             self.backend_mode = "review"
             self.timeout_config_attr = "planning_timeout"
+            self.client_cache_key = "review_client"
             self.result_flag = "completed"
         self.spec = spec
         self.name = spec.name
