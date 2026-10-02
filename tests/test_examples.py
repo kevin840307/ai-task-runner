@@ -157,9 +157,9 @@ def test_validation_modes_example_maps_to_builtin_workflows():
     ]
 
     assert workflows == [
-        ["planning", "execute", "review", "validate_file"],
-        ["planning", "execute", "review", "validate_ai"],
-        ["planning", "execute", "review", "validate_file", "validate_ai"],
+        ["planning", "validate_file"],
+        ["planning", "validate_ai"],
+        ["planning", "validate_file", "validate_ai"],
     ]
     assert all("workflow_file" not in item for item in yaml.safe_load(script.read_text()))
 
