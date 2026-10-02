@@ -1121,26 +1121,37 @@ function App() {
   }, [visual]);
 
   function applyAIProfileDefaults(stage: Stage, profile: string): Stage {
-    const next = { ...stage, profile };
+    const previousProfile = String(stage.profile || "generic");
+    const cleaned: Stage = { ...stage, profile };
+    if (previousProfile === "execute") {
+      if (cleaned.prompt === "common/execution.md") delete cleaned.prompt;
+      if (cleaned.status === "AI 正在處理目前任務") delete cleaned.status;
+    } else if (previousProfile === "review") {
+      if (cleaned.prompt === "common/review.md") delete cleaned.prompt;
+      if (cleaned.status === "AI 正在確認任務是否完成") delete cleaned.status;
+      if (cleaned.max_failures === 3) delete cleaned.max_failures;
+      if (cleaned.error_policy?.retries === 2) delete cleaned.error_policy;
+    }
+
     if (profile === "execute") {
+      delete cleaned.max_failures;
       return {
-        ...next,
-        status: "AI 正在處理目前任務",
-        prompt: "common/execution.md",
-        error_policy: stage.error_policy,
+        ...cleaned,
+        status: cleaned.status || "AI 正在處理目前任務",
+        prompt: cleaned.prompt || "common/execution.md",
       };
     }
     if (profile === "review") {
       return {
-        ...next,
-        status: "AI 正在確認任務是否完成",
-        prompt: "common/review.md",
-        error_policy: { retries: 2 },
-        max_failures: 3,
+        ...cleaned,
+        status: cleaned.status || "AI 正在確認任務是否完成",
+        prompt: cleaned.prompt || "common/review.md",
+        error_policy: cleaned.error_policy || { retries: 2 },
+        max_failures: cleaned.max_failures || 3,
       };
     }
-    const { max_failures: _maxFailures, ...generic } = next;
-    return { ...generic, profile: "generic" };
+    delete cleaned.max_failures;
+    return { ...cleaned, profile: "generic" };
   }
 
   async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "", profile = "generic") {
