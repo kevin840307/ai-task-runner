@@ -57,7 +57,7 @@ def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
     assert "Default —" in text
     assert "Effective:" in text
     assert 'defaultOption(catalog, stage.type, "prompt")' in text
-    assert "common/execution.md" in text  # profile-first creation exposes the effective preset explicitly.
+    assert 'catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt' in text
 
 
 def test_workflow_builder_internal_prompts_are_not_user_assets():
@@ -74,8 +74,8 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
-    assert 'cleaned.error_policy || { retries: 2 }' in text
-    assert 'max_failures: 3' in text
+    assert 'profiles[profile]?.defaults || {}' in text
+    assert '["prompt", "status", "max_failures", "error_policy"]' in text
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
     assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
@@ -457,12 +457,9 @@ def test_ai_stage_profile_first_create_and_quick_shortcuts():
     text = SOURCE.read_text(encoding="utf-8")
 
     assert 'createAIProfile' in text
-    assert '<option value="generic">Generic</option>' in text
-    assert '<option value="execute">Execute</option>' in text
-    assert '<option value="review">Review</option>' in text
+    assert 'Object.entries(catalog?.stage_types?.base?.profiles || {})' in text
     assert "applyAIProfileDefaults" in text
-    assert "common/execution.md" in text
-    assert "common/review.md" in text
+    assert 'profiles[profile]?.defaults || {}' in text
     assert 'event.key === "/"' in text
     assert 'event.key === "Enter" && selected' in text
     assert 'title="Add Stage (/)"' in text
