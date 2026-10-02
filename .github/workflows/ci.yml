@@ -69,3 +69,24 @@ jobs:
           path: ui/static/workflow-studio-app
           if-no-files-found: error
 
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Browser E2E
+        env:
+          AI_TASK_RUNNER_BROWSER_REQUIRED: "1"
+        run: python -m pytest -q ui/tests/test_browser_crud_e2e.py ui/tests/test_full_designer_browser.py
