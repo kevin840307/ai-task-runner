@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import os
 import socket
+import tempfile
 import threading
 from pathlib import Path
 from urllib.parse import quote
 
 import pytest
+import yaml
 
 from ui.server import UIServer
 
@@ -40,6 +42,28 @@ def _launch_browser(playwright):
     if executable:
         return playwright.chromium.launch(headless=True, executable_path=executable)
     return playwright.chromium.launch(headless=True)
+
+
+def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
+    source = page.locator(source_selector)
+    target = page.locator(target_selector)
+    source.scroll_into_view_if_needed()
+    target.scroll_into_view_if_needed()
+    start = source.bounding_box()
+    end = target.bounding_box()
+    assert start and end
+    page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(end["x"] + end["width"] / 2, end["y"] + end["height"] / 2, steps=12)
+    page.mouse.up()
+    page.wait_for_timeout(120)
+
+
+def _save_editor(page) -> None:
+    button = page.locator(".studio-header button.primary")
+    assert button.is_enabled()
+    button.click()
+    page.get_by_text("Workflow saved").wait_for(timeout=5000)
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
@@ -163,3 +187,146 @@ def test_full_designer_common_desktop_viewports_do_not_overflow(viewport) -> Non
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_full_designer_graph_crud_roundtrip() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-graph-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "graph-e2e.yaml"
+        workflow.write_text(
+            """stages:
+  execute:
+    type: command
+    command: "{python} -c \"print('execute')\""
+  review:
+    type: review
+    routes:
+      fail: execute
+  router:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: command
+    command: "{python} -c \"print('worker')\""
+flow:
+  - execute
+  - review
+  - router
+  - worker
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1600, "height": 960})
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "graph-e2e.yaml")
+                file_id = item["id"]
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(file_id)}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+
+                # Existing explicit FAIL edge can be selected and removed with Delete.
+                fail_edge = page.locator('.react-flow__edge[data-id="review:fail:execute"]')
+                fail_edge.click()
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert fail_edge.count() == 0
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert "routes" not in saved["stages"]["review"]
+
+                page.reload()
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+
+                # Connect FAIL to END: FAIL terminal semantics must persist as stop.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="review"] .react-flow__handle.fail',
+                    '.react-flow__node[data-id="__end__"] .react-flow__handle',
+                )
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for()
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["review"]["routes"]["fail"] == "stop"
+
+                page.reload()
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+
+                # Reconnecting FAIL retargets the semantic edge.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="review"] .react-flow__handle.fail',
+                    '.react-flow__node[data-id="worker"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="review:fail:worker"]').wait_for()
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["review"]["routes"]["fail"] == "worker"
+
+                # Handoff edges are Stage-owned targets. Add a second target and persist it.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="router"] .react-flow__handle.handoff',
+                    '.react-flow__node[data-id="review"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="router:handoff:review"]').wait_for()
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["router"]["targets"] == ["worker", "review"]
+
+                page.reload()
+                page.locator('.react-flow__edge[data-id="router:handoff:worker"]').wait_for()
+
+                # Selected explicit HANDOFF edge follows the same Delete keyboard contract.
+                handoff_edge = page.locator('.react-flow__edge[data-id="router:handoff:worker"]')
+                handoff_edge.click()
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert handoff_edge.count() == 0
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["router"]["targets"] == ["review"]
+
+                # Once no edge targets worker, node deletion uses the guarded confirmation flow.
+                page.locator('.react-flow__node[data-id="worker"]').click()
+                page.keyboard.press("Delete")
+                dialog = page.locator(".designer-confirm-dialog")
+                dialog.wait_for()
+                dialog.locator("button.danger-confirm").click()
+                page.locator('.react-flow__node[data-id="worker"]').wait_for(state="detached")
+                _save_editor(page)
+
+                page.reload()
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert "worker" not in saved["stages"]
+                assert "worker" not in saved["flow"]
+                assert saved["stages"]["review"]["routes"]["fail"] != "worker"
+                assert saved["stages"]["router"]["targets"] == ["review"]
+                assert page.locator('.react-flow__node[data-id="worker"]').count() == 0
+                assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
