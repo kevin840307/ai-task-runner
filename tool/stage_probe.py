@@ -206,7 +206,10 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     "work_dir": str((project / work_dir).resolve()),
                 }
 
-            if definition.get("scope") == "task" or str(definition.get("type") or "") in {"task", "review"}:
+            if (
+                str(definition.get("type") or "base") == "base"
+                and str(definition.get("profile") or "generic") in {"execute", "review"}
+            ):
                 runner.state.tasks = [
                     Task(
                         id="stage-test",
