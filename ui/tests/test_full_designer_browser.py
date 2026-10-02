@@ -145,69 +145,96 @@ flow:
     {"width": 1920, "height": 1080},
 ])
 def test_full_designer_common_desktop_viewports_do_not_overflow(viewport) -> None:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    server = UIServer(ROOT, "127.0.0.1", port)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        with sync_playwright() as playwright:
-            browser = _launch_browser(playwright)
-            page = browser.new_page(viewport=viewport)
-            errors: list[str] = []
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            files = page.request.get(f"http://127.0.0.1:{port}/api/studio/files").json()
-            file_id = next(item["id"] for item in files["workflows"] if item["name"] == "file.yaml")
-            page.goto(f"http://127.0.0.1:{port}/workflow-studio-app/index.html?id={quote(file_id)}")
-            page.locator('.react-flow__node[data-id="review"]').wait_for()
+    with tempfile.TemporaryDirectory(prefix="ai-runner-viewport-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "viewport-e2e.yaml"
+        workflow.write_text(
+            """stages:
+  execute:
+    type: base
+    profile: execute
+  review:
+    type: base
+    profile: review
+    error_policy:
+      retries: 2
+    max_failures: 3
+    routes:
+      fail: execute
+flow:
+  - execute
+  - review
+""",
+            encoding="utf-8",
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport=viewport)
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(f"http://127.0.0.1:{port}/api/studio/files?project={project_q}").json()
+                file_id = next(item["id"] for item in files["workflows"] if item["name"] == "viewport-e2e.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(file_id)}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
 
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            palette = page.locator(".palette").bounding_box()
-            canvas = page.locator(".canvas").bounding_box()
-            assert palette and palette["x"] >= 0 and palette["x"] + palette["width"] <= viewport["width"]
-            assert canvas and canvas["x"] >= 0 and canvas["x"] + canvas["width"] <= viewport["width"] + 1
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                palette = page.locator(".palette").bounding_box()
+                canvas = page.locator(".canvas").bounding_box()
+                assert palette and palette["x"] >= 0 and palette["x"] + palette["width"] <= viewport["width"]
+                assert canvas and canvas["x"] >= 0 and canvas["x"] + canvas["width"] <= viewport["width"] + 1
 
-            page.locator('.react-flow__node[data-id="review"]').dblclick()
-            modal = page.locator(".stage-editor-modal").bounding_box()
-            assert modal
-            assert modal["x"] >= 0 and modal["y"] >= 0
-            assert modal["x"] + modal["width"] <= viewport["width"] + 1
-            assert modal["y"] + modal["height"] <= viewport["height"] + 1
+                page.locator('.react-flow__node[data-id="review"]').dblclick()
+                modal = page.locator(".stage-editor-modal").bounding_box()
+                assert modal
+                assert modal["x"] >= 0 and modal["y"] >= 0
+                assert modal["x"] + modal["width"] <= viewport["width"] + 1
+                assert modal["y"] + modal["height"] <= viewport["height"] + 1
 
-            stage_yaml_tab = page.get_by_role("tab", name="YAML").last
-            stage_yaml_tab.click()
-            page.locator(".stage-yaml-panel textarea").wait_for()
-            stage_yaml_box = page.locator(".stage-yaml-panel textarea").bounding_box()
-            assert stage_yaml_box
-            assert stage_yaml_box["x"] >= modal["x"]
-            assert stage_yaml_box["x"] + stage_yaml_box["width"] <= modal["x"] + modal["width"] + 1
-            assert stage_yaml_box["y"] + stage_yaml_box["height"] <= modal["y"] + modal["height"] + 1
-            page.get_by_role("button", name="Close").click()
+                stage_yaml_tab = page.get_by_role("tab", name="YAML").last
+                stage_yaml_tab.click()
+                page.locator(".stage-yaml-panel textarea").wait_for()
+                stage_yaml_box = page.locator(".stage-yaml-panel textarea").bounding_box()
+                assert stage_yaml_box
+                assert stage_yaml_box["x"] >= modal["x"]
+                assert stage_yaml_box["x"] + stage_yaml_box["width"] <= modal["x"] + modal["width"] + 1
+                assert stage_yaml_box["y"] + stage_yaml_box["height"] <= modal["y"] + modal["height"] + 1
+                page.get_by_role("button", name="Close").click()
 
-            page.locator('.react-flow__node[data-id="review"]').dispatch_event(
-                "contextmenu",
-                {"clientX": viewport["width"] - 2, "clientY": viewport["height"] - 2, "button": 2},
-            )
-            menu = page.locator(".stage-context-menu").bounding_box()
-            assert menu
-            assert menu["x"] >= 0 and menu["y"] >= 0
-            assert menu["x"] + menu["width"] <= viewport["width"] + 1
-            assert menu["y"] + menu["height"] <= viewport["height"] + 1
-            page.keyboard.press("Escape")
+                page.locator('.react-flow__node[data-id="review"]').dispatch_event(
+                    "contextmenu",
+                    {"clientX": viewport["width"] - 2, "clientY": viewport["height"] - 2, "button": 2},
+                )
+                menu = page.locator(".stage-context-menu").bounding_box()
+                assert menu
+                assert menu["x"] >= 0 and menu["y"] >= 0
+                assert menu["x"] + menu["width"] <= viewport["width"] + 1
+                assert menu["y"] + menu["height"] <= viewport["height"] + 1
+                page.keyboard.press("Escape")
 
-            page.get_by_role("tab", name="YAML").click()
-            page.locator(".workflow-yaml-editor").wait_for()
-            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            yaml_box = page.locator(".workflow-yaml-editor").bounding_box()
-            assert yaml_box and yaml_box["x"] >= 0 and yaml_box["x"] + yaml_box["width"] <= viewport["width"] + 1
-            assert not errors
-            browser.close()
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-
+                page.get_by_role("tab", name="YAML").click()
+                page.locator(".workflow-yaml-editor").wait_for()
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                yaml_box = page.locator(".workflow-yaml-editor").bounding_box()
+                assert yaml_box and yaml_box["x"] >= 0 and yaml_box["x"] + yaml_box["width"] <= viewport["width"] + 1
+                assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
@@ -222,10 +249,11 @@ def test_full_designer_graph_crud_roundtrip() -> None:
   planning:
     type: plan
   execute:
-    type: task
-    scope: task
+    type: base
+    profile: execute
   review:
-    type: review
+    type: base
+    profile: review
     routes:
       fail: execute
   router:
