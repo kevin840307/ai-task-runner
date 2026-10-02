@@ -166,39 +166,31 @@ def test_live_builtin_review_max_failures_contract_matches_bundled_workflows():
 
 
 def test_live_builtin_review_error_policy_contract_rejects_missing_policy(
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    bad = tmp_path / "file.yaml"
-    bad.write_text(
-        """
-stages:
-  review:
-    type: review
-flow: [review]
-""",
-        encoding="utf-8",
-    )
-    workflows = dict(live.WORKFLOWS)
-    workflows["file"] = bad
-    monkeypatch.setattr(live, "WORKFLOWS", workflows)
+    from runner.workflow.stages import PlanStage
 
-    with pytest.raises(RuntimeError, match="Review error_policy mismatch"):
+    monkeypatch.setattr(
+        PlanStage,
+        "_plan_child_stages",
+        staticmethod(lambda _tasks: [{"name": "review", "type": "base", "profile": "review"}]),
+    )
+    with pytest.raises(RuntimeError, match="dynamic Plan Review error_policy mismatch"):
         live.builtin_review_error_policy_contract()
 
 
 def test_live_builtin_readonly_safety_contract_matches_bundled_workflows():
     assert live.builtin_readonly_safety_contract() == {
-        "file": {"planning": "observe", "review": "observe"},
+        "file": {"planning": "observe", "dynamic_review": "observe"},
         "ai": {
             "planning": "observe",
-            "review": "observe",
             "validate_ai": "observe",
+            "dynamic_review": "observe",
         },
         "mixed": {
             "planning": "observe",
-            "review": "observe",
             "validate_ai": "observe",
+            "dynamic_review": "observe",
         },
     }
 
@@ -616,7 +608,8 @@ def test_example_smoke_probe_uses_ai_validator_for_ai_only_workflow(
     workflow.write_text(
         "stages:\n"
         "  execute:\n"
-        "    type: task\n"
+        "    type: base\n"
+        "    profile: execute\n"
         "  validate_ai:\n"
         "    type: ai_validator\n"
         "    validator: ai\n"
@@ -773,7 +766,9 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
     ],
 )
 def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
-    stages = ["planning", "execute", "review", *validators]
+    execute = "planning__g1__task_001_execute"
+    review = "planning__g1__task_001_review"
+    stages = ["planning", execute, review, *validators]
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
@@ -790,7 +785,15 @@ def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: li
         encoding="utf-8",
     )
     (work / "state.json").write_text(
-        json.dumps({"tasks": [{"title": "one", "status": "completed"}]}),
+        json.dumps({
+            "tasks": [{"title": "one", "status": "completed"}],
+            "expanded_workflow": [
+                {"name": "planning", "type": "plan"},
+                {"name": execute, "type": "base", "profile": "execute"},
+                {"name": review, "type": "base", "profile": "review"},
+                *[{"name": name, "type": "command"} for name in validators],
+            ],
+        }),
         encoding="utf-8",
     )
 
@@ -801,13 +804,15 @@ def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
-    stages = [
-        "planning",
-        "execute", "review",
-        "execute", "review",
-        "execute", "review",
-        "validate_file", "validate_ai",
+    dynamic = [
+        name
+        for index in range(1, 4)
+        for name in (
+            f"planning__g1__task_{index:03d}_execute",
+            f"planning__g1__task_{index:03d}_review",
+        )
     ]
+    stages = ["planning", *dynamic, "validate_file", "validate_ai"]
     events = [
         event
         for stage in stages
@@ -821,15 +826,22 @@ def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path
         encoding="utf-8",
     )
     (work / "state.json").write_text(
-        json.dumps(
-            {
-                "tasks": [
-                    {"title": "one", "status": "completed"},
-                    {"title": "two", "status": "completed"},
-                    {"title": "three", "status": "completed"},
-                ]
-            }
-        ),
+        json.dumps({
+            "tasks": [
+                {"title": "one", "status": "completed"},
+                {"title": "two", "status": "completed"},
+                {"title": "three", "status": "completed"},
+            ],
+            "expanded_workflow": [
+                {"name": "planning", "type": "plan"},
+                *[
+                    {"name": name, "type": "base", "profile": "review" if name.endswith("_review") else "execute"}
+                    for name in dynamic
+                ],
+                {"name": "validate_file", "type": "command"},
+                {"name": "validate_ai", "type": "ai_validator"},
+            ],
+        }),
         encoding="utf-8",
     )
 
@@ -990,10 +1002,12 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
     assert [node["name"] for node in workflow] == [
         "execute", "seed", "review", "review_verify", "validate_file"
     ]
-    assert workflow[0]["type"] == "task"
+    assert workflow[0]["type"] == "base"
+    assert workflow[0]["profile"] == "execute"
     assert workflow[1]["type"] == "command"
     assert workflow[2]["routes"] == {"fail": "execute"}
-    assert workflow[3]["type"] == "review"
+    assert workflow[3]["type"] == "base"
+    assert workflow[3]["profile"] == "review"
     assert all(
         key not in node
         for node in workflow
@@ -1037,14 +1051,14 @@ def test_workflow_dryrun_preflight_covers_current_graph_contracts():
         if str(item["workflow"]).endswith("ralphy_ai_validate.yaml")
     )
     assert ralphy["features"]["task_producer"] is False
-    assert ralphy["features"]["task_scope"] is False
+    assert ralphy["features"]["dynamic_producer"] is False
 
     custom = next(
         item for item in results
         if str(item["workflow"]).endswith("custom_workflow_latest.yaml")
     )
     assert custom["features"]["task_producer"] is True
-    assert custom["features"]["task_scope"] is True
+    assert custom["features"]["dynamic_producer"] is True
 
     twelve = next(
         item for item in results
@@ -1543,16 +1557,13 @@ def test_live_resume_workflow_uses_current_string_flow_contract():
     import yaml
 
     data = yaml.safe_load(live.RESUME_PROBE_WORKFLOW)
-    assert data["flow"] == [
-        "discover",
-        "execute_first",
-        "pause",
-        "execute_second",
-        "validate_file",
-    ]
+    assert data["flow"] == ["discover", "validate_file"]
     assert all(isinstance(item, str) for item in data["flow"])
-    for name in ("execute_first", "pause", "execute_second"):
-        assert data["stages"][name]["scope"] == "task"
+    assert all("scope" not in stage for stage in data["stages"].values())
+    assert '"name": "execute_first"' in live.RESUME_TASK_PRODUCER
+    assert '"name": "pause"' in live.RESUME_TASK_PRODUCER
+    assert '"name": "execute_second"' in live.RESUME_TASK_PRODUCER
+    assert '"task_complete": True' in live.RESUME_TASK_PRODUCER
 
 
 def test_resume_probe_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
@@ -1779,7 +1790,8 @@ def test_full_loop_workflow_uses_deterministic_rollback_and_qwen_verification(tm
     assert workflow[0]["type"] == "command"
     assert workflow[2]["type"] == "command"
     assert workflow[2]["routes"] == {"fail": "execute"}
-    assert workflow[3]["type"] == "review"
+    assert workflow[3]["type"] == "base"
+    assert workflow[3]["profile"] == "review"
     assert workflow[4]["routes"] == {"fail": "execute"}
     compile(live.FULL_LOOP_EXECUTOR, "full_loop_execute.py", "exec")
     compile(live.FULL_LOOP_REVIEW_GATE, "full_loop_review_gate.py", "exec")
