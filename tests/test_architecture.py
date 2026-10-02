@@ -76,13 +76,11 @@ def test_workflow_has_explicit_result_and_resource_owners():
 
 
 def test_stage_executor_is_the_only_stage_retry_owner():
-    executor = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner/workflow/stage_executor.py").read_text(encoding="utf-8")
     for token in ("stage_retries", "retry_delay", "retry_max_delay", "_fresh_session"):
         assert token in executor
     for path in (ROOT / "runner/workflow/stages").glob("*.py"):
-        if path.name == "executor.py":
-            continue
-        text = path.read_text(encoding="utf-8")
+                text = path.read_text(encoding="utf-8")
         assert "stage_retries" not in text
         assert "retry_max_delay" not in text
 
@@ -108,8 +106,6 @@ def test_workflow_cursor_writes_are_owned_by_flow_engine():
     allowed = ROOT / "runner" / "workflow" / "flow_engine.py"
     patterns = (
         "state.workflow_position =",
-        "state.task_step =",
-        "self.context.state.task_step +=",
         "self.context.state.workflow_position =",
     )
     offenders = []
@@ -120,4 +116,15 @@ def test_workflow_cursor_writes_are_owned_by_flow_engine():
         for pattern in patterns:
             if pattern in text:
                 offenders.append(f"{path.relative_to(ROOT)}: {pattern}")
+    assert offenders == []
+
+
+
+def test_removed_task_scope_runtime_fields_do_not_reappear():
+    offenders = []
+    for path in (ROOT / "runner").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for token in ("task_step", '"scope"', "'scope'"):
+            if token in text and path.name not in {"workflow_studio_state.py"}:
+                offenders.append(f"{path.relative_to(ROOT)}: {token}")
     assert offenders == []
