@@ -7,7 +7,7 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
-from .profiles import AI_STAGE_PROFILES, profile_names
+from .profiles import AI_STAGE_PROFILES, apply_ai_profile_defaults, profile_names
 from .stages.ai_validator_stage import AIValidatorStage
 from .stages.handoff_stage import HandoffStage
 from .stages.plan_stage import PlanStage
@@ -100,6 +100,7 @@ def stage_result_kind(definition: dict[str, Any]) -> str:
 
 def create_stage(definition: dict[str, Any]):
     values = deepcopy(definition)
+    apply_ai_profile_defaults(values)
     stage_type = str(values.pop("type", "base"))
     name = str(values.get("name", ""))
     for field in (*NODE_FIELDS, *RUNNER_INTERNAL_FIELDS):
