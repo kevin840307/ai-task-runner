@@ -170,10 +170,29 @@ def _reduce_tasks(ctx: StageContext, result: StageResult) -> StageResult:
     if result.status != "pass":
         return result
     source = result.data if result.data is not None else result.output
-    tasks = decode_tasks(source, cycle=ctx.state.cycle)
-    install_plan(ctx.state, tasks, ctx.ai_client.session_id)
+    raw = source
+    if isinstance(source, str):
+        try:
+            raw = json.loads(source)
+        except json.JSONDecodeError as error:
+            raise RunnerError(f"task producer must return valid JSON: {error}") from error
+    tasks = decode_tasks(raw, cycle=ctx.state.cycle)
+    stages = raw.get("stages") if isinstance(raw, dict) else None
+    if not isinstance(stages, list) or not stages:
+        raise RunnerError(
+            "task producer must provide a non-empty stages array; "
+            "Runner does not infer child Stage structure"
+        )
     progress.show_todo(ctx.state)
-    return result
+    return StageResult(
+        stage=result.stage,
+        status=result.status,
+        output=result.output,
+        changed_files=list(result.changed_files),
+        data={"tasks": tasks, "stages": stages},
+        error=result.error,
+        kind="tasks",
+    )
 
 
 def _reduce_task(ctx: StageContext, result: StageResult) -> StageResult:
@@ -223,18 +242,6 @@ def _reduce_validation(ctx: StageContext, result: StageResult) -> StageResult:
             ctx.set_stage("validator_failed", result.output)
             progress.set_status("驗證失敗，依 routes 處理", result.stage)
     return result
-
-
-def install_plan(
-    state: RunState,
-    tasks: Sequence[Task],
-    session_id: str,
-) -> None:
-    state.ai_session_id = session_id
-    state.review_failures.clear()
-    state.tasks = list(tasks)
-    state.current = 0
-    state.completed = False
 
 
 def finish_task(ctx: StageContext) -> None:
