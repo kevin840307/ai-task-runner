@@ -1006,7 +1006,7 @@ function renderStudioVisibilityBadge() {
   badge.hidden = !hidden;
   if (hidden) {
     badge.textContent = t("studio.hidden_badge", "Hidden from Chat");
-    badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Tasks workflow selector. Workflow Studio, CLI, and Runner behavior are unchanged.");
+    badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Chat workflow selector. Workflow Settings, CLI, and Runner behavior are unchanged.");
   }
   if (notice) notice.hidden = !hidden;
   if (scopeBadge) {
