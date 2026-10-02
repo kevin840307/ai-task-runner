@@ -66,7 +66,6 @@ class PlanStage(BaseStage):
                     "name": review,
                     "type": "base",
                     "profile": "review",
-                    "readonly_safety": "observe",
                     "task_id": task.id,
                     "task_complete": True,
                     "error_policy": {"retries": 2},
