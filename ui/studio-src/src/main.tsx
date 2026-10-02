@@ -568,6 +568,22 @@ function Field({
       </label>
     );
   }
+  if (type === "optional_boolean") {
+    return (
+      <label>
+        <span>{option.name}</span>
+        <select value={value == null ? "" : String(Boolean(value))} onChange={(e) => {
+          const raw = e.target.value;
+          onChange(raw === "" ? null : raw === "true");
+        }}>
+          <option value="">Use Stage default</option>
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+        {option.description && <small className="effective-value">{option.description}</small>}
+      </label>
+    );
+  }
   if (type === "bool" || type === "boolean") {
     return (
       <label className="check">
