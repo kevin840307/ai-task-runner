@@ -530,63 +530,60 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
         }
 
 
-def builtin_review_error_policy_contract() -> dict[str, int]:
-    """Verify bundled Review stages keep the intentional finite fail-soft policy."""
-    from runner.workflow.loader import load_workflow
+def _plan_review_template() -> dict[str, object]:
+    from runner.runtime.run_state import Task
+    from runner.workflow.stages import PlanStage
 
-    observed: dict[str, int] = {}
-    for workflow in ("file", "ai", "mixed"):
-        loaded = load_workflow(WORKFLOWS[workflow])
-        review = next(
-            (node for node in loaded if node.get("name") == "review" and node.get("type") == "review"),
-            None,
+    tasks = [
+        Task(
+            id="contract-task",
+            title="Contract task",
+            description="Validate dynamic Plan child contract.",
+            acceptance_criteria=["Review child is configured safely."],
+            deliverable="Contract evidence",
         )
-        policy = review.get("error_policy") if isinstance(review, dict) else None
-        retries = policy.get("retries") if isinstance(policy, dict) else None
-        if retries != 2:
-            raise RuntimeError(
-                f"workflow/{workflow} Review error_policy mismatch: expected retries=2, got {retries!r}"
-            )
-        observed[workflow] = int(retries)
-    return observed
+    ]
+    children = PlanStage._plan_child_stages(tasks)
+    review = next(
+        (item for item in children if item.get("profile") == "review"),
+        None,
+    )
+    if not isinstance(review, dict):
+        raise RuntimeError("Plan Stage did not generate an AI Review child")
+    return review
+
+
+def builtin_review_error_policy_contract() -> dict[str, int]:
+    """Verify dynamic Plan Review children keep the finite fail-soft policy."""
+    review = _plan_review_template()
+    policy = review.get("error_policy")
+    retries = policy.get("retries") if isinstance(policy, dict) else None
+    if retries != 2:
+        raise RuntimeError(
+            f"dynamic Plan Review error_policy mismatch: expected retries=2, got {retries!r}"
+        )
+    return {workflow: int(retries) for workflow in ("file", "ai", "mixed")}
 
 
 def builtin_review_max_failures_contract() -> dict[str, int]:
-    """Verify bundled Review stages keep the bounded semantic FAIL loop."""
-    from runner.workflow.loader import load_workflow
-
-    observed: dict[str, int] = {}
-    for workflow in ("file", "ai", "mixed"):
-        loaded = load_workflow(WORKFLOWS[workflow])
-        review = next(
-            (node for node in loaded if node.get("name") == "review" and node.get("type") == "review"),
-            None,
+    """Verify dynamic Plan Review children keep the bounded semantic FAIL loop."""
+    review = _plan_review_template()
+    maximum = review.get("max_failures")
+    if maximum != 3:
+        raise RuntimeError(
+            f"dynamic Plan Review max_failures mismatch: expected 3, got {maximum!r}"
         )
-        maximum = review.get("max_failures") if isinstance(review, dict) else None
-        if maximum != 3:
-            raise RuntimeError(
-                f"workflow/{workflow} Review max_failures mismatch: expected 3, got {maximum!r}"
-            )
-        observed[workflow] = int(maximum)
-    return observed
+    return {workflow: int(maximum) for workflow in ("file", "ai", "mixed")}
 
 
 def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
-    """Verify bundled workflows default read-only AI stages to observe."""
+    """Verify static read-only stages and dynamic Plan Review children use observe."""
     from runner.workflow.loader import load_workflow
 
     expected = {
-        "file": {"planning": "observe", "review": "observe"},
-        "ai": {
-            "planning": "observe",
-            "review": "observe",
-            "validate_ai": "observe",
-        },
-        "mixed": {
-            "planning": "observe",
-            "review": "observe",
-            "validate_ai": "observe",
-        },
+        "file": {"planning": "observe"},
+        "ai": {"planning": "observe", "validate_ai": "observe"},
+        "mixed": {"planning": "observe", "validate_ai": "observe"},
     }
     observed: dict[str, dict[str, str | None]] = {}
     for workflow, stages in expected.items():
@@ -601,6 +598,15 @@ def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
                     f"workflow/{workflow} {stage} readonly_safety mismatch: "
                     f"expected {expected_value!r}, got {actual!r}"
                 )
+        dynamic_review = _plan_review_template().get("readonly_safety")
+        observed[workflow]["dynamic_review"] = (
+            dynamic_review if isinstance(dynamic_review, str) else None
+        )
+        if dynamic_review != "observe":
+            raise RuntimeError(
+                f"workflow/{workflow} dynamic Review readonly_safety mismatch: "
+                f"expected 'observe', got {dynamic_review!r}"
+            )
     return observed
 
 
@@ -665,7 +671,6 @@ def probe_timeout_diagnostic(project: Path, log: Path) -> str:
                 "cycle": state.get("cycle"),
                 "current": state.get("current"),
                 "workflow_position": state.get("workflow_position"),
-                "task_step": state.get("task_step"),
                 "transition_previous": state.get("transition_previous"),
                 "validator_output": _tail_text(str(state.get("validator_output") or ""), 800),
             },
@@ -1008,7 +1013,6 @@ def assert_state_completed(
             "run failed: "
             f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
             f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
-            f"task_step={state.get('task_step')}, "
             f"transition_previous={state.get('transition_previous')!r}, "
             f"validator_output={validator_output[-1200:]!r}"
         )
