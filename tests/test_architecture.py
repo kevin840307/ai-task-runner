@@ -80,7 +80,7 @@ def test_stage_executor_is_the_only_stage_retry_owner():
     for token in ("stage_retries", "retry_delay", "retry_max_delay", "_fresh_session"):
         assert token in executor
     for path in (ROOT / "runner/workflow/stages").glob("*.py"):
-                text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
         assert "stage_retries" not in text
         assert "retry_max_delay" not in text
 
