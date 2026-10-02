@@ -78,12 +78,15 @@ def test_builder_prompt_describes_current_graph_and_prompt_contract():
     assert "common/review.md" in text
     assert "type: handoff" in text
     assert "targets" in text
-    assert "session_policy: main" in text
     assert "session_policy: role" in text
     assert "session_policy: fresh" in text
-    for removed in ("restart_at", "max_attempts", "on_exhausted"):
-        assert removed in text
+    for removed in ("scope", "type: task", "type: review", "restart_at", "max_attempts", "on_exhausted"):
+        assert f"Never emit `{removed}`" in text or f"Do not emit legacy `{removed}`" in text or removed in text
     assert "error_policy.retries" in text
+    assert "profile: execute" in text
+    assert "profile: review" in text
+    assert "produces: tasks" in text or "produces `tasks`" in text
+    assert "Runner never guesses child Stage types" in text
     assert "ERROR is never a graph edge" in text
 
 
