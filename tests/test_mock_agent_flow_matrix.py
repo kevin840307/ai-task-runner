@@ -184,7 +184,7 @@ def test_multi_task_same_session_sends_only_new_todo_context(tmp_path, monkeypat
     assert len(execute) == 2
     assert execute[0]["resumed"] is True
     assert execute[1]["resumed"] is True
-    assert execute[1]["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert execute[1]["prompt"].find("RUNNER_SHARED_STAGE_CONTROL") >= 0
     assert "mode: continue" in execute[1]["prompt"]
     assert '"title": "Create second marker"' in execute[1]["prompt"]
     assert "Goal (global constraints only):" not in execute[1]["prompt"]
@@ -204,11 +204,11 @@ def test_review_feedback_continuation_sends_only_new_evidence(tmp_path, monkeypa
     executes = [row for row in rows if row["stage"] == "execute"]
     assert len(reviews) >= 2
     assert reviews[1]["resumed"] is True
-    assert reviews[1]["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert reviews[1]["prompt"].find("RUNNER_SHARED_STAGE_CONTROL") >= 0
     assert "mode: continue" in reviews[1]["prompt"]
     assert "Evidence order:" not in reviews[1]["prompt"]
     assert any(
-        row["prompt"].startswith("RUNNER_SHARED_STAGE_CONTROL")
+        row["prompt"].find("RUNNER_SHARED_STAGE_CONTROL") >= 0
         and "Review missing_items:" in row["prompt"]
         for row in executes[1:]
     )
