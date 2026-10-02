@@ -8,7 +8,7 @@ from runner.errors import ConfigurationError, RunnerError
 from runner.runtime import events
 from runner.runtime.events import EventBus
 from runner.runtime.run_state import RunState
-from runner.workflow.stage_executor import StageExecutor
+from runner.workflow.execution import StageExecutor
 from runner.workflow.stages import StageResult
 from runner.workflow.stages import StageContext
 
