@@ -898,11 +898,14 @@ class WorkflowStudioTests(unittest.TestCase):
         self.workflow.write_text(
             "stages:\n"
             "  work:\n"
-            "    type: task\n"
-            "    scope: task\n"
+            "    type: base\n"
+            "    profile: execute\n"
             "  review:\n"
-            "    type: review\n"
-            "    scope: task\n"
+            "    type: base\n"
+            "    profile: review\n"
+            "    error_policy:\n"
+            "      retries: 2\n"
+            "    max_failures: 3\n"
             "    routes:\n"
             "      fail: work\n"
             "flow:\n"
@@ -969,7 +972,7 @@ class WorkflowStudioTests(unittest.TestCase):
         result = self.state.studio_stage_add(
             item["id"],
             "detached_execute",
-            "task",
+            "base",
             opened["hash"],
             self.project,
             add_to_flow=False,
@@ -982,20 +985,35 @@ class WorkflowStudioTests(unittest.TestCase):
             [stage["name"] for stage in result["visual"]["stages"]],
         )
 
-    def test_backend_created_review_defaults_to_finite_fail_soft_retries(self) -> None:
+    def test_backend_accepts_ai_review_profile_with_finite_fail_soft_policy(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        result = self.state.studio_stage_add(
+        added = self.state.studio_stage_add(
             item["id"],
             "review_2",
-            "review",
+            "base",
             opened["hash"],
             self.project,
             add_to_flow=False,
         )
-        data = __import__("yaml").safe_load(result["file"]["content"])
-        self.assertEqual(data["stages"]["review_2"]["error_policy"], {"retries": 2})
-        self.assertEqual(data["stages"]["review_2"]["max_failures"], 3)
+        saved = self.state.studio_stage_save(
+            item["id"],
+            "review_2",
+            {
+                "profile": "review",
+                "prompt": "common/review.md",
+                "error_policy": {"retries": 2},
+                "max_failures": 3,
+            },
+            added["file"]["hash"],
+            self.project,
+        )
+        data = __import__("yaml").safe_load(saved["file"]["content"])
+        stage = data["stages"]["review_2"]
+        self.assertEqual(stage["type"], "base")
+        self.assertEqual(stage["profile"], "review")
+        self.assertEqual(stage["error_policy"], {"retries": 2})
+        self.assertEqual(stage["max_failures"], 3)
 
     def test_graph_save_round_trips_session_policy_and_rejects_conflicting_session_key(self) -> None:
         item = self._workflow_item()
@@ -1341,7 +1359,7 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         self.assertIn("project.root", saved["content"])
 
-    def test_stage_node_owns_scope_label_and_result_edges_not_retry(self) -> None:
+    def test_stage_node_owns_label_and_result_edges_and_rejects_removed_scope(self) -> None:
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
         result = self.state.studio_stage_save(
@@ -1349,7 +1367,6 @@ class WorkflowStudioTests(unittest.TestCase):
             "review",
             {
                 "label": "Review result",
-                "scope": "task",
                 "routes": {"fail": "work"},
             },
             opened["hash"],
@@ -1357,19 +1374,20 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         data = __import__("yaml").safe_load(result["file"]["content"])
         stage = data["stages"]["review"]
-        self.assertEqual(stage["scope"], "task")
+        self.assertNotIn("scope", stage)
         self.assertEqual(stage["label"], "Review result")
         self.assertEqual(stage["routes"], {"fail": "work"})
 
         opened = self.state.studio_read(item["id"], self.project)
-        with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
-            self.state.studio_stage_save(
-                item["id"],
-                "review",
-                {"retry": -1},
-                opened["hash"],
-                self.project,
-            )
+        for removed in ({"scope": "task"}, {"retry": -1}):
+            with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
+                self.state.studio_stage_save(
+                    item["id"],
+                    "review",
+                    removed,
+                    opened["hash"],
+                    self.project,
+                )
 
     def test_stage_source_round_trip_uses_shared_yaml_validation(self) -> None:
         item = self._workflow_item()
@@ -1380,7 +1398,8 @@ class WorkflowStudioTests(unittest.TestCase):
             item["id"], "review", "format", self.project, fields=review
         )
         self.assertTrue(formatted["ok"])
-        self.assertIn("type: review", formatted["source"])
+        self.assertIn("type: base", formatted["source"])
+        self.assertIn("profile: review", formatted["source"])
         self.assertNotIn("name:", formatted["source"])
         self.assertNotIn("routes:", formatted["source"])
         self.assertNotIn("targets:", formatted["source"])
@@ -1390,26 +1409,27 @@ class WorkflowStudioTests(unittest.TestCase):
             "review",
             "parse",
             self.project,
-            source="type: review\nscope: task\nmax_failures: 3\n",
+            source="type: base\nprofile: review\nmax_failures: 3\n",
         )
-        self.assertEqual(parsed["fields"]["type"], "review")
+        self.assertEqual(parsed["fields"]["type"], "base")
+        self.assertEqual(parsed["fields"]["profile"], "review")
         self.assertEqual(parsed["fields"]["max_failures"], 3)
 
         with self.assertRaisesRegex(ValueError, "immutable"):
             self.state.studio_stage_source(
-                item["id"], "review", "parse", self.project, source="type: task\n"
+                item["id"], "review", "parse", self.project, source="type: plan\n"
             )
         with self.assertRaisesRegex(ValueError, "cannot be changed"):
             self.state.studio_stage_source(
-                item["id"], "review", "parse", self.project, source="name: other\ntype: review\n"
+                item["id"], "review", "parse", self.project, source="name: other\ntype: base\nprofile: review\n"
             )
         with self.assertRaisesRegex(ValueError, "Routing tab"):
             self.state.studio_stage_source(
-                item["id"], "review", "parse", self.project, source="type: review\nroutes:\n  fail: work\n"
+                item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nroutes:\n  fail: work\n"
             )
         with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
             self.state.studio_stage_source(
-                item["id"], "review", "parse", self.project, source="type: review\nunknown_field: true\n"
+                item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nunknown_field: true\n"
             )
 
     def test_stage_editor_rejects_max_failures_outside_review(self) -> None:
@@ -1444,7 +1464,9 @@ class WorkflowStudioTests(unittest.TestCase):
             ["work", "review"],
         )
         review = next(stage for stage in visual["stages"] if stage["name"] == "review")
-        self.assertEqual(review["scope"], "task")
+        self.assertEqual(review["type"], "base")
+        self.assertEqual(review["profile"], "review")
+        self.assertNotIn("scope", review)
 
     def test_visual_save_reorders_only_string_stage_names(self) -> None:
         item = self._workflow_item()
