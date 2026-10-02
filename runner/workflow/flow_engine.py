@@ -8,6 +8,7 @@ from typing import Any
 from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
 from ..utils import bounded_text
+from .dynamic_expansion import activate_dynamic_task, dynamic_done_target, expand_stage_result
 from .results import finish_run, finish_task
 from .registry import create_stage
 from .stages import StageContext, StageExecutor, StageResult
@@ -29,18 +30,20 @@ class FlowEngine:
     - ERROR is not graph-routable: StageExecutor applies retry policy.
     - Review with a finite local error_policy is fail-soft: exhausted ERROR skips to next.
     - routes may override PASS/FAIL with next/done/stop/or another Stage.
-    - contiguous scope: task nodes repeat once per durable Task.
+    - any Stage may return tasks/stages; Runner inserts the durable child Workflow
+      immediately after that Stage and resumes the parent flow when children finish.
 
     Technical retry/session recovery belongs only to StageExecutor.
     """
 
     def __init__(self, context: StageContext) -> None:
         self.context = context
-        self.workflow = context.config.workflow
-        self.positions = {
-            str(item["name"]): index
-            for index, item in enumerate(self.workflow)
-        }
+        self.workflow = (
+            list(context.state.expanded_workflow)
+            if context.state.expanded_workflow
+            else list(context.config.workflow)
+        )
+        self._reindex()
 
     def run(self, executor: StageExecutor) -> int:
         state = self.context.state
@@ -53,12 +56,7 @@ class FlowEngine:
                 self.context.save_state()
                 return 2
             position = state.workflow_position
-            if self.workflow[position].get("scope") == "task":
-                previous, stopped = self._run_task_block(position, executor, previous)
-            else:
-                previous, stopped = self._run_stage(
-                    position, executor, previous, task_scoped=False
-                )
+            previous, stopped = self._run_stage(position, executor, previous)
             if stopped:
                 return 1
 
@@ -67,55 +65,14 @@ class FlowEngine:
             self.context.save_state()
         return 0
 
-    def _run_task_block(
-        self,
-        position: int,
-        executor: StageExecutor,
-        previous: StageResult | None,
-    ) -> tuple[StageResult | None, bool]:
-        state = self.context.state
-        start, end = self._task_block(position)
-        if not state.tasks:
-            raise ConfigurationError(
-                "task-scoped workflow requires tasks from an earlier Stage"
-            )
-        if state.workflow_position != start:
-            state.workflow_position = start
-
-        while state.current < len(state.tasks):
-            if not 0 <= state.task_step <= end - start:
-                raise ConfigurationError("saved task_step is outside task-scoped flow")
-
-            while state.task_step < end - start:
-                index = start + state.task_step
-                previous, stopped = self._run_stage(
-                    index, executor, previous, task_scoped=True
-                )
-                if stopped:
-                    return previous, True
-                if state.workflow_position != start:
-                    return previous, False
-
-            finish_task(self.context)
-            state.task_step = 0
-            state.transition_previous = {}
-            previous = None
-            self.context.save_state()
-
-        state.workflow_position = end
-        state.task_step = 0
-        self.context.save_state()
-        return previous, False
-
     def _run_stage(
         self,
         index: int,
         executor: StageExecutor,
         previous: StageResult | None,
-        *,
-        task_scoped: bool,
     ) -> tuple[StageResult, bool]:
         definition = self.workflow[index]
+        activate_dynamic_task(self.context.state, definition)
         result = self._review_bypass_result(definition)
         if result is None:
             stage = create_stage(definition)
@@ -136,6 +93,29 @@ class FlowEngine:
             if definition.get("type") == "handoff" and result.status == "pass"
             else resolve_stage_target(definition, result.status)
         )
+
+        expanded = expand_stage_result(
+            state=self.context.state,
+            workflow=self.workflow,
+            source_index=index,
+            source=definition,
+            result=result,
+            continuation=target,
+        )
+        if expanded is not None:
+            self.workflow = expanded
+            self._reindex()
+            self.context.state.workflow_position = index + 1
+            self.context.save_state()
+            return result, False
+
+        if (
+            result.status == "pass"
+            and definition.get("_dynamic_task_complete")
+        ):
+            finish_task(self.context)
+
+        target = self._dynamic_target(definition, target)
         if target == "stop":
             self.context.save_state()
             return result, True
@@ -144,11 +124,7 @@ class FlowEngine:
             self.context.save_state()
             return result, False
         if target == "next":
-            if task_scoped:
-                self.context.state.task_step += 1
-            else:
-                self.context.state.workflow_position = index + 1
-                self.context.state.task_step = 0
+            self.context.state.workflow_position = index + 1
             self.context.save_state()
             return result, False
 
@@ -239,24 +215,23 @@ class FlowEngine:
         if position <= source_index:
             state.cycle += 1
 
-        if self.workflow[position].get("scope") == "task":
-            start, _ = self._task_block(position)
-            state.workflow_position = start
-            state.task_step = position - start
-        else:
-            state.workflow_position = position
-            state.task_step = 0
-
+        state.workflow_position = position
         self.context.set_stage("workflow_route", result.output)
 
-    def _task_block(self, position: int) -> tuple[int, int]:
-        start = position
-        while start > 0 and self.workflow[start - 1].get("scope") == "task":
-            start -= 1
-        end = position
-        while end < len(self.workflow) and self.workflow[end].get("scope") == "task":
-            end += 1
-        return start, end
+    def _dynamic_target(self, definition: dict[str, Any], target: str) -> str:
+        if target == "done":
+            nested = dynamic_done_target(definition)
+            if nested is not None:
+                return nested
+        if target == "next" and definition.get("_dynamic_continue"):
+            return str(definition["_dynamic_continue"])
+        return target
+
+    def _reindex(self) -> None:
+        self.positions = {
+            str(item["name"]): index
+            for index, item in enumerate(self.workflow)
+        }
 
     def _remember_previous(self, result: StageResult) -> None:
         raw = json.dumps(result.data, ensure_ascii=False, default=str)
