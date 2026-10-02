@@ -72,7 +72,9 @@ class RunState:
     last_activity_at: float = 0.0
     last_error: str = ""
     workflow_position: int = 0
-    task_step: int = 0
+    expanded_workflow: list[dict[str, Any]] = field(default_factory=list)
+    dynamic_groups: dict[str, str] = field(default_factory=dict)
+    expansion_counter: int = 0
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
     stage_sessions: dict[str, str] = field(default_factory=dict)
@@ -86,7 +88,7 @@ class RunState:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"state.{name} must be a non-empty string")
-        for name in ("cycle", "current", "workflow_position", "task_step"):
+        for name in ("cycle", "current", "workflow_position", "expansion_counter"):
             value = getattr(self, name)
             if not is_integer(value) or value < 0:
                 raise ValueError(f"state.{name} must be non-negative")
@@ -105,6 +107,15 @@ class RunState:
                 raise ValueError(f"state.{name} must be a non-negative number")
         if not isinstance(self.transition_previous, dict):
             raise ValueError("state.transition_previous must be an object")
+        if not isinstance(self.expanded_workflow, list) or any(
+            not isinstance(item, dict) for item in self.expanded_workflow
+        ):
+            raise ValueError("state.expanded_workflow must be an array of objects")
+        if not isinstance(self.dynamic_groups, dict) or any(
+            not isinstance(key, str) or not key.strip() or not isinstance(value, str)
+            for key, value in self.dynamic_groups.items()
+        ):
+            raise ValueError("state.dynamic_groups must map non-empty strings to strings")
         if not isinstance(self.stage_sessions, dict):
             raise ValueError("state.stage_sessions must be an object")
         if not isinstance(self.review_failures, dict):
