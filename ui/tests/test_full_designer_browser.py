@@ -67,53 +67,73 @@ def _save_editor(page) -> None:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
-def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
-    workflow = ROOT / "runner" / "assets" / "workflows" / "file.yaml"
-    original = workflow.read_bytes()
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    server = UIServer(ROOT, "127.0.0.1", port)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        with sync_playwright() as playwright:
-            browser = _launch_browser(playwright)
-            page = browser.new_page(viewport={"width": 1600, "height": 960})
-            errors: list[str] = []
-            page.on("pageerror", lambda error: errors.append(str(error)))
-            files = page.request.get(f"http://127.0.0.1:{port}/api/studio/files").json()
-            file_id = next(item["id"] for item in files["workflows"] if item["name"] == "file.yaml")
-            page.goto(f"http://127.0.0.1:{port}/workflow-studio-app/index.html?id={quote(file_id)}")
-            page.locator('.react-flow__node[data-id="review"]').wait_for()
-            assert page.locator(".react-flow__node-scope").count() == 1
+def test_full_designer_ai_profiles_routes_and_draft_do_not_write_yaml() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-editor-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "editor-e2e.yaml"
+        workflow.write_text(
+            """stages:
+  execute:
+    type: base
+    profile: execute
+  review:
+    type: base
+    profile: review
+    error_policy:
+      retries: 2
+    max_failures: 3
+    routes:
+      fail: execute
+flow:
+  - execute
+  - review
+""",
+            encoding="utf-8",
+        )
+        original = workflow.read_bytes()
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1600, "height": 960})
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(f"http://127.0.0.1:{port}/api/studio/files?project={project_q}").json()
+                file_id = next(item["id"] for item in files["workflows"] if item["name"] == "editor-e2e.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(file_id)}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                assert page.locator(".react-flow__node-scope").count() == 0
 
-            page.locator('.react-flow__node[data-id="review"]').dblclick()
-            page.get_by_role("tab", name="連線").click()
-            assert "END（停止）" in page.locator(".route-row").nth(2).inner_text()
+                page.locator('.react-flow__node[data-id="review"]').dblclick()
+                assert page.get_by_text("AI profile").is_visible()
+                assert page.get_by_text("執行範圍").count() == 0
+                page.get_by_role("tab", name="連線").click()
+                assert page.get_by_text("Semantic FAIL 上限").is_visible()
+                page.get_by_role("button", name="Close").click()
 
-            page.get_by_role("tab", name="基本").click()
-            page.get_by_text("執行範圍").locator("..").locator("select").select_option("")
-            page.get_by_role("button", name="Close").click()
-            page.locator('.react-flow__node[data-id="execute"]').dblclick()
-            page.get_by_text("執行範圍").locator("..").locator("select").select_option("")
-            assert page.locator(".react-flow__node-scope").count() == 0
-            review_palette = page.locator(".palette-item").filter(has_text="Review")
-            review_palette.click()
-            assert page.locator('.react-flow__node[data-id="review_2"]').count() == 0
-            review_palette.drag_to(page.locator(".canvas"), target_position={"x": 450, "y": 300})
-            page.locator('.react-flow__node[data-id="review_2"]').wait_for()
-            page.get_by_text("積木標題（雙擊積木可重新命名）").locator("..").locator("input").fill("Second review")
-            assert page.locator('.react-flow__node[data-id="review_2"]').get_by_text("Second review").is_visible()
-            assert page.get_by_text("未儲存草稿").is_visible()
-            assert workflow.read_bytes() == original
-            assert not errors
-            browser.close()
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-
+                ai_palette = page.locator(".palette-item").filter(has_text="AI Stage").first
+                ai_palette.drag_to(page.locator(".canvas"), target_position={"x": 450, "y": 300})
+                page.locator('.react-flow__node[data-id="ai_stage"]').wait_for()
+                page.get_by_text("AI profile").locator("..").locator("select").select_option("review")
+                assert page.get_by_text("未儲存草稿").is_visible()
+                assert workflow.read_bytes() == original
+                assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
@@ -296,7 +316,7 @@ flow:
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
-                assert saved["stages"]["execute"]["scope"] == "task"
+                assert saved["stages"]["execute"]["profile"] == "execute"
 
                 # Explicit PASS edge is also persisted and can later be removed.
                 _connect_nodes(
@@ -376,7 +396,7 @@ flow:
                 page.locator('.react-flow__node[data-id="review"]').wait_for()
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["flow"][0] == "review"
-                assert saved["stages"]["execute"]["scope"] == "task"
+                assert saved["stages"]["execute"]["profile"] == "execute"
                 assert not errors
                 browser.close()
         finally:
