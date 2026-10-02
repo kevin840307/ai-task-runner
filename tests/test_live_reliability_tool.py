@@ -68,7 +68,7 @@ def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(tm
     assert result == {
         "agent_ping": True,
         "real_stage_status": "pass",
-        "real_stage_next": "validate_ai",
+        "real_stage_next": "done",
     }
 
 
@@ -233,7 +233,13 @@ def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
                 {
                     "completed": True,
                     "stage": "completed",
-                    "tasks": [{"title": "one", "status": "completed"}],
+                    "tasks": [{"id": "planning__g1__task-001", "title": "one", "status": "completed"}],
+                    "expanded_workflow": [
+                        {"name": "planning", "type": "plan"},
+                        {"name": "planning__g1__task_001_execute", "type": "base", "profile": "execute"},
+                        {"name": "planning__g1__task_001_review", "type": "base", "profile": "review"},
+                        {"name": "validate_ai", "type": "ai_validator"},
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -246,8 +252,8 @@ def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
                 "session": "planner",
                 "session_mode": "fresh",
             },
-            {"type": "runner.stage", "action": "start", "stage": "execute"},
-            {"type": "runner.stage", "action": "start", "stage": "review"},
+            {"type": "runner.stage", "action": "start", "stage": "planning__g1__task_001_execute"},
+            {"type": "runner.stage", "action": "start", "stage": "planning__g1__task_001_review"},
             {"type": "runner.stage", "action": "start", "stage": "validate_ai"},
             {"type": "model.result", "session": "validator-a"},
             {"type": "model.result", "session": "validator-b"},
@@ -1630,14 +1636,24 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
                     "project_root": str(project.resolve()),
                     "completed": False,
                     "stage": "executing",
-                    "task_step": 1,
+                    "workflow_position": 2,
                     "ai_session_id": "session-resume",
                     "tasks": [{
-                        "id": "t1",
+                        "id": "discover__g1__resume",
                         "title": "task",
                         "description": "task",
                         "status": "pending",
                     }],
+                    "expanded_workflow": [
+                        {"name": "discover", "type": "command", "produces": "tasks"},
+                        {"name": "discover__g1__execute_first", "type": "base", "profile": "execute"},
+                        {"name": "discover__g1__pause", "type": "command"},
+                        {"name": "discover__g1__execute_second", "type": "base", "profile": "execute"},
+                        {"name": "validate_file", "type": "command", "result_kind": "validation"},
+                    ],
+                    "dynamic_groups": {"discover": "discover__g1"},
+                    "dynamic_task_groups": {"discover__g1": ["discover__g1__resume"]},
+                    "expansion_counter": 1,
                 }),
                 encoding="utf-8",
             )
