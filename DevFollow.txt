@@ -41,3 +41,7 @@ Workflow UI ownership
 - Workflow Editor is the single Workflow editing surface with Designer/YAML views over canonical YAML.
 - Stage settings may expose Form/YAML/Routes/Test, but all views update one Stage draft and use backend YAML/schema validation.
 - Do not reintroduce a second Visual Workflow editor in the asset library.
+- ralphy_ai_validate.yaml is the Chat fallback default when no valid saved Workflow preference exists.
+- Workflow Library right-click owns Show in Chat / Hide from Chat; reuse persisted workflow visibility and never create another visibility store.
+- Stage Editor tabs are Form / YAML / Routing / Test. Form and YAML edit the same Stage draft; routing stays graph-owned.
+
