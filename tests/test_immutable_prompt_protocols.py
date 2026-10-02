@@ -7,6 +7,8 @@ from runner.agent import parse_result
 from runner.errors import RunnerError
 from runner.prompting import (
     PLAN_PROTOCOL,
+    DYNAMIC_TASKS_PROTOCOL,
+    DYNAMIC_STAGES_PROTOCOL,
     REVIEW_PROTOCOL,
     VALIDATION_PROTOCOL,
     append_stage_protocol,
@@ -109,3 +111,24 @@ def test_legacy_editable_contract_files_are_gone():
     assert "RUNNER_IMMUTABLE_PLAN_PROTOCOL" in PLAN_PROTOCOL
     assert "RUNNER_IMMUTABLE_REVIEW_PROTOCOL" in REVIEW_PROTOCOL
     assert "RUNNER_IMMUTABLE_VALIDATION_PROTOCOL" in VALIDATION_PROTOCOL
+
+
+
+def test_dynamic_producer_protocols_require_producer_defined_child_stages():
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" in DYNAMIC_TASKS_PROTOCOL
+    assert '"tasks"' in DYNAMIC_TASKS_PROTOCOL
+    assert '"stages"' in DYNAMIC_TASKS_PROTOCOL
+    assert "Runner never invents Execute/Review" in DYNAMIC_TASKS_PROTOCOL
+    assert "task_complete=true" in DYNAMIC_TASKS_PROTOCOL
+
+    assert "RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL" in DYNAMIC_STAGES_PROTOCOL
+    assert '"stages"' in DYNAMIC_STAGES_PROTOCOL
+    assert "Runner never infers child Stage types" in DYNAMIC_STAGES_PROTOCOL
+
+    plan = append_stage_protocol("plan", "plan_tasks")
+    generic_tasks = append_stage_protocol("produce", "tasks")
+    stages = append_stage_protocol("produce", "stages")
+    assert "RUNNER_IMMUTABLE_PLAN_PROTOCOL" in plan
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" not in plan
+    assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" in generic_tasks
+    assert "RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL" in stages
