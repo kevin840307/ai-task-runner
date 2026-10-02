@@ -278,6 +278,7 @@ flow:
                 page.keyboard.press("Control+z")
                 page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for()
                 assert page.get_by_text("已復原上一個 Workflow 草稿修改。").is_visible()
+                _save_editor(page)
 
                 page.reload()
                 page.locator('.react-flow__node[data-id="review"]').wait_for()
