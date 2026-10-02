@@ -12,6 +12,7 @@ from copy import deepcopy
 from typing import Any
 
 from ..errors import ConfigurationError, RunnerError
+from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from .schema import validate_routes, validate_stage
 from .stages.base_stage import StageResult
@@ -183,6 +184,7 @@ def _install_task_group(
 
     state.tasks.extend(installed)
     state.dynamic_task_groups[source_name] = [task.id for task in installed]
+    progress.show_todo(state)
     if state.current > len(state.tasks):
         state.current = len(state.tasks)
     return mapping
