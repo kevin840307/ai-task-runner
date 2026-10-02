@@ -13,6 +13,13 @@ from .registry import create_stage
 from .stages import StageContext, StageExecutor, StageResult
 
 
+def _is_review_definition(definition: dict[str, Any]) -> bool:
+    return definition.get("type") == "review" or (
+        definition.get("type", "base") == "base"
+        and definition.get("profile") == "review"
+    )
+
+
 class FlowEngine:
     """Run Stage -> Result -> Route until completion or stop.
 
@@ -164,7 +171,7 @@ class FlowEngine:
         On the fourth entry to that Review Stage, Runner does not call the
         reviewer; it emits a fail-soft PASS and clears the durable counter.
         """
-        if definition.get("type") != "review":
+        if not _is_review_definition(definition):
             return None
         maximum = definition.get("max_failures")
         if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
@@ -212,7 +219,7 @@ class FlowEngine:
         result: StageResult,
     ) -> None:
         """Persist consecutive semantic Review FAIL count; PASS resets it."""
-        if definition.get("type") != "review" or result.status not in {"pass", "fail"}:
+        if not _is_review_definition(definition) or result.status not in {"pass", "fail"}:
             return
         maximum = definition.get("max_failures")
         if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum <= 0:
@@ -325,7 +332,7 @@ def resolve_stage_target(definition: dict[str, Any], status: str) -> str:
         policy = definition.get("error_policy")
         retries = policy.get("retries") if isinstance(policy, dict) else None
         if (
-            definition.get("type") == "review"
+            _is_review_definition(definition)
             and isinstance(retries, int)
             and not isinstance(retries, bool)
             and retries >= 0
