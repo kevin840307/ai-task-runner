@@ -76,7 +76,7 @@ def test_workflow_has_explicit_result_and_resource_owners():
 
 
 def test_stage_executor_is_the_only_stage_retry_owner():
-    executor = (ROOT / "runner/workflow/stage_executor.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner/workflow/execution/stage_executor.py").read_text(encoding="utf-8")
     for token in ("stage_retries", "retry_delay", "retry_max_delay", "_fresh_session"):
         assert token in executor
     for path in (ROOT / "runner/workflow/stages").glob("*.py"):
@@ -151,7 +151,7 @@ def test_stage_implementations_are_split_by_responsibility():
     assert expected <= {path.name for path in stages.glob("*.py")}
     assert not (stages / "core.py").exists()
     assert not (stages / "executor.py").exists()
-    assert (ROOT / "runner" / "workflow" / "stage_executor.py").is_file()
+    assert (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").is_file()
 
 
 def test_stage_executor_is_workflow_orchestration_not_a_stage_type():
