@@ -163,7 +163,7 @@ def test_transient_service_errors_stay_in_same_session_and_backoff_in_seconds(
 ):
     sleeps = []
     monkeypatch.setattr(
-        "runner.workflow.stages.executor.sleep_with_heartbeat",
+        "runner.workflow.stage_executor.sleep_with_heartbeat",
         lambda seconds: sleeps.append(seconds),
     )
     failures = []
