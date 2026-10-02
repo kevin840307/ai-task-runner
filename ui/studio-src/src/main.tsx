@@ -109,7 +109,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     testing: "測試中…", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
     favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
-    copy: "複製", paste: "貼上", delete: "刪除", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
+    copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
     group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
   },
   en: {
@@ -125,7 +125,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     testing: "Testing…", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
     favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
-    copy: "Copy", paste: "Paste", delete: "Delete", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
+    copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
     group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools"
   },
 };
@@ -648,6 +648,7 @@ function App() {
   const [addStageQuery, setAddStageQuery] = useState("");
   const [copiedStage, setCopiedStage] = useState<Stage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stage: string } | null>(null);
+  const [edgeContextMenu, setEdgeContextMenu] = useState<{ x: number; y: number; edge: Edge } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<DesignerConfirmDialog | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
@@ -1459,6 +1460,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               })}
             </div>
           </div>
+        </div>}
+
+        {edgeContextMenu && <div className="stage-context-menu edge-context-menu" style={{ left: edgeContextMenu.x, top: edgeContextMenu.y }}
+          onMouseLeave={() => setEdgeContextMenu(null)}>
+          <button type="button" className="danger-item" onClick={() => {
+            deleteEdges([edgeContextMenu.edge]);
+            setEdgeContextMenu(null);
+          }}>⌫ {tx("delete_connection")}</button>
         </div>}
 
         {contextMenu && <div className="stage-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}
