@@ -244,6 +244,49 @@ A direct task array with the same task objects is also valid. The task collectio
 [/RUNNER_IMMUTABLE_PLAN_PROTOCOL]
 """.strip()
 
+DYNAMIC_TASKS_PROTOCOL: Final[str] = r"""
+[RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]
+This Stage is a dynamic Workflow producer.
+Return exactly one JSON object and no markdown:
+{
+  "tasks": [
+    {
+      "title": "string",
+      "description": "string",
+      "deliverable": "string",
+      "acceptance_criteria": ["specific observable criterion"]
+    }
+  ],
+  "stages": [
+    {
+      "name": "local_stage_name",
+      "type": "registered_stage_type",
+      "...": "ordinary Stage fields",
+      "task_id": "the producer-local task id when this Stage belongs to a task",
+      "task_complete": true
+    }
+  ]
+}
+The Stage producer owns the child structure. Runner never invents Execute/Review or any other child Stage type.
+Every produced task must be referenced by at least one child Stage using task_id and must have at least one child Stage with task_complete=true.
+Child Stage names must be unique inside this produced Workflow. Local routes/targets may reference those local names; Runner will namespace them during expansion.
+Do not emit Runner-owned _dynamic_* fields.
+[/RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]
+""".strip()
+
+
+DYNAMIC_STAGES_PROTOCOL: Final[str] = r"""
+[RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL]
+This Stage is a dynamic Workflow producer.
+Return exactly one JSON object and no markdown:
+{"stages":[{"name":"local_stage_name","type":"registered_stage_type","...":"ordinary Stage fields"}]}
+The Stage producer owns the complete child structure. Runner never infers child Stage types.
+Child Stage names must be unique inside this produced Workflow. Local routes/targets may reference those local names; Runner will namespace them during expansion.
+Do not emit Runner-owned _dynamic_* fields.
+[/RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL]
+""".strip()
+
+
 REVIEW_PROTOCOL: Final[str] = r"""
 [RUNNER_IMMUTABLE_REVIEW_PROTOCOL]
 This block is owned by AI Task Runner and overrides conflicting editable prompt instructions.
@@ -284,7 +327,9 @@ Parser feedback: {error}
 """.strip()
 
 _STAGE_PROTOCOLS: Final[dict[str, str]] = {
-    "tasks": PLAN_PROTOCOL,
+    "plan_tasks": PLAN_PROTOCOL,
+    "tasks": DYNAMIC_TASKS_PROTOCOL,
+    "stages": DYNAMIC_STAGES_PROTOCOL,
     "review": REVIEW_PROTOCOL,
     "validation": VALIDATION_PROTOCOL,
 }
@@ -321,6 +366,8 @@ __all__ = [
     "save_prompt",
     "PROMPT_CONTEXT_KEYS",
     "PLAN_PROTOCOL",
+    "DYNAMIC_TASKS_PROTOCOL",
+    "DYNAMIC_STAGES_PROTOCOL",
     "REVIEW_PROTOCOL",
     "STRUCTURED_RETRY_PROTOCOL",
     "VALIDATION_PROTOCOL",
