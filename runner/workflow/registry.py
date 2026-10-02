@@ -7,6 +7,7 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
+from .profiles import AI_STAGE_PROFILES, profile_names
 from .stages.ai_validator_stage import AIValidatorStage
 from .stages.handoff_stage import HandoffStage
 from .stages.plan_stage import PlanStage
@@ -48,6 +49,7 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "title": str(getattr(stage_class, "ui_title", "") or name),
             "description": str(getattr(stage_class, "ui_description", "") or ""),
             "category": str(getattr(stage_class, "ui_category", "") or "extensions"),
+            "profiles": deepcopy(AI_STAGE_PROFILES) if name == "base" else {},
             "options": [
                 _field_info(item)
                 for item in fields(stage_class.spec_class)
@@ -132,7 +134,7 @@ def _field_info(item: Any) -> dict[str, Any]:
     raw_type = str(result["type"]).lower().replace("nonetype", "none")
     if item.name == "profile":
         result["type"] = "enum"
-        result["values"] = ["generic", "execute", "review"]
+        result["values"] = profile_names()
     elif item.name == "mode":
         result["type"] = "enum"
         result["values"] = ["readonly", "write"]
