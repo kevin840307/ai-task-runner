@@ -1201,7 +1201,7 @@ def task_array_recovery_preflight() -> None:
     """Prove Planning can recover a complete TaskArray from a broken object envelope."""
     from types import SimpleNamespace
 
-    from runner.workflow.stages.core import parse_plan_tasks
+    from runner.workflow.stages.plan_stage import parse_plan_tasks
 
     payload = [{
         "title": "Create artifact",
