@@ -63,5 +63,5 @@ Child routes and Handoff targets must stay inside the child Workflow. Use normal
 
 PlanStage is the first built-in producer: after parsing Tasks, it creates repeated `AI Stage(profile=execute) -> AI Stage(profile=review)` children. The complete child Workflow runs before the parent continues.
 
-Every child runs through the same `runner/workflow/stage_executor.py`, so custom/plugin Stages must not implement retry/recover/session machinery.
+Every child runs through the same `runner/workflow/execution/stage_executor.py`, so custom/plugin Stages must not implement retry/recover/session machinery. AI behavior presets belong in `runner/workflow/profiles.py`; add a dedicated Stage type only when runtime semantics genuinely differ.
 
