@@ -18,8 +18,9 @@ from ..errors import ConfigurationError, RunnerError
 from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from ..utils import bounded_text
+from .stages.base_stage import StageResult
 if TYPE_CHECKING:
-    from .stages.base_stage import StageContext, StageResult
+    from .stages.base_stage import StageContext
 
 MAX_MISSING_ITEMS = 100
 MAX_MISSING_ITEM_CHARS = 1_000
