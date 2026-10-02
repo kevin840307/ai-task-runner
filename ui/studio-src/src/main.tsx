@@ -48,11 +48,18 @@ type CatalogOption = {
   description?: string;
 };
 
+type CatalogProfile = {
+  title?: string;
+  description?: string;
+  defaults?: Record<string, unknown>;
+};
+
 type CatalogStageType = {
   type: string;
   title?: string;
   description?: string;
   category?: string;
+  profiles?: Record<string, CatalogProfile>;
   options: CatalogOption[];
 };
 
@@ -1137,37 +1144,28 @@ function App() {
   }, [visual]);
 
   function applyAIProfileDefaults(stage: Stage, profile: string): Stage {
+    const profiles = catalog?.stage_types?.base?.profiles || {};
     const previousProfile = String(stage.profile || "generic");
+    const previousDefaults = profiles[previousProfile]?.defaults || {};
+    const nextDefaults = profiles[profile]?.defaults || {};
     const cleaned: Stage = { ...stage, profile };
-    if (previousProfile === "execute") {
-      if (cleaned.prompt === "common/execution.md") delete cleaned.prompt;
-      if (cleaned.status === "AI 正在處理目前任務") delete cleaned.status;
-    } else if (previousProfile === "review") {
-      if (cleaned.prompt === "common/review.md") delete cleaned.prompt;
-      if (cleaned.status === "AI 正在確認任務是否完成") delete cleaned.status;
-      if (cleaned.max_failures === 3) delete cleaned.max_failures;
-      if (cleaned.error_policy?.retries === 2) delete cleaned.error_policy;
-    }
 
-    if (profile === "execute") {
-      delete cleaned.max_failures;
-      return {
-        ...cleaned,
-        status: cleaned.status || "AI 正在處理目前任務",
-        prompt: cleaned.prompt || "common/execution.md",
-      };
-    }
-    if (profile === "review") {
-      return {
-        ...cleaned,
-        status: cleaned.status || "AI 正在確認任務是否完成",
-        prompt: cleaned.prompt || "common/review.md",
-        error_policy: cleaned.error_policy || { retries: 2 },
-        max_failures: cleaned.max_failures || 3,
-      };
-    }
-    delete cleaned.max_failures;
-    return { ...cleaned, profile: "generic" };
+    ["prompt", "status", "max_failures", "error_policy"].forEach((key) => {
+      const current = cleaned[key];
+      const previous = previousDefaults[key];
+      if (previous !== undefined && JSON.stringify(current) === JSON.stringify(previous)) {
+        delete cleaned[key];
+      }
+    });
+
+    if (profile !== "review") delete cleaned.max_failures;
+    ["prompt", "status", "max_failures", "error_policy"].forEach((key) => {
+      const value = nextDefaults[key];
+      if (value !== undefined && (cleaned[key] === undefined || cleaned[key] === "")) {
+        cleaned[key] = structuredClone(value);
+      }
+    });
+    return cleaned;
   }
 
   async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "", profile = "generic") {
@@ -1618,13 +1616,13 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   <select value={createAIProfile} onChange={(e) => {
                     const profile = e.target.value;
                     setCreateAIProfile(profile);
-                    if (profile === "execute") setCreatePrompt("common/execution.md");
-                    else if (profile === "review") setCreatePrompt("common/review.md");
+                    const value = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
+                    setCreatePrompt(typeof value === "string" ? value : "");
                     else setCreatePrompt("");
                   }}>
-                    <option value="generic">Generic</option>
-                    <option value="execute">Execute</option>
-                    <option value="review">Review</option>
+                    {Object.entries(catalog?.stage_types?.base?.profiles || {}).map(([value, item]) => (
+                      <option key={value} value={value}>{item.title || value}</option>
+                    ))}
                   </select>
                   <small className="effective-value">
                     {createAIProfile === "execute" ? "Writable execution preset." : createAIProfile === "review" ? "Read-only structured PASS/FAIL preset." : "Custom AI behavior; choose a Prompt."}
