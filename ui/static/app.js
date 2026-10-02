@@ -776,6 +776,8 @@ function openWorkflowDropdown() {
   positionWorkflowDropdown();
 }
 
+const DEFAULT_WORKFLOW_NAME = "ralphy_ai_validate.yaml";
+function workflowBasename(value) { return String(value || "").replaceAll("\\", "/").split("/").filter(Boolean).pop() || ""; }
 function renderWorkflowPicker() {
   const select = $("workflowSelect"), menu = $("workflowDropdownMenu"), label = $("workflowSelectedLabel"); if (!select || !menu || !label) return;
   const previous = select.value; const saved = String(currentProjectPreferences().workflow || ""); select.innerHTML = ""; menu.innerHTML = "";
@@ -789,8 +791,12 @@ function renderWorkflowPicker() {
     menu.appendChild(button);
   }
   if ([...select.options].some((option) => option.value === saved)) select.value = saved;
-  else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
-  else if (select.options.length) select.selectedIndex = 0;
+  else {
+    const preferred = [...select.options].find((option) => workflowBasename(option.value) === DEFAULT_WORKFLOW_NAME || option.textContent === DEFAULT_WORKFLOW_NAME);
+    if (preferred) select.value = preferred.value;
+    else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+    else if (select.options.length) select.selectedIndex = 0;
+  }
   if (select.value) rememberProjectPreference("workflow", select.value);
   label.textContent = state.studioCatalogLoading ? "Loading workflows..." : (select.options[select.selectedIndex]?.textContent || "No workflow");
   renderWorkflowPickerSelection();
@@ -850,7 +856,6 @@ async function switchView(view) {
     $("chatNav").classList.remove("active");
     $("workflowNav").classList.toggle("active", kind === "workflow");
     $("promptNav").classList.toggle("active", kind === "prompt");
-    $("settingsNav").classList.remove("active");
     renderStudioFiles(); renderWorkflowPicker();
     setViewLoading("workflowView", true, kind === "prompt" ? "Loading prompts…" : "Loading workflows…");
     try { await refreshStudioFiles(); }
@@ -864,7 +869,7 @@ async function switchView(view) {
   if (document.querySelector(".designer-step-modal-box") && !(await closeStageEditor())) return false;
   if (!$("addStageBackdrop").hidden && !(await closeAddStageModal())) return false;
   if (!$("newWorkflowBackdrop").hidden && !(await closeNewWorkflowModal())) return false;
-  state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active"); $("promptNav").classList.remove("active"); $("settingsNav").classList.remove("active");
+  state.view = "chat"; $("workflowView").hidden = true; $("chatView").hidden = false; $("chatNav").classList.add("active"); $("workflowNav").classList.remove("active"); $("promptNav").classList.remove("active");
   return true;
 }
 function visibleStudioFiles() { return state.studioSourceKind === "prompt" ? (state.studioFiles.prompts || []) : (state.studioFiles.workflows || []); }
@@ -2035,7 +2040,6 @@ $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter"
 $("chatNav").onclick = () => switchView("chat");
 $("workflowNav").onclick = () => switchView("workflow");
 $("promptNav").onclick = () => switchView("prompt");
-$("settingsNav").onclick = (event) => { event.stopPropagation(); toggleThemePanel(event); };
 $("visualModeButton").onclick = () => setStudioMode("visual"); $("yamlModeButton").onclick = () => setStudioMode("yaml"); $("yamlWorkflowSource").onclick = () => setStudioSource("workflow"); $("yamlPromptSource").onclick = () => setStudioSource("prompt"); $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceKind] = $("studioSearchInput").value; renderStudioFiles(); }; $("studioSearchClear").onclick = () => { state.studioFilters[state.studioSourceKind] = ""; renderStudioFiles(); $("studioSearchInput").focus(); };
 $("studioTextarea").addEventListener("input", () => { updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); }); $("studioTextarea").addEventListener("keydown", handleEditorKeydown); $("studioTextarea").addEventListener("scroll", () => { $("studioLineNumbers").scrollTop = $("studioTextarea").scrollTop; });
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
