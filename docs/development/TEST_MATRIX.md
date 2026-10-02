@@ -89,3 +89,19 @@ Deterministic CI, a short live gate and a 24H soak are separate confidence layer
 - Primary navigation separates Workflows and Prompts; no duplicate Settings nav is exposed.
 - Stage Editor contract: `Form | YAML | Routing | Test`, with Stage YAML using the shared source parser.
 - Desktop browser layout/context-menu smoke: 1024, 1280, 1366, 1440, and 1920 widths.
+
+
+## Dedicated browser CI
+
+The CI has a separate Ubuntu Playwright/Chromium job. In that job
+`AI_TASK_RUNNER_BROWSER_REQUIRED=1` forces browser tests to execute rather than
+skip when no system browser is present.
+
+Browser coverage includes:
+- Workflow Settings manager + Prompt CRUD and Workflow visibility/navigation
+- common desktop viewport overflow checks (1024/1280/1366/1440/1920)
+- Workflow Editor Stage dialogs, YAML view and context menus
+- graph CRUD round-trip for START/END, scope:task, PASS/FAIL/HANDOFF edges,
+  edge retarget/delete, Stage delete, save/reload
+- selected explicit edge Delete/Backspace
+- Workflow draft Ctrl+Z undo
