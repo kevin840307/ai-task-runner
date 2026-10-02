@@ -83,3 +83,9 @@ Acceptance requires the full wall-clock duration and evidence that there is:
 - stable frozen Workflow/Prompt resources across resume.
 
 Deterministic CI, a short live gate and a 24H soak are separate confidence layers.
+
+- Workflow Library right-click Chat visibility (Show/Hide) and immediate Chat picker filtering.
+- Chat default selection prefers `ralphy_ai_validate.yaml` when no valid saved Workflow preference exists.
+- Primary navigation separates Workflows and Prompts; no duplicate Settings nav is exposed.
+- Stage Editor contract: `Form | YAML | Routing | Test`, with Stage YAML using the shared source parser.
+- Desktop browser layout/context-menu smoke: 1024, 1280, 1366, 1440, and 1920 widths.
