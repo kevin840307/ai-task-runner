@@ -31,7 +31,7 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
     assert not unknown_special, f"Expected built-in catalog fields disappeared: {sorted(unknown_special)}"
 
     # Fields filtered out of the generic parameter list must have an explicit UI owner.
-    assert '["name", "type", "status", "label", "scope", "routes", "targets", "max_failures"]' in SOURCE
+    assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"]' in SOURCE
     assert 'value={draft.status || ""}' in SOURCE
     assert 'draft.type === "handoff"' in SOURCE and 'stage.targets || []' in SOURCE
     assert 'value={draft.max_failures ?? ""}' in SOURCE
@@ -43,10 +43,11 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
 
 def test_react_workflow_editor_covers_all_node_level_runtime_options():
     node_options = workflow_catalog()["node_options"]
-    assert set(node_options) == {"scope", "label", "routes", "error_policy"}
+    assert set(node_options) == {"label", "routes", "error_policy"}
 
     assert 'value={draft.label || ""}' in SOURCE
-    assert 'value={draft.scope || ""}' in SOURCE
+    assert 'value={String(draft.profile || "generic")}' in SOURCE
+    assert 'value={draft.scope || ""}' not in SOURCE
     assert 'draft.routes || {}' in SOURCE
     assert 'draft.error_policy?.retries' in SOURCE
 
@@ -88,3 +89,14 @@ def test_generic_field_renderer_supports_every_catalog_scalar_shape():
     assert 'type.includes("float")' in SOURCE
     assert 'type.includes("list")' in SOURCE
     assert 'option.values?.length || type === "enum"' in SOURCE
+
+
+def test_ai_stage_profile_catalog_is_extensible():
+    catalog = workflow_catalog()
+    base = catalog["stage_types"]["base"]
+    profile = next(option for option in base["options"] if option["name"] == "profile")
+    assert profile["type"] == "enum"
+    assert profile["values"] == ["generic", "execute", "review"]
+    assert "scope" not in catalog["node_options"]
+    assert "task" not in catalog["stage_types"]
+    assert "review" not in catalog["stage_types"]
