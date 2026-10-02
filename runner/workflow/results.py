@@ -218,9 +218,9 @@ def _reduce_tasks(ctx: StageContext, result: StageResult) -> StageResult:
             + ", ".join(missing)
         )
 
-    ctx.state.tasks = tasks
-    ctx.state.current = 0
-    ctx.state.review_failures.clear()
+    # Durable Task installation is owned by dynamic_expansion so tasks and
+    # child Stage definitions become visible atomically. This avoids duplicate
+    # Task state and lets nested producers namespace IDs safely.
     return StageResult(
         stage=result.stage,
         status=result.status,
