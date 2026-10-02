@@ -1,9 +1,11 @@
 stages:
   work:
-    mode: write
+    type: base
+    profile: execute
 
   check:
-    type: review
+    type: base
+    profile: review
     routes:
       fail: work
 
