@@ -7,8 +7,6 @@ from runner.workflow.stages import (
     CommandStage,
     HandoffStage,
     PlanStage,
-    ReviewStage,
-    TaskStage,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,8 +27,6 @@ def test_workflow_has_one_minimal_type_registry():
     assert STAGE_REGISTRY == {
         "base": BaseStage,
         "handoff": HandoffStage,
-        "task": TaskStage,
-        "review": ReviewStage,
         "ai_validator": AIValidatorStage,
         "command": CommandStage,
         "plan": PlanStage,
@@ -39,7 +35,7 @@ def test_workflow_has_one_minimal_type_registry():
 
 def test_workflow_runtime_has_only_current_canonical_modules():
     workflow = ROOT / "runner" / "workflow"
-    for name in ("flow_engine.py", "results.py", "loader.py", "schema.py", "registry.py"):
+    for name in ("flow_engine.py", "dynamic_expansion.py", "results.py", "loader.py", "schema.py", "registry.py"):
         assert (workflow / name).is_file()
 
     for removed in (
