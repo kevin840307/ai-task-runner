@@ -16,6 +16,7 @@ from ...runtime.run_state import RunState, Task
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
 StageResultKind = Literal["generic", "tasks", "task", "review", "validation", "handoff"]
+AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
 MODE_READONLY: StageMode = "readonly"
 MODE_WRITE: StageMode = "write"
@@ -120,6 +121,7 @@ ResultParser = Callable[[str, StageContext], Any]
 @dataclass(frozen=True)
 class BaseStageSpec:
     name: str
+    profile: AIStageProfile = "generic"
     status: str = "AI Stage"
     prompt: str = ""
     instructions: str = ""
@@ -142,6 +144,7 @@ class BaseStageSpec:
     fresh_session_each_run: bool = False
     fresh_session_on_start: bool = False
     produces: str = ""
+    max_failures: int | None = None
 
 
 
@@ -158,6 +161,36 @@ class BaseStage:
     result_flag = ""
 
     def __init__(self, spec: BaseStageSpec) -> None:
+        profile = str(spec.profile or "generic")
+        if profile not in {"generic", "execute", "review"}:
+            raise ConfigurationError(
+                f"AI Stage {spec.name} profile must be generic, execute, or review"
+            )
+        if profile == "execute":
+            spec = replace(
+                spec,
+                status=spec.status if spec.status != "AI Stage" else "AI 正在處理目前任務",
+                prompt=spec.prompt or "common/execution.md",
+                run_state=spec.run_state or "executing",
+                mode=MODE_WRITE,
+                actor="executor" if spec.actor == "ai" else spec.actor,
+                track_changes=True if not spec.track_changes else spec.track_changes,
+            )
+            self.result_kind = "task"
+        elif profile == "review":
+            from ..results import PARSERS
+            spec = replace(
+                spec,
+                status=spec.status if spec.status != "AI Stage" else "AI 正在確認任務是否完成",
+                prompt=spec.prompt or "common/review.md",
+                run_state=spec.run_state or "reviewing",
+                mode=MODE_READONLY,
+                parser=spec.parser or PARSERS["review"],
+            )
+            self.result_kind = "review"
+            self.backend_mode = "review"
+            self.timeout_config_attr = "planning_timeout"
+            self.result_flag = "completed"
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
