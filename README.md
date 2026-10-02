@@ -216,6 +216,8 @@ Project Chat remains the primary run surface. Workflow editing is intentionally 
 
 - **Workflows** is the Workflow asset library (search/create/import/rename/duplicate/export/delete) and opens the dedicated Workflow Editor.
 - **Prompts** is a separate Prompt workspace with its own asset list and Prompt Editor.
+- Workflows can be right-clicked to **Show in Chat / Hide from Chat**; this uses the same persisted visibility state that filters the Project Chat Workflow picker.
+- `ralphy_ai_validate.yaml` is the initial Chat fallback when there is no still-valid saved Workflow selection. A valid explicit user selection is preserved.
 - **Workflow Editor** is the only Workflow editor and provides `Designer | YAML` views over the same canonical Workflow YAML.
 - Stage settings provide `Form | YAML | Routing | Test`; Stage YAML is parsed/validated by the same Python YAML/schema path before it updates the draft.
 - Stages reference Prompt files instead of embedding Prompt bodies.
