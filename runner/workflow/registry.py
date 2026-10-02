@@ -129,9 +129,15 @@ def _field_info(item: Any) -> dict[str, Any]:
         "required": required,
         "type": _type_name(item.type),
     }
+    raw_type = str(result["type"]).lower().replace("nonetype", "none")
     if item.name == "profile":
         result["type"] = "enum"
         result["values"] = ["generic", "execute", "review"]
+    elif item.name == "mode":
+        result["type"] = "enum"
+        result["values"] = ["readonly", "write"]
+    elif "bool" in raw_type and "none" in raw_type:
+        result["type"] = "optional_boolean"
     if item.name == "parser":
         from .results import PARSERS
         result["type"] = "enum"
