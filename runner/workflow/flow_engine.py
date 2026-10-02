@@ -110,10 +110,15 @@ class FlowEngine:
             self.context.save_state()
             return result, False
 
-        if (
+        completes_dynamic_task = (
             result.status == "pass"
-            and definition.get("_dynamic_task_complete")
-        ):
+            or (
+                result.status == "error"
+                and _is_review_definition(definition)
+                and target == "next"
+            )
+        )
+        if completes_dynamic_task and definition.get("_dynamic_task_complete"):
             finish_task(self.context)
 
         target = self._dynamic_target(definition, target)
