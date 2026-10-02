@@ -345,6 +345,18 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             assert body["x"] >= 0 and body["x"] + body["width"] <= viewport["width"] + 1
             assert sidebar["x"] >= 0 and sidebar["x"] + sidebar["width"] <= viewport["width"] + 1
 
+            workflow_row = page.locator("#studioFileList .studio-file-item").filter(has_text="layout_check.workflow.yaml")
+            workflow_row.dispatch_event(
+                "contextmenu",
+                {"clientX": viewport["width"] - 2, "clientY": viewport["height"] - 2, "button": 2},
+            )
+            menu = page.locator("#workflowContextMenu").bounding_box()
+            assert menu
+            assert menu["x"] >= 0 and menu["y"] >= 0
+            assert menu["x"] + menu["width"] <= viewport["width"] + 1
+            assert menu["y"] + menu["height"] <= viewport["height"] + 1
+            page.keyboard.press("Escape")
+
             page.click("#promptNav")
             assert page.locator("#promptNav").evaluate("node => node.classList.contains('active')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
