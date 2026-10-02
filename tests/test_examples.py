@@ -135,15 +135,15 @@ def test_latest_custom_workflow_uses_python_task_producer():
     from runner.workflow.loader import load_workflow
 
     workflow = load_workflow(EXAMPLES / "custom_workflow_latest.yaml")
-    assert [stage["name"] for stage in workflow] == [
-        "discover_tasks", "execute", "review", "done"
-    ]
+    assert [stage["name"] for stage in workflow] == ["discover_tasks", "done"]
     assert workflow[0]["type"] == "command"
     assert workflow[0]["produces"] == "tasks"
-    assert workflow[1]["scope"] == "task"
-    assert workflow[2]["scope"] == "task"
-    assert workflow[2]["type"] == "review"
-    assert workflow[3]["type"] == "command"
+    assert workflow[1]["type"] == "command"
+    producer = (EXAMPLES / "custom_task_producer.py").read_text(encoding="utf-8")
+    assert '"stages"' in producer
+    assert '"profile": "execute"' in producer
+    assert '"profile": "review"' in producer
+    assert '"task_complete": True' in producer
 
 
 def test_validation_modes_example_maps_to_builtin_workflows():
