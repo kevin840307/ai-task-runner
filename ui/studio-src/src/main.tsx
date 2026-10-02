@@ -1461,13 +1461,32 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
             onEdgesDelete={deleteEdges}
+            onEdgeClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
+            onEdgeContextMenu={(event, edge) => {
+              if (!edge.data?.explicit) return;
+              event.preventDefault();
+              setSelected("");
+              setContextMenu(null);
+              const menuWidth = 190;
+              const menuHeight = 64;
+              setEdgeContextMenu({
+                x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+                y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+                edge,
+              });
+            }}
             onNodeDragStop={rememberPosition}
-            onNodeClick={(_e, n) => n.data.kind === "stage" && setSelected(n.id)}
+            onNodeClick={(_e, n) => {
+              if (n.data.kind !== "stage") return;
+              setSelected(n.id);
+              setEdgeContextMenu(null);
+            }}
             onNodeDoubleClick={(_e, n) => n.data.kind === "stage" && openStageEditor(n.id)}
             onNodeContextMenu={(event, n) => {
               if (n.data.kind !== "stage") return;
               event.preventDefault();
               setSelected(n.id);
+              setEdgeContextMenu(null);
               const menuWidth = 200;
               const menuHeight = 230;
               setContextMenu({
@@ -1476,8 +1495,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 stage: n.id,
               });
             }}
-            onPaneContextMenu={(event) => { event.preventDefault(); setContextMenu(null); }}
-            onPaneClick={() => { setSelected(""); setContextMenu(null); }}
+            onPaneContextMenu={(event) => { event.preventDefault(); setContextMenu(null); setEdgeContextMenu(null); }}
+            onPaneClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
             connectionLineStyle={{ strokeWidth: 2.5 }}
             defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
             fitView
