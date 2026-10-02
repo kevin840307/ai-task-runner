@@ -1,6 +1,7 @@
 stages:
   project_discovery:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -8,7 +9,8 @@ stages:
     prompt: skills/project_discovery.md
 
   review_project_discovery:
-    type: review
+    type: base
+    profile: review
     label: Review Project Discovery
     prompt: skills/review.md
     instructions: Review project discovery.
@@ -17,6 +19,7 @@ stages:
 
   project_documentation:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -24,7 +27,8 @@ stages:
     prompt: skills/project_documentation.md
 
   challenge_review_project_documentation:
-    type: review
+    type: base
+    profile: review
     label: Challenge Review Project Documentation
     prompt: skills/challenge_review.md
     session_policy: fresh
@@ -35,7 +39,8 @@ stages:
       fail: project_documentation
 
   review_project_documentation:
-    type: review
+    type: base
+    profile: review
     label: Review Project Documentation
     prompt: skills/review.md
     instructions: Review the project documentation.
@@ -44,6 +49,7 @@ stages:
 
   e2e_spec_generation:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -51,7 +57,8 @@ stages:
     prompt: skills/e2e_spec_generation.md
 
   challenge_review_e2e_spec:
-    type: review
+    type: base
+    profile: review
     label: Challenge Review E2E SPEC
     prompt: skills/challenge_review.md
     session_policy: fresh
@@ -62,7 +69,8 @@ stages:
       fail: e2e_spec_generation
 
   review_e2e_spec:
-    type: review
+    type: base
+    profile: review
     label: Review E2E SPEC
     prompt: skills/review.md
     instructions: Review the E2E specification.
@@ -71,6 +79,7 @@ stages:
 
   verification_design:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -78,7 +87,8 @@ stages:
     prompt: skills/verification_design.md
 
   review_verification_design:
-    type: review
+    type: base
+    profile: review
     label: Review Verification Design
     prompt: skills/review.md
     instructions: Review the verification design.
@@ -87,6 +97,7 @@ stages:
 
   regression_dsl_generation:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -94,7 +105,8 @@ stages:
     prompt: skills/regression_dsl_generation.md
 
   review_regression_dsl:
-    type: review
+    type: base
+    profile: review
     label: Review Regression DSL
     prompt: skills/review.md
     instructions: Review the generated regression DSL.
@@ -103,6 +115,7 @@ stages:
 
   execution_qualification:
     type: base
+    profile: execute
     mode: write
     actor: executor
     track_changes: true
@@ -110,7 +123,8 @@ stages:
     prompt: skills/execution_qualification.md
 
   review_execution_qualification:
-    type: review
+    type: base
+    profile: review
     label: Review Execution & Qualification
     prompt: skills/review.md
     instructions: Review the regression execution and qualification result.
