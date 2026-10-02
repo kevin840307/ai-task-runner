@@ -15,7 +15,7 @@ from .stages import StageContext, StageExecutor, StageResult
 
 
 def _is_review_definition(definition: dict[str, Any]) -> bool:
-    return definition.get("type") == "review" or (
+    return (
         definition.get("type", "base") == "base"
         and definition.get("profile") == "review"
     )
