@@ -57,19 +57,7 @@ flow:
 
 Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 
-以下舊 Runtime 概念已刻意移除：
-
-- `recover`
-- `restart_at`
-- `repeat`
-- `max_attempts`
-- `on_exhausted`
-- `fresh_after_same_failures`
-- `replan` StageResult
-- 舊的 `task` / `review` Stage type 與 `scope: task`
-- 可用 graph routing 的 ERROR/recovery policy
-- System/Custom Workflow 分流
-- TaskRunner/Pipeline/LinearRouting 相容 runtime
+pre-v3 的相容 runtime/schema 已完全移除。現在 Workflow 只使用 Stage registry、PASS/FAIL 語意 routing、Stage-local technical retry、dynamic child Workflow 與 durable session/state 契約。
 
 ## Stage 與 24H Reliability
 
@@ -87,7 +75,7 @@ Stage 只做一件事並回傳 `StageResult`。Stage 不實作 retry、recover�
 
 ### AI Stage Profile
 
-一般 AI 行為統一使用一個 `base` Stage type，再用 profile 表達：
+一般 AI 行為統一使用一個 `base` Stage type，再用 profile 表達。Profile 預設只定義在 `runner/workflow/profiles.py`，YAML normalization、dynamic child expansion 與 Studio 共用同一份來源：
 
 ```yaml
 stages:
@@ -345,9 +333,10 @@ tool\qwen_live_reliability_24h.bat
 
 1. `runner/workflow_runner.py`
 2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/stage_executor.py`
+3. `runner/workflow/execution/stage_executor.py`
 4. `runner/workflow/stages/`
-5. `runner/runtime/run_state.py`
+5. `runner/workflow/profiles.py`
+6. `runner/runtime/run_state.py`
 
 核心規則：
 
