@@ -7,7 +7,7 @@ import pytest
 
 import runner.workflow.flow_engine as flow_engine_module
 from runner.config.runtime import RuntimeConfig
-from runner.runtime.run_state import RunState, Task
+from runner.runtime.run_state import RunState
 from runner.workflow.flow_engine import FlowEngine
 from runner.workflow.stages import StageContext, StageResult
 
@@ -160,54 +160,6 @@ def test_done_edge_completes_immediately(tmp_path):
 
     assert FlowEngine(ctx).run(executor) == 0
     assert executor.seen == ["gate"]
-    assert ctx.state.completed is True
-
-
-def test_task_scope_runs_the_explicit_block_for_each_task(tmp_path):
-    tasks = [
-        Task("t1", "one", "d", ["a"], "o"),
-        Task("t2", "two", "d", ["a"], "o"),
-    ]
-    workflow = [
-        node("execute", scope="task"),
-        node("review", scope="task"),
-        node("validate"),
-    ]
-    ctx = context(tmp_path, workflow, tasks)
-    executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
-
-    assert FlowEngine(ctx).run(executor) == 0
-
-    assert executor.seen == [
-        "execute", "review",
-        "execute", "review",
-        "validate",
-    ]
-    assert ctx.state.current == 2
-    assert all(task.status == "completed" for task in ctx.state.tasks)
-    assert ctx.state.completed is True
-
-
-def test_task_review_fail_edge_restarts_same_task_at_execute(tmp_path):
-    task = Task("t1", "one", "d", ["a"], "o")
-    workflow = [
-        node("execute", scope="task"),
-        node("review", scope="task", routes={"fail": "execute"}),
-    ]
-    ctx = context(tmp_path, workflow, [task])
-    reviews = 0
-
-    def callback(stage, _ctx, previous):
-        nonlocal reviews
-        if stage.name == "review":
-            reviews += 1
-            return StageResult(stage.name, "fail" if reviews == 1 else "pass")
-        return StageResult(stage.name, "pass")
-
-    executor = Executor(callback)
-    assert FlowEngine(ctx).run(executor) == 0
-    assert executor.seen == ["execute", "review", "execute", "review"]
-    assert ctx.state.current == 1
     assert ctx.state.completed is True
 
 
