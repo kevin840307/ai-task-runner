@@ -473,7 +473,7 @@ class WorkflowStudioMixin:
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
-            "type", "status", "label", "scope", "routes", "error_policy", "max_failures", "validator",
+            "type", "status", "label", "routes", "error_policy", "max_failures", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
@@ -668,8 +668,8 @@ class WorkflowStudioMixin:
         if parser not in (None, "", "review", "validation"):
             raise ValueError("Stage parser must be review or validation")
         produces = fields.get("produces")
-        if produces not in (None, "", "tasks"):
-            raise ValueError("Stage produces must be tasks when specified")
+        if produces not in (None, "", "tasks", "stages"):
+            raise ValueError("Stage produces must be tasks or stages when specified")
         session_policy = fields.get("session_policy", "auto")
         if session_policy not in {"auto", "main", "role", "fresh"}:
             raise ValueError("Stage session_policy must be auto, main, role, or fresh")
@@ -679,8 +679,9 @@ class WorkflowStudioMixin:
             )
         max_failures = fields.get("max_failures")
         if max_failures is not None:
-            if stage_type != "review":
-                raise ValueError("Stage max_failures is only valid for Review")
+            is_review = stage_type == "base" and fields.get("profile") == "review"
+            if not is_review:
+                raise ValueError("Stage max_failures is only valid for AI Stage Review profile")
             if (
                 not isinstance(max_failures, int)
                 or isinstance(max_failures, bool)
@@ -709,9 +710,6 @@ class WorkflowStudioMixin:
 
     @staticmethod
     def _validate_node_editor_fields(updates: dict, workflow: dict) -> None:
-        scope = updates.get("scope")
-        if scope not in (None, "", "task"):
-            raise ValueError("Stage scope must be task when specified")
         label = updates.get("label")
         if label is not None and (not isinstance(label, str) or not label.strip()):
             raise ValueError("Stage label must be a non-empty string")
@@ -1373,7 +1371,7 @@ class WorkflowStudioMixin:
                             continue
                         previous = original.get(key, "" if key in {"status", "prompt"} else None)
                         if value != previous:
-                            changes[key] = None if key in {"status", "prompt", "label", "scope"} and value == "" else value
+                            changes[key] = None if key in {"status", "prompt", "label"} and value == "" else value
                     if changes:
                         self._validate_stage_editor_fields(config)
                         self._validate_node_editor_fields(changes, {"stages": desired})
@@ -1608,7 +1606,7 @@ class WorkflowStudioMixin:
     def _supported_stage_types(self) -> set[str]:
         tool = self.repo_root / "tool" / "workflow_catalog.py"
         if not tool.is_file():
-            return {"base", "task", "review", "ai_validator", "command", "plan"}
+            return {"base", "ai_validator", "command", "plan", "handoff"}
         return set(self.workflow_catalog().get("stage_types", {}))
 
     def _workflow_visibility(self) -> dict[str, bool]:
