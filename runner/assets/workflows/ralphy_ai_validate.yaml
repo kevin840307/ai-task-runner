@@ -1,6 +1,7 @@
 stages:
   ralphy:
-    type: task
+    type: base
+    profile: execute
     status: Ralphy 正在執行任務
     prompt: ralphy/ralphy.md
     session_policy: fresh
@@ -12,6 +13,7 @@ stages:
     session_policy: fresh
     routes:
       fail: ralphy
+
 flow:
   - ralphy
   - validate_ai
