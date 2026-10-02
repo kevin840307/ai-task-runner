@@ -60,7 +60,7 @@ The complete child Workflow executes through the same StageExecutor/FlowEngine r
 
 `type: handoff` advertises `targets`. Its structured result selects exactly one allowed target. It does not execute target work and does not own a scheduler hierarchy.
 
-All ordinary AI specialists are `base` (AI Stage) nodes with a behavior profile; only genuinely special runtime semantics use dedicated Stage types such as `plan`, `ai_validator`, `command` and `handoff`.
+All ordinary AI specialists are `base` (AI Stage) nodes with a behavior profile. Profile defaults live only in `runner/workflow/profiles.py`; YAML normalization, dynamic expansion and Studio consume that same catalog. Only genuinely special runtime semantics use dedicated Stage types such as `plan`, `ai_validator`, `command` and `handoff`.
 
 Session policy is independent from routing:
 - `role` = durable Stage-owned Session;
@@ -90,12 +90,6 @@ The backend validates the same catalog/schema used by runtime loading.
 
 ## Explicit non-goals
 
-Do not restore:
-- Pipeline/TaskRunner compatibility runtimes;
-- repair/recover/restart_at/repeat/max_attempts/on_exhausted graph controls;
-- `routes.error`;
-- Discussion / Group Chat runtime or UI mode;
-- generic AgentMessage or scheduler framework;
-- generic parallel DAG execution.
+Do not restore any pre-v3 compatibility runtime/schema. ERROR remains an execution concern rather than a graph edge. Discussion / Group Chat, generic AgentMessage/scheduler frameworks and generic parallel DAG execution are also outside the current runtime.
 
 Parallel read-only/write-isolated execution remains future work.
