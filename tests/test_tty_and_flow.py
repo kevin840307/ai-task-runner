@@ -66,15 +66,16 @@ def test_redirected_output_has_no_spinner_and_deduplicates(monkeypatch, tmp_path
     assert ui._thread is None
 
 
-def test_default_flow_uses_explicit_plan_execute_review_nodes():
-    assert "understand" not in STAGE_REGISTRY
+def test_default_flow_uses_plan_dynamic_children_then_validators():
+    assert set(STAGE_REGISTRY) == {"base", "plan", "ai_validator", "command", "handoff"}
     workflow = load_default_workflow("validator.py", "ai")
     assert [stage["name"] for stage in workflow] == [
-        "planning", "execute", "review", "validate_file", "validate_ai"
+        "planning", "validate_file", "validate_ai"
     ]
-    assert [stage.get("scope") for stage in workflow[1:3]] == ["task", "task"]
-    assert workflow[2]["routes"]["fail"] == "execute"
-    assert "planner_stages" not in workflow[0]
+    assert workflow[0]["type"] == "plan"
+    assert all("scope" not in stage for stage in workflow)
+    assert "execute" not in {stage["name"] for stage in workflow}
+    assert "review" not in {stage["name"] for stage in workflow}
 
 
 def test_repeated_tty_start_does_not_restart_spinner_or_add_lines(
