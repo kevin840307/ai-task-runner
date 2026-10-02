@@ -85,7 +85,8 @@ def test_builder_prompt_describes_current_graph_and_prompt_contract():
     assert "error_policy.retries" in text
     assert "profile: execute" in text
     assert "profile: review" in text
-    assert "produces: tasks" in text or "produces `tasks`" in text
+    assert "`tasks` or `stages`" in text
+    assert "Runner never guesses child Stage types" in text
     assert "Runner never guesses child Stage types" in text
     assert "ERROR is never a graph edge" in text
 
