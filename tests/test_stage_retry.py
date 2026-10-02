@@ -9,7 +9,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.errors import ConfigurationError, RunnerError
 from runner.runtime.run_state import RunState
 from runner.workflow.stages import StageContext, StageResult
-from runner.workflow.stages.executor import StageExecutor
+from runner.workflow.stage_executor import StageExecutor
 
 
 class Hooks:
