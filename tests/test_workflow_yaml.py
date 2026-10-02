@@ -125,21 +125,14 @@ flow:
         load_workflow(path)
 
 
-def test_builtin_workflow_has_explicit_plan_task_review_validate_nodes():
+def test_builtin_workflow_keeps_plan_children_dynamic():
     workflow = load_workflow(WORKFLOWS["ai"])
 
-    assert [item["name"] for item in workflow] == [
-        "planning",
-        "execute",
-        "review",
-        "validate_ai",
-    ]
-    assert workflow[1]["scope"] == "task"
-    assert workflow[2]["scope"] == "task"
-    assert workflow[2]["error_policy"] == {"retries": 2}
-    assert workflow[2]["max_failures"] == 3
-    assert workflow[2]["routes"] == {"fail": "execute"}
-    assert workflow[3]["routes"] == {"fail": "planning"}
+    assert [item["name"] for item in workflow] == ["planning", "validate_ai"]
+    assert workflow[0]["type"] == "plan"
+    assert workflow[1]["type"] == "ai_validator"
+    assert workflow[1]["routes"] == {"fail": "planning"}
+    assert all("scope" not in item for item in workflow)
 
 
 @pytest.mark.parametrize(
@@ -161,7 +154,8 @@ stages:
   execute:
     type: base
   review:
-    type: review
+    type: base
+    profile: review
     {legacy}
 flow:
   - execute
@@ -215,7 +209,8 @@ stages:
     error_policy:
       retries: -1
   check:
-    type: review
+    type: base
+    profile: review
     error_policy:
       retries: 2
 flow:
@@ -298,38 +293,31 @@ flow:
         load_workflow(path)
 
 
-def test_task_scope_must_be_one_contiguous_block(tmp_path):
+@pytest.mark.parametrize("stage_type", ["base", "plan", "ai_validator", "command", "handoff"])
+def test_removed_scope_contract_is_rejected_for_every_stage(tmp_path, stage_type):
+    extra = ""
+    if stage_type == "command":
+        extra = 'command: "echo ok"'
+    elif stage_type == "handoff":
+        extra = "targets: [worker]"
+    elif stage_type == "ai_validator":
+        extra = "validator: ai"
     path = write_workflow(
         tmp_path,
-        """
+        f"""
 stages:
-  a: {type: base, scope: task}
-  b: {type: base}
-  c: {type: base, scope: task}
-flow:
-  - a
-  - b
-  - c
-""",
-    )
-    with pytest.raises(RunnerError, match="contiguous"):
-        load_workflow(path)
-
-
-def test_validator_cannot_run_inside_task_scope(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  validate:
-    type: ai_validator
-    validator: ai
+  legacy:
+    type: {stage_type}
     scope: task
+    {extra}
+  worker:
+    type: base
 flow:
-  - validate
+  - legacy
+  - worker
 """,
     )
-    with pytest.raises(RunnerError, match="validator stages cannot use scope"):
+    with pytest.raises(RunnerError, match="unknown options"):
         load_workflow(path)
 
 
@@ -341,7 +329,8 @@ stages:
   execute:
     type: base
   review:
-    type: review
+    type: base
+    profile: review
     routes:
       fail: execute
 flow:
@@ -373,7 +362,8 @@ stages:
   execute:
     type: base
   review:
-    type: review
+    type: base
+    profile: review
     max_failures: 3
     routes:
       fail: execute
@@ -405,7 +395,8 @@ def test_review_max_failures_pass_clears_consecutive_counter(tmp_path):
         """
 stages:
   review:
-    type: review
+    type: base
+    profile: review
     max_failures: 3
 flow:
   - review
@@ -442,7 +433,8 @@ def test_review_max_failures_fourth_entry_is_synthetic_pass(tmp_path):
         """
 stages:
   review:
-    type: review
+    type: base
+    profile: review
     max_failures: 3
 flow:
   - review
@@ -465,7 +457,7 @@ flow:
 
 
 def test_finish_task_clears_task_review_failure_counters(tmp_path):
-    workflow = [{"name": "review", "type": "review", "scope": "task", "max_failures": 3}]
+    workflow = [{"name": "review", "type": "base", "profile": "review", "max_failures": 3}]
     ctx = context(tmp_path, workflow)
     ctx.state.tasks = [Task(id="task-1", title="one", description="one")]
     ctx.state.review_failures = {
@@ -495,13 +487,14 @@ def test_max_failures_is_review_only_and_positive(tmp_path):
         """
 stages:
   execute:
-    type: task
+    type: base
+    profile: execute
     max_failures: 3
 flow:
   - execute
 """,
     )
-    with pytest.raises(RunnerError, match="max_failures is only valid for type: review"):
+    with pytest.raises(RunnerError, match="max_failures is only valid for Review semantics"):
         load_workflow(invalid_type)
 
     invalid_value = write_workflow(
@@ -509,7 +502,8 @@ flow:
         """
 stages:
   review:
-    type: review
+    type: base
+    profile: review
     max_failures: 0
 flow:
   - review
@@ -525,7 +519,8 @@ def test_review_finite_error_policy_skips_after_exhausted_error(tmp_path):
         """
 stages:
   review:
-    type: review
+    type: base
+    profile: review
     error_policy:
       retries: 2
   validate:
@@ -554,54 +549,65 @@ flow:
     assert ctx.state.completed is True
 
 
-def test_task_scoped_review_error_skip_finishes_current_task_and_continues(tmp_path):
-    path = write_workflow(
-        tmp_path,
-        """
-stages:
-  planning:
-    type: plan
-  execute:
-    type: task
-    scope: task
-  review:
-    type: review
-    scope: task
-    error_policy:
-      retries: 2
-  validate:
-    type: command
-    command: "echo validate"
-flow:
-  - planning
-  - execute
-  - review
-  - validate
-""",
-    )
-    workflow = load_workflow(path)
+def test_dynamic_plan_child_review_error_skip_finishes_each_task_and_continues(tmp_path):
+    workflow = [
+        {"name": "planning", "type": "plan"},
+        {"name": "validate", "type": "command", "command": "echo validate"},
+    ]
     ctx = context(tmp_path, workflow)
-    ctx.state.tasks = [
+
+    tasks = [
         Task(id="t1", title="one", description="one"),
         Task(id="t2", title="two", description="two"),
     ]
+    child_stages = []
+    for index, task in enumerate(tasks, 1):
+        execute = f"task_{index:03d}_execute"
+        review = f"task_{index:03d}_review"
+        child_stages.extend([
+            {"name": execute, "type": "base", "profile": "execute", "task_id": task.id},
+            {
+                "name": review,
+                "type": "base",
+                "profile": "review",
+                "task_id": task.id,
+                "task_complete": True,
+                "error_policy": {"retries": 2},
+                "routes": {"fail": execute},
+            },
+        ])
 
     class ErrorReviewExecutor(Executor):
         def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
             self.calls.append((stage.name, previous))
             self.retry_limits.append(retry_limit)
-            if stage.name == "review":
+            if stage.name == "planning":
+                return StageResult(
+                    "planning",
+                    "pass",
+                    output="planned",
+                    data={"tasks": tasks, "stages": child_stages},
+                    kind="tasks",
+                )
+            if stage.name.endswith("_review"):
                 return StageResult(stage.name, "error", output="review unavailable")
             return StageResult(stage.name, "pass", output=stage.name)
 
     executor = ErrorReviewExecutor()
-    ctx.state.workflow_position = 1
     assert FlowEngine(ctx).run(executor) == 0
-    assert [name for name, _ in executor.calls] == [
-        "execute", "review", "execute", "review", "validate",
+    names = [name for name, _ in executor.calls]
+    assert names[0] == "planning"
+    assert names[-1] == "validate"
+    assert [name for name in names if name.endswith("_execute")] == [
+        "planning__g1__task_001_execute",
+        "planning__g1__task_002_execute",
     ]
-    assert executor.retry_limits == [None, 2, None, 2, None]
-    assert ctx.state.current == 2
+    assert [name for name in names if name.endswith("_review")] == [
+        "planning__g1__task_001_review",
+        "planning__g1__task_002_review",
+    ]
+    assert executor.retry_limits == [None, None, 2, None, 2, None]
+    assert [task.status for task in ctx.state.tasks] == ["completed", "completed"]
     assert ctx.state.completed is True
 
 
@@ -646,7 +652,8 @@ stages:
   first:
     type: base
   second:
-    type: review
+    type: base
+    profile: review
     error_policy:
       retries: -1
 flow:
