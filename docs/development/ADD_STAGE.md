@@ -35,3 +35,33 @@ Start or restart `python ui/main.py`, then reload the browser. The UI server obt
 The Palette groups built-in types by purpose; registered types without built-in presentation metadata appear under **擴充積木** with a generic title. The editor fields and validation still come from the Stage spec. Adding a new type does not require a Flow UI code change.
 
 The Flow UI keeps edits in browser memory until **儲存 Workflow**. Save checks the file hash, Stage/route schema, Prompt references, and Workflow dry-run before one atomic YAML write. Reloading or leaving without saving discards the draft.
+
+## Decide whether a new Stage type is actually needed
+
+For ordinary AI behavior, prefer the existing `type: base`:
+
+- `profile: generic` — custom AI prompt/instructions.
+- `profile: execute` — writable execution behavior.
+- `profile: review` — read-only structured review.
+
+Create a special Stage type only when behavior needs new runtime semantics, such as Plan, AI Validator, Command, Handoff, or a plugin-specific operation. Do not create a Python Stage class merely because a Workflow needs another role or prompt.
+
+## Producer-defined dynamic child Workflows
+
+A special Stage may return `StageResult.kind = "tasks"` or `"stages"`.
+
+Runner never generates a child template. The producer Stage owns the child `stages` definitions; Runner only validates, namespaces, persists, executes, recovers, and resumes them.
+
+A `tasks` producer result must include:
+
+- a non-empty `tasks` array;
+- a non-empty `stages` array;
+- at least one child binding each Task with `task_id`;
+- at least one child per Task with `task_complete: true`.
+
+Child routes and Handoff targets must stay inside the child Workflow. Use normal `next` / `done` / `stop` semantics to finish the child and return to the parent continuation; do not route directly to arbitrary parent Stages.
+
+PlanStage is the first built-in producer: after parsing Tasks, it creates repeated `AI Stage(profile=execute) -> AI Stage(profile=review)` children. The complete child Workflow runs before the parent continues.
+
+Every child runs through the same `runner/workflow/stage_executor.py`, so custom/plugin Stages must not implement retry/recover/session machinery.
+
