@@ -25,7 +25,6 @@ type Stage = Record<string, unknown> & {
   type: string;
   status?: string;
   label?: string;
-  scope?: string;
   routes?: Record<string, string>;
   error_policy?: { retries: number };
   max_failures?: number;
@@ -69,7 +68,7 @@ type StudioFile = {
 };
 
 type StudioNodeData = {
-  kind: "start" | "end" | "stage" | "scope";
+  kind: "start" | "end" | "stage";
   label: string;
   subtitle?: string;
   stage?: Stage;
@@ -103,7 +102,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
     stage_settings: "Stage 設定", form: "Form", basic: "基本", parameters: "參數", yaml_stage: "YAML", routing: "連線", test: "測試", apply_yaml: "套用 YAML",
     close: "關閉", duplicate: "複製積木", remove: "移除積木", draft_only: "修改先存為草稿",
-    type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
+    type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
     testing: "測試中…", no_incoming: "目前沒有連入線。",
@@ -119,7 +118,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
     stage_settings: "Stage Settings", form: "Form", basic: "Basic", parameters: "Parameters", yaml_stage: "YAML", routing: "Routing", test: "Test", apply_yaml: "Apply YAML",
     close: "Close", duplicate: "Duplicate", remove: "Remove", draft_only: "Changes stay in draft",
-    type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
+    type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
     testing: "Testing…", no_incoming: "No incoming edges.",
@@ -251,14 +250,14 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const title = String(s.label || s.name);
   const dynamicRouter = s.type === "handoff";
   const errorRetries = s.error_policy?.retries;
-  const reviewErrorSkip = s.type === "review" && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
-  const reviewMaxFailures = s.type === "review" && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
+  const reviewSemantic = s.type === "base" && s.profile === "review";
+  const reviewErrorSkip = reviewSemantic && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
+  const reviewMaxFailures = reviewSemantic && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
-        <span className="stage-type">{STAGE_META[s.type]?.title || String(s.type || "Stage")}</span>
-        {s.scope === "task" && <b className="scope-chip">↻ Task</b>}
+        <span className="stage-type">{s.type === "base" && s.profile ? `AI · ${String(s.profile)}` : (STAGE_META[s.type]?.title || String(s.type || "Stage"))}</span>
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
@@ -282,14 +281,9 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   );
 }
 
-function ScopeNode({ data }: NodeProps<Node<StudioNodeData>>) {
-  return <div className="wf-scope"><span className="wf-scope-handle" title="拖曳移動 Per Task 區域"><strong>{data.label}</strong><span aria-hidden="true">⠿</span></span></div>;
-}
-
 const nodeTypes = {
   terminal: TerminalNode,
   stage: StageNode,
-  scope: ScopeNode,
 };
 
 function stageByName(visual: Visual, name: string) {
@@ -298,8 +292,6 @@ function stageByName(visual: Visual, name: string) {
 
 const STAGE_META: Record<string, { title: string; description: string }> = {
   plan: { title: "Plan", description: "產生 Task[] 規劃" },
-  task: { title: "Execute", description: "執行目前 Task" },
-  review: { title: "Review", description: "檢查完成度並回 PASS / FAIL" },
   ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
   handoff: { title: "Handoff", description: "動態選擇下一個 Stage" },
   command: { title: "Command", description: "執行外部命令或驗證器" },
@@ -307,8 +299,8 @@ const STAGE_META: Record<string, { title: string; description: string }> = {
 };
 
 const PALETTE_SECTIONS = [
-  { id: "build", types: ["plan", "task", "base"], icon: "✦" },
-  { id: "validate", types: ["review", "ai_validator"], icon: "✓" },
+  { id: "build", types: ["plan", "base"], icon: "✦" },
+  { id: "validate", types: ["ai_validator"], icon: "✓" },
   { id: "handoff", types: ["handoff"], icon: "↔" },
   { id: "tools", types: ["command"], icon: "›" },
 ];
@@ -343,7 +335,7 @@ function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
 }
 
 function nextStageKey(visual: Visual, type: string): string {
-  const base = type === "task" ? "execute" : type === "ai_validator" ? "validate_ai" : type;
+  const base = type === "base" ? "ai_stage" : type === "ai_validator" ? "validate_ai" : type;
   const used = new Set(visual.stages.map((s) => s.name));
   if (!used.has(base)) return base;
   let i = 2;
@@ -387,25 +379,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
     data: { kind: "start", label: "START" },
     deletable: false,
   });
-
-  const taskIndexes = visual.flow
-    .map((name, i) => stageByName(visual, name)?.scope === "task" ? i : -1)
-    .filter((i) => i >= 0);
-  if (taskIndexes.length) {
-    const first = Math.min(...taskIndexes);
-    const last = Math.max(...taskIndexes);
-    nodes.push({
-      id: "__task_scope__",
-      type: "scope",
-      position: { x: mainX - 90, y: 120 + first * verticalGap - 22 },
-      data: { kind: "scope", label: "↻ PER TASK" },
-      style: { width: 480, height: (last - first + 1) * verticalGap + 36 },
-      dragHandle: ".wf-scope-handle",
-      selectable: true,
-      draggable: true,
-      deletable: false,
-    });
-  }
 
   const autoPositions: CanvasLayout = {};
   const branchTargets = new Set<string>();
@@ -783,7 +756,7 @@ function App() {
     return catalog.stage_types[draft.type]?.options || [];
   }, [draft, catalog]);
   const parameterOptions = options.filter((o) => {
-    if (["name", "type", "status", "label", "scope", "routes", "targets", "max_failures"].includes(o.name)) return false;
+    if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"].includes(o.name)) return false;
     if (o.name === "session_key" && String(draft?.session_policy || "auto") !== "auto") return false;
     return true;
   });
@@ -876,21 +849,15 @@ function App() {
       rememberUndoSnapshot(visual);
       const updated = { ...visual, stages: visual.stages.map((stage) => stage.name === next.name ? next : stage) };
       setVisual(updated);
-      if (draft?.scope !== next.scope) {
-        const graph = graphFor(updated, catalog);
-        setNodes(graph.nodes);
-        setEdges(graph.edges);
-      } else {
-        setNodes((current) => current.map((node) => node.id === next.name ? {
-          ...node,
-          data: {
-            ...node.data,
-            label: String(next.label || next.name),
-            subtitle: String(next.status || ""),
-            stage: next,
-          },
-        } : node));
-      }
+      setNodes((current) => current.map((node) => node.id === next.name ? {
+        ...node,
+        data: {
+          ...node.data,
+          label: String(next.label || next.name),
+          subtitle: String(next.status || ""),
+          stage: next,
+        },
+      } : node));
     }
     setDirtyGraph(true);
     setTestResult(null);
@@ -1119,17 +1086,37 @@ function App() {
     writeLayout(visual.id, layoutRef.current);
   }, [visual]);
 
+  function applyAIProfileDefaults(stage: Stage, profile: string): Stage {
+    const next = { ...stage, profile };
+    if (profile === "execute") {
+      return {
+        ...next,
+        status: "AI 正在處理目前任務",
+        prompt: "common/execution.md",
+        error_policy: stage.error_policy,
+      };
+    }
+    if (profile === "review") {
+      return {
+        ...next,
+        status: "AI 正在確認任務是否完成",
+        prompt: "common/review.md",
+        error_policy: { retries: 2 },
+        max_failures: 3,
+      };
+    }
+    const { max_failures: _maxFailures, ...generic } = next;
+    return { ...generic, profile: "generic" };
+  }
+
   async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "") {
     if (!visual || !catalog?.stage_types?.[stageType]) return;
     const name = nextStageKey(visual, stageType);
-    const stage: Stage = { name, type: stageType };
+    let stage: Stage = { name, type: stageType };
+    if (stageType === "base") stage = applyAIProfileDefaults(stage, "generic");
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
-    if (stageType === "review") {
-      stage.error_policy = { retries: 2 };
-      stage.max_failures = 3;
-    }
     const next = { ...visual, stages: [...visual.stages, stage] };
     rememberUndoSnapshot(visual);
     setVisual(next);
@@ -1622,21 +1609,24 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               <div className="stage-editor-content">
               {inspectorTab === "form" && <div className="fields stage-form-panel" role="tabpanel">
                 <section className="stage-form-section">
-                  <div className="stage-form-section-head"><strong>{tx("basic")}</strong><small>Stage identity and execution scope</small></div>
+                  <div className="stage-form-section-head"><strong>{tx("basic")}</strong><small>Stage identity and behavior</small></div>
                 <label>
                   <span>{tx("type_fixed")}</span>
                   <select value={draft.type} disabled>
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
+                {draft.type === "base" && <label>
+                  <span>AI profile</span>
+                  <select value={String(draft.profile || "generic")} onChange={(e) => editDraft(applyAIProfileDefaults(draft, e.target.value))}>
+                    <option value="generic">Generic</option>
+                    <option value="execute">Execute</option>
+                    <option value="review">Review</option>
+                  </select>
+                  <small className="effective-value">Choose a behavior preset; prompt and advanced parameters remain editable.</small>
+                </label>}
                 <label><span>{tx("display_name")}（Stage key 不變）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>{tx("run_status")}</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
-                <label>
-                  <span>{tx("scope")}</span>
-                  <select value={String(draft.scope || "")} onChange={(e) => editDraft({ ...draft, scope: e.target.value })}>
-                    <option value="">Workflow</option><option value="task">Per task</option>
-                  </select>
-                </label>
                 </section>
                 <section className="stage-form-section">
                   <div className="stage-form-section-head"><strong>{tx("parameters")}</strong><small>{parameterOptions.length} fields</small></div>
