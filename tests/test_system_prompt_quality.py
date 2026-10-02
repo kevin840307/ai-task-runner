@@ -74,18 +74,19 @@ def test_final_validator_is_requirement_driven_and_bounded():
     assert "smallest clear implementation that remains maintainable" in value
 
 
-def test_builtin_workflows_use_explicit_plan_execute_review_validator_nodes():
+def test_builtin_planning_workflows_keep_generated_children_out_of_static_yaml():
     expected = {
-        "ai.yaml": ["planning", "execute", "review", "validate_ai"],
-        "file.yaml": ["planning", "execute", "review", "validate_file"],
-        "mixed.yaml": ["planning", "execute", "review", "validate_file", "validate_ai"],
+        "ai.yaml": ["planning", "validate_ai"],
+        "file.yaml": ["planning", "validate_file"],
+        "mixed.yaml": ["planning", "validate_file", "validate_ai"],
     }
     for name, flow in expected.items():
         data = yaml.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
         assert data["flow"] == flow
-        assert data["stages"]["execute"]["scope"] == "task"
-        assert data["stages"]["review"]["scope"] == "task"
-        assert data["stages"]["review"]["routes"]["fail"] == "execute"
+        assert data["stages"]["planning"]["type"] == "plan"
+        assert "execute" not in data["stages"]
+        assert "review" not in data["stages"]
+        assert all("scope" not in stage for stage in data["stages"].values())
 
 
 def test_builtin_validation_edges_close_back_through_planning():
