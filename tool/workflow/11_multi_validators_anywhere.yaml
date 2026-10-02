@@ -2,15 +2,7 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
 
   preflight_file:
     type: command
@@ -20,7 +12,8 @@ stages:
       fail: planning
 
   challenge_review:
-    type: review
+    type: base
+    profile: review
     prompt: common/review.md
     session_policy: fresh
     routes:
@@ -51,8 +44,6 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - preflight_file
   - challenge_review
   - ai_gate_1
