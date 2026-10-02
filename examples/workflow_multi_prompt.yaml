@@ -1,35 +1,31 @@
 stages:
   step_a:
     type: base
-    mode: write
-    actor: executor
-    track_changes: true
+    profile: execute
     prompt: prompts/step_a.md
 
   review_a:
-    type: review
+    type: base
+    profile: review
     prompt: prompts/review_a.md
     routes:
       fail: step_a
 
   step_b:
     type: base
-    mode: write
-    actor: executor
-    track_changes: true
+    profile: execute
     prompt: prompts/step_b.md
 
   review_b:
-    type: review
+    type: base
+    profile: review
     prompt: prompts/review_b.md
     routes:
       fail: step_b
 
   step_c:
     type: base
-    mode: write
-    actor: executor
-    track_changes: true
+    profile: execute
     prompt: prompts/step_c.md
 
   validate_file:
