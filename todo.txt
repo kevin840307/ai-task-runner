@@ -27,6 +27,22 @@ Current product direction:
 
 
 
+DYNAMIC EXPANSION + AI STAGE CONVERGENCE (2026-10-02)
+-----------------------------------------------------
+[x] Remove public `type: task`, `type: review`, `scope` and durable `task_step`.
+[x] General AI behavior is `base` + `profile: generic|execute|review`.
+[x] PlanStage owns task -> Execute/Review child generation; Runner only validates/inserts/executes producer-defined children.
+[x] Any special/plugin Stage may return producer-defined `tasks` or `stages`.
+[x] Child Workflow runs fully before returning to the parent Stage after the producer.
+[x] Persist expanded Workflow + dynamic task groups so Resume does not rerun the producer.
+[x] Update Workflow Builder + production Dry Run to the same contract.
+[x] Update React Editor catalog/Profile UI; remove Workflow-level vs task-level controls.
+[x] Add real Playwright browser CI, graph CRUD, edge Delete/right-click Delete, Ctrl+Z and common desktop viewport coverage.
+[ ] Final source/bundle sync and all deterministic CI jobs green.
+[ ] Real-Qwen short gate after deterministic stabilization.
+[ ] High-density soak.
+[ ] Full 24H Windows unattended soak.
+
 RELEASE READINESS REVIEW (2026-09-30)
 --------------------------------------
 [x] Fix Studio session-policy UX so explicit main/role/fresh cannot leave or edit conflicting session_key.
@@ -137,7 +153,7 @@ Do not add compatibility shims for these old paths/concepts:
 - execution_mode / separate mode Runner hierarchy
 - repair Stage as runtime concept
 - recover / restart_at / repeat / max_attempts / on_exhausted graph controls
-- hidden Plan Task/Review nodes
+- legacy `task` / `review` Stage types and `scope` contract
 - System/Custom asset split
 - generic Folder picker UI for asset grouping
 
@@ -250,7 +266,7 @@ WORKFLOW STUDIO - LINEAR FIRST
 [x] Add graph-save API for Flow order + PASS/FAIL routes; Handoff targets are Stage-owned edges.
 [x] Make Stage writable fields derive from the runtime workflow catalog instead of a fixed allow-list.
 [x] Add START / END as UI-only virtual node concepts in the new Studio source.
-[x] Show scope: task as a PER TASK visual group; Plan still produces Task[] only.
+[x] Remove task-level UI/scope entirely; Plan remains a special producer that emits its own dynamic child Workflow.
 [x] Add PASS / FAIL Stage handles; ERROR is retry-only; Handoff uses one multi-target HANDOFF handle.
 [x] Edge selection supports Delete/Backspace for explicit PASS/FAIL/HANDOFF edges; implicit PASS -> next stays protected.
 [x] Workflow draft supports Ctrl+Z undo for graph/stage mutations; Save/Reload clears undo history and text inputs keep native undo.
@@ -262,7 +278,7 @@ WORKFLOW STUDIO - LINEAR FIRST
 [x] Keep Stage key immutable in the Workflow Editor and expose label/display-name editing explicitly; changing the key requires recreate/YAML.
 [ ] Add graph dirty/unsaved-navigation guard and runtime edit-lock handling to the full page.
 [x] Add Prompt selector/browse experience in the Stage inspector and show the effective default Prompt explicitly.
-[x] Add real Chromium graph CRUD browser E2E: START/END, Stage delete, flow reorder, PASS/FAIL/HANDOFF connect/delete/retarget, scope:task and save/reload YAML round-trip.
+[x] Add real Chromium graph CRUD browser E2E: START/END, Stage delete, flow reorder, PASS/FAIL/HANDOFF connect/delete/retarget, AI profiles and save/reload YAML round-trip.
 [x] Add runtime-catalog -> React Workflow Editor coverage proving generic Stage options are editable or explicitly owned by specialized controls.
 [ ] Remove/retire the old Flow Map modal/card-list Visual editor only after the React Flow page has equivalent coverage.
 [x] Workflow Builder internal prompts stay outside assets/Studio; removed unused workflow_prompt.md and workflow_review.md from runner assets.
@@ -272,7 +288,7 @@ Linear Studio completion rule:
 - every real Stage is one draggable node
 - every runtime Stage option can be edited from UI
 - PASS/FAIL routing and HANDOFF targets can be created/retargeted/removed without hand-editing YAML
-- flow order and scope:task are visible and editable
+- flow order and AI Stage profile are visible/editable; there is no task-level UI mode
 - YAML round-trip is lossless for supported fields
 - compiled static assets run with only the existing Python UI server; no Node/React runtime on user machines
 
@@ -302,7 +318,7 @@ Gate 2 - Deterministic unattended reliability
 [x] Same Session -> Fresh Session rotation centralized
 [x] semantic FAIL is result-edge routing, not technical retry
 [x] custom Stage requires no retry/recovery implementation
-[x] custom produces: tasks uses the same graph
+[x] custom/plugin producer-defined `tasks` / `stages` child Workflows use the same graph; Runner does not infer child structure
 [x] deterministic Dry Run matrix exists
 [x] validator placement observability restored in Dry Run
 [ ] re-confirm kill/resume semantic equivalence after current refactor if CI exposes regressions
