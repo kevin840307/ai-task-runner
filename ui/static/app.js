@@ -72,12 +72,12 @@ function renderThemeControls() {
   document.querySelectorAll("[data-language-option]").forEach((button) => { const active = button.dataset.languageOption === language; button.classList.toggle("active", active); button.setAttribute("aria-pressed", String(active)); });
 }
 function positionThemePanel() {
-  const panel = $("themePanel"), button = $("settingsNav") || $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
+  const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button || panel.hidden) return; const rect = button.getBoundingClientRect(), pad = 12, gap = 8;
   const width = panel.getBoundingClientRect().width || Math.min(320, window.innerWidth - pad * 2); let left = Math.max(pad, Math.min(rect.right - width, window.innerWidth - width - pad)); let top = rect.bottom + gap;
   const height = panel.getBoundingClientRect().height || 320; if (top + height > window.innerHeight - pad) top = Math.max(pad, rect.top - height - gap); panel.style.left = `${Math.round(left)}px`; panel.style.top = `${Math.round(top)}px`;
 }
-function closeThemePanel() { const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false"); $("settingsNav")?.classList.remove("active"); $("chatNav")?.classList.toggle("active", state.view === "chat"); $("workflowNav")?.classList.toggle("active", state.view === "workflow"); $("promptNav")?.classList.toggle("active", state.view === "prompt"); }
-function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); $("chatNav")?.classList.remove("active"); $("workflowNav")?.classList.remove("active"); $("promptNav")?.classList.remove("active"); $("settingsNav")?.classList.add("active"); renderThemeControls(); requestAnimationFrame(positionThemePanel); }
+function closeThemePanel() { const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; panel.hidden = true; button.classList.remove("active"); button.setAttribute("aria-expanded", "false"); }
+function toggleThemePanel(event) { event?.stopPropagation(); const panel = $("themePanel"), button = $("themeButton"); if (!panel || !button) return; const opening = panel.hidden; if (!opening) return closeThemePanel(); panel.hidden = false; button.classList.add("active"); button.setAttribute("aria-expanded", "true"); renderThemeControls(); requestAnimationFrame(positionThemePanel); }
 
 async function api(path, options = {}) {
   const { timeoutMs = 0, ...fetchOptions } = options;
@@ -1005,7 +1005,7 @@ function renderStudioVisibilityBadge() {
   const hidden = item?.kind === "workflow" && !!item.hidden;
   badge.hidden = !hidden;
   if (hidden) {
-    badge.textContent = t("studio.hidden_badge", "Hidden from Tasks");
+    badge.textContent = t("studio.hidden_badge", "Hidden from Chat");
     badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Tasks workflow selector. Workflow Studio, CLI, and Runner behavior are unchanged.");
   }
   if (notice) notice.hidden = !hidden;
@@ -1642,7 +1642,7 @@ function updateDirtyState() {
   $("newWorkflowButton").disabled = !state.studioGuard.editable; $("importAssetButton").disabled = !state.studioGuard.editable; $("importAssetButton").textContent = state.studioSourceKind === "workflow" ? "Import YAML" : "Import Prompt";
   $("exportStudioButton").textContent = "Export";
   $("exportStudioButton").disabled = !state.studioFile; $("deleteStudioButton").hidden = !state.studioFile || !!state.studioFile.readonly; $("deleteStudioButton").disabled = !state.studioGuard.editable || !state.studioFile?.deletable;
-  $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Tasks" : "Hide from Tasks"; }
+  $("studioAssetMenuButton").disabled = !state.studioFile; $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly; $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile; const visibilityButton = $("toggleWorkflowVisibilityButton"); if (visibilityButton) { visibilityButton.hidden = state.studioFile?.kind !== "workflow"; visibilityButton.disabled = !state.studioFile || state.studioFile.kind !== "workflow"; visibilityButton.textContent = state.studioFile?.hidden ? "Show in Chat" : "Hide from Chat"; }
 }
 function renderStudioGuard() {
   const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner"); badge.className = "runtime-badge";
