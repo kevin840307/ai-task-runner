@@ -183,7 +183,6 @@ def _reduce_tasks(ctx: StageContext, result: StageResult) -> StageResult:
             "task producer must provide a non-empty stages array; "
             "Runner does not infer child Stage structure"
         )
-    progress.show_todo(ctx.state)
     return StageResult(
         stage=result.stage,
         status=result.status,
