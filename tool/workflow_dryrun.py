@@ -184,23 +184,31 @@ class MockStageExecutor:
         if kind == "tasks":
             if status == "fail":
                 return StageResult(stage.name, "fail", output="TASKS_FAIL")
-            task = Task(
-                id=f"c{ctx.state.cycle:02d}-t001",
-                title="Dry-run task",
-                description="Exercise dynamically expanded child Workflow.",
-                deliverable="Dry-run deliverable",
-                acceptance_criteria=["Workflow closes."],
+            task_count = max(
+                2 if stage.__class__.__name__ == "PlanStage" else 1,
+                int(getattr(getattr(stage, "spec", None), "min_tasks", 1) or 1),
             )
+            tasks = [
+                Task(
+                    id=f"c{ctx.state.cycle:02d}-t{index:03d}",
+                    title=f"Dry-run task {index}",
+                    description="Exercise dynamically expanded child Workflow.",
+                    deliverable=f"Dry-run deliverable {index}",
+                    acceptance_criteria=["Workflow closes."],
+                )
+                for index in range(1, task_count + 1)
+            ]
             # PlanStage owns its task -> child Stage conversion in finish().
             if stage.__class__.__name__ == "PlanStage":
-                return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
+                return StageResult(stage.name, "pass", output="TASKS_PASS", data=tasks)
             # Other task-producing Stages must provide their own child Stage structure.
+            task = tasks[0]
             return StageResult(
                 stage.name,
                 "pass",
                 output="TASKS_PASS",
                 data={
-                    "tasks": [task],
+                    "tasks": tasks,
                     "stages": [
                         {
                             "name": "dryrun_execute",
