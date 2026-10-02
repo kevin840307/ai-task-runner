@@ -9,7 +9,7 @@ from ...errors import RunnerError
 from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
 from ...utils import bounded_text
-from ..results import decode_tasks, install_plan
+from ..results import decode_tasks
 from .base_stage import (
     MODE_READONLY,
     MODE_WRITE,
@@ -51,7 +51,6 @@ class PlanStage(BaseStage):
         tasks = list(result.data or [])
         if not tasks or any(not isinstance(task, Task) for task in tasks):
             raise RunnerError("Plan Stage must produce validated tasks")
-        install_plan(ctx.state, tasks, ctx.ai_client.session_id)
         return replace(
             result,
             data={
