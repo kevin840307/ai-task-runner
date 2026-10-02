@@ -56,7 +56,8 @@ def test_react_studio_exposes_effective_prompt_instead_of_opaque_default():
     assert "effectivePrompt" in text
     assert "Default —" in text
     assert "Effective:" in text
-    assert "common/execution.md" not in text  # comes from the runtime catalog, not duplicated UI constants
+    assert 'defaultOption(catalog, stage.type, "prompt")' in text
+    assert "common/execution.md" in text  # profile-first creation exposes the effective preset explicitly.
 
 
 def test_workflow_builder_internal_prompts_are_not_user_assets():
@@ -73,8 +74,8 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
-    assert 'stage.error_policy = { retries: 2 };' in text
-    assert "stage.max_failures = 3" in text
+    assert 'error_policy: { retries: 2 }' in text
+    assert 'max_failures: 3' in text
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
     assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
@@ -125,7 +126,6 @@ def test_react_source_tracks_session_policy_ui_contract():
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
     text = SOURCE.read_text(encoding="utf-8")
     assert 'id="handoff"' in text
-    assert 'types: ["handoff"]' in text
     assert '"discussion_controller"' not in text
     assert '"discussion"' not in text
     assert '"dispatch"' not in text
@@ -209,6 +209,8 @@ def test_node_library_scales_with_favorites_recent_and_extensions():
     assert "togglePaletteSection" in text
     assert "rememberPaletteStage" in text
     assert "knownTypes" in text
+    assert "catalogStageMeta" in text
+    assert "catalogMeta?.category" in text
     assert 'palette-favorite' in text
     assert 'className="palette-section-head"' in text
     assert "palettePrefs.collapsed" in text
@@ -448,3 +450,31 @@ def test_designer_edge_delete_and_undo_keyboard_contract():
     assert "已復原上一個 Workflow 草稿修改。" in text
     assert 'deleteKeyCode={null}' in text  # Node deletion stays workflow-aware.
     assert 'tx("delete_connection")' in text
+
+
+
+def test_ai_stage_profile_first_create_and_quick_shortcuts():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'createAIProfile' in text
+    assert '<option value="generic">Generic</option>' in text
+    assert '<option value="execute">Execute</option>' in text
+    assert '<option value="review">Review</option>' in text
+    assert "applyAIProfileDefaults" in text
+    assert "common/execution.md" in text
+    assert "common/review.md" in text
+    assert 'event.key === "/"' in text
+    assert 'event.key === "Enter" && selected' in text
+    assert 'title="Add Stage (/)"' in text
+
+
+def test_stage_palette_and_generic_field_use_catalog_metadata():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "CatalogStageType" in text
+    assert "catalogStageMeta" in text
+    assert "catalogMeta?.title" in text
+    assert "catalogMeta?.description" in text
+    assert "catalogMeta?.category" in text
+    assert "option.description" in text
+    assert 'category !== "extensions"' in text
