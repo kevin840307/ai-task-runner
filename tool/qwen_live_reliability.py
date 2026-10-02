@@ -612,10 +612,12 @@ def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
                     f"workflow/{workflow} {stage} readonly_safety mismatch: "
                     f"expected {expected_value!r}, got {actual!r}"
                 )
-        dynamic_review = _plan_review_template().get("readonly_safety")
-        observed[workflow]["dynamic_review"] = (
-            dynamic_review if isinstance(dynamic_review, str) else None
-        )
+        from runner.workflow.registry import create_stage
+        dynamic_review = create_stage({
+            "name": "dynamic_review_contract",
+            **_plan_review_template(),
+        }).readonly_safety
+        observed[workflow]["dynamic_review"] = dynamic_review
         if dynamic_review != "observe":
             raise RuntimeError(
                 f"workflow/{workflow} dynamic Review readonly_safety mismatch: "
