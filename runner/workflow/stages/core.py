@@ -9,7 +9,7 @@ from ...errors import RunnerError
 from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
 from ...utils import bounded_text
-from ..results import decode_tasks
+from ..results import decode_tasks, install_plan
 from .base_stage import (
     MODE_READONLY,
     MODE_WRITE,
@@ -32,7 +32,7 @@ class PlanStageSpec(BaseStageSpec):
 
 
 class PlanStage(BaseStage):
-    result_kind = "tasks"
+    result_kind = "stages"
     backend_mode = "planning"
     timeout_config_attr = "planning_timeout"
 
@@ -43,6 +43,45 @@ class PlanStage(BaseStage):
             minimum=spec.min_tasks,
         )
         super().__init__(replace(spec, parser=parser))
+
+    def finish(self, ctx: StageContext, result: StageResult) -> StageResult:
+        result = super().finish(ctx, result)
+        if result.status != "pass":
+            return result
+        tasks = list(result.data or [])
+        if not tasks or any(not isinstance(task, Task) for task in tasks):
+            raise RunnerError("Plan Stage must produce validated tasks")
+        install_plan(ctx.state, tasks, ctx.ai_client.session_id)
+        return replace(
+            result,
+            data={"stages": self._plan_child_stages(tasks)},
+            kind="stages",
+        )
+
+    @staticmethod
+    def _plan_child_stages(tasks: list[Task]) -> list[dict[str, object]]:
+        stages: list[dict[str, object]] = []
+        for index, task in enumerate(tasks, 1):
+            token = f"task_{index:03d}"
+            execute = f"{token}_execute"
+            review = f"{token}_review"
+            stages.append({
+                "name": execute,
+                "type": "base",
+                "profile": "execute",
+                "task_id": task.id,
+            })
+            stages.append({
+                "name": review,
+                "type": "base",
+                "profile": "review",
+                "task_id": task.id,
+                "task_complete": True,
+                "error_policy": {"retries": 2},
+                "max_failures": 3,
+                "routes": {"fail": execute},
+            })
+        return stages
 
     def _original_prompt(
         self,
