@@ -625,6 +625,7 @@ function App() {
   const [prompts, setPrompts] = useState<StudioFile[]>([]);
   const [pendingCreate, setPendingCreate] = useState<{ type: string; position?: { x: number; y: number } } | null>(null);
   const [createPrompt, setCreatePrompt] = useState("");
+  const [createAIProfile, setCreateAIProfile] = useState("generic");
   const [createCommand, setCreateCommand] = useState("");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("form");
   const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
@@ -719,6 +720,17 @@ function App() {
         return;
       }
       if (typing || editorOpen || addStageOpen) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        setAddStageOpen(true);
+        setAddStageQuery("");
+        return;
+      }
+      if (event.key === "Enter" && selected) {
+        event.preventDefault();
+        openStageEditor(selected);
+        return;
+      }
       const ctrl = event.ctrlKey || event.metaKey;
       if (ctrl && event.key.toLowerCase() === "z") {
         event.preventDefault();
@@ -1131,11 +1143,11 @@ function App() {
     return { ...generic, profile: "generic" };
   }
 
-  async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "") {
+  async function createStage(stageType: string, position?: { x: number; y: number }, prompt = "", command = "", profile = "generic") {
     if (!visual || !catalog?.stage_types?.[stageType]) return;
     const name = nextStageKey(visual, stageType);
     let stage: Stage = { name, type: stageType };
-    if (stageType === "base") stage = applyAIProfileDefaults(stage, "generic");
+    if (stageType === "base") stage = applyAIProfileDefaults(stage, profile);
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
@@ -1188,10 +1200,11 @@ function App() {
     });
   }
 
-  async function addStage(stageType = "task", position?: { x: number; y: number }) {
+  async function addStage(stageType = "base", position?: { x: number; y: number }) {
     rememberPaletteStage(stageType);
     if (stageType === "base" || stageType === "command") {
       setPendingCreate({ type: stageType, position });
+      setCreateAIProfile("generic");
       setCreatePrompt(stageType === "base" ? String(defaultOption(catalog, stageType, "prompt") || "") : "");
       setCreateCommand("");
       return;
@@ -1201,7 +1214,7 @@ function App() {
 
   async function confirmPendingCreate() {
     if (!pendingCreate) return;
-    if (pendingCreate.type === "base" && !createPrompt.trim()) {
+    if (pendingCreate.type === "base" && createAIProfile === "generic" && !createPrompt.trim()) {
       setMessage("Generic AI Stage requires a Prompt.");
       return;
     }
@@ -1209,7 +1222,7 @@ function App() {
       setMessage("Command Stage requires a command.");
       return;
     }
-    await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim());
+    await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim(), createAIProfile);
   }
 
   function dragStage(event: React.DragEvent<HTMLDivElement>, stageType: string) {
@@ -1399,7 +1412,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         <aside className="palette">
           <div className="palette-head">
             <div className="palette-title-row"><span><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong></span>
-              <button type="button" className="palette-command-add" onClick={() => { setAddStageOpen(true); setAddStageQuery(""); }}>＋</button>
+              <button type="button" className="palette-command-add" title="Add Stage (/)" onClick={() => { setAddStageOpen(true); setAddStageQuery(""); }}>＋</button>
             </div>
             <small>{tx("drag_hint")}</small>
           </div>
@@ -1460,7 +1473,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>;
             });
           })()}
-          <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ = quick add</small></div>
+          <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ / = quick add · Enter = edit selected</small></div>
         </aside>
         <div
           ref={canvasRef}
@@ -1572,18 +1585,38 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 <small>NEW STAGE</small>
                 <h3>{catalogStageMeta(catalog, pendingCreate.type).title}</h3>
               </div>
-              {pendingCreate.type === "base" && (
+              {pendingCreate.type === "base" && <>
+                <label>
+                  <span>AI profile</span>
+                  <select value={createAIProfile} onChange={(e) => {
+                    const profile = e.target.value;
+                    setCreateAIProfile(profile);
+                    if (profile === "execute") setCreatePrompt("common/execution.md");
+                    else if (profile === "review") setCreatePrompt("common/review.md");
+                    else setCreatePrompt("");
+                  }}>
+                    <option value="generic">Generic</option>
+                    <option value="execute">Execute</option>
+                    <option value="review">Review</option>
+                  </select>
+                  <small className="effective-value">
+                    {createAIProfile === "execute" ? "Writable execution preset." : createAIProfile === "review" ? "Read-only structured PASS/FAIL preset." : "Custom AI behavior; choose a Prompt."}
+                  </small>
+                </label>
                 <label>
                   <span>Prompt</span>
                   <select value={createPrompt} onChange={(e) => setCreatePrompt(e.target.value)}>
-                    <option value="">Choose Prompt…</option>
+                    <option value="">{createAIProfile === "generic" ? "Choose Prompt…" : "Use profile default"}</option>
                     {prompts.map((p) => {
                       const ref = p.reference || p.display_name || p.name;
                       return <option key={p.id} value={ref}>{ref}</option>;
                     })}
                   </select>
+                  <small className="effective-value">
+                    Effective: <code>{createPrompt || (createAIProfile === "execute" ? "common/execution.md" : createAIProfile === "review" ? "common/review.md" : "(none)")}</code>
+                  </small>
                 </label>
-              )}
+              </>}
               {pendingCreate.type === "command" && (
                 <label>
                   <span>Command</span>
