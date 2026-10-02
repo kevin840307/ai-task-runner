@@ -1745,10 +1745,10 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>{tx("result_edges")}</strong>
                 <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
-                {draft.type === "review"
+                {(draft.type === "base" && draft.profile === "review")
                   ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。允許真的 FAIL N 次；下一次進入 Review 時不呼叫 Agent，直接走 fail-soft PASS 並清零。正常 PASS 也會清零。</p>
                   : <p>ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。</p>}
-                <label className="route-policy-field"><span>{draft.type === "review" ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
+                <label className="route-policy-field"><span>{(draft.type === "base" && draft.profile === "review") ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
                   value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
                   onChange={(event) => {
                     const raw = event.target.value;
@@ -1761,11 +1761,11 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       editDraft({ ...draft, error_policy: { retries } });
                     }
                   }} /></label>
-                {draft.type === "review" && Number.isInteger(draft.error_policy?.retries) && Number(draft.error_policy?.retries) >= 0 &&
+                {(draft.type === "base" && draft.profile === "review") && Number.isInteger(draft.error_policy?.retries) && Number(draft.error_policy?.retries) >= 0 &&
                   <div className="route-row error-skip-row"><span className="route-dot error" />
                     <strong>ERROR</strong><span>重試耗盡 → 下一個積木（Skip Review）</span>
                   </div>}
-                {draft.type === "review" && <>
+                {(draft.type === "base" && draft.profile === "review") && <>
                   <label className="route-policy-field"><span>Semantic FAIL 上限（max_failures）</span><input type="number" min={1}
                     value={draft.max_failures ?? ""} placeholder="不限制"
                     onChange={(event) => {
