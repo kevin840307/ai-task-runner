@@ -37,19 +37,6 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
-
-  review:
-    type: review
-    scope: task
-    error_policy:
-      retries: 2
-    max_failures: 3
-    routes:
-      fail: execute
-
   validate_ai:
     type: ai_validator
     validator: ai
@@ -58,8 +45,6 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - validate_ai
 ```
 
@@ -81,7 +66,7 @@ Rollback / Loop 就是指向前面 Stage 的普通 result edge。
 - `on_exhausted`
 - `fresh_after_same_failures`
 - `replan` StageResult
-- hidden Plan Task/Review nodes
+- 舊的 `task` / `review` Stage type 與 `scope: task`
 - 可用 graph routing 的 ERROR/recovery policy
 - System/Custom Workflow 分流
 - TaskRunner/Pipeline/LinearRouting 相容 runtime
@@ -94,13 +79,39 @@ Stage 是唯一 execution / agent extension unit。
 
 - `base`
 - `plan`
-- `task`
-- `review`
 - `ai_validator`
 - `command`
 - `handoff`
 
 Stage 只做一件事並回傳 `StageResult`。Stage 不實作 retry、recover、session rotation，也不決定 Workflow 下一步。
+
+### AI Stage Profile
+
+一般 AI 行為統一使用一個 `base` Stage type，再用 profile 表達：
+
+```yaml
+stages:
+  execute:
+    type: base
+    profile: execute
+
+  review:
+    type: base
+    profile: review
+    error_policy:
+      retries: 2
+    max_failures: 3
+    routes:
+      fail: execute
+```
+
+`profile: generic` 是中性的自訂 AI 行為；`execute` 套用可寫入執行預設；`review` 套用 read-only structured PASS/FAIL 契約。只有真正具有不同 runtime 語意的能力才保留專用 Stage type，例如 Plan、AI Validator、Command、Handoff。
+
+### Dynamic child Workflow
+
+任意 Stage 都可以產生 `tasks` 或 `stages`，但 child Stage definitions 必須由 producer Stage 自己提供；Runner 不推測 child Stage 類型。產生的 child Workflow 會插在 producer 後面，完整走同一套 StageExecutor / FlowEngine retry、recover、routing、resume，再回 parent 下一個 Stage。
+
+`PlanStage` 是內建例子：它驗證 task plan 後，由 PlanStage 自己建立每個 task 的 Execute -> Review 交錯 child stages。其他特殊 Stage / plugin 也能用相同 contract 產生完全不同的 child 結構。展開後定義與 task binding 會持久化在 RunState，Resume 不會為了重建 child workflow 再跑 producer。
 
 `StageExecutor` 統一負責：
 
@@ -138,9 +149,9 @@ Deterministic configuration/state error fail closed。 `KeyboardInterrupt` / `Sy
 Durable state 只保存 Resume 真正需要的資料：
 
 - run identity / goal / project
-- tasks / current task
+- dynamic tasks / current task binding
 - workflow position
-- task-scope position
+- durable expanded child Workflow / dynamic groups
 - AI session id
 - 最新 StageResult transition
 - workflow fingerprint
@@ -168,7 +179,7 @@ runner/
   assets/
     workflows/ 可編輯 Workflow YAML
     prompts/
-      common/   內建 Plan/Task/Review/Validator Prompt
+      common/   內建 Plan/AI Stage Review/Validator Prompt
       ralphy/   Ralphy Prompt
       workflow/ Workflow 生成 Prompt
   config/       Defaults 與 RuntimeConfig
