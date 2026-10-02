@@ -191,6 +191,36 @@ def _reduce_tasks(ctx: StageContext, result: StageResult) -> StageResult:
             "task producer must provide a non-empty stages array; "
             "Runner does not infer child Stage structure"
         )
+
+    task_ids = {task.id for task in tasks}
+    referenced = {
+        str(stage.get("task_id", "") or "")
+        for stage in stages
+        if isinstance(stage, dict) and stage.get("task_id")
+    }
+    completed = {
+        str(stage.get("task_id", "") or "")
+        for stage in stages
+        if isinstance(stage, dict)
+        and stage.get("task_id")
+        and stage.get("task_complete") is True
+    }
+    if not task_ids.issubset(referenced):
+        missing = sorted(task_ids - referenced)
+        raise RunnerError(
+            "task producer child stages must reference every task_id: "
+            + ", ".join(missing)
+        )
+    if not task_ids.issubset(completed):
+        missing = sorted(task_ids - completed)
+        raise RunnerError(
+            "task producer child stages must mark task_complete for every task_id: "
+            + ", ".join(missing)
+        )
+
+    ctx.state.tasks = tasks
+    ctx.state.current = 0
+    ctx.state.review_failures.clear()
     return StageResult(
         stage=result.stage,
         status=result.status,
