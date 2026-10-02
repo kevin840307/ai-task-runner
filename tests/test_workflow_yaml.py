@@ -1314,3 +1314,65 @@ flow:
     assert previous.kind == "handoff"
     assert previous.data == {"target": "worker", "reason": "resume test"}
     assert ctx.state.completed is True
+
+def test_ai_profile_defaults_are_applied_by_workflow_normalization(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  generic:
+    type: base
+  review:
+    type: base
+    profile: review
+flow:
+  - generic
+  - review
+""",
+    )
+
+    workflow = load_workflow(path)
+    generic, review = workflow
+
+    assert generic["profile"] == "generic"
+    assert Path(generic["prompt"]).name == "generic.md"
+    assert review["profile"] == "review"
+    assert Path(review["prompt"]).name == "review.md"
+    assert review["error_policy"] == {"retries": 2}
+    assert review["max_failures"] == 3
+    assert review["readonly_safety"] == "observe"
+
+
+def test_dynamic_review_child_uses_shared_profile_defaults():
+    from runner.workflow.dynamic_expansion import expand_stage_result
+
+    state = RunState("run", "goal", "/tmp/project")
+    workflow = [
+        {"name": "producer", "type": "base", "produces": "stages"},
+        {"name": "after", "type": "base"},
+    ]
+    result = StageResult(
+        "producer",
+        "pass",
+        data={
+            "stages": [
+                {"name": "review", "type": "base", "profile": "review"}
+            ]
+        },
+        kind="stages",
+    )
+
+    expanded = expand_stage_result(
+        state=state,
+        workflow=workflow,
+        source_index=0,
+        source=workflow[0],
+        result=result,
+        continuation="next",
+    )
+
+    child = expanded[1]
+    assert child["profile"] == "review"
+    assert child["error_policy"] == {"retries": 2}
+    assert child["max_failures"] == 3
+    assert child["readonly_safety"] == "observe"
