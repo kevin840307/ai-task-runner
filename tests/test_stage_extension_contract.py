@@ -239,3 +239,14 @@ def test_explicit_produces_overrides_ai_profile_result_kind():
         "profile": "review",
         "produces": "tasks",
     }) == "tasks"
+
+def test_ai_stage_catalog_exposes_profile_metadata_for_studio():
+    catalog = stage_catalog()
+    profiles = catalog["base"]["profiles"]
+
+    assert set(profiles) == {"generic", "execute", "review"}
+    assert profiles["generic"]["defaults"]["prompt"] == "common/generic.md"
+    assert profiles["execute"]["defaults"]["prompt"] == "common/execution.md"
+    assert profiles["review"]["defaults"]["prompt"] == "common/review.md"
+    assert profiles["review"]["defaults"]["error_policy"] == {"retries": 2}
+    assert profiles["review"]["defaults"]["max_failures"] == 3
