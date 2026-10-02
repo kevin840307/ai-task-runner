@@ -128,3 +128,28 @@ def test_removed_task_scope_runtime_fields_do_not_reappear():
             if token in text and path.name not in {"workflow_studio_state.py"}:
                 offenders.append(f"{path.relative_to(ROOT)}: {token}")
     assert offenders == []
+
+
+def test_stage_implementations_are_split_by_responsibility():
+    stages = ROOT / "runner" / "workflow" / "stages"
+    expected = {
+        "base_stage.py",
+        "plan_stage.py",
+        "ai_validator_stage.py",
+        "command_stage.py",
+        "handoff_stage.py",
+        "__init__.py",
+    }
+    assert expected <= {path.name for path in stages.glob("*.py")}
+    assert not (stages / "core.py").exists()
+    assert not (stages / "executor.py").exists()
+    assert (ROOT / "runner" / "workflow" / "stage_executor.py").is_file()
+
+
+def test_stage_executor_is_workflow_orchestration_not_a_stage_type():
+    registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner" / "workflow" / "stage_executor.py").read_text(encoding="utf-8")
+    assert '"executor"' not in registry
+    assert "class StageExecutor" in executor
+    assert "stage_retries" in executor
+    assert "_fresh_session" in executor
