@@ -72,7 +72,7 @@ def test_generic_field_renderer_supports_every_catalog_scalar_shape():
     unsupported = {
         value for value in option_types
         if value and not (
-            value in {"string", "str", "bool", "boolean", "enum"}
+            value in {"string", "str", "bool", "boolean", "optional_boolean", "enum"}
             or "int" in value
             or "float" in value
             or "list" in value
@@ -84,6 +84,7 @@ def test_generic_field_renderer_supports_every_catalog_scalar_shape():
     }
     assert not unsupported, f"React generic Field needs a renderer for catalog types: {sorted(unsupported)}"
 
+    assert 'type === "optional_boolean"' in SOURCE
     assert 'type === "bool" || type === "boolean"' in SOURCE
     assert 'type.includes("int")' in SOURCE
     assert 'type.includes("float")' in SOURCE
@@ -97,6 +98,9 @@ def test_ai_stage_profile_catalog_is_extensible():
     profile = next(option for option in base["options"] if option["name"] == "profile")
     assert profile["type"] == "enum"
     assert profile["values"] == ["generic", "execute", "review"]
+    mode = next(option for option in base["options"] if option["name"] == "mode")
+    assert mode["type"] == "enum"
+    assert mode["values"] == ["readonly", "write"]
     assert "scope" not in catalog["node_options"]
     assert "task" not in catalog["stage_types"]
     assert "review" not in catalog["stage_types"]
