@@ -234,6 +234,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
             page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
+            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
             page.wait_for_timeout(200)
 
@@ -340,6 +341,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
             page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
+            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
             page.wait_for_timeout(160)
 
@@ -411,6 +413,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
             page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
+            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
             page.wait_for_timeout(200)
 
