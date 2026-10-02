@@ -187,6 +187,7 @@ class BaseStage:
                 run_state=spec.run_state or "reviewing",
                 mode=MODE_READONLY,
                 allow_project_read=True,
+                readonly_safety=spec.readonly_safety or "observe",
                 parser=spec.parser or PARSERS["review"],
             )
             self.result_kind = "review"
