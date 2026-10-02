@@ -8,15 +8,16 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 
 | Area | Coverage |
 | --- | --- |
-| Workflow schema | supported Stage types/options, unknown option rejection, PASS/FAIL-only routes, target existence, task-scope topology |
+| Workflow schema | supported Stage types/options, AI Stage profiles, unknown option rejection, PASS/FAIL-only routes, target existence, dynamic producer child-Stage validation |
 | Semantic routing | PASS next, explicit PASS/FAIL, done/stop, backward loop, unrouted FAIL safe stop |
 | Technical ERROR | Stage/global retry limits, unlimited `-1`, Same Session retry, Fresh Session rotation, partial-write recovery, Review finite-retry fail-soft Skip, non-Review fail-closed exhaustion, KeyboardInterrupt/SystemExit propagation |
 | Session policy | main/role/fresh acceptance, invalid mode, role durable restore/persist, fresh non-persistence, per-role reset, global reset, recovery rotation |
+| Dynamic child Workflow | producer-defined tasks/stages, Plan Execute→Review expansion, nested producer isolation, child completion before parent continuation, durable resume without re-running producer |
 | Dynamic Handoff | target allow-list, disallowed target rejection, exactly-one target routing, role -> coordinator loop, final validator FAIL -> coordinator, durable resume |
 | Prompts | shared Dynamic worker renders role `instructions`; prompt ownership/category references; shared retry/continue/recover control envelope |
 | Validators | File command validators, AI validators, multiple validators anywhere, repeated AI runs/voting, validator FAIL rollback |
-| Task production | Plan Task[], custom command/Python `produces: tasks`, contiguous task scope |
-| Resume/state | workflow position, task step, transition_previous, role Sessions, corrupt/incompatible state rejection |
+| Task production | Plan producer-defined Execute/Review children, custom/plugin `produces: tasks|stages`, nested dynamic expansion |
+| Resume/state | workflow position, durable expanded Workflow, dynamic task groups, transition_previous, role Sessions, corrupt/incompatible state rejection |
 | Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
 | Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
@@ -101,7 +102,7 @@ Browser coverage includes:
 - Workflow Settings manager + Prompt CRUD and Workflow visibility/navigation
 - common desktop viewport overflow checks (1024/1280/1366/1440/1920)
 - Workflow Editor Stage dialogs, YAML view and context menus
-- graph CRUD round-trip for START/END, scope:task, PASS/FAIL/HANDOFF edges,
+- graph CRUD round-trip for START/END, AI Stage profiles, PASS/FAIL/HANDOFF edges,
   edge retarget/delete, Stage delete, save/reload
 - selected explicit edge Delete/Backspace
 - Workflow draft Ctrl+Z undo
