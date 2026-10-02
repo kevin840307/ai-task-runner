@@ -48,7 +48,8 @@ def test_react_workflow_editor_covers_all_node_level_runtime_options():
     assert 'value={String(draft.label || "")}' in SOURCE
     assert 'value={String(draft.profile || "generic")}' in SOURCE
     assert 'value={draft.scope || ""}' not in SOURCE
-    assert 'draft.routes || {}' in SOURCE
+    assert 'const routes = (s.routes || {}) as Record<string, string>' in SOURCE
+    assert 'stage.routes || {}' in SOURCE
     assert 'draft.error_policy?.retries' in SOURCE
 
     # Graph result routes are semantic PASS/FAIL only. Handoff targets are a Stage-owned
