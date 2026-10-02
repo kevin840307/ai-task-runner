@@ -199,9 +199,11 @@ def test_full_designer_graph_crud_roundtrip() -> None:
         workflow = workflow_dir / "graph-e2e.yaml"
         workflow.write_text(
             """stages:
+  planning:
+    type: plan
   execute:
-    type: command
-    command: "{python} -c \"print('execute')\""
+    type: task
+    scope: task
   review:
     type: review
     routes:
@@ -213,6 +215,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
     type: command
     command: "{python} -c \"print('worker')\""
 flow:
+  - planning
   - execute
   - review
   - router
@@ -293,6 +296,18 @@ flow:
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
+                assert saved["stages"]["execute"]["scope"] == "task"
+
+                # Explicit PASS edge is also persisted and can later be removed.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="review"] .react-flow__handle.pass',
+                    '.react-flow__node[data-id="worker"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="review:pass:worker"]').wait_for()
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["review"]["routes"]["pass"] == "worker"
 
                 # Handoff edges are Stage-owned targets. Add a second target and persist it.
                 _connect_nodes(
@@ -318,7 +333,13 @@ flow:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["router"]["targets"] == ["review"]
 
-                # Remove the remaining FAIL reference before deleting the target Stage.
+                # Remove PASS/FAIL references before deleting the target Stage.
+                pass_edge = page.locator('.react-flow__edge[data-id="review:pass:worker"]')
+                pass_edge.click()
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert pass_edge.count() == 0
+
                 fail_edge = page.locator('.react-flow__edge[data-id="review:fail:worker"]')
                 fail_edge.click()
                 page.keyboard.press("Delete")
@@ -343,6 +364,19 @@ flow:
                 assert saved["stages"]["review"]["routes"]["fail"] != "worker"
                 assert saved["stages"]["router"]["targets"] == ["review"]
                 assert page.locator('.react-flow__node[data-id="worker"]').count() == 0
+
+                # START handle reorders the canonical flow; save/reload must preserve it.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="__start__"] .react-flow__handle',
+                    '.react-flow__node[data-id="review"] .react-flow__handle.stage-input',
+                )
+                _save_editor(page)
+                page.reload()
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["flow"][0] == "review"
+                assert saved["stages"]["execute"]["scope"] == "task"
                 assert not errors
                 browser.close()
         finally:
