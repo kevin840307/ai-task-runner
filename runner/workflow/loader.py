@@ -15,7 +15,6 @@ from ..utils import io_path
 from .schema import (
     validate_routes,
     validate_stage,
-    validate_topology,
     workflow_has_task_producer,
     workflow_validators,
 )
@@ -124,7 +123,6 @@ def normalize_workflow(data: Any, source: Path) -> list[dict[str, Any]]:
         node["_workflow_index"] = index
 
     validate_routes(result)
-    validate_topology(result)
     return result
 
 
