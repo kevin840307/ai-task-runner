@@ -74,7 +74,7 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "有限值耗盡後 Skip" in text
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
-    assert 'error_policy: { retries: 2 }' in text
+    assert 'cleaned.error_policy || { retries: 2 }' in text
     assert 'max_failures: 3' in text
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
