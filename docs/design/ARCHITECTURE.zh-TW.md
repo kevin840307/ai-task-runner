@@ -59,7 +59,7 @@ child Workflow 會完整走同一套 StageExecutor / FlowEngine retry、recover�
 
 `type: handoff` 宣告 `targets`，structured result 每次只選一個允許的 target。Handoff 本身不執行角色工作，也沒有第二套 scheduler hierarchy。
 
-一般 AI specialist 統一使用 `base`（AI Stage）+ behavior profile；只有真正具有特殊 runtime 語意的能力才保留專用 Stage type，例如 `plan`、`ai_validator`、`command`、`handoff`。
+一般 AI specialist 統一使用 `base`（AI Stage）+ behavior profile。Profile 預設只放在 `runner/workflow/profiles.py`，YAML normalization、dynamic expansion 與 Studio 共用同一份 catalog；只有真正具有特殊 runtime 語意的能力才保留專用 Stage type，例如 `plan`、`ai_validator`、`command`、`handoff`。
 
 Session policy 與 routing 解耦：
 - `role`：durable Stage-owned Session；
@@ -89,12 +89,6 @@ UI backend 使用與 runtime loader 相同的 catalog/schema 驗證。
 
 ## 明確不做
 
-不要恢復：
-- Pipeline/TaskRunner compatibility runtime；
-- repair/recover/restart_at/repeat/max_attempts/on_exhausted graph control；
-- `routes.error`；
-- Discussion / Group Chat runtime 或 UI mode；
-- generic AgentMessage / scheduler framework；
-- generic parallel DAG engine。
+不恢復任何 pre-v3 compatibility runtime/schema。ERROR 維持 execution concern，不成為 graph edge。Discussion / Group Chat、generic AgentMessage/scheduler framework 與 generic parallel DAG engine 也不屬於目前 runtime。
 
 Parallel 仍是 future work。
