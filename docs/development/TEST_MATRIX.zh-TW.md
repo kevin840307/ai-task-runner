@@ -83,3 +83,9 @@ tool\qwen_live_reliability_24h.bat
 - resume 時 frozen Workflow/Prompt resource 穩定。
 
 Deterministic CI、短 live gate、24H soak 是三個不同的信心層級。
+
+- Workflow Library 右鍵 Chat 顯示切換（顯示/隱藏）與 Chat picker 即時過濾。
+- 沒有有效已保存 Workflow 偏好時，Chat 預設選擇 `ralphy_ai_validate.yaml`。
+- 主導覽分離 Workflows / Prompts，不額外顯示重複的 Settings nav。
+- Stage Editor 契約為 `Form | YAML | Routing | Test`，Stage YAML 共用既有 source parser。
+- 桌面 browser layout/context-menu smoke：1024、1280、1366、1440、1920 寬度。
