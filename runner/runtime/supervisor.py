@@ -446,7 +446,6 @@ def _state_progress_fingerprint(states: Sequence[Path]) -> str:
             "current": state.get("current") if isinstance(state, dict) else None,
             "cycle": state.get("cycle") if isinstance(state, dict) else None,
             "workflow_position": state.get("workflow_position") if isinstance(state, dict) else None,
-            "task_step": state.get("task_step") if isinstance(state, dict) else None,
             "completed": state.get("completed") if isinstance(state, dict) else None,
             "tasks": [
                 {
