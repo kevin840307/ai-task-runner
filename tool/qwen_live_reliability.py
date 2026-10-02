@@ -1353,8 +1353,14 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
         None,
     )
     features = custom.get("features", {}) if isinstance(custom, dict) else {}
-    if not isinstance(features, dict) or not features.get("task_producer") or not features.get("task_scope"):
-        raise RuntimeError("custom Task Producer dry-run preflight did not cover task production + task scope")
+    if (
+        not isinstance(features, dict)
+        or not features.get("task_producer")
+        or not features.get("dynamic_producer")
+    ):
+        raise RuntimeError(
+            "custom Task Producer dry-run preflight did not cover producer-defined dynamic child Workflow"
+        )
     return results
 
 
@@ -1365,7 +1371,7 @@ def workflow_dryrun_negative_preflight() -> None:
         root = Path(directory)
         invalid = root / "invalid.yaml"
         invalid.write_text(
-            "stages:\n  work:\n    type: task\n    unsupported_option: true\nflow: [work]\n",
+            "stages:\n  work:\n    type: base\n    profile: execute\n    unsupported_option: true\nflow: [work]\n",
             encoding="utf-8",
         )
         invalid_run = subprocess.run(
@@ -1414,11 +1420,11 @@ def stage_result_mapping_preflight() -> None:
     from runner.workflow.stages import (
         AIValidatorStage,
         AIValidatorStageSpec,
-        ReviewStage,
-        ReviewStageSpec,
+        BaseStage,
+        BaseStageSpec,
     )
 
-    review = ReviewStage(ReviewStageSpec(name="review"))
+    review = BaseStage(BaseStageSpec(name="review", profile="review"))
     validator = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
     checks = [
         (review.result_status({"completed": True}), "pass", "review true"),
@@ -2091,7 +2097,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     command: "{python} seed_review.py"
 
   execute:
-    type: task
+    type: base
+    profile: execute
     status: Executing Review feedback
     prompt: review_execute.md
 
@@ -2104,7 +2111,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
       fail: execute
 
   review_verify:
-    type: review
+    type: base
+    profile: review
     status: Reviewing repaired state with Qwen
     prompt: review_check.md
     routes:
@@ -2270,7 +2278,8 @@ FULL_LOOP_WORKFLOW = '''stages:
       fail: execute
 
   review_verify:
-    type: review
+    type: base
+    profile: review
     prompt: full_loop_review.md
     routes:
       fail: execute
