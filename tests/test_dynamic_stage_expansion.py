@@ -245,3 +245,62 @@ def test_removed_task_step_state_is_rejected() -> None:
     data["task_step"] = 0
     with pytest.raises(ValueError, match="removed fields"):
         RunState.load(data)
+
+
+def test_dynamic_producer_explicit_parent_route_runs_children_before_target() -> None:
+    workflow = [
+        {
+            "name": "generator",
+            "type": "base",
+            "produces": "stages",
+            "routes": {"pass": "target"},
+        },
+        {"name": "skipped", "type": "base", "profile": "generic"},
+        {"name": "target", "type": "base", "profile": "generic"},
+    ]
+    ctx, executor, error = _execute(workflow, Scenario(), 20)
+    try:
+        assert error == ""
+        assert _names(executor) == [
+            "generator",
+            "generator__g1__dryrun_child",
+            "target",
+        ]
+        assert ctx.state.completed is True
+    finally:
+        _close(ctx)
+
+
+def test_dynamic_child_done_returns_to_parent_continuation() -> None:
+    state = RunState(run_id="run", goal="goal", project_root="/tmp/project")
+    workflow = [
+        {"name": "generator", "type": "base", "produces": "stages"},
+        {"name": "after", "type": "base", "profile": "generic"},
+    ]
+    result = StageResult(
+        "generator",
+        "pass",
+        data={
+            "stages": [
+                {
+                    "name": "child",
+                    "type": "base",
+                    "profile": "generic",
+                    "routes": {"pass": "done"},
+                }
+            ]
+        },
+        kind="stages",
+    )
+    expanded = expand_stage_result(
+        state=state,
+        workflow=workflow,
+        source_index=0,
+        source=workflow[0],
+        result=result,
+        continuation="next",
+    )
+    assert expanded is not None
+    child = expanded[1]
+    assert child["_dynamic_group_continue"] == "next"
+    assert child["_dynamic_continue"] == "next"
