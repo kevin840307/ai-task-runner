@@ -41,6 +41,11 @@ def decode_tasks(value: Any, *, cycle: int, minimum: int = 1) -> list[Task]:
             ) from error
     if isinstance(value, dict):
         raw = value.get("tasks")
+        if isinstance(raw, list) and all(isinstance(item, Task) for item in raw):
+            tasks = list(raw)
+            if len(tasks) < minimum:
+                raise RunnerError(f"tasks must contain at least {minimum} items")
+            return tasks
     elif isinstance(value, list):
         raw = value
     else:
