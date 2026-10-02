@@ -269,6 +269,16 @@ flow:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "stop"
 
+                # Ctrl+Z restores the most recent graph draft mutation before save.
+                edge = page.locator('.react-flow__edge[data-id="review:fail:__end__"]')
+                edge.click()
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert edge.count() == 0
+                page.keyboard.press("Control+z")
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for()
+                assert page.get_by_text("已復原上一個 Workflow 草稿修改。").is_visible()
+
                 page.reload()
                 page.locator('.react-flow__node[data-id="review"]').wait_for()
 
@@ -306,6 +316,14 @@ flow:
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["router"]["targets"] == ["review"]
+
+                # Remove the remaining FAIL reference before deleting the target Stage.
+                fail_edge = page.locator('.react-flow__edge[data-id="review:fail:worker"]')
+                fail_edge.click()
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert fail_edge.count() == 0
+                _save_editor(page)
 
                 # Once no edge targets worker, node deletion uses the guarded confirmation flow.
                 page.locator('.react-flow__node[data-id="worker"]').click()
