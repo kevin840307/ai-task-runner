@@ -55,7 +55,7 @@ YAML remains the only canonical Workflow model. The graph is an editor projectio
 - START / END are UI-only virtual nodes and are never written as Stages
 - flow order = default PASS -> next
 - routes.pass/fail = explicit semantic result edges; ERROR is retry-only and never a graph edge
-- scope: task = visual PER TASK group; it is not a hidden Stage
+- Dynamic child Workflow expansion is runtime-owned; there is no task-level UI mode or `scope` contract.
 - Plan produces Task[] data only; it never injects Execute/Review nodes
 - Stage parameters are rendered from /api/workflow/catalog so new Stage options do
   not require another hard-coded UI field list
@@ -140,12 +140,26 @@ Removed concepts must not return
 - TaskRunner / Pipeline compatibility runtime
 - recover / restart_at / repeat / max_attempts / on_exhausted
 - repair Stage as a runtime concept
-- hidden Plan Task/Review nodes
+- legacy `task` / `review` Stage types or `scope: task`
 - plan_only runtime mode
 - separate retry/recovery Stage or graph framework
 - System/Custom Workflow trees
 - old runner/ai, runner/backends, runner/project, runner/utils package trees
 - pre-assets Workflow/Prompt paths
+
+Dynamic child Workflow / AI Stage convergence (2026-10-02)
+-------------------------------------------------------
+- [DONE] General AI behavior converged to `type: base` + `profile: generic|execute|review`.
+- [DONE] Removed public `type: task`, `type: review`, `scope`, task-level UI grouping and durable `task_step`.
+- [DONE] Plan remains a special Stage and itself generates alternating Execute -> Review child Stages for validated tasks.
+- [DONE] Any Stage/plugin may return producer-defined `tasks` or `stages`; child Workflow runs fully before parent continuation.
+- [DONE] Expanded child Workflow and dynamic task groups persist across Resume.
+- [DONE] Workflow Builder and Dry Run use the same dynamic producer contract.
+- [DONE] React Workflow Editor exposes AI Stage profiles and catalog-driven generic options.
+- [DONE] Browser CI is real Playwright/Chromium, not a silent skip.
+- [DONE] Edge Delete/Backspace, right-click delete and Ctrl+Z draft undo are covered by editor contracts/browser E2E.
+- [NEXT] Final deterministic CI / Browser gate after bundle sync.
+- [NEXT] Real-Qwen short gate, high-density soak, then Windows 24H soak.
 
 TODO - only remaining gates
 ---------------------------
@@ -172,7 +186,7 @@ Gate 2 - deterministic unattended reliability
 13. [IN PROGRESS] kill/resume equivalence at committed Stage boundaries.
 14. [IN PROGRESS] YAML List multi-item + restart/resume.
 15. [DONE] Custom Stage requires no retry/recovery code.
-16. [DONE] Custom produces: tasks works through the same graph.
+16. [DONE] Any producer-defined `tasks` / `stages` child Workflow uses the same FlowEngine/StageExecutor graph; Runner does not infer child Stage types.
 
 Gate 3 - real backend proof
 17. [NEXT] Run real-Qwen built-in file/ai/mixed topologies.
