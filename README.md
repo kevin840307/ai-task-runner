@@ -57,19 +57,7 @@ Default routing is:
 
 Rollback and loop are ordinary result edges to an earlier Stage.
 
-The following legacy runtime concepts are intentionally removed:
-
-- `recover`
-- `restart_at`
-- `repeat`
-- `max_attempts`
-- `on_exhausted`
-- `fresh_after_same_failures`
-- `replan` StageResult
-- legacy `task` / `review` Stage types and `scope: task`
-- graph-routable ERROR/recovery policy
-- separate System/Custom Workflow trees
-- TaskRunner/Pipeline/LinearRouting compatibility runtimes
+Pre-v3 compatibility runtime/schema paths are intentionally absent. Current Workflows use only the Stage registry, PASS/FAIL semantic routes, Stage-local technical retry policy, dynamic child Workflow expansion, and durable session/state contracts.
 
 ## Stage and reliability
 
@@ -87,7 +75,7 @@ A Stage does one responsibility and returns `StageResult`. It does not implement
 
 ### AI Stage profiles
 
-General AI behavior is one `base` Stage type with a small behavior profile:
+General AI behavior is one `base` Stage type with a small behavior profile. Profile defaults are defined once in `runner/workflow/profiles.py` and are shared by YAML normalization, dynamic child expansion and Studio:
 
 ```yaml
 stages:
@@ -352,9 +340,10 @@ Main runtime reading path:
 
 1. `runner/workflow_runner.py`
 2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/stage_executor.py`
+3. `runner/workflow/execution/stage_executor.py`
 4. `runner/workflow/stages/`
-5. `runner/runtime/run_state.py`
+5. `runner/workflow/profiles.py`
+6. `runner/runtime/run_state.py`
 
 Design rule:
 
