@@ -9,6 +9,7 @@ from ...errors import RunnerError
 from ...prompting import build_stage_prompt_context, render_prompt
 from ...runtime.run_state import Task
 from ...utils import bounded_text
+from ..profiles import apply_ai_profile_defaults
 from ..results import decode_tasks
 from .base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
 
@@ -68,12 +69,10 @@ class PlanStage(BaseStage):
                     "profile": "review",
                     "task_id": task.id,
                     "task_complete": True,
-                    "error_policy": {"retries": 2},
-                    "max_failures": 3,
                     "routes": {"fail": execute},
                 },
             ])
-        return stages
+        return [apply_ai_profile_defaults(stage) for stage in stages]
 
     def _original_prompt(
         self,
