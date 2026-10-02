@@ -88,7 +88,7 @@ type StageTestResult = {
   test_retry_policy?: string;
 };
 
-type InspectorTab = "settings" | "parameters" | "yaml" | "routing" | "test";
+type InspectorTab = "form" | "yaml" | "routing" | "test";
 type WorkflowEditorView = "designer" | "yaml";
 type StageTestMode = "stage" | "agent_ping";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
@@ -101,7 +101,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
-    stage_settings: "Stage 設定", basic: "基本", parameters: "參數", yaml_stage: "YAML", routing: "連線", test: "測試", apply_yaml: "套用 YAML",
+    stage_settings: "Stage 設定", form: "Form", basic: "基本", parameters: "參數", yaml_stage: "YAML", routing: "連線", test: "測試", apply_yaml: "套用 YAML",
     close: "關閉", duplicate: "複製積木", remove: "移除積木", draft_only: "修改先存為草稿",
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字", scope: "執行範圍",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
@@ -117,7 +117,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
-    stage_settings: "Stage Settings", basic: "Basic", parameters: "Parameters", yaml_stage: "YAML", routing: "Routing", test: "Test", apply_yaml: "Apply YAML",
+    stage_settings: "Stage Settings", form: "Form", basic: "Basic", parameters: "Parameters", yaml_stage: "YAML", routing: "Routing", test: "Test", apply_yaml: "Apply YAML",
     close: "Close", duplicate: "Duplicate", remove: "Remove", draft_only: "Changes stay in draft",
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text", scope: "Scope",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
@@ -630,7 +630,7 @@ function App() {
   const [pendingCreate, setPendingCreate] = useState<{ type: string; position?: { x: number; y: number } } | null>(null);
   const [createPrompt, setCreatePrompt] = useState("");
   const [createCommand, setCreateCommand] = useState("");
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("settings");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("form");
   const [parameterSection, setParameterSection] = useState<ParameterSection>("content");
   const [stageYaml, setStageYaml] = useState("");
   const [stageYamlError, setStageYamlError] = useState("");
@@ -754,7 +754,7 @@ function App() {
   }, [selected, visual]);
 
   useEffect(() => {
-    setInspectorTab("settings");
+    setInspectorTab("form");
     setParameterSection("content");
     setTestResult(null);
     setTestError("");
@@ -1301,7 +1301,7 @@ function App() {
 
   function openStageEditor(name: string) {
     setSelected(name);
-    setInspectorTab("settings");
+    setInspectorTab("form");
     setEditorOpen(true);
     requestAnimationFrame(() => {
       titleInputRef.current?.focus();
@@ -1530,18 +1530,20 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 <div className="inspector-head-actions"><span>{draft.type}</span><button type="button" className="modal-close-button" onClick={() => setEditorOpen(false)} aria-label={tx("close")}>×</button></div>
               </div>
               <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
-                {(["settings", "parameters", "yaml", "routing", "test"] as const).map((tab) => (
+                {(["form", "yaml", "routing", "test"] as const).map((tab) => (
                   <button key={tab} type="button" role="tab" aria-selected={inspectorTab === tab}
                     className={inspectorTab === tab ? "active" : ""} onClick={() => {
                       setInspectorTab(tab);
                       if (tab === "yaml") void loadStageYaml();
                     }}>
-                    {{ settings: tx("basic"), parameters: `${tx("parameters")}${parameterOptions.length ? ` · ${parameterOptions.length}` : ""}`, yaml: tx("yaml_stage"), routing: tx("routing"), test: tx("test") }[tab]}
+                    {{ form: tx("form"), yaml: tx("yaml_stage"), routing: tx("routing"), test: tx("test") }[tab]}
                   </button>
                 ))}
               </div>
               <div className="stage-editor-content">
-              {inspectorTab === "settings" && <div className="fields" role="tabpanel">
+              {inspectorTab === "form" && <div className="fields stage-form-panel" role="tabpanel">
+                <section className="stage-form-section">
+                  <div className="stage-form-section-head"><strong>{tx("basic")}</strong><small>Stage identity and execution scope</small></div>
                 <label>
                   <span>{tx("type_fixed")}</span>
                   <select value={draft.type} disabled>
@@ -1556,8 +1558,9 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     <option value="">Workflow</option><option value="task">Per task</option>
                   </select>
                 </label>
-              </div>}
-              {inspectorTab === "parameters" && <div className="fields" role="tabpanel">
+                </section>
+                <section className="stage-form-section">
+                  <div className="stage-form-section-head"><strong>{tx("parameters")}</strong><small>{parameterOptions.length} fields</small></div>
                 {parameterOptions.length === 0 && <p className="section-empty">此積木沒有其他參數。</p>}
                 {parameterOptions.length > 8 && <div className="parameter-sections" role="tablist" aria-label="Parameter sections">
                   {parameterGroups.map((section) => <button key={section.id} type="button" role="tab"
@@ -1598,6 +1601,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       }}
                     />
                   ))}
+                </section>
               </div>}
               {inspectorTab === "yaml" && <div className="stage-yaml-panel" role="tabpanel">
                 <div className="stage-yaml-toolbar">
