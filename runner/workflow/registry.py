@@ -77,15 +77,17 @@ def workflow_catalog() -> dict[str, Any]:
 
 
 def stage_result_kind(definition: dict[str, Any]) -> str:
+    # An explicit producer contract is stronger than an AI behavior profile.
+    # This keeps dynamic expansion generic: any Stage/profile may emit tasks/stages.
+    produces = str(definition.get("produces", "") or "")
+    if produces:
+        return produces
     if definition.get("type", "base") == "base":
         profile = str(definition.get("profile", "generic") or "generic")
         if profile == "execute":
             return "task"
         if profile == "review":
             return "review"
-    produces = str(definition.get("produces", "") or "")
-    if produces:
-        return produces
     declared = str(definition.get("result_kind", "") or "")
     if declared:
         return declared
