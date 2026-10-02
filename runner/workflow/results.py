@@ -240,7 +240,7 @@ def install_plan(
 def finish_task(ctx: StageContext) -> None:
     state = ctx.state
     if state.current >= len(state.tasks):
-        raise ConfigurationError("task-scoped workflow has no pending task")
+        raise ConfigurationError("dynamic task child workflow has no pending task")
     task = state.tasks[state.current]
     task.status = "completed"
     task.last_output = ""
