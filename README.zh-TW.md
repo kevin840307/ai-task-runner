@@ -216,6 +216,8 @@ Project Chat 仍是主要執行介面。Workflow UI 收斂成單一路徑：
 
 - **Workflows** 是 Workflow 資產庫（搜尋、建立、Import、Rename、Duplicate、Export、Delete），點選後進入獨立 Workflow Editor。
 - **Prompts** 是獨立 Prompt workspace，包含自己的資產清單與 Prompt Editor。
+- Workflows 可用右鍵 **顯示於 Chat / 從 Chat 隱藏**；沿用同一份 persisted visibility，會直接控制 Project Chat 的 Workflow picker。
+- `ralphy_ai_validate.yaml` 是 Chat 初始 fallback；若使用者已明確選過且該 Workflow 仍有效，會保留使用者選擇。
 - **Workflow Editor** 是唯一 Workflow 編輯器，提供 `Designer | YAML`，兩者共用同一份 canonical Workflow YAML。
 - Stage 設定提供 `Form | YAML | Routing | Test`；Stage YAML 由同一套 Python YAML/schema 驗證後才回寫 draft。
 - Stage 只 reference Prompt file，不把 Prompt 本文塞進 Workflow YAML。
