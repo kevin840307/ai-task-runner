@@ -473,7 +473,7 @@ class WorkflowStudioMixin:
     def _stage_editor_fields(self) -> set[str]:
         """Fields that the Studio may change in a Stage definition."""
         allowed = {
-            "type", "status", "label", "routes", "error_policy", "max_failures", "validator",
+            "type", "profile", "status", "label", "routes", "error_policy", "max_failures", "validator",
             "prompt", "instructions", "detail", "run_state", "mode", "actor",
             "allow_project_read", "parser", "structured_retries",
             "structured_fresh_retries", "runs", "required_passes",
@@ -617,7 +617,9 @@ class WorkflowStudioMixin:
             if stage_type == "command" and not str(command or "").strip():
                 raise ValueError("Command Stage requires a command")
             if stage_type == "base" and not str(prompt or "").strip():
-                raise ValueError("Base Stage requires a Prompt")
+                # Legacy add endpoint creates Generic AI Stage; richer profile creation is
+                # owned by the Workflow Editor graph draft.
+                raise ValueError("Generic AI Stage requires a Prompt")
             if str(prompt or "").strip() and self._resolve_prompt_reference(path, str(prompt).strip()) is None:
                 raise ValueError(f"Prompt not found: {str(prompt).strip()}")
 
@@ -626,9 +628,6 @@ class WorkflowStudioMixin:
             if prompt.strip(): config["prompt"] = prompt.strip()
             if stage_type == "command": config["command"] = command.strip()
             if stage_type == "ai_validator": config.setdefault("validator", "ai")
-            if stage_type == "review":
-                config.setdefault("error_policy", {"retries": 2})
-                config.setdefault("max_failures", 3)
             updated = self._insert_stage_block(content, name, config)
             if add_to_flow:
                 parsed = self._load_workflow_yaml(updated)
@@ -661,6 +660,12 @@ class WorkflowStudioMixin:
         if stage_type is not None:
             if stage_type not in self._supported_stage_types():
                 raise ValueError("Unsupported Stage type")
+        profile = fields.get("profile")
+        if profile is not None:
+            if stage_type not in (None, "base"):
+                raise ValueError("Stage profile is valid only for AI Stage")
+            if profile not in {"generic", "execute", "review"}:
+                raise ValueError("Stage profile must be generic, execute, or review")
         mode = fields.get("mode")
         if mode not in (None, "", "readonly", "write"):
             raise ValueError("Stage mode must be readonly or write")
@@ -938,6 +943,20 @@ class WorkflowStudioMixin:
                 return resolved
         return None
 
+    @staticmethod
+    def _effective_stage_prompt_reference(config: dict) -> str:
+        prompt = str(config.get("prompt") or "").strip()
+        if prompt:
+            return prompt
+        if str(config.get("type") or "base") != "base":
+            return ""
+        profile = str(config.get("profile") or "generic")
+        if profile == "execute":
+            return "common/execution.md"
+        if profile == "review":
+            return "common/review.md"
+        return ""
+
     def _workflow_prompt_refs(self, content: str) -> list[tuple[str, str]]:
         data = self._load_workflow_yaml(content)
         stages = data.get("stages") or {}
@@ -948,12 +967,14 @@ class WorkflowStudioMixin:
             if not isinstance(config, dict):
                 continue
             stage_type = str(config.get("type") or "base")
-            if stage_type == "base" and not str(config.get("prompt") or "").strip():
+            effective_prompt = self._effective_stage_prompt_reference(config)
+            if stage_type == "base" and not effective_prompt:
                 refs.append((str(name), "<required>"))
-            for key in ("prompt", "continuation_prompt"):
-                value = config.get(key)
-                if isinstance(value, str) and value.strip():
-                    refs.append((str(name), value.strip()))
+            elif effective_prompt:
+                refs.append((str(name), effective_prompt))
+            continuation = config.get("continuation_prompt")
+            if isinstance(continuation, str) and continuation.strip():
+                refs.append((str(name), continuation.strip()))
         return refs
 
     def _validate_workflow_prompt_refs(self, workflow_path: Path, content: str) -> None:
