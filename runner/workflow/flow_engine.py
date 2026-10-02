@@ -11,7 +11,7 @@ from ..utils import bounded_text
 from .dynamic_expansion import activate_dynamic_task, dynamic_done_target, expand_stage_result
 from .results import finish_run, finish_task
 from .registry import create_stage
-from .stage_executor import StageExecutor
+from .execution import StageExecutor
 from .stages import StageContext, StageResult
 
 
