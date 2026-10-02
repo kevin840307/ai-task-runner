@@ -15,6 +15,7 @@ from ..errors import ConfigurationError, RunnerError
 from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from .schema import validate_routes, validate_stage
+from .profiles import apply_ai_profile_defaults
 from .stages.base_stage import StageResult
 
 DYNAMIC_META_FIELDS = frozenset({
@@ -271,6 +272,7 @@ def _expand_stages(
         if not name:
             raise RunnerError(f"stages[{index}].name must be a non-empty string")
         definition.setdefault("type", "base")
+        apply_ai_profile_defaults(definition)
         if any(str(key).startswith("_dynamic_") for key in definition):
             raise RunnerError(
                 f"stages[{index}] contains Runner-owned dynamic metadata"
