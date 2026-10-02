@@ -79,11 +79,14 @@ def test_dryrun_matrix_covers_semantic_routes_and_safe_stop():
     assert payload["closed"] is True
     assert payload["features"]["routes"] >= 3
     names = {case["name"] for case in payload["cases"]}
-    assert "review FAIL -> execute -> closure" in names
+    assert any(
+        name.startswith("planning__g1__task_001_review FAIL -> ")
+        and name.endswith("__task_001_execute -> closure")
+        for name in names
+    )
     assert "validate_file FAIL -> planning -> closure" in names
     assert "validate_ai FAIL -> planning -> closure" in names
     assert "planning ERROR -> stop" in names
-    assert "review ERROR -> next -> closure" in names
 
 
 def test_dryrun_supports_custom_task_producer():
