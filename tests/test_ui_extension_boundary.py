@@ -40,8 +40,9 @@ def test_stage_catalog_uses_registered_spec_as_single_schema_source():
     assert "name" not in command_fields
     contract = workflow_catalog()
     assert "command" in contract["stage_types"]
-    assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "handoff", "plan", "review", "task"}
-    assert contract["node_options"]["scope"]["values"] == ["task"]
+    assert set(contract["stage_types"]) == {"ai_validator", "base", "command", "handoff", "plan"}
+    assert "scope" not in contract["node_options"]
+    assert contract["stage_types"]["base"]["options"]
 
 
 def test_workflow_save_validates_then_atomically_replaces(tmp_path):
@@ -294,7 +295,6 @@ def test_workflow_catalog_tool_is_json_process_boundary():
     assert "command" in payload["stage_types"]
     assert payload["node_options"]["scope"]["values"] == ["task"]
     assert set(payload["node_options"]) == {
-        "scope",
         "label",
         "routes",
         "error_policy",
