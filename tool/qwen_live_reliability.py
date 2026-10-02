@@ -904,16 +904,14 @@ def assert_builtin_topology(project: Path, workflow: str) -> None:
         for event in runner_events(project)
         if event.get("type") == "runner.stage" and event.get("action") == "start"
     ]
-    required = {"planning", "execute", "review"}
     expected_validators = {
         "file": {"validate_file"},
         "ai": {"validate_ai"},
         "mixed": {"validate_file", "validate_ai"},
     }[workflow]
-    missing = sorted(required - set(starts))
     validators = {name for name in starts if name.startswith("validate_")}
-    task_runs = starts.count("execute")
-    review_runs = starts.count("review")
+    execute_runs = [name for name in starts if name.endswith("_execute")]
+    review_runs = [name for name in starts if name.endswith("_review")]
 
     state = read_state(project)
     tasks = state.get("tasks")
@@ -927,22 +925,28 @@ def assert_builtin_topology(project: Path, workflow: str) -> None:
         if isinstance(tasks, list)
         else ["<missing durable tasks>"]
     )
+    expanded = state.get("expanded_workflow")
+    expanded_names = {
+        str(item.get("name", ""))
+        for item in expanded
+        if isinstance(item, dict)
+    } if isinstance(expanded, list) else set()
 
-    # Planning is intentionally free to decompose the same goal into one or more
-    # bounded TODOs. The topology contract therefore follows durable task count
-    # instead of assuming the model will always emit exactly one TODO. Retries
-    # or replans may legitimately make task/review stage counts larger.
-    invalid_task_loop = (
-        task_count < 1
-        or task_runs < task_count
-        or review_runs < task_count
+    invalid_dynamic_children = (
+        "planning" not in starts
+        or task_count < 1
+        or len(execute_runs) < task_count
+        or len(review_runs) < task_count
         or bool(incomplete)
+        or not any(name.endswith("_execute") for name in expanded_names)
+        or not any(name.endswith("_review") for name in expanded_names)
     )
-    if missing or validators != expected_validators or invalid_task_loop:
+    if validators != expected_validators or invalid_dynamic_children:
         raise RuntimeError(
-            f"workflow/{workflow} topology mismatch: missing={missing}, "
+            f"workflow/{workflow} topology mismatch: "
             f"validators={sorted(validators)}, durable_tasks={task_count}, "
-            f"incomplete={incomplete}, task_runs={task_runs}, review_runs={review_runs}"
+            f"incomplete={incomplete}, execute_runs={len(execute_runs)}, "
+            f"review_runs={len(review_runs)}, expanded={sorted(expanded_names)}"
         )
 
 
