@@ -28,6 +28,7 @@ STAGE_REGISTRY: dict[str, type[Any]] = {
 }
 NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
 CATALOG_HIDDEN_FIELDS = frozenset({"fresh_session_each_run", "fresh_session_on_start"})
+CATALOG_HIDDEN_STAGE_TYPES = frozenset({"plan"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -54,6 +55,7 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             ],
         }
         for name, stage_class in sorted(STAGE_REGISTRY.items())
+        if name not in CATALOG_HIDDEN_STAGE_TYPES
     }
 
 
@@ -61,7 +63,7 @@ def workflow_catalog() -> dict[str, Any]:
     return {
         "stage_types": stage_catalog(),
         "node_options": {
-            "scope": {"type": "enum", "values": ["task"]},
+            "scope": {"type": "enum", "values": ["task"], "ui_hidden": True},
             "label": {"type": "string"},
             "routes": {
                 "type": "object",
@@ -76,6 +78,12 @@ def workflow_catalog() -> dict[str, Any]:
 
 
 def stage_result_kind(definition: dict[str, Any]) -> str:
+    if definition.get("type", "base") == "base":
+        profile = str(definition.get("profile", "generic") or "generic")
+        if profile == "execute":
+            return "task"
+        if profile == "review":
+            return "review"
     produces = str(definition.get("produces", "") or "")
     if produces:
         return produces
@@ -119,6 +127,9 @@ def _field_info(item: Any) -> dict[str, Any]:
         "required": required,
         "type": _type_name(item.type),
     }
+    if item.name == "profile":
+        result["type"] = "enum"
+        result["values"] = ["generic", "execute", "review"]
     if item.name == "parser":
         from .results import PARSERS
         result["type"] = "enum"
