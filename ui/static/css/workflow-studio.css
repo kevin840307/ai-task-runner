@@ -1045,3 +1045,33 @@
     align-self: center;
   }
 }
+
+.workflow-context-menu {
+  position: fixed;
+  z-index: 120;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+.workflow-context-menu[hidden] { display: none !important; }
+.workflow-context-menu button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflow-context-menu button:hover {
+  background: var(--panel-2);
+  color: var(--accent-dark);
+}
