@@ -188,9 +188,55 @@ class MockStageExecutor:
                 id=f"c{ctx.state.cycle:02d}-t001",
                 title="Dry-run task",
                 description="Exercise dynamically expanded child Workflow.",
+                deliverable="Dry-run deliverable",
                 acceptance_criteria=["Workflow closes."],
             )
-            return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
+            # PlanStage owns its task -> child Stage conversion in finish().
+            if stage.__class__.__name__ == "PlanStage":
+                return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
+            # Other task-producing Stages must provide their own child Stage structure.
+            return StageResult(
+                stage.name,
+                "pass",
+                output="TASKS_PASS",
+                data={
+                    "tasks": [task],
+                    "stages": [
+                        {
+                            "name": "dryrun_execute",
+                            "type": "base",
+                            "profile": "execute",
+                            "task_id": task.id,
+                        },
+                        {
+                            "name": "dryrun_review",
+                            "type": "base",
+                            "profile": "review",
+                            "task_id": task.id,
+                            "task_complete": True,
+                            "routes": {"fail": "dryrun_execute"},
+                        },
+                    ],
+                },
+            )
+        if kind == "stages":
+            if status == "fail":
+                return StageResult(stage.name, "fail", output="STAGES_FAIL", kind="stages")
+            return StageResult(
+                stage.name,
+                "pass",
+                output="STAGES_PASS",
+                data={
+                    "stages": [
+                        {
+                            "name": "dryrun_child",
+                            "type": "base",
+                            "profile": "generic",
+                        }
+                    ]
+                },
+                kind="stages",
+            )
         if kind == "handoff":
             if status == "fail":
                 return StageResult(stage.name, "fail", output="HANDOFF_FAIL", kind="handoff")
