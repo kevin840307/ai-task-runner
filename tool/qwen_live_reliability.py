@@ -175,6 +175,7 @@ import json
 print(json.dumps({
     "tasks": [
         {
+            "id": "health",
             "title": "Create health probe",
             "description": "Create health.txt exactly as required by the project goal.",
             "deliverable": "health.txt with the exact required text and no trailing newline.",
@@ -183,6 +184,24 @@ print(json.dumps({
                 "health.txt content exactly matches the requested text",
                 "protected files are unchanged"
             ]
+        }
+    ],
+    "stages": [
+        {
+            "name": "execute",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "health"
+        },
+        {
+            "name": "review",
+            "type": "base",
+            "profile": "review",
+            "task_id": "health",
+            "task_complete": True,
+            "error_policy": {"retries": 2},
+            "max_failures": 3,
+            "routes": {"fail": "execute"}
         }
     ]
 }, ensure_ascii=False))
@@ -194,10 +213,6 @@ CUSTOM_TASK_WORKFLOW = '''stages:
     command: "{python} task_producer.py"
     produces: tasks
 
-  execute:
-    type: task
-    scope: task
-
   validate_file:
     type: command
     result_kind: validation
@@ -205,7 +220,6 @@ CUSTOM_TASK_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - execute
   - validate_file
 '''
 
@@ -1145,7 +1159,7 @@ def api_retry_classification_preflight() -> None:
 
         def deterministic(config):
             calls.append(bool(config.resume))
-            raise RunnerError("saved task_step is outside the task-scoped SOP")
+            raise RunnerError("saved dynamic child cursor is outside the expanded Workflow")
 
         api_module.execute = deterministic
         try:
@@ -1647,28 +1661,52 @@ import time
 time.sleep(3)
 '''
 
+RESUME_TASK_PRODUCER = '''from __future__ import annotations
+import json
+
+print(json.dumps({
+    "tasks": [
+        {
+            "id": "resume",
+            "title": "Resume probe task",
+            "description": "Exercise durable dynamic child Workflow resume.",
+            "deliverable": "health.txt with expected content.",
+            "acceptance_criteria": ["The resumed child Workflow completes."]
+        }
+    ],
+    "stages": [
+        {
+            "name": "execute_first",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "resume",
+            "status": "Execute before forced restart"
+        },
+        {
+            "name": "pause",
+            "type": "command",
+            "task_id": "resume",
+            "status": "Holding durable resume checkpoint",
+            "command": "{python} resume_pause.py"
+        },
+        {
+            "name": "execute_second",
+            "type": "base",
+            "profile": "execute",
+            "task_id": "resume",
+            "task_complete": True,
+            "status": "Continue same session after restart"
+        }
+    ]
+}, ensure_ascii=False))
+'''
+
 RESUME_PROBE_WORKFLOW = '''stages:
   discover:
     type: command
     status: Creating deterministic resume TODO
     command: "{python} task_producer.py"
     produces: tasks
-
-  execute_first:
-    type: task
-    scope: task
-    status: Execute before forced restart
-
-  pause:
-    type: command
-    scope: task
-    status: Holding durable resume checkpoint
-    command: "{python} resume_pause.py"
-
-  execute_second:
-    type: task
-    scope: task
-    status: Continue same session after restart
 
   validate_file:
     type: command
@@ -1677,16 +1715,13 @@ RESUME_PROBE_WORKFLOW = '''stages:
 
 flow:
   - discover
-  - execute_first
-  - pause
-  - execute_second
   - validate_file
 '''
 
 
 def resume_probe(settings: Settings, root: Path) -> None:
     project = create_project(root, "resume-probe")
-    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
+    (project / "task_producer.py").write_text(RESUME_TASK_PRODUCER, encoding="utf-8")
     (project / "resume_pause.py").write_text(RESUME_PROBE_PAUSE, encoding="utf-8")
     workflow = project / "resume-workflow.yaml"
     workflow.write_text(RESUME_PROBE_WORKFLOW, encoding="utf-8")
@@ -1712,11 +1747,21 @@ def resume_probe(settings: Settings, root: Path) -> None:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
             session = state.get("ai_session_id")
+            expanded = state.get("expanded_workflow")
+            position = state.get("workflow_position")
+            current_name = ""
+            if (
+                isinstance(expanded, list)
+                and isinstance(position, int)
+                and 0 <= position < len(expanded)
+                and isinstance(expanded[position], dict)
+            ):
+                current_name = str(expanded[position].get("name", ""))
             if (
                 isinstance(session, str)
                 and session
                 and state.get("completed") is not True
-                and state.get("task_step") == 1
+                and current_name.endswith("__pause")
             ):
                 interrupted_session = session
                 terminate(process)
@@ -1730,8 +1775,8 @@ def resume_probe(settings: Settings, root: Path) -> None:
         state = read_state(project)
         raise RuntimeError(
             "could not capture the deterministic durable resume checkpoint "
-            f"(stage={state.get('stage')}, task_step={state.get('task_step')}, "
-            f"completed={state.get('completed')})"
+            f"(stage={state.get('stage')}, workflow_position={state.get('workflow_position')}, "
+            f"completed={state.get('completed')}, expanded={bool(state.get('expanded_workflow'))})"
         )
 
     saw_resume = False
