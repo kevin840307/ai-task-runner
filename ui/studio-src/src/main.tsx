@@ -357,6 +357,11 @@ function defaultOption(catalog: Catalog | null, stageType: string, name: string)
 function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
   const explicit = String(stage.prompt || "").trim();
   if (explicit) return explicit;
+  if (stage.type === "base") {
+    const profile = String(stage.profile || "generic");
+    const profilePrompt = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
+    if (typeof profilePrompt === "string" && profilePrompt.trim()) return profilePrompt.trim();
+  }
   return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
 }
 
@@ -1618,27 +1623,26 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     setCreateAIProfile(profile);
                     const value = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
                     setCreatePrompt(typeof value === "string" ? value : "");
-                    else setCreatePrompt("");
                   }}>
                     {Object.entries(catalog?.stage_types?.base?.profiles || {}).map(([value, item]) => (
                       <option key={value} value={value}>{item.title || value}</option>
                     ))}
                   </select>
                   <small className="effective-value">
-                    {createAIProfile === "execute" ? "Writable execution preset." : createAIProfile === "review" ? "Read-only structured PASS/FAIL preset." : "Custom AI behavior; choose a Prompt."}
+                    {catalog?.stage_types?.base?.profiles?.[createAIProfile]?.description || "AI Stage behavior preset."}
                   </small>
                 </label>
                 <label>
                   <span>Prompt</span>
                   <select value={createPrompt} onChange={(e) => setCreatePrompt(e.target.value)}>
-                    <option value="">{createAIProfile === "generic" ? "Choose Prompt…" : "Use profile default"}</option>
+                    <option value="">Use profile default</option>
                     {prompts.map((p) => {
                       const ref = p.reference || p.display_name || p.name;
                       return <option key={p.id} value={ref}>{ref}</option>;
                     })}
                   </select>
                   <small className="effective-value">
-                    Effective: <code>{createPrompt || (createAIProfile === "execute" ? "common/execution.md" : createAIProfile === "review" ? "common/review.md" : "(none)")}</code>
+                    Effective: <code>{createPrompt || String(catalog?.stage_types?.base?.profiles?.[createAIProfile]?.defaults?.prompt || "(none)")}</code>
                   </small>
                 </label>
               </>}
@@ -1705,11 +1709,13 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {draft.type === "base" && <label>
                   <span>AI profile</span>
                   <select value={String(draft.profile || "generic")} onChange={(e) => editDraft(applyAIProfileDefaults(draft, e.target.value))}>
-                    <option value="generic">Generic</option>
-                    <option value="execute">Execute</option>
-                    <option value="review">Review</option>
+                    {Object.entries(catalog?.stage_types?.base?.profiles || {}).map(([value, item]) => (
+                      <option key={value} value={value}>{item.title || value}</option>
+                    ))}
                   </select>
-                  <small className="effective-value">Choose a behavior preset; prompt and advanced parameters remain editable.</small>
+                  <small className="effective-value">
+                    {catalog?.stage_types?.base?.profiles?.[String(draft.profile || "generic")]?.description || "Choose an AI behavior preset; parameters remain editable."}
+                  </small>
                 </label>}
                 <label><span>{tx("display_name")}（Stage key 不變）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>{tx("run_status")}</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
