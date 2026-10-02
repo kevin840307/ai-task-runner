@@ -75,7 +75,7 @@ def test_stage_probe_accepts_disconnected_stage(tmp_path):
 def test_stage_probe_draft_reports_review_error_exhaustion_as_skip():
     draft = {
         "stages": {
-            "review": {"type": "review", "error_policy": {"retries": 2}},
+            "review": {"type": "base", "profile": "review", "error_policy": {"retries": 2}},
             "validate": {"type": "command", "command": "echo validate"},
         },
         "flow": ["review", "validate"],
@@ -118,7 +118,8 @@ def test_real_stage_probe_calls_real_fake_agent_once_and_stops_at_stage(tmp_path
         yaml.safe_dump({
             "stages": {
                 "review": {
-                    "type": "review",
+                    "type": "base",
+                    "profile": "review",
                     "error_policy": {"retries": 2},
                 },
                 "after": {
