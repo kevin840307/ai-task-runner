@@ -238,6 +238,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_timeout(200)
 
             page.click("#workflowNav")
+            page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
+            page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('workflow-manager-mode')")
             assert page.locator(".studio-designer-body").evaluate(
                 "node => node.classList.contains('workflow-manager-mode')"
             )
@@ -268,7 +270,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Prompt assets keep the inline master-detail editor.
             page.click("#promptNav")
-            assert page.locator("#promptNav").evaluate("node => node.classList.contains('active')")
+            page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+            page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('prompt-manager-mode')")
             assert page.locator(".studio-designer-body").evaluate(
                 "node => node.classList.contains('prompt-manager-mode')"
             )
@@ -341,7 +344,8 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.wait_for_timeout(160)
 
             page.click("#workflowNav")
-            assert page.locator("#workflowNav").evaluate("node => node.classList.contains('active')")
+            page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
+            page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('workflow-manager-mode')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
             assert page.locator("#settingsNav").count() == 0
@@ -364,7 +368,8 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.keyboard.press("Escape")
 
             page.click("#promptNav")
-            assert page.locator("#promptNav").evaluate("node => node.classList.contains('active')")
+            page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+            page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('prompt-manager-mode')")
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             prompt_body = page.locator(".studio-designer-body").bounding_box()
             assert prompt_body and prompt_body["x"] + prompt_body["width"] <= viewport["width"] + 1
@@ -409,6 +414,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             page.add_script_tag(path=str(static_root / "app.js"))
             page.wait_for_timeout(200)
 
+            page.wait_for_function("document.querySelector('#workflowSelectedLabel')?.textContent === 'ralphy_ai_validate.yaml'")
             assert page.locator("#workflowSelectedLabel").inner_text() == "ralphy_ai_validate.yaml"
             assert page.locator("#workflowSelect").input_value().replace("\\", "/").endswith("/ralphy_ai_validate.yaml")
             browser.close()
