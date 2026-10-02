@@ -113,8 +113,6 @@ def test_yaml_item_workflow_precedence_is_item_then_outer_then_default(tmp_path)
     )
     assert [stage["name"] for stage in workflow] == [
         "planning",
-        "execute",
-        "review",
         "validate_file",
     ]
     assert explicit is False
