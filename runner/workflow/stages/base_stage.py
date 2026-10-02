@@ -174,6 +174,7 @@ class BaseStage:
                 run_state=spec.run_state or "executing",
                 mode=MODE_WRITE,
                 actor="executor" if spec.actor == "ai" else spec.actor,
+                allow_project_read=True,
                 track_changes=True if not spec.track_changes else spec.track_changes,
             )
             self.result_kind = "task"
@@ -185,6 +186,7 @@ class BaseStage:
                 prompt=spec.prompt or "common/review.md",
                 run_state=spec.run_state or "reviewing",
                 mode=MODE_READONLY,
+                allow_project_read=True,
                 parser=spec.parser or PARSERS["review"],
             )
             self.result_kind = "review"
