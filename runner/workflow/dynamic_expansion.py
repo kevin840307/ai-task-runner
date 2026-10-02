@@ -68,6 +68,7 @@ def expand_stage_result(
         path,
         result_kind=result.kind,
         task_id_map=task_id_map,
+        reserved_names={str(item["name"]) for item in workflow},
     )
 
     if not children:
@@ -244,6 +245,7 @@ def _expand_stages(
     *,
     result_kind: str,
     task_id_map: dict[str, str],
+    reserved_names: set[str],
 ) -> list[dict[str, Any]]:
     if isinstance(value, str):
         try:
@@ -288,10 +290,31 @@ def _expand_stages(
     if len(set(local_names)) != len(local_names):
         raise RunnerError("dynamic stages must have unique names")
 
+    local_set = set(local_names)
+    for definition in clean:
+        for status, target in (definition.get("routes") or {}).items():
+            if target not in {"next", "done", "stop"} and target not in local_set:
+                raise RunnerError(
+                    f"dynamic Stage {source_name} child {definition['name']} "
+                    f"routes.{status} must stay inside the child Workflow"
+                )
+        for target in definition.get("targets") or []:
+            if target not in local_set:
+                raise RunnerError(
+                    f"dynamic Stage {source_name} child {definition['name']} "
+                    f"handoff target must stay inside the child Workflow"
+                )
+
     name_map = {
         name: f"{group}__{_safe_name(name)}"
         for name in local_names
     }
+    collisions = sorted(set(name_map.values()) & reserved_names)
+    if collisions:
+        raise RunnerError(
+            f"dynamic Stage {source_name} child names collide with parent Workflow: "
+            + ", ".join(collisions)
+        )
     result: list[dict[str, Any]] = []
     for definition in clean:
         local_name = str(definition["name"])
