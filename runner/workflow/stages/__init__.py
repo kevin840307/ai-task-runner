@@ -6,7 +6,6 @@ from .handoff_stage import HandoffStage, HandoffStageSpec
 from .plan_stage import PlanStage, PlanStageSpec
 from .command_stage import CommandStage, CommandStageSpec
 from .base_stage import Stage, StageContext, StageExecution, StageResult, StageStatus
-from .stage_executor import StageAction, StageExecutor
 
 __all__ = [
     "BaseStage",
@@ -20,10 +19,8 @@ __all__ = [
     "PlanStage",
     "PlanStageSpec",
     "Stage",
-    "StageAction",
     "StageContext",
     "StageExecution",
-    "StageExecutor",
     "StageResult",
     "StageStatus",
 ]
