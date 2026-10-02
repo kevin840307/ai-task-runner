@@ -373,13 +373,9 @@ class BaseStage:
             ctx.state.stage_sessions.pop(self.name, None)
         contracts = ctx.scratch.get("prompt_contracts")
         if isinstance(contracts, dict) and previous:
-            current = contracts.get(self.name)
-            if (
-                isinstance(current, tuple)
-                and len(current) == 2
-                and current[1] == previous
-            ):
-                contracts.pop(self.name, None)
+            identity = self._prompt_contract_identity()
+            if contracts.get(identity) == previous:
+                contracts.pop(identity, None)
         ctx.save_state()
         return previous
 
@@ -594,7 +590,7 @@ class BaseStage:
         contracts = ctx.scratch.get("prompt_contracts")
         return (
             isinstance(contracts, dict)
-            and contracts.get(self.name) == (self.spec.prompt, session)
+            and contracts.get(self._prompt_contract_identity()) == session
         )
 
     def _remember_prompt(self, ctx: StageContext, client) -> None:
@@ -605,7 +601,15 @@ class BaseStage:
         if not isinstance(contracts, dict):
             contracts = {}
             ctx.scratch["prompt_contracts"] = contracts
-        contracts[self.name] = (self.spec.prompt, session)
+        contracts[self._prompt_contract_identity()] = session
+
+    def _prompt_contract_identity(self) -> tuple[str, str, str]:
+        """Static prompt identity reusable across dynamically generated sibling Stages."""
+        return (
+            str(self.spec.profile or "generic"),
+            str(self.spec.prompt or ""),
+            str(self.spec.instructions or ""),
+        )
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
         if not self.spec.prompt:
