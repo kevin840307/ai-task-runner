@@ -81,9 +81,12 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
 
     max_failures = values.get("max_failures")
     if max_failures is not None:
-        if stage_type != "review":
+        is_review = stage_type == "review" or (
+            stage_type == "base" and values.get("profile") == "review"
+        )
+        if not is_review:
             raise RunnerError(
-                f"workflow stage {name} max_failures is only valid for type: review"
+                f"workflow stage {name} max_failures is only valid for Review semantics"
             )
         if (
             not isinstance(max_failures, int)
