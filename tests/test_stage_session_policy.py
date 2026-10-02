@@ -5,7 +5,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState, StateStore
 from runner.errors import RunnerError
 from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
-from runner.workflow.stages.executor import StageExecutor
+from runner.workflow.stage_executor import StageExecutor
 
 
 def context(tmp_path: Path) -> StageContext:
