@@ -21,7 +21,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
 | Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
-| Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge, separate Workflows/Prompts/Settings navigation, Stage Form/YAML/Routing/Test ownership, common desktop viewport overflow checks |
+| Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge, separate Workflows/Prompts navigation with Interface settings kept outside the primary nav, Stage Form/YAML/Routing/Test ownership, common desktop viewport overflow checks |
 | Process/runtime | ownership/orphan/supervisor/control-file probes, repeated same-checkpoint crash restart, capped process backoff |
 
 ## Negative/removed-contract coverage
