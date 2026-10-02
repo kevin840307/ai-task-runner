@@ -32,6 +32,9 @@ class PlanStageSpec(BaseStageSpec):
 
 
 class PlanStage(BaseStage):
+    ui_title = "Plan"
+    ui_description = "Plan work and generate a producer-defined dynamic child Workflow."
+    ui_category = "build"
     result_kind = "tasks"
     backend_mode = "planning"
     timeout_config_attr = "planning_timeout"
@@ -133,6 +136,9 @@ class AIValidatorStageSpec(BaseStageSpec):
 
 
 class AIValidatorStage(BaseStage):
+    ui_title = "AI Validator"
+    ui_description = "Independent final AI validation with optional multi-run voting."
+    ui_category = "validate"
     result_kind = "validation"
     parser_name = "validation"
     backend_mode = "review"
@@ -203,6 +209,9 @@ class HandoffStageSpec(BaseStageSpec):
 
 
 class HandoffStage(BaseStage):
+    ui_title = "Handoff"
+    ui_description = "Dynamically select exactly one allowed next Stage."
+    ui_category = "handoff"
     result_kind = "handoff"
     backend_mode = "review"
 
