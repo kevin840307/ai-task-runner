@@ -16,7 +16,8 @@ def test_review_gate_examples_use_current_review_stage_contract():
     ):
         workflow = load_workflow(EXAMPLES / name)
         stage = next(item for item in workflow if item["name"] == stage_name)
-        assert stage["type"] == "review"
+        assert stage["type"] == "base"
+        assert stage["profile"] == "review"
         assert stage["session_policy"] == "fresh"
         assert stage["routes"]["fail"] == "planning"
         assert "recover" not in stage
