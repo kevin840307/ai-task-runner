@@ -33,6 +33,9 @@ class CommandStageSpec:
 
 
 class CommandStage:
+    ui_title = "Command"
+    ui_description = "Run an external command or deterministic validator."
+    ui_category = "tools"
     """Run one configured child process and map its exit code to a Stage result."""
 
     spec_class = CommandStageSpec
