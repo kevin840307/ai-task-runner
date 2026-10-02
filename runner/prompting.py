@@ -251,6 +251,7 @@ Return exactly one JSON object and no markdown:
 {
   "tasks": [
     {
+      "id": "optional producer-local stable id",
       "title": "string",
       "description": "string",
       "deliverable": "string",
@@ -268,7 +269,7 @@ Return exactly one JSON object and no markdown:
   ]
 }
 The Stage producer owns the child structure. Runner never invents Execute/Review or any other child Stage type.
-Every produced task must be referenced by at least one child Stage using task_id and must have at least one child Stage with task_complete=true.
+A task id is optional; when supplied it must be unique within this result. Every produced task must be referenced by at least one child Stage using the same task_id and must have at least one child Stage with task_complete=true.
 Child Stage names must be unique inside this produced Workflow. Local routes/targets may reference those local names; Runner will namespace them during expansion.
 Do not emit Runner-owned _dynamic_* fields.
 [/RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]
