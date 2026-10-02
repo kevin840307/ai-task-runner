@@ -7,11 +7,9 @@ from dataclasses import MISSING, fields
 from typing import Any, get_args, get_origin
 
 from ..errors import RunnerError
-from .stages.core import (
-    AIValidatorStage,
-    HandoffStage,
-    PlanStage,
-)
+from .stages.ai_validator import AIValidatorStage
+from .stages.handoff import HandoffStage
+from .stages.plan import PlanStage
 from .stages.base_stage import BaseStage
 from .stages.command import CommandStage
 
