@@ -12,7 +12,7 @@ from copy import deepcopy
 from typing import Any
 
 from ..errors import ConfigurationError, RunnerError
-from ..runtime.run_state import RunState, Task
+from ..runtime.run_state import RunState
 from .schema import validate_routes, validate_stage
 from .stages.base_stage import StageResult
 
@@ -56,11 +56,8 @@ def expand_stage_result(
     ]
     path = [*parent_path, group]
 
-    if result.kind == "tasks":
-        children = _expand_tasks(state.tasks, source_name, group, path)
-    else:
-        raw = result.data if result.data is not None else result.output
-        children = _expand_stages(raw, source_name, group, path)
+    raw = result.data if result.data is not None else result.output
+    children = _expand_stages(raw, source_name, group, path, result_kind=result.kind)
 
     if not children:
         raise ConfigurationError(
@@ -124,49 +121,13 @@ def _drop_previous_expansion(
     ]
 
 
-def _expand_tasks(
-    tasks: list[Task],
-    source_name: str,
-    group: str,
-    path: list[str],
-) -> list[dict[str, Any]]:
-    if not tasks:
-        raise RunnerError(f"dynamic Stage {source_name} produced no tasks")
-    result: list[dict[str, Any]] = []
-    for index, task in enumerate(tasks, 1):
-        token = _safe_name(task.id or f"task_{index}")
-        execute = f"{group}__{token}__execute"
-        review = f"{group}__{token}__review"
-        common = {
-            "_dynamic_group": group,
-            "_dynamic_path": list(path),
-            "_dynamic_parent": source_name,
-            "_dynamic_task_id": task.id,
-        }
-        result.append({
-            "name": execute,
-            "type": "base",
-            "profile": "execute",
-            **common,
-        })
-        result.append({
-            "name": review,
-            "type": "base",
-            "profile": "review",
-            "error_policy": {"retries": 2},
-            "max_failures": 3,
-            "routes": {"fail": execute},
-            "_dynamic_task_complete": True,
-            **common,
-        })
-    return result
-
-
 def _expand_stages(
     value: Any,
     source_name: str,
     group: str,
     path: list[str],
+    *,
+    result_kind: str,
 ) -> list[dict[str, Any]]:
     if isinstance(value, str):
         try:
@@ -175,10 +136,11 @@ def _expand_stages(
             raise RunnerError(
                 f"Stage {source_name} stages result must be valid JSON: {error}"
             ) from error
-    raw = value.get("stages") if isinstance(value, dict) else value
+    raw = value.get("stages") if isinstance(value, dict) else None
     if not isinstance(raw, list) or not raw:
         raise RunnerError(
-            f"Stage {source_name} stages result must contain a non-empty stages array"
+            f"Stage {source_name} {result_kind} result must provide a non-empty stages array; "
+            "Runner does not infer child Stage structure from tasks"
         )
 
     clean: list[dict[str, Any]] = []
@@ -195,7 +157,13 @@ def _expand_stages(
             raise RunnerError(
                 f"stages[{index}] contains Runner-owned dynamic metadata"
             )
+        task_id = str(definition.pop("task_id", "") or "")
+        task_complete = bool(definition.pop("task_complete", False))
         validate_stage(name, definition)
+        if task_id:
+            definition["_producer_task_id"] = task_id
+        if task_complete:
+            definition["_producer_task_complete"] = True
         clean.append(definition)
         local_names.append(name)
 
@@ -223,11 +191,17 @@ def _expand_stages(
                 name_map.get(str(target), target)
                 for target in targets
             ]
+        task_id = str(child.pop("_producer_task_id", "") or "")
+        task_complete = bool(child.pop("_producer_task_complete", False))
         child.update({
             "_dynamic_group": group,
             "_dynamic_path": list(path),
             "_dynamic_parent": source_name,
         })
+        if task_id:
+            child["_dynamic_task_id"] = task_id
+        if task_complete:
+            child["_dynamic_task_complete"] = True
         result.append(child)
     return result
 
