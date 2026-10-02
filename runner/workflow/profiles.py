@@ -1,0 +1,72 @@
+"""AI Stage profile defaults shared by runtime, YAML normalization, and Studio."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any
+
+AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
+    "generic": {
+        "title": "Generic",
+        "description": "General-purpose AI Stage with no task/review semantics.",
+        "defaults": {
+            "prompt": "common/generic.md",
+        },
+    },
+    "execute": {
+        "title": "Execute",
+        "description": "Writable task execution Stage using the shared execution prompt.",
+        "defaults": {
+            "status": "AI 正在處理目前任務",
+            "prompt": "common/execution.md",
+            "run_state": "executing",
+            "mode": "write",
+            "actor": "executor",
+            "allow_project_read": True,
+            "track_changes": True,
+        },
+    },
+    "review": {
+        "title": "Review",
+        "description": "Read-only semantic review gate with fail-soft technical retry policy.",
+        "defaults": {
+            "status": "AI 正在確認任務是否完成",
+            "prompt": "common/review.md",
+            "run_state": "reviewing",
+            "mode": "readonly",
+            "allow_project_read": True,
+            "readonly_safety": "observe",
+            "error_policy": {"retries": 2},
+            "max_failures": 3,
+        },
+    },
+}
+
+
+def profile_names() -> list[str]:
+    return list(AI_STAGE_PROFILES)
+
+
+def profile_defaults(profile: str) -> dict[str, Any]:
+    item = AI_STAGE_PROFILES.get(str(profile or "generic"))
+    return deepcopy(item.get("defaults", {})) if item else {}
+
+
+def apply_ai_profile_defaults(definition: dict[str, Any]) -> dict[str, Any]:
+    """Apply only missing AI profile values; explicit YAML always wins."""
+    if str(definition.get("type", "base")) != "base":
+        return definition
+    profile = str(definition.get("profile", "generic") or "generic")
+    defaults = profile_defaults(profile)
+    for key, value in defaults.items():
+        definition.setdefault(key, value)
+    definition["profile"] = profile
+    return definition
+
+
+__all__ = [
+    "AI_STAGE_PROFILES",
+    "apply_ai_profile_defaults",
+    "profile_defaults",
+    "profile_names",
+]
