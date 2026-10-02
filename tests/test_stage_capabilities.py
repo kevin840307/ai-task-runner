@@ -72,7 +72,7 @@ def test_command_stage_receives_execution_behavior_only():
 
 
 def test_validation_command_uses_shared_process_boundary(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as module
+    import runner.workflow.stages.command_stage as module
 
     validator = tmp_path / "validate.py"
     validator.write_text("print('ok')", encoding="utf-8")
@@ -103,7 +103,7 @@ def test_validation_command_uses_shared_process_boundary(monkeypatch, tmp_path):
 
 
 def test_command_stage_uses_shared_process_boundary(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as module
+    import runner.workflow.stages.command_stage as module
 
     ctx = context(tmp_path)
     ctx.config.agent_timeout = 10
