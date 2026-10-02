@@ -7,7 +7,7 @@ from runner.agent import AIError, BackendError
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState
 from runner.workflow.stages import StageContext, StageResult
-from runner.workflow.stage_executor import StageExecutor
+from runner.workflow.execution import StageExecutor
 
 
 class Hooks:
