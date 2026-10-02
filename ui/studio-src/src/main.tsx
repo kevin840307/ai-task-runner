@@ -606,6 +606,7 @@ function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const layoutRef = useRef<CanvasLayout>({});
+  const undoStackRef = useRef<Visual[]>([]);
   const graphFor = useCallback((v: Visual, c: Catalog | null) => {
     const graph = graphFromVisual(v, c, layoutRef.current);
     layoutRef.current = Object.fromEntries(graph.nodes.map((node) => [node.id, node.position]));
@@ -695,6 +696,7 @@ function App() {
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(false);
+      undoStackRef.current = [];
       setEditorView("designer");
       setMessage("");
     } catch (error) {
@@ -830,9 +832,37 @@ function App() {
     }
   }
 
+  function rememberUndoSnapshot(snapshot: Visual) {
+    const clone = structuredClone(snapshot);
+    const last = undoStackRef.current[undoStackRef.current.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(clone)) return;
+    undoStackRef.current = [...undoStackRef.current.slice(-49), clone];
+  }
+
+  function undoVisualDraft() {
+    if (!visual || undoStackRef.current.length === 0) {
+      setMessage("沒有可復原的 Workflow 修改。");
+      return;
+    }
+    const previous = undoStackRef.current[undoStackRef.current.length - 1];
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    setVisual(previous);
+    const graph = graphFor(previous, catalog);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setSelected("");
+    setDraft(null);
+    setEditorOpen(false);
+    setContextMenu(null);
+    setEdgeContextMenu(null);
+    setDirtyGraph(true);
+    setMessage("已復原上一個 Workflow 草稿修改。");
+  }
+
   function editDraft(next: Stage) {
     setDraft(next);
     if (visual) {
+      rememberUndoSnapshot(visual);
       const updated = { ...visual, stages: visual.stages.map((stage) => stage.name === next.name ? next : stage) };
       setVisual(updated);
       if (draft?.scope !== next.scope) {
@@ -897,6 +927,7 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(false);
+    undoStackRef.current = [];
     return result.visual;
   }, [catalog, graphFor]);
 
@@ -991,6 +1022,7 @@ function App() {
 
   const connect = useCallback((connection: Connection) => {
     if (!visual || !connection.source || !connection.target) return;
+    rememberUndoSnapshot(visual);
     const status = String(connection.sourceHandle || "pass").toLowerCase();
     if (connection.source === START) {
       if (connection.target === END) return;
@@ -1044,7 +1076,11 @@ function App() {
 
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
+    const explicit = removed.filter((edge) => edge.data?.explicit);
+    if (!explicit.length) return;
+    rememberUndoSnapshot(visual);
     let stages = visual.stages;
+    removed = explicit;
     for (const edge of removed) {
       const status = String(edge.data?.status || "");
       if (!status || !edge.data?.explicit) continue;
@@ -1084,6 +1120,7 @@ function App() {
       stage.max_failures = 3;
     }
     const next = { ...visual, stages: [...visual.stages, stage] };
+    rememberUndoSnapshot(visual);
     setVisual(next);
     if (position) {
       layoutRef.current = { ...layoutRef.current, [name]: position };
@@ -1189,6 +1226,7 @@ function App() {
     const flow = [...visual.flow];
     if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, name);
     const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    rememberUndoSnapshot(visual);
     setVisual(next);
     const sourcePosition = selected ? layoutRef.current[selected] : undefined;
     const targetPosition = position || (sourcePosition ? { x: sourcePosition.x + 260, y: sourcePosition.y + 40 } : undefined);
@@ -1218,6 +1256,7 @@ function App() {
     const flow = [...visual.flow];
     if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, newName);
     const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    rememberUndoSnapshot(visual);
     setVisual(next);
     const sourcePosition = layoutRef.current[name];
     if (sourcePosition) {
@@ -1256,6 +1295,7 @@ function App() {
       action: () => {
         const current = visual;
         const next = { ...current, flow: current.flow.filter((item) => item !== name), stages: current.stages.filter((stage) => stage.name !== name) };
+        rememberUndoSnapshot(current);
         setVisual(next);
         const g = graphFor(next, catalog);
         setNodes(g.nodes);
