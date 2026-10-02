@@ -21,14 +21,28 @@ ROOT = Path(__file__).resolve().parents[2]
 BROWSER_REQUIRED = os.environ.get("AI_TASK_RUNNER_BROWSER_REQUIRED") == "1"
 
 
-def _launch_browser(playwright):
+def _system_browser() -> str | None:
     configured = os.environ.get("CHROMIUM_PATH")
     if configured and Path(configured).is_file():
-        return playwright.chromium.launch(headless=True, executable_path=configured)
+        return configured
+    default_windows = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+    if default_windows.is_file():
+        return str(default_windows)
+    return None
+
+
+def _browser_unavailable() -> bool:
+    return sync_playwright is None or (not BROWSER_REQUIRED and _system_browser() is None)
+
+
+def _launch_browser(playwright):
+    executable = _system_browser()
+    if executable:
+        return playwright.chromium.launch(headless=True, executable_path=executable)
     return playwright.chromium.launch(headless=True)
 
 
-@pytest.mark.skipif(sync_playwright is None, reason="Playwright unavailable")
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
     workflow = ROOT / "runner" / "assets" / "workflows" / "file.yaml"
     original = workflow.read_bytes()
@@ -78,7 +92,7 @@ def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
 
 
 
-@pytest.mark.skipif(sync_playwright is None, reason="Playwright unavailable")
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
