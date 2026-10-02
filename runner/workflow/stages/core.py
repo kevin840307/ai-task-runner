@@ -32,7 +32,7 @@ class PlanStageSpec(BaseStageSpec):
 
 
 class PlanStage(BaseStage):
-    result_kind = "stages"
+    result_kind = "tasks"
     backend_mode = "planning"
     timeout_config_attr = "planning_timeout"
 
@@ -54,8 +54,11 @@ class PlanStage(BaseStage):
         install_plan(ctx.state, tasks, ctx.ai_client.session_id)
         return replace(
             result,
-            data={"stages": self._plan_child_stages(tasks)},
-            kind="stages",
+            data={
+                "tasks": tasks,
+                "stages": self._plan_child_stages(tasks),
+            },
+            kind="tasks",
         )
 
     @staticmethod
