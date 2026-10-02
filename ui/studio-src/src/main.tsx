@@ -45,10 +45,19 @@ type CatalogOption = {
   required?: boolean;
   default?: unknown;
   values?: string[];
+  description?: string;
+};
+
+type CatalogStageType = {
+  type: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  options: CatalogOption[];
 };
 
 type Catalog = {
-  stage_types: Record<string, { type: string; options: CatalogOption[] }>;
+  stage_types: Record<string, CatalogStageType>;
   node_options?: Record<string, unknown>;
 };
 
@@ -304,6 +313,16 @@ const PALETTE_SECTIONS = [
   { id: "handoff", types: ["handoff"], icon: "↔" },
   { id: "tools", types: ["command"], icon: "›" },
 ];
+function catalogStageMeta(catalog: Catalog | null, type: string) {
+  const catalogMeta = catalog?.stage_types?.[type];
+  const fallback = STAGE_META[type];
+  return {
+    title: String(catalogMeta?.title || fallback?.title || type),
+    description: String(catalogMeta?.description || fallback?.description || ""),
+    category: String(catalogMeta?.category || (PALETTE_SECTIONS.find((section) => section.types.includes(type))?.id ?? "extensions")),
+  };
+}
+
 const PALETTE_PREF_KEY = "workflow-designer.palette:v1";
 type PalettePrefs = { favorites: string[]; recent: string[]; collapsed: string[] };
 
@@ -545,6 +564,7 @@ function Field({
           {!option.required && <option value="">{option.default !== undefined && option.default !== "" ? `Default — ${String(option.default)}` : "Use Stage default"}</option>}
           {(option.values || []).map((v) => <option key={v} value={v}>{v || "(empty)"}</option>)}
         </select>
+        {option.description && <small className="effective-value">{option.description}</small>}
       </label>
     );
   }
@@ -553,6 +573,7 @@ function Field({
       <label className="check">
         <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
         <span>{option.name}</span>
+        {option.description && <small className="effective-value">{option.description}</small>}
       </label>
     );
   }
@@ -570,6 +591,7 @@ function Field({
           onChange={(e) => onChange(parseInputValue(option, e.target.value))}
         />
       )}
+      {option.description && <small className="effective-value">{option.description}</small>}
       {option.default !== undefined && <small>default: {JSON.stringify(option.default)}</small>}
     </label>
   );
@@ -1386,14 +1408,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           {(() => {
             const q = paletteQuery.trim().toLowerCase();
             const allTypes = Object.keys(catalog?.stage_types || {});
-            const knownTypes = new Set(PALETTE_SECTIONS.flatMap((section) => section.types));
+            const knownTypes = new Set(allTypes.filter((type) => catalogStageMeta(catalog, type).category !== "extensions"));
             const matches = (type: string) => {
               if (!q) return true;
-              const meta = STAGE_META[type];
+              const meta = catalogStageMeta(catalog, type);
               return [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
             };
             const item = (type: string, icon = "◇") => {
-              const meta = STAGE_META[type] || { title: type, description: tx("custom_stage") };
+              const meta = catalogStageMeta(catalog, type);
               const favorite = palettePrefs.favorites.includes(type);
               return <div key={type} className="palette-item" draggable={!busy} title={meta.description}
                 onDragStart={(event) => dragStage(event, type)}>
@@ -1416,8 +1438,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             const recentTypes = palettePrefs.recent.filter((type) => allTypes.includes(type) && !favoriteTypes.includes(type) && matches(type));
             if (recentTypes.length) groups.push({ id: "recent", title: tx("recent"), icon: "↺", types: recentTypes });
             PALETTE_SECTIONS.forEach((section) => {
-              const types = section.types.filter((type) => allTypes.includes(type) && matches(type));
+              const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === section.id && matches(type));
               if (types.length) groups.push({ id: section.id, title: tx(`group_${section.id}`), icon: section.icon, types });
+            });
+            const customCategories = Array.from(new Set(allTypes.map((type) => catalogStageMeta(catalog, type).category)
+              .filter((category) => category && category !== "extensions" && !PALETTE_SECTIONS.some((section) => section.id === category))));
+            customCategories.forEach((category) => {
+              const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === category && matches(type));
+              if (types.length) groups.push({ id: `plugin:${category}`, title: category, icon: "◇", types });
             });
             const extensionTypes = allTypes.filter((type) => !knownTypes.has(type) && matches(type));
             if (extensionTypes.length) groups.push({ id: "extensions", title: tx("extensions"), icon: "◇", types: extensionTypes });
@@ -1506,12 +1534,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             <div className="add-stage-command-list">
               {Object.keys(catalog?.stage_types || {}).filter((type) => {
                 const q = addStageQuery.trim().toLowerCase();
-                const meta = STAGE_META[type];
+                const meta = catalogStageMeta(catalog, type);
                 return !q || [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
               }).map((type) => {
-                const meta = STAGE_META[type] || { title: type, description: tx("custom_stage") };
+                const meta = catalogStageMeta(catalog, type);
                 return <button type="button" key={type} onClick={() => { setAddStageOpen(false); void addStage(type); }}>
-                  <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.types.includes(type))?.icon || "◇"}</span>
+                  <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.id === catalogStageMeta(catalog, type).category)?.icon || "◇"}</span>
                   <span><strong>{meta.title}</strong><small>{meta.description}</small></span><b>＋</b>
                 </button>;
               })}
@@ -1542,7 +1570,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             <div className="create-stage-card">
               <div>
                 <small>NEW STAGE</small>
-                <h3>{STAGE_META[pendingCreate.type]?.title || pendingCreate.type}</h3>
+                <h3>{catalogStageMeta(catalog, pendingCreate.type).title}</h3>
               </div>
               {pendingCreate.type === "base" && (
                 <label>
