@@ -8,7 +8,7 @@ from typing import Any
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY, stage_result_kind
 
-NODE_FIELDS = frozenset({"routes", "label", "scope", "error_policy"})
+NODE_FIELDS = frozenset({"routes", "label", "error_policy"})
 META_FIELDS = frozenset({"name", "type", "validator", "max_failures", *NODE_FIELDS})
 
 
@@ -45,9 +45,6 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
     if label is not None and (not isinstance(label, str) or not label.strip()):
         raise RunnerError(f"workflow stage {name} label must be a non-empty string")
 
-    scope = values.get("scope")
-    if scope not in {None, "task"}:
-        raise RunnerError(f"workflow stage {name} scope must be task when specified")
 
     for legacy_session_option in ("fresh_session_each_run", "fresh_session_on_start"):
         if legacy_session_option in values:
@@ -76,8 +73,10 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
             raise RunnerError(f"workflow stage {name} handoff targets must be unique")
 
     produces = values.get("produces")
-    if produces not in {None, "", "tasks"}:
-        raise RunnerError(f"workflow stage {name} produces must be tasks when specified")
+    if produces not in {None, "", "tasks", "stages"}:
+        raise RunnerError(
+            f"workflow stage {name} produces must be tasks or stages when specified"
+        )
 
     max_failures = values.get("max_failures")
     if max_failures is not None:
@@ -159,18 +158,6 @@ def validate_routes(workflow: list[dict[str, Any]]) -> None:
                 )
 
 
-def validate_topology(workflow: list[dict[str, Any]]) -> None:
-    task_nodes = [
-        index for index, item in enumerate(workflow) if item.get("scope") == "task"
-    ]
-    if not task_nodes:
-        return
-    if task_nodes != list(range(task_nodes[0], task_nodes[-1] + 1)):
-        raise RunnerError("task-scoped workflow stages must form one contiguous block")
-    if any(stage_result_kind(workflow[index]) == "validation" for index in task_nodes):
-        raise RunnerError("validator stages cannot use scope: task")
-
-
 def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
     file_validation = any(
         item.get("type") == "command" and item.get("result_kind") == "validation"
@@ -190,7 +177,6 @@ def workflow_has_task_producer(workflow: list[dict[str, Any]]) -> bool:
 __all__ = [
     "validate_routes",
     "validate_stage",
-    "validate_topology",
     "workflow_has_task_producer",
     "workflow_validators",
 ]
