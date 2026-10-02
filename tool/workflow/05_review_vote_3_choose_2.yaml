@@ -2,18 +2,11 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
 
   review_vote:
-    type: review
+    type: base
+    profile: review
     prompt: common/review.md
     session_policy: fresh
     runs: 3
@@ -30,7 +23,5 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - review_vote
   - validate_ai
