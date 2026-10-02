@@ -373,7 +373,6 @@ def _incomplete_progress_key(result: RunResult) -> str:
             "current": state.get("current"),
             "cycle": state.get("cycle"),
             "workflow_position": state.get("workflow_position"),
-            "task_step": state.get("task_step"),
             "completed": state.get("completed"),
             "tasks": [
                 {
