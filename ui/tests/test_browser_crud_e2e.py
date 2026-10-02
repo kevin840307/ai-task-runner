@@ -17,6 +17,8 @@ try:
 except ImportError:  # pragma: no cover
     sync_playwright = None
 
+BROWSER_REQUIRED = os.environ.get("AI_TASK_RUNNER_BROWSER_REQUIRED") == "1"
+
 
 def _chromium_executable() -> str | None:
     configured = os.environ.get("CHROMIUM_PATH")
@@ -27,6 +29,10 @@ def _chromium_executable() -> str | None:
         if found:
             return found
     return None
+
+
+def _browser_unavailable() -> bool:
+    return sync_playwright is None or (not BROWSER_REQUIRED and _chromium_executable() is None)
 
 
 def _launch_browser(playwright):
@@ -187,8 +193,8 @@ def _bridge_for(state: UIState):
 
 
 @pytest.mark.skipif(
-    sync_playwright is None,
-    reason="Playwright not available",
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
 )
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
@@ -291,8 +297,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
 
 @pytest.mark.skipif(
-    sync_playwright is None,
-    reason="Playwright not available",
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
 )
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
@@ -367,8 +373,8 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
 
 
 @pytest.mark.skipif(
-    sync_playwright is None,
-    reason="Playwright not available",
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
 )
 def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
