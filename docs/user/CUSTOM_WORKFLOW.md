@@ -1,18 +1,21 @@
 # Custom Workflow
 
-A Workflow is a YAML graph of Stages. The runtime has one execution model for CLI, API, YAML List and Studio.
+A Workflow is one ordered graph of Stages. CLI, API, YAML List, Studio, Dry Run, and dynamic child Workflows all use the same runtime.
 
-## Minimal shape
+## Minimal AI Workflow
 
 ```yaml
 stages:
   execute:
-    type: task
-    scope: task
+    type: base
+    profile: execute
 
   review:
-    type: review
-    scope: task
+    type: base
+    profile: review
+    error_policy:
+      retries: 2
+    max_failures: 3
     routes:
       fail: execute
 
@@ -29,7 +32,17 @@ flow:
   - final_validate
 ```
 
-Default PASS moves to the next Stage in `flow`. Override semantic navigation only with:
+`type: base` is the general AI Stage. Choose a profile instead of a separate Execute/Review Stage type:
+
+- `profile: generic` — custom AI behavior.
+- `profile: execute` — writable execution behavior, default prompt `common/execution.md`.
+- `profile: review` — read-only structured PASS/FAIL review, default prompt `common/review.md`.
+
+The removed `type: task`, `type: review`, `scope`, and `task_step` contracts are not supported.
+
+## Routing and technical recovery
+
+PASS defaults to the next Stage in `flow`. Semantic navigation uses only:
 
 ```yaml
 routes:
@@ -39,30 +52,90 @@ routes:
 
 Targets may also be `done` or `stop`.
 
-Technical ERROR is not a graph edge. Exceptions, backend failures, timeouts and transient API errors are handled by `StageExecutor`. Configure only retry count when needed:
+Technical ERROR is never a graph edge. Exceptions, backend failures, timeouts, transient API failures, partial writes, Same Session retry, Fresh Session recovery, and backoff are owned by `runner/workflow/stage_executor.py`.
 
 ```yaml
 error_policy:
-  retries: -1   # unlimited technical retry
+  retries: -1
 ```
 
-For a `review` Stage only, a finite local `error_policy.retries` is also the fail-soft contract: once those technical retries are exhausted, Review is skipped and the Workflow continues to the next Stage. Keep an authoritative Validator after such a Review. Other Stage types fail closed when a finite retry budget is exhausted.
+A finite local retry on an AI Stage with `profile: review` is fail-soft: technical ERROR retries are exhausted, then the Workflow continues to the next Stage. Semantic Review FAIL still follows `routes.fail`; `max_failures` may cap consecutive semantic FAIL results.
 
-Do not use `routes.error`, repair/recover/restart_at/repeat/max_attempts/on_exhausted; they are not part of the current runtime contract.
+## Special Stage types
 
-## Stage types
+Built-in special types have runtime behavior that cannot be represented by an AI profile:
 
-Built-in types:
-
-- `plan` — produce Task[].
-- `task` — execute the current Task.
-- `review` — read-only structured completion verdict.
+- `plan` — plans Tasks and produces its own dynamic child Workflow.
 - `ai_validator` — independent AI validation, optionally multiple runs/voting.
-- `base` — generic AI-backed Stage.
-- `handoff` — dynamically select exactly one allowed next Stage.
-- `command` — external command/Python tool Stage.
+- `command` — external command/Python Stage.
+- `handoff` — dynamically selects exactly one allowed next Stage.
+- registered plugin Stage types.
 
 A custom Python Stage should implement work/result behavior only. Retry/session recovery belongs to StageExecutor.
+
+## Dynamic child Workflows
+
+Any Stage may return `tasks` or `stages`. The producer Stage must also define the child Stage structure; Runner never guesses which child Stage types to create.
+
+Execution semantics are always:
+
+```text
+A -> B -> C -> D
+
+C returns tasks/stages
+
+A -> B -> C
+          -> child-1
+          -> child-2
+          -> ...
+          -> D
+```
+
+All children run through the same FlowEngine and StageExecutor, including retry/recover/routing/session policy. Expanded definitions are persisted in RunState so Resume continues the already-expanded child Workflow without rerunning C merely to reconstruct it.
+
+PlanStage currently converts its validated Tasks into an ordered child Workflow:
+
+```text
+task-1 Execute -> task-1 Review
+-> task-2 Execute -> task-2 Review
+-> ...
+```
+
+This Plan behavior belongs to PlanStage, not Runner. Another special Stage may generate a different child Workflow.
+
+A `tasks` producer returns both validated task data and child Stage definitions. Child definitions bind to Tasks with `task_id`; at least one child for each Task must set `task_complete: true`.
+
+```json
+{
+  "tasks": [
+    {
+      "id": "inspect",
+      "title": "Inspect project",
+      "description": "Inspect the project.",
+      "deliverable": "Findings",
+      "acceptance_criteria": ["Findings are complete."]
+    }
+  ],
+  "stages": [
+    {
+      "name": "inspect_execute",
+      "type": "base",
+      "profile": "execute",
+      "task_id": "inspect"
+    },
+    {
+      "name": "inspect_review",
+      "type": "base",
+      "profile": "review",
+      "task_id": "inspect",
+      "task_complete": true,
+      "routes": {"fail": "inspect_execute"}
+    }
+  ]
+}
+```
+
+A `stages` producer may return only a non-empty `stages` array when no durable Task objects are needed.
 
 ## Dynamic Handoff
 
@@ -75,6 +148,7 @@ stages:
 
   implementer:
     type: base
+    profile: generic
     prompt: common/dynamic_worker.md
     instructions: Implement the smallest correct change.
     session_policy: role
@@ -85,6 +159,7 @@ stages:
 
   verifier:
     type: base
+    profile: generic
     prompt: common/dynamic_worker.md
     instructions: Independently verify tests and evidence.
     session_policy: role
@@ -107,34 +182,29 @@ flow:
   - final_validate
 ```
 
-The Handoff Stage only chooses the next target. Roles remain ordinary Stages. Discussion/review-board/triage patterns should be expressed with this same primitive instead of adding another runtime family.
+The Handoff Stage only chooses the next allowed target. Target roles remain ordinary Stages.
 
 ## Session policy
 
-AI-backed Stages expose one explicit policy:
+AI-backed Stages expose one session policy:
 
-- `role`: durable Session owned by the Stage name; reusable across later handoffs and process resume. This is the Dynamic specialist default.
-- `main`: share the Runner primary Session.
-- `fresh`: new Session for every invocation. Use for independent validation.
-- `auto`: built-in/internal default behavior. Only `auto` may use `session_key`.
+- `role` — durable Session owned by the Stage name.
+- `main` — share the Runner primary Session.
+- `fresh` — new Session for every invocation; recommended for independent validation.
+- `auto` — built-in/default behavior.
 
-Repeated technical failure may rotate the affected role to a fresh Session. Other role Sessions remain intact.
+Repeated technical failure may rotate only the affected Stage to a fresh Session.
 
 ## Multiple runs / voting
 
-Structured AI Stages can run multiple independent calls:
-
 ```yaml
 review_vote:
-  type: review
+  type: base
+  profile: review
   session_policy: fresh
   runs: 3
   required_passes: 2
 ```
-
-## Task scope
-
-Stages with `scope: task` must form one contiguous block. They execute once per current Task. Validation Stages cannot be task-scoped.
 
 ## Command Stage
 
@@ -147,7 +217,7 @@ validate_file:
     fail: execute
 ```
 
-Use `produces: tasks` when a custom command/Python Stage produces Task[] instead of using PlanStage.
+A command/plugin Stage may declare `produces: tasks` or `produces: stages`, but its output must provide the corresponding producer-defined child Workflow.
 
 ## Prompts
 
@@ -157,8 +227,6 @@ Prompt references are category-relative:
 - `ralphy/<name>.md`
 - `workflow/<workflow-name>/<name>.md`
 
-Dynamic ordinary roles normally share `common/dynamic_worker.md`; role-specific behavior belongs in `instructions`. Use a dedicated prompt only when a role truly needs a different protocol/tool contract.
-
 ## Testing
 
 Before live execution:
@@ -167,12 +235,12 @@ Before live execution:
 python tool/workflow_dryrun.py path/to/workflow.yaml --matrix --json
 ```
 
-For one Stage only, use Workflow Studio Stage Test or `tool/stage_probe.py`.
+For one Stage only, use Workflow Editor Stage Test or `tool/stage_probe.py`.
 
-Real backend proof is separate from deterministic CI:
+Real backend proof is separate:
 
 ```powershell
 tool\qwen_live_reliability_0_5h.bat
 ```
 
-Run the 24H gate only after the short live gate passes.
+Run the 24H gate only after the short gate passes.
