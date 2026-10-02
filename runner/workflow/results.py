@@ -57,8 +57,13 @@ def decode_tasks(value: Any, *, cycle: int, minimum: int = 1) -> list[Task]:
     for index, item in enumerate(raw, 1):
         if not isinstance(item, dict):
             raise RunnerError(f"tasks[{index}] must be an object")
+        task_id = item.get("id")
+        if task_id is None:
+            task_id = f"c{cycle:02d}-t{index:03d}"
+        else:
+            task_id = require_text(task_id, f"tasks[{index}].id")
         tasks.append(Task(
-            id=f"c{cycle:02d}-t{index:03d}",
+            id=task_id,
             title=require_text(item.get("title"), f"tasks[{index}].title"),
             description=require_text(
                 item.get("description"),
@@ -74,6 +79,9 @@ def decode_tasks(value: Any, *, cycle: int, minimum: int = 1) -> list[Task]:
                 allow_empty=False,
             ),
         ))
+    ids = [task.id for task in tasks]
+    if len(set(ids)) != len(ids):
+        raise RunnerError("tasks ids must be unique")
     return tasks
 
 
