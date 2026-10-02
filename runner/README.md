@@ -9,7 +9,7 @@ workflow_runner.py
         |
 workflow/flow_engine.py
    |            |             |
-stage_executor.py   stages/   runtime/run_state.py
+execution/stage_executor.py   stages/   runtime/run_state.py
         |
       agent/
 ```
@@ -40,6 +40,6 @@ Root modules have cross-domain ownership and are intentionally kept visible:
 
 Ownership rule:
 
-> Stage defines work. `workflow/stage_executor.py` owns technical retry/session recovery. FlowEngine owns semantic navigation and dynamic child insertion. StateStore owns durable progress.
+> Stage defines work. `workflow/execution/stage_executor.py` owns technical retry/session recovery. FlowEngine owns semantic navigation and dynamic child insertion. StateStore owns durable progress.
 
 Do not add compatibility folders or alternate runtimes. If a helper has one clear owner, keep it with that owner; keep a root helper only when it genuinely serves multiple domains.
