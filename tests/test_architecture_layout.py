@@ -16,9 +16,10 @@ def test_stage_implementation_files_are_small_in_number():
     stages = ROOT / "runner" / "workflow" / "stages"
     assert {
         "base_stage.py",
-        "core.py",
-        "command.py",
-        "executor.py",
+        "plan_stage.py",
+        "ai_validator_stage.py",
+        "command_stage.py",
+        "handoff_stage.py",
         "__init__.py",
     } == {path.name for path in stages.glob("*.py")}
 
@@ -35,7 +36,7 @@ def test_workflow_has_one_minimal_type_registry():
 
 def test_workflow_runtime_has_only_current_canonical_modules():
     workflow = ROOT / "runner" / "workflow"
-    for name in ("flow_engine.py", "dynamic_expansion.py", "results.py", "loader.py", "schema.py", "registry.py"):
+    for name in ("flow_engine.py", "dynamic_expansion.py", "stage_executor.py", "results.py", "loader.py", "schema.py", "registry.py"):
         assert (workflow / name).is_file()
 
     for removed in (
