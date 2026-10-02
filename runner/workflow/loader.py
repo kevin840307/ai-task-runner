@@ -12,6 +12,7 @@ from ..assets import PROMPT_DIR, WORKFLOW_DIR
 from ..errors import RunnerError
 from ..resources import write_text
 from ..utils import io_path
+from .profiles import apply_ai_profile_defaults
 from .schema import (
     validate_routes,
     validate_stage,
@@ -134,6 +135,7 @@ def _normalize_stage(name: Any, definition: Any, source: Path) -> dict[str, Any]
     values = deepcopy(definition)
     values.setdefault("type", "base")
     values["name"] = name
+    apply_ai_profile_defaults(values)
     instructions_file = values.pop("instructions_file", None)
     if instructions_file is not None:
         values["instructions"] = _read_text(instructions_file, source, name)
