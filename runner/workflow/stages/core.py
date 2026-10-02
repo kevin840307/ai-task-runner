@@ -79,39 +79,6 @@ def parse_plan_tasks(
 
 
 @dataclass(frozen=True)
-class TaskStageSpec(BaseStageSpec):
-    status: str = "AI 正在處理目前任務"
-    run_state: str = "executing"
-    mode: str = MODE_WRITE
-    actor: str = "executor"
-    prompt: str = "common/execution.md"
-    track_changes: bool = True
-
-
-class TaskStage(BaseStage):
-    result_kind = "task"
-
-
-@dataclass(frozen=True)
-class ReviewStageSpec(BaseStageSpec):
-    status: str = "AI 正在確認任務是否完成"
-    run_state: str = "reviewing"
-    mode: str = MODE_READONLY
-    actor: str = "ai"
-    prompt: str = "common/review.md"
-    max_failures: int | None = None
-
-
-class ReviewStage(BaseStage):
-    result_kind = "review"
-    parser_name = "review"
-    backend_mode = "review"
-    timeout_config_attr = "planning_timeout"
-    client_cache_key = "review_client"
-    result_flag = "completed"
-
-
-@dataclass(frozen=True)
 class AIValidatorStageSpec(BaseStageSpec):
     status: str = "正在執行最終 AI 驗證"
     run_state: str = "validating"
@@ -231,9 +198,7 @@ class HandoffStage(BaseStage):
         )
 
 PlanStage.spec_class = PlanStageSpec
-TaskStage.spec_class = TaskStageSpec
 HandoffStage.spec_class = HandoffStageSpec
-ReviewStage.spec_class = ReviewStageSpec
 AIValidatorStage.spec_class = AIValidatorStageSpec
 
 __all__ = [
@@ -243,9 +208,5 @@ __all__ = [
     "HandoffStageSpec",
     "PlanStage",
     "PlanStageSpec",
-    "ReviewStage",
-    "ReviewStageSpec",
-    "TaskStage",
-    "TaskStageSpec",
     "parse_plan_tasks",
 ]
