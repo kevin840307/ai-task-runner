@@ -252,16 +252,18 @@ WORKFLOW STUDIO - LINEAR FIRST
 [x] Add START / END as UI-only virtual node concepts in the new Studio source.
 [x] Show scope: task as a PER TASK visual group; Plan still produces Task[] only.
 [x] Add PASS / FAIL Stage handles; ERROR is retry-only; Handoff uses one multi-target HANDOFF handle.
+[x] Edge selection supports Delete/Backspace for explicit PASS/FAIL/HANDOFF edges; implicit PASS -> next stays protected.
+[x] Workflow draft supports Ctrl+Z undo for graph/stage mutations; Save/Reload clears undo history and text inputs keep native undo.
 [x] Add large dedicated Studio source package: React + TypeScript + @xyflow/react + Vite.
 [x] Full Designer React source lives only in ui/studio-src; ui/static/workflow-studio-app is generated only by npm run build and must never be hand-edited.
 [x] Workflow Studio opens Full Designer for the selected Workflow; Full Designer returns deterministically to Workflow Studio and restores that Workflow.
 [x] Add node creation/deletion from the React canvas (+ draggable Stage Palette) while disconnected nodes stay out of flow.
 [ ] Add explicit edge retarget UX and terminal target choice (done vs stop when needed).
-[ ] Add Stage rename transaction that updates flow/routes safely, or keep Stage key immutable with a clear UI label.
+[x] Keep Stage key immutable in the Workflow Editor and expose label/display-name editing explicitly; changing the key requires recreate/YAML.
 [ ] Add graph dirty/unsaved-navigation guard and runtime edit-lock handling to the full page.
 [x] Add Prompt selector/browse experience in the Stage inspector and show the effective default Prompt explicitly.
-[ ] Add graph CRUD browser tests: START/END, delete Stage, reorder, PASS/FAIL + HANDOFF connect/delete/retarget, scope:task, save/reload. (Disconnected Stage + Prompt ownership contracts added.)
-[ ] Add catalog coverage test proving every runtime Stage option is editable by the generic inspector.
+[x] Add real Chromium graph CRUD browser E2E: START/END, Stage delete, flow reorder, PASS/FAIL/HANDOFF connect/delete/retarget, scope:task and save/reload YAML round-trip.
+[x] Add runtime-catalog -> React Workflow Editor coverage proving generic Stage options are editable or explicitly owned by specialized controls.
 [ ] Remove/retire the old Flow Map modal/card-list Visual editor only after the React Flow page has equivalent coverage.
 [x] Workflow Builder internal prompts stay outside assets/Studio; removed unused workflow_prompt.md and workflow_review.md from runner assets.
 
@@ -288,6 +290,7 @@ Gate 1 - Repository contract / CI - COMPLETE
 [x] CLI/API/runtime tests recovered from migration failures
 [x] fresh Ubuntu CI PASS on current head
 [x] fresh Windows CI PASS on current head
+[x] Dedicated Chromium/Playwright browser CI job exists; browser E2E is forced in that job and cannot silently skip.
 
 Gate 1 completion rule:
 BOTH operating systems must pass full pytest + compile on the same/current head.
