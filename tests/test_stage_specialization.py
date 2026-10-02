@@ -54,11 +54,11 @@ def test_review_and_validation_result_flags_map_true_to_pass_false_to_fail():
     from runner.workflow.stages import (
         AIValidatorStage,
         AIValidatorStageSpec,
-        ReviewStage,
-        ReviewStageSpec,
+        BaseStage,
+        BaseStageSpec,
     )
 
-    review = ReviewStage(ReviewStageSpec(name="review"))
+    review = BaseStage(BaseStageSpec(name="review", profile="review"))
     validator = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
     assert review.result_status({"completed": True}) == "pass"
     assert review.result_status({"completed": False}) == "fail"
