@@ -616,8 +616,8 @@ class WorkflowStudioMixin:
                 raise ValueError(f"Stage already exists: {name}")
             if stage_type == "command" and not str(command or "").strip():
                 raise ValueError("Command Stage requires a command")
-            if stage_type == "base" and not str(prompt or "").strip():
-                prompt = "common/generic.md"
+            # AI profile defaults are catalog/runtime-owned. Only validate a Prompt
+            # when the user explicitly overrides the profile default.
             if str(prompt or "").strip() and self._resolve_prompt_reference(path, str(prompt).strip()) is None:
                 raise ValueError(f"Prompt not found: {str(prompt).strip()}")
 
