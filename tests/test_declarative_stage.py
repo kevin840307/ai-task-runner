@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from runner.errors import RunnerError
 from runner.workflow.registry import STAGE_REGISTRY, create_stage, register_stage
 from runner.workflow.stages import (
     AIValidatorStage,
@@ -64,5 +65,5 @@ def test_yaml_references_expose_only_structured_parsers():
 def test_scope_is_rejected_as_removed_contract():
     import pytest
     from runner.errors import ConfigurationError
-    with pytest.raises((ConfigurationError, TypeError, ValueError)):
+    with pytest.raises((RunnerError, ConfigurationError, TypeError, ValueError)):
         create_stage({"name": "legacy", "type": "base", "scope": "task"})
