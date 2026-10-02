@@ -4,22 +4,6 @@ stages:
     status: AI 正在依任務複雜度建立可驗證 TODO
     readonly_safety: observe
 
-  execute:
-    type: task
-    scope: task
-    status: AI 正在處理目前任務
-
-  review:
-    type: review
-    scope: task
-    status: AI 正在確認任務是否完成
-    readonly_safety: observe
-    error_policy:
-      retries: 2
-    max_failures: 3
-    routes:
-      fail: execute
-
   validate_file:
     type: command
     status: 正在執行 Python Validator
@@ -44,7 +28,5 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - validate_file
   - validate_ai
