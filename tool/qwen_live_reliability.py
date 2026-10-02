@@ -497,11 +497,10 @@ def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
 
 
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
-    """Exercise the isolated Full Designer Stage Probe against the real Qwen backend."""
+    """Exercise isolated Agent Ping and AI Review profile against the real backend."""
     tool = ROOT / "tool" / "stage_probe.py"
-    workflow = WORKFLOWS["ai"]
 
-    def run_probe(root: Path, mode: str, log: Path) -> dict[str, object]:
+    def run_probe(root: Path, workflow: Path, mode: str, log: Path) -> dict[str, object]:
         command = [
             sys.executable,
             str(tool),
@@ -529,13 +528,28 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="ai-runner-stage-probe-live-") as directory:
         root = Path(directory) / "project"
         root.mkdir()
-        ping = run_probe(root, "agent_ping", Path(directory) / "agent-ping.log")
+        workflow = Path(directory) / "stage-probe.yaml"
+        workflow.write_text(
+            """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+    error_policy:
+      retries: 2
+    max_failures: 3
+flow:
+  - review
+""",
+            encoding="utf-8",
+        )
+        ping = run_probe(root, workflow, "agent_ping", Path(directory) / "agent-ping.log")
         if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
             raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
-        stage = run_probe(root, "stage", Path(directory) / "real-stage.log")
+        stage = run_probe(root, workflow, "stage", Path(directory) / "real-stage.log")
         if stage.get("status") not in {"pass", "fail"} or stage.get("kind") != "review":
             raise RuntimeError(f"real Review Stage Probe contract mismatch: {stage!r}")
-        if stage.get("next") not in {"execute", "validate_ai"}:
+        if stage.get("next") != "done":
             raise RuntimeError(f"real Review Stage Probe next target mismatch: {stage!r}")
         return {
             "agent_ping": True,
@@ -613,9 +627,12 @@ def builtin_readonly_safety_contract() -> dict[str, dict[str, str | None]]:
                     f"expected {expected_value!r}, got {actual!r}"
                 )
         from runner.workflow.registry import create_stage
+        template = dict(_plan_review_template())
+        template.pop("task_id", None)
+        template.pop("task_complete", None)
         dynamic_review = create_stage({
             "name": "dynamic_review_contract",
-            **_plan_review_template(),
+            **template,
         }).readonly_safety
         observed[workflow]["dynamic_review"] = dynamic_review
         if dynamic_review != "observe":
