@@ -56,7 +56,7 @@ YAML remains the only canonical Workflow model. The graph is an editor projectio
 - flow order = default PASS -> next
 - routes.pass/fail = explicit semantic result edges; ERROR is retry-only and never a graph edge
 - Dynamic child Workflow expansion is runtime-owned; there is no task-level UI mode or `scope` contract.
-- Plan produces Task[] data only; it never injects Execute/Review nodes
+- Plan validates Task[] and itself produces the alternating Execute -> Review child Stage definitions; Runner only expands and executes producer-defined children
 - Stage parameters are rendered from /api/workflow/catalog so new Stage options do
   not require another hard-coded UI field list
 - Graph edits patch the existing YAML; there is no second graph/runtime schema
