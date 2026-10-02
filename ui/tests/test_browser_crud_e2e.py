@@ -29,6 +29,14 @@ def _chromium_executable() -> str | None:
     return None
 
 
+def _launch_browser(playwright):
+    executable = _chromium_executable()
+    kwargs = {"headless": True, "args": ["--no-sandbox"]}
+    if executable:
+        kwargs["executable_path"] = executable
+    return playwright.chromium.launch(**kwargs)
+
+
 def _write_fixture_repo(root: Path) -> UIState:
     (root / "ui" / "data").mkdir(parents=True)
     (root / "ui" / "data" / "projects.json").write_text("[]", encoding="utf-8")
@@ -179,8 +187,8 @@ def _bridge_for(state: UIState):
 
 
 @pytest.mark.skipif(
-    sync_playwright is None or _chromium_executable() is None,
-    reason="Playwright/Chromium not available",
+    sync_playwright is None,
+    reason="Playwright not available",
 )
 def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
@@ -194,11 +202,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                executable_path=_chromium_executable(),
-                args=["--no-sandbox"],
-            )
+            browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1440, "height": 900})
             page_errors: list[str] = []
             page.on("pageerror", lambda error: page_errors.append(str(error)))
@@ -287,8 +291,8 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
 
 @pytest.mark.skipif(
-    sync_playwright is None or _chromium_executable() is None,
-    reason="Playwright/Chromium not available",
+    sync_playwright is None,
+    reason="Playwright not available",
 )
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
@@ -307,11 +311,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                executable_path=_chromium_executable(),
-                args=["--no-sandbox"],
-            )
+            browser = _launch_browser(playwright)
             page = browser.new_page(viewport=viewport)
             page.expose_function("__apiBridge", _bridge_for(state))
             page.set_content(html, wait_until="domcontentloaded")
@@ -367,8 +367,8 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
 
 
 @pytest.mark.skipif(
-    sync_playwright is None or _chromium_executable() is None,
-    reason="Playwright/Chromium not available",
+    sync_playwright is None,
+    reason="Playwright not available",
 )
 def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
     static_root = Path(__file__).resolve().parents[1] / "static"
@@ -384,11 +384,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
         html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                executable_path=_chromium_executable(),
-                args=["--no-sandbox"],
-            )
+            browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1366, "height": 768})
             page.expose_function("__apiBridge", _bridge_for(state))
             page.set_content(html, wait_until="domcontentloaded")
