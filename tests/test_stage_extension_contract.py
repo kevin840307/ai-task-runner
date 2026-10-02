@@ -149,11 +149,26 @@ class TaskProducerStage:
                 "tasks": [
                     {
                         "title": "Extension task",
-                        "description": "Exercise a task-scoped Stage from a custom producer.",
+                        "description": "Exercise producer-defined child Stages.",
                         "deliverable": "Completed extension task",
-                        "acceptance_criteria": ["The task-scoped Stage completes."],
+                        "acceptance_criteria": ["The producer-defined child Workflow completes."],
                     }
-                ]
+                ],
+                "stages": [
+                    {
+                        "name": "child_execute",
+                        "type": "contract_task_consumer",
+                        "message": "TASK_CONSUMED",
+                        "task_id": "c01-t001",
+                    },
+                    {
+                        "name": "child_done",
+                        "type": "contract_task_consumer",
+                        "message": "TASK_COMPLETE",
+                        "task_id": "c01-t001",
+                        "task_complete": True,
+                    },
+                ],
             },
         )
 
@@ -161,7 +176,7 @@ class TaskProducerStage:
         return result
 
 
-def test_registered_task_producer_drives_task_scope_without_plan_or_core_changes(tmp_path):
+def test_registered_task_producer_expands_its_own_child_workflow_without_core_changes(tmp_path):
     producer_name = "contract_task_producer"
     consumer_name = "contract_task_consumer"
     register_stage(producer_name, TaskProducerStage)
@@ -174,13 +189,12 @@ stages:
   discover:
     type: {producer_name}
     produces: tasks
-  execute:
+  after:
     type: {consumer_name}
-    message: TASK_CONSUMED
-    scope: task
+    message: PARENT_CONTINUED
 flow:
   - discover
-  - execute
+  - after
 """.lstrip(),
             encoding="utf-8",
         )
@@ -193,6 +207,11 @@ flow:
         assert len(ctx.state.tasks) == 1
         assert ctx.state.tasks[0].status == "completed"
         assert ctx.state.current == 1
+        names = [item["name"] for item in ctx.state.expanded_workflow]
+        assert names[0] == "discover"
+        assert names[1].endswith("__child_execute")
+        assert names[2].endswith("__child_done")
+        assert names[3] == "after"
     finally:
         STAGE_REGISTRY.pop(producer_name, None)
         STAGE_REGISTRY.pop(consumer_name, None)
