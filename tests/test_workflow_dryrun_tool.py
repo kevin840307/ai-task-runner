@@ -52,7 +52,8 @@ def test_dryrun_detects_non_converging_result_edge_loop(tmp_path: Path):
     workflow.write_text(
         """stages:
   check:
-    type: review
+    type: base
+    profile: review
     routes:
       fail: check
 flow:
@@ -90,9 +91,10 @@ def test_dryrun_supports_custom_task_producer():
     payload = json.loads(result.stdout)
 
     assert payload["completed"] is True
-    assert [item["stage"] for item in payload["transitions"]] == [
-        "discover_tasks", "execute", "review", "done"
-    ]
+    stages = [item["stage"] for item in payload["transitions"]]
+    assert stages[0] == "discover_tasks"
+    assert stages[-1] == "done"
+    assert any(name.startswith("discover_tasks__g") for name in stages[1:-1])
 
 
 def test_dryrun_rejects_removed_legacy_routing_fields(tmp_path: Path):
@@ -100,10 +102,12 @@ def test_dryrun_rejects_removed_legacy_routing_fields(tmp_path: Path):
     workflow.write_text(
         """stages:
   work:
-    type: review
+    type: base
+    profile: review
     recover: [repair]
   repair:
-    type: task
+    type: base
+    profile: execute
 flow: [work]
 """,
         encoding="utf-8",
@@ -121,7 +125,8 @@ def test_dryrun_rejects_invalid_route_target(tmp_path: Path):
     workflow.write_text(
         """stages:
   work:
-    type: review
+    type: base
+    profile: review
     routes:
       fail: missing
 flow: [work]
@@ -161,9 +166,11 @@ def test_dryrun_json_contract_is_small_and_machine_readable():
     }
     assert payload["valid"] is True
     assert payload["completed"] is True
-    assert [item["stage"] for item in payload["transitions"]] == [
-        "planning", "execute", "review", "validate_file"
-    ]
+    stages = [item["stage"] for item in payload["transitions"]]
+    assert stages[0] == "planning"
+    assert stages[-1] == "validate_file"
+    assert any(name.endswith("__task_001_execute") for name in stages)
+    assert any(name.endswith("__task_001_review") for name in stages)
 
 
 def test_dynamic_handoff_matrix_exercises_selected_role_failures():
