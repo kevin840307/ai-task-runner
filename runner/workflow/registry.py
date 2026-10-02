@@ -47,6 +47,9 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
     return {
         name: {
             "type": name,
+            "title": str(getattr(stage_class, "ui_title", "") or name),
+            "description": str(getattr(stage_class, "ui_description", "") or ""),
+            "category": str(getattr(stage_class, "ui_category", "") or "extensions"),
             "options": [
                 _field_info(item)
                 for item in fields(stage_class.spec_class)
@@ -138,6 +141,9 @@ def _field_info(item: Any) -> dict[str, Any]:
     if item.name == "produces":
         result["type"] = "enum"
         result["values"] = ["", "tasks", "stages"]
+    description = str((getattr(item, "metadata", None) or {}).get("description", "") or "").strip()
+    if description:
+        result["description"] = description
     if item.name == "session_policy":
         result["type"] = "enum"
         result["values"] = ["auto", "main", "role", "fresh"]
