@@ -7,7 +7,7 @@ from runner.errors import RunnerError
 from runner.runtime.run_state import RunState, Task
 from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 from runner.workflow.stages import StageContext
-from runner.workflow.stage_executor import StageExecutor
+from runner.workflow.execution import StageExecutor
 
 
 class Hooks:
