@@ -319,12 +319,28 @@ def _handoff_selector(
     return {}
 
 
-def _matrix_cases(workflow: list[dict[str, Any]]) -> list[MatrixCase]:
+def _matrix_cases(
+    workflow: list[dict[str, Any]],
+    *,
+    expanded: list[dict[str, Any]] | None = None,
+) -> list[MatrixCase]:
     cases = [MatrixCase("happy path", Scenario(), True)]
-    for definition in workflow:
+    static_names = {str(item["name"]) for item in workflow}
+    definitions = list(workflow)
+    if expanded:
+        definitions.extend(
+            item for item in expanded
+            if str(item.get("name", "")) not in static_names
+        )
+
+    for definition in definitions:
         name = str(definition["name"])
-        handoffs = _handoff_selector(workflow, name)
-        for status in ("fail", "error"):
+        handoffs = _handoff_selector(definitions, name)
+        # Semantic matrix owns PASS/FAIL routing. Technical ERROR retry/recovery
+        # is covered by StageExecutor tests and is meaningful only for static
+        # entries whose local policy is known before dynamic expansion.
+        statuses = ("fail", "error") if name in static_names else ("fail",)
+        for status in statuses:
             target = str(resolve_stage_target(definition, status))
             scenario_data: dict[str, Any] = {"stages": {name: status}}
             if handoffs:
@@ -349,10 +365,25 @@ def _matrix_cases(workflow: list[dict[str, Any]]) -> list[MatrixCase]:
     return cases
 
 
+def _expanded_happy_path(
+    workflow: list[dict[str, Any]],
+    max_steps: int,
+) -> list[dict[str, Any]]:
+    ctx, _executor, error = _execute(workflow, Scenario(), max_steps)
+    try:
+        if error:
+            return []
+        return list(ctx.state.expanded_workflow)
+    finally:
+        _close(ctx)
+
+
 def matrix_payload(path: Path, max_steps: int) -> dict[str, Any]:
     workflow = load_workflow(path)
+    expanded = _expanded_happy_path(workflow, max_steps)
+    definitions = expanded or workflow
     results = []
-    for case in _matrix_cases(workflow):
+    for case in _matrix_cases(workflow, expanded=expanded):
         ctx, executor, error = _execute(workflow, case.scenario, max_steps)
         try:
             completed = bool(ctx.state.completed) and not error
@@ -377,20 +408,20 @@ def matrix_payload(path: Path, max_steps: int) -> dict[str, Any]:
             "dynamic_producer": any(stage_result_kind(item) in {"tasks", "stages"} for item in workflow),
             "task_producer": any(stage_result_kind(item) == "tasks" for item in workflow),
             "stage_producer": any(stage_result_kind(item) == "stages" for item in workflow),
-            "routes": sum(bool(item.get("routes")) for item in workflow),
+            "routes": sum(bool(item.get("routes")) for item in definitions),
             "file_validations": sum(
                 item.get("type") == "command"
                 and stage_result_kind(item) == "validation"
-                for item in workflow
+                for item in definitions
             ),
             "ai_validations": sum(
                 item.get("type") == "ai_validator"
-                for item in workflow
+                for item in definitions
             ),
             "validation_not_last": any(
                 stage_result_kind(item) == "validation"
-                and index < len(workflow) - 1
-                for index, item in enumerate(workflow)
+                and index < len(definitions) - 1
+                for index, item in enumerate(definitions)
             ),
         },
         "paths_passed": passed,
