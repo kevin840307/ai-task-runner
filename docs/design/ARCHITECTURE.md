@@ -29,20 +29,38 @@ Owns semantic navigation only:
 - PASS -> next by default;
 - FAIL -> stop by default;
 - explicit `routes.pass` / `routes.fail`;
-- task-scope iteration;
+- durable dynamic child-Workflow expansion for Stage results (`tasks` / `stages`);
 - one-of-many Handoff target routing;
 - Review fail-soft continuation after a finite local technical retry policy is exhausted.
 
 ERROR never becomes a graph edge. Review skip is a Stage-type policy that resolves to the ordinary next Stage; other finite ERROR exhaustion remains fail-closed.
 
 ### StateStore
-Persists committed workflow position, task position, previous transition evidence, primary Session ID and durable per-role Session IDs.
+Persists committed workflow position, expanded child Workflow, dynamic task groups, previous transition evidence, primary Session ID and durable per-role Session IDs.
+
+## Dynamic child Workflows
+
+Any Stage may return `tasks` or `stages` when that Stage itself defines the child Stage structure. Runner never infers child node types.
+
+Execution is parent-flow insertion semantics:
+
+```text
+A -> B -> C -> D
+          |
+          +-> child-1 -> child-2 -> ... -> child-N
+                                      |
+                                      +-> D
+```
+
+The complete child Workflow executes through the same StageExecutor/FlowEngine reliability path before the parent continues. Expanded definitions and task bindings are durable RunState, so Resume continues the already-expanded child Workflow without re-running C merely to reconstruct it.
+
+`PlanStage` is the built-in example: it parses validated tasks and itself creates alternating AI Execute -> AI Review child stages. Future special/plugin Stages may produce completely different child structures through the same expansion contract.
 
 ## Dynamic Handoff
 
 `type: handoff` advertises `targets`. Its structured result selects exactly one allowed target. It does not execute target work and does not own a scheduler hierarchy.
 
-All specialist targets remain normal `base`, `review`, `task`, `ai_validator` or `command` Stages.
+All ordinary AI specialists are `base` (AI Stage) nodes with a behavior profile; only genuinely special runtime semantics use dedicated Stage types such as `plan`, `ai_validator`, `command` and `handoff`.
 
 Session policy is independent from routing:
 - `role` = durable Stage-owned Session;
@@ -63,11 +81,10 @@ Dynamic roles share one worker template plus per-Stage `instructions`; dedicated
 Studio is an editor projection of YAML, not a second graph schema.
 
 - START/END: virtual only.
-- Stage node: one real YAML Stage.
+- Stage node: one real YAML Stage. AI Stage uses `profile: generic | execute | review`.
 - PASS/FAIL edge: semantic route.
 - Handoff edge: allowed target.
 - ERROR: retry policy only.
-- `scope: task`: visual group.
 
 The backend validates the same catalog/schema used by runtime loading.
 
