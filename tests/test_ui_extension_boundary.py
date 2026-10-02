@@ -20,6 +20,8 @@ def _workflow_text(prompt: str = "") -> str:
     return (
         "stages:\n"
         "  execute:\n"
+        "    type: base\n"
+        "    profile: execute\n"
         "    status: Execute\n"
         f"{prompt_line}"
         "  validate_file:\n"
