@@ -430,3 +430,21 @@ def test_stage_editor_converges_to_form_yaml_routing_test():
     assert 'className="stage-form-section"' in text
     assert 'inspectorTab === "parameters"' not in text
     assert ".stage-form-section" in styles
+
+
+
+def test_designer_edge_delete_and_undo_keyboard_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'onEdgeContextMenu={(event, edge) =>' in text
+    assert 'onEdgeClick={() =>' in text
+    assert 'edge.data?.explicit' in text
+    assert 'deleteEdges([selectedExplicitEdge])' in text
+    assert 'event.key.toLowerCase() === "z"' in text
+    assert "undoVisualDraft()" in text
+    assert "rememberUndoSnapshot" in text
+    assert "undoStackRef.current = []" in text
+    assert "沒有可復原的 Workflow 修改。" in text
+    assert "已復原上一個 Workflow 草稿修改。" in text
+    assert 'deleteKeyCode={null}' in text  # Node deletion stays workflow-aware.
+    assert 'tx("delete_connection")' in text
