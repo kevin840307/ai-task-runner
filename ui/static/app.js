@@ -1279,7 +1279,7 @@ async function checkPromptSyntax() {
 function fieldValue(id) { return $(id)?.value ?? ""; }
 function checked(id) { return Boolean($(id)?.checked); }
 function stageTypeCatalog() { return state.workflowCatalog?.stage_types && typeof state.workflowCatalog.stage_types === "object" ? state.workflowCatalog.stage_types : {}; }
-function stageTypeNames() { const names = Object.keys(stageTypeCatalog()); return names.length ? names : ["base", "task", "review", "plan", "ai_validator", "command"]; }
+function stageTypeNames() { const names = Object.keys(stageTypeCatalog()); return names.length ? names : ["base", "plan", "ai_validator", "command", "handoff"]; }
 function stageTypeOptions(type) { return Array.isArray(stageTypeCatalog()?.[type]?.options) ? stageTypeCatalog()[type].options : []; }
 function stageHasOption(type, name) { return stageTypeOptions(type).some((item) => item?.name === name); }
 function stageTypesOptions(selected) { const names = stageTypeNames(); if (selected && !names.includes(selected)) names.push(selected); return names.map((v) => `<option value="${escapeHtml(v)}" ${v === selected ? "selected" : ""}>${escapeHtml(v)}</option>`).join(""); }
@@ -1311,7 +1311,7 @@ function promptOptionRows(current) {
   if (current && !matched) rows.push(`<option value="${escapeHtml(current)}" selected>Current · ${escapeHtml(current)}</option>`);
   return rows.join("");
 }
-function stageSupportsPrompt(type) { const catalog = stageTypeCatalog(); return Object.keys(catalog).length ? stageHasOption(type, "prompt") : ["base", "task", "review", "ai_validator"].includes(type); }
+function stageSupportsPrompt(type) { const catalog = stageTypeCatalog(); return Object.keys(catalog).length ? stageHasOption(type, "prompt") : ["base", "plan", "ai_validator", "handoff"].includes(type); }
 function stageSupportsParser(type) { const catalog = stageTypeCatalog(); return Object.keys(catalog).length ? stageHasOption(type, "parser") : !["command", "plan"].includes(type); }
 function currentStageModal() { return document.querySelector(".designer-step-modal-box"); }
 function markStageEditorDirty() { state.stageEditorDirty = true; }
@@ -1374,7 +1374,6 @@ function renderStageEditorContent(cfg, item) {
       <label class="designer-form-row"><span class="designer-label">Status</span><input id="stageStatus" class="designer-input" value="${escapeHtml(cfg.status ?? "")}" placeholder="User-facing runtime status" ${disabled} /></label>
       <label id="stagePromptSelectRow" class="designer-form-row stage-form-wide"><span class="designer-label">Prompt</span><select id="stagePromptSelect" class="designer-select" ${disabled}>${promptOptionRows(cfg.prompt ?? "")}</select><span class="designer-form-hint">${escapeHtml(t("stage.prompt_desc", "Edit Prompt content in Workflow Studio → Prompt. Continuation Prompt is an advanced YAML override and is intentionally not duplicated here."))}</span></label>
       <label class="designer-form-row"><span class="designer-label">Timeout (seconds)</span><input id="stageTimeout" class="designer-input" type="number" min="0" step="0.1" value="${cfg.timeout ?? ""}" placeholder="Stage default" ${disabled} /></label>
-      <label class="designer-form-row"><span class="designer-label">Flow scope</span><select id="stageScope" class="designer-select" ${disabled}><option value="" ${!cfg.scope ? "selected" : ""}>Workflow</option><option value="task" ${cfg.scope === "task" ? "selected" : ""}>Per task</option></select></label>
       <label class="designer-form-row stage-form-wide"><span class="designer-label">Flow label</span><input id="stageFlowLabel" class="designer-input" value="${escapeHtml(cfg.label || "")}" placeholder="Optional display / routing label" ${disabled} /></label>
       <label class="designer-form-row stage-form-wide"><span class="designer-label">Detail</span><textarea id="stageDetail" class="designer-textarea" rows="2" placeholder="Optional Stage detail / context" ${disabled}>${escapeHtml(cfg.detail || "")}</textarea></label>
     </div>
@@ -1468,7 +1467,6 @@ function changedFields(cfg) {
     type,
     status: valueOrNull("stageStatus"),
     label: valueOrNull("stageFlowLabel"),
-    scope: valueOrNull("stageScope"),
     routes: routeMapOrNull(),
     run_state: valueOrNull("stageRunState"),
     actor: valueOrNull("stageActor"),
