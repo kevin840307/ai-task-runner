@@ -20,7 +20,7 @@ StageExecutor   StateStore
 
 - **Stage**: one semantic unit of work.
 - **StageExecutor**: technical reliability for one Stage: retry, timeout, Same Session retry, Fresh Session rotation, safety/change tracking and hooks.
-- **FlowEngine**: semantic PASS/FAIL navigation, task-scope iteration and Dynamic Handoff target routing.
+- **FlowEngine**: semantic PASS/FAIL navigation, durable dynamic child-Workflow expansion and Dynamic Handoff target routing.
 - **StateStore**: durable workflow position, task progress, primary Session and per-role Sessions.
 - **WorkflowRunner**: constructs the runtime and executes the loaded Workflow.
 - **UI/CLI/API/YAML List**: adapters to the same runtime; none owns execution semantics.
@@ -35,7 +35,9 @@ A normal Stage returns PASS, FAIL or ERROR.
 - ERROR is never a graph edge. StageExecutor applies retry policy. A Review with finite local `error_policy.retries` fail-soft skips to the next Stage after exhaustion; other Stage types fail closed after finite exhaustion.
 - A backward PASS/FAIL edge is the rollback/loop mechanism. There is no repair/recover Stage model.
 
-`scope: task` Stages form one contiguous block and execute per durable Task.
+Any Stage may return `tasks` or `stages` only when that Stage supplies the child Stage definitions. FlowEngine inserts that child Workflow immediately after the producer, runs it completely through the same StageExecutor path, then resumes the parent next Stage. Expanded definitions and task bindings are durable state; Resume does not rerun the producer merely to rebuild children.
+
+`PlanStage` is the built-in producer example. It parses validated tasks and itself builds alternating `base/profile=execute` -> `base/profile=review` children. Runner never infers that structure for other producers.
 
 ## Dynamic Handoff
 
@@ -64,7 +66,7 @@ AI Stages expose `session_policy`:
 
 `RunState.stage_sessions` stores only durable `role` Sessions. Technical failure can rotate only the failing Stage to a fresh Session; other role Sessions remain intact.
 
-The older `fresh_session_each_run`, `fresh_session_on_start` and `session_key` knobs remain internal compatibility primitives for existing built-in Stage profiles. New Dynamic YAML should use `session_policy`.
+`fresh_session_each_run` and `fresh_session_on_start` remain internal Stage implementation details and are not public Workflow YAML. `session_key` is only the advanced `session_policy: auto` cache override. New workflows should normally use `session_policy`.
 
 ## Prompt model
 
