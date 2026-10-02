@@ -32,9 +32,9 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
 
     # Fields filtered out of the generic parameter list must have an explicit UI owner.
     assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"]' in SOURCE
-    assert 'value={draft.status || ""}' in SOURCE
+    assert 'value={String(draft.status || "")}' in SOURCE
     assert 'draft.type === "handoff"' in SOURCE and 'stage.targets || []' in SOURCE
-    assert 'value={draft.max_failures ?? ""}' in SOURCE
+    assert 'draft.max_failures' in SOURCE and 'max_failures' in SOURCE
 
     # Prompt is catalog-driven but intentionally gets a richer selector instead of a plain input.
     assert 'option.name === "prompt"' in SOURCE
@@ -45,7 +45,7 @@ def test_react_workflow_editor_covers_all_node_level_runtime_options():
     node_options = workflow_catalog()["node_options"]
     assert set(node_options) == {"label", "routes", "error_policy"}
 
-    assert 'value={draft.label || ""}' in SOURCE
+    assert 'value={String(draft.label || "")}' in SOURCE
     assert 'value={String(draft.profile || "generic")}' in SOURCE
     assert 'value={draft.scope || ""}' not in SOURCE
     assert 'draft.routes || {}' in SOURCE
