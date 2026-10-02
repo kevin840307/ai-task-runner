@@ -2,18 +2,11 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
 
   challenge_review:
-    type: review
+    type: base
+    profile: review
     prompt: common/review.md
     session_policy: fresh
     routes:
@@ -38,8 +31,6 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - challenge_review
   - validate_file
   - validate_ai
