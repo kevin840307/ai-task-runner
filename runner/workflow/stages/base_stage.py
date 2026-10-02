@@ -192,6 +192,8 @@ class BaseStage:
             self.timeout_config_attr = "planning_timeout"
             self.client_cache_key = "review_client"
             self.result_flag = "completed"
+        if spec.produces:
+            self.result_kind = spec.produces
         self.spec = spec
         self.name = spec.name
         self.status = spec.status
