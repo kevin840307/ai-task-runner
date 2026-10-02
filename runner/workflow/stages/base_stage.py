@@ -166,7 +166,12 @@ class BaseStage:
             raise ConfigurationError(
                 f"AI Stage {spec.name} profile must be generic, execute, or review"
             )
-        if profile == "execute":
+        if profile == "generic":
+            spec = replace(
+                spec,
+                prompt=spec.prompt or "common/generic.md",
+            )
+        elif profile == "execute":
             spec = replace(
                 spec,
                 status=spec.status if spec.status != "AI Stage" else "AI 正在處理目前任務",
