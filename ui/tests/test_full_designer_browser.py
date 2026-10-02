@@ -18,10 +18,17 @@ except ImportError:  # pragma: no cover
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CHROME = Path(os.environ.get("CHROMIUM_PATH", r"C:\Program Files\Google\Chrome\Application\chrome.exe"))
+BROWSER_REQUIRED = os.environ.get("AI_TASK_RUNNER_BROWSER_REQUIRED") == "1"
 
 
-@pytest.mark.skipif(sync_playwright is None or not CHROME.is_file(), reason="Playwright/Chrome unavailable")
+def _launch_browser(playwright):
+    configured = os.environ.get("CHROMIUM_PATH")
+    if configured and Path(configured).is_file():
+        return playwright.chromium.launch(headless=True, executable_path=configured)
+    return playwright.chromium.launch(headless=True)
+
+
+@pytest.mark.skipif(sync_playwright is None, reason="Playwright unavailable")
 def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
     workflow = ROOT / "runner" / "assets" / "workflows" / "file.yaml"
     original = workflow.read_bytes()
@@ -33,7 +40,7 @@ def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
     thread.start()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, executable_path=str(CHROME))
+            browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1600, "height": 960})
             errors: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
@@ -71,7 +78,7 @@ def test_full_designer_scope_routes_and_draft_do_not_write_yaml() -> None:
 
 
 
-@pytest.mark.skipif(sync_playwright is None or not CHROME.is_file(), reason="Playwright/Chrome unavailable")
+@pytest.mark.skipif(sync_playwright is None, reason="Playwright unavailable")
 @pytest.mark.parametrize("viewport", [
     {"width": 1024, "height": 768},
     {"width": 1280, "height": 800},
@@ -88,7 +95,7 @@ def test_full_designer_common_desktop_viewports_do_not_overflow(viewport) -> Non
     thread.start()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, executable_path=str(CHROME))
+            browser = _launch_browser(playwright)
             page = browser.new_page(viewport=viewport)
             errors: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
