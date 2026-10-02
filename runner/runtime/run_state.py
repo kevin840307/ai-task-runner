@@ -74,6 +74,7 @@ class RunState:
     workflow_position: int = 0
     expanded_workflow: list[dict[str, Any]] = field(default_factory=list)
     dynamic_groups: dict[str, str] = field(default_factory=dict)
+    dynamic_task_groups: dict[str, list[str]] = field(default_factory=dict)
     expansion_counter: int = 0
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
@@ -116,6 +117,17 @@ class RunState:
             for key, value in self.dynamic_groups.items()
         ):
             raise ValueError("state.dynamic_groups must map non-empty strings to strings")
+        if not isinstance(self.dynamic_task_groups, dict):
+            raise ValueError("state.dynamic_task_groups must be an object")
+        for key, values in self.dynamic_task_groups.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("state.dynamic_task_groups keys must be non-empty strings")
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) or not value.strip() for value in values
+            ):
+                raise ValueError(
+                    f"state.dynamic_task_groups.{key} must be an array of non-empty strings"
+                )
         if not isinstance(self.stage_sessions, dict):
             raise ValueError("state.stage_sessions must be an object")
         if not isinstance(self.review_failures, dict):
