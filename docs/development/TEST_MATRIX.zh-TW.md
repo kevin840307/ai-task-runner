@@ -8,15 +8,16 @@
 
 | 區域 | 覆蓋 |
 | --- | --- |
-| Workflow schema | Stage type/options、未知欄位拒絕、只允許 PASS/FAIL route、target 存在性、task-scope topology |
+| Workflow schema | Stage type/options、AI Stage profile、未知欄位拒絕、只允許 PASS/FAIL route、target 存在性、dynamic producer child Stage 驗證 |
 | Semantic routing | PASS next、顯式 PASS/FAIL、done/stop、backward loop、未 routing FAIL 安全停止 |
 | Technical ERROR | Stage/global retry、無限 `-1`、Same Session retry、Fresh Session rotation、partial-write recovery、Review finite-retry fail-soft Skip、非 Review finite exhaustion fail-closed、KeyboardInterrupt/SystemExit 不被吞掉 |
 | Session policy | main/role/fresh、非法 mode、role durable restore/persist、fresh 不持久化、單一 role reset、global reset、錯誤後 session rotation |
+| Dynamic child Workflow | producer-defined tasks/stages、Plan Execute→Review 展開、nested producer 隔離、child 跑完才回 parent、Resume 不重跑 producer |
 | Dynamic Handoff | target allow-list、非法 target、一次只選一個 target、role -> coordinator、final validator FAIL -> coordinator、durable resume |
 | Prompt | Dynamic shared worker 會 render role `instructions`；prompt category ownership；共用 retry/continue/recover control envelope |
 | Validator | File command validator、AI validator、多 validator 任意位置、多次 AI vote、validator FAIL rollback |
-| Task production | Plan Task[]、custom command/Python `produces: tasks`、連續 task scope |
-| Resume/state | workflow position、task step、transition_previous、role Sessions、損壞 state 拒絕 |
+| Task production | Plan producer-defined Execute/Review children、自訂/plugin `produces: tasks|stages`、nested dynamic expansion |
+| Resume/state | workflow position、durable expanded Workflow、dynamic task groups、transition_previous、role Sessions、損壞 state 拒絕 |
 | Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
 | Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
 | Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
