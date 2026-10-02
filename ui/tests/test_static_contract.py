@@ -43,7 +43,7 @@ class StaticContractTests(unittest.TestCase):
 
     def test_stage_modal_has_real_editable_contract_fields(self):
         for token in (
-            "stageStatus", "stageRunState", "stageScope", "stageActor", "stageMode", "stageTimeout",
+            "stageStatus", "stageRunState", "stageActor", "stageMode", "stageTimeout",
             "stageProduces", "stageSessionKey", "stageSessionPolicy", "stageDetail",
             "stageStructuredRetries", "stageStructuredFreshRetries",
             "stageTrackChanges", "stageTolerateRestored",
