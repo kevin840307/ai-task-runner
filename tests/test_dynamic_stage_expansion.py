@@ -304,3 +304,126 @@ def test_dynamic_child_done_returns_to_parent_continuation() -> None:
     child = expanded[1]
     assert child["_dynamic_group_continue"] == "next"
     assert child["_dynamic_continue"] == "next"
+
+
+
+def test_dynamic_child_routes_cannot_escape_parent_workflow() -> None:
+    state = RunState(run_id="run", goal="goal", project_root="/tmp/project")
+    workflow = [
+        {"name": "generator", "type": "base", "produces": "stages"},
+        {"name": "after", "type": "base"},
+    ]
+    result = StageResult(
+        "generator",
+        "pass",
+        data={
+            "stages": [
+                {
+                    "name": "child",
+                    "type": "base",
+                    "routes": {"pass": "after"},
+                }
+            ]
+        },
+        kind="stages",
+    )
+    with pytest.raises(RunnerError, match="must stay inside the child Workflow"):
+        expand_stage_result(
+            state=state,
+            workflow=workflow,
+            source_index=0,
+            source=workflow[0],
+            result=result,
+            continuation="next",
+        )
+
+
+def test_dynamic_child_handoff_targets_must_be_local() -> None:
+    state = RunState(run_id="run", goal="goal", project_root="/tmp/project")
+    workflow = [
+        {"name": "generator", "type": "base", "produces": "stages"},
+        {"name": "after", "type": "base"},
+    ]
+    result = StageResult(
+        "generator",
+        "pass",
+        data={
+            "stages": [
+                {
+                    "name": "router",
+                    "type": "handoff",
+                    "targets": ["after"],
+                }
+            ]
+        },
+        kind="stages",
+    )
+    with pytest.raises(RunnerError, match="handoff target must stay inside"):
+        expand_stage_result(
+            state=state,
+            workflow=workflow,
+            source_index=0,
+            source=workflow[0],
+            result=result,
+            continuation="next",
+        )
+
+
+def test_task_reduction_does_not_install_tasks_before_dynamic_expansion(tmp_path: Path) -> None:
+    from runner.config.runtime import RuntimeConfig
+    from runner.workflow.results import reduce_result
+    from runner.workflow.stages import StageContext
+
+    state = RunState(run_id="run", goal="goal", project_root=str(tmp_path))
+    task = Task(
+        id="t1",
+        title="one",
+        description="one",
+        deliverable="one",
+        acceptance_criteria=["done"],
+    )
+    ctx = StageContext(
+        config=RuntimeConfig(
+            goal="goal",
+            project_root=str(tmp_path),
+            workflow=[{"name": "producer", "type": "base", "produces": "tasks"}],
+            workflow_explicit=True,
+        ),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
+        ai_client=type("AI", (), {"session_id": ""})(),
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_args, **_kwargs: None,
+    )
+    result = reduce_result(
+        ctx,
+        StageResult(
+            "producer",
+            "pass",
+            data={
+                "tasks": [task],
+                "stages": [
+                    {
+                        "name": "execute",
+                        "type": "base",
+                        "profile": "execute",
+                        "task_id": "t1",
+                    },
+                    {
+                        "name": "review",
+                        "type": "base",
+                        "profile": "review",
+                        "task_id": "t1",
+                        "task_complete": True,
+                    },
+                ],
+            },
+            kind="tasks",
+        ),
+    )
+    assert result.kind == "tasks"
+    assert state.tasks == []
