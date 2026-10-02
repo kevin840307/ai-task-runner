@@ -617,9 +617,7 @@ class WorkflowStudioMixin:
             if stage_type == "command" and not str(command or "").strip():
                 raise ValueError("Command Stage requires a command")
             if stage_type == "base" and not str(prompt or "").strip():
-                # Legacy add endpoint creates Generic AI Stage; richer profile creation is
-                # owned by the Workflow Editor graph draft.
-                raise ValueError("Generic AI Stage requires a Prompt")
+                prompt = "common/generic.md"
             if str(prompt or "").strip() and self._resolve_prompt_reference(path, str(prompt).strip()) is None:
                 raise ValueError(f"Prompt not found: {str(prompt).strip()}")
 
@@ -951,6 +949,8 @@ class WorkflowStudioMixin:
         if str(config.get("type") or "base") != "base":
             return ""
         profile = str(config.get("profile") or "generic")
+        if profile == "generic":
+            return "common/generic.md"
         if profile == "execute":
             return "common/execution.md"
         if profile == "review":
