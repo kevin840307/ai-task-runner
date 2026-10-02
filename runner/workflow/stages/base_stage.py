@@ -12,6 +12,7 @@ from ...config.runtime import RuntimeConfig
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
 from ...runtime.run_state import RunState, Task
+from ..profiles import profile_defaults, profile_names
 
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
@@ -162,21 +163,22 @@ class BaseStage:
 
     def __init__(self, spec: BaseStageSpec) -> None:
         profile = str(spec.profile or "generic")
-        if profile not in {"generic", "execute", "review"}:
+        if profile not in profile_names():
             raise ConfigurationError(
-                f"AI Stage {spec.name} profile must be generic, execute, or review"
+                f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
             )
+        defaults = profile_defaults(profile)
         if profile == "generic":
             spec = replace(
                 spec,
-                prompt=spec.prompt or "common/generic.md",
+                prompt=spec.prompt or str(defaults.get("prompt", "")),
             )
         elif profile == "execute":
             spec = replace(
                 spec,
-                status=spec.status if spec.status != "AI Stage" else "AI 正在處理目前任務",
-                prompt=spec.prompt or "common/execution.md",
-                run_state=spec.run_state or "executing",
+                status=spec.status if spec.status != "AI Stage" else str(defaults.get("status", "AI Stage")),
+                prompt=spec.prompt or str(defaults.get("prompt", "")),
+                run_state=spec.run_state or str(defaults.get("run_state", "")),
                 mode=MODE_WRITE,
                 actor="executor" if spec.actor == "ai" else spec.actor,
                 allow_project_read=True,
@@ -187,9 +189,9 @@ class BaseStage:
             from ..results import PARSERS
             spec = replace(
                 spec,
-                status=spec.status if spec.status != "AI Stage" else "AI 正在確認任務是否完成",
-                prompt=spec.prompt or "common/review.md",
-                run_state=spec.run_state or "reviewing",
+                status=spec.status if spec.status != "AI Stage" else str(defaults.get("status", "AI Stage")),
+                prompt=spec.prompt or str(defaults.get("prompt", "")),
+                run_state=spec.run_state or str(defaults.get("run_state", "")),
                 mode=MODE_READONLY,
                 allow_project_read=True,
                 readonly_safety=spec.readonly_safety or "observe",
