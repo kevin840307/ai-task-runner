@@ -11,8 +11,6 @@ from .stages.core import (
     AIValidatorStage,
     HandoffStage,
     PlanStage,
-    ReviewStage,
-    TaskStage,
 )
 from .stages.base_stage import BaseStage
 from .stages.command import CommandStage
@@ -20,15 +18,16 @@ from .stages.command import CommandStage
 STAGE_REGISTRY: dict[str, type[Any]] = {
     "base": BaseStage,
     "handoff": HandoffStage,
-    "task": TaskStage,
-    "review": ReviewStage,
     "ai_validator": AIValidatorStage,
     "command": CommandStage,
     "plan": PlanStage,
 }
-NODE_FIELDS = frozenset({"validator", "routes", "label", "scope", "error_policy", "_workflow_index"})
+NODE_FIELDS = frozenset({"validator", "routes", "label", "error_policy", "_workflow_index"})
+RUNNER_INTERNAL_FIELDS = frozenset({
+    "_dynamic_group", "_dynamic_path", "_dynamic_parent", "_dynamic_task_id",
+    "_dynamic_task_complete", "_dynamic_continue", "_dynamic_group_continue",
+})
 CATALOG_HIDDEN_FIELDS = frozenset({"fresh_session_each_run", "fresh_session_on_start"})
-CATALOG_HIDDEN_STAGE_TYPES = frozenset({"plan"})
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
@@ -51,11 +50,12 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "options": [
                 _field_info(item)
                 for item in fields(stage_class.spec_class)
-                if item.name != "name" and item.name not in CATALOG_HIDDEN_FIELDS
+                if item.name != "name"
+                and item.name not in CATALOG_HIDDEN_FIELDS
+                and not (item.name == "profile" and name != "base")
             ],
         }
         for name, stage_class in sorted(STAGE_REGISTRY.items())
-        if name not in CATALOG_HIDDEN_STAGE_TYPES
     }
 
 
@@ -63,7 +63,6 @@ def workflow_catalog() -> dict[str, Any]:
     return {
         "stage_types": stage_catalog(),
         "node_options": {
-            "scope": {"type": "enum", "values": ["task"], "ui_hidden": True},
             "label": {"type": "string"},
             "routes": {
                 "type": "object",
@@ -98,7 +97,7 @@ def create_stage(definition: dict[str, Any]):
     values = deepcopy(definition)
     stage_type = str(values.pop("type", "base"))
     name = str(values.get("name", ""))
-    for field in NODE_FIELDS:
+    for field in (*NODE_FIELDS, *RUNNER_INTERNAL_FIELDS):
         values.pop(field, None)
 
     try:
@@ -136,7 +135,7 @@ def _field_info(item: Any) -> dict[str, Any]:
         result["values"] = sorted(PARSERS)
     if item.name == "produces":
         result["type"] = "enum"
-        result["values"] = ["", "tasks"]
+        result["values"] = ["", "tasks", "stages"]
     if item.name == "session_policy":
         result["type"] = "enum"
         result["values"] = ["auto", "main", "role", "fresh"]
