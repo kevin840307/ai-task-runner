@@ -21,9 +21,12 @@ class ExtensionSpec:
 
 
 class ExtensionStage:
-    """Test-only Stage proving ordinary extensions need no Core branch."""
+    """Test-only Stage proving ordinary extensions need no Core/UI branch."""
 
     spec_class = ExtensionSpec
+    ui_title = "Contract Extension"
+    ui_description = "Test plugin Stage"
+    ui_category = "testing"
     result_kind = "generic"
     mode = "readonly"
     actor = "extension"
@@ -99,6 +102,9 @@ flow:
 
         catalog = stage_catalog()
         assert name in catalog
+        assert catalog[name]["title"] == "Contract Extension"
+        assert catalog[name]["description"] == "Test plugin Stage"
+        assert catalog[name]["category"] == "testing"
         assert {item["name"] for item in catalog[name]["options"]} >= {"status", "message"}
 
         workflow = load_workflow(workflow_file)
@@ -215,3 +221,21 @@ flow:
     finally:
         STAGE_REGISTRY.pop(producer_name, None)
         STAGE_REGISTRY.pop(consumer_name, None)
+
+
+
+def test_explicit_produces_overrides_ai_profile_result_kind():
+    from runner.workflow.registry import stage_result_kind
+
+    assert stage_result_kind({
+        "name": "generator",
+        "type": "base",
+        "profile": "execute",
+        "produces": "stages",
+    }) == "stages"
+    assert stage_result_kind({
+        "name": "generator",
+        "type": "base",
+        "profile": "review",
+        "produces": "tasks",
+    }) == "tasks"
