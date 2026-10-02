@@ -117,7 +117,9 @@ runner/
   config/      runtime configuration
   plugins/     extension registration + runtime hooks
   runtime/     durable/process reliability
-  workflow/    graph loading/schema/result routing + Stage implementations
+  workflow/    graph loading/schema/result routing + dynamic expansion + Stage execution
+    stage_executor.py  shared retry/recover/session boundary
+    stages/     one file per concrete Stage type
   api.py
   bootstrap.py
   prompting.py
@@ -195,7 +197,7 @@ Root causes already fixed:
 - Dry Run now reports validator placement features required by live preflight
 - UI static tests now protect the new minimal node/edge contract instead of old Flow overrides
 - obsolete recovery/restart/max_attempts UI i18n keys were removed
-- AI Validator static contract now points to `workflow/stages/core.py`
+- AI Validator static contract now points to its dedicated `workflow/stages/ai_validator_stage.py`
 - Project Workflow Builder publish helper test now expects the asset package root
 - regression demo mock now understands `RUNNER_SHARED_STAGE_CONTROL` and structured Review feedback
 - `future.txt` explicitly lists the three UI workflow families
