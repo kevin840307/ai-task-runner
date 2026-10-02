@@ -1,19 +1,9 @@
-# Custom task producer with an explicit per-task closed loop.
+# Custom task producer with producer-defined dynamic child stages.
 stages:
   discover_tasks:
     type: command
     command: "{python} custom_task_producer.py"
     produces: tasks
-
-  execute:
-    type: task
-    scope: task
-
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
 
   done:
     type: command
@@ -21,6 +11,4 @@ stages:
 
 flow:
   - discover_tasks
-  - execute
-  - review
   - done
