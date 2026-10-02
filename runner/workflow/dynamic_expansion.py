@@ -12,7 +12,7 @@ from copy import deepcopy
 from typing import Any
 
 from ..errors import ConfigurationError, RunnerError
-from ..runtime.run_state import RunState
+from ..runtime.run_state import RunState, Task
 from .schema import validate_routes, validate_stage
 from .stages.base_stage import StageResult
 
@@ -57,12 +57,24 @@ def expand_stage_result(
     path = [*parent_path, group]
 
     raw = result.data if result.data is not None else result.output
-    children = _expand_stages(raw, source_name, group, path, result_kind=result.kind)
+    task_id_map: dict[str, str] = {}
+    if result.kind == "tasks":
+        task_id_map = _install_task_group(state, source_name, group, raw)
+    children = _expand_stages(
+        raw,
+        source_name,
+        group,
+        path,
+        result_kind=result.kind,
+        task_id_map=task_id_map,
+    )
 
     if not children:
         raise ConfigurationError(
             f"dynamic Stage {source_name} produced no child stages"
         )
+    if result.kind == "tasks":
+        _validate_task_bindings(source_name, task_id_map.values(), children)
 
     group_continue = _effective_continuation(source, continuation)
     for child in children:
@@ -114,11 +126,112 @@ def _drop_previous_expansion(
 ) -> list[dict[str, Any]]:
     old_group = state.dynamic_groups.pop(source_name, "")
     if not old_group:
+        _remove_task_groups(state, {source_name})
         return list(workflow)
+
+    removed_names = {
+        str(item.get("name", ""))
+        for item in workflow
+        if old_group in (item.get("_dynamic_path") or [])
+    }
+    affected = {source_name, *[name for name in removed_names if name]}
+    _remove_task_groups(state, affected)
+    for name in removed_names:
+        state.dynamic_groups.pop(name, None)
+
     return [
         item for item in workflow
         if old_group not in (item.get("_dynamic_path") or [])
     ]
+
+
+def _install_task_group(
+    state: RunState,
+    source_name: str,
+    group: str,
+    value: Any,
+) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise RunnerError(
+            f"Stage {source_name} tasks result must be an object containing tasks and stages"
+        )
+    raw_tasks = value.get("tasks")
+    if not isinstance(raw_tasks, list) or not raw_tasks or any(
+        not isinstance(task, Task) for task in raw_tasks
+    ):
+        raise RunnerError(
+            f"Stage {source_name} tasks result must contain validated Task objects"
+        )
+
+    _remove_task_groups(state, {source_name})
+    mapping: dict[str, str] = {}
+    installed: list[Task] = []
+    used_ids = {task.id for task in state.tasks}
+    for index, original in enumerate(raw_tasks, 1):
+        task = deepcopy(original)
+        base = _safe_name(task.id or f"task_{index}")
+        candidate = f"{group}__{base}"
+        suffix = 2
+        while candidate in used_ids:
+            candidate = f"{group}__{base}_{suffix}"
+            suffix += 1
+        mapping[original.id] = candidate
+        task.id = candidate
+        task.status = "pending"
+        installed.append(task)
+        used_ids.add(candidate)
+
+    state.tasks.extend(installed)
+    state.dynamic_task_groups[source_name] = [task.id for task in installed]
+    if state.current > len(state.tasks):
+        state.current = len(state.tasks)
+    return mapping
+
+
+def _remove_task_groups(state: RunState, sources: set[str]) -> None:
+    remove_ids: set[str] = set()
+    for source in sources:
+        remove_ids.update(state.dynamic_task_groups.pop(source, []))
+    if not remove_ids:
+        return
+    state.tasks = [task for task in state.tasks if task.id not in remove_ids]
+    for key in [
+        key for key in state.review_failures
+        if any(key.endswith(f"::{task_id}") for task_id in remove_ids)
+    ]:
+        state.review_failures.pop(key, None)
+    if state.current > len(state.tasks):
+        state.current = len(state.tasks)
+
+
+def _validate_task_bindings(
+    source_name: str,
+    task_ids: Any,
+    children: list[dict[str, Any]],
+) -> None:
+    expected = set(task_ids)
+    bound = {
+        str(child.get("_dynamic_task_id"))
+        for child in children
+        if child.get("_dynamic_task_id")
+    }
+    completed = {
+        str(child.get("_dynamic_task_id"))
+        for child in children
+        if child.get("_dynamic_task_id") and child.get("_dynamic_task_complete")
+    }
+    missing_bindings = sorted(expected - bound)
+    missing_completion = sorted(expected - completed)
+    if missing_bindings:
+        raise RunnerError(
+            f"Stage {source_name} tasks have no child Stage bindings: "
+            + ", ".join(missing_bindings)
+        )
+    if missing_completion:
+        raise RunnerError(
+            f"Stage {source_name} tasks have no completion Stage: "
+            + ", ".join(missing_completion)
+        )
 
 
 def _expand_stages(
@@ -128,6 +241,7 @@ def _expand_stages(
     path: list[str],
     *,
     result_kind: str,
+    task_id_map: dict[str, str],
 ) -> list[dict[str, Any]]:
     if isinstance(value, str):
         try:
@@ -158,6 +272,8 @@ def _expand_stages(
                 f"stages[{index}] contains Runner-owned dynamic metadata"
             )
         task_id = str(definition.pop("task_id", "") or "")
+        if task_id:
+            task_id = task_id_map.get(task_id, task_id)
         task_complete = bool(definition.pop("task_complete", False))
         validate_stage(name, definition)
         if task_id:
