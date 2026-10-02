@@ -892,10 +892,10 @@ function appendStudioItem(root, item) {
   const metaNode = document.createElement("small");
   metaNode.textContent =
     item.kind === "workflow" && item.hidden
-      ? "Hidden from Tasks"
+      ? t("assets.hidden_from_chat", "Hidden from Chat")
       : item.kind === "prompt"
         ? "Prompt"
-        : "Available in Tasks";
+        : t("assets.visible_in_chat", "Visible in Chat");
   if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
   button.append(top, metaNode);
   if (item.kind === "workflow") {
@@ -905,8 +905,42 @@ function appendStudioItem(root, item) {
     button.appendChild(action);
   }
   button.onclick = () => item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item);
+  if (item.kind === "workflow") {
+    button.oncontextmenu = (event) => {
+      event.preventDefault();
+      openWorkflowContextMenu(item, event.clientX, event.clientY);
+    };
+  }
   root.appendChild(button);
 }
+function closeWorkflowContextMenu() {
+  const menu = $("workflowContextMenu");
+  if (!menu) return;
+  menu.hidden = true;
+  delete menu.dataset.workflowId;
+}
+function workflowContextItem() {
+  const id = $("workflowContextMenu")?.dataset.workflowId || "";
+  return (state.studioFiles.workflows || []).find((item) => item.id === id) || null;
+}
+function openWorkflowContextMenu(item, x, y) {
+  const menu = $("workflowContextMenu");
+  if (!menu || !item) return;
+  menu.dataset.workflowId = item.id;
+  $("workflowContextOpen").textContent = t("studio.open_editor", "Open Editor");
+  $("workflowContextVisibility").textContent = item.hidden
+    ? t("assets.show_in_chat", "Show in Chat")
+    : t("assets.hide_from_chat", "Hide from Chat");
+  menu.hidden = false;
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
 function renderStudioFiles() {
   const root = $("studioFileList");
   const isPrompt = state.studioSourceKind === "prompt";
@@ -1900,15 +1934,19 @@ async function deleteStudioAsset() {
 }
 
 
+async function setWorkflowVisibility(item, hidden) {
+  if (!item || item.kind !== "workflow") return;
+  try {
+    const updated = await api("/api/studio/visibility", { method: "POST", body: JSON.stringify({ id: item.id, project: state.project?.path || "", hidden }) });
+    if (state.studioFile?.id === item.id) state.studioFile = { ...state.studioFile, ...updated };
+    const row = (state.studioFiles.workflows || []).find((entry) => entry.id === item.id); if (row) Object.assign(row, updated);
+    renderStudioFiles(); renderWorkflowPicker(); renderStudioVisibilityBadge(); updateDirtyState(); closeStudioAssetMenu(); closeWorkflowContextMenu();
+    showToast(updated.hidden ? t("assets.hidden_from_chat", "Workflow hidden from Chat") : t("assets.visible_in_chat", "Workflow visible in Chat"));
+  } catch (error) { showActionError(error.message, "Workflow visibility update failed"); }
+}
 async function toggleWorkflowVisibility() {
   const item = state.studioFile; if (!item || item.kind !== "workflow") return;
-  try {
-    const updated = await api("/api/studio/visibility", { method: "POST", body: JSON.stringify({ id: item.id, project: state.project?.path || "", hidden: !item.hidden }) });
-    state.studioFile = { ...item, ...updated };
-    const row = (state.studioFiles.workflows || []).find((entry) => entry.id === item.id); if (row) Object.assign(row, updated);
-    renderStudioFiles(); renderWorkflowPicker(); renderStudioVisibilityBadge(); updateDirtyState(); closeStudioAssetMenu();
-    showToast(updated.hidden ? "Workflow hidden from Tasks" : "Workflow visible in Tasks");
-  } catch (error) { showActionError(error.message, "Workflow visibility update failed"); }
+  await setWorkflowVisibility(item, !item.hidden);
 }
 function closeStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $("studioAssetMenuButton"); if (!menu || !button) return; menu.hidden = true; button.setAttribute("aria-expanded", "false"); }
 function toggleStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $("studioAssetMenuButton"); if (!menu || !button || button.disabled) return; const open = menu.hidden; menu.hidden = !open; button.setAttribute("aria-expanded", String(open)); }
@@ -2044,6 +2082,8 @@ $("visualModeButton").onclick = () => setStudioMode("visual"); $("yamlModeButton
 $("studioTextarea").addEventListener("input", () => { updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); }); $("studioTextarea").addEventListener("keydown", handleEditorKeydown); $("studioTextarea").addEventListener("scroll", () => { $("studioLineNumbers").scrollTop = $("studioTextarea").scrollTop; });
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
 $("openFullDesignerButton").onclick = openFullDesigner;
+$("workflowContextOpen").onclick = () => { const item = workflowContextItem(); closeWorkflowContextMenu(); if (item) openWorkflowEditorItem(item); };
+$("workflowContextVisibility").onclick = () => { const item = workflowContextItem(); if (item) void setWorkflowVisibility(item, !item.hidden); };
 $("saveStudioButton").onclick = saveStudio; $("toggleWorkflowVisibilityButton").onclick = toggleWorkflowVisibility; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("studioAssetMenuButton").onclick = (event) => { event.stopPropagation(); toggleStudioAssetMenu(); }; $("renameStudioButton").onclick = renameStudioAsset; $("duplicateStudioButton").onclick = duplicateStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("addFlowStepButton").onclick = openAddStageModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
 $("newWorkflowClose").onclick = () => closeNewWorkflowModal(); $("newWorkflowCancel").onclick = () => closeNewWorkflowModal(); $("newWorkflowConfirm").onclick = confirmNewWorkflow; $("newWorkflowBackdrop").addEventListener("click", (e) => { if (e.target === $("newWorkflowBackdrop")) closeNewWorkflowModal(); }); $("newWorkflowBackdrop").addEventListener("input", () => { state.newWorkflowDirty = true; }); $("newWorkflowName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmNewWorkflow(); } });
 $("newPromptClose").onclick = () => closeNewPromptModal(); $("newPromptCancel").onclick = () => closeNewPromptModal(); $("newPromptConfirm").onclick = confirmNewPrompt; $("newPromptBackdrop").addEventListener("click", (e) => { if (e.target === $("newPromptBackdrop")) closeNewPromptModal(); }); $("newPromptBackdrop").addEventListener("input", () => { state.newPromptDirty = true; });
@@ -2094,6 +2134,7 @@ document.addEventListener("click", (event) => {
   if (!backendPicker?.contains(event.target) && !backendMenu?.contains(event.target)) closeBackendDropdown();
   if (!event.target.closest?.(".project-tree") && !event.target.closest?.(".project-action-menu")) closeProjectMenus();
   if (!event.target.closest?.(".studio-asset-menu-wrap")) closeStudioAssetMenu();
+  if (!event.target.closest?.("#workflowContextMenu")) closeWorkflowContextMenu();
   if (!$("optionsPanel").hidden && !$("optionsPanel").contains(event.target) && !$("optionsButton").contains(event.target) && !backendMenu?.contains(event.target)) closeOptionsPanel();
   if (!$("themePanel").hidden && !$("themePanel").contains(event.target) && !$("themeButton").contains(event.target)) closeThemePanel();
 });
@@ -2153,7 +2194,7 @@ $("resetButton").onclick = async () => {
   try { await api("/api/project/reset", { method: "POST", body: JSON.stringify(payload()) }); state.lastStream = ""; removeLiveCard(); await refreshRuntime({ force: true }); showToast("Runtime reset"); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Reset failed"); }
 };
 $("rerunButton").onclick = async () => { await withButtonBusy($("rerunButton"), "Rerunning…", async () => { try { await api("/api/project/rerun", { method: "POST", body: JSON.stringify(payload()) }); showToast("Task rerun started"); setTimeout(refreshRuntime, 250); } catch (error) { $("errorText").textContent = error.message; showActionError(error.message, "Rerun failed"); } }); };
-window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
+window.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; if (!$("validationDetailsBackdrop").hidden) return closeValidationDetails(); if (!$("workflowContextMenu").hidden) return closeWorkflowContextMenu(); if (!$("errorDetailsBackdrop").hidden) return closeErrorDetails(); if (!$("themePanel").hidden) return closeThemePanel(); if (!$("backendDropdownMenu").hidden) return closeBackendDropdown(); if (!$("optionsPanel").hidden) return closeOptionsPanel(); if (!$("workflowDropdownMenu").hidden) return closeWorkflowDropdown(); if (document.querySelector(".project-action-menu:not([hidden])")) return closeProjectMenus(); if (document.querySelector(".designer-step-modal-box")) return closeStageEditor(); if (!$("generateWorkflowSaveBackdrop").hidden) return closeGenerateWorkflowSaveModal(); if (!$("addStageBackdrop").hidden) return closeAddStageModal(); if (!$("importAssetBackdrop").hidden) return closeImportAssetModal(); if (!$("newPromptBackdrop").hidden) return closeNewPromptModal(); if (!$("newWorkflowBackdrop").hidden) return closeNewWorkflowModal(); if (!$("workflowGeneratorPage").hidden) { leaveGenerateWorkflowPage(); return; } if (!$("projectModalBackdrop").hidden) return closeProjectModal(); });
 window.addEventListener("beforeunload", (event) => { if (state.studioDirty || state.visualDirty || state.stageEditorDirty || state.generateWorkflowDirty) { event.preventDefault(); event.returnValue = ""; } });
 state.preferences = loadUiPreferences(); showEmpty(); resizeComposerInput(); renderRunConfigurationLock(); if (window.ResizeObserver) {
   const composerObserver = new ResizeObserver(syncComposerReserve);
