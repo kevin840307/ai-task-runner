@@ -187,7 +187,7 @@ class MockStageExecutor:
             task = Task(
                 id=f"c{ctx.state.cycle:02d}-t001",
                 title="Dry-run task",
-                description="Exercise task-scoped routing.",
+                description="Exercise dynamically expanded child Workflow.",
                 acceptance_criteria=["Workflow closes."],
             )
             return StageResult(stage.name, "pass", output="TASKS_PASS", data=[task])
@@ -320,8 +320,9 @@ def matrix_payload(path: Path, max_steps: int) -> dict[str, Any]:
         "workflow": str(path),
         "features": {
             "stages": len(workflow),
-            "task_scope": any(item.get("scope") == "task" for item in workflow),
+            "dynamic_producer": any(stage_result_kind(item) in {"tasks", "stages"} for item in workflow),
             "task_producer": any(stage_result_kind(item) == "tasks" for item in workflow),
+            "stage_producer": any(stage_result_kind(item) == "stages" for item in workflow),
             "routes": sum(bool(item.get("routes")) for item in workflow),
             "file_validations": sum(
                 item.get("type") == "command"
