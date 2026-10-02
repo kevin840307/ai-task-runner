@@ -54,6 +54,7 @@ def test_dryrun_detects_non_converging_result_edge_loop(tmp_path: Path):
   check:
     type: base
     profile: review
+    max_failures: null
     routes:
       fail: check
 flow:
