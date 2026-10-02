@@ -35,3 +35,33 @@ Catalog JSON 應出現 `stage_types.echo`，包含 `status`、`prefix` 選項；
 Palette 依用途分類內建類型；沒有內建呈現資訊的新類型會以通用名稱顯示在**擴充積木**。編輯欄位與驗證仍由 Stage spec 提供，新增類型不必修改 Flow UI 程式碼。
 
 Flow UI 的修改先保留在瀏覽器草稿，按**儲存 Workflow**後才會檢查檔案 hash、Stage／連線 schema、Prompt 引用與 Workflow dry-run；全部通過才原子寫入 YAML。未儲存時重新載入或離開會捨棄草稿。
+
+## 先判斷是否真的需要新 Stage type
+
+如果只是一般 AI 行為，優先使用既有 `type: base`：
+
+- `profile: generic`：自訂 AI Prompt / instructions。
+- `profile: execute`：可寫入的執行 Stage。
+- `profile: review`：read-only 結構化 Review。
+
+只有需要新的 runtime 行為時才新增特殊 Stage，例如 Plan、AI Validator、Command、Handoff 或 plugin Stage。這可以避免每個 Prompt/角色都長出一個新的 Python Stage class。
+
+## Producer-defined dynamic child Workflow
+
+特殊 Stage 可透過 `StageResult.kind = "tasks"` 或 `"stages"` 產生 child Workflow。
+
+Runner 不產生 child Stage template。Producer Stage 自己負責回傳 child `stages`；Runner 只負責驗證、namespace、持久化、執行與 Resume。
+
+`tasks` producer 的結果需包含：
+
+- 非空 `tasks`。
+- 非空 `stages`。
+- 每個 Task 至少被一個 child 的 `task_id` 綁定。
+- 每個 Task 至少有一個 child 設 `task_complete: true`。
+
+child routes/hand-off targets 必須留在 child Workflow 內；若要結束 child 並回 parent，使用正常的 `next` / `done` / `stop` 語意。不要直接 route 到 parent 任意 Stage。
+
+PlanStage 是目前第一個正式 producer：它解析 Tasks 後自行建立多組 `AI Stage(profile=execute) -> AI Stage(profile=review)`，全部完成後才回 parent 下一個 Stage。
+
+所有 child Stage 都使用相同的 `runner/workflow/stage_executor.py`，所以自訂 Stage 不需要實作 retry/recover/session logic。
+
