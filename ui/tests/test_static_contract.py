@@ -97,9 +97,9 @@ class StaticContractTests(unittest.TestCase):
         for removed in ("Recovery gate", "stageRecover", "stageMaxAttempts", "stageRestartAt", "stageRouteReplan"):
             self.assertNotIn(removed, self.js)
 
-    def test_visual_editor_can_add_multi_run_to_review_not_only_edit_existing_values(self):
-        self.assertIn('else if (["base", "task", "review"].includes(type))', self.js)
-        self.assertNotIn('&& (cfg.runs !== undefined || cfg.required_passes !== undefined)', self.js)
+    def test_legacy_visual_editor_does_not_reintroduce_task_or_review_stage_types(self):
+        self.assertNotIn('"task"', self.js[self.js.find("function normalizeStageType"):self.js.find("function normalizeStageType") + 1500] if "function normalizeStageType" in self.js else "")
+        self.assertNotIn('type: "review"', self.js)
 
     def test_environment_check_is_available_from_run_options(self):
         for token in ('id="environmentCheckButton"', 'id="environmentCheckResult"'):
@@ -311,7 +311,7 @@ class LayoutRegressionTests(unittest.TestCase):
     def test_explicit_workflow_ai_validator_companion_contract(self):
         repo = self.root.parent
         source = (
-            repo / "runner" / "workflow" / "stages" / "core.py"
+            repo / "runner" / "workflow" / "stages" / "ai_validator_stage.py"
         ).read_text(encoding="utf-8")
         self.assertIn("ctx.config.workflow_explicit", source)
         self.assertIn("or ctx.validator_is_ai", source)
