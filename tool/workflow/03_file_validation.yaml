@@ -2,15 +2,7 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
 
   validate_file:
     type: command
@@ -24,6 +16,4 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - validate_file
