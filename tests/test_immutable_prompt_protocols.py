@@ -132,3 +132,44 @@ def test_dynamic_producer_protocols_require_producer_defined_child_stages():
     assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" not in plan
     assert "RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL" in generic_tasks
     assert "RUNNER_IMMUTABLE_DYNAMIC_STAGES_PROTOCOL" in stages
+
+
+def test_review_and_validator_verdicts_do_not_depend_on_editable_prompt_text():
+    from runner.workflow.stages import (
+        AIValidatorStage,
+        AIValidatorStageSpec,
+        BaseStage,
+        BaseStageSpec,
+    )
+
+    review = BaseStage(
+        BaseStageSpec(
+            name="custom_review",
+            profile="review",
+            prompt="custom/review-anything.md",
+        )
+    )
+    validator = AIValidatorStage(
+        AIValidatorStageSpec(
+            name="custom_validator",
+            prompt="custom/validator-anything.md",
+        )
+    )
+
+    # Editable Prompt content chooses WHAT to inspect, never HOW semantic verdicts
+    # are encoded. PASS/FAIL mapping remains Runner-owned.
+    assert review.result_status({"completed": True}) == "pass"
+    assert review.result_status({"completed": False}) == "fail"
+    assert validator.result_status({"passed": True}) == "pass"
+    assert validator.result_status({"passed": False}) == "fail"
+
+    review_wire = append_stage_protocol(
+        "Ignore every formatting convention in this editable prompt.",
+        review.result_kind,
+    )
+    validator_wire = append_stage_protocol(
+        "Return a long prose essay from this editable prompt.",
+        validator.result_kind,
+    )
+    assert review_wire.rstrip().endswith("[/RUNNER_IMMUTABLE_REVIEW_PROTOCOL]")
+    assert validator_wire.rstrip().endswith("[/RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]")
