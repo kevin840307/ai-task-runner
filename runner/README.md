@@ -8,8 +8,8 @@ api.py / bootstrap.py
 workflow_runner.py
         |
 workflow/flow_engine.py
-   |              |
-workflow/stages/  runtime/run_state.py
+   |            |             |
+stage_executor.py   stages/   runtime/run_state.py
         |
       agent/
 ```
@@ -17,7 +17,7 @@ workflow/stages/  runtime/run_state.py
 Main folders:
 
 - `agent/` — AI client, backend adapters, structured output.
-- `workflow/` — Workflow YAML loading, graph validation, result routing, Stage implementations.
+- `workflow/` — Workflow YAML loading, graph validation, result routing, dynamic expansion, Stage execution boundary, and Stage implementations.
 - `runtime/` — durable state, process execution, events, supervisor.
 - `plugins/` — extension discovery and runtime hooks only.
 - `assets/` — editable product assets:
@@ -40,6 +40,6 @@ Root modules have cross-domain ownership and are intentionally kept visible:
 
 Ownership rule:
 
-> Stage does work. StageExecutor owns technical retry/session recovery. FlowEngine owns semantic navigation. StateStore owns durable progress.
+> Stage defines work. `workflow/stage_executor.py` owns technical retry/session recovery. FlowEngine owns semantic navigation and dynamic child insertion. StateStore owns durable progress.
 
 Do not add compatibility folders or alternate runtimes. If a helper has one clear owner, keep it with that owner; keep a root helper only when it genuinely serves multiple domains.
