@@ -37,19 +37,6 @@ stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
-
-  review:
-    type: review
-    scope: task
-    error_policy:
-      retries: 2
-    max_failures: 3
-    routes:
-      fail: execute
-
   validate_ai:
     type: ai_validator
     validator: ai
@@ -58,8 +45,6 @@ stages:
 
 flow:
   - planning
-  - execute
-  - review
   - validate_ai
 ```
 
@@ -81,7 +66,7 @@ The following legacy runtime concepts are intentionally removed:
 - `on_exhausted`
 - `fresh_after_same_failures`
 - `replan` StageResult
-- hidden Plan Task/Review nodes
+- legacy `task` / `review` Stage types and `scope: task`
 - graph-routable ERROR/recovery policy
 - separate System/Custom Workflow trees
 - TaskRunner/Pipeline/LinearRouting compatibility runtimes
@@ -94,13 +79,39 @@ Built-in types:
 
 - `base`
 - `plan`
-- `task`
-- `review`
 - `ai_validator`
 - `command`
 - `handoff`
 
 A Stage does one responsibility and returns `StageResult`. It does not implement retry, recovery, session rotation or graph navigation.
+
+### AI Stage profiles
+
+General AI behavior is one `base` Stage type with a small behavior profile:
+
+```yaml
+stages:
+  execute:
+    type: base
+    profile: execute
+
+  review:
+    type: base
+    profile: review
+    error_policy:
+      retries: 2
+    max_failures: 3
+    routes:
+      fail: execute
+```
+
+`profile: generic` is the neutral custom-AI behavior. `execute` applies writable execution defaults. `review` applies the structured read-only semantic PASS/FAIL contract. Dedicated Stage types are reserved for genuinely different runtime semantics such as Plan, AI Validator, Command and Handoff.
+
+### Dynamic child Workflows
+
+Any Stage may produce `tasks` or `stages`, but the producer Stage must supply the child Stage definitions. Runner never infers child Stage types. The produced child Workflow is inserted immediately after the producer, runs completely through the normal StageExecutor/FlowEngine reliability path, then the parent Workflow continues.
+
+`PlanStage` is the built-in example: it validates its task plan and itself builds alternating Execute -> Review child stages for every task. Other special/plugin Stages may generate different child structures using the same contract. Expanded definitions and task bindings are persisted in RunState, so Resume continues the existing child Workflow without re-running the producer merely to reconstruct it.
 
 `StageExecutor` owns all Stage technical reliability:
 
@@ -138,9 +149,9 @@ Each model session stays bounded. After the shared per-session attempt budget is
 Durable state contains only what is required to resume:
 
 - run identity / goal / project
-- tasks and current task
+- dynamic tasks and current task binding
 - workflow position
-- task-scope position
+- durable expanded child Workflow / dynamic groups
 - AI session id
 - latest StageResult transition
 - workflow fingerprint
@@ -168,7 +179,7 @@ runner/
   assets/
     workflows/ editable Workflow YAML
     prompts/
-      common/   built-in Plan/Task/Review/Validator prompts
+      common/   built-in Plan/AI Stage Review/Validator prompts
       ralphy/   Ralphy-specific prompts
       workflow/ Workflow-generation prompts
   config/       runtime defaults and validated RuntimeConfig
