@@ -3161,8 +3161,12 @@ def transient_proxy(upstream_port: int):
                         self.send_header(key, value)
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
-                self.wfile.write(payload)
+                # Publish success before the response body becomes observable by the caller.
+                # Otherwise Windows may schedule the client immediately after wfile.write()
+                # while this handler has not incremented the counter yet, making the
+                # reliability probe nondeterministically fail despite a successful proxy.
                 control.successes += 1
+                self.wfile.write(payload)
             finally:
                 connection.close()
 
