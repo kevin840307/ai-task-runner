@@ -725,6 +725,17 @@ function App() {
       }
       if (typing || editorOpen || addStageOpen) return;
       const ctrl = event.ctrlKey || event.metaKey;
+      if (ctrl && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undoVisualDraft();
+        return;
+      }
+      const selectedExplicitEdge = edges.find((edge) => edge.selected && edge.data?.explicit);
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedExplicitEdge) {
+        event.preventDefault();
+        deleteEdges([selectedExplicitEdge]);
+        return;
+      }
       if (ctrl && event.key.toLowerCase() === "c" && selected) {
         event.preventDefault();
         copyStageByName(selected);
