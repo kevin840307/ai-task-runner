@@ -10,7 +10,7 @@ Canonical Builder assets live together here:
 - `run.py` — generate a draft and optionally publish it.
 - `publish.py` — publish an already validated draft.
 
-`runner/workflow/system/workflow_builder.yaml` remains only as a compatibility mirror for the existing `SYSTEM_WORKFLOWS["workflow_builder"]` registry. It points to `workflow_builder/prompt.md` and uses the same fixed `workflow_builder/validation.py`. The Builder is system-internal and is intentionally excluded from the normal Workflow Studio / Tasks Workflow selector.
+The Builder owns one internal Workflow at `workflow_builder/workflow_builder.yaml`. It is not mirrored into Runner assets and is intentionally excluded from the normal Workflow library / Chat selector. Its generated drafts are validated by the production loader plus `tool/workflow_dryrun.py` before publication.
 
 ## CLI: generate and publish
 
