@@ -122,10 +122,18 @@ def test_workflow_cursor_writes_are_owned_by_flow_engine():
 
 def test_removed_task_scope_runtime_fields_do_not_reappear():
     offenders = []
+    forbidden = (
+        "task_step",
+        'get("scope")',
+        "get('scope')",
+        '["scope"]',
+        "['scope']",
+        "scope: task",
+    )
     for path in (ROOT / "runner").rglob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        for token in ("task_step", '"scope"', "'scope'"):
-            if token in text and path.name not in {"workflow_studio_state.py"}:
+        source = path.read_text(encoding="utf-8")
+        for token in forbidden:
+            if token in source:
                 offenders.append(f"{path.relative_to(ROOT)}: {token}")
     assert offenders == []
 
