@@ -5,7 +5,7 @@ from .ai_validator_stage import AIValidatorStage, AIValidatorStageSpec
 from .handoff_stage import HandoffStage, HandoffStageSpec
 from .plan_stage import PlanStage, PlanStageSpec
 from .command_stage import CommandStage, CommandStageSpec
-from .contracts import Stage, StageContext, StageExecution, StageResult, StageStatus
+from ..contracts import Stage, StageContext, StageExecution, StageResult, StageStatus
 
 __all__ = [
     "BaseStage",
