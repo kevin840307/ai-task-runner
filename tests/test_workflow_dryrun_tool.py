@@ -166,7 +166,7 @@ def test_dryrun_json_contract_is_small_and_machine_readable():
     payload = json.loads(result.stdout)
 
     assert set(payload) == {
-        "valid", "completed", "workflow", "executions", "error", "transitions"
+        "valid", "completed", "workflow", "executions", "error", "cycle", "stage", "transitions"
     }
     assert payload["valid"] is True
     assert payload["completed"] is True
