@@ -209,7 +209,7 @@ const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[
   { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
   { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
   { id: "result", label: "結果", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
-  { id: "advanced", label: "進階", fields: ["session_key", "ai_validator_yolo"] },
+  { id: "advanced", label: "進階", fields: ["ai_validator_yolo"] },
 ];
 
 const START = "__start__";
@@ -830,7 +830,6 @@ function App() {
   }, [draft, catalog]);
   const parameterOptions = options.filter((o) => {
     if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"].includes(o.name)) return false;
-    if (o.name === "session_key" && String(draft?.session_policy || "auto") !== "auto") return false;
     return true;
   });
   const parameterGroups = PARAMETER_SECTIONS.map((section) => ({
@@ -1780,14 +1779,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                       key={option.name}
                       option={option}
                       value={draft[option.name]}
-                      onChange={(value) => {
-                        if (option.name === "session_policy" && String(value || "auto") !== "auto") {
-                          const { session_key: _sessionKey, ...rest } = draft;
-                          editDraft({ ...rest, session_policy: value });
-                          return;
-                        }
-                        editDraft({ ...draft, [option.name]: value });
-                      }}
+                      onChange={(value) => editDraft({ ...draft, [option.name]: value })}
                     />
                   ))}
                 </section>
