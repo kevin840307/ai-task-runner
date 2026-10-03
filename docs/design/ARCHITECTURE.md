@@ -12,6 +12,23 @@ There is one runtime for CLI, API, YAML List and UI.
 ### Stage
 Owns semantic work and returns `StageResult`.
 
+### Stage module ownership
+
+```text
+runner/workflow/
+  stages/
+    contracts.py          shared Stage protocol/context/result types
+    base_stage.py         generic AI-backed Stage + profile behavior
+    plan_stage.py         Plan special Stage
+    ai_validator_stage.py AI validation special Stage
+    command_stage.py      deterministic external command Stage
+    handoff_stage.py      dynamic handoff special Stage
+  execution/
+    stage_executor.py     shared retry/session/recovery execution boundary
+```
+
+A plugin or new special Stage depends on `stages/contracts.py` and its own behavior. It must not own retry/session/recovery policy. Non-AI Stages do not depend on `BaseStage`.
+
 ### StageExecutor
 Owns technical reliability only:
 - technical retry;
