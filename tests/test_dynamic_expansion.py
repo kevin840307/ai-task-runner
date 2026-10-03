@@ -140,6 +140,9 @@ def test_rerunning_same_producer_replaces_old_children_and_tasks(tmp_path, monke
         result=result("one"), continuation="next",
     )
     assert first is not None
+    old_child = "producer__g1__child"
+    state.stage_sessions[old_child] = "session-old"
+    state.review_failures[f"{old_child}::__run__"] = 2
     second = expansion.expand_stage_result(
         state=state, workflow=first, source_index=0, source=source,
         result=result("two"), continuation="next",
@@ -151,3 +154,5 @@ def test_rerunning_same_producer_replaces_old_children_and_tasks(tmp_path, monke
     assert "producer__g2__child" in names
     assert [task.id for task in state.tasks] == ["producer__g2__two"]
     assert state.dynamic_groups == {"producer": "producer__g2"}
+    assert old_child not in state.stage_sessions
+    assert not any(key.startswith(f"{old_child}::") for key in state.review_failures)
