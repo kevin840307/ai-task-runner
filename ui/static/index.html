@@ -37,7 +37,7 @@
       <div class="brand">Agent Workflow</div>
       <button id="themeButton" class="theme-toggle-button" type="button" title="主題與外觀" data-i18n-title="theme.open" aria-haspopup="dialog" aria-expanded="false">◐</button>
       <section id="themePanel" class="theme-panel" role="dialog" aria-label="主題與外觀" data-i18n-aria="theme.open" hidden>
-        <div class="theme-panel-head"><strong data-i18n="theme.settings">介面設定</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" data-i18n-aria="common.close">×</button></div>
+        <div class="theme-panel-head"><strong data-i18n="theme.settings">介面設定</strong><button id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close" data-i18n-aria="common.close">×</button></div>
         <div class="theme-setting-group">
           <span class="theme-setting-label" data-i18n="theme.appearance">外觀</span>
           <div class="appearance-options" role="group" aria-label="Appearance">
@@ -113,7 +113,7 @@
       <section id="composePanel" class="compose-panel" hidden>
         <div class="composer-box">
           <div id="optionsPanel" class="options-panel" role="dialog" aria-label="Run options" hidden>
-            <div class="options-popover-head"><strong data-i18n="options.title">執行選項</strong><button id="optionsCloseButton" type="button" aria-label="Close options">×</button></div>
+            <div class="options-popover-head"><strong data-i18n="options.title">執行選項</strong><button id="optionsCloseButton" type="button" aria-label="Close options" title="Close options">×</button></div>
             <div class="options-popover-field backend-option-field"><span>Backend</span>
               <div id="backendPicker" class="backend-picker">
                 <select id="backend" hidden aria-hidden="true"></select>
@@ -189,7 +189,7 @@
           <aside class="designer-sidebar studio-workflow-sidebar">
             <div class="designer-section-row studio-list-head">
               <div id="studioListTitle" class="designer-section-title">Workflows</div>
-              <button id="newWorkflowButton" class="mini-button" type="button" title="New workflow">+</button>
+              <button id="newWorkflowButton" class="mini-button" type="button" title="New asset" aria-label="Create new asset">+</button>
             </div>
             <label class="studio-search-wrap" for="studioSearchInput">
               <span class="studio-search-icon" aria-hidden="true">⌕</span>
@@ -345,7 +345,7 @@
     <div class="modal-card validation-details-card" role="dialog" aria-modal="true" aria-labelledby="validationDetailsTitle">
       <div class="modal-head validation-details-head">
         <div class="validation-details-title-wrap"><span id="validationDetailsIcon" class="validation-details-icon">!</span><div><h2 id="validationDetailsTitle">Validation details</h2><p id="validationDetailsSubtitle">Complete validator output</p></div></div>
-        <button id="validationDetailsClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="validationDetailsClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="validation-details-body">
         <div id="validationDetailsSummary" class="validation-details-summary"></div>
@@ -357,7 +357,7 @@
 
   <div id="errorDetailsBackdrop" class="modal-backdrop error-details-backdrop" hidden>
     <div class="modal-card error-details-card" role="dialog" aria-modal="true" aria-labelledby="errorDetailsTitle">
-      <div class="modal-head"><div><h2 id="errorDetailsTitle">Error details</h2><p>完整錯誤資訊，方便複製與除錯。</p></div><button id="errorDetailsClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <div class="modal-head"><div><h2 id="errorDetailsTitle">Error details</h2><p>完整錯誤資訊，方便複製與除錯。</p></div><button id="errorDetailsClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button></div>
       <pre id="errorDetailsContent" class="error-details-content"></pre>
       <div class="modal-actions"><button id="errorDetailsCopy" type="button">Copy</button><button id="errorDetailsOk" class="primary" type="button">OK</button></div>
     </div>
@@ -368,7 +368,7 @@
     <div class="modal-card project-modal-card" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
       <div class="modal-head">
         <div class="modal-title-with-icon"><span class="modal-title-icon" aria-hidden="true">P</span><div><h2 id="projectModalTitle">Open Project</h2><p data-i18n="projects.open_desc">選擇 Runner 要操作的專案資料夾。專案只會加入側邊欄，不會複製或搬動檔案。</p></div></div>
-        <button id="projectModalClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="projectModalClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="modal-section-label">Project folder</div>
       <label class="modal-label" for="projectPathInput">Path</label>
@@ -386,7 +386,7 @@
     <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="newWorkflowTitle">
       <div class="modal-head">
         <div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="newWorkflowTitle">New Workflow</h2><p data-i18n="workflow.new_desc">建立空白 Workflow，再用 Visual Designer 加 Stage；不會覆寫既有檔案。</p></div></div>
-        <button id="newWorkflowClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="newWorkflowClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="modal-scroll-body">
         <div class="modal-section-label">Workflow file</div>
@@ -411,7 +411,7 @@ flow:
     <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="newPromptTitle">
       <div class="modal-head">
         <div class="modal-title-with-icon"><span class="modal-title-icon prompt" aria-hidden="true">P</span><div><h2 id="newPromptTitle">New Prompt</h2><p data-i18n="prompt.new_desc">建立 Global 或 Project Prompt；兩者都可直接編輯。</p></div></div>
-        <button id="newPromptClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="newPromptClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="modal-scroll-body">
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="newPromptName" class="designer-input" placeholder="my_prompt.md" /></label>
@@ -427,7 +427,7 @@ flow:
     <div class="modal-card workflow-create-card" role="dialog" aria-modal="true" aria-labelledby="duplicateAssetTitle">
       <div class="modal-head">
         <div class="modal-title-with-icon"><span id="duplicateAssetIcon" class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="duplicateAssetTitle">Duplicate Workflow</h2><p id="duplicateAssetDescription">Create an independent copy. The source file is not modified.</p></div></div>
-        <button id="duplicateAssetClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="duplicateAssetClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="modal-scroll-body">
         <label class="designer-form-row"><span class="designer-label">Name</span><input id="duplicateAssetName" class="designer-input" /></label>
@@ -440,7 +440,7 @@ flow:
   <!-- Static-style Import modal for both Workflow and Prompt assets. -->
   <div id="generateWorkflowSaveBackdrop" class="modal-backdrop" hidden>
     <div class="modal-card workflow-save-card" role="dialog" aria-modal="true" aria-labelledby="generateWorkflowSaveTitle">
-      <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p data-i18n="builder.save_desc">Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close">×</button></div>
+      <div class="modal-head"><div class="modal-title-with-icon"><span class="modal-title-icon workflow" aria-hidden="true">W</span><div><h2 id="generateWorkflowSaveTitle">Save Generated Workflow</h2><p data-i18n="builder.save_desc">Validate the current Draft again, then publish it as a real Workflow.</p></div></div><button id="generateWorkflowSaveClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button></div>
       <div class="modal-scroll-body workflow-save-body">
         <div class="workflow-save-target-grid">
           <label class="designer-form-row"><span class="designer-label">Filename</span><input id="generateWorkflowSaveFilename" class="designer-input" placeholder="regression.workflow.yaml" /></label>
@@ -457,7 +457,7 @@ flow:
     <div class="modal-card import-asset-card" role="dialog" aria-modal="true" aria-labelledby="importAssetTitle">
       <div class="modal-head">
         <div class="modal-title-with-icon"><span class="modal-title-icon import" aria-hidden="true">I</span><div><h2 id="importAssetTitle">Import Workflow</h2><p id="importAssetDescription" data-i18n="import.desc">Import becomes a Global or Project asset.</p></div></div>
-        <button id="importAssetClose" class="modal-close" type="button" aria-label="Close">×</button>
+        <button id="importAssetClose" class="modal-close" type="button" aria-label="Close" title="Close">×</button>
       </div>
       <div class="modal-scroll-body import-asset-body">
         <div class="designer-import-grid">
