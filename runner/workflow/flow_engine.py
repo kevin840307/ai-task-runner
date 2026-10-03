@@ -95,6 +95,12 @@ class FlowEngine:
             else resolve_stage_target(definition, result.status)
         )
 
+        old_group = self.context.state.dynamic_groups.get(str(definition["name"]), "")
+        replaced_dynamic_names = {
+            str(item.get("name", ""))
+            for item in self.workflow
+            if old_group and old_group in (item.get("_dynamic_path") or [])
+        }
         expanded = expand_stage_result(
             state=self.context.state,
             workflow=self.workflow,
@@ -104,6 +110,9 @@ class FlowEngine:
             continuation=target,
         )
         if expanded is not None:
+            for name in replaced_dynamic_names:
+                if name:
+                    self.context.scratch.pop(f"stage_session:{name}", None)
             self.workflow = expanded
             self._reindex()
             self.context.state.workflow_position = index + 1
