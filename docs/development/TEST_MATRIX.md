@@ -18,7 +18,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Validators | File command validators, AI validators, multiple validators anywhere, repeated AI runs/voting, validator FAIL rollback |
 | Dynamic producers | Plan producer-defined Execute/Review children, custom/plugin `produces: tasks|stages`, nested dynamic expansion |
 | Resume/state | workflow position, durable expanded Workflow, dynamic task groups, transition_previous, role Sessions, corrupt/incompatible state rejection |
-| Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
+| Dry Run | normal closure, fail loops, Dynamic Handoff, custom dynamic producer, non-converging loop cutoff, invalid schema/route controls |
 | Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
 | Studio backend | YAML graph save/validation, stage add/delete, asset roots, prompt references, Stage test sandbox |
 | Studio React | PASS/FAIL/Handoff handles, searchable palette, safe duplicate, Review max_failures UI, Dynamic branch layout, session-policy UI normalization, no ERROR edge, separate Workflows/Prompts navigation with Interface settings kept outside the primary nav, Stage Form/YAML/Routing/Test ownership, common desktop viewport overflow checks |
@@ -59,7 +59,7 @@ Before soak, the tool performs deterministic preflight and then exercises real-Q
 - expired Session -> Fresh Session;
 - process restart / detached UI resume;
 - YAML List resume;
-- custom Stage / custom Task producer;
+- custom Stage / custom dynamic producer;
 - protected-file policy;
 - timeout/recovery budget;
 - final AI voting.
