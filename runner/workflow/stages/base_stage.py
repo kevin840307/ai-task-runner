@@ -147,6 +147,9 @@ class BaseStageSpec:
 
 
 class BaseStage:
+    ui_title = "AI Stage"
+    ui_description = "General AI Stage; choose Generic, Execute, or Review behavior profile."
+    ui_category = "build"
     """Perform one or more AI interactions and return only resulting facts."""
 
     result_kind = "generic"
