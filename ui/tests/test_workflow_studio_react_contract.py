@@ -704,3 +704,15 @@ def test_add_stage_escape_restores_focus_and_edges_stay_below_handles():
     assert "if (addStageOpen) closeAddStageCommand()" in text
     assert "zIndex: 0" in text
     assert "zIndex: 2" in text
+
+
+
+def test_designer_optional_snap_is_local_only_and_nonsemantic():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'const SNAP_PREF_KEY = "workflow-designer.snap:v1"' in text
+    assert 'const [snapEnabled, setSnapEnabled] = useState(readSnapPreference())' in text
+    assert 'aria-pressed={snapEnabled}' in text
+    assert 'snapToGrid={snapEnabled}' in text
+    assert 'snapGrid={[20, 20]}' in text
+    assert 'writeSnapPreference(next)' in text
