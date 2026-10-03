@@ -16,8 +16,8 @@ Owns semantic work and returns `StageResult`.
 
 ```text
 runner/workflow/
+  contracts.py            shared Stage protocol/context/result types
   stages/
-    contracts.py          shared Stage protocol/context/result types
     base_stage.py         generic AI-backed Stage + profile behavior
     plan_stage.py         Plan special Stage
     ai_validator_stage.py AI validation special Stage
