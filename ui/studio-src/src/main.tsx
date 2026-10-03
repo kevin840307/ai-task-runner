@@ -128,7 +128,28 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
     favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
     copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
-    group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具"
+    group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具",
+    disconnected: "未連線", fail_soft_next: "下次 Pass",
+    undo_none: "沒有可復原的 Workflow 修改。", undo_done: "已復原上一個 Workflow 草稿修改。",
+    redo_none: "沒有可重做的 Workflow 修改。", redo_done: "已重做上一個 Workflow 草稿修改。",
+    switch_title: "儲存並切換視圖？", switch_message: "Workflow Editor 只維護一份 canonical YAML。先儲存目前修改，再切換 Designer / YAML，避免兩份草稿分岔。", switch_confirm: "儲存並切換",
+    remove_refs_first: "請先移除指向此 Stage 的結果連線。", remove_title: "移除 Stage", remove_message: "從草稿移除此 Stage？儲存 Workflow 後才會更新 YAML。", remove_confirm: "移除",
+    discard_title: "捨棄未儲存變更？", discard_message: "目前 Workflow 還有未儲存的草稿。離開後這些變更會遺失。", discard_confirm: "捨棄並離開",
+    reload_title: "重新載入 Workflow？", reload_message: "目前未儲存的 Workflow 草稿會被捨棄，並重新載入磁碟上的版本。", reload_confirm: "捨棄並重新載入",
+    cancel: "取消", dynamic_child_note: "此 Stage 成功後會先執行它產生的 child Stages，全部完成後才回到主 Workflow 的下一個 Stage。",
+    display_name_suffix: "（Stage key 不變）", no_parameters: "此積木沒有其他參數。", stage_yaml_hint: "同一份 Stage draft；type 與 key 不可在此變更。",
+    route_intro: "從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。",
+    review_policy_help: "Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。允許真的 FAIL N 次；下一次進入 Review 時不呼叫 Agent，直接走 fail-soft PASS 並清零。正常 PASS 也會清零。",
+    error_policy_help: "ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。",
+    error_retry: "ERROR 重試次數", error_retry_skip: "ERROR 重試次數（有限值耗盡後 Skip）", inherit_global: "沿用全域設定",
+    retry_exhaust_skip: "重試耗盡 → 下一個積木（Skip Review）", semantic_fail_limit: "Semantic FAIL 上限（max_failures）", unlimited: "不限制",
+    semantic_fail_help: "允許連續 FAIL 此次數；下一次進入 Review 直接 PASS，不呼叫 Agent。PASS 或放行後 counter 清 0。",
+    outgoing: "從這個積木出去", end_stop: "END（停止）", end_done: "END（完成）", next_default: "下一個積木（預設）", stop_default: "停止（預設）",
+    test_help: "測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 使用目前草稿設定；為避免測試掛死，local -1 在測試中最多 retry 2 次。正式 Runtime 全域設定不受影響。",
+    test_input_placeholder: "輸入這個積木要接收的內容", test_input_help: "依 Stage 類型提供最小合法測試內容；只作用於 isolated Stage Test，不會修改 Workflow Prompt。",
+    fixed_prompt: "固定 Prompt", ping_help: "不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。",
+    mode_label: "模式", next_label: "下一個", retry_label: "測試 Retry", retry_exhausted_skip: "Retry 用盡 → Skip",
+    no_output: "（沒有文字輸出）", structured_data: "結構化資料", changed_files: "變更檔案", duplicate_hint: "複製目前設定，但不複製結果連線"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
@@ -144,7 +165,28 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
     favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
     copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
-    group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools"
+    group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools",
+    disconnected: "Disconnected", fail_soft_next: "Next entry passes",
+    undo_none: "No Workflow change to undo.", undo_done: "Undid the previous Workflow draft change.",
+    redo_none: "No Workflow change to redo.", redo_done: "Redid the previous Workflow draft change.",
+    switch_title: "Save and switch view?", switch_message: "Workflow Editor keeps one canonical YAML. Save the current draft before switching Designer / YAML so the two views cannot diverge.", switch_confirm: "Save and switch",
+    remove_refs_first: "Remove result connections pointing to this Stage first.", remove_title: "Remove Stage", remove_message: "Remove this Stage from the draft? YAML changes only after you Save the Workflow.", remove_confirm: "Remove",
+    discard_title: "Discard unsaved changes?", discard_message: "This Workflow has unsaved draft changes. Leaving will discard them.", discard_confirm: "Discard and leave",
+    reload_title: "Reload Workflow?", reload_message: "Unsaved Workflow draft changes will be discarded and the saved version reloaded.", reload_confirm: "Discard and reload",
+    cancel: "Cancel", dynamic_child_note: "After this Stage passes, its generated child Stages run to completion before the parent Workflow continues.",
+    display_name_suffix: " (Stage key is unchanged)", no_parameters: "This Stage has no additional parameters.", stage_yaml_hint: "Same Stage draft; type and key cannot be changed here.",
+    route_intro: "Drag the large output handle to a target Stage. PASS / FAIL are Workflow results; ERROR is not a graph edge.",
+    review_policy_help: "Review is a fail-soft gate: technical ERROR uses error_policy; semantic FAIL uses max_failures. After N real FAIL verdicts, the next entry bypasses the Agent with fail-soft PASS and resets the counter. A normal PASS also resets it.",
+    error_policy_help: "ERROR uses this Stage retry count; leave blank to inherit global stage_retries (default -1). A non-Review Stage stops here when a finite retry budget is exhausted.",
+    error_retry: "ERROR retries", error_retry_skip: "ERROR retries (Skip after finite exhaustion)", inherit_global: "Inherit global setting",
+    retry_exhaust_skip: "Retries exhausted → next Stage (Skip Review)", semantic_fail_limit: "Semantic FAIL limit (max_failures)", unlimited: "Unlimited",
+    semantic_fail_help: "Allow this many consecutive FAIL verdicts; the next entry passes without calling the Agent. PASS or bypass resets the counter.",
+    outgoing: "Outgoing", end_stop: "END (stop)", end_done: "END (complete)", next_default: "Next Stage (default)", stop_default: "Stop (default)",
+    test_help: "Test only the current Stage/agent; it does not continue through the Workflow. Real Stage uses the current draft. For safety, local -1 is capped at 2 retries in Stage Test. Production global settings are unchanged.",
+    test_input_placeholder: "Enter input for this Stage", test_input_help: "Uses minimal valid input for the Stage type. This isolated Stage Test does not modify the Workflow Prompt.",
+    fixed_prompt: "Fixed Prompt", ping_help: "Uses no tools, does not read or modify the project, and only verifies agent transport.",
+    mode_label: "Mode", next_label: "Next", retry_label: "Test Retry", retry_exhausted_skip: "Retries exhausted → Skip",
+    no_output: "(no text output)", structured_data: "Structured data", changed_files: "Changed files", duplicate_hint: "Duplicate settings without result connections"
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -284,9 +326,9 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-stage-meta">
-        {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">未連線</span>}
+        {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">{tx("disconnected")}</span>}
         {reviewErrorSkip && <span>ERR×{errorRetries} → Skip</span>}
-        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → 下次 Pass</span>}
+        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → {tx("fail_soft_next")}</span>}
         {dynamicRouter && <span>{(s.targets || []).length} targets</span>}
         {data.dynamicOutput && <span className="dynamic-chip">Dynamic · {data.dynamicOutput}</span>}
       </div>
@@ -926,24 +968,24 @@ function App() {
 
   function undoVisualDraft() {
     if (!visual || undoStackRef.current.length === 0) {
-      setMessage("沒有可復原的 Workflow 修改。");
+      setMessage(tx("undo_none"));
       return;
     }
     const previous = undoStackRef.current[undoStackRef.current.length - 1];
     undoStackRef.current = undoStackRef.current.slice(0, -1);
     redoStackRef.current = [...redoStackRef.current.slice(-49), structuredClone(visual)];
-    applyHistorySnapshot(previous, "已復原上一個 Workflow 草稿修改。");
+    applyHistorySnapshot(previous, tx("undo_done"));
   }
 
   function redoVisualDraft() {
     if (!visual || redoStackRef.current.length === 0) {
-      setMessage("沒有可重做的 Workflow 修改。");
+      setMessage(tx("redo_none"));
       return;
     }
     const next = redoStackRef.current[redoStackRef.current.length - 1];
     redoStackRef.current = redoStackRef.current.slice(0, -1);
     undoStackRef.current = [...undoStackRef.current.slice(-49), structuredClone(visual)];
-    applyHistorySnapshot(next, "已重做上一個 Workflow 草稿修改。");
+    applyHistorySnapshot(next, tx("redo_done"));
   }
 
   function editDraft(next: Stage) {
@@ -1095,9 +1137,9 @@ function App() {
     };
     if (!currentDirty) { void apply(); return; }
     requestConfirm({
-      title: "儲存並切換視圖？",
-      message: "Workflow Editor 只維護一份 canonical YAML。先儲存目前修改，再切換 Designer / YAML，避免兩份草稿分岔。",
-      confirmLabel: "儲存並切換",
+      title: tx("switch_title"),
+      message: tx("switch_message"),
+      confirmLabel: tx("switch_confirm"),
       action: apply,
     });
   }
@@ -1423,13 +1465,13 @@ function App() {
     if (visual.stages.some((stage) => stage.name !== name && (
       Object.values(stage.routes || {}).includes(name) || (stage.targets || []).includes(name)
     ))) {
-      setMessage(`請先移除指向 ${name} 的結果連線。`);
+      setMessage(tx("remove_refs_first"));
       return;
     }
     requestConfirm({
-      title: "移除 Stage",
-      message: `從草稿移除 Stage "${name}"？儲存 Workflow 後才會更新 YAML。`,
-      confirmLabel: "移除",
+      title: tx("remove_title"),
+      message: `${tx("remove_message")} · ${name}`,
+      confirmLabel: tx("remove_confirm"),
       danger: true,
       action: () => {
         const current = visual;
@@ -1460,9 +1502,9 @@ function App() {
     const leave = () => { window.location.href = workflowStudioUrl(); };
     if (!editorDirty) { leave(); return; }
     requestConfirm({
-      title: "捨棄未儲存變更？",
-      message: "目前 Workflow 還有未儲存的草稿。離開後這些變更會遺失。",
-      confirmLabel: "捨棄並離開",
+      title: tx("discard_title"),
+      message: tx("discard_message"),
+      confirmLabel: tx("discard_confirm"),
       danger: true,
       action: leave,
     });
@@ -1471,9 +1513,9 @@ function App() {
   function reloadStudio() {
     if (!editorDirty) { void load(); return; }
     requestConfirm({
-      title: "重新載入 Workflow？",
-      message: "目前未儲存的 Workflow 草稿會被捨棄，並重新載入磁碟上的版本。",
-      confirmLabel: "捨棄並重新載入",
+      title: tx("reload_title"),
+      message: tx("reload_message"),
+      confirmLabel: tx("reload_confirm"),
       danger: true,
       action: () => { void load(); },
     });
@@ -1762,7 +1804,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               <p>{confirmDialog.message}</p>
             </div>
             <div className="designer-confirm-actions">
-              <button type="button" onClick={() => setConfirmDialog(null)}>取消</button>
+              <button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>
               <button type="button" className={confirmDialog.danger ? "danger-confirm" : "primary"}
                 onClick={() => {
                   const action = confirmDialog.action;
@@ -1803,7 +1845,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {(String(draft.produces || catalog?.stage_types?.[draft.type]?.result_kind || "") === "tasks"
                 || String(draft.produces || catalog?.stage_types?.[draft.type]?.result_kind || "") === "stages") && <div className="dynamic-stage-note">
                 <strong>Dynamic child Workflow</strong>
-                <span>此 Stage 執行成功後會先執行它產生的 child Stages，全部完成後才回到主 Workflow 的下一個 Stage。</span>
+                <span>{tx("dynamic_child_note")}</span>
               </div>}
               {draft.type === "base" && <label>
                   <span>AI profile</span>
@@ -1816,12 +1858,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     {catalog?.stage_types?.base?.profiles?.[String(draft.profile || "generic")]?.description || "Choose an AI behavior preset; parameters remain editable."}
                   </small>
                 </label>}
-                <label><span>{tx("display_name")}（Stage key 不變）</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
+                <label><span>{tx("display_name")}{tx("display_name_suffix")}</span><input ref={titleInputRef} value={String(draft.label || "")} placeholder={draft.name} onChange={(e) => editDraft({ ...draft, label: e.target.value })} /></label>
                 <label><span>{tx("run_status")}</span><input value={String(draft.status || "")} onChange={(e) => editDraft({ ...draft, status: e.target.value })} /></label>
                 </section>
                 <section className="stage-form-section">
                   <div className="stage-form-section-head"><strong>{tx("parameters")}</strong><small>{parameterOptions.length} fields</small></div>
-                {parameterOptions.length === 0 && <p className="section-empty">此積木沒有其他參數。</p>}
+                {parameterOptions.length === 0 && <p className="section-empty">{tx("no_parameters")}</p>}
                 {parameterOptions.length > 8 && <div className="parameter-sections" role="tablist" aria-label="Parameter sections">
                   {parameterGroups.map((section) => <button key={section.id} type="button" role="tab"
                     aria-selected={visibleParameters === section.options}
@@ -1858,7 +1900,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>}
               {inspectorTab === "yaml" && <div className="stage-yaml-panel" role="tabpanel">
                 <div className="stage-yaml-toolbar">
-                  <div><strong>Stage YAML</strong><small>同一份 Stage draft；type 與 key 不可在此變更。</small></div>
+                  <div><strong>Stage YAML</strong><small>{tx("stage_yaml_hint")}</small></div>
                   <button type="button" onClick={() => void applyStageYaml()} disabled={stageYamlLoading}>{stageYamlLoading ? "…" : tx("apply_yaml")}</button>
                 </div>
                 {stageYamlError && <div className="stage-yaml-error">{stageYamlError}</div>}
@@ -1867,12 +1909,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>}
               {inspectorTab === "routing" && <div className="edge-help" role="tabpanel">
                 <strong>{tx("result_edges")}</strong>
-                <p>從積木下方的大接點拉到目標積木。PASS / FAIL 是 Workflow 結果；ERROR 不建立連線。</p>
+                <p>{tx("route_intro")}</p>
                 {(draft.type === "base" && draft.profile === "review")
-                  ? <p>Review 是 fail-soft gate：technical ERROR 由 error_policy 控制；semantic FAIL 由 max_failures 控制。允許真的 FAIL N 次；下一次進入 Review 時不呼叫 Agent，直接走 fail-soft PASS 並清零。正常 PASS 也會清零。</p>
-                  : <p>ERROR 依本積木的重試次數執行；留空沿用全域 stage_retries（預設 -1）。非 Review Stage 的有限 retry 用盡後會停在目前 Stage。</p>}
-                <label className="route-policy-field"><span>{(draft.type === "base" && draft.profile === "review") ? "ERROR 重試次數（有限值耗盡後 Skip）" : "ERROR 重試次數"}</span><input type="number" min={-1}
-                  value={draft.error_policy?.retries ?? ""} placeholder="沿用全域設定"
+                  ? <p>{tx("review_policy_help")}</p>
+                  : <p>{tx("error_policy_help")}</p>}
+                <label className="route-policy-field"><span>{(draft.type === "base" && draft.profile === "review") ? tx("error_retry_skip") : tx("error_retry")}</span><input type="number" min={-1}
+                  value={draft.error_policy?.retries ?? ""} placeholder={tx("inherit_global")}
                   onChange={(event) => {
                     const raw = event.target.value;
                     if (raw === "") {
@@ -1886,11 +1928,11 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   }} /></label>
                 {(draft.type === "base" && draft.profile === "review") && Number.isInteger(draft.error_policy?.retries) && Number(draft.error_policy?.retries) >= 0 &&
                   <div className="route-row error-skip-row"><span className="route-dot error" />
-                    <strong>ERROR</strong><span>重試耗盡 → 下一個積木（Skip Review）</span>
+                    <strong>ERROR</strong><span>{tx("retry_exhaust_skip")}</span>
                   </div>}
                 {(draft.type === "base" && draft.profile === "review") && <>
-                  <label className="route-policy-field"><span>Semantic FAIL 上限（max_failures）</span><input type="number" min={1}
-                    value={draft.max_failures ?? ""} placeholder="不限制"
+                  <label className="route-policy-field"><span>{tx("semantic_fail_limit")}</span><input type="number" min={1}
+                    value={draft.max_failures ?? ""} placeholder={tx("unlimited")}
                     onChange={(event) => {
                       const raw = event.target.value;
                       if (raw === "") {
@@ -1902,14 +1944,14 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         editDraft({ ...draft, max_failures: value });
                       }
                     }} />
-                    <small>允許連續 FAIL 此次數；下一次進入 Review 直接 PASS，不呼叫 Agent。PASS 或放行後 counter 清 0。</small>
+                    <small>{tx("semantic_fail_help")}</small>
                   </label>
                   {Number.isInteger(draft.max_failures) && Number(draft.max_failures) > 0 &&
                     <div className="route-row failure-cap-row"><span className="route-dot fail" />
                       <strong>FAIL×{Number(draft.max_failures)}</strong><span>下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）</span>
                     </div>}
                 </>}
-                <div className="route-section-title">從這個積木出去</div>
+                <div className="route-section-title">{tx("outgoing")}</div>
                 {draft.type === "handoff"
                   ? edges.filter((edge) => edge.source === draft.name && edge.data?.status === "handoff").map((edge) =>
                     <div className="route-row" key={edge.id}><span className="route-dot pass" />
@@ -1919,8 +1961,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   const edge = edges.find((item) => item.source === draft.name && item.data?.status === status);
                   const terminal = String(edge?.data?.terminal || "");
                   const target = edge?.target === END
-                    ? terminal === "stop" ? "END（停止）" : "END（完成）"
-                    : edge?.target || (status === "pass" ? "下一個積木（預設）" : "停止（預設）");
+                    ? terminal === "stop" ? tx("end_stop") : tx("end_done")
+                    : edge?.target || (status === "pass" ? tx("next_default") : tx("stop_default"));
                   return <div className="route-row" key={status}><span className={`route-dot ${status}`} />
                     <strong>{status.toUpperCase()}</strong><span>{target}</span>
                   </div>;
@@ -1935,7 +1977,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 })}
               </div>}
               {inspectorTab === "test" && <div className="stage-test" role="tabpanel">
-                <p>測試只停留在目前積木/agent，不會沿 Workflow 繼續執行。Real Stage 使用目前草稿的 Prompt、Parser、Session Policy 與 local Error Policy；為避免測試掛死，local -1 在測試中最多 retry 2 次，未設定 local policy 則只做單次 attempt。正式 Runtime 的全域 stage_retries 不受影響。Agent Ping 只驗證 backend/agent transport。</p>
+                <p>{tx("test_help")}</p>
                 <div className="test-mode-tabs" role="tablist" aria-label="Stage test mode">
                   <button type="button" role="tab" aria-selected={testMode === "stage"} className={testMode === "stage" ? "active" : ""}
                     onClick={() => { setTestMode("stage"); setTestResult(null); setTestError(""); }}>Real Stage</button>
@@ -1959,27 +2001,27 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         {testInput && <button type="button" onClick={() => setTestInput("")}>{tx("clear")}</button>}
                       </div>
                       <textarea value={testInput} onChange={(e) => setTestInput(e.target.value)} rows={5}
-                        placeholder={stageTestPrompt(draft, testScenario) || "輸入這個積木要接收的內容"} />
-                      <small>依 Stage 類型提供最小合法測試內容；只作用於本次 isolated Stage Test，不會修改 Workflow Prompt。</small>
+                        placeholder={stageTestPrompt(draft, testScenario) || tx("test_input_placeholder")} />
+                      <small>{tx("test_input_help")}</small>
                     </label>
-                  : <div className="ping-prompt"><strong>固定 Prompt</strong><code>{AGENT_PING_PROMPT}</code><small>不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。</small></div>}
+                  : <div className="ping-prompt"><strong>{tx("fixed_prompt")}</strong><code>{AGENT_PING_PROMPT}</code><small>{tx("ping_help")}</small></div>}
                 <button type="button" className="primary" onClick={() => void testStage()}
                   disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>模式：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
-                    {testMode === "stage" && <span>下一個：<strong>{testResult.next}</strong></span>}
-                    {testMode === "stage" && testResult.test_retry_policy && <span>測試 Retry：<strong>{testResult.test_retry_policy}</strong></span>}
-                    {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">Retry 用盡 → Skip</span>}</div>
-                  <strong>Output</strong><pre>{testResult.output || "（沒有文字輸出）"}</pre>
-                  {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>結構化資料</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
-                  {!!testResult.changed_files?.length && <details><summary>變更檔案 · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{testBackend}</strong></span>
+                    {testMode === "stage" && <span>{tx("next_label")}：<strong>{testResult.next}</strong></span>}
+                    {testMode === "stage" && testResult.test_retry_policy && <span>{tx("retry_label")}：<strong>{testResult.test_retry_policy}</strong></span>}
+                    {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">{tx("retry_exhausted_skip")}</span>}</div>
+                  <strong>Output</strong><pre>{testResult.output || tx("no_output")}</pre>
+                  {testResult.data != null && Object.keys(testResult.data as object).length > 0 && <details><summary>{tx("structured_data")}</summary><pre>{JSON.stringify(testResult.data, null, 2)}</pre></details>}
+                  {!!testResult.changed_files?.length && <details><summary>{tx("changed_files")} · {testResult.changed_files.length}</summary><pre>{testResult.changed_files.join("\n")}</pre></details>}
                 </div>}
               </div>}
               </div>
               <footer>
                 <div className="footer-actions">
-                  <button onClick={() => void duplicateStage()} disabled={busy} title="複製目前設定，但不複製結果連線">{tx("duplicate")}</button>
+                  <button onClick={() => void duplicateStage()} disabled={busy} title={tx("duplicate_hint")}>{tx("duplicate")}</button>
                   <button className="danger" onClick={() => void deleteStage()} disabled={busy}>{tx("remove")}</button>
                 </div>
                 <span className="draft-hint">{tx("draft_only")}</span>
