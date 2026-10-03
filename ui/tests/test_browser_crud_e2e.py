@@ -304,6 +304,15 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert workflow_row.count() == 1
             assert workflow_row.locator(".studio-file-item-action").count() == 1
 
+            # Search no-result is actionable and restores the list without navigation.
+            page.fill("#studioSearchInput", "definitely-no-match")
+            page.wait_for_timeout(80)
+            assert page.locator(".studio-list-empty", has_text="No matching workflows").count() == 1
+            page.get_by_role("button", name="Clear search").click()
+            page.wait_for_timeout(80)
+            assert page.locator("#studioSearchInput").input_value() == ""
+            assert workflow_row.count() == 1
+
             # Right-click visibility is owned by the Workflow Library and updates Chat immediately.
             workflow_row.click(button="right")
             assert page.locator("#workflowContextMenu").is_visible()
