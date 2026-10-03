@@ -435,3 +435,64 @@ def test_dynamic_reexpansion_releases_old_role_client_cache(tmp_path):
     assert FlowEngine(ctx).run(executor) == 0
     assert producer_calls == 2
     assert checked is True
+
+
+
+def test_transition_history_records_actual_semantic_targets(tmp_path):
+    workflow = [
+        node("work"),
+        node("review", routes={"fail": "work"}),
+        node("done"),
+    ]
+    ctx = context(tmp_path, workflow)
+    reviews = 0
+
+    def callback(stage, _ctx, previous):
+        nonlocal reviews
+        if stage.name == "review":
+            reviews += 1
+            return StageResult(
+                "review",
+                "fail" if reviews == 1 else "pass",
+                kind="review",
+            )
+        return StageResult(stage.name, "pass")
+
+    assert FlowEngine(ctx).run(Executor(callback)) == 0
+
+    compact = [
+        (item["stage"], item["status"], item["target"])
+        for item in ctx.state.transition_history
+    ]
+    assert compact == [
+        ("work", "pass", "review"),
+        ("review", "fail", "work"),
+        ("work", "pass", "review"),
+        ("review", "pass", "done"),
+        ("done", "pass", "done"),
+    ]
+
+
+def test_transition_history_is_bounded_for_long_running_loops(tmp_path):
+    workflow = [
+        node("work"),
+        node("review", routes={"fail": "work"}),
+    ]
+    ctx = context(tmp_path, workflow)
+    ctx.config.max_cycles = 25
+    reviews = 0
+
+    def callback(stage, _ctx, previous):
+        nonlocal reviews
+        if stage.name == "review":
+            reviews += 1
+            if reviews < 25:
+                return StageResult("review", "fail", kind="review")
+        return StageResult(stage.name, "pass")
+
+    assert FlowEngine(ctx).run(Executor(callback)) == 0
+
+    assert len(ctx.state.transition_history) == 40
+    assert ctx.state.transition_history[-1]["stage"] == "review"
+    assert ctx.state.transition_history[-1]["status"] == "pass"
+    assert all(set(item) == {"stage", "status", "target", "cycle", "kind", "timestamp"} for item in ctx.state.transition_history)
