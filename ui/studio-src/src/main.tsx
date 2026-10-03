@@ -852,6 +852,10 @@ function App() {
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
   const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen;
+  const closeAddStageCommand = useCallback(() => {
+    setAddStageOpen(false);
+    requestAnimationFrame(() => addStageTriggerRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     if (!anyModalOpen || addStageOpen) return;
@@ -870,11 +874,11 @@ function App() {
       if (editorOpen) setEditorOpen(false);
       else if (confirmDialog) setConfirmDialog(null);
       else if (pendingCreate) setPendingCreate(null);
-      else if (addStageOpen) setAddStageOpen(false);
+      else if (addStageOpen) closeAddStageCommand();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [addStageOpen, pendingCreate, confirmDialog, editorOpen]);
+  }, [addStageOpen, pendingCreate, confirmDialog, editorOpen, closeAddStageCommand]);
   const displayEdges = useMemo<Edge[]>(() => edges.map((edge) => {
     const related = Boolean(selected && (edge.source === selected || edge.target === selected));
     const status = String(edge.data?.status || "pass").toUpperCase();
@@ -951,7 +955,7 @@ function App() {
       const typing = Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable));
       if (event.key === "Escape") {
         setContextMenu(null);
-        if (addStageOpen) setAddStageOpen(false);
+        if (addStageOpen) closeAddStageCommand();
         else if (editorOpen) setEditorOpen(false);
         return;
       }
@@ -1889,9 +1893,9 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         </div>
 
         {addStageOpen && <div className="add-stage-command-backdrop" role="dialog" aria-modal="true" aria-label={tx("add_stage_dialog")}
-          onMouseDown={(event) => { if (event.target === event.currentTarget) { setAddStageOpen(false); requestAnimationFrame(() => addStageTriggerRef.current?.focus()); } }}>
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closeAddStageCommand(); }}>
           <div className="add-stage-command">
-            <div className="add-stage-command-head"><strong>{tx("add_stage_dialog")}</strong><button type="button" onClick={() => { setAddStageOpen(false); requestAnimationFrame(() => addStageTriggerRef.current?.focus()); }} aria-label={tx("close")} title={tx("close")}>×</button></div>
+            <div className="add-stage-command-head"><strong>{tx("add_stage_dialog")}</strong><button type="button" onClick={closeAddStageCommand} aria-label={tx("close")} title={tx("close")}>×</button></div>
             <input autoFocus value={addStageQuery} onChange={(event) => setAddStageQuery(event.target.value)} placeholder={tx("search_stage")} />
             <div className="add-stage-command-list">
               {Object.keys(catalog?.stage_types || {}).filter((type) => {
