@@ -595,8 +595,16 @@ function updateRuntimeElapsed() {
   if (indicator) indicator.textContent = state.runtime?.running ? "Running" : runtimeStatusLabel(state.runtime);
 }
 function updateRuntimeFreshness() {
-  const text = formatFreshness(state.runtimeLastChangedAt); setTextIfChanged($("lastUpdateText"), text); const live = $("messages")?.querySelector(".live-updated"); setTextIfChanged(live, `Last update ${text}`);
-  const stale = Boolean(state.runtime?.running && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000); $("lastUpdateText")?.classList.toggle("stale", stale);
+  const text = formatFreshness(state.runtimeLastChangedAt);
+  const exact = state.runtimeLastChangedAt ? new Date(state.runtimeLastChangedAt).toLocaleString() : "";
+  const last = $("lastUpdateText");
+  setTextIfChanged(last, text);
+  if (last) last.title = exact ? "Last update: " + exact : "";
+  const live = $("messages")?.querySelector(".live-updated");
+  setTextIfChanged(live, `Last update ${text}`);
+  if (live) live.title = exact ? "Last update: " + exact : "";
+  const stale = Boolean(state.runtime?.running && state.runtimeLastChangedAt && Date.now() - state.runtimeLastChangedAt > 30000);
+  last?.classList.toggle("stale", stale);
   updateRuntimeElapsed();
 }
 function runConfigurationLocked() { return Boolean(state.runLaunching || state.runtime?.running || state.runtime?.resumable || state.studioCatalogLoading); }
