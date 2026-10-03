@@ -274,11 +274,15 @@ def test_full_designer_graph_crud_roundtrip() -> None:
     targets: [worker]
   worker:
     type: command
-    command:\n      - "{python}"\n      - "-c"\n      - "print(\'worker\')"\nflow:
+    command:\n      - "{python}"\n      - "-c"\n      - "print(\'worker\')"
+  after:
+    type: command
+    command:\n      - "{python}"\n      - "-c"\n      - "print(\'after\')"\nflow:
   - execute
   - review
   - router
   - worker
+  - after
 """,
             encoding="utf-8",
         )
