@@ -171,6 +171,8 @@ def test_executor_persists_recovery_error_and_clears_it_after_success():
         event["type"] == "runner.status"
         and event["action"] == "set"
         and event["status"] == "Recovering"
+        and "retry 1" in event["detail"]
+        and "wait 0s" in event["detail"]
         and "HTTP 503" in event["detail"]
         for event in records
     )
