@@ -2036,7 +2036,8 @@ def test_dynamic_session_live_fixture_matches_current_workflow_prompt_contract(t
     assert by_name["fresh_role"]["session_policy"] == "fresh"
     assert by_name["fresh_role"]["routes"] == {"pass": "final_gate"}
     assert by_name["coordinator"]["targets"] == ["main_role"]
-    assert by_name["main_role"]["routes"] == {"pass": "stable_role"}
+    assert by_name["main_role"]["routes"] == {"pass": "main_gate"}
+    assert by_name["main_gate"]["routes"] == {"fail": "main_role", "pass": "stable_role"}
     for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
         prompt = Path(by_name[name]["prompt"])
         assert prompt.is_absolute()
@@ -2103,6 +2104,9 @@ def test_dynamic_session_workflow_dryrun_forces_two_stable_visits(tmp_path: Path
         assert starts == [
             "coordinator",
             "main_role",
+            "main_gate",
+            "main_role",
+            "main_gate",
             "stable_role",
             "stable_gate",
             "stable_role",
@@ -2122,3 +2126,25 @@ def test_real_review_stage_probe_requires_pass_done_for_complete_evidence():
     assert 'stage.get("status") != "pass"' in source
     assert 'stage.get("next") != "done"' in source
     assert 'stage.get("route") != "next"' in source
+
+
+
+def test_dynamic_session_main_gate_forces_two_main_role_visits(tmp_path: Path):
+    gate = tmp_path / "main_gate.py"
+    gate.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('main-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+
+    first = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+    second = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+
+    assert first.returncode == 1
+    assert second.returncode == 0
+    assert (tmp_path / "main-gate.count").read_text(encoding="utf-8") == "2"
