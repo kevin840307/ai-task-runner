@@ -104,4 +104,4 @@ jobs:
       - name: Browser E2E
         env:
           AI_TASK_RUNNER_BROWSER_REQUIRED: "1"
-        run: python -m pytest -q --timeout=120 --timeout-method=thread ui/tests/test_browser_crud_e2e.py ui/tests/test_full_designer_browser.py
+        run: python -m pytest -vv --tb=short --durations=20 --timeout=120 --timeout-method=thread ui/tests/test_browser_crud_e2e.py ui/tests/test_full_designer_browser.py
