@@ -142,8 +142,6 @@ class BaseStageSpec:
     timeout: float | None = None
     session_key: str = ""
     session_policy: SessionPolicy = "auto"
-    fresh_session_each_run: bool = False
-    fresh_session_on_start: bool = False
     produces: str = ""
     max_failures: int | None = None
 
@@ -215,9 +213,6 @@ class BaseStage:
         self.tolerate_restored_changes = spec.tolerate_restored_changes
         self.readonly_safety = spec.readonly_safety
         self.track_changes = spec.track_changes
-        self.fresh_session_on_start = (
-            spec.session_policy == "auto" and spec.fresh_session_on_start
-        )
         if spec.parser is None and self.parser_name:
             from ..results import PARSERS
             self.spec = replace(spec, parser=PARSERS[self.parser_name])
@@ -242,13 +237,7 @@ class BaseStage:
         self._attempt_checkpoint = len(self._completed_runs)
         while len(self._completed_runs) < runs:
             client = self._client(ctx)
-            if (
-                self.spec.session_policy == "fresh"
-                or (
-                    self.spec.session_policy == "auto"
-                    and self.spec.fresh_session_each_run
-                )
-            ) and not self._run_pending:
+            if self.spec.session_policy == "fresh" and not self._run_pending:
                 client.session_id = ""
             self._run_pending = True
             self._completed_runs.append(self._run_once(ctx, previous, client))
