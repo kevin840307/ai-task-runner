@@ -515,7 +515,11 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
             "--probe-mode", mode,
         ]
         if mode == "stage":
-            command += ["--input", "Review only this isolated test task and return the required structured verdict."]
+            command += [
+                "--input",
+                "REVIEW_STAGE_PROBE_OK is the complete deliverable and executor evidence. "
+                "Verify that this exact non-empty deliverable is present and consistent, then decide immediately.",
+            ]
         code = run_command(command, log, min(settings.run_timeout, max(180.0, settings.agent_timeout + 60)))
         raw = [line.strip() for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
         if not raw:
@@ -550,10 +554,10 @@ flow:
         if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
             raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
         stage = run_probe(root, workflow, "stage", Path(directory) / "real-stage.log")
-        if stage.get("status") not in {"pass", "fail"} or stage.get("kind") != "review":
-            raise RuntimeError(f"real Review Stage Probe contract mismatch: {stage!r}")
-        if stage.get("next") != "done":
-            raise RuntimeError(f"real Review Stage Probe next target mismatch: {stage!r}")
+        if stage.get("status") != "pass" or stage.get("kind") != "review":
+            raise RuntimeError(f"real Review Stage Probe expected PASS for complete evidence: {stage!r}")
+        if stage.get("next") != "done" or stage.get("route") != "next":
+            raise RuntimeError(f"real Review Stage Probe PASS routing mismatch: {stage!r}")
         return {
             "agent_ping": True,
             "real_stage_status": stage.get("status"),
