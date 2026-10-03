@@ -661,3 +661,16 @@ def test_designer_modal_focus_return_and_confirmation_order_contract():
     cancel_index = text.index('<button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>')
     confirm_index = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
     assert cancel_index < confirm_index
+
+
+
+def test_add_stage_focus_and_reusable_handle_layer_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "const addStageTriggerRef = useRef<HTMLButtonElement | null>(null)" in text
+    assert "ref={addStageTriggerRef}" in text
+    assert "requestAnimationFrame(() => addStageTriggerRef.current?.focus())" in text
+    assert ".react-flow__edges { z-index: 1 !important; }" in styles
+    assert ".react-flow__nodes { z-index: 2 !important; }" in styles
+    assert "pointer-events: auto !important" in styles
