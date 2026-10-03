@@ -214,9 +214,6 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("setRunHistoryOpen(false)", self.app_js)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 
     def test_studio_action_feedback_is_inline_and_persistent(self):
@@ -243,3 +240,12 @@ if __name__ == "__main__":
         self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
         self.assertIn('if (event.key === "Escape")', dialogs)
         self.assertIn('requestAnimationFrame(() => trigger.focus())', dialogs)
+
+    def test_no_static_contract_tests_are_defined_after_main_guard(self):
+        source = Path(__file__).read_text(encoding="utf-8")
+        main = source.index('if __name__ == "__main__":')
+        self.assertNotIn("\n    def test_", source[main:])
+
+
+if __name__ == "__main__":
+    unittest.main()
