@@ -11,7 +11,7 @@ from ...runtime.run_state import Task
 from ...utils import bounded_text
 from ..profiles import apply_ai_profile_defaults
 from ..results import decode_tasks
-from .base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
+from .base_stage import BaseStage, BaseStageSpec, SessionPolicy, StageContext, StageResult
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class PlanStageSpec(BaseStageSpec):
     allow_project_read: bool = True
     run_state: str = "planning"
     prompt: str = "common/planning.md"
-    fresh_session_on_start: bool = True
+    session_policy: SessionPolicy = "fresh"
     min_tasks: int = MIN_PLANNED_TASKS
 
 
