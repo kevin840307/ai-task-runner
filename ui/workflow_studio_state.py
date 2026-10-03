@@ -1578,8 +1578,10 @@ class WorkflowStudioMixin:
         try:
             stat = resolved.stat()
             item["version"] = f"{stat.st_mtime_ns}:{stat.st_size}"
+            item["mtime"] = stat.st_mtime
         except OSError:
             item["version"] = ""
+            item["mtime"] = 0
         if kind == "workflow":
             item.update(self._workflow_requirements(resolved))
             key = os.path.normcase(os.path.abspath(str(resolved)))
