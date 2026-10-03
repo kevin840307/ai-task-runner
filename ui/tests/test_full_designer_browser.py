@@ -67,7 +67,7 @@ def _save_editor(page) -> None:
     assert page.locator(".unsaved-badge").count() == 1
     button.click()
     page.locator(".unsaved-badge").wait_for(state="detached", timeout=8000)
-    assert button.is_enabled()
+    assert button.is_disabled()
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
