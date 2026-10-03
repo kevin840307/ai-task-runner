@@ -84,11 +84,17 @@
           <p id="runtimeHeadline" class="runtime-headline" hidden></p>
         </div>
         <div class="runtime-actions">
+          <button id="runtimeTraceButton" class="action-button" type="button" title="Recent runtime transitions" aria-expanded="false" hidden>Trace</button>
           <button id="runHistoryButton" class="action-button" type="button" title="Recent runs" aria-expanded="false">Runs</button>
           <button id="clearHistoryButton" class="action-button clear-history-button" type="button" title="清除聊天紀錄" data-i18n-title="history.clear" data-i18n="history.clear">清除紀錄</button>
           <span id="statusBadge" class="runtime-badge" data-i18n="status.idle">閒置</span>
         </div>
       </header>
+
+      <section id="runtimeTracePanel" class="runtime-trace-panel" hidden aria-label="Recent runtime transitions">
+        <div class="run-history-head"><strong>Runtime Trace</strong><button id="runtimeTraceClose" type="button" aria-label="Close runtime trace" title="Close">×</button></div>
+        <div id="runtimeTraceList" class="runtime-trace-list"></div>
+      </section>
 
       <section id="runHistoryPanel" class="run-history-panel" hidden aria-label="Recent runs">
         <div class="run-history-head"><strong>Recent Runs</strong><button id="runHistoryClose" type="button" aria-label="Close recent runs" title="Close">×</button></div>
