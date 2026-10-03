@@ -143,6 +143,16 @@ def _bridge_for(state: UIState):
                     data = {
                         "running": False, "completed": False, "resumable": False,
                         "stage": "", "cli_status": "", "completed_count": 0, "total": 0,
+                        "recent_transitions": [
+                            {
+                                "stage": "execute", "status": "pass", "target": "review",
+                                "cycle": 1, "kind": "task", "timestamp": 1.0,
+                            },
+                            {
+                                "stage": "review", "status": "fail", "target": "execute",
+                                "cycle": 1, "kind": "review", "timestamp": 2.0,
+                            },
+                        ],
                     }
                 elif path == "/api/workflow/catalog":
                     data = {"stage_types": {}, "node_options": {}}
@@ -385,9 +395,20 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#chatView").is_visible()
             assert page.locator("#workflowView").is_hidden()
 
+            # Runtime Trace reuses bounded runtime evidence and remains mutually
+            # exclusive with Recent Runs.
+            assert page.locator("#runtimeTraceButton").is_visible()
+            page.click("#runtimeTraceButton")
+            assert page.locator("#runtimeTracePanel").is_visible()
+            assert page.locator("#runtimeTraceList", has_text="review FAIL → execute").count() == 1
+            assert page.locator("#runtimeTraceList", has_text="Cycle 1").count() >= 1
+            assert page.locator("#runtimeTraceButton").get_attribute("aria-expanded") == "true"
+
             # Recent Runs is a lightweight derived view and must not require another
             # navigation surface or history store.
             page.click("#runHistoryButton")
+            assert page.locator("#runtimeTracePanel").is_hidden()
+            assert page.locator("#runtimeTraceButton").get_attribute("aria-expanded") == "false"
             assert page.locator("#runHistoryPanel").is_visible()
             assert page.locator("#runHistoryList", has_text="No runs yet.").count() == 1
             assert page.locator("#runHistoryButton").get_attribute("aria-expanded") == "true"
