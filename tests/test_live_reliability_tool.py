@@ -1652,7 +1652,7 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
                         {"name": "validate_file", "type": "command", "result_kind": "validation"},
                     ],
                     "dynamic_groups": {"discover": "discover__g1"},
-                    "dynamic_task_groups": {"discover__g1": ["discover__g1__resume"]},
+                    "dynamic_task_groups": {"discover": ["discover__g1__resume"]},
                     "expansion_counter": 1,
                 }),
                 encoding="utf-8",
@@ -1713,12 +1713,13 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     text = first_workflow.read_text(encoding="utf-8")
     assert "type: plan" not in text
     assert "produces: tasks" in text
-    assert "execute_first" in text
-    assert "pause" in text
-    assert "execute_second" in text
     producer = first_workflow.parent / "task_producer.py"
     assert producer.is_file()
-    assert '"tasks"' in producer.read_text(encoding="utf-8")
+    producer_text = producer.read_text(encoding="utf-8")
+    assert '"tasks"' in producer_text
+    assert '"name": "execute_first"' in producer_text
+    assert '"name": "pause"' in producer_text
+    assert '"name": "execute_second"' in producer_text
     assert "--resume" in resumed
 
 
