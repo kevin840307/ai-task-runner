@@ -225,6 +225,20 @@ Public entry-point regression protection completed:
 [x] CLI reference docs updated to current stage_retries / retry_delay / retry_max_delay contract.
 [x] External CLI/YAML runs still use the shared runtime/state surfaces consumed by the UI.
 
+LIVE REGRESSION NOTES
+---------------------
+[x] Fixed detached-UI stop.request/resume live false failure.
+    - Root cause: the probe required model.prompt(session_mode=resume) after every detached stop.
+      stop.request can legitimately arrive after the AI Stage already checkpointed, while a
+      command/validator is active, so Resume may complete without another model prompt.
+    - stop_request_resume_probe now verifies the contract it owns:
+      clean Supervisor exit=130, control-file cleanup, durable run/checkpoint preservation,
+      no backward progress, durable AI session not erased, then successful --resume completion.
+    - resume_probe remains the dedicated real-Qwen same-session transport proof at a
+      deterministic checkpoint guaranteed to require another AI call.
+    - Deterministic coverage proves Supervisor stop.request does not mutate state.json and
+      the live harness accepts a valid detached Resume that needs no redundant model prompt.
+
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
     reproduce -> deterministic regression test -> fix -> rerun gates.
