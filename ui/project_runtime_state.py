@@ -619,6 +619,16 @@ class ProjectRuntimeMixin:
             "pid": pid,
             "worker_pid": marker.get("worker_pid"),
             "stage": state.get("stage") or "",
+            "cycle": int(state.get("cycle") or 1),
+            "workflow_position": int(state.get("workflow_position") or 0),
+            "last_transition": (
+                {
+                    "stage": str((state.get("transition_previous") or {}).get("stage") or ""),
+                    "status": str((state.get("transition_previous") or {}).get("status") or ""),
+                }
+                if isinstance(state.get("transition_previous"), dict)
+                else {}
+            ),
             "task": current_task,
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
