@@ -43,6 +43,27 @@ def test_main_session_policy_reuses_primary_client(tmp_path):
     assert stage._client(ctx) is ctx.ai_client
 
 
+def test_main_session_policy_persists_and_reuses_primary_session(tmp_path):
+    ctx = context(tmp_path)
+    ctx.ai_client.session_id = ""
+    stage = RecordingStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        session_policy="main",
+    ))
+
+    first = stage.run(ctx)
+    assert first.status == "pass"
+    assert ctx.state.ai_session_id == "session-1"
+    stage.finish(ctx, first)
+
+    second = stage.run(ctx)
+    assert second.status == "pass"
+    assert stage.seen == ["", "session-1"]
+    assert ctx.state.ai_session_id == "session-2"
+    assert ctx.state.stage_sessions == {}
+
+
 def test_role_session_state_store_round_trip_survives_resume(tmp_path):
     work = tmp_path / ".work"
     store = StateStore(tmp_path, work)
