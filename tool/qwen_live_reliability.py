@@ -434,6 +434,8 @@ def runner_command(
             command.extend(["--validator", validator])
         elif workflow_uses_stage(workflow, "validate_file"):
             command.extend(["--validator", str(project / "validation.py")])
+        elif ai_only and workflow_uses_stage(workflow, "validate_ai"):
+            command.extend(["--validator", "ai"])
     if not timeout_probe:
         command.extend(["--agent-timeout", whole_seconds_arg(settings.agent_timeout)])
         command.extend(["--planning-timeout", whole_seconds_arg(settings.planning_timeout)])
