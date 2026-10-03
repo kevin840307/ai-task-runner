@@ -588,6 +588,53 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["flow"][0] == "review"
                 assert saved["stages"]["execute"]["profile"] == "execute"
+
+                # Workflow draft recovery is local-only and hash-gated.
+                visual = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/visual?id={quote(file_id)}&project={project_q}"
+                ).json()
+                draft_key = f"workflow-studio-draft:v1:{visual['id']}"
+                stale = {
+                    "hash": "stale-hash",
+                    "visual": visual,
+                    "yamlContent": workflow.read_text(encoding="utf-8"),
+                    "editorView": "designer",
+                    "savedAt": 1,
+                }
+                page.evaluate(
+                    "([key, value]) => localStorage.setItem(key, JSON.stringify(value))",
+                    [draft_key, stale],
+                )
+                page.reload()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
+                assert page.locator(".workflow-draft-recovery").count() == 0
+                assert page.evaluate("(key) => localStorage.getItem(key)", draft_key) is None
+
+                visual = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/visual?id={quote(file_id)}&project={project_q}"
+                ).json()
+                recovered_visual = json.loads(json.dumps(visual))
+                execute = next(stage for stage in recovered_visual["stages"] if stage["name"] == "execute")
+                execute["label"] = "Recovered Local Draft"
+                canonical_before_recovery = workflow.read_text(encoding="utf-8")
+                local_draft = {
+                    "hash": visual["hash"],
+                    "visual": recovered_visual,
+                    "yamlContent": canonical_before_recovery,
+                    "editorView": "designer",
+                    "savedAt": 2,
+                }
+                page.evaluate(
+                    "([key, value]) => localStorage.setItem(key, JSON.stringify(value))",
+                    [draft_key, local_draft],
+                )
+                page.reload()
+                page.get_by_text("Unsaved local draft found").wait_for(state="visible")
+                page.get_by_role("button", name="Restore Draft").click()
+                page.locator('.react-flow__node[data-id="execute"]').get_by_text("Recovered Local Draft").wait_for(state="visible")
+                assert page.locator(".unsaved-badge").is_visible()
+                assert workflow.read_text(encoding="utf-8") == canonical_before_recovery
+
                 assert not errors
                 browser.close()
         finally:
