@@ -399,6 +399,7 @@ function catalogStageMeta(catalog: Catalog | null, type: string) {
 }
 
 const PALETTE_PREF_KEY = "workflow-designer.palette:v1";
+const SNAP_PREF_KEY = "workflow-designer.snap:v1";
 type PalettePrefs = { favorites: string[]; recent: string[]; collapsed: string[] };
 
 function readPalettePrefs(): PalettePrefs {
@@ -416,6 +417,12 @@ function readPalettePrefs(): PalettePrefs {
 
 function writePalettePrefs(prefs: PalettePrefs): void {
   try { localStorage.setItem(PALETTE_PREF_KEY, JSON.stringify(prefs)); } catch { /* local-only convenience */ }
+}
+function readSnapPreference(): boolean {
+  try { return localStorage.getItem(SNAP_PREF_KEY) === "1"; } catch { return false; }
+}
+function writeSnapPreference(enabled: boolean): void {
+  try { localStorage.setItem(SNAP_PREF_KEY, enabled ? "1" : "0"); } catch { /* local-only convenience */ }
 }
 
 function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
@@ -843,6 +850,7 @@ function App() {
   const [testing, setTesting] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
+  const [snapEnabled, setSnapEnabled] = useState(readSnapPreference());
   const [addStageOpen, setAddStageOpen] = useState(false);
   const [addStageQuery, setAddStageQuery] = useState("");
   const [copiedStage, setCopiedStage] = useState<Stage | null>(null);
@@ -1721,6 +1729,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         <div>
           {message && <span className="message">{message}</span>}
           <span className={editorDirty ? "unsaved-badge" : "saved-badge"}>{editorDirty ? tx("unsaved") : tx("saved")}</span>
+          {editorView === "designer" && <button type="button" aria-pressed={snapEnabled} title="Snap nodes to a 20px grid"
+            onClick={() => { const next = !snapEnabled; setSnapEnabled(next); writeSnapPreference(next); }}>Snap</button>}
           {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title={tx("reset_layout_title")}>{tx("reset")}</button>}
           <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}
@@ -1883,6 +1893,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             connectionLineStyle={{ strokeWidth: 2.5 }}
             defaultEdgeOptions={{ interactionWidth: 24, style: { strokeWidth: 2 } }}
             fitView
+            snapToGrid={snapEnabled}
+            snapGrid={[20, 20]}
             minZoom={0.25}
             maxZoom={1.8}
             deleteKeyCode={null}
