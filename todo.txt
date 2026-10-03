@@ -128,7 +128,7 @@ P0 - UI / UX HIGH VALUE
     - Show retry delay, attempt/session recovery mode and next action where useful.
     - Do not render normal retry/recovery as a fatal red failure.
 
-[ ] Workflow save Problems / Validation panel
+[x] Workflow save Problems / Validation panel
     - Designer remains freely editable.
     - Validate complete graph only at Save boundary.
     - Surface invalid route/target, unreachable Stage, disconnected Stage,
@@ -142,17 +142,17 @@ P0 - UI / UX HIGH VALUE
     - Reduce visual weight of full filesystem paths.
     - Add a clear Needs Attention state only for action-required failures.
 
-[ ] Composer simplification
+[x] Composer simplification
     - Keep Workflow + Run as the primary interaction.
     - Backend / validator / AI validator / environment checks stay under Options.
     - Avoid exposing rarely changed configuration in the normal run path.
 
 [ ] Prompt impact visibility
-    - Show "Used by" Workflow / Stage references for each Prompt.
-    - Allow navigation from Prompt reference to the owning Workflow/Stage when practical.
+    - [x] Show "Used by" Workflow / Stage references for each Prompt using the same backend scanner that guards rename/delete.
+    - [ ] Add precise navigation only after usage entries carry structured Workflow id/scope + Stage key; do not guess from duplicate filenames.
     - Goal: make Prompt edits safer and easier to understand.
 
-[ ] Workflow Library layout
+[x] Workflow Library layout
     - Treat Workflows as an asset/library page, not a second inline editor.
     - Improve scanability: name, scope, Chat visibility, modified/recent state.
     - Clicking opens the single Workflow Editor.
@@ -339,3 +339,7 @@ CURRENT IMPLEMENTATION NOTES
 
 - Chat runtime header now projects durable cycle / workflow position / last semantic transition from the same state.json used by CLI/YAML runs; no second monitoring state was introduced.
 - Shared confirmation/input/choice dialogs now restore focus to their trigger after close and support Escape consistently.
+
+- Problems panel was already present in current source and Browser E2E: duplicate keys, missing START/route/target, Handoff without target and unreachable Stages are surfaced before Save; error blocks Save and warning remains visible.
+- Composer already follows the compact contract: Workflow + Run primary; backend/validator/AI validator/environment checks live under Options.
+- Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
