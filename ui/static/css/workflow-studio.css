@@ -1075,3 +1075,27 @@
   background: var(--panel-2);
   color: var(--accent-dark);
 }
+
+
+/* Empty/search states expose one compact next action instead of dead-end text. */
+.studio-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.studio-empty-action {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: var(--panel);
+  color: var(--accent-dark);
+  font-weight: 800;
+}
