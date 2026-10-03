@@ -1232,10 +1232,13 @@ function App() {
 
   async function addStage(stageType = "base", position?: { x: number; y: number }) {
     rememberPaletteStage(stageType);
-    if (stageType === "base" || stageType === "command") {
+    const hasPrompt = Boolean(
+      catalog?.stage_types?.[stageType]?.options?.some((option) => option.name === "prompt")
+    );
+    if (stageType === "base" || stageType === "command" || hasPrompt) {
       setPendingCreate({ type: stageType, position });
       setCreateAIProfile("generic");
-      setCreatePrompt(stageType === "base" ? String(defaultOption(catalog, stageType, "prompt") || "") : "");
+      setCreatePrompt("");
       setCreateCommand("");
       return;
     }
@@ -1244,10 +1247,6 @@ function App() {
 
   async function confirmPendingCreate() {
     if (!pendingCreate) return;
-    if (pendingCreate.type === "base" && createAIProfile === "generic" && !createPrompt.trim()) {
-      setMessage("Generic AI Stage requires a Prompt.");
-      return;
-    }
     if (pendingCreate.type === "command" && !createCommand.trim()) {
       setMessage("Command Stage requires a command.");
       return;
@@ -1614,6 +1613,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               <div>
                 <small>NEW STAGE</small>
                 <h3>{catalogStageMeta(catalog, pendingCreate.type).title}</h3>
+                <p>{catalogStageMeta(catalog, pendingCreate.type).description}</p>
               </div>
               {pendingCreate.type === "base" && <>
                 <label>
@@ -1646,7 +1646,22 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   </small>
                 </label>
               </>}
-              {pendingCreate.type === "command" && (
+              {pendingCreate.type !== "base" && catalog?.stage_types?.[pendingCreate.type]?.options?.some((option) => option.name === "prompt") && (
+                <label>
+                  <span>Prompt</span>
+                  <select value={createPrompt} onChange={(e) => setCreatePrompt(e.target.value)}>
+                    <option value="">Use Stage default</option>
+                    {prompts.map((p) => {
+                      const ref = p.reference || p.display_name || p.name;
+                      return <option key={p.id} value={ref}>{ref}</option>;
+                    })}
+                  </select>
+                  <small className="effective-value">
+                    Effective: <code>{createPrompt || String(defaultOption(catalog, pendingCreate.type, "prompt") || "(none)")}</code>
+                  </small>
+                </label>
+              )}
+                            {pendingCreate.type === "command" && (
                 <label>
                   <span>Command</span>
                   <textarea rows={4} value={createCommand} onChange={(e) => setCreateCommand(e.target.value)} placeholder="python tool/my_validator.py" />
