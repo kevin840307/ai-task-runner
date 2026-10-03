@@ -137,6 +137,8 @@ def _bridge_for(state: UIState):
                     data = {"projects": state.projects()}
                 elif path == "/api/project/messages":
                     data = {"messages": []}
+                elif path == "/api/project/runs":
+                    data = {"runs": state.run_history(project) if project is not None else []}
                 elif path == "/api/project/runtime":
                     data = {
                         "running": False, "completed": False, "resumable": False,
