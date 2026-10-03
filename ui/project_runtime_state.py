@@ -175,7 +175,16 @@ class ProjectRuntimeMixin:
         return {"default": default, "backends": sorted(names)}
 
     def workflow_catalog(self) -> dict:
-        """Return the Runner-owned Stage/editor contract without importing Core."""
+        """Return the Runner-owned Stage/editor contract without importing Runner modules.
+
+        The catalog is immutable for one UI server process. Cache the first valid
+        result so normal Stage edits do not spawn a Python subprocess repeatedly
+        and unrelated subprocess mocks/tests cannot accidentally intercept it.
+        """
+        cached = getattr(self, "_workflow_catalog_cache", None)
+        if isinstance(cached, dict):
+            return cached
+
         tool = self.repo_root / "tool" / "workflow_catalog.py"
         try:
             completed = subprocess.run(
@@ -197,6 +206,7 @@ class ProjectRuntimeMixin:
             raise ValueError("Workflow catalog returned invalid JSON") from exc
         if not isinstance(payload, dict) or not isinstance(payload.get("stage_types"), dict):
             raise ValueError("Workflow catalog is missing stage_types")
+        self._workflow_catalog_cache = payload
         return payload
 
     def add_project(self, path: str) -> dict:
