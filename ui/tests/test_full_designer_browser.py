@@ -1,8 +1,11 @@
 """Browser smoke check for the built Full Designer against the real local UI."""
 from __future__ import annotations
 
+import json
 import os
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -367,6 +370,42 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
                 assert saved["stages"]["execute"]["profile"] == "execute"
+
+                # End-to-end contract: a connection drawn in the browser must not only
+                # persist to YAML; the production loader + FlowEngine path used by the
+                # dry-run tool must actually follow that saved edge.
+                scenario = project / "ui-edge-runtime-scenario.yaml"
+                scenario.write_text("stages:\n  review: fail\n", encoding="utf-8")
+                runtime = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "tool" / "workflow_dryrun.py"),
+                        str(workflow),
+                        "--scenario",
+                        str(scenario),
+                        "--json",
+                    ],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                assert runtime.returncode == 0, runtime.stdout + runtime.stderr
+                payload = json.loads(runtime.stdout)
+                assert payload["completed"] is True
+                assert [item["stage"] for item in payload["transitions"]] == [
+                    "execute",
+                    "review",
+                    "worker",
+                    "after",
+                ]
+                assert [item["status"] for item in payload["transitions"]] == [
+                    "pass",
+                    "fail",
+                    "pass",
+                    "pass",
+                ]
 
                 # Drawing the same semantic output to another target is the primary
                 # retarget UX. The existing explicit route is replaced atomically.
