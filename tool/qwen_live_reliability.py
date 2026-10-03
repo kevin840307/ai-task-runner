@@ -169,7 +169,7 @@ print("VALIDATION_PASSED")
 '''
 
 
-CUSTOM_TASK_PRODUCER = '''from __future__ import annotations
+CUSTOM_DYNAMIC_PRODUCER = '''from __future__ import annotations
 import json
 
 print(json.dumps({
@@ -207,7 +207,7 @@ print(json.dumps({
 }, ensure_ascii=False))
 '''
 
-CUSTOM_TASK_WORKFLOW = '''stages:
+CUSTOM_DYNAMIC_WORKFLOW = '''stages:
   discover:
     type: command
     command: "{python} task_producer.py"
@@ -1392,7 +1392,7 @@ def workflow_dryrun_preflight() -> list[dict[str, object]]:
         or not features.get("dynamic_producer")
     ):
         raise RuntimeError(
-            "custom Task Producer dry-run preflight did not cover producer-defined dynamic child Workflow"
+            "custom Dynamic Producer dry-run preflight did not cover producer-defined dynamic child Workflow"
         )
     return results
 
@@ -1882,12 +1882,12 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("stop.request resume completed without same-session evidence")
 
 
-def custom_task_producer_probe(settings: Settings, root: Path) -> None:
+def custom_dynamic_producer_probe(settings: Settings, root: Path) -> None:
     """Prove a non-Plan Python Stage can produce a durable dynamic child Workflow."""
     project = create_project(root, "custom-task-producer-probe")
-    (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
+    (project / "task_producer.py").write_text(CUSTOM_DYNAMIC_PRODUCER, encoding="utf-8")
     workflow = project / "workflow.yaml"
-    workflow.write_text(CUSTOM_TASK_WORKFLOW, encoding="utf-8")
+    workflow.write_text(CUSTOM_DYNAMIC_WORKFLOW, encoding="utf-8")
     code = run_command(
         runner_command(settings, project, workflow=workflow),
         console_log(project, "console.jsonl"),
@@ -1897,9 +1897,9 @@ def custom_task_producer_probe(settings: Settings, root: Path) -> None:
     state = read_state(project)
     tasks = state.get("tasks")
     if not isinstance(tasks, list) or len(tasks) != 1:
-        raise RuntimeError("custom Task Producer did not install exactly one durable Task")
+        raise RuntimeError("custom Dynamic Producer did not install exactly one durable Task")
     if tasks[0].get("status") != "completed":
-        raise RuntimeError("custom Task Producer task did not complete")
+        raise RuntimeError("custom Dynamic Producer task did not complete")
 
 
 def builtin_workflow_probe(settings: Settings, root: Path, workflow: str) -> None:
@@ -3530,8 +3530,8 @@ def main() -> int:
             print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
         dynamic_handoff_session_policy_probe(settings, run_root)
         print("PASS Dynamic Handoff main/role/fresh session-policy live probe", flush=True)
-        custom_task_producer_probe(settings, run_root)
-        print("PASS custom Python Task Producer -> dynamic child Workflow probe", flush=True)
+        custom_dynamic_producer_probe(settings, run_root)
+        print("PASS custom Python Dynamic Producer -> dynamic child Workflow probe", flush=True)
         review_failure_routing_probe(settings, run_root)
         print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
         complete_closed_loop_probe(settings, run_root)
@@ -3627,7 +3627,7 @@ def main() -> int:
         "loop_detection_contract_preflight": True,
         "builtin_workflow_contracts": ["file", "ai", "mixed"],
         "dynamic_handoff_session_policy_probe": True,
-        "custom_task_producer_probe": True,
+        "custom_dynamic_producer_probe": True,
         "review_failure_routing_probe": True,
         "validator_failure_routing_probe": True,
         "yaml_list_resume_probe": True,
