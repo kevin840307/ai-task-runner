@@ -664,7 +664,13 @@ function renderRuntime(runtime) {
   $("rerunButton").hidden = runtime.running || !runtime.completed || !hasUserMessage();
   const blockNew = runtime.running || runtime.resumable || state.runLaunching || state.studioCatalogLoading;
   const blockTyping = runtime.running || runtime.resumable || state.runLaunching;
-  $("sendButton").disabled = blockNew; $("messageInput").disabled = blockTyping;
+  $("sendButton").disabled = blockNew;
+  $("sendButton").title = runtime.running
+    ? "A task is already running."
+    : runtime.resumable ? "Continue or Reset the stopped task before starting another."
+      : state.runLaunching ? "Task launch is already in progress."
+        : state.studioCatalogLoading ? "Workflow catalog is still loading." : "Run task";
+  $("messageInput").disabled = blockTyping;
   renderRunConfigurationLock();
   $("messageInput").placeholder = "描述要完成的功能或修復內容...";
   if (runtime.running || runtime.resumable) {
@@ -914,6 +920,8 @@ function appendStudioItem(root, item) {
   top.className = "studio-file-item-top";
   const name = document.createElement("strong");
   name.textContent = item.name;
+  name.title = item.name;
+  button.title = item.name;
   const scope = document.createElement("span");
   scope.className = `studio-list-scope ${item.scope || "global"}`;
   scope.textContent = String(item.scope || "global").toUpperCase();
@@ -1044,6 +1052,7 @@ async function deleteWorkflowItem(item) {
 
 function renderStudioFiles() {
   const root = $("studioFileList");
+  const previousScrollTop = root?.scrollTop || 0;
   const isPrompt = state.studioSourceKind === "prompt";
   if ($("assetPageTitle")) $("assetPageTitle").textContent = isPrompt ? t("assets.prompts_title", "Prompts") : t("assets.workflows_title", "Workflows");
   if ($("assetPageDescription")) $("assetPageDescription").textContent = isPrompt
@@ -1104,6 +1113,7 @@ function renderStudioFiles() {
     }
     root.appendChild(empty);
   }
+  if (root && root.scrollTop !== previousScrollTop) root.scrollTop = previousScrollTop;
 }
 function clearStudioEditor() {
   closeStudioAssetMenu();
