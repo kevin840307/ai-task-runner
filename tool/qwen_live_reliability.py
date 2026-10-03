@@ -2987,13 +2987,10 @@ def api_recovery_probe(
         outage_until = 0.0
         successes_before_outage = 0
         recovered = False
-        runner_recovery_seen = False
         recovery_event_seen = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
-                if str(state.get("last_error") or ""):
-                    runner_recovery_seen = True
                 if not recovery_event_seen:
                     # runner.status=Recovering is intentionally transient UI state.
                     # runner.recovery/retry is the stable structured observability
