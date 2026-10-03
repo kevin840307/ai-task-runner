@@ -1298,8 +1298,9 @@ class WorkflowStudioMixin:
         """Validate and persist one complete Flow UI draft.
 
         YAML remains canonical. START/END are UI-only nodes and never enter the
-        Workflow file. Default PASS-to-next is represented by the Flow order;
-        only non-default PASS and semantic FAIL routes are written; handoff targets remain Stage fields.
+        Workflow file. The Designer may connect, retarget or delete PASS/FAIL/HANDOFF
+        edges freely. Flow order is only the compact representation for a connected
+        PASS-to-next edge; graph save validates the complete draft before writing YAML.
         """
         with self._edit_lock:
             self._require_editable()
