@@ -439,8 +439,10 @@ def test_designer_edge_delete_and_undo_keyboard_contract():
 
     assert 'onEdgeContextMenu={(event, edge) =>' in text
     assert 'onEdgeClick={() =>' in text
-    assert 'edge.data?.explicit' in text
-    assert 'deleteEdges([selectedExplicitEdge])' in text
+    assert 'edge.data?.status && edge.source !== START' in text
+    assert 'deleteEdges([selectedResultEdge])' in text
+    assert 'if (status === "pass") routes.pass = "stop"' in text
+    assert 'if (passTarget !== "stop")' in text
     assert 'key === "z"' in text
     assert 'key === "y"' in text
     assert "undoVisualDraft()" in text
