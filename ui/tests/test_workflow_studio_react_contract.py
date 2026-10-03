@@ -187,7 +187,7 @@ def test_stage_editor_has_fixed_height_and_compact_quick_add_palette():
     text = SOURCE.read_text(encoding="utf-8")
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
-    assert 'className="stage-editor-content"' in text
+    assert 'stage-editor-content ${inspectorTab === "yaml" ? "yaml-mode" : ""}' in text
     assert 'className="palette-quick-add"' in text
     assert "void addStage(type)" in text
     assert "title={meta.description}" in text
@@ -337,7 +337,7 @@ def test_stage_prompt_can_open_the_shared_prompt_editor():
     styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
 
     assert "promptEditorUrl" in text
-    assert 'view: "prompt"' in text
+    assert 'view: "workflow", source: "prompt", studio: promptId' in text
     assert "Edit Prompt" in text
     assert 'className="inline-prompt-edit"' in text
     assert ".inline-prompt-edit" in styles
