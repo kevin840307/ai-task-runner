@@ -18,6 +18,8 @@ except ImportError:  # pragma: no cover
     sync_playwright = None
 
 BROWSER_REQUIRED = os.environ.get("AI_TASK_RUNNER_BROWSER_REQUIRED") == "1"
+BROWSER_DEFAULT_TIMEOUT_MS = 8_000
+
 
 
 def _chromium_executable() -> str | None:
@@ -262,6 +264,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
             page_errors: list[str] = []
             page.on("pageerror", lambda error: page_errors.append(str(error)))
             page.expose_function("__apiBridge", _bridge_for(state))
@@ -370,6 +373,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport=viewport)
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
             page.expose_function("__apiBridge", _bridge_for(state))
             _load_main_ui_document(page, html)
             page.evaluate(
@@ -441,6 +445,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
         with sync_playwright() as playwright:
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1366, "height": 768})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
             page.expose_function("__apiBridge", _bridge_for(state))
             _load_main_ui_document(page, html)
             page.evaluate(
