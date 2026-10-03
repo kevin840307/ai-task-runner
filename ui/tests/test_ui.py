@@ -913,6 +913,7 @@ class WorkflowStudioTests(unittest.TestCase):
             "  - review\n",
             encoding="utf-8",
         )
+        ((self.root / "runner" / "assets" / "prompts" / "common") / "generic.md").write_text("Generic {{ goal }}\n", encoding="utf-8")
         ((self.root / "runner" / "assets" / "prompts" / "common") / "execution.md").write_text("Do {{ goal }}\n", encoding="utf-8")
         ((self.root / "runner" / "assets" / "prompts" / "common") / "review.md").write_text("Review {{ goal }}\n", encoding="utf-8")
         ((self.root / "runner" / "assets" / "prompts" / "common") / "rules.md").write_text(
