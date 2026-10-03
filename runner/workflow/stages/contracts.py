@@ -1,0 +1,121 @@
+"""Stable contracts shared by every Workflow Stage and execution policy."""
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal, Protocol
+
+from ...agent import AIClientProtocol
+from ...config.runtime import RuntimeConfig
+from ...errors import RunnerError
+from ...runtime.run_state import RunState, Task
+
+StageStatus = Literal["pass", "fail", "error"]
+StageMode = Literal["readonly", "write"]
+StageResultKind = Literal[
+    "generic", "tasks", "stages", "task", "review", "validation", "handoff"
+]
+MODE_READONLY: StageMode = "readonly"
+MODE_WRITE: StageMode = "write"
+
+
+@dataclass(frozen=True)
+class StageResult:
+    stage: str
+    status: StageStatus
+    output: str = ""
+    error: RunnerError | None = None
+    changed_files: list[str] = field(default_factory=list)
+    data: object | None = None
+    kind: StageResultKind = "generic"
+
+    @classmethod
+    def error_result(cls, stage: str, error: BaseException) -> "StageResult":
+        runner_error = error if isinstance(error, RunnerError) else RunnerError(str(error))
+        return cls(stage, "error", output=str(runner_error), error=runner_error)
+
+
+@dataclass
+class StageExecution:
+    change_detected: Callable[[], bool] | None = None
+    attempt: int = 1
+    retry_mode: Literal["initial", "retry", "recover"] = "initial"
+    previous_error: str = ""
+    label: str = ""
+
+
+@dataclass
+class StageContext:
+    config: RuntimeConfig
+    root: Path
+    work: Path
+    state: RunState
+    ai_client: AIClientProtocol
+    state_file: Path
+    validator_path: Path | None
+    validator_is_ai: bool
+    save_state: Callable[[], None]
+    set_stage: Callable[[str, str], None]
+    scratch: dict[str, Any] = field(default_factory=dict)
+    execution: StageExecution = field(default_factory=StageExecution)
+
+    @property
+    def task(self) -> Task | None:
+        return (
+            self.state.tasks[self.state.current]
+            if self.state.current < len(self.state.tasks)
+            else None
+        )
+
+    def require_task(self, stage: str) -> Task:
+        task = self.task
+        if task is None:
+            raise RunnerError(f"{stage} stage requires a pending task")
+        return task
+
+    def save_session(self) -> None:
+        self.state.ai_session_id = self.ai_client.session_id
+        self.save_state()
+
+    def reset_sessions(self) -> None:
+        for value in (self.ai_client, *self.scratch.values()):
+            if hasattr(value, "session_id"):
+                value.session_id = ""
+        self.state.ai_session_id = ""
+        self.state.stage_sessions.clear()
+        self.scratch.pop("prompt_contracts", None)
+        self.save_state()
+
+
+class Stage(Protocol):
+    name: str
+    mode: str
+    actor: str
+    status: str
+    detail: str
+
+    def run(
+        self,
+        ctx: StageContext,
+        previous: StageResult | None = None,
+    ) -> StageResult: ...
+
+    def finish(
+        self,
+        ctx: StageContext,
+        result: StageResult,
+    ) -> StageResult: ...
+
+
+__all__ = [
+    "MODE_READONLY",
+    "MODE_WRITE",
+    "Stage",
+    "StageContext",
+    "StageExecution",
+    "StageMode",
+    "StageResult",
+    "StageResultKind",
+    "StageStatus",
+]
