@@ -2076,3 +2076,39 @@ def test_dynamic_session_gate_forces_two_stable_role_visits(tmp_path: Path):
     assert first.returncode == 1
     assert second.returncode == 0
     assert (tmp_path / "stable-gate.count").read_text(encoding="utf-8") == "2"
+
+
+
+def test_dynamic_session_workflow_dryrun_forces_two_stable_visits(tmp_path: Path):
+    from runner.workflow.loader import load_workflow
+    from tool.workflow_dryrun import Scenario, _execute, _close
+
+    project = tmp_path / "dynamic-dryrun"
+    project.mkdir()
+    (project / "dynamic_router.md").write_text(live.DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8")
+    (project / "dynamic_role.md").write_text(live.DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8")
+    workflow_file = project / "workflow.yaml"
+    workflow_file.write_text(live.DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    workflow = load_workflow(workflow_file)
+    scenario = Scenario({
+        "handoffs": {"coordinator": "main_role"},
+        "stages": {"stable_gate": ["fail", "pass"]},
+    })
+    ctx, executor, error = _execute(workflow, scenario, 20)
+    try:
+        assert error == ""
+        starts = [stage for _number, stage, _label, _status in executor.trace]
+        assert starts == [
+            "coordinator",
+            "main_role",
+            "stable_role",
+            "stable_gate",
+            "stable_role",
+            "stable_gate",
+            "fresh_role",
+            "final_gate",
+        ]
+        assert ctx.state.completed is True
+    finally:
+        _close(ctx)
