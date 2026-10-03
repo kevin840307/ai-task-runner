@@ -5,13 +5,8 @@ from dataclasses import dataclass, field, replace
 
 from ...agent import parse_result, require_object, require_text
 from ...errors import RunnerError
-from .base_stage import (
-    MODE_READONLY,
-    BaseStage,
-    BaseStageSpec,
-    SessionPolicy,
-    StageContext,
-)
+from .base_stage import BaseStage, BaseStageSpec, SessionPolicy
+from .contracts import MODE_READONLY, StageContext
 
 
 @dataclass(frozen=True)
