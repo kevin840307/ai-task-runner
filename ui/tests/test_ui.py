@@ -377,6 +377,26 @@ class UIStateTests(unittest.TestCase):
             "  [>] 2. Second TODO",
         ])
 
+    def test_runtime_exposes_cycle_position_and_last_transition_for_header(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-headline",
+            "cycle": 3,
+            "workflow_position": 4,
+            "current": 0,
+            "completed": False,
+            "stage": "review",
+            "tasks": [],
+            "transition_previous": {"stage": "execute", "status": "pass", "output": "ok"},
+        })
+
+        info = self.state.read_runtime(self.project)
+
+        self.assertEqual(info["cycle"], 3)
+        self.assertEqual(info["workflow_position"], 4)
+        self.assertEqual(info["last_transition"], {"stage": "execute", "status": "pass"})
+
+
     def test_runtime_prefers_current_console_snapshot_status(self) -> None:
         runtime = self.project / ".ai-task-runner"
         tasks = [{"id": "t1", "title": "Plan TODO", "status": "pending", "attempts": 0}]
