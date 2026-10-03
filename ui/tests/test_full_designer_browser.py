@@ -248,8 +248,6 @@ def test_full_designer_graph_crud_roundtrip() -> None:
         workflow = workflow_dir / "graph-e2e.yaml"
         workflow.write_text(
             """stages:
-  planning:
-    type: plan
   execute:
     type: base
     profile: execute
@@ -265,7 +263,6 @@ def test_full_designer_graph_crud_roundtrip() -> None:
     type: command
     command: "{python} -c \"print('worker')\""
 flow:
-  - planning
   - execute
   - review
   - router
