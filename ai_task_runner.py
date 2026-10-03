@@ -72,6 +72,8 @@ def parser() -> argparse.ArgumentParser:
         default=DEFAULT_STAGE_RETRIES,
         help="technical Stage retries; -1 keeps retrying with Fresh Session rotation",
     )
+    value.add_argument("--max-cycles", type=int, default=-1, help="Workflow backward-cycle limit; -1 is unlimited")
+    value.add_argument("--skip-on-max-cycles", action="store_true", help="treat max-cycle exhaustion as a skipped YAML List item")
     value.add_argument("--retry-delay", type=float, default=5, help="seconds before retrying a technical failure")
     value.add_argument("--retry-max-delay", type=float, default=300, help="maximum seconds between transient service retries")
 
