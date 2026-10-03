@@ -1140,8 +1140,12 @@ def test_stop_request_resume_probe_exercises_detached_ui_contract(
             self.returncode = None
             (self.work / "state.json").write_text(
                 json.dumps({
+                    "run_id": "stop-run",
                     "completed": False,
                     "stage": "execute",
+                    "current": 1,
+                    "cycle": 2,
+                    "workflow_position": 3,
                     "ai_session_id": "session-stop",
                 }),
                 encoding="utf-8",
@@ -1170,17 +1174,11 @@ def test_stop_request_resume_probe_exercises_detached_ui_contract(
         history = work / "debug" / "history"
         history.mkdir(parents=True, exist_ok=True)
         events = [
-            {"type": "runner.stage", "action": "start", "stage": "execute"},
-            {
-                "type": "model.prompt",
-                "call_id": "resume-1",
-                "session": "session-stop",
-                "session_mode": "resume",
-            },
+            {"type": "runner.stage", "action": "start", "stage": "validate_file"},
             {
                 "type": "runner.stage",
                 "action": "finish",
-                "stage": "execute",
+                "stage": "validate_file",
                 "result": "pass",
             },
         ]
@@ -1201,10 +1199,6 @@ def test_stop_request_resume_probe_exercises_detached_ui_contract(
         )
         (work / "debug" / "last-result.txt").write_text(
             "result", encoding="utf-8"
-        )
-        (history / "resume-1-prompt.txt").write_text(
-            "Continue normal task execution in this same session.\n",
-            encoding="utf-8",
         )
         (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
         log.parent.mkdir(parents=True, exist_ok=True)
