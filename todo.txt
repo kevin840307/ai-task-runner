@@ -300,6 +300,10 @@ High-value runner work remaining:
 [ ] Keep FlowEngine semantic and StageExecutor technical.
     Do not merge them for code-count reduction.
 
+REAL BACKEND GATE
+-----------------
+The release is not complete until real-Qwen gates below are green. Deterministic CI alone is insufficient.
+
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
