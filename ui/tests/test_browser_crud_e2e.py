@@ -336,8 +336,10 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
             assert page.locator(".studio-workflow-main").is_visible()
             page.fill("#studioPromptTextarea", "# Prompt\n\n{{ goal }}\n")
-            page.click("#validateStudioButton")
+            page.wait_for_function("!document.querySelector('#saveStudioButton')?.disabled")
             page.click("#saveStudioButton")
+            page.wait_for_function("document.querySelector('#saveStudioButton')?.disabled")
+            page.click("#validateStudioButton")
             page.wait_for_timeout(120)
 
             page.click("#workflowNav")
