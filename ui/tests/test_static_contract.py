@@ -140,5 +140,13 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("app-language-changed", self.app_js)
 
 
+    def test_quick_win_status_and_empty_state_contract(self):
+        self.assertIn('id="emptyOpenProjectButton"', self.html)
+        self.assertIn('Needs Attention', self.app_js)
+        self.assertIn('path.textContent = project.exists === false ? t("project.missing", "Missing") : "Ready"', self.app_js)
+        self.assertIn('clear.textContent = "Clear search"', self.app_js)
+        self.assertIn('create.textContent = state.studioSourceKind === "prompt" ? "Create Prompt" : "Create Workflow"', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
