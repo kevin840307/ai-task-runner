@@ -498,3 +498,15 @@ def test_ai_profile_switching_is_fully_catalog_driven():
     assert "Object.entries(previousDefaults)" in text
     assert "Object.entries(nextDefaults)" in text
     assert '["prompt", "status", "max_failures", "error_policy"]' not in text
+
+
+
+def test_create_stage_prompt_setup_is_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'options?.some((option) => option.name === "prompt")' in text
+    assert 'Use Stage default' in text
+    assert 'defaultOption(catalog, pendingCreate.type, "prompt")' in text
+    assert 'catalogStageMeta(catalog, pendingCreate.type).description' in text
+    assert 'pendingCreate.type === "base"' in text
+    assert 'pendingCreate.type === "command"' in text
