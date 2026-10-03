@@ -73,14 +73,14 @@ Three validation modes are supported: AI-only, File-only, and Mixed. Mixed valid
 
 YAML batch mode is supported. It supports per-item `project_root`, `goal_file`, `workflow_file`, AI validation count, and required-pass threshold. Each item receives isolated nested state. Runtime scope must restore the parent after a child item finishes so hooks/events/state cannot leak across tasks.
 
-Workflow YAML has only two top-level keys: `stages` defines named nodes and `flow` defines their ordered membership. The registry remains only `type -> class`. Prefer semantic built-ins (`plan`, `task`, `review`, `ai_validator`, `command`) and use `base` only for deliberately generic AI behavior. Task-producing Stages emit the public Task contract; explicit contiguous `scope: task` Stages define the per-TODO SOP.
+Workflow YAML has only two top-level keys: `stages` defines named nodes and `flow` defines their ordered membership. The registry remains only `type -> class`. General AI behavior uses `type: base` with `profile: generic | execute | review`; dedicated types are reserved for genuinely special runtime semantics such as `plan`, `ai_validator`, `command`, `handoff`, or plugins. Producer Stages may return `tasks` or `stages` together with producer-defined child Stage definitions; Runner executes the child Workflow before continuing the parent.
 
 PASS/FAIL result edges are the only semantic routing mechanism. Backward edges implement rollback/loops. Technical ERROR stays inside StageExecutor retry/recovery and is never a graph edge. There is no public `recover`, `restart_at`, Repair Stage, repeat/max-attempt graph, or hidden replan topology. A Review may intentionally use a finite local `error_policy.retries`; after exhaustion it fail-soft skips to the next Stage, so an authoritative validator should remain later in the flow.
 
 ## Prompt contract
 All bundled Stage prompts use Jinja + `StrictUndefined`. Template context/rendering is owned by `runner/prompting.py`; do not expose `RunState`, `RuntimeConfig`, `scratch`, or other internal objects directly. Bundled prompt resources live under `runner/assets/prompts/<category>/`.
 
-Ordinary write work should use `type: task`, and read-only verdict work should use `type: review`; use `type: base` only for intentionally generic AI behavior. A genuinely new behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader and FlowEngine must not gain Stage-name-specific branches.
+Ordinary write work uses `type: base, profile: execute`; read-only verdict work uses `type: base, profile: review`; custom AI behavior uses `profile: generic`. A genuinely new special behavior requires one Stage class exposing `spec_class`, one `register_stage("type", Class)` call, and a YAML instance. Loader, FlowEngine, and StageExecutor must not gain Stage-name-specific branches.
 
 A Stage implements one independent attempt and returns facts in `StageResult`. It must not construct/call another Stage or choose concrete successors. `StageResult.kind` selects the small durable-state reducer (`tasks`, `task`, `review`, `validation`, or `generic`); composition stays in generic FlowEngine/routing data.
 
