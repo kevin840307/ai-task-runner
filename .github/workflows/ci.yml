@@ -1,32 +1,107 @@
-name: Temporary Bundle Sync
+name: CI
 
 on:
   push:
-    branches:
-      - bundle-sync-temp-20261003
+  pull_request:
 
-permissions:
-  contents: write
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  bundle-sync:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python-version: ["3.11"]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
+          python-version: ${{ matrix.python-version }}
+          cache: pip
 
-      - name: Generate final source bundle
-        run: |
-          git worktree add --detach /tmp/ai-task-runner-final 7ebecde2f0ae23969bb673052ed478a00c887ddb
-          python3 /tmp/ai-task-runner-final/tool/bundle.py pack /tmp/ai-task-runner-final /tmp/ai-task-runner-final/project.bundle.txt
-          cp /tmp/ai-task-runner-final/project.bundle.txt project.bundle.txt
+      - name: Install
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Restore final CI and commit only bundle
+      - name: Compile
+        run: python -m compileall -q runner tool ai_task_runner.py ai_task_runner_validator.py
+
+      - name: Test
+        run: python -m pytest -q
+
+  studio-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/studio-src
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/studio-src/package-lock.json
+
+      - name: Install Studio
         run: |
-          git checkout 7ebecde2f0ae23969bb673052ed478a00c887ddb -- .github/workflows/ci.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add project.bundle.txt .github/workflows/ci.yml
-          git commit -m "Regenerate project.bundle.txt from final verified source"
-          git push origin HEAD:bundle-sync-temp-20261003
+          npm ci
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
+
+      - name: Build Studio
+        run: npm run build
+
+      - name: Verify committed Studio bundle
+        run: git diff --exit-code -- ../static/workflow-studio-app
+
+      - name: Upload Studio build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-studio-app
+          path: ui/static/workflow-studio-app
+          if-no-files-found: error
+
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/studio-src/package-lock.json
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Build current Workflow Editor for browser tests
+        working-directory: ui/studio-src
+        run: |
+          npm ci
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
+          npm run build
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Browser E2E
+        env:
+          AI_TASK_RUNNER_BROWSER_REQUIRED: "1"
+        run: python -m pytest -q --timeout=120 --timeout-method=thread ui/tests/test_browser_crud_e2e.py ui/tests/test_full_designer_browser.py
