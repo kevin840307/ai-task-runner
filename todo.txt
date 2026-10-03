@@ -44,10 +44,11 @@ QUICK WINS - LOW COST / HIGH VALUE
 Do these before larger UI work when they can be implemented without widening runtime contracts.
 
 [ ] Make project/runtime status text consistent everywhere
-    - Use one small vocabulary: Idle / Running / Recovering / Stopped / Completed / Needs Attention.
+    - Sidebar/header now share Idle / Running / Stopped / Completed / Needs Attention.
+    - Remaining: expose a first-class Recovering state from runtime evidence instead of inferring it from Stage/detail text.
     - Avoid showing the same state with different wording/colors in sidebar, header and task view.
 
-[ ] Reduce filesystem-path visual weight
+[x] Reduce filesystem-path visual weight
     - Show Project name first.
     - Move full path to secondary text / tooltip where possible.
 
@@ -56,20 +57,20 @@ Do these before larger UI work when they can be implemented without widening run
     - Keep destructive actions visually separated.
     - Stop / Reset / Delete should not compete visually with Run / Save.
 
-[ ] Improve dirty / saved feedback
+[x] Improve dirty / saved feedback
     - Make UNSAVED / Saved / Saving states obvious.
     - Keep Ctrl+S behavior consistent in Prompt and Workflow editing surfaces.
 
-[ ] Improve empty states
+[x] Improve empty states
     - Each empty state should explain what is missing and expose the next useful action.
     - Project: Open Project.
     - Workflow: Create / Generate.
     - Prompt: Create Prompt.
 
-[ ] Improve no-result search states
+[x] Improve no-result search states
     - Workflow/Prompt search should show "No results" plus a clear reset/clear-search action.
 
-[ ] Keep Project click behavior consistent across Tasks / Workflows / Prompts
+[x] Keep Project click behavior consistent across Tasks / Workflows / Prompts
     - Selecting a Project should always establish context and return to Tasks/Chat.
     - Preserve unsaved-change protection before navigation.
 
@@ -218,6 +219,14 @@ RUNNER
 ------
 Do not do another runner architecture rewrite now.
 
+Public entry-point regression protection completed:
+[x] CLI -> RunRequest -> RuntimeConfig max_cycles / skip_on_max_cycles parity restored.
+[x] YAML List max_cycles / skip_on_max_cycles remains supported and deterministically tested.
+[x] YAML List now rejects unknown item fields instead of silently ignoring typos.
+[x] Plugin top-level YAML convenience fields must be explicitly declared through plugin metadata.
+[x] CLI reference docs updated to current stage_retries / retry_delay / retry_max_delay contract.
+[x] External CLI/YAML runs still use the shared runtime/state surfaces consumed by the UI.
+
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
     reproduce -> deterministic regression test -> fix -> rerun gates.
@@ -302,3 +311,12 @@ Release is complete when:
 - UI / CLI / API / YAML List still share the same runtime,
 - no ownership/orphan/state-growth issue remains,
 - final Studio bundle and project.bundle.txt are synchronized.
+
+CURRENT IMPLEMENTATION NOTES
+----------------------------
+- Newly added Designer Stages are draft-first: Form/YAML/Routing/Test must work before Workflow Save.
+- Stage YAML regression now covers a newly-created unsaved AI Stage; it must not query only saved YAML and report "Stage not found".
+- Workflow/Prompt empty/search states now provide an actionable next step.
+- Project rows show runtime detail instead of repeating full filesystem paths; full path remains available via tooltip/title.
+- Saved/Saving/Unsaved feedback is explicit in Prompt and Workflow editors.
+- Current deterministic/live strategy: UI-only changes require static/browser regression; runtime contract changes require deterministic runtime/API/YAML tests; Qwen live probes are added only when behavior depends on the real backend/session/process boundary.
