@@ -4,7 +4,7 @@ This file describes what is covered by deterministic CI and what still requires 
 
 ## Deterministic CI
 
-The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the React Studio build. It also rebuilds Full Designer and verifies the committed `ui/static/workflow-studio-app` exactly matches `ui/studio-src`; CI is verify-only and never rewrites the branch.
+The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the React Studio build. It also rebuilds Workflow Editor and verifies the committed `ui/static/workflow-studio-app` exactly matches `ui/studio-src`; CI is verify-only and never rewrites the branch.
 
 | Area | Coverage |
 | --- | --- |
@@ -16,7 +16,7 @@ The normal GitHub gate runs compile + pytest on Ubuntu and Windows plus the Reac
 | Dynamic Handoff | target allow-list, disallowed target rejection, exactly-one target routing, role -> coordinator loop, final validator FAIL -> coordinator, durable resume |
 | Prompts | shared Dynamic worker renders role `instructions`; prompt ownership/category references; shared retry/continue/recover control envelope |
 | Validators | File command validators, AI validators, multiple validators anywhere, repeated AI runs/voting, validator FAIL rollback |
-| Task production | Plan producer-defined Execute/Review children, custom/plugin `produces: tasks|stages`, nested dynamic expansion |
+| Dynamic producers | Plan producer-defined Execute/Review children, custom/plugin `produces: tasks|stages`, nested dynamic expansion |
 | Resume/state | workflow position, durable expanded Workflow, dynamic task groups, transition_previous, role Sessions, corrupt/incompatible state rejection |
 | Dry Run | normal closure, fail loops, Dynamic Handoff, custom Task producer, non-converging loop cutoff, invalid schema/route controls |
 | Stage Probe | isolated Real Stage execution with real backend, fixed-prompt Agent Ping, bounded test retry safety, result/next target without continuing the workflow |
