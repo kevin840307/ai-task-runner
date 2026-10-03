@@ -1472,8 +1472,13 @@ async function validateStudio() {
 function setStudioStatus(text, error = false) {
   const detail = String(text || "").trim();
   state.studioErrorDetail = error ? detail : "";
-  // Studio no longer owns a persistent footer. Success is a toast; validation
-  // failures use the compact one-line validation row and details dialog.
+  const row = $("studioStatus");
+  if (!row) return;
+  row.textContent = detail ? errorSummary(detail, error ? "Action failed" : "") : "";
+  row.title = detail;
+  row.hidden = !detail;
+  row.classList.toggle("error", Boolean(error && detail));
+  if (error && detail) rememberErrorDetail(detail, "Studio action failed");
 }
 async function confirmDiscardStudio() {
   if (!state.studioDirty) return true;
