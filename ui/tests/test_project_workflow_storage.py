@@ -190,3 +190,36 @@ def test_prompt_read_exposes_workflow_stage_usages(tmp_path: Path) -> None:
     loaded = state.studio_read(prompt["item"]["id"], project)
 
     assert loaded["used_by"] == ["uses_prompt.workflow.yaml · review"]
+
+
+
+def test_workflow_save_allows_schema_valid_non_closing_route(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    (tmp_path / "tool/workflow_dryrun.py").write_text(
+        "import json\n"
+        "print(json.dumps({'valid': True, 'closed': False, 'cases': [{'name': 'happy path', 'passed': False}]}))\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    created = state.studio_workflow_create("intentional_stop", "project", project)
+    current = state.studio_read(created["item"]["id"], project)
+    content = (
+        "stages:\n"
+        "  execute:\n"
+        "    type: base\n"
+        "    profile: execute\n"
+        "    routes:\n"
+        "      pass: stop\n"
+        "flow: [execute]\n"
+    )
+
+    saved = state.studio_save(
+        created["item"]["id"],
+        content,
+        current["hash"],
+        project,
+    )
+
+    assert saved["ok"] is True
+    reread = state.studio_read(created["item"]["id"], project)
+    assert "pass: stop" in reread["content"]
