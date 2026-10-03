@@ -90,3 +90,10 @@ Deterministic CI、短 live gate、24H soak 是三個不同的信心層級。
 - 主導覽分離 Workflows / Prompts，不額外顯示重複的 Settings nav。
 - Stage Editor 契約為 `Form | YAML | Routing | Test`，Stage YAML 共用既有 source parser。
 - 桌面 browser layout/context-menu smoke：1024、1280、1366、1440、1920 寬度。
+
+
+## Browser CI source 一致性
+
+Ubuntu Playwright/Chromium job 會先 build 當前 `ui/studio-src`，再執行 browser E2E，
+避免拿 stale committed bundle 測最新 source。`AI_TASK_RUNNER_BROWSER_REQUIRED=1`
+會強制 browser tests 真正執行，沒有 Chromium 時直接 FAIL，不允許默默 skip。
