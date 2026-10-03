@@ -296,7 +296,9 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             assert not page.locator(".studio-workflow-main").is_visible()
             sidebar = page.locator(".studio-workflow-sidebar").bounding_box()
-            assert sidebar and sidebar["width"] > 1000
+            body = page.locator(".studio-designer-body").bounding_box()
+            assert sidebar and body
+            assert abs(sidebar["width"] - body["width"]) <= 2
             workflow_row = page.locator("#studioFileList .studio-file-item").filter(
                 has_text="e2e_crud.workflow.yaml"
             )
