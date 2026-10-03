@@ -331,6 +331,18 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".studio-designer-body").evaluate(
                 "node => node.classList.contains('prompt-manager-mode')"
             )
+
+            # Project rows are a Tasks/Chat navigation affordance from both asset pages.
+            # Regression: Prompts used to leave the UI on the Prompt manager because
+            # selectProject() only switched away from the Workflow view.
+            page.locator("#projectList .project-root").first.click()
+            page.wait_for_function("document.querySelector('#chatNav')?.classList.contains('active')")
+            assert page.locator("#chatView").is_visible()
+            assert page.locator("#workflowView").is_hidden()
+
+            page.click("#promptNav")
+            page.wait_for_function("document.querySelector('#promptNav')?.classList.contains('active')")
+            page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('prompt-manager-mode')")
             page.click("#newWorkflowButton")
             page.fill("#newPromptName", "e2e_prompt")
             page.select_option("#newPromptDestination", "global")
