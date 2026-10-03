@@ -11,7 +11,8 @@ from ...runtime.run_state import Task
 from ...utils import bounded_text
 from ..profiles import apply_ai_profile_defaults
 from ..results import decode_tasks
-from .base_stage import BaseStage, BaseStageSpec, SessionPolicy, StageContext, StageResult
+from .base_stage import BaseStage, BaseStageSpec, SessionPolicy
+from .contracts import StageContext, StageResult
 
 
 @dataclass(frozen=True)
