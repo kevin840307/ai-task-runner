@@ -573,7 +573,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
           interactionWidth: 28,
           markerEnd: { type: MarkerType.ArrowClosed },
           data: { status, explicit: true, terminal: target },
-          reconnectable: "target",
         });
       });
       return;
@@ -591,7 +590,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       interactionWidth: routes.pass ? 28 : 14,
       markerEnd: { type: MarkerType.ArrowClosed },
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
-      reconnectable: routes.pass ? "target" : false,
     });
     const failTarget = routes.fail;
     if (failTarget) {
@@ -605,7 +603,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         interactionWidth: 28,
         markerEnd: { type: MarkerType.ArrowClosed },
         data: { status: "fail", explicit: true, terminal: failTarget },
-        reconnectable: "target",
       });
     }
   });
@@ -1211,44 +1208,6 @@ function App() {
     setDirtyGraph(true);
   }, [visual, catalog, graphFor]);
 
-  const reconnectExplicitEdge = useCallback((oldEdge: Edge, connection: Connection) => {
-    if (!visual || !oldEdge.data?.explicit || !connection.source || !connection.target) return;
-    if (connection.source !== oldEdge.source || connection.target === START) return;
-
-    const status = String(oldEdge.data?.status || "").toLowerCase();
-    if (!["pass", "fail", "handoff"].includes(status)) return;
-    if (status === "handoff" && connection.target === END) return;
-
-    rememberUndoSnapshot(visual);
-    const stages = visual.stages.map((stage) => {
-      if (stage.name !== oldEdge.source) return stage;
-
-      if (status === "handoff") {
-        const targets = (stage.targets || [])
-          .map((target) => target === oldEdge.target ? connection.target! : target);
-        return { ...stage, targets: Array.from(new Set(targets)) };
-      }
-
-      const routes = { ...(stage.routes || {}) };
-      const index = visual.flow.indexOf(stage.name);
-      const nextName = visual.flow[index + 1];
-      let target = connection.target!;
-      if (target === END) target = status === "pass" ? "done" : "stop";
-
-      if (status === "pass" && target === nextName) delete routes.pass;
-      else routes[status] = target;
-      return { ...stage, routes };
-    });
-
-    const next = { ...visual, stages };
-    setVisual(next);
-    const graph = graphFor(next, catalog);
-    setNodes(graph.nodes);
-    setEdges(graph.edges);
-    setDirtyGraph(true);
-    setMessage("Connection retargeted.");
-  }, [visual, catalog, graphFor]);
-
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
     const explicit = removed.filter((edge) => edge.data?.explicit);
@@ -1649,8 +1608,6 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
             onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
-            onReconnect={reconnectExplicitEdge}
-            reconnectRadius={24}
             onEdgesDelete={deleteEdges}
             onEdgeClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
             onEdgeContextMenu={(event, edge) => {
