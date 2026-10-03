@@ -202,3 +202,68 @@ def test_dynamic_handoff_builtin_dryrun_reaches_final_validation():
     ]
 
 
+
+
+def test_dryrun_matrix_reaches_branch_only_stage_before_injecting_failure(tmp_path: Path):
+    workflow = tmp_path / "branch.yaml"
+    workflow.write_text(
+        """stages:
+  gate:
+    type: base
+    profile: review
+    routes:
+      fail: branch
+      pass: direct
+  branch:
+    type: base
+    profile: generic
+  direct:
+    type: base
+    profile: generic
+flow:
+  - gate
+  - branch
+  - direct
+""",
+        encoding="utf-8",
+    )
+
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+    cases = {case["name"]: case for case in payload["cases"]}
+    assert cases["branch FAIL -> stop"]["passed"] is True
+    assert cases["branch FAIL -> stop"]["executions"] == 2
+
+
+def test_dryrun_matrix_ignores_static_stage_that_is_unreachable_by_any_result_edge(tmp_path: Path):
+    workflow = tmp_path / "unreachable.yaml"
+    workflow.write_text(
+        """stages:
+  gate:
+    type: base
+    profile: review
+    routes:
+      pass: worker
+      fail: worker
+  dead:
+    type: handoff
+    targets: [worker]
+  worker:
+    type: base
+    profile: generic
+flow:
+  - gate
+  - dead
+  - worker
+""",
+        encoding="utf-8",
+    )
+
+    result = run(str(workflow), "--matrix", "--json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["closed"] is True
+    names = {case["name"] for case in payload["cases"]}
+    assert not any(name.startswith("dead ") for name in names)
