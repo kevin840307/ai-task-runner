@@ -36,7 +36,7 @@ def test_workflow_has_one_minimal_type_registry():
 
 def test_workflow_runtime_has_only_current_canonical_modules():
     workflow = ROOT / "runner" / "workflow"
-    for name in ("flow_engine.py", "dynamic_expansion.py", "results.py", "loader.py", "schema.py", "registry.py"):
+    for name in ("contracts.py", "flow_engine.py", "dynamic_expansion.py", "results.py", "loader.py", "schema.py", "registry.py"):
         assert (workflow / name).is_file()
     assert (workflow / "execution" / "stage_executor.py").is_file()
     assert not (workflow / "stage_executor.py").exists()
