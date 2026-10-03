@@ -169,5 +169,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertNotIn('return "Interrupted"', self.app_js)
 
 
+    def test_runtime_freshness_keeps_relative_text_with_exact_tooltip(self):
+        self.assertIn("new Date(state.runtimeLastChangedAt).toLocaleString()", self.app_js)
+        self.assertIn('last.title = exact ? "Last update: " + exact : ""', self.app_js)
+        self.assertIn('live.title = exact ? "Last update: " + exact : ""', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
