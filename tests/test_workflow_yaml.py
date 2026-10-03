@@ -121,7 +121,7 @@ flow:
 """,
     )
 
-    with pytest.raises(RunnerError, match="was removed.*session_policy: fresh"):
+    with pytest.raises(RunnerError, match="unknown options"):
         load_workflow(path)
 
 
