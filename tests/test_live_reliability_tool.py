@@ -2172,17 +2172,17 @@ def test_api_recovery_probe_disables_backend_internal_retry():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
 
     assert "qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0)" in source
-    assert 'event.get("status") == "Recovering"' in source
-    assert '"status": "Recovering"' not in source
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("action") == "retry"' in source
 
 
 
-def test_api_recovery_probe_latches_transient_recovering_evidence():
+def test_api_recovery_probe_latches_structured_recovery_evidence():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    assert "recovering_seen = False" in source
-    assert "if not recovering_seen:" in source
-    assert 'event.get("status") == "Recovering"' in source
-    assert "probe-owned --json-events" in source
+    assert "recovery_event_seen = False" in source
+    assert "if not recovery_event_seen:" in source
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("retry_mode")' in source
     assert "(*jsonl_events(log), *runner_events(project))" in source
 
 
@@ -2190,7 +2190,7 @@ def test_api_recovery_probe_latches_transient_recovering_evidence():
 def test_api_recovery_probe_uses_probe_owned_json_event_stream():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "(*jsonl_events(log), *runner_events(project))" in source
-    assert "probe-owned --json-events" in source
+    assert "runner.recovery/retry" in source
 
 
 
