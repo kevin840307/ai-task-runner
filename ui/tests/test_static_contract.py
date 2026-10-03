@@ -193,5 +193,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('last.title = exact ? "Last update: " + exact : ""', self.app_js)
 
 
+    def test_prompt_editor_shows_used_by_workflow_stage_evidence(self):
+        self.assertIn('id="studioPromptUsedBy"', self.html)
+        self.assertIn("function renderPromptUsage()", self.app_js)
+        self.assertIn("state.studioFile?.used_by", self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
