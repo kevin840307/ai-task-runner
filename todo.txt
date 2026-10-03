@@ -350,6 +350,10 @@ REAL BACKEND GATE
 -----------------
 The release is not complete until real-Qwen gates below are green. Deterministic CI alone is insufficient.
 
+24H ACCEPTANCE
+--------------
+The 24H soak below is the final unattended-runtime acceptance gate.
+
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
