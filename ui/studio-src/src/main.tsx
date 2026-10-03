@@ -201,6 +201,11 @@ function initialDesignerLanguage(): DesignerLanguage {
   try { return localStorage.getItem(DESIGNER_LANGUAGE_KEY) === "en" ? "en" : "zh-TW"; } catch { return "zh-TW"; }
 }
 
+function designerText(key: string): string {
+  const language = initialDesignerLanguage();
+  return DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key;
+}
+
 
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
@@ -334,9 +339,9 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
       <div className="wf-stage-meta">
-        {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">{tx("disconnected")}</span>}
+        {data.subtitle === "Not connected to flow" && <span className="disconnected-chip">{designerText("disconnected")}</span>}
         {reviewErrorSkip && <span>ERR×{errorRetries} → Skip</span>}
-        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → {tx("fail_soft_next")}</span>}
+        {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → {designerText("fail_soft_next")}</span>}
         {dynamicRouter && <span>{(s.targets || []).length} targets</span>}
         {data.dynamicOutput && <span className="dynamic-chip">Dynamic · {data.dynamicOutput}</span>}
       </div>
