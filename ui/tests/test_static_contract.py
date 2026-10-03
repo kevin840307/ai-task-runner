@@ -232,3 +232,14 @@ if __name__ == "__main__":
         self.assertIn('id="optionsCloseButton" type="button" aria-label="Close options" title="Close options"', self.html)
         self.assertIn('id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close"', self.html)
         self.assertIn('id="validationDetailsClose" class="modal-close" type="button" aria-label="Close" title="Close"', self.html)
+
+
+
+    def test_shared_confirmation_dialog_contract_is_consistent(self):
+        dialogs = (self.root / "static" / "js" / "ui-dialogs.js").read_text(encoding="utf-8")
+        cancel = dialogs.index('data-dialog-cancel')
+        confirm = dialogs.index('data-dialog-ok class=')
+        self.assertLess(cancel, confirm)
+        self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
+        self.assertIn('if (event.key === "Escape")', dialogs)
+        self.assertIn('requestAnimationFrame(() => trigger.focus())', dialogs)
