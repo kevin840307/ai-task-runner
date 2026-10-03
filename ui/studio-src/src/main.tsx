@@ -60,6 +60,8 @@ type CatalogStageType = {
   description?: string;
   category?: string;
   profiles?: Record<string, CatalogProfile>;
+  result_kind?: string;
+  dynamic_output?: boolean;
   options: CatalogOption[];
 };
 
@@ -88,6 +90,7 @@ type StudioNodeData = {
   label: string;
   subtitle?: string;
   stage?: Stage;
+  dynamicOutput?: string;
 };
 
 type StageTestResult = {
@@ -285,6 +288,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
         {reviewErrorSkip && <span>ERR×{errorRetries} → Skip</span>}
         {reviewMaxFailures > 0 && <span>FAIL×{reviewMaxFailures} → 下次 Pass</span>}
         {dynamicRouter && <span>{(s.targets || []).length} targets</span>}
+        {data.dynamicOutput && <span className="dynamic-chip">Dynamic · {data.dynamicOutput}</span>}
       </div>
       <div className={`wf-handles ${dynamicRouter ? "single" : ""}`}>
         {dynamicRouter ? <span>HANDOFF</span> : <><span>PASS</span><span>FAIL</span></>}
@@ -310,7 +314,7 @@ function stageByName(visual: Visual, name: string) {
 }
 
 const STAGE_META: Record<string, { title: string; description: string }> = {
-  plan: { title: "Plan", description: "產生 Task[] 規劃" },
+  plan: { title: "Plan", description: "產生計畫並在執行時展開 child Workflow" },
   ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
   handoff: { title: "Handoff", description: "動態選擇下一個 Stage" },
   command: { title: "Command", description: "執行外部命令或驗證器" },
@@ -467,6 +471,10 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         label: String(s.label || s.name),
         subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
+        dynamicOutput: (() => {
+          const kind = String(s.produces || catalog?.stage_types?.[s.type]?.result_kind || "");
+          return kind === "tasks" || kind === "stages" ? kind : "";
+        })(),
       },
       deletable: false,
       className: disconnected ? "disconnected" : "",
@@ -1721,7 +1729,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     {Object.keys(catalog?.stage_types || {}).map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </label>
-                {draft.type === "base" && <label>
+                {(String(draft.produces || catalog?.stage_types?.[draft.type]?.result_kind || "") === "tasks"
+                || String(draft.produces || catalog?.stage_types?.[draft.type]?.result_kind || "") === "stages") && <div className="dynamic-stage-note">
+                <strong>Dynamic child Workflow</strong>
+                <span>此 Stage 執行成功後會先執行它產生的 child Stages，全部完成後才回到主 Workflow 的下一個 Stage。</span>
+              </div>}
+              {draft.type === "base" && <label>
                   <span>AI profile</span>
                   <select value={String(draft.profile || "generic")} onChange={(e) => editDraft(applyAIProfileDefaults(draft, e.target.value))}>
                     {Object.entries(catalog?.stage_types?.base?.profiles || {}).map(([value, item]) => (
