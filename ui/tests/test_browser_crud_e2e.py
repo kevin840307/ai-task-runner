@@ -43,6 +43,15 @@ def _launch_browser(playwright):
     return playwright.chromium.launch(**kwargs)
 
 
+def _boot_main_ui(page) -> None:
+    # The fixture injects app.js after set_content(), so make startup deterministic
+    # by invoking the same production project loader explicitly.
+    page.evaluate("() => loadProjects()")
+    page.wait_for_function(
+        "document.querySelector('#projectName')?.textContent === 'Fixture Project'"
+    )
+
+
 def _write_fixture_repo(root: Path) -> UIState:
     (root / "ui" / "data").mkdir(parents=True)
     (root / "ui" / "data" / "projects.json").write_text(
@@ -250,7 +259,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
             page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
-            page.wait_for_function("document.querySelector('#projectName')?.textContent === 'Fixture Project'")
+            _boot_main_ui(page)
             page.click("#workflowNav")
             page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
             page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('workflow-manager-mode')")
@@ -356,7 +365,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
             page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
-            page.wait_for_function("document.querySelector('#projectName')?.textContent === 'Fixture Project'")
+            _boot_main_ui(page)
             page.click("#workflowNav")
             page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
             page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('workflow-manager-mode')")
@@ -427,7 +436,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
             page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
             page.add_script_tag(path=str(static_root / "app.js"))
-            page.wait_for_function("document.querySelector('#projectName')?.textContent === 'Fixture Project'")
+            _boot_main_ui(page)
             page.wait_for_function("document.querySelector('#workflowSelectedLabel')?.textContent === 'ralphy_ai_validate.yaml'")
             assert page.locator("#workflowSelectedLabel").inner_text() == "ralphy_ai_validate.yaml"
             assert page.locator("#workflowSelect").input_value().replace("\\", "/").endswith("/ralphy_ai_validate.yaml")
