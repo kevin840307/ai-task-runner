@@ -231,3 +231,52 @@ def test_executor_fills_declared_kind_only_for_generic_result():
 
     result = StageExecutor(Hooks()).run(ReviewLike(), context())
     assert result.kind == "review"
+
+
+
+def test_unlimited_retry_with_zero_configured_delay_uses_safety_floor(monkeypatch):
+    class RetryTwice(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 2:
+                return StageResult.error_result(self.name, RunnerError("temporary failure"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    monkeypatch.setattr(StageExecutor, "_sleep", staticmethod(lambda _ctx, seconds: sleeps.append(seconds)))
+
+    result = StageExecutor(Hooks()).run(RetryTwice(), ctx)
+
+    assert result.status == "pass"
+    assert sleeps == [1.0, 1.0]
+
+
+def test_finite_retry_may_still_use_zero_delay(monkeypatch):
+    class RetryOnce(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return StageResult.error_result(self.name, RunnerError("retry immediately"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = 1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    monkeypatch.setattr(StageExecutor, "_sleep", staticmethod(lambda _ctx, seconds: sleeps.append(seconds)))
+
+    result = StageExecutor(Hooks()).run(RetryOnce(), ctx)
+
+    assert result.status == "pass"
+    assert sleeps == [0.0]
