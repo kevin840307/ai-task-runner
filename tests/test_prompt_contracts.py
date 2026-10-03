@@ -188,3 +188,15 @@ def test_obsolete_alternate_stage_prompts_are_removed():
         "planning_rules.md",
     }
     assert not any(path.name in forbidden for path in PROMPT_ROOT.rglob("*.md"))
+
+
+def test_plan_stage_uses_plan_wire_protocol_before_dynamic_expansion():
+    from runner.workflow.stages import PlanStage, PlanStageSpec
+
+    stage = PlanStage(PlanStageSpec(name="planning"))
+    prompt = stage._with_immutable_protocol("Plan work.")
+
+    assert "[RUNNER_IMMUTABLE_PLAN_PROTOCOL]" in prompt
+    assert "[RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]" not in prompt
+    assert stage.result_kind == "tasks"
+    assert stage.protocol_kind == "plan_tasks"
