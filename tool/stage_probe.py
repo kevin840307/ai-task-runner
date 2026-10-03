@@ -210,12 +210,19 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 str(definition.get("type") or "base") == "base"
                 and str(definition.get("profile") or "generic") in {"execute", "review"}
             ):
+                is_review = str(definition.get("profile") or "generic") == "review"
                 runner.state.tasks = [
                     Task(
                         id="stage-test",
                         title=f"Test {args.stage}",
                         description=input_text or f"Execute the selected Stage {args.stage} once.",
-                        acceptance_criteria=["Return the Stage result for this isolated test."],
+                        acceptance_criteria=(
+                            ["The supplied deliverable is non-empty and matches the supplied executor evidence."]
+                            if is_review and input_text
+                            else ["Return the Stage result for this isolated test."]
+                        ),
+                        deliverable=input_text if is_review else "",
+                        last_output=input_text if is_review else "",
                     )
                 ]
                 runner._save_state()
