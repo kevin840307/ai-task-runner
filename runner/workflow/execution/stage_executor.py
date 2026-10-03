@@ -80,10 +80,10 @@ class StageExecutor:
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
-        base_retry_delay = base_retry_delay
+        base_retry_delay = float(ctx.config.retry_delay)
         if unlimited:
             base_retry_delay = max(1.0, base_retry_delay)
-        retry_max_delay = max(base_retry_delay, retry_max_delay)
+        retry_max_delay = max(base_retry_delay, float(ctx.config.retry_max_delay))
         service_delay = base_retry_delay
 
         run_state = str(getattr(stage, "run_state", "") or "")
