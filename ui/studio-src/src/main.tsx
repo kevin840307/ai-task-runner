@@ -944,6 +944,7 @@ function App() {
           project: query().project,
           stage: draft.name,
           mode: "parse",
+          fields: draft,
           source: stageYaml,
         }),
       });
