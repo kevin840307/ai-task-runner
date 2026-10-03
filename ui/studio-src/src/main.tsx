@@ -578,19 +578,21 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       return;
     }
     const passTarget = routes.pass || (next ? "next" : "done");
-    const resolvedPass = passTarget === "next" ? (next || END) : passTarget === "done" || passTarget === "stop" ? END : passTarget;
-    const passClass = routes.pass ? "result pass" : "normal pass";
-    edges.push({
-      id: `${name}:pass:${resolvedPass}`,
-      source: name,
-      sourceHandle: "pass",
-      target: resolvedPass,
-      className: passClass,
-      deletable: Boolean(routes.pass),
-      interactionWidth: routes.pass ? 28 : 14,
-      markerEnd: { type: MarkerType.ArrowClosed },
-      data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
-    });
+    if (passTarget !== "stop") {
+      const resolvedPass = passTarget === "next" ? (next || END) : passTarget === "done" ? END : passTarget;
+      const passClass = routes.pass ? "result pass" : "normal pass";
+      edges.push({
+        id: `${name}:pass:${resolvedPass}`,
+        source: name,
+        sourceHandle: "pass",
+        target: resolvedPass,
+        className: passClass,
+        deletable: true,
+        interactionWidth: 28,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
+      });
+    }
     const failTarget = routes.fail;
     if (failTarget) {
       const resolved = failTarget === "done" || failTarget === "stop" ? END : failTarget === "next" ? (next || END) : failTarget;
@@ -842,10 +844,10 @@ function App() {
         undoVisualDraft();
         return;
       }
-      const selectedExplicitEdge = edges.find((edge) => edge.selected && edge.data?.explicit);
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedExplicitEdge) {
+      const selectedResultEdge = edges.find((edge) => edge.selected && edge.data?.status && edge.source !== START);
+      if ((event.key === "Delete" || event.key === "Backspace") && selectedResultEdge) {
         event.preventDefault();
-        deleteEdges([selectedExplicitEdge]);
+        deleteEdges([selectedResultEdge]);
         return;
       }
       if (ctrl && event.key.toLowerCase() === "c" && selected) {
@@ -1210,21 +1212,22 @@ function App() {
 
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
-    const explicit = removed.filter((edge) => edge.data?.explicit);
-    if (!explicit.length) return;
+    const semantic = removed.filter((edge) => edge.data?.status && edge.source !== START);
+    if (!semantic.length) return;
     rememberUndoSnapshot(visual);
     let stages = visual.stages;
-    removed = explicit;
+    removed = semantic;
     for (const edge of removed) {
       const status = String(edge.data?.status || "");
-      if (!status || !edge.data?.explicit) continue;
+      if (!status) continue;
       stages = stages.map((s) => {
         if (s.name !== edge.source) return s;
         if (status === "handoff") {
           return { ...s, targets: (s.targets || []).filter((target) => target !== edge.target) };
         }
         const routes = { ...(s.routes || {}) };
-        delete routes[status];
+        if (status === "pass") routes.pass = "stop";
+        else delete routes[status];
         return { ...s, routes };
       });
     }
@@ -1611,7 +1614,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             onEdgesDelete={deleteEdges}
             onEdgeClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
             onEdgeContextMenu={(event, edge) => {
-              if (!edge.data?.explicit) return;
+              if (!edge.data?.status || edge.source === START) return;
               event.preventDefault();
               setSelected("");
               setContextMenu(null);
