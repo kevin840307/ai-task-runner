@@ -292,7 +292,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
 
             # Shared dialogs must restore keyboard focus to the control that opened them.
             page.locator("#openProject").focus()
-            page.evaluate("window.__focusDialog = window.UiDialogs.confirm({title:'Confirm focus', message:'Regression', confirmLabel:'OK'})")
+            page.evaluate("void window.UiDialogs.confirm({title:'Confirm focus', message:'Regression', confirmLabel:'OK'})")
             page.locator("[data-dialog-cancel]").click()
             page.wait_for_function("document.activeElement?.id === 'openProject'")
 
