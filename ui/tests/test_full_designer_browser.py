@@ -127,6 +127,14 @@ flow:
                 page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 assert page.locator(".react-flow__node-scope").count() == 0
 
+                snap = page.get_by_role("button", name="Snap")
+                assert snap.get_attribute("aria-pressed") == "false"
+                snap.click()
+                assert snap.get_attribute("aria-pressed") == "true"
+                assert page.evaluate("localStorage.getItem('workflow-designer.snap:v1')") == "1"
+                snap.click()
+                assert snap.get_attribute("aria-pressed") == "false"
+
                 add_stage = page.locator(".palette-command-add")
                 add_stage.focus()
                 add_stage.click()
