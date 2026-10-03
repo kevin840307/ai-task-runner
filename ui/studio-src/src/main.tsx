@@ -149,7 +149,11 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     test_input_placeholder: "輸入這個積木要接收的內容", test_input_help: "依 Stage 類型提供最小合法測試內容；只作用於 isolated Stage Test，不會修改 Workflow Prompt。",
     fixed_prompt: "固定 Prompt", ping_help: "不使用工具、不讀專案、不修改檔案，只確認 agent 能正常回覆。",
     mode_label: "模式", next_label: "下一個", retry_label: "測試 Retry", retry_exhausted_skip: "Retry 用盡 → Skip",
-    no_output: "（沒有文字輸出）", structured_data: "結構化資料", changed_files: "變更檔案", duplicate_hint: "複製目前設定，但不複製結果連線"
+    no_output: "（沒有文字輸出）", structured_data: "結構化資料", changed_files: "變更檔案", duplicate_hint: "複製目前設定，但不複製結果連線",
+    stage_added: "Stage 已加入草稿；儲存 Workflow 後才會寫入 YAML。", stage_copied: "已複製 Stage 設定；貼上時不會複製結果連線。",
+    stage_pasted: "Stage 已貼上；結果連線未複製。", stage_duplicated: "Stage 已複製；結果連線不會一起複製。", stage_removed: "Stage 已從草稿移除。",
+    layout_reset_done: "已重設畫布位置；Workflow 執行順序沒有變動。", reset_layout_title: "只重設畫布位置，不變更 YAML",
+    fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）"
   },
   en: {
     back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
@@ -186,7 +190,11 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     test_input_placeholder: "Enter input for this Stage", test_input_help: "Uses minimal valid input for the Stage type. This isolated Stage Test does not modify the Workflow Prompt.",
     fixed_prompt: "Fixed Prompt", ping_help: "Uses no tools, does not read or modify the project, and only verifies agent transport.",
     mode_label: "Mode", next_label: "Next", retry_label: "Test Retry", retry_exhausted_skip: "Retries exhausted → Skip",
-    no_output: "(no text output)", structured_data: "Structured data", changed_files: "Changed files", duplicate_hint: "Duplicate settings without result connections"
+    no_output: "(no text output)", structured_data: "Structured data", changed_files: "Changed files", duplicate_hint: "Duplicate settings without result connections",
+    stage_added: "Stage added to draft; YAML changes only after you Save.", stage_copied: "Stage settings copied; result connections are not copied.",
+    stage_pasted: "Stage pasted; result connections were not copied.", stage_duplicated: "Stage duplicated; result connections were not copied.", stage_removed: "Stage removed from draft.",
+    layout_reset_done: "Canvas layout reset; Workflow execution order is unchanged.", reset_layout_title: "Reset canvas positions only; do not change YAML",
+    fail_soft_next_detail: "Next entry → direct PASS (no Agent call; counter resets)"
   },
 };
 function initialDesignerLanguage(): DesignerLanguage {
@@ -247,11 +255,11 @@ function stageTestPrompt(stage: Stage | null, scenario: StageTestScenario = "pas
 }
 
 
-const PARAMETER_SECTIONS: { id: ParameterSection; label: string; fields: string[] }[] = [
-  { id: "content", label: "內容", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
-  { id: "execution", label: "執行", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
-  { id: "result", label: "結果", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
-  { id: "advanced", label: "進階", fields: ["ai_validator_yolo"] },
+const PARAMETER_SECTIONS: { id: ParameterSection; fields: string[] }[] = [
+  { id: "content", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
+  { id: "execution", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
+  { id: "result", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
+  { id: "advanced", fields: ["ai_validator_yolo"] },
 ];
 
 const START = "__start__";
@@ -1316,7 +1324,7 @@ function App() {
     setCreatePrompt("");
     setCreateCommand("");
     setDirtyGraph(true);
-    setMessage(`Stage ${name} 已加入草稿。儲存 Workflow 後才會寫入 YAML。`);
+    setMessage(`${tx("stage_added")} · ${name}`);
   }
 
   function rememberPaletteStage(stageType: string) {
@@ -1394,7 +1402,7 @@ function App() {
     delete copy.routes;
     if (copy.type === "handoff") copy.targets = [];
     setCopiedStage(copy);
-    setMessage(`已複製 Stage ${name} 設定；貼上時不會複製結果連線。`);
+    setMessage(`${tx("stage_copied")} · ${name}`);
   }
 
   function pasteStage(position?: { x: number; y: number }) {
@@ -1420,7 +1428,7 @@ function App() {
     setEdges(g.edges);
     setSelected(name);
     setDirtyGraph(true);
-    setMessage(`Stage 已貼上為 ${name}；結果連線未複製。`);
+    setMessage(`${tx("stage_pasted")} · ${name}`);
   }
 
   async function duplicateStage(name = draft?.name || selected) {
@@ -1452,7 +1460,7 @@ function App() {
     setEdges(g.edges);
     setSelected(newName);
     setDirtyGraph(true);
-    setMessage(`Stage ${name} 已複製為 ${newName}；結果連線不會一起複製。`);
+    setMessage(`${tx("stage_duplicated")} · ${name} → ${newName}`);
   }
 
   function requestConfirm(dialog: DesignerConfirmDialog) {
@@ -1485,7 +1493,7 @@ function App() {
         setEditorOpen(false);
         setContextMenu(null);
         setDirtyGraph(true);
-        setMessage(`Stage ${name} 已從草稿移除。`);
+        setMessage(`${tx("stage_removed")} · ${name}`);
       },
     });
   }
@@ -1495,7 +1503,7 @@ function App() {
     layoutRef.current = {};
     try { localStorage.removeItem(layoutKey(visual.id)); } catch { /* Ignore unavailable browser storage. */ }
     setNodes(graphFor(visual, catalog).nodes);
-    setMessage("已重設畫布位置；Workflow 執行順序沒有變動。");
+    setMessage(tx("layout_reset_done"));
   }
 
   function leaveStudio() {
@@ -1548,7 +1556,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         <div>
           {message && <span className="message">{message}</span>}
           {editorDirty && <span className="unsaved-badge">{tx("unsaved")}</span>}
-          {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title="只重設畫布位置，不變更 YAML">{tx("reset")}</button>}
+          {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title={tx("reset_layout_title")}>{tx("reset")}</button>}
           <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
           <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}>
             {busy ? tx("saving") : tx("save")}
@@ -1948,7 +1956,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   </label>
                   {Number.isInteger(draft.max_failures) && Number(draft.max_failures) > 0 &&
                     <div className="route-row failure-cap-row"><span className="route-dot fail" />
-                      <strong>FAIL×{Number(draft.max_failures)}</strong><span>下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）</span>
+                      <strong>FAIL×{Number(draft.max_failures)}</strong><span>{tx("fail_soft_next_detail")}</span>
                     </div>}
                 </>}
                 <div className="route-section-title">{tx("outgoing")}</div>
