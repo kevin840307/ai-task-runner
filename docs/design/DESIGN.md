@@ -21,7 +21,7 @@ Version: 1.2.66
 
 ## Main flow
 
-Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
+Bundled planning flows are `Plan -> dynamic child Workflow -> File Validator? -> AI Validator? -> PASS`; PlanStage currently emits alternating AI Execute -> AI Review children for its validated Tasks.
 
 - No independent Understand Stage.
 - `PlanStage` is the built-in AI Task producer and installs durable TODOs through the generic `tasks` result effect.
@@ -30,14 +30,14 @@ Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Valid
 - Validator FAIL follows its explicit `routes.fail` edge, typically back to Planning or Execute.
 - Backward PASS/FAIL result edges are the only rollback/loop mechanism; there is no `restart_at`, Repair Stage, or hidden recovery graph.
 - Built-in workflows complete only after their configured validation path passes. Explicit generic workflows may omit validators and complete when their flow ends successfully.
-- A custom Workflow YAML contains only named `stages` and top-level `flow`. Task-producing Stages emit the public Task contract; explicit contiguous `scope: task` Stages define the per-task SOP. A custom flow may use Plan, another Task producer, or no tasks at all. There is no generated `next_steps`, `expand`, or hidden `foreach` topology.
+- A custom Workflow YAML contains only named `stages` and top-level `flow`. A producer Stage may return `tasks` or `stages` together with its own child Stage definitions; Runner validates/inserts/executes that child Workflow before continuing the parent. There is no `scope`, `task_step`, generated `next_steps`, or second task-level runtime.
 
 ## Ownership
 
 - `assets/workflows/*.yaml` and `workflow/loader.py`: bundled/custom topology and one normalization path.
 - `workflow/registry.py`: the explicit `type -> Stage class` registry plus UI/editor catalog metadata.
 - `workflow/results.py`: StageResult parsing/reduction and durable task/validation effects.
-- `workflow/stages/executor.py`: shared retry/session recovery, hooks, progress reporting, and project change tracking.
+- `workflow/execution/stage_executor.py`: shared retry/session recovery, hooks, progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.
 - `agent/`: Qwen/OpenCode transport, session, and structured-output adapters.
 - `workspace.py`: project files, policy, manifests, and protection helpers.
