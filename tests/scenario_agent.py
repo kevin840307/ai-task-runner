@@ -17,6 +17,21 @@ stage = prompt_stage(prompt)
 record_prompt(state_dir, stage, prompt, args)
 
 
+def emit_failed_session():
+    if is_qwen:
+        print(json.dumps({
+            "type": "system",
+            "subtype": "session_start",
+            "session_id": session,
+        }))
+    else:
+        print(json.dumps({
+            "type": "step_start",
+            "sessionID": session,
+            "part": {"type": "step-start"},
+        }))
+
+
 def count(name):
     if scenario == "ai_replan_many_per_project":
         name = f"{root.name}.{name}"
@@ -65,9 +80,11 @@ elif stage == "execute":
     else:
         answer = "execution finished"
     if scenario == "execution_model_error" and n <= 3:
+        emit_failed_session()
         print("stable tool failure")
         raise SystemExit(7)
     if scenario == "api_503" and n <= 3:
+        emit_failed_session()
         print("HTTP 503 Service Unavailable")
         raise SystemExit(7)
     if scenario == "loop_detection" and n == 1:
