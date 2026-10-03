@@ -281,3 +281,11 @@ def test_stage_probe_error_mock_injects_one_error_then_uses_real_retry(tmp_path)
     assert result["test_retry_limit"] == 1
     assert result["test_scenario"] == "error_mock"
     assert result["mock_error_injected"] is True
+
+
+
+def test_review_stage_probe_source_populates_concrete_review_evidence():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "stage_probe.py").read_text(encoding="utf-8")
+    assert 'deliverable=input_text if is_review else ""' in source
+    assert 'last_output=input_text if is_review else ""' in source
+    assert "The supplied deliverable is non-empty and matches the supplied executor evidence." in source
