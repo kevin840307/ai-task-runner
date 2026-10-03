@@ -263,5 +263,15 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
 
 
+    def test_runtime_trace_uses_bounded_existing_runtime_evidence(self):
+        self.assertIn('id="runtimeTraceButton"', self.html)
+        self.assertIn('id="runtimeTracePanel"', self.html)
+        self.assertIn('id="runtimeTraceList"', self.html)
+        self.assertIn("function renderRuntimeTrace(", self.app_js)
+        self.assertIn("runtime?.recent_transitions", self.app_js)
+        self.assertIn("setRuntimeTraceOpen(false)", self.app_js)
+        self.assertNotIn("/api/project/trace", self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
