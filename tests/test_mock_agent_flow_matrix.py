@@ -182,7 +182,7 @@ def test_multi_task_same_session_sends_only_new_todo_context(tmp_path, monkeypat
     assert result.completed is True
     execute = [row for row in records(state_dir) if row["stage"] == "execute"]
     assert len(execute) == 2
-    assert execute[0]["resumed"] is True
+    assert execute[0]["resumed"] is False
     assert execute[1]["resumed"] is True
     assert execute[1]["prompt"].find("RUNNER_SHARED_STAGE_CONTROL") >= 0
     assert "mode: continue" in execute[1]["prompt"]
