@@ -647,3 +647,17 @@ def test_handles_stay_interactive_after_existing_edges():
 
     assert "z-index: 4 !important" in styles
     assert "pointer-events: auto !important" in styles
+
+
+
+def test_designer_modal_focus_return_and_confirmation_order_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen" in text
+    assert "const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null" in text
+    assert "if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus())" in text
+    assert 'aria-label="Dismiss Workflow problems" title="Dismiss Workflow problems"' in text
+    assert 'aria-label={tx("close")} title={tx("close")}' in text
+    cancel_index = text.index('<button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>')
+    confirm_index = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
+    assert cancel_index < confirm_index
