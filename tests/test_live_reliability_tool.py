@@ -2113,3 +2113,12 @@ def test_dynamic_session_workflow_dryrun_forces_two_stable_visits(tmp_path: Path
         assert ctx.state.completed is True
     finally:
         _close(ctx)
+
+
+
+def test_real_review_stage_probe_requires_pass_done_for_complete_evidence():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "REVIEW_STAGE_PROBE_OK is the complete deliverable and executor evidence." in source
+    assert 'stage.get("status") != "pass"' in source
+    assert 'stage.get("next") != "done"' in source
+    assert 'stage.get("route") != "next"' in source
