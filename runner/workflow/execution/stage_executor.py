@@ -146,10 +146,17 @@ class StageExecutor:
             result = stage.finish(ctx, result)
             from ..results import reduce_result
 
-            produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
-            kind = produces or str(getattr(stage, "result_kind", "generic") or "generic")
-            if result.kind != kind:
-                result = replace(result, kind=kind)
+            # An explicit runtime StageResult kind is authoritative. This keeps
+            # dynamic producers extensible: a plugin/custom Stage may return
+            # kind="tasks" or kind="stages" without duplicating that declaration
+            # on the class. Declarative spec/class kinds only fill generic results.
+            if result.kind == "generic":
+                produces = str(getattr(getattr(stage, "spec", None), "produces", "") or "")
+                declared = produces or str(
+                    getattr(stage, "result_kind", "generic") or "generic"
+                )
+                if declared != "generic":
+                    result = replace(result, kind=declared)
             result = reduce_result(ctx, result)
         except ConfigurationError:
             raise
