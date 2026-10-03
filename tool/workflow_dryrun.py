@@ -34,14 +34,14 @@ class MockAIClient:
 
 
 class DryRunContext:
-    def __init__(self, root: Path, workflow: list[dict[str, Any]]) -> None:
+    def __init__(self, root: Path, workflow: list[dict[str, Any]], max_cycles: int = -1) -> None:
         self.root = root
         self.work = root / ".dryrun"
         self.work.mkdir(parents=True, exist_ok=True)
         self.config = SimpleNamespace(
             workflow=workflow,
             ai_validator_prompt="dry-run",
-            max_cycles=-1,
+            max_cycles=max_cycles,
         )
         self.state = RunState(
             run_id="dryrun",
@@ -280,9 +280,11 @@ def _execute(
     workflow: list[dict[str, Any]],
     scenario: Scenario,
     max_steps: int,
+    *,
+    max_cycles: int = -1,
 ) -> tuple[DryRunContext, MockStageExecutor, str]:
     temporary = tempfile.TemporaryDirectory(prefix="ai-task-runner-dryrun-")
-    ctx = DryRunContext(Path(temporary.name), workflow)
+    ctx = DryRunContext(Path(temporary.name), workflow, max_cycles=max_cycles)
     ctx.scratch["_temporary"] = temporary
     executor = MockStageExecutor(scenario, max_steps)
     error = ""
@@ -471,6 +473,8 @@ def matrix_payload(path: Path, max_steps: int) -> dict[str, Any]:
                 "expected_completed": case.expected_completed,
                 "executions": executor.calls,
                 "error": error or None,
+                "cycle": ctx.state.cycle,
+                "stage": ctx.state.stage,
             })
         finally:
             _close(ctx)
@@ -512,11 +516,12 @@ def run_dryrun(
     scenario_path: Path | None,
     max_steps: int,
     *,
+    max_cycles: int = -1,
     json_output: bool = False,
 ) -> int:
     workflow = load_workflow(path)
     scenario = load_scenario(scenario_path)
-    ctx, executor, error = _execute(workflow, scenario, max_steps)
+    ctx, executor, error = _execute(workflow, scenario, max_steps, max_cycles=max_cycles)
     try:
         completed = bool(ctx.state.completed) and not error
         if json_output:
@@ -568,6 +573,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("workflow", type=Path)
     value.add_argument("--scenario", type=Path)
     value.add_argument("--max-steps", type=int, default=100)
+    value.add_argument("--max-cycles", type=int, default=-1)
     value.add_argument("--matrix", action="store_true")
     value.add_argument("--json", action="store_true")
     return value
@@ -575,7 +581,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    if args.max_steps < 1:
+    if args.max_steps < 1 or args.max_cycles < -1:
         return 2
     try:
         workflow = args.workflow.resolve()
@@ -587,6 +593,7 @@ def main(argv: list[str] | None = None) -> int:
             workflow,
             args.scenario.resolve() if args.scenario else None,
             args.max_steps,
+            max_cycles=args.max_cycles,
             json_output=args.json,
         )
     except Exception as exc:
