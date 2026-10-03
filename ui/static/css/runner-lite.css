@@ -1308,3 +1308,41 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+
+.runtime-trace-panel {
+  margin: 0 18px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.runtime-trace-panel[hidden] { display: none !important; }
+.runtime-trace-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(320px, 42vh);
+  overflow: auto;
+}
+.runtime-trace-row {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+.runtime-trace-row strong,
+.runtime-trace-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-trace-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.runtime-trace-row.status-fail strong { color: var(--warn); }
+.runtime-trace-row.status-error strong { color: var(--danger); }
