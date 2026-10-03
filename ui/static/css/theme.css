@@ -595,3 +595,9 @@ html[data-appearance] {
   --shadow-md: 0 5px 16px rgba(0,0,0,.09);
   --shadow-popover: 0 12px 32px rgba(0,0,0,.20);
 }
+
+
+html[data-appearance] .project-mark.runtime-recovering { background: var(--run) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--run) 16%, transparent); }
+html[data-appearance] .project-mark.runtime-needs_attention { background: var(--warn) !important; }
+html[data-appearance] .project-runtime-label.runtime-recovering { color: var(--run); background: var(--info-soft); }
+html[data-appearance] .project-runtime-label.runtime-needs_attention { color: var(--warn); background: var(--warning-soft); }
