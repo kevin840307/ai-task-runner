@@ -311,14 +311,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator("#workflowContextVisibility").is_visible()
             page.click("#workflowContextVisibility")
             page.wait_for_timeout(80)
-            assert workflow_row.locator(".studio-file-hidden").count() == 1
+            assert workflow_row.locator("small.hidden-state").count() == 1
             assert page.locator("#workflowSelect option", has_text="e2e_crud.workflow.yaml").count() == 0
 
             workflow_row.click(button="right")
             assert page.locator("#workflowContextVisibility").is_visible()
             page.click("#workflowContextVisibility")
             page.wait_for_timeout(80)
-            assert workflow_row.locator(".studio-file-hidden").count() == 0
+            assert workflow_row.locator("small.hidden-state").count() == 0
             assert page.locator("#workflowSelect option", has_text="e2e_crud.workflow.yaml").count() == 1
 
             # Prompt assets keep the inline master-detail editor.
