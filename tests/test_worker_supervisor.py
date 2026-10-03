@@ -350,7 +350,8 @@ def test_supervisor_stop_request_terminates_worker_and_cleans_children(tmp_path,
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
-    state.write_text("{}", encoding="utf-8")
+    durable = '{"run_id":"stop-preserve","stage":"executing","current":1,"cycle":2,"workflow_position":3,"ai_session_id":"session-A"}'
+    state.write_text(durable, encoding="utf-8")
     request = _request(tmp_path)
     stop_request = work / supervisor_module.STOP_REQUEST_FILE
     calls = []
