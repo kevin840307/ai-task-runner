@@ -127,6 +127,14 @@ flow:
                 page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 assert page.locator(".react-flow__node-scope").count() == 0
 
+                add_stage = page.locator(".palette-command-add")
+                add_stage.focus()
+                add_stage.click()
+                page.locator(".add-stage-command").wait_for(state="attached")
+                page.keyboard.press("Escape")
+                page.locator(".add-stage-command").wait_for(state="detached")
+                page.wait_for_function("document.activeElement?.classList.contains('palette-command-add')")
+
                 page.locator('.react-flow__node[data-id="review"]').dblclick()
                 assert page.get_by_text("AI profile").is_visible()
                 assert page.get_by_text("執行範圍").count() == 0
