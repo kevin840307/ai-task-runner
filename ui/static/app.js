@@ -1091,9 +1091,8 @@ async function restoreWorkflowStudioNavigation() {
     if (project && !sameProjectPath(state.project?.path, project.path)) await selectProject(project);
   }
 
-  await switchView("workflow");
   const source = params.get("source") === "prompt" ? "prompt" : "workflow";
-  state.studioSourceKind = source;
+  await switchView(source);
   await refreshStudioFiles({ force: true });
   renderStudioFiles();
   const studioId = params.get("studio") || "";
