@@ -44,11 +44,12 @@ def _launch_browser(playwright):
 
 
 def _boot_main_ui(page) -> None:
-    # The fixture injects app.js after set_content(), so make startup deterministic
-    # by invoking the same production project loader explicitly.
-    page.evaluate("() => loadProjects()")
+    # app.js performs its production bootstrap immediately when injected. Do not
+    # reach into private lexical functions such as loadProjects(); wait for the
+    # same rendered state a real browser user observes.
     page.wait_for_function(
-        "document.querySelector('#projectName')?.textContent === 'Fixture Project'"
+        "document.querySelector('#projectName')?.textContent === 'Fixture Project'",
+        timeout=5000,
     )
 
 
