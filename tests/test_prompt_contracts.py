@@ -158,7 +158,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
     assert "same_session: false" in recovered
 
 
-def test_prompt_contract_memory_is_bounded_per_stage():
+def test_prompt_contract_memory_is_bounded_per_static_prompt_identity():
     from types import SimpleNamespace
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
 
@@ -176,8 +176,7 @@ def test_prompt_contract_memory_is_bounded_per_stage():
     second._remember_prompt(ctx, client)
 
     assert scratch["prompt_contracts"] == {
-        "worker_a": ("common/execution.md", "session-99"),
-        "worker_b": ("common/execution.md", "other-session"),
+        ("generic", "common/execution.md", ""): "other-session",
     }
 
 
