@@ -952,17 +952,8 @@ function renderStudioFiles() {
   body?.classList.toggle("workflow-manager-mode", workflowManager);
   body?.classList.toggle("prompt-manager-mode", !workflowManager);
   root.innerHTML = "";
-  $("studioSourceTabs").hidden = true;
   $("studioListTitle").textContent =
     state.studioSourceKind === "prompt" ? "Prompts" : "Workflows";
-  $("yamlWorkflowSource").classList.toggle(
-    "active",
-    state.studioSourceKind === "workflow",
-  );
-  $("yamlPromptSource").classList.toggle(
-    "active",
-    state.studioSourceKind === "prompt",
-  );
   $("newWorkflowButton").hidden = false;
   $("newWorkflowButton").title =
     state.studioSourceKind === "prompt" ? "New prompt" : "New workflow";
@@ -997,21 +988,12 @@ function clearStudioEditor() {
 function studioCacheVersion(item) { return String(item?.version || ""); }
 // Hidden Workflows remain editable in Studio but are omitted from the Tasks selector.
 function renderStudioVisibilityBadge() {
-  const badge = $("studioVisibilityBadge"), notice = $("studioVisibilityNotice"), scopeBadge = $("studioScopeBadge"), item = state.studioFile;
-  if (!badge) return;
-  const hidden = item?.kind === "workflow" && !!item.hidden;
-  badge.hidden = !hidden;
-  if (hidden) {
-    badge.textContent = t("studio.hidden_badge", "Hidden from Chat");
-    badge.title = t("studio.hidden_badge_tip", "This Workflow is hidden from the Chat workflow selector. Workflow Settings, CLI, and Runner behavior are unchanged.");
-  }
-  if (notice) notice.hidden = !hidden;
-  if (scopeBadge) {
-    const scope = String(item?.scope || "").toLowerCase();
-    scopeBadge.hidden = !item;
-    scopeBadge.className = `studio-scope-badge ${scope || "global"}`;
-    scopeBadge.textContent = scope === "project" ? "PROJECT" : "GLOBAL";
-  }
+  const scopeBadge = $("studioScopeBadge"), item = state.studioFile;
+  if (!scopeBadge) return;
+  const scope = String(item?.scope || "").toLowerCase();
+  scopeBadge.hidden = !item;
+  scopeBadge.className = `studio-scope-badge ${scope || "global"}`;
+  scopeBadge.textContent = scope === "project" ? "PROJECT" : "GLOBAL";
 }
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
 function applyStudioLoaded(data, _visual, item, cached = false) {
@@ -1149,8 +1131,6 @@ function updateDirtyState() {
   $("studioAssetMenuButton").disabled = !state.studioFile;
   $("renameStudioButton").disabled = !state.studioGuard.editable || !state.studioFile || !!state.studioFile.readonly;
   $("duplicateStudioButton").disabled = !state.studioGuard.editable || !state.studioFile;
-  const visibilityButton = $("toggleWorkflowVisibilityButton");
-  if (visibilityButton) visibilityButton.hidden = true;
 }
 function renderStudioGuard() {
   const guard = state.studioGuard || { editable: true, active_projects: [] }, badge = $("studioLockBadge"), banner = $("studioLockBanner"); badge.className = "runtime-badge";
@@ -1580,7 +1560,7 @@ $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceK
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
 $("workflowContextOpen").onclick = () => { const item = workflowContextItem(); closeWorkflowContextMenu(); if (item) openWorkflowEditorItem(item); };
 $("workflowContextVisibility").onclick = () => { const item = workflowContextItem(); if (item) void setWorkflowVisibility(item, !item.hidden); };
-$("saveStudioButton").onclick = saveStudio; $("toggleWorkflowVisibilityButton").onclick = toggleWorkflowVisibility; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("studioAssetMenuButton").onclick = (event) => { event.stopPropagation(); toggleStudioAssetMenu(); }; $("renameStudioButton").onclick = renameStudioAsset; $("duplicateStudioButton").onclick = duplicateStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
+$("saveStudioButton").onclick = saveStudio; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("studioAssetMenuButton").onclick = (event) => { event.stopPropagation(); toggleStudioAssetMenu(); }; $("renameStudioButton").onclick = renameStudioAsset; $("duplicateStudioButton").onclick = duplicateStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
 $("newWorkflowClose").onclick = () => closeNewWorkflowModal(); $("newWorkflowCancel").onclick = () => closeNewWorkflowModal(); $("newWorkflowConfirm").onclick = confirmNewWorkflow; $("newWorkflowBackdrop").addEventListener("click", (e) => { if (e.target === $("newWorkflowBackdrop")) closeNewWorkflowModal(); }); $("newWorkflowBackdrop").addEventListener("input", () => { state.newWorkflowDirty = true; }); $("newWorkflowName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmNewWorkflow(); } });
 $("newPromptClose").onclick = () => closeNewPromptModal(); $("newPromptCancel").onclick = () => closeNewPromptModal(); $("newPromptConfirm").onclick = confirmNewPrompt; $("newPromptBackdrop").addEventListener("click", (e) => { if (e.target === $("newPromptBackdrop")) closeNewPromptModal(); }); $("newPromptBackdrop").addEventListener("input", () => { state.newPromptDirty = true; });
 $("duplicateAssetClose").onclick = closeDuplicateAssetModal; $("duplicateAssetCancel").onclick = closeDuplicateAssetModal; $("duplicateAssetConfirm").onclick = confirmDuplicateAsset; $("duplicateAssetBackdrop").addEventListener("click", (e) => { if (e.target === $("duplicateAssetBackdrop")) closeDuplicateAssetModal(); });
