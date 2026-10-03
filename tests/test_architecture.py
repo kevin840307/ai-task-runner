@@ -161,3 +161,16 @@ def test_stage_executor_is_workflow_orchestration_not_a_stage_type():
     assert "class StageExecutor" in executor
     assert "stage_retries" in executor
     assert "_fresh_session" in executor
+
+
+
+def test_stage_executor_does_not_depend_on_concrete_stage_types():
+    executor = (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").read_text(encoding="utf-8")
+    for concrete in (
+        "PlanStage",
+        "AIValidatorStage",
+        "CommandStage",
+        "HandoffStage",
+    ):
+        assert concrete not in executor
+    assert "from ..stages.base_stage import" in executor
