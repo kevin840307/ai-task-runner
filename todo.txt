@@ -236,6 +236,18 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed real Review Stage Probe false failure caused by incomplete isolated review evidence.
+    - Root cause: the live Stage Probe created a Review Task with an empty deliverable/last_output,
+      while the harness still expected PASS->done. Real Qwen correctly returned semantic FAIL->stop
+      because there was nothing concrete to verify.
+    - Isolated Review Stage tests now populate the supplied input as deliverable and executor evidence
+      with a concrete acceptance criterion. Production Review semantics are unchanged.
+    - The real-Qwen preflight now supplies a deterministic completed-evidence token and requires
+      PASS + route=next + next=done. FAIL->stop remains the correct default routing contract when
+      Review evidence is actually incomplete.
+    - Added deterministic Stage Probe/source contract coverage and live harness contract coverage.
+    - Other real Stage Probe assertions were audited; no additional model-result-forcing scenario remains.
+
 [x] Fixed Dynamic Handoff live route false failure caused by LLM-controlled visit counting.
     - Root cause: the probe required stable_role to emit STABLE_FIRST on its first call and
       STABLE_REPEAT on its second call, then used those exact model outputs to decide whether
