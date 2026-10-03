@@ -16,7 +16,7 @@ from ..runtime import events as progress
 from ..runtime.run_state import RunState, Task
 from .schema import validate_routes, validate_stage
 from .profiles import apply_ai_profile_defaults
-from .stages.contracts import StageResult
+from .contracts import StageResult
 
 DYNAMIC_META_FIELDS = frozenset({
     "_dynamic_group",
