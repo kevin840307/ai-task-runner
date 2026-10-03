@@ -105,7 +105,7 @@ flow:
             with sync_playwright() as playwright:
                 browser = _launch_browser(playwright)
                 page = browser.new_page(viewport={"width": 1600, "height": 960})
-            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
                 errors: list[str] = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 project_q = quote(str(project))
@@ -182,7 +182,7 @@ flow:
             with sync_playwright() as playwright:
                 browser = _launch_browser(playwright)
                 page = browser.new_page(viewport=viewport)
-            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
                 errors: list[str] = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 project_q = quote(str(project))
@@ -285,7 +285,7 @@ flow:
             with sync_playwright() as playwright:
                 browser = _launch_browser(playwright)
                 page = browser.new_page(viewport={"width": 1600, "height": 960})
-            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
                 errors: list[str] = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 project_q = quote(str(project))
@@ -467,7 +467,7 @@ flow:
             with sync_playwright() as playwright:
                 browser = _launch_browser(playwright)
                 page = browser.new_page(viewport={"width": 1440, "height": 900})
-            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
                 project_q = quote(str(project))
                 files = page.request.get(
                     f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
