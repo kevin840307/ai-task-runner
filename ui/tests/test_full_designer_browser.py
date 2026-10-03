@@ -64,7 +64,7 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
 def _reconnect_edge_target(page, edge_id: str, target_selector: str) -> None:
     edge = page.locator(f'.react-flow__edge[data-id="{edge_id}"]')
     edge.dispatch_event("click")
-    updater = page.locator(".react-flow__edgeupdater-target")
+    updater = page.get_by_test_id(f"rf__edge-{edge_id}").locator(".react-flow__edgeupdater-target")
     updater.wait_for(state="attached")
     target = page.locator(target_selector)
     start = updater.bounding_box()
