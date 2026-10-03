@@ -63,13 +63,25 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
 
 def _reconnect_edge_target(page, edge_id: str, target_selector: str) -> None:
     edge = page.locator(f'.react-flow__edge[data-id="{edge_id}"]')
-    edge.dispatch_event("click")
+    edge.click(force=True)
     updater = page.get_by_test_id(f"rf__edge-{edge_id}").locator(".react-flow__edgeupdater-target")
     updater.wait_for(state="attached")
     target = page.locator(target_selector)
-    assert updater.bounding_box() and target.bounding_box()
-    updater.drag_to(target, force=True)
-    page.wait_for_timeout(180)
+    updater_box = updater.bounding_box()
+    target_box = target.bounding_box()
+    assert updater_box and target_box
+    page.mouse.move(
+        updater_box["x"] + updater_box["width"] / 2,
+        updater_box["y"] + updater_box["height"] / 2,
+    )
+    page.mouse.down()
+    page.mouse.move(
+        target_box["x"] + target_box["width"] / 2,
+        target_box["y"] + target_box["height"] / 2,
+        steps=18,
+    )
+    page.mouse.up()
+    page.wait_for_timeout(220)
 
 
 def _save_editor(page) -> None:
