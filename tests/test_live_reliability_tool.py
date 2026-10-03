@@ -2194,9 +2194,17 @@ def test_api_recovery_probe_uses_probe_owned_json_event_stream():
 
 
 
-def test_api_recovery_probe_distinguishes_backend_retry_from_stageexecutor_recovery():
+def test_api_recovery_probe_uses_stable_stageexecutor_recovery_evidence():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    assert "runner_recovery_seen = False" in source
-    assert 'if str(state.get("last_error") or ""):' in source
-    assert "failure may have been absorbed below StageExecutor" in source
-    assert "durable last_error observed" in source
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("action") == "retry"' in source
+    assert "final scan after process exit" in source
+    assert "last_error is deliberately transient" in source
+
+
+
+def test_api_recovery_probe_final_scan_prevents_fast_recovery_race():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "console_events = jsonl_events(log)" in source
+    assert "recovery_event_seen = recovery_event_seen or any(" in source
+    assert "for event in (*console_events, *events)" in source
