@@ -62,7 +62,7 @@ def _install_main_ui_scripts(page, static_root: Path) -> None:
         source = static_root / relative
         page.route(
             f"http://local.test/{relative}",
-            lambda route, source=source: route.fulfill(
+            lambda route, _request, source=source: route.fulfill(
                 status=200,
                 content_type="text/javascript",
                 body=source.read_text(encoding="utf-8"),
