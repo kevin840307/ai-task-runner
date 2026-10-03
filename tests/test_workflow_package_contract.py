@@ -10,6 +10,7 @@ EXECUTION = WORKFLOW / "execution"
 
 
 def test_stage_package_has_one_concrete_stage_per_file_and_no_core_bucket():
+    assert (WORKFLOW / "contracts.py").is_file()
     assert not (STAGES / "core.py").exists()
     expected = {
         "base_stage.py",
