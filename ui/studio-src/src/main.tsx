@@ -245,7 +245,7 @@ function workflowStudioUrl() {
 
 function promptEditorUrl(promptId: string) {
   const { project } = query();
-  const p = new URLSearchParams({ view: "prompt", studio: promptId });
+  const p = new URLSearchParams({ view: "workflow", source: "prompt", studio: promptId });
   if (project) p.set("project", project);
   return `/index.html?${p}`;
 }
@@ -1696,7 +1696,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   </button>
                 ))}
               </div>
-              <div className="stage-editor-content">
+              <div className={`stage-editor-content ${inspectorTab === "yaml" ? "yaml-mode" : ""}`}>
               {inspectorTab === "form" && <div className="fields stage-form-panel" role="tabpanel">
                 <section className="stage-form-section">
                   <div className="stage-form-section-head"><strong>{tx("basic")}</strong><small>Stage identity and behavior</small></div>
