@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "ui" / "studio-src" / "src" / "main.tsx"
+STYLES = ROOT / "ui" / "studio-src" / "src" / "styles.css"
 
 
 def test_react_studio_has_drag_palette_and_manual_result_edge_handles():
