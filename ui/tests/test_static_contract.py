@@ -243,7 +243,8 @@ class StaticContractTests(unittest.TestCase):
 
     def test_no_static_contract_tests_are_defined_after_main_guard(self):
         source = Path(__file__).read_text(encoding="utf-8")
-        main = source.index('if __name__ == "__main__":')
+        main = source.rfind('\nif __name__ == "__main__":\n')
+        self.assertGreaterEqual(main, 0)
         self.assertNotIn("\n    def test_", source[main:])
 
 
@@ -257,7 +258,7 @@ class StaticContractTests(unittest.TestCase):
 
 
     def test_shared_dialog_icon_close_has_accessible_tooltip(self):
-        dialogs = (ROOT / "ui" / "static" / "js" / "ui-dialogs.js").read_text(encoding="utf-8")
+        dialogs = (self.root / "static" / "js" / "ui-dialogs.js").read_text(encoding="utf-8")
         self.assertIn('data-dialog-close aria-label="Close" title="Close"', dialogs)
         self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
 
