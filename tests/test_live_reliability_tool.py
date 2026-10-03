@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import http.client
 import json
 import sys
