@@ -1624,6 +1624,9 @@ class WorkflowStudioTests(unittest.TestCase):
             stdout='{"closed":true,"valid":true,"paths_passed":1,"paths_total":1}',
             stderr="",
         )
+        # Prime the immutable runtime catalog before mocking the dry-run subprocess.
+        # studio_validate also resolves AI profile defaults through this catalog.
+        self.state.workflow_catalog()
         with patch("ui.workflow_studio_state.subprocess.run", return_value=fake) as run:
             result = self.state.studio_validate(item["id"], self.project)
         self.assertTrue(result["ok"])
