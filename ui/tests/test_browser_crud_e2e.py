@@ -303,7 +303,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 has_text="e2e_crud.workflow.yaml"
             )
             assert workflow_row.count() == 1
-            assert "Open Editor" in workflow_row.inner_text()
+            assert workflow_row.locator(".studio-file-item-action").count() == 1
 
             # Right-click visibility is owned by the Workflow Library and updates Chat immediately.
             workflow_row.click(button="right")
