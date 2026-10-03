@@ -503,8 +503,7 @@ flow:
                 page.wait_for_url(
                     f"**/index.html?view=workflow&source=prompt&studio={quote(prompt['id'])}*"
                 )
-                page.locator("#studioPromptTextarea").wait_for(state="attached")
-                assert page.locator("#studioPromptTextarea").is_visible()
+                page.locator("#studioPromptTextarea").wait_for(state="visible")
                 assert page.locator("#studioPromptTextarea").input_value().strip()
                 assert page.locator("#studioFileName").inner_text() == prompt["name"]
                 browser.close()
