@@ -2191,3 +2191,12 @@ def test_api_recovery_probe_uses_probe_owned_json_event_stream():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "(*jsonl_events(log), *runner_events(project))" in source
     assert "probe-owned --json-events" in source
+
+
+
+def test_api_recovery_probe_distinguishes_backend_retry_from_stageexecutor_recovery():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "runner_recovery_seen = False" in source
+    assert 'if str(state.get("last_error") or ""):' in source
+    assert "failure may have been absorbed below StageExecutor" in source
+    assert "durable last_error observed" in source
