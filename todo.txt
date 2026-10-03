@@ -101,8 +101,9 @@ Do these before larger UI work when they can be implemented without widening run
     - Project / Workflow / Prompt / Stage names should truncate gracefully with tooltip/full-name access.
     - No horizontal page overflow at supported desktop widths.
 
-[ ] Keep inline feedback close to the action
-    - Save/validate/import/generate failures should appear near the triggering control, not only as a distant global message.
+[x] Keep inline feedback close to the action
+    - Studio actions now use the local studioStatus row for persistent nearby feedback while retaining toast/details for visibility and debugging.
+    - Save/validate/import/generate failures do not rely only on a distant global message.
 
 [x] Use relative freshness text consistently
     - Prefer concise "updated 12s ago / 3m ago" style for live status, with exact timestamp available on hover/details.
@@ -118,11 +119,12 @@ P0 - UI / UX HIGH VALUE
       progress, elapsed, last transition and retry state.
     - Goal: answer "what is it doing now and does it need attention?" at a glance.
 
-[ ] Last-run / run-history entry point
-    - Keep this lightweight: recent runs for the selected Project with status, start/end time and duration.
-    - Open one run to inspect its existing messages/log/trace evidence.
-    - Do not build a separate analytics Dashboard.
-    - This gives operators the common Dify/n8n-style "what happened last run?" path without widening runtime semantics.
+[x] Last-run / run-history entry point
+    - Recent Runs is derived from existing messages.jsonl + run_id + current durable runtime state; no second history store was added.
+    - Shows status, prompt, freshness and duration for the selected Project.
+    - Completed rows can jump back to the matching existing assistant message when available.
+    - Unit/static/browser coverage protects the lightweight panel and empty state.
+    - No separate analytics Dashboard or background polling was introduced.
 
 [x] Error / recovery UX
     - Visually distinguish:
@@ -171,8 +173,8 @@ P1 - UI / UX USEFUL AFTER P0
     - Reuse durable runtime evidence; do not create a second tracing engine.
 
 [ ] Unsaved draft recovery
-    - Preserve local Workflow/Prompt editor drafts across accidental reload/navigation/crash.
-    - On reopen, offer Restore Draft / Discard Draft when the saved YAML/hash differs.
+    - [x] Prompt drafts are preserved in local browser storage, hash-gated against the saved asset, and offer Restore Draft / Discard Draft.
+    - [ ] Workflow Designer/YAML draft recovery still needs the same local-only crash/reload protection.
     - Draft recovery is local/editor-only; it must NOT auto-write canonical YAML.
 
 [ ] Run from here / Test path
