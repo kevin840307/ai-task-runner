@@ -73,14 +73,14 @@ Validator feedback 存入 state 時 bounded 到 20,000 characters，保留開頭
 
 YAML batch mode 已支援，並支援每筆獨立 `project_root`、`goal_file`、`workflow_file`、AI validation count/required passes。每筆使用自己的 nested state；runtime scope 必須在 child item 結束後恢復 parent，禁止全域 state leakage。
 
-Workflow YAML 只保留兩個頂層 key：`stages` 定義命名 node，`flow` 定義其順序與 membership。Registry 只保留 `type -> class`。優先使用語意化內建 Stage（`plan`、`task`、`review`、`ai_validator`、`command`）；只有刻意需要通用 AI 行為時才用 `base`。Task Producer 產生公開 Task contract；連續的 `scope: task` Stage 定義逐 TODO SOP。
+Workflow YAML 只保留兩個頂層 key：`stages` 定義命名 node，`flow` 定義其順序與 membership。Registry 只保留 `type -> class`。一般 AI 行為統一使用 `type: base` 搭配 `profile: generic | execute | review`；只有真正具有特殊 runtime 語意的能力才使用獨立 type，例如 `plan`、`ai_validator`、`command`、`handoff` 或 plugin。Producer Stage 可回傳 `tasks` 或 `stages` 與自己的 child Stage definitions；Runner 會先完整執行 child Workflow 再回 parent。
 
 PASS/FAIL result edge 是唯一 semantic routing 機制；backward edge 就是 rollback/loop。Technical ERROR 只由 StageExecutor retry/recovery，不建立 graph edge。不存在 public `recover`、`restart_at`、Repair Stage、repeat/max-attempt graph 或 hidden replan topology。Review 可刻意設定有限 local `error_policy.retries`；耗盡後 fail-soft Skip 到下一 Stage，因此後面仍應保留 authoritative Validator。
 
 ## Prompt Contract
 所有 bundled Stage Prompt 使用 Jinja + `StrictUndefined`。Template context/rendering 統一由 `runner/prompting.py` 負責；不得直接暴露 `RunState`、`RuntimeConfig`、`scratch` 等內部物件。Bundled Prompt resource 位於 `runner/assets/prompts/<category>/`。
 
-一般寫入型 AI 工作使用 `type: task`，唯讀 verdict 工作使用 `type: review`；只有刻意需要通用 AI 行為時才使用 `type: base`。真正的新行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、FlowEngine 禁止增加 Stage-name-specific branch。
+一般寫入型 AI 工作使用 `type: base, profile: execute`；唯讀 verdict 使用 `type: base, profile: review`；客製 AI 行為使用 `profile: generic`。真正的新特殊行為只需一個帶 `spec_class` 的 Stage class、一次 `register_stage("type", Class)` 與 YAML instance；Loader、FlowEngine、StageExecutor 禁止增加 Stage-name-specific branch。
 
 Stage 只實作一次獨立 attempt，並以 `StageResult` 回傳 facts；不得建構／呼叫另一個 Stage，也不得選擇具體 successor。State reduction 由 `StageResult.kind` 選擇少量 reducer（`tasks`、`task`、`review`、`validation`、`generic`），串接留在通用 FlowEngine/routing data。
 
