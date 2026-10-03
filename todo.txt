@@ -323,7 +323,7 @@ LIVE REGRESSION NOTES
 
 
 [x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
-[x] API outage live probes require observable Recovering status and require durable last_error to clear after successful recovery.
+[x] API outage live probes require structured runner.recovery/retry evidence, same-session recovery, and final durable last_error cleanup after success.
 [x] Fixed Dynamic Handoff live startup failure caused by stale harness validator injection.
     - Root cause: runner_command() unconditionally added --validator validation.py to every direct run.
       Explicit Dynamic Handoff workflows without validate_file are correctly valid, but RuntimeConfig
