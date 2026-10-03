@@ -2987,10 +2987,13 @@ def api_recovery_probe(
         outage_until = 0.0
         successes_before_outage = 0
         recovered = False
+        runner_recovery_seen = False
         recovering_seen = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
+                if str(state.get("last_error") or ""):
+                    runner_recovery_seen = True
                 if not recovering_seen:
                     # This live probe owns the --json-events console stream, so use
                     # it as the primary evidence for transient status events. The
@@ -3047,10 +3050,16 @@ def api_recovery_probe(
         # Recovering is intentionally transient. The probe-owned --json-events
         # console stream is unbounded for this one run, while production log.txt
         # is bounded. Latch either source while the run is active.
+        if not runner_recovery_seen:
+            raise RuntimeError(
+                "API outage was injected and recovered, but no durable Runner last_error "
+                "was observed; the failure may have been absorbed below StageExecutor"
+            )
         if not recovering_seen:
             raise RuntimeError(
-                "API outage reached Runner recovery path but no structured "
-                "Recovering status event was observed in console JSON events or production log while recovery was active"
+                "API outage reached StageExecutor recovery (durable last_error observed) "
+                "but no structured Recovering status event was observed in console JSON events "
+                "or production log while recovery was active"
             )
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
