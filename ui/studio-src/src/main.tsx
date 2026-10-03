@@ -39,6 +39,12 @@ type Visual = {
   flow: string[];
 };
 
+type GraphProblem = {
+  severity: "error" | "warning";
+  message: string;
+  stage?: string;
+};
+
 type CatalogOption = {
   name: string;
   type: string;
@@ -618,6 +624,67 @@ function graphDraft(visual: Visual) {
     if (stage.routes && Object.keys(stage.routes).length) routes[stage.name] = stage.routes;
   });
   return { flow: visual.flow, routes, stages: visual.stages };
+}
+
+function graphProblems(visual: Visual): GraphProblem[] {
+  const problems: GraphProblem[] = [];
+  const names = visual.stages.map((stage) => stage.name);
+  const known = new Set(names);
+  const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
+  Array.from(new Set(duplicates)).forEach((name) => {
+    problems.push({ severity: "error", stage: name, message: `Duplicate Stage key: ${name}` });
+  });
+  if (!visual.flow.length) {
+    problems.push({ severity: "error", message: "START has no connected Stage." });
+  }
+  visual.flow.forEach((name) => {
+    if (!known.has(name)) problems.push({ severity: "error", message: `Flow references missing Stage: ${name}` });
+  });
+
+  const adjacency = new Map<string, string[]>();
+  visual.stages.forEach((stage) => {
+    const targets: string[] = [];
+    const index = visual.flow.indexOf(stage.name);
+    const next = index >= 0 ? visual.flow[index + 1] : "";
+    if (stage.type === "handoff") {
+      const handoff = Array.isArray(stage.targets) ? stage.targets : [];
+      if (!handoff.length) problems.push({ severity: "error", stage: stage.name, message: "Handoff has no target." });
+      handoff.forEach((target) => {
+        if (!known.has(target)) problems.push({ severity: "error", stage: stage.name, message: `Handoff target not found: ${target}` });
+        else targets.push(target);
+      });
+    } else {
+      const pass = String(stage.routes?.pass || (next ? "next" : "done"));
+      if (pass === "next" && next) targets.push(next);
+      else if (!["next", "done", "stop"].includes(pass)) {
+        if (!known.has(pass)) problems.push({ severity: "error", stage: stage.name, message: `PASS target not found: ${pass}` });
+        else targets.push(pass);
+      }
+      const fail = String(stage.routes?.fail || "");
+      if (fail && !["next", "done", "stop"].includes(fail)) {
+        if (!known.has(fail)) problems.push({ severity: "error", stage: stage.name, message: `FAIL target not found: ${fail}` });
+        else targets.push(fail);
+      } else if (fail === "next" && next) targets.push(next);
+    }
+    adjacency.set(stage.name, targets);
+  });
+
+  const reachable = new Set<string>();
+  const queue = visual.flow[0] ? [visual.flow[0]] : [];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (reachable.has(current) || !known.has(current)) continue;
+    reachable.add(current);
+    (adjacency.get(current) || []).forEach((target) => {
+      if (!reachable.has(target)) queue.push(target);
+    });
+  }
+  visual.stages.forEach((stage) => {
+    if (!reachable.has(stage.name)) {
+      problems.push({ severity: "warning", stage: stage.name, message: "Stage is unreachable from START." });
+    }
+  });
+  return problems;
 }
 
 function parseInputValue(option: CatalogOption, raw: string, checked?: boolean): unknown {
