@@ -33,6 +33,12 @@ Prioritize by:
 3. reduction of user confusion / operator mistakes,
 4. implementation cost and regression risk.
 
+UI/UX reference direction:
+- n8n / Langflow / Flowise / Dify are references for interaction patterns, not feature targets.
+- Borrow only patterns that reduce mistakes or debugging time.
+- Keep this product centered on Tasks + Workflows + Prompts; do not copy platform-scale navigation.
+- Keep YAML canonical and explicit Save validation. Do NOT auto-save canonical Workflow YAML merely because other editors auto-save drafts.
+
 QUICK WINS - LOW COST / HIGH VALUE
 ----------------------------------
 Do these before larger UI work when they can be implemented without widening runtime contracts.
@@ -70,6 +76,13 @@ Do these before larger UI work when they can be implemented without widening run
 [ ] Improve hover/tooltips for icon-only controls
     - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
 
+[ ] Keyboard focus / accessibility pass
+    - Every interactive control must be reachable by keyboard with a visible focus state.
+    - Icon-only buttons need accessible names.
+    - Menus/dialogs should return focus to the triggering control when closed.
+    - Prefer real button semantics and correct aria-expanded/selected/disabled states.
+    - High value because it also improves ordinary keyboard-heavy desktop use, not only screen-reader use.
+
 [ ] Clarify disabled controls
     - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
 
@@ -100,6 +113,12 @@ P0 - UI / UX HIGH VALUE
       running/recovering/stopped/completed, current Stage, Task, cycle,
       progress, elapsed, last transition and retry state.
     - Goal: answer "what is it doing now and does it need attention?" at a glance.
+
+[ ] Last-run / run-history entry point
+    - Keep this lightweight: recent runs for the selected Project with status, start/end time and duration.
+    - Open one run to inspect its existing messages/log/trace evidence.
+    - Do not build a separate analytics Dashboard.
+    - This gives operators the common Dify/n8n-style "what happened last run?" path without widening runtime semantics.
 
 [ ] Error / recovery UX
     - Visually distinguish:
@@ -145,6 +164,12 @@ P1 - UI / UX USEFUL AFTER P0
 [ ] Runtime Trace
     - Stage, result, route, retry/recover, duration and session evidence.
     - Optimize for debugging long unattended runs.
+    - Reuse durable runtime evidence; do not create a second tracing engine.
+
+[ ] Unsaved draft recovery
+    - Preserve local Workflow/Prompt editor drafts across accidental reload/navigation/crash.
+    - On reopen, offer Restore Draft / Discard Draft when the saved YAML/hash differs.
+    - Draft recovery is local/editor-only; it must NOT auto-write canonical YAML.
 
 [ ] Run from here / Test path
     - Dry-run/mock path first; do not introduce a second runtime.
@@ -153,16 +178,19 @@ P1 - UI / UX USEFUL AFTER P0
 [ ] Edge -> empty canvas -> Add Stage
     - Create and connect in one interaction.
 
+[ ] Canvas smart guides / optional snap
+    - Lightweight alignment guides or snap-to-grid for cleaner graphs.
+    - Must remain optional and never rewrite graph semantics.
+
 [ ] Better Workflow search / recent / favorites
     - Only if real workflow count makes navigation slower.
-
-[ ] Better empty states
-    - Project / Workflow / Prompt empty states should provide the next useful action.
 
 P2 - DEFER / LOW CURRENT VALUE
 -------------------------------
 Do not spend release time on these unless a real use case appears:
 - separate Dashboard/Home
+- automatic writes of canonical Workflow YAML while editing
+- platform-scale analytics/evaluation suite
 - another Workflow editing surface
 - Undo history panel
 - large version-history browser
@@ -182,6 +210,7 @@ WORKFLOW DESIGNER CURRENT CONTRACT
 - ERROR remains error_policy, never a graph edge.
 - START/END are UI-only.
 - Save backend validates flow/routes/targets/schema before writing YAML.
+- Unsaved editor recovery, if implemented, is a local draft only and never bypasses Save validation.
 - Runtime executes only canonical saved YAML.
 - Stage Test does not create a second execution model.
 
