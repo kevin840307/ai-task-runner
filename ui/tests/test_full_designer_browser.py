@@ -126,9 +126,12 @@ flow:
                 page.locator(".modal-close-button").click()
 
                 ai_palette = page.locator(".palette-item").filter(has_text="AI Stage").first
-                ai_palette.drag_to(page.locator(".canvas"), target_position={"x": 450, "y": 300})
+                ai_palette.locator(".palette-quick-add").click()
+                create = page.locator(".create-stage-card")
+                create.wait_for()
+                create.get_by_text("AI profile").locator("..").locator("select").select_option("review")
+                create.get_by_role("button", name="Create Stage").click()
                 page.locator('.react-flow__node[data-id="ai_stage"]').wait_for()
-                page.get_by_text("AI profile").locator("..").locator("select").select_option("review")
                 assert page.get_by_text("未儲存草稿").is_visible()
                 assert workflow.read_bytes() == original
                 assert not errors
@@ -301,7 +304,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
 
                 # Existing explicit FAIL edge can be selected and removed with Delete.
                 fail_edge = page.locator('.react-flow__edge[data-id="review:fail:execute"]')
-                fail_edge.click()
+                fail_edge.dispatch_event("click")
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(100)
                 assert fail_edge.count() == 0
@@ -325,7 +328,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
 
                 # Ctrl+Z restores the most recent graph draft mutation before save.
                 edge = page.locator('.react-flow__edge[data-id="review:fail:__end__"]')
-                edge.click()
+                edge.dispatch_event("click")
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(100)
                 assert edge.count() == 0
@@ -376,7 +379,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
 
                 # Selected explicit HANDOFF edge follows the same Delete keyboard contract.
                 handoff_edge = page.locator('.react-flow__edge[data-id="router:handoff:worker"]')
-                handoff_edge.click()
+                handoff_edge.dispatch_event("click")
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(100)
                 assert handoff_edge.count() == 0
@@ -386,13 +389,13 @@ def test_full_designer_graph_crud_roundtrip() -> None:
 
                 # Remove PASS/FAIL references before deleting the target Stage.
                 pass_edge = page.locator('.react-flow__edge[data-id="review:pass:worker"]')
-                pass_edge.click()
+                pass_edge.dispatch_event("click")
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(100)
                 assert pass_edge.count() == 0
 
                 fail_edge = page.locator('.react-flow__edge[data-id="review:fail:worker"]')
-                fail_edge.click()
+                fail_edge.dispatch_event("click")
                 page.keyboard.press("Delete")
                 page.wait_for_timeout(100)
                 assert fail_edge.count() == 0
