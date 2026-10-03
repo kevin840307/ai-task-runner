@@ -1957,3 +1957,42 @@ def test_runner_command_explicit_workflow_only_injects_file_validator_when_requi
     )
     with_file_validator = live.runner_command(config, project, workflow=file_workflow)
     assert with_file_validator[with_file_validator.index("--validator") + 1] == str(project / "validation.py")
+
+
+
+def test_dynamic_session_live_fixture_matches_current_workflow_prompt_contract(tmp_path: Path):
+    project = tmp_path / "dynamic"
+    project.mkdir()
+    (project / "dynamic_router.md").write_text(live.DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8")
+    (project / "dynamic_role.md").write_text(live.DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8")
+    workflow = project / "workflow.yaml"
+    workflow.write_text(live.DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+
+    loaded = load_workflow(workflow)
+    by_name = {item["name"]: item for item in loaded}
+
+    assert by_name["coordinator"]["session_policy"] == "role"
+    assert by_name["main_role"]["session_policy"] == "main"
+    assert by_name["stable_role"]["session_policy"] == "role"
+    assert by_name["fresh_role"]["session_policy"] == "fresh"
+    for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
+        prompt = Path(by_name[name]["prompt"])
+        assert prompt.is_absolute()
+        assert prompt.is_file()
+
+
+def test_assert_state_completed_includes_console_tail_when_startup_failed(tmp_path: Path):
+    project = tmp_path / "startup-failure"
+    project.mkdir()
+    log = live.console_log(project, "console.jsonl")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("configuration exploded before state creation\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as error:
+        live.assert_state_completed(project, 1)
+
+    message = str(error.value)
+    assert "state unavailable" in message
+    assert "configuration exploded before state creation" in message
