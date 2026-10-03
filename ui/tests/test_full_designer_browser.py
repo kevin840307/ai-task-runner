@@ -207,10 +207,12 @@ flow:
                 stage_yaml_tab.click()
                 page.locator(".stage-yaml-panel textarea").wait_for()
                 stage_yaml_box = page.locator(".stage-yaml-panel textarea").bounding_box()
-                assert stage_yaml_box
+                yaml_content_box = page.locator(".stage-editor-content.yaml-mode").bounding_box()
+                assert stage_yaml_box and yaml_content_box
                 assert stage_yaml_box["x"] >= modal["x"]
                 assert stage_yaml_box["x"] + stage_yaml_box["width"] <= modal["x"] + modal["width"] + 1
                 assert stage_yaml_box["y"] + stage_yaml_box["height"] <= modal["y"] + modal["height"] + 1
+                assert stage_yaml_box["height"] >= yaml_content_box["height"] * 0.72
                 page.get_by_role("button", name="Close").click()
 
                 page.locator('.react-flow__node[data-id="review"]').dispatch_event(
@@ -426,6 +428,74 @@ flow:
                 assert saved["flow"][0] == "review"
                 assert saved["stages"]["execute"]["profile"] == "execute"
                 assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_edit_prompt_deep_link_opens_prompt_workspace() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-prompt-link-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "prompt-link-e2e.yaml"
+        workflow.write_text(
+            """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+flow:
+  - review
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                workflow_id = next(
+                    item["id"] for item in files["workflows"]
+                    if item["name"] == "prompt-link-e2e.yaml"
+                )
+                prompt = next(
+                    item for item in files["prompts"]
+                    if (item.get("reference") or item.get("display_name") or item.get("name"))
+                    == "common/review.md"
+                )
+
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(workflow_id)}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').dblclick()
+                edit_prompt = page.get_by_role("button", name="Edit Prompt")
+                edit_prompt.wait_for()
+                edit_prompt.click()
+
+                page.wait_for_url(
+                    f"**/index.html?view=workflow&source=prompt&studio={quote(prompt['id'])}*"
+                )
+                page.locator("#studioPromptTextarea").wait_for()
+                assert page.locator("#studioPromptTextarea").is_visible()
+                assert page.locator("#studioPromptTextarea").input_value().strip()
+                assert page.locator("#studioFileName").inner_text() == prompt["name"]
                 browser.close()
         finally:
             server.shutdown()
