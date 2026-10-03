@@ -142,6 +142,16 @@ flow:
                 create.get_by_role("button", name="Create Stage").click()
                 page.locator('.react-flow__node[data-id="ai_stage"]').wait_for(state="attached")
                 assert page.get_by_text("未儲存草稿").is_visible()
+
+                # A newly created Stage exists only in the Designer draft until Save.
+                # Stage YAML must use that draft instead of failing with
+                # "Stage not found: ai_stage" against the older saved YAML.
+                page.get_by_role("tab", name="YAML").last.click()
+                page.locator(".stage-yaml-panel textarea").wait_for(state="attached")
+                page.wait_for_function("document.querySelector('.stage-yaml-panel textarea')?.value.includes('type: base')")
+                assert "profile: review" in page.locator(".stage-yaml-panel textarea").input_value()
+                assert page.locator(".stage-yaml-error").count() == 0
+
                 assert workflow.read_bytes() == original
                 assert not errors
                 browser.close()
