@@ -183,10 +183,6 @@
               <div id="studioListTitle" class="designer-section-title">Workflows</div>
               <button id="newWorkflowButton" class="mini-button" type="button" title="New workflow">+</button>
             </div>
-            <div id="studioSourceTabs" class="studio-source-tabs" role="tablist" aria-label="Asset source" hidden>
-              <button id="yamlWorkflowSource" class="active" type="button">Workflow</button>
-              <button id="yamlPromptSource" type="button">Prompt</button>
-            </div>
             <label class="studio-search-wrap" for="studioSearchInput">
               <span class="studio-search-icon" aria-hidden="true">⌕</span>
               <input id="studioSearchInput" class="studio-search-input" type="search" placeholder="Search workflows..." autocomplete="off" spellcheck="false" />
@@ -211,9 +207,8 @@
                       <span id="dirtyBadge" class="badge warning" hidden>UNSAVED</span>
                       <span id="syntaxBadge" class="studio-syntax-badge" hidden></span>
                     </div>
-                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2><span id="studioVisibilityBadge" class="badge studio-visibility-badge" hidden>Hidden from Chat</span></div>
+                    <div class="designer-card-main-row"><h2 id="studioFileName"></h2></div>
                     <p id="studioFilePath"></p>
-                    <div id="studioVisibilityNotice" class="studio-visibility-notice" hidden><span aria-hidden="true">◉</span><span>This workflow is hidden from the Chat workflow selector.</span></div>
                   </div>
                   <div class="designer-card-actions">
                     <button id="reloadStudioButton" class="studio-secondary-action" type="button">Reload</button>
@@ -222,7 +217,6 @@
                       <div id="studioAssetMenu" class="studio-asset-menu" role="menu" hidden>
                         <button id="renameStudioButton" type="button" role="menuitem">Rename</button>
                         <button id="duplicateStudioButton" type="button" role="menuitem">Duplicate</button>
-                        <button id="toggleWorkflowVisibilityButton" type="button" role="menuitem">Hide from Tasks</button>
                         <button id="exportStudioButton" type="button" role="menuitem">Export</button>
                         <button id="deleteStudioButton" class="designer-danger studio-menu-danger" type="button" role="menuitem">Delete</button>
                       </div>
