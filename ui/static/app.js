@@ -363,7 +363,7 @@ function createProjectRow(project) {
     if (!(await confirmDiscardStudio())) return;
     const ok = await confirmDialog({ title: "Remove Project?", message: `Remove ${project.name} from this UI? Project files are not deleted.`, confirmLabel: "Remove Project", danger: true });
     if (!ok) return;
-    closeStageEditor(true); closeAddStageModal(true); closeProjectMenus(); state.removingProjectPath = project.path; setProjectListLoading(true, "Removing project…"); renderProjects();
+    closeProjectMenus(); state.removingProjectPath = project.path; setProjectListLoading(true, "Removing project…"); renderProjects();
     try {
       await api("/api/projects/remove", { method: "POST", body: JSON.stringify({ path: project.path }) });
       setProjectListLoading(true, "Refreshing projects…");
@@ -436,7 +436,7 @@ async function selectProject(project) {
     renderRunConfigurationLock();
   }
   if (changingProject && state.studioFile?.scope === "project") {
-    if ((state.studioDirty || state.visualDirty) && !(await confirmDiscardStudio())) return;
+    if (state.studioDirty && !(await confirmDiscardStudio())) return;
     clearStudioEditor();
   }
   if (state.view === "workflow" && !(await switchView("chat"))) return;
@@ -1052,11 +1052,6 @@ function openWorkflowEditorItem(item) {
   const params = new URLSearchParams({ id: item.id });
   if (state.project?.path) params.set("project", state.project.path);
   window.location.href = `/workflow-studio-app/index.html?${params}`;
-}
-
-function openFullDesigner() {
-  if (!state.studioFile || state.studioFile.kind !== "workflow") return;
-  openWorkflowEditorItem(state.studioFile);
 }
 
 async function openAssetItem(item) {
