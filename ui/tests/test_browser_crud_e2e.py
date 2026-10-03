@@ -287,6 +287,13 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 page.add_style_tag(path=str(css))
             _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
+
+            # Shared dialogs must restore keyboard focus to the control that opened them.
+            page.locator("#openProject").focus()
+            page.evaluate("window.__focusDialog = window.UiDialogs.confirm({title:'Confirm focus', message:'Regression', confirmLabel:'OK'})")
+            page.locator("[data-dialog-cancel]").click()
+            page.wait_for_function("document.activeElement?.id === 'openProject'")
+
             page.click("#workflowNav")
             page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
             page.wait_for_function("document.querySelector('.studio-designer-body')?.classList.contains('workflow-manager-mode')")
