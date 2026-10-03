@@ -654,7 +654,6 @@ class ProjectRuntimeMixin:
             "backend": str(request.get("backend") or ""),
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),
-            "execution_mode": str(request.get("execution_mode") or "linear"),
             "validator": str(request.get("validator") or ""),
         }
 
@@ -809,7 +808,6 @@ class ProjectRuntimeMixin:
                     model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -840,7 +838,6 @@ class ProjectRuntimeMixin:
                 self.launch(
                     project, None, mode="run", backend=backend, model=request["model"],
                     validator=request["validator"], workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -860,7 +857,6 @@ class ProjectRuntimeMixin:
         model: str = "",
         validator: str = "",
         workflow: str = "",
-        execution_mode: str = "linear",
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
@@ -881,7 +877,6 @@ class ProjectRuntimeMixin:
                     raise ValueError("Goal is required")
                 if mode == "rerun":
                     command.append("--force-new")
-            command += ["--execution-mode", str(execution_mode or "linear")]
             if backend:
                 command += ["--backend", backend]
             command += self._model_cli_args(model)
@@ -987,7 +982,6 @@ class ProjectRuntimeMixin:
             "backend": backend or "",
             "model": model_value,
             "mode": request_mode,
-            "execution_mode": "linear",
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
             "validator": validator_value,
