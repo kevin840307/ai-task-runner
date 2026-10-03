@@ -234,6 +234,19 @@ LIVE REGRESSION NOTES
 
 [x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
 [x] API outage live probes require observable Recovering status and require durable last_error to clear after successful recovery.
+[x] Fixed Dynamic Handoff live startup failure caused by stale harness validator injection.
+    - Root cause: runner_command() unconditionally added --validator validation.py to every direct run.
+      Explicit Dynamic Handoff workflows without validate_file are correctly valid, but RuntimeConfig
+      rejects a supplied file validator when the workflow has no validate_file Stage, so startup failed
+      before state.json existed.
+    - Explicit Workflow live commands now add --validator only when the loaded Workflow actually contains
+      validate_file. Default runs keep their validator contract; file/mixed explicit workflows still receive it.
+    - Added deterministic coverage for both sides of this contract.
+    - Dynamic Session live fixture now preloads through the production Workflow loader and verifies local
+      prompt resolution before touching Qwen.
+    - assert_state_completed now includes the newest harness console tail when startup fails, eliminating
+      low-information stage=None/cycle=None failures.
+
 [x] Fixed detached-UI stop.request/resume live false failure.
     - Root cause: the probe required model.prompt(session_mode=resume) after every detached stop.
       stop.request can legitimately arrive after the AI Stage already checkpointed, while a
@@ -346,4 +359,8 @@ CURRENT IMPLEMENTATION NOTES
 
 - Problems panel was already present in current source and Browser E2E: duplicate keys, missing START/route/target, Handoff without target and unreachable Stages are surfaced before Save; error blocks Save and warning remains visible.
 - Composer already follows the compact contract: Workflow + Run primary; backend/validator/AI validator/environment checks live under Options.
+- Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
+
+- Workflow Problems panel already validates duplicate/missing flow targets, empty Handoff targets and unreachable Stages at Save boundary, blocks errors, keeps warnings visible, and focuses the affected Stage.
+- Composer already keeps Workflow + Run primary while Backend/validators/environment checks stay under Options.
 - Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
