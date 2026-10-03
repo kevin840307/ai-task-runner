@@ -437,3 +437,14 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 }
 .stage-form-section-head strong { color: #334155; font-size: 11px; }
 .stage-form-section-head small { color: #94a3b8; font-size: 9px; }
+
+.dynamic-chip {
+  border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca;
+  border-radius: 999px; padding: 2px 6px; font-size: 9px; font-weight: 800;
+}
+.dynamic-stage-note {
+  display: grid; gap: 3px; margin: 2px 0 8px; padding: 9px 10px;
+  border: 1px solid #c7d2fe; border-radius: 9px; background: #f8faff;
+}
+.dynamic-stage-note strong { color: #3730a3; font-size: 10px; }
+.dynamic-stage-note span { color: #64748b; font-size: 10px; line-height: 1.5; }
