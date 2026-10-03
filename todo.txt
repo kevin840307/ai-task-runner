@@ -188,9 +188,11 @@ P1 - UI / UX USEFUL AFTER P0
 [ ] Edge -> empty canvas -> Add Stage
     - Create and connect in one interaction.
 
-[ ] Canvas smart guides / optional snap
-    - Lightweight alignment guides or snap-to-grid for cleaner graphs.
-    - Must remain optional and never rewrite graph semantics.
+[x] Canvas smart guides / optional snap
+    - Designer now has an optional local-only Snap toggle backed by React Flow snapToGrid.
+    - Preference is stored in localStorage; default remains off so existing layouts do not change.
+    - Uses a 20px grid and never writes YAML or changes Workflow semantics.
+    - React contract and Browser E2E verify toggle state and persistence.
 
 [ ] Better Workflow search / recent / favorites
     - Only if real workflow count makes navigation slower.
