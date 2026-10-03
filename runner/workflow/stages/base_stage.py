@@ -140,7 +140,6 @@ class BaseStageSpec:
     track_changes: bool = False
     tolerate_restored_changes: bool = False
     timeout: float | None = None
-    session_key: str = ""
     session_policy: SessionPolicy = "auto"
     produces: str = ""
     max_failures: int | None = None
@@ -401,7 +400,7 @@ class BaseStage:
                 ctx.scratch[key] = client
             return client
 
-        key = self.spec.session_key or self.client_cache_key
+        key = self.client_cache_key
         if not key:
             return ctx.ai_client
         client = ctx.scratch.get(key)
