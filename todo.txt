@@ -238,6 +238,17 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Strengthened transient API recovery live proof to distinguish backend retry from Runner recovery.
+    - The live probe now latches durable state.last_error while the outage is active, which proves the
+      failure actually crossed the backend boundary and reached StageExecutor.
+    - Recovering structured status is observed from the probe-owned --json-events console stream first,
+      with bounded production log.txt as secondary evidence.
+    - Failure diagnostics now distinguish: outage absorbed below StageExecutor vs StageExecutor recovery
+      without structured Recovering observability.
+    - Successful completion still requires same-session recovery, no RESET_SESSION verdict and final
+      durable last_error cleared.
+    - The same shared probe covers HTTP 429/502/503 and raw disconnect variants.
+
 [x] Fixed transient API recovery live false failure caused by bounded-log observation.
     - Root cause: Recovering is a short-lived runner.status event, while log.txt is intentionally bounded.
       api_recovery_probe waited until the whole run completed, then required the final bounded log to
