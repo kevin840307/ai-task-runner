@@ -156,7 +156,7 @@ def test_stage_implementations_are_split_by_responsibility():
 
 def test_stage_executor_is_workflow_orchestration_not_a_stage_type():
     registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
-    executor = (ROOT / "runner" / "workflow" / "stage_executor.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").read_text(encoding="utf-8")
     assert '"executor"' not in registry
     assert "class StageExecutor" in executor
     assert "stage_retries" in executor
