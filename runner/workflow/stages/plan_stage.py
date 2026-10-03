@@ -29,6 +29,7 @@ class PlanStage(BaseStage):
     ui_description = "Plan work and generate a producer-defined dynamic child Workflow."
     ui_category = "build"
     result_kind = "tasks"
+    protocol_kind = "plan_tasks"
     backend_mode = "planning"
     timeout_config_attr = "planning_timeout"
 
