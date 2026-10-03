@@ -333,7 +333,7 @@ tool\qwen_live_reliability_24h.bat
 
 1. `runner/workflow_runner.py`
 2. `runner/workflow/flow_engine.py`
-3. `runner/workflow/stages/contracts.py`
+3. `runner/workflow/contracts.py`
 4. `runner/workflow/execution/stage_executor.py`
 5. `runner/workflow/stages/`
 6. `runner/workflow/profiles.py`
