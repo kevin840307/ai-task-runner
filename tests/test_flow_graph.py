@@ -388,3 +388,50 @@ def test_resume_uses_durable_expanded_workflow_without_rerunning_producer(tmp_pa
 
     assert executor.seen == ["producer__g1__child", "after"]
     assert "producer" not in executor.seen
+
+
+
+def test_dynamic_reexpansion_releases_old_role_client_cache(tmp_path):
+    workflow = [
+        node("producer", produces="stages"),
+        node("gate", routes={"fail": "producer"}),
+    ]
+    ctx = context(tmp_path, workflow)
+    producer_calls = 0
+    gate_calls = 0
+    checked = False
+
+    def callback(stage, _ctx, previous):
+        nonlocal producer_calls, gate_calls, checked
+        if stage.name == "producer":
+            producer_calls += 1
+            return StageResult(
+                "producer",
+                "pass",
+                kind="stages",
+                data={
+                    "stages": [{
+                        "name": "role",
+                        "type": "base",
+                        "profile": "generic",
+                        "session_policy": "role",
+                    }]
+                },
+            )
+        if stage.name == "producer__g1__role":
+            _ctx.state.stage_sessions[stage.name] = "session-old"
+            _ctx.scratch[f"stage_session:{stage.name}"] = object()
+            return StageResult(stage.name, "pass")
+        if stage.name == "gate":
+            gate_calls += 1
+            return StageResult(stage.name, "fail" if gate_calls == 1 else "pass")
+        if stage.name == "producer__g2__role":
+            checked = True
+            assert "producer__g1__role" not in _ctx.state.stage_sessions
+            assert "stage_session:producer__g1__role" not in _ctx.scratch
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    assert FlowEngine(ctx).run(executor) == 0
+    assert producer_calls == 2
+    assert checked is True
