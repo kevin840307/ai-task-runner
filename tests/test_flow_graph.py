@@ -42,7 +42,7 @@ class Executor:
         self.seen = []
         self.labels = []
 
-    def run(self, stage, ctx, previous=None, *, label=""):
+    def run(self, stage, ctx, previous=None, *, label="", retry_limit=None):
         self.seen.append(stage.name)
         self.labels.append(label)
         return self.callback(stage, ctx, previous)
