@@ -3,119 +3,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from pathlib import Path
-from dataclasses import dataclass, field, replace
-from typing import Any, Literal, Protocol
+from dataclasses import dataclass, replace
+from typing import Any, Literal
 
-from ...agent import AIClientProtocol, configure_ai_client, create_ai_client, structured_call
-from ...config.runtime import RuntimeConfig
+from ...agent import configure_ai_client, create_ai_client, structured_call
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
-from ...runtime.run_state import RunState, Task
 from ..profiles import profile_defaults, profile_names
+from .contracts import MODE_READONLY, MODE_WRITE, StageContext, StageMode, StageResult
 
-StageStatus = Literal["pass", "fail", "error"]
-StageMode = Literal["readonly", "write"]
-StageResultKind = Literal["generic", "tasks", "stages", "task", "review", "validation", "handoff"]
 AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
-MODE_READONLY: StageMode = "readonly"
-MODE_WRITE: StageMode = "write"
-
-
-@dataclass(frozen=True)
-class StageResult:
-    stage: str
-    status: StageStatus
-    output: str = ""
-    error: RunnerError | None = None
-    changed_files: list[str] = field(default_factory=list)
-    data: object | None = None
-    kind: StageResultKind = "generic"
-
-    @classmethod
-    def error_result(cls, stage: str, error: BaseException) -> "StageResult":
-        runner_error = (
-            error if isinstance(error, RunnerError) else RunnerError(str(error))
-        )
-        return cls(
-            stage,
-            "error",
-            output=str(runner_error),
-            error=runner_error,
-        )
-
-
-@dataclass
-class StageExecution:
-    change_detected: Callable[[], bool] | None = None
-    attempt: int = 1
-    retry_mode: Literal["initial", "retry", "recover"] = "initial"
-    previous_error: str = ""
-    label: str = ""
-
-
-@dataclass
-class StageContext:
-    config: RuntimeConfig
-    root: Path
-    work: Path
-    state: RunState
-    ai_client: AIClientProtocol
-    state_file: Path
-    validator_path: Path | None
-    validator_is_ai: bool
-    save_state: Callable[[], None]
-    set_stage: Callable[[str, str], None]
-    scratch: dict[str, Any] = field(default_factory=dict)
-    execution: StageExecution = field(default_factory=StageExecution)
-
-    @property
-    def task(self) -> Task | None:
-        return (
-            self.state.tasks[self.state.current]
-            if self.state.current < len(self.state.tasks)
-            else None
-        )
-
-    def require_task(self, stage: str) -> Task:
-        task = self.task
-        if task is None:
-            raise RunnerError(f"{stage} stage requires a pending task")
-        return task
-
-    def save_session(self) -> None:
-        self.state.ai_session_id = self.ai_client.session_id
-        self.save_state()
-
-    def reset_sessions(self) -> None:
-        for value in (self.ai_client, *self.scratch.values()):
-            if hasattr(value, "session_id"):
-                value.session_id = ""
-        self.state.ai_session_id = ""
-        self.state.stage_sessions.clear()
-        self.scratch.pop("prompt_contracts", None)
-        self.save_state()
-
-
-class Stage(Protocol):
-    name: str
-    mode: str
-    actor: str
-    status: str
-    detail: str
-
-    def run(
-        self,
-        ctx: StageContext,
-        previous: StageResult | None = None,
-    ) -> StageResult: ...
-
-    def finish(
-        self,
-        ctx: StageContext,
-        result: StageResult,
-    ) -> StageResult: ...
 
 
 ResultParser = Callable[[str, StageContext], Any]
