@@ -128,6 +128,14 @@ def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
     project = tmp_path / "project"
     script = tmp_path / "tasks.yaml"
     workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        "stages:\n"
+        "  work:\n"
+        "    type: base\n"
+        "    profile: generic\n"
+        "flow: [work]\n",
+        encoding="utf-8",
+    )
     config = replace(settings(tmp_path), sandbox=True)
 
     commands = [
