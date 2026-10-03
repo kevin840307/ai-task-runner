@@ -906,6 +906,17 @@ class WorkflowStudioTests(unittest.TestCase):
             "import json; print(json.dumps({'closed': True, 'valid': True, 'paths_passed': 1, 'paths_total': 1}))\n",
             encoding="utf-8",
         )
+        (self.root / "tool" / "workflow_catalog.py").write_text(
+            "import json\n"
+            "profiles={\n"
+            " 'generic': {'title':'Generic','description':'','defaults':{'prompt':'common/generic.md'}},\n"
+            " 'execute': {'title':'Execute','description':'','defaults':{'prompt':'common/execution.md'}},\n"
+            " 'review': {'title':'Review','description':'','defaults':{'prompt':'common/review.md','error_policy':{'retries':2},'max_failures':3}},\n"
+            "}\n"
+            "stage_types={name:{'type':name,'title':name,'description':'','category':'extensions','result_kind':'generic','dynamic_output':False,'profiles':profiles if name=='base' else {},'options':[]} for name in ['base','plan','command','ai_validator','handoff']}\n"
+            "print(json.dumps({'stage_types':stage_types,'node_options':{'label':{'type':'string'},'routes':{'type':'object'},'error_policy':{'type':'object'}}}))\n",
+            encoding="utf-8",
+        )
         (self.root / "runner" / "config" / "defaults.py").write_text(
             "DEFAULT_BACKEND='qwen'\n",
             encoding="utf-8",
