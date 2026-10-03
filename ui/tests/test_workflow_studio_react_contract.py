@@ -593,3 +593,13 @@ def test_designer_visible_chrome_uses_shared_i18n():
         "從積木下方的大接點拉到目標積木。",
     ):
         assert removed not in body
+
+
+def test_workflow_editor_exposes_saved_unsaved_state_and_save_reason():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert 'editorDirty ? "unsaved-badge" : "saved-badge"' in text
+    assert 'editorDirty ? tx("unsaved") : tx("saved")' in text
+    assert 'title={!editorDirty ? tx("saved")' in text
+    assert ".studio-header .saved-badge" in styles
