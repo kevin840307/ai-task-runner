@@ -508,3 +508,32 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
   white-space: nowrap;
 }
 .workflow-problem small { color: var(--muted); }
+
+
+.workflow-draft-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid #facc15;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+.workflow-draft-recovery > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.workflow-draft-recovery small {
+  color: #785c12;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workflow-draft-recovery-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
