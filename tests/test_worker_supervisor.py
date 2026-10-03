@@ -38,7 +38,8 @@ def test_supervisor_resumes_after_abnormal_worker_exit(tmp_path, monkeypatch):
     work = tmp_path / ".ai-task-runner"
     work.mkdir()
     state = work / "state.json"
-    state.write_text("{}", encoding="utf-8")
+    durable = '{"run_id":"stop-preserve","stage":"executing","current":1,"cycle":2,"workflow_position":3,"ai_session_id":"session-A"}'
+    state.write_text(durable, encoding="utf-8")
     request = _request(tmp_path)
     workers = iter([FakeWorker(3221225477, 101), FakeWorker(0, 102)])
     calls = []
@@ -388,6 +389,7 @@ def test_supervisor_stop_request_terminates_worker_and_cleans_children(tmp_path,
     assert calls == [((state,), 31337)]
     assert not stop_request.exists()
     assert not (work / supervisor_module.RUNNER_PROCESS_FILE).exists()
+    assert state.read_text(encoding="utf-8") == durable
 
 
 def test_supervisor_clears_stale_stop_request_before_new_run(tmp_path, monkeypatch):
