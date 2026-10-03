@@ -2992,11 +2992,15 @@ def api_recovery_probe(
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
                 if not recovering_seen:
+                    # This live probe owns the --json-events console stream, so use
+                    # it as the primary evidence for transient status events. The
+                    # production log.txt is intentionally bounded and is only a
+                    # secondary source here.
                     recovering_seen = any(
                         event.get("type") == "runner.status"
                         and event.get("action") == "set"
                         and event.get("status") == "Recovering"
-                        for event in runner_events(project)
+                        for event in (*jsonl_events(log), *runner_events(project))
                     )
                 current_session = state.get("ai_session_id")
                 if not session_id and isinstance(current_session, str) and current_session:
@@ -3040,14 +3044,13 @@ def api_recovery_probe(
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
-        # Recovering is intentionally a transient UI/event status. log.txt is
-        # bounded, so a long successful run may trim that early event before this
-        # final assertion. Latch it while the run is active instead of requiring
-        # the final bounded log to retain historical UI state.
+        # Recovering is intentionally transient. The probe-owned --json-events
+        # console stream is unbounded for this one run, while production log.txt
+        # is bounded. Latch either source while the run is active.
         if not recovering_seen:
             raise RuntimeError(
                 "API outage reached Runner recovery path but no structured "
-                "Recovering status event was observed while recovery was active"
+                "Recovering status event was observed in console JSON events or production log while recovery was active"
             )
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
