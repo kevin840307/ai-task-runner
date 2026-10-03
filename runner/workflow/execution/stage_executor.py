@@ -89,6 +89,11 @@ class StageExecutor:
 
         while True:
             attempt += 1
+            if attempt > 1:
+                progress.set_status(
+                    str(getattr(stage, "status", "") or stage.name),
+                    str(label or getattr(stage, "detail", "") or ""),
+                )
             ctx.execution = StageExecution(
                 attempt=attempt,
                 retry_mode=retry_mode,
@@ -102,11 +107,13 @@ class StageExecutor:
             error = result.error or RunnerError(result.output or "stage error")
             if isinstance(error, ConfigurationError):
                 raise error
+            previous_error = str(error)
+            ctx.set_stage(str(ctx.state.stage or run_state or stage.name), previous_error)
+            ctx.save_state()
             if not unlimited and retries_used >= retry_limit:
                 break
 
             retries_used += 1
-            previous_error = str(error)
 
             if result.changed_files:
                 # A write-side Stage may fail after leaving valid partial work.
@@ -118,11 +125,13 @@ class StageExecutor:
                 failures_in_session = 0
                 retry_mode = "recover"
                 service_delay = float(ctx.config.retry_delay)
+                progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
                 self._sleep(ctx, service_delay)
                 continue
 
             if is_transient_error(error):
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
+                progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
                 self._sleep(ctx, service_delay)
                 if service_delay:
                     service_delay = min(
@@ -140,6 +149,7 @@ class StageExecutor:
             else:
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
 
+            progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
             self._sleep(ctx, float(ctx.config.retry_delay))
 
         try:
@@ -163,6 +173,10 @@ class StageExecutor:
         except Exception as error:
             result = StageResult.error_result(stage.name, error)
 
+        final_error = ""
+        if result.status == "error":
+            final_error = str(result.error or result.output or "stage error")
+        ctx.set_stage(str(ctx.state.stage or run_state or stage.name), final_error)
         ctx.execution = StageExecution()
         ctx.save_state()
         progress.stage_finished(StageAction(stage, ctx, label), result)
