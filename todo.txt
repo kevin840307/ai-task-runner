@@ -99,16 +99,16 @@ DETERMINISTIC GATES
 [x] Chromium/Playwright browser CI job cannot silently skip.
 [x] Graph CRUD browser E2E covers START/END, Stage delete, reorder, PASS/FAIL/HANDOFF connect/delete/retarget, AI profile and save/reload.
 [x] Common desktop viewport coverage.
-[x] Final generated Studio bundle synchronized with current source.
-[ ] Final Windows pytest PASS on current head.
-[ ] Final Ubuntu pytest PASS on current head.
+[ ] Final generated Studio bundle synchronized with current source.
+[x] Final Windows pytest PASS on current head.
+[x] Final Ubuntu pytest PASS on current head.
 [ ] Final Studio build + bundle verify PASS on current head.
-[ ] Final browser-e2e PASS on current head.
+[x] Final browser-e2e PASS on current head.
 
 WORKFLOW EDITOR FOLLOW-UP
 -------------------------
 [ ] Explicit edge retarget interaction may be polished further if browser/user testing proves current reconnect behavior unclear.
-[ ] Retire any remaining legacy card-list/Flow Map editor only after confirming no unique capability remains.
+[x] Legacy card-list / Flow Map Workflow editor removed after Workflow Library + single Workflow Editor replacement.
 [ ] Keep UX changes evidence-driven; do not add another Workflow editing surface.
 
 REAL BACKEND GATE
