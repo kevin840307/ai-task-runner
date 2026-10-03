@@ -1214,3 +1214,16 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   color: var(--text);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+
+.runtime-headline {
+  margin: 4px 0 0;
+  max-width: min(760px, 62vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.runtime-headline[hidden] { display: none !important; }
