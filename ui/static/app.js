@@ -786,7 +786,7 @@ function renderWorkflowPicker() {
     const option = document.createElement("option"); option.value = row.value; option.textContent = row.label; select.appendChild(option);
     const button = document.createElement("button"); button.type = "button"; button.className = "workflow-dropdown-option"; button.setAttribute("role", "option");
     button.innerHTML = `<span class="workflow-option-main"><strong></strong><small></small></span><span class="workflow-option-badge"></span>`;
-    button.querySelector("strong").textContent = row.label; button.querySelector("small").textContent = row.meta; button.querySelector(".workflow-option-badge").textContent = row.scope === "system" ? "SYSTEM" : row.scope.toUpperCase();
+    button.querySelector("strong").textContent = row.label; button.querySelector("small").textContent = row.meta; button.querySelector(".workflow-option-badge").textContent = String(row.scope || "global").toUpperCase();
     button.onclick = () => { select.value = row.value; label.textContent = row.label; rememberProjectPreference("workflow", row.value); closeWorkflowDropdown(); renderWorkflowPickerSelection(); };
     menu.appendChild(button);
   }
@@ -1578,7 +1578,7 @@ async function openAddStageModal() {
   if (!state.studioFile || state.studioFile.kind !== "workflow") return setStudioStatus("Select a Workflow first.", true);
   if (!state.studioGuard.editable) return setStudioStatus("Stop active Runtime before editing Workflow.", true);
   if (state.visualDirty && !(await saveVisualFlow())) return;
-  state.addStageDirty = false; $("addStageName").value = ""; $("addStageType").value = "task"; $("addStageStatus").value = ""; $("addStageCommand").value = ""; $("addStageToFlow").checked = true; $("addStageHint").textContent = ""; $("addStageHint").classList.remove("error"); fillAddStagePromptOptions(); updateAddStageType(); $("addStageBackdrop").hidden = false; setTimeout(() => $("addStageName").focus(), 0);
+  state.addStageDirty = false; $("addStageName").value = ""; $("addStageType").value = "base"; $("addStageStatus").value = ""; $("addStageCommand").value = ""; $("addStageToFlow").checked = true; $("addStageHint").textContent = ""; $("addStageHint").classList.remove("error"); fillAddStagePromptOptions(); updateAddStageType(); $("addStageBackdrop").hidden = false; setTimeout(() => $("addStageName").focus(), 0);
 }
 async function closeAddStageModal(force = false) {
   if ($("addStageBackdrop").hidden) return true;
