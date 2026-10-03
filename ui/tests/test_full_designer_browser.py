@@ -61,6 +61,22 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
     page.wait_for_timeout(120)
 
 
+def _reconnect_edge_target(page, edge_id: str, target_selector: str) -> None:
+    edge = page.locator(f'.react-flow__edge[data-id="{edge_id}"]')
+    edge.dispatch_event("click")
+    updater = page.locator(".react-flow__edgeupdater-target")
+    updater.wait_for(state="attached")
+    target = page.locator(target_selector)
+    start = updater.bounding_box()
+    end = target.bounding_box()
+    assert start and end
+    page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(end["x"] + end["width"] / 2, end["y"] + end["height"] / 2, steps=12)
+    page.mouse.up()
+    page.wait_for_timeout(150)
+
+
 def _save_editor(page) -> None:
     button = page.locator(".studio-header button.primary")
     assert button.is_enabled()
@@ -345,6 +361,12 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 page.keyboard.press("Control+z")
                 page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
                 assert page.get_by_text("已復原上一個 Workflow 草稿修改。").is_visible()
+                page.keyboard.press("Control+y")
+                page.wait_for_timeout(100)
+                assert page.locator('.react-flow__edge[data-id="review:fail:__end__"]').count() == 0
+                assert page.get_by_text("已重做上一個 Workflow 草稿修改。").is_visible()
+                page.keyboard.press("Control+z")
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
                 _save_editor(page)
 
                 page.reload()
@@ -361,6 +383,26 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
                 assert saved["stages"]["execute"]["profile"] == "execute"
+
+                # Drag the existing explicit edge target to retarget it in place.
+                _reconnect_edge_target(
+                    page,
+                    "review:fail:worker",
+                    '.react-flow__node[data-id="after"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="review:fail:after"]').wait_for(state="attached")
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["review"]["routes"]["fail"] == "after"
+
+                # Normal reconnect from the FAIL output can still point it back to worker.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="review"] .react-flow__handle.fail',
+                    '.react-flow__node[data-id="worker"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="review:fail:worker"]').wait_for(state="attached")
+                _save_editor(page)
 
                 # Explicit PASS edge is also persisted and can later be removed.
                 _connect_nodes(
