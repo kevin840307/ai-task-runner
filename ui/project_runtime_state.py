@@ -433,17 +433,17 @@ class ProjectRuntimeMixin:
         status = "idle"
         if pid_value and self._pid_alive(pid_value, alive_pids):
             self._clear_launch_reservation(project)
-            status = "running"
+            status = "recovering" if state.get("last_error") else "running"
         elif self._active_launch_reservation(project, alive_pids):
-            status = "running"
+            status = "recovering" if state.get("last_error") else "running"
         else:
             completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
             if completed:
                 status = "completed"
             elif marker and state:
-                status = "interrupted"
+                status = "needs_attention"
             elif state:
-                status = "stopped"
+                status = "needs_attention" if state.get("last_error") else "stopped"
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
         completed_count = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "completed")
         stage = str(state.get("stage") or "")
