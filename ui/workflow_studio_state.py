@@ -244,13 +244,16 @@ class WorkflowStudioMixin:
         path, kind, scope = self._resolve_studio_file(file_id, project)
         content = path.read_text(encoding="utf-8")
         stat = path.stat()
-        return {
+        result = {
             **self._studio_item(path, scope, kind),
             "content": content,
             "hash": self._hash_text(content),
             "mtime": stat.st_mtime,
             "guard": self.edit_guard(),
         }
+        if kind == "prompt":
+            result["used_by"] = self._prompt_usages(path, project)
+        return result
 
     def studio_save(self, file_id: str, content: str, expected_hash: str, project: Path | None = None) -> dict:
         with self._edit_lock:
