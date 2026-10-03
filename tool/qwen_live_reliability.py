@@ -2159,9 +2159,9 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
             "session_policy=main did not reuse the primary Runner session"
         )
     durable_main = str(state.get("ai_session_id") or "")
-    if durable_main and durable_main != main_results[-1]:
+    if durable_main:
         raise RuntimeError(
-            "session_policy=main durable state disagrees with the observed primary session"
+            "completed Dynamic Handoff run unexpectedly retained the primary Runner session"
         )
     stable_session = str(stage_sessions.get("stable_role") or "")
     if len(stable_results) < 2 or not stable_session:
