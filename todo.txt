@@ -1,546 +1,215 @@
-AI Task Runner - Handoff / Current TODO
-======================================
+AI Task Runner - Current TODO
+=============================
 
 Branch: minimal-closed-loop-runtime
 Repository: kevin840307/ai-task-runner
 
-PURPOSE OF THIS FILE
---------------------
-This is the primary handoff document for the next chat/session.
-Read this file first, then inspect the current branch HEAD and CI before changing code.
+GOAL
+----
+Keep the product small, understandable and reliable for 24H unattended runs.
+The architecture refactor is complete. Do not restart old architecture work unless
+a reproduced failure proves it is necessary.
 
-Do NOT restart the architecture discussion from old assumptions.
-Do NOT restore removed compatibility contracts just to make an old test/file pass.
-Prefer deleting stale tests/docs/contracts over preserving obsolete behavior.
+Core runtime ownership stays:
+- WorkflowRunner = composition / entry
+- FlowEngine = semantic PASS/FAIL/HANDOFF navigation + dynamic child Workflow
+- StageExecutor = technical retry/session/recovery/timeout/safety
+- Stage = semantic work only
+- StateStore / RunState = durable resume state
+- YAML = canonical Workflow contract
+- ERROR is not a graph edge
 
-CURRENT STATUS
---------------
-The large deterministic refactor is functionally complete.
+Do not restore removed contracts:
+scope/task-level workflow, public type: task/review, repair Stage, routes.error,
+recover graph route, restart_at, repeat, max_attempts/on_exhausted,
+alternate TaskRunner/Pipeline runtimes, Discussion/Group Chat compatibility.
 
-The last fully verified architecture head before the latest documentation-only cleanup
-was green on:
-- Ubuntu pytest
-- Windows pytest
-- React Studio build
-- committed Studio bundle verify
-- Playwright/Chromium browser E2E
-- push CI
-- pull_request CI
+CURRENT PRIORITY
+----------------
+Do not add features just because they are possible.
+Prioritize by:
+1. impact on common usage,
+2. impact on 24H unattended reliability,
+3. reduction of user confusion / operator mistakes,
+4. implementation cost and regression risk.
 
-IMPORTANT:
-Any new commit creates a new HEAD. Always verify the four deterministic jobs on the
-same/current HEAD before claiming deterministic completion:
-1. Ubuntu Python tests
-2. Windows Python tests
-3. Studio build + bundle verify
-4. Browser E2E
+P0 - UI / UX HIGH VALUE
+------------------------
+[ ] Chat / Tasks runtime header
+    - Make current runtime state obvious in one place:
+      running/recovering/stopped/completed, current Stage, Task, cycle,
+      progress, elapsed, last transition and retry state.
+    - Goal: answer "what is it doing now and does it need attention?" at a glance.
 
-The remaining release work is primarily real-backend / soak evidence, not another
-large deterministic rewrite.
+[ ] Error / recovery UX
+    - Visually distinguish:
+      technical ERROR / retry-recover,
+      semantic FAIL / graph routing,
+      user stop,
+      fail-closed / needs-attention.
+    - Show retry delay, attempt/session recovery mode and next action where useful.
+    - Do not render normal retry/recovery as a fatal red failure.
 
-FINAL ARCHITECTURE - DO NOT RE-DESIGN WITHOUT A REAL FAILURE
-------------------------------------------------------------
-One runtime only:
+[ ] Workflow save Problems / Validation panel
+    - Designer remains freely editable.
+    - Validate complete graph only at Save boundary.
+    - Surface invalid route/target, unreachable Stage, disconnected Stage,
+      invalid Handoff targets, obvious dead ends and schema errors.
+    - Clicking a problem should focus/highlight the relevant Node/Edge.
+    - Save only when the graph passes canonical backend/schema validation.
 
-    Chat / CLI / API / YAML List
-              |
-        WorkflowRunner
-              |
-          FlowEngine
-              |
-         StageExecutor
-              |
-             Stage
-              |
-          StageResult
+[ ] Project sidebar clarity
+    - Keep Project as the global working context.
+    - Prefer name + runtime state + current Stage/progress.
+    - Reduce visual weight of full filesystem paths.
+    - Add a clear Needs Attention state only for action-required failures.
 
-Responsibilities:
+[ ] Composer simplification
+    - Keep Workflow + Run as the primary interaction.
+    - Backend / validator / AI validator / environment checks stay under Options.
+    - Avoid exposing rarely changed configuration in the normal run path.
 
-- Stage
-  - owns semantic work only;
-  - returns StageResult;
-  - may be AI-backed, command-backed, plugin-backed, or special-purpose;
-  - may produce a producer-defined child Workflow.
+[ ] Prompt impact visibility
+    - Show "Used by" Workflow / Stage references for each Prompt.
+    - Allow navigation from Prompt reference to the owning Workflow/Stage when practical.
+    - Goal: make Prompt edits safer and easier to understand.
 
-- StageExecutor
-  - path: runner/workflow/execution/stage_executor.py
-  - owns technical reliability only:
-    retry / Same Session / Fresh Session / timeout / API transient recovery /
-    safety hooks / change tracking;
-  - is NOT a Stage type;
-  - must NOT own PASS/FAIL routing;
-  - must NOT be moved back under runner/workflow/stages/.
+[ ] Workflow Library layout
+    - Treat Workflows as an asset/library page, not a second inline editor.
+    - Improve scanability: name, scope, Chat visibility, modified/recent state.
+    - Clicking opens the single Workflow Editor.
+    - Keep right-click Show in Chat / Hide from Chat.
 
-- FlowEngine
-  - owns semantic PASS/FAIL navigation;
-  - owns Dynamic Handoff target navigation;
-  - owns insertion/execution/resume of producer-defined child Workflows;
-  - technical ERROR never becomes a graph edge.
-
-- RunState / StateStore
-  - owns durable workflow position;
-  - owns durable expanded child Workflow;
-  - owns dynamic task groups / role sessions / transition evidence;
-  - resume must continue an already-expanded child Workflow without re-running
-    its producer only to reconstruct children.
-
-STAGE PACKAGE OWNERSHIP
------------------------
-runner/workflow/
-  contracts.py
-  profiles.py
-  registry.py
-  schema.py
-  loader.py
-  flow_engine.py
-  dynamic_expansion.py
-
-  execution/
-    __init__.py
-    stage_executor.py
-
-  stages/
-    __init__.py
-    base_stage.py
-    plan_stage.py
-    ai_validator_stage.py
-    command_stage.py
-    handoff_stage.py
-
-Rules:
-- one concrete built-in special Stage per file;
-- no core.py bucket;
-- no executor.py under stages/;
-- adding a normal AI behavior should normally be an AI Stage profile, not a new Stage type;
-- adding a genuinely special Stage should require only its semantic behavior/result contract,
-  not its own retry/recover/session framework.
-
-CURRENT PUBLIC STAGE MODEL
---------------------------
-General AI behavior:
-
-    type: base
-    profile: generic | execute | review
-
-Meaning:
-- generic = custom/general AI behavior
-- execute = writable execution behavior
-- review = read-only semantic PASS/FAIL review behavior
-
-Special Stage types:
-- plan
-- ai_validator
-- command
-- handoff
-- registered plugin/special Stage types
-
-Do NOT reintroduce public:
-- type: task
-- type: review
-
-PLAN / DYNAMIC CHILD WORKFLOW CONTRACT
---------------------------------------
-PlanStage is a special Stage, not a separate workflow mode.
-
-Parent example:
-
-    A -> B -> C -> D
-
-If C produces a child Workflow:
-
-    A -> B -> C
-              |
-              +-> child-1 -> child-2 -> ... -> child-N
-                                              |
-                                              +-> D
-
-Rules:
-- any Stage may return kind=tasks or kind=stages;
-- the producing Stage owns the child Stage structure;
-- Runner NEVER guesses which child Stage types to create;
-- Runner validates, namespaces, inserts, executes, recovers and resumes the
-  producer-defined child Workflow;
-- all child Stages use the normal StageExecutor reliability path;
-- all child Stages finish before the parent continuation runs;
-- nested producers are supported;
-- child routes/Handoff targets must stay inside their child Workflow boundary;
-- expanded child Workflow is durable.
-
-PlanStage built-in behavior:
-- parses/validates Plan tasks;
-- PlanStage itself creates the child Stage definitions;
-- current built-in child shape is alternating:
-    Execute -> Review -> Execute -> Review -> ...
-- Review FAIL loops only to its corresponding Execute;
-- PlanStage is only one producer implementation;
-- future special/plugin Stages may emit completely different child structures.
-
-REMOVED CONTRACTS - DO NOT RESTORE
-----------------------------------
-These were intentionally removed and are protected by tests:
-
-- public scope / scope: task
-- task-level Workflow mode
-- task_step
-- public type: task
-- public type: review
-- TaskStage
-- ReviewStage
-- runner/workflow/stages/core.py
-- runner/workflow/stages/executor.py
-- repair Stage
-- routes.error
-- recover graph route
-- restart_at
-- repeat
-- max_attempts
-- on_exhausted
-- execution_mode / separate runtime mode hierarchy
-- TaskRunner/Pipeline alternate runtime
-- System/Custom asset split
-- Discussion / Group Chat runtime or UI mode
-- old runner/workflows/
-- old runner/prompts/
-- old runner/ai/
-- old runner/backends/
-- old runner/project/
-
-Do not add compatibility code for these.
-Old YAML using removed contracts should fail fast instead of silently working.
-
-DYNAMIC HANDOFF
----------------
-Dynamic Handoff is CURRENTLY SUPPORTED, not future work.
-
-- type: handoff
-- targets = explicit allow-list
-- model chooses exactly one target per decision
-- specialist roles remain normal AI Stages
-- session_policy may be main / role / fresh / auto
-- final AI validator may route FAIL back to the Handoff Stage
-- durable role sessions and resume are covered by deterministic tests
-
-Discussion / Group Chat is NOT planned.
-
-UI / PRODUCT MODEL
-------------------
-Primary navigation:
-- Chat / Tasks
-- Workflows
-- Prompts
-
-Do not add a duplicate Settings navigation item.
-Interface settings remain available through the existing settings entry.
-
-Chat:
-- remains the main run entry point;
-- default Workflow is ralphy_ai_validate.yaml when no valid saved selection exists;
-- a valid previously selected Workflow remains respected.
-
-Workflows:
-- asset/library page, not a second editor;
-- right-click supports Show in Chat / Hide from Chat;
-- visibility change updates Chat Workflow picker;
-- clicking a Workflow opens the single Workflow Editor.
-
-Prompts:
-- separate asset surface;
-- Prompt Editor is the single Prompt editing surface.
-
-Workflow Editor:
-- single official Workflow editor;
-- Designer | YAML;
-- Stage Editor: Form | YAML | Routing | Test;
-- catalog-driven Stage options;
-- Node Library scales through search/categories/favorites/recent/extensions;
-- no task-level/scope UI;
-- AI Stage exposes profile Generic / Execute / Review;
-- Plan remains a special Stage;
-- PASS / FAIL / HANDOFF edges are the Designer routing surface;
-- ERROR is never a graph edge.
-
-Editor keyboard / mouse UX:
-- Node: Delete/Backspace through workflow-aware delete path
-- Node: Ctrl+C / Ctrl+V
-- Edge: click any PASS / FAIL / HANDOFF edge then Delete/Backspace
-- Edge: right-click -> Delete connection
-- Edge: reconnect same semantic output to retarget
-- Ctrl+Z = Workflow draft undo
-- Ctrl+Y / Ctrl+Shift+Z = redo
-- text inputs keep native text undo behavior
-- PASS edges are deletable like FAIL/HANDOFF edges; deleting PASS persists routes.pass: stop so runtime does not silently continue. Reconnecting to the flow-next Stage may be serialized compactly through flow order.
-
-Supported desktop viewport test set:
-- 1024x768
-- 1280x800
-- 1366x768
-- 1440x900
-- 1920x1080
-
-Mobile is intentionally not part of the current acceptance scope.
-
-WORKFLOW BUILDER / DRY-RUN
---------------------------
-Workflow Builder must generate only the current contract:
-
-- normal AI behavior = type: base + profile
-- no scope
-- no type: task
-- no type: review
-- Plan YAML does NOT predeclare its runtime-generated Execute/Review children
-- special producer Stages define their own child stages
-- Dynamic Handoff uses type: handoff + targets
-- no Discussion / Group Chat types
-- no ERROR route
-
-Dry Run must use the production loader / FlowEngine and exercise:
-- ordinary closure
-- semantic FAIL loops
-- Dynamic Handoff
-- Plan dynamic child Workflow
-- custom/plugin tasks producer
-- custom/plugin stages producer
-- nested dynamic producer
-- non-converging loop cutoff
-- invalid schema/route controls
-
-TEST COVERAGE ALREADY PRESENT
+P1 - UI / UX USEFUL AFTER P0
 -----------------------------
-Do not add more tests merely for test count.
-Add tests only for a real uncovered contract or a reproduced bug.
+[ ] Runtime Trace
+    - Stage, result, route, retry/recover, duration and session evidence.
+    - Optimize for debugging long unattended runs.
 
-Deterministic coverage includes:
+[ ] Run from here / Test path
+    - Dry-run/mock path first; do not introduce a second runtime.
+    - Reuse production loader + FlowEngine.
 
-Runner/runtime:
-[x] PASS/FAIL/next/done/stop/backward loop
-[x] semantic FAIL vs technical ERROR
-[x] stage_retries=-1
-[x] finite retry exhaustion
-[x] Same Session retry
-[x] Fresh Session recovery
-[x] transient API classification/backoff
-[x] partial-write recovery
-[x] Review finite ERROR retry -> fail-soft Skip
-[x] Review max_failures semantic bypass/reset
-[x] process supervisor restart/backoff
-[x] ownership lock / orphan cleanup
-[x] StateStore resume / corruption rejection
+[ ] Edge -> empty canvas -> Add Stage
+    - Create and connect in one interaction.
 
-Dynamic Workflow:
-[x] Plan creates multiple Execute/Review pairs
-[x] Review FAIL loops to its own Execute
-[x] custom producer-defined tasks + stages envelope
-[x] producer-defined stages
-[x] Runner does not infer child Stage structure
-[x] nested producer isolation
-[x] parent continuation after children
-[x] explicit parent route preserved after children
-[x] child done returns to parent continuation
-[x] child route/Handoff boundary validation
-[x] durable expanded Workflow resume without producer rerun
-[x] removed scope/task_step/task/review contracts are rejected
+[ ] Better Workflow search / recent / favorites
+    - Only if real workflow count makes navigation slower.
 
-Dynamic Handoff:
-[x] allow-list validation
-[x] exactly-one target routing
-[x] invalid/disallowed target rejection
-[x] main / role / fresh session policy
-[x] durable role session resume
-[x] final validator FAIL -> Handoff loop
-[x] max_cycles protection
+[ ] Better empty states
+    - Project / Workflow / Prompt empty states should provide the next useful action.
 
-Stage architecture:
-[x] StageExecutor execution-policy boundary
-[x] no Stage directly owns retry/session/recovery framework
-[x] one special Stage per file
-[x] no core.py
-[x] no stages/executor.py
-[x] registry exposes only current Stage model
-[x] AI Stage profile defaults centralized
-[x] plugin/custom Stage extension contract
-
-UI/backend:
-[x] React catalog-driven Stage parameters
-[x] AI Stage profile UI
-[x] no scope/task-level UI
-[x] Stage Form/YAML/Routing/Test
-[x] PASS/FAIL/HANDOFF graph edges
-[x] edge Delete/Backspace
-[x] edge retarget
-[x] Stage delete guard
-[x] Ctrl+C/Ctrl+V
-[x] Ctrl+Z + redo
-[x] Workflow manager / Prompt editor ownership
-[x] Workflow Chat visibility
-[x] ralphy_ai_validate.yaml default
-[x] common desktop viewport checks
-[x] graph CRUD save/reload browser E2E
-
-CI:
-[x] Ubuntu Python test job
-[x] Windows Python test job
-[x] Studio build
-[x] committed Studio bundle verify
-[x] dedicated Playwright/Chromium browser-e2e job
-[x] browser CI builds current Studio source before browser tests
-[x] browser CI cannot silently skip because AI_TASK_RUNNER_BROWSER_REQUIRED=1
-
-FILES TO READ WHEN TAKING OVER
-------------------------------
-Architecture:
-- todo.txt
-- docs/design/ARCHITECTURE.md
-- docs/development/TEST_MATRIX.md
-
-Runtime:
-- runner/workflow/contracts.py
-- runner/workflow/registry.py
-- runner/workflow/schema.py
-- runner/workflow/flow_engine.py
-- runner/workflow/dynamic_expansion.py
-- runner/workflow/execution/stage_executor.py
-- runner/workflow/stages/base_stage.py
-- runner/workflow/stages/plan_stage.py
-
-UI:
-- ui/studio-src/src/main.tsx
-- ui/workflow_studio_state.py
-- ui/tests/test_full_designer_browser.py
-- ui/tests/test_browser_crud_e2e.py
-
-Builder / validation:
-- workflow_builder/prompt.md
-- workflow_builder/validation.py
-- tool/workflow_dryrun.py
-
-High-value architecture tests:
-- tests/test_workflow_package_contract.py
-- tests/test_workflow_architecture_contract.py
-- tests/test_dynamic_expansion.py
-- tests/test_dynamic_stage_expansion.py
-- tests/test_stage_executor.py
-- tests/test_stage_specialization.py
-- tests/test_workflow_yaml.py
-
-CURRENT NEXT ACTIONS
---------------------
-Do these in this order.
-
-1. Verify current HEAD deterministic CI
-   [ ] Confirm SAME HEAD has all four green:
-       - Ubuntu Python
-       - Windows Python
-       - Studio build + bundle verify
-       - Browser E2E
-   Note: any documentation/code commit creates a new HEAD, so re-check before claiming green.
-
-2. Real-Qwen short gate on user's Windows/Qwen environment
-   Run:
-       tool\qwen_live_reliability_0_5h.bat
-
-   Required evidence:
-   [ ] built-in file topology
-   [ ] built-in ai topology
-   [ ] built-in mixed topology
-   [ ] Plan dynamic Execute/Review expansion
-   [ ] Review FAIL -> corresponding Execute -> closure
-   [ ] Validator FAIL -> configured target -> closure
-   [ ] Dynamic Handoff target selection
-   [ ] main / role / fresh session behavior
-   [ ] HTTP 429
-   [ ] HTTP 502
-   [ ] HTTP 503
-   [ ] raw disconnect recovery
-   [ ] expired Session -> Fresh Session
-   [ ] process restart / detached UI resume
-   [ ] YAML List multi-item resume
-   [ ] custom Stage
-   [ ] custom producer-defined tasks/stages child Workflow
-   [ ] nested producer if live fixture supports it
-   [ ] complete closed-loop probe
-
-3. Fix only reproduced live failures
-   [ ] For every live failure, first add/adjust a deterministic regression test.
-   [ ] Do not add speculative compatibility code.
-   [ ] Do not reintroduce removed contracts.
-   [ ] Keep StageExecutor technical; keep FlowEngine semantic.
-
-4. High-density soak
-   [ ] Run high-density reliability soak after 0.5H gate is green.
-   [ ] Check state/log/history growth.
-   [ ] Check retry/backoff does not spin.
-   [ ] Check no ownership/orphan leak.
-
-5. Full 24H Windows soak
-   Run:
-       tool\qwen_live_reliability_24h.bat
-
-   Acceptance:
-   [ ] full wall-clock duration
-   [ ] no stuck ownership lock
-   [ ] no orphan worker/process after stop/crash/resume
-   [ ] no lost committed workflow position
-   [ ] no dynamic child Workflow corruption
-   [ ] no role-session corruption
-   [ ] no unbounded state/log/history growth
-   [ ] frozen Workflow/Prompt resources stable across Resume
-
-6. Release cleanup
-   [ ] Re-run same-HEAD deterministic CI after any soak-driven fix.
-   [ ] Regenerate project.bundle.txt only after gates stabilize.
-   [ ] Ensure bundle excludes runtime artifacts but keeps tests/source/docs needed for review.
-   [ ] Update this todo.txt with final live/24H evidence.
-
-DO NOT SPEND TIME ON THESE UNLESS A REAL USE CASE APPEARS
----------------------------------------------------------
-- Discussion / Group Chat
+P2 - DEFER / LOW CURRENT VALUE
+-------------------------------
+Do not spend release time on these unless a real use case appears:
+- separate Dashboard/Home
+- another Workflow editing surface
+- Undo history panel
+- large version-history browser
+- minimap decoration
+- heavy animation
+- mobile Workflow Designer
+- multi-user collaboration
 - generic parallel DAG engine
 - parallel writers without isolated worktrees
-- another Workflow editing surface
-- mobile Workflow Editor
-- compatibility with removed task-level/scope contracts
-- speculative rare failures that have no reproduced impact on 24H operation
+- Discussion / Group Chat
 
-EXTENSION GUIDELINES
---------------------
-When adding a new ordinary AI behavior:
-1. Prefer a new AI Stage profile/default if Generic/Execute/Review is not enough.
-2. Keep profile defaults centralized.
-3. Let Studio consume the runtime catalog.
-4. Do not create a new Stage type only for UI naming.
+WORKFLOW DESIGNER CURRENT CONTRACT
+----------------------------------
+- PASS / FAIL / HANDOFF edges may be connected, deleted and retargeted freely.
+- Deleting PASS must not silently continue to next.
+- Flow order may compactly serialize PASS-to-next.
+- ERROR remains error_policy, never a graph edge.
+- START/END are UI-only.
+- Save backend validates flow/routes/targets/schema before writing YAML.
+- Runtime executes only canonical saved YAML.
+- Stage Test does not create a second execution model.
 
-When adding a new special/plugin Stage:
-1. Implement one Stage class/file.
-2. Return semantic StageResult.
-3. If it produces child work, return producer-defined tasks/stages + child Stage definitions.
-4. Let dynamic_expansion validate/namespace/insert the children.
-5. Let StageExecutor handle technical retry/session/recovery.
-6. Let FlowEngine handle semantic navigation.
-7. Add schema/catalog tests + one focused runtime test.
-8. Add UI rendering only through catalog metadata when possible.
+RUNNER
+------
+Do not do another runner architecture rewrite now.
 
-DONE DEFINITION
----------------
-The refactor/release is complete only when all are true:
+High-value runner work remaining:
+[ ] Fix only reproduced live/backend failures.
+    reproduce -> deterministic regression test -> fix -> rerun gates.
 
-[ ] Same/current HEAD deterministic CI is fully green:
-    Ubuntu + Windows + Studio + Browser.
-[ ] real-Qwen 0.5H gate is green.
-[ ] high-density soak is green.
-[ ] full 24H Windows soak is green.
-[ ] no removed compatibility contract is restored.
-[ ] UI / CLI / API / YAML List execute the same runtime.
-[ ] dynamic child Workflow Resume is proven on real backend.
-[ ] no stuck ownership/orphan/state-growth issue remains.
-[ ] project.bundle.txt regenerated after final gates.
-[ ] todo.txt updated with final evidence and no stale tasks.
+[ ] Verify state/log/history growth during soak.
+    - No unbounded state.json growth.
+    - No unbounded warning/debug/history growth.
+    - No repeated stale dynamic/session entries after completion/resume.
 
-HANDOFF RULE
-------------
-If another chat takes over:
-1. read this file;
-2. inspect current HEAD;
-3. inspect CI for that exact HEAD;
-4. do not redo completed deterministic architecture work;
-5. continue from CURRENT NEXT ACTIONS;
-6. if a new bug is found, reproduce -> test -> fix -> rerun gates.
+[ ] Verify retry/backoff behavior under long failure windows.
+    - No busy loop.
+    - Same Session remains bounded before Fresh Session rotation.
+    - 429/502/503/raw disconnect/expired session continue unattended.
+    - Partial-write recovery preserves valid project state.
+
+[ ] Only optimize save/write frequency if soak evidence shows excessive I/O.
+    Current save points are intentionally conservative for durable resume.
+    Do not trade resume correctness for micro-optimization without measurements.
+
+[ ] Keep FlowEngine semantic and StageExecutor technical.
+    Do not merge them for code-count reduction.
+
+RELEASE GATES
+-------------
+[ ] Same/current HEAD deterministic CI green:
+    - Ubuntu Python
+    - Windows Python
+    - Studio build + committed bundle verify
+    - Playwright/Chromium Browser E2E
+
+[ ] Real-Qwen 0.5H gate green:
+    tool\qwen_live_reliability_0_5h.bat
+
+    Must cover at least:
+    - file / ai / mixed topologies
+    - Plan dynamic children
+    - Review FAIL rollback/closure
+    - Validator FAIL routing/closure
+    - Dynamic Handoff
+    - main / role / fresh sessions
+    - HTTP 429 / 502 / 503
+    - raw disconnect
+    - expired Session -> Fresh Session
+    - process restart / detached UI resume
+    - YAML List resume
+    - custom Stage / producer-defined child Workflow
+    - complete closed-loop probe
+
+[ ] High-density soak green
+    - state/log/history growth
+    - retry/backoff spin
+    - ownership/orphan leak
+
+[ ] Full 24H Windows soak green:
+    tool\qwen_live_reliability_24h.bat
+
+    Acceptance:
+    - full wall-clock duration
+    - no stuck ownership lock
+    - no orphan worker/process after stop/crash/resume
+    - no lost workflow position
+    - no dynamic child Workflow corruption
+    - no role-session corruption
+    - no unbounded state/log/history growth
+    - frozen Workflow/Prompt resources stable across Resume
+
+[ ] Final release cleanup
+    - rerun deterministic CI after any soak-driven fix
+    - rebuild/commit Studio bundle after final Studio source changes
+    - regenerate project.bundle.txt only after gates stabilize
+    - bundle excludes runtime artifacts and keeps source/tests/docs
+    - update this file with final live/24H evidence
+
+DONE
+----
+Release is complete when:
+- current HEAD deterministic CI is green,
+- real-Qwen 0.5H is green,
+- high-density soak is green,
+- full 24H Windows soak is green,
+- no removed contract has returned,
+- UI / CLI / API / YAML List still share the same runtime,
+- no ownership/orphan/state-growth issue remains,
+- final Studio bundle and project.bundle.txt are synchronized.
