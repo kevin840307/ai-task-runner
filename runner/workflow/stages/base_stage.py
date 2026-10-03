@@ -10,7 +10,7 @@ from ...agent import configure_ai_client, create_ai_client, structured_call
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
 from ..profiles import profile_defaults, profile_names
-from .contracts import MODE_READONLY, MODE_WRITE, StageContext, StageMode, StageResult
+from ..contracts import MODE_READONLY, MODE_WRITE, StageContext, StageMode, StageResult
 
 AIStageProfile = Literal["generic", "execute", "review"]
 SessionPolicy = Literal["auto", "main", "role", "fresh"]
