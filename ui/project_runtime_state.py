@@ -698,6 +698,67 @@ class ProjectRuntimeMixin:
             return []
         return rows[-200:]
 
+    def run_history(self, project: Path) -> list[dict]:
+        """Derive recent UI run history from existing chat/runtime evidence.
+
+        No second history store is created: completed runs come from assistant
+        messages carrying run_id, while the current active/stopped run comes
+        from the same durable runtime state used by the rest of the UI.
+        """
+        messages = self.messages(project)
+        rows: list[dict] = []
+        latest_user: dict | None = None
+        seen: set[str] = set()
+        for message in messages:
+            role = str(message.get("role") or "")
+            if role == "user":
+                latest_user = message
+                continue
+            run_id = str(message.get("run_id") or "").strip()
+            if role != "assistant" or not run_id or run_id in seen:
+                continue
+            started_at = float((latest_user or {}).get("time") or 0)
+            finished_at = float(message.get("time") or 0)
+            rows.append({
+                "run_id": run_id,
+                "status": "completed",
+                "prompt": str((latest_user or {}).get("content") or ""),
+                "started_at": started_at,
+                "updated_at": finished_at,
+                "duration": max(0.0, finished_at - started_at) if started_at and finished_at else 0.0,
+            })
+            seen.add(run_id)
+
+        runtime = self.read_runtime(project)
+        current_id = str(runtime.get("run_id") or "").strip()
+        if current_id and current_id not in seen and (
+            runtime.get("running") or runtime.get("resumable") or runtime.get("completed")
+        ):
+            if runtime.get("running") and runtime.get("last_error"):
+                status = "recovering"
+            elif runtime.get("running"):
+                status = "running"
+            elif runtime.get("completed"):
+                status = "completed"
+            elif runtime.get("resumable") and (runtime.get("stale") or runtime.get("last_error")):
+                status = "needs_attention"
+            elif runtime.get("resumable"):
+                status = "stopped"
+            else:
+                status = "idle"
+            started_at = float(runtime.get("started_at") or (latest_user or {}).get("time") or 0)
+            updated_at = float(runtime.get("updated_at") or time.time())
+            rows.append({
+                "run_id": current_id,
+                "status": status,
+                "prompt": str(runtime.get("input_prompt") or (latest_user or {}).get("content") or ""),
+                "started_at": started_at,
+                "updated_at": updated_at,
+                "duration": max(0.0, updated_at - started_at) if started_at else 0.0,
+            })
+        return list(reversed(rows[-20:]))
+
+
     def append_message(self, project: Path, role: str, content: str, *, run_id: str = "") -> None:
         with self._chat_lock:
             folder = project / UI_STATE_DIR
