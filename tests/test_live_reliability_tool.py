@@ -2095,7 +2095,10 @@ def test_dynamic_session_workflow_dryrun_forces_two_stable_visits(tmp_path: Path
     workflow = load_workflow(workflow_file)
     scenario = Scenario({
         "handoffs": {"coordinator": "main_role"},
-        "stages": {"stable_gate": ["fail", "pass"]},
+        "stages": {
+            "main_gate": ["fail", "pass"],
+            "stable_gate": ["fail", "pass"],
+        },
     })
     ctx, executor, error = _execute(workflow, scenario, 20)
     try:
