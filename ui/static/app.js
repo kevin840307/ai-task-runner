@@ -20,7 +20,7 @@ function rememberProjectPreference(key, value) { const prefs = currentProjectPre
 function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
-  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true,
+  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true, runHistoryOpen: false,
   backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
@@ -427,6 +427,7 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
+  setRunHistoryOpen(false);
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
@@ -454,6 +455,7 @@ async function selectProject(project) {
     state.validatorWorkflowPath = "";
     state.aiValidatorPromptWorkflowPath = "";
   }
+  setRunHistoryOpen(false);
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
   if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
@@ -466,6 +468,91 @@ async function selectProject(project) {
   finally { setViewLoading("chatView", false); state.projectSwitching = false; renderProjects(); }
 }
 
+function formatRunDuration(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m ${total % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+function runHistoryStatusLabel(status) {
+  return ({
+    running: "Running",
+    recovering: "Recovering",
+    completed: "Completed",
+    stopped: "Stopped",
+    needs_attention: "Needs Attention",
+  })[status] || String(status || "Unknown");
+}
+async function refreshRunHistory({ projectPath = state.project?.path || "" } = {}) {
+  const root = $("runHistoryList");
+  if (!root || !projectPath) return;
+  try {
+    const data = await api(`/api/project/runs?project=${encodeURIComponent(projectPath)}`, { timeoutMs: 15000 });
+    if (!sameProjectPath(state.project?.path, projectPath)) return;
+    root.innerHTML = "";
+    const runs = Array.isArray(data.runs) ? data.runs : [];
+    if (!runs.length) {
+      const empty = document.createElement("div");
+      empty.className = "run-history-empty";
+      empty.textContent = "No runs yet.";
+      root.appendChild(empty);
+      return;
+    }
+    for (const run of runs) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = `run-history-row status-${run.status || "unknown"}`;
+      row.dataset.runId = String(run.run_id || "");
+
+      const copy = document.createElement("span");
+      copy.className = "run-history-copy";
+      const prompt = document.createElement("strong");
+      prompt.textContent = String(run.prompt || "Run");
+      prompt.title = String(run.prompt || "Run");
+      const meta = document.createElement("small");
+      const updated = Number(run.updated_at || 0) * 1000;
+      meta.textContent = [
+        runHistoryStatusLabel(run.status),
+        formatRunDuration(run.duration),
+        updated ? formatFreshness(updated) : "",
+      ].filter(Boolean).join(" · ");
+      if (updated) meta.title = `Updated: ${new Date(updated).toLocaleString()}`;
+      copy.append(prompt, meta);
+
+      const badge = document.createElement("span");
+      badge.className = "run-history-status";
+      badge.textContent = runHistoryStatusLabel(run.status);
+      row.append(copy, badge);
+      row.onclick = () => {
+        const runId = String(run.run_id || "");
+        const target = [...document.querySelectorAll("#messages .message[data-run-id]")]
+          .find((node) => node.dataset.runId === runId);
+        if (!target) return;
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        target.classList.add("run-history-focus");
+        setTimeout(() => target.classList.remove("run-history-focus"), 1200);
+      };
+      root.appendChild(row);
+    }
+  } catch (error) {
+    root.innerHTML = "";
+    const failed = document.createElement("div");
+    failed.className = "run-history-empty error";
+    failed.textContent = errorSummary(error.message, "Unable to load run history");
+    root.appendChild(failed);
+  }
+}
+function setRunHistoryOpen(open) {
+  state.runHistoryOpen = Boolean(open && state.project);
+  const panel = $("runHistoryPanel");
+  const button = $("runHistoryButton");
+  if (panel) panel.hidden = !state.runHistoryOpen;
+  if (button) button.setAttribute("aria-expanded", String(state.runHistoryOpen));
+  if (state.runHistoryOpen) void refreshRunHistory();
+}
+
 async function refreshMessages({ forceFollow = false, projectPath = state.project?.path || "" } = {}) {
   if (!projectPath) return;
   const root = $("messages");
@@ -475,7 +562,7 @@ async function refreshMessages({ forceFollow = false, projectPath = state.projec
   const input = root.querySelector(".runtime-input-card");
   const live = root.querySelector(".live-activity"); root.innerHTML = "";
   for (const message of data.messages || []) {
-    const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant";
+    const item = document.createElement("article"); item.className = `message ${message.role}`; item.dataset.role = message.role || "assistant"; if (message.run_id) item.dataset.runId = String(message.run_id);
     const body = document.createElement("div"); body.className = "message-body"; body.textContent = message.content || ""; item.appendChild(body); root.appendChild(item);
   }
   if (input) root.appendChild(input);
@@ -700,7 +787,12 @@ function renderRuntime(runtime) {
     current.runtime_total = nextTotal;
     if (changed) renderProjects();
   }
-  if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) { state.lastRunId = runtime.run_id; state.historyPinnedToBottom = true; refreshMessages({ forceFollow: true }); }
+  if (runtime.completed && runtime.run_id && runtime.run_id !== state.lastRunId) {
+    state.lastRunId = runtime.run_id;
+    state.historyPinnedToBottom = true;
+    refreshMessages({ forceFollow: true });
+    if (state.runHistoryOpen) void refreshRunHistory();
+  }
 }
 function hasUserMessage() { return $("messages")?.querySelector(".message.user") !== null; }
 function resizeComposerInput() { const ta = $("messageInput"); if (!ta) return; autosizeTextarea(ta, { minHeight: 46, maxHeight: 210 }); syncComposerReserve(); }
@@ -1801,6 +1893,8 @@ if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+$("runHistoryButton").onclick = () => setRunHistoryOpen(!state.runHistoryOpen);
+$("runHistoryClose").onclick = () => setRunHistoryOpen(false);
 $("clearHistoryButton").onclick = async () => {
   if (!state.project || state.runtime?.running) return;
   const resetStopped = Boolean(state.runtime?.resumable);
@@ -1815,6 +1909,7 @@ $("clearHistoryButton").onclick = async () => {
     removeLiveCard();
     await refreshMessages({ forceFollow: true });
     await refreshRuntime({ force: true });
+    if (state.runHistoryOpen) await refreshRunHistory();
     showToast(resetStopped ? "Chat history and stopped task cleared" : t("history.cleared", "Chat history cleared"));
   } catch (error) { showActionError(error.message, "Clear history failed"); }
 };
