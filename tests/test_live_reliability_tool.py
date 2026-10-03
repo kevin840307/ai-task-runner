@@ -2165,3 +2165,12 @@ def test_finish_run_clears_primary_session_by_contract():
     source = (Path(__file__).resolve().parents[1] / "runner" / "workflow" / "results.py").read_text(encoding="utf-8")
     assert 'ctx.state.ai_session_id = ""' in source
     assert 'ctx.ai_client.session_id = ""' in source
+
+
+
+def test_api_recovery_probe_disables_backend_internal_retry():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+
+    assert "qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0)" in source
+    assert 'event.get("status") == "Recovering"' in source
+    assert '"status": "Recovering"' not in source
