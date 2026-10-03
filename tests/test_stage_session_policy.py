@@ -85,37 +85,11 @@ def test_role_session_policy_restores_and_persists_durable_stage_session(tmp_pat
     assert len(created) == 1
 
 
-def test_explicit_role_policy_overrides_legacy_fresh_each_run(tmp_path, monkeypatch):
-    ctx = context(tmp_path)
-    ctx.state.stage_sessions["worker"] = "role-existing"
+def test_plan_and_ai_validator_use_fresh_session_policy_by_default():
+    from runner.workflow.stages import AIValidatorStageSpec, PlanStageSpec
 
-    def fake_create(*args, session_id="", **kwargs):
-        return SimpleNamespace(session_id=session_id)
-
-    monkeypatch.setattr("runner.workflow.stages.base_stage.create_ai_client", fake_create)
-    stage = RecordingStage(BaseStageSpec(
-        name="worker",
-        prompt="unused",
-        session_policy="role",
-        fresh_session_each_run=True,
-    ))
-
-    result = stage.run(ctx)
-
-    assert result.status == "pass"
-    assert stage.seen == ["role-existing"]
-    assert ctx.state.stage_sessions["worker"] == "session-1"
-
-
-def test_explicit_main_policy_overrides_legacy_fresh_on_start(tmp_path):
-    stage = BaseStage(BaseStageSpec(
-        name="worker",
-        prompt="unused",
-        session_policy="main",
-        fresh_session_on_start=True,
-    ))
-
-    assert stage.fresh_session_on_start is False
+    assert PlanStageSpec(name="plan").session_policy == "fresh"
+    assert AIValidatorStageSpec(name="validate").session_policy == "fresh"
 
 
 def test_fresh_session_policy_clears_session_on_every_stage_invocation(tmp_path, monkeypatch):
