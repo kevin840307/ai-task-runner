@@ -3134,6 +3134,37 @@ def resource_snapshot(root: Path) -> dict[str, int]:
         "active_process_markers": sum(
             1 for path in root.rglob("active-process.txt") if path.is_file()
         ),
+        "project_state_json_bytes": 0,
+        "project_stage_sessions": 0,
+        "project_dynamic_groups": 0,
+        "project_dynamic_task_groups": 0,
+        "project_review_failures": 0,
+        "project_expanded_workflow_stages": 0,
+        "project_debug_history_bytes": 0,
+    }
+
+
+def project_state_metrics(project: Path) -> dict[str, int]:
+    work = project / ".ai-task-runner"
+    state_path = work / "state.json"
+    state = read_json(state_path)
+    def count_mapping(name: str) -> int:
+        value = state.get(name)
+        return len(value) if isinstance(value, dict) else 0
+
+    expanded = state.get("expanded_workflow")
+    try:
+        state_bytes = state_path.stat().st_size
+    except OSError:
+        state_bytes = 0
+    return {
+        "project_state_json_bytes": int(state_bytes),
+        "project_stage_sessions": count_mapping("stage_sessions"),
+        "project_dynamic_groups": count_mapping("dynamic_groups"),
+        "project_dynamic_task_groups": count_mapping("dynamic_task_groups"),
+        "project_review_failures": count_mapping("review_failures"),
+        "project_expanded_workflow_stages": len(expanded) if isinstance(expanded, list) else 0,
+        "project_debug_history_bytes": _tree_bytes(work / "debug" / "history"),
     }
 
 
@@ -3220,6 +3251,7 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             sandbox_runs=result.sandbox_runs + int(sandboxed),
         )
         sample = resource_snapshot(root)
+        sample.update(project_state_metrics(project))
         maximum = _resource_maximum(maximum, sample)
         _record_resource_snapshot(root, run_number, sample)
         result = replace(result, resource_max=maximum, resource_end=sample)
