@@ -236,6 +236,17 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Reworked Dynamic Handoff session_policy=main live proof to test direct reuse instead of final-state retention.
+    - The previous probe ran main_role only once, then required final completed state.ai_session_id to equal
+      that one model session. Primary-session durability across process restart is already owned by the
+      dedicated resume/process-restart probe.
+    - Dynamic Handoff now deterministically visits main_role twice through main_gate and verifies the two
+      real model.result session ids are identical. stable_role is still visited twice to prove role reuse;
+      fresh_role remains isolated and non-durable.
+    - If final state.ai_session_id is present it must agree with the observed main session, but the probe no
+      longer falsely fails solely because a completed run does not retain it.
+    - Deterministic fixture/dry-run/gate coverage was updated to include the two main_role visits.
+
 [x] Fixed real Review Stage Probe false failure caused by incomplete isolated review evidence.
     - Root cause: the live Stage Probe created a Review Task with an empty deliverable/last_output,
       while the harness still expected PASS->done. Real Qwen correctly returned semantic FAIL->stop
