@@ -8,7 +8,7 @@ from typing import Any
 
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
-from .plugins.registry import merge_plugin_config, plugin_config_from_yaml
+from .plugins.registry import merge_plugin_config, plugin_config_from_yaml, plugin_yaml_fields
 from .runtime import events
 from .runtime.run_state import StateStore
 from .utils import io_path
@@ -49,6 +49,11 @@ REMOVED_SCRIPT_FIELDS = frozenset({
     "api_wait_timeout",
     "retry_wait",
     "retry_max_wait",
+})
+SCRIPT_ITEM_BASE_FIELDS = frozenset({
+    "prompt", "goal", "goal_file", "project_root", "project_name",
+    "validator", "validator_prompt", "ai_validator_prompt", "ai_validator_prompt_file",
+    "workflow", "workflow_file", "plugins",
 })
 
 
@@ -200,6 +205,12 @@ def _parse_item(
     if removed:
         raise RunnerError(
             f"script item {index} uses removed options: " + ", ".join(removed)
+        )
+    allowed = SCRIPT_ITEM_BASE_FIELDS | set(SCRIPT_ITEM_RUNTIME_ALIASES) | set(plugin_yaml_fields())
+    unknown = sorted(str(key) for key in item if key not in allowed)
+    if unknown:
+        raise RunnerError(
+            f"script item {index} unknown options: " + ", ".join(unknown)
         )
 
     goal, goal_file = _goal(
