@@ -429,6 +429,36 @@ class UIStateTests(unittest.TestCase):
             "  [>] 2. Second TODO",
         ])
 
+    def test_runtime_exposes_only_last_twenty_bounded_transitions(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-trace",
+            "cycle": 21,
+            "current": 0,
+            "completed": False,
+            "stage": "review",
+            "tasks": [],
+            "transition_history": [
+                {
+                    "stage": f"stage-{index}",
+                    "status": "pass",
+                    "target": f"target-{index}",
+                    "cycle": index + 1,
+                    "kind": "generic",
+                    "timestamp": float(index + 1),
+                }
+                for index in range(30)
+            ],
+        })
+
+        info = self.state.read_runtime(self.project)
+
+        self.assertEqual(len(info["recent_transitions"]), 20)
+        self.assertEqual(info["recent_transitions"][0]["stage"], "stage-10")
+        self.assertEqual(info["recent_transitions"][-1]["stage"], "stage-29")
+        self.assertEqual(info["recent_transitions"][-1]["target"], "target-29")
+
+
     def test_runtime_exposes_cycle_position_and_last_transition_for_header(self) -> None:
         runtime = self.project / ".ai-task-runner"
         self.write_json(runtime / "state.json", {
