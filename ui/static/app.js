@@ -994,8 +994,8 @@ function renderStudioFiles() {
 }
 function clearStudioEditor() {
   closeStudioAssetMenu();
-  state.studioFile = null; state.studioOriginal = ""; state.studioHash = ""; state.studioDirty = false; state.visual = null; state.visualDirty = false; state.selectedFlowIndex = -1;
-  $("studioEditor").hidden = true; $("studioEmpty").hidden = false; $("validationOutput").hidden = true; state.studioErrorDetail = ""; state.validationDetail = ""; state.validationSummary = ""; renderStudioVisibilityBadge(); $("studioTextarea").value = ""; $("studioPromptTextarea").value = ""; updateLineNumbers(); updateDirtyState(); renderStudioPanels();
+  state.studioFile = null; state.studioOriginal = ""; state.studioHash = ""; state.studioDirty = false;
+  $("studioEditor").hidden = true; $("studioEmpty").hidden = false; $("validationOutput").hidden = true; state.studioErrorDetail = ""; state.validationDetail = ""; state.validationSummary = ""; renderStudioVisibilityBadge(); $("studioPromptTextarea").value = ""; updateDirtyState(); renderStudioPanels();
 }
 function studioCacheVersion(item) { return String(item?.version || ""); }
 // Hidden Workflows remain editable in Studio but are omitted from the Tasks selector.
@@ -1017,13 +1017,12 @@ function renderStudioVisibilityBadge() {
   }
 }
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
-function applyStudioLoaded(data, visual, item, cached = false) {
-  const cache = state.studioFileCache.get(item.id);
-  state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; state.visual = visual; state.visualDirty = false;
-  state.selectedFlowIndex = cache?.selectedFlowIndex ?? (visual?.flow?.length ? 0 : -1); state.studioGuard = data.guard || state.studioGuard;
-  $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = data.name; $("studioFilePath").textContent = `${data.scope} · ${data.path}`; $("studioKindLabel").textContent = data.kind === "prompt" ? "Prompt" : "Workflow"; $("validationOutput").hidden = true; state.validationDetail = ""; state.validationSummary = ""; renderStudioVisibilityBadge();
-  if (data.kind === "prompt") $("studioPromptTextarea").value = data.content; else $("studioTextarea").value = data.content;
-  renderStudioGuard(); renderStudioFiles(); renderStudioPanels(); renderVisualDesigner(); renderPromptTags(); updateLineNumbers(); updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus(cached ? "" : "");
+function applyStudioLoaded(data, _visual, item, cached = false) {
+  state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false;
+  state.studioGuard = data.guard || state.studioGuard;
+  $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = data.name; $("studioFilePath").textContent = `${data.scope} · ${data.path}`; $("studioKindLabel").textContent = "Prompt"; $("validationOutput").hidden = true; state.validationDetail = ""; state.validationSummary = ""; renderStudioVisibilityBadge();
+  $("studioPromptTextarea").value = data.content;
+  renderStudioGuard(); renderStudioFiles(); renderStudioPanels(); renderPromptTags(); updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus(cached ? "" : "");
 }
 async function openStudioFile(item) {
   void probeFullDesigner();
@@ -1032,26 +1031,24 @@ async function openStudioFile(item) {
   if (state.studioFile?.id !== item.id && !(await confirmDiscardStudio())) return;
   if (state.studioFile?.id && state.studioFileCache.has(state.studioFile.id)) state.studioFileCache.get(state.studioFile.id).selectedFlowIndex = state.selectedFlowIndex;
   const token = ++state.studioOpenToken;
+  if (item.kind !== "prompt") return openWorkflowEditorItem(item);
   const cached = state.studioFileCache.get(item.id);
   if (cached && cached.version === studioCacheVersion(item) && (Date.now() - Number(cached.loadedAt || 0)) < 15000) {
-    applyStudioLoaded(cached.data, cached.visual, item, true);
-    if (cached.data.kind === "prompt") refreshPromptTags();
+    applyStudioLoaded(cached.data, null, item, true);
+    refreshPromptTags();
     return;
   }
-  // Give immediate selection feedback before localhost file/visual hydration completes.
-  state.studioFile = { ...item, content: "", hash: "" }; state.visual = null; state.selectedFlowIndex = -1;
-  if (item.kind === "workflow") $("studioTextarea").value = ""; else $("studioPromptTextarea").value = "";
-  $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = item.name; $("studioFilePath").textContent = `${item.scope} · ${item.path}`; $("studioKindLabel").textContent = item.kind === "prompt" ? "Prompt" : "Workflow"; renderStudioVisibilityBadge();
-  renderStudioFiles(); renderStudioPanels(); renderVisualDesigner(); updateLineNumbers(); setStudioStatus("Loading…");
-  setStudioContentLoading(true, item.kind === "prompt" ? "Loading prompt…" : "Loading workflow…");
+  state.studioFile = { ...item, content: "", hash: "" };
+  $("studioPromptTextarea").value = "";
+  $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = item.name; $("studioFilePath").textContent = `${item.scope} · ${item.path}`; $("studioKindLabel").textContent = "Prompt"; renderStudioVisibilityBadge();
+  renderStudioFiles(); renderStudioPanels(); setStudioStatus("Loading…");
+  setStudioContentLoading(true, "Loading prompt…");
   try {
-    const filePromise = api(`/api/studio/file?id=${encodeURIComponent(item.id)}${projectQuery()}`);
-    const visualPromise = item.kind === "workflow" ? api(`/api/studio/visual?id=${encodeURIComponent(item.id)}${projectQuery()}`) : Promise.resolve(null);
-    const [data, visual] = await Promise.all([filePromise, visualPromise]);
+    const data = await api(`/api/studio/file?id=${encodeURIComponent(item.id)}${projectQuery()}`);
     if (token !== state.studioOpenToken) return;
-    state.studioFileCache.set(item.id, { version: studioCacheVersion(item), loadedAt: Date.now(), data, visual, selectedFlowIndex: visual?.flow?.length ? 0 : -1 });
-    applyStudioLoaded(data, visual, item);
-    if (data.kind === "prompt") await refreshPromptTags();
+    state.studioFileCache.set(item.id, { version: studioCacheVersion(item), loadedAt: Date.now(), data });
+    applyStudioLoaded(data, null, item);
+    await refreshPromptTags();
   } catch (error) { if (token === state.studioOpenToken) setStudioStatus(error.message, true); }
   finally { if (token === state.studioOpenToken) setStudioContentLoading(false); }
 }
@@ -1087,7 +1084,7 @@ async function openAssetItem(item) {
     openWorkflowEditorItem(item);
     return;
   }
-  await openAssetItem(item);
+  await openStudioFile(item);
 }
 
 async function restoreWorkflowStudioNavigation() {
@@ -1113,24 +1110,8 @@ async function restoreWorkflowStudioNavigation() {
 }
 
 function renderStudioPanels() {
-  const prompt = state.studioFile?.kind === "prompt";
-  const workflow = state.studioFile?.kind === "workflow";
-  $("promptEditorPanel").hidden = !prompt;
-  $("visualDesignerPanel").hidden = !workflow || state.studioMode !== "visual";
-  $("yamlEditorPanel").hidden = !workflow || state.studioMode !== "yaml";
-}
-async function setStudioMode(mode) {
-  if (mode === state.studioMode) return;
-  // Prompt uses the same editor in both modes; mode only matters to Workflow files.
-  if (state.studioFile?.kind === "workflow" && !(await confirmDiscardStudio())) return;
-  state.studioMode = mode;
-  $("visualModeButton").classList.toggle("active", mode === "visual"); $("yamlModeButton").classList.toggle("active", mode === "yaml");
-  renderStudioPanels(); updateDirtyState(); scheduleSyntaxCheck();
-}
-async function setStudioSource(kind) {
-  if (kind === state.studioSourceKind) return;
-  if (!(await confirmDiscardStudio())) return;
-  closeStageEditor(true); state.studioSourceKind = kind; clearStudioEditor(); renderStudioFiles();
+  const panel = $("promptEditorPanel");
+  if (panel) panel.hidden = state.studioFile?.kind !== "prompt";
 }
 function flowStageName(item) { return typeof item === "string" ? item : String(item?.stage || ""); }
 function stageConfig(name) { return (state.visual?.stages || []).find((s) => s.name === name) || { name, type: "base", status: "", prompt: "" }; }
