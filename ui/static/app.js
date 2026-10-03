@@ -927,12 +927,15 @@ function appendStudioItem(root, item) {
   scope.textContent = String(item.scope || "global").toUpperCase();
   top.append(name, scope);
   const metaNode = document.createElement("small");
-  metaNode.textContent =
+  const assetState =
     item.kind === "workflow" && item.hidden
       ? t("assets.hidden_from_chat", "Hidden from Chat")
       : item.kind === "prompt"
         ? "Prompt"
         : t("assets.visible_in_chat", "Visible in Chat");
+  const modifiedAt = Number(item.mtime || 0) * 1000;
+  metaNode.textContent = modifiedAt ? `${assetState} · ${formatFreshness(modifiedAt)}` : assetState;
+  if (modifiedAt) metaNode.title = `Modified: ${new Date(modifiedAt).toLocaleString()}`;
   if (item.kind === "workflow" && item.hidden) metaNode.classList.add("hidden-state");
   button.append(top, metaNode);
   if (item.kind === "workflow") {
