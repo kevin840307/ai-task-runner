@@ -20,7 +20,7 @@ function rememberProjectPreference(key, value) { const prefs = currentProjectPre
 function rememberValidator(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.validators = prefs.validators && typeof prefs.validators === "object" ? prefs.validators : {}; prefs.validators[workflow] = value; saveUiPreferences(); }
 function rememberAiValidatorPrompt(workflow, value) { if (!state.project || !workflow) return; const prefs = currentProjectPreferences(); prefs.aiValidatorPrompts = prefs.aiValidatorPrompts && typeof prefs.aiValidatorPrompts === "object" ? prefs.aiValidatorPrompts : {}; prefs.aiValidatorPrompts[workflow] = value; saveUiPreferences(); }
 const state = {
-  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true, runHistoryOpen: false,
+  projects: [], project: null, runtime: null, lastStream: "", lastRunId: "", historyPinnedToBottom: true, runHistoryOpen: false, runtimeTraceOpen: false,
   backends: [], defaultBackend: "", workflowCatalog: { stage_types: {}, node_options: {} }, preferences: null, validatorWorkflowPath: "", aiValidatorPromptWorkflowPath: "",
   view: "chat",
   studioFiles: { workflows: [], prompts: [] }, studioFile: null,
@@ -428,6 +428,7 @@ function renderProjects() {
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
   setRunHistoryOpen(false);
+  setRuntimeTraceOpen(false);
   $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
@@ -456,6 +457,7 @@ async function selectProject(project) {
     state.aiValidatorPromptWorkflowPath = "";
   }
   setRunHistoryOpen(false);
+  setRuntimeTraceOpen(false);
   state.project = project; state.runtime = null; state.lastStream = ""; state.runtimeStartedAt = 0; state.runtimeStoppedAt = 0; state.historyPinnedToBottom = true; state.validatorWorkflowPath = ""; $("clearHistoryButton").disabled = true;
   if (!state.preferences) state.preferences = loadUiPreferences(); state.preferences.lastProject = project.path; saveUiPreferences();
   if ($("workflowSelect")) $("workflowSelect").innerHTML = ""; renderProjects(); renderBackendPicker();
@@ -546,11 +548,54 @@ async function refreshRunHistory({ projectPath = state.project?.path || "" } = {
 }
 function setRunHistoryOpen(open) {
   state.runHistoryOpen = Boolean(open && state.project);
+  if (state.runHistoryOpen) setRuntimeTraceOpen(false);
   const panel = $("runHistoryPanel");
   const button = $("runHistoryButton");
   if (panel) panel.hidden = !state.runHistoryOpen;
   if (button) button.setAttribute("aria-expanded", String(state.runHistoryOpen));
   if (state.runHistoryOpen) void refreshRunHistory();
+}
+function renderRuntimeTrace(runtime = state.runtime) {
+  const button = $("runtimeTraceButton");
+  const root = $("runtimeTraceList");
+  if (!button || !root) return;
+  const items = Array.isArray(runtime?.recent_transitions) ? runtime.recent_transitions : [];
+  button.hidden = items.length === 0;
+  if (!items.length) {
+    root.innerHTML = "";
+    setRuntimeTraceOpen(false);
+    return;
+  }
+  root.innerHTML = "";
+  for (const item of [...items].reverse()) {
+    const row = document.createElement("div");
+    row.className = `runtime-trace-row status-${item.status || "unknown"}`;
+    const route = document.createElement("strong");
+    route.textContent = `${item.stage || "stage"} ${String(item.status || "").toUpperCase()} → ${item.target || "stop"}`;
+    route.title = route.textContent;
+    const meta = document.createElement("small");
+    const timestamp = Number(item.timestamp || 0) * 1000;
+    meta.textContent = [
+      Number(item.cycle || 0) > 0 ? `Cycle ${item.cycle}` : "",
+      item.kind ? String(item.kind) : "",
+      timestamp ? formatFreshness(timestamp) : "",
+    ].filter(Boolean).join(" · ");
+    if (timestamp) meta.title = new Date(timestamp).toLocaleString();
+    row.append(route, meta);
+    root.appendChild(row);
+  }
+}
+function setRuntimeTraceOpen(open) {
+  state.runtimeTraceOpen = Boolean(open && state.project);
+  if (state.runtimeTraceOpen && state.runHistoryOpen) {
+    state.runHistoryOpen = false;
+    if ($("runHistoryPanel")) $("runHistoryPanel").hidden = true;
+    $("runHistoryButton")?.setAttribute("aria-expanded", "false");
+  }
+  const panel = $("runtimeTracePanel");
+  const button = $("runtimeTraceButton");
+  if (panel) panel.hidden = !state.runtimeTraceOpen;
+  if (button) button.setAttribute("aria-expanded", String(state.runtimeTraceOpen));
 }
 
 async function refreshMessages({ forceFollow = false, projectPath = state.project?.path || "" } = {}) {
@@ -743,6 +788,7 @@ function renderRuntime(runtime) {
     headline.hidden = parts.length === 0;
   }
   renderRuntimeInput(runtime);
+  renderRuntimeTrace(runtime);
   $("clearHistoryButton").disabled = Boolean(runtime.running); $("clearHistoryButton").title = runtime.running ? "Stop the active task before clearing this chat history" : "Clear chat history";
   $("sendButton").hidden = runtime.running || runtime.resumable;
   $("stopButton").hidden = !runtime.running;
@@ -1956,6 +2002,8 @@ if (systemColorScheme) { const onSystemAppearanceChanged = () => { if ((document
 applyThemePreferences(document.documentElement.dataset.theme || readThemePreference(), document.documentElement.dataset.appearancePreference || readAppearancePreference()); applyMotionPreference(document.documentElement.dataset.motion || readMotionPreference());
 $("sendButton").onclick = sendMessage;
 $("messageInput").addEventListener("input", resizeComposerInput); $("messageInput").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+$("runtimeTraceButton").onclick = () => setRuntimeTraceOpen(!state.runtimeTraceOpen);
+$("runtimeTraceClose").onclick = () => setRuntimeTraceOpen(false);
 $("runHistoryButton").onclick = () => setRunHistoryOpen(!state.runHistoryOpen);
 $("runHistoryClose").onclick = () => setRunHistoryOpen(false);
 $("clearHistoryButton").onclick = async () => {
