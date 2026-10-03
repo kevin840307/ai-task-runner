@@ -268,7 +268,7 @@ Editor keyboard / mouse UX:
 - Ctrl+Z = Workflow draft undo
 - Ctrl+Y / Ctrl+Shift+Z = redo
 - text inputs keep native text undo behavior
-- implicit PASS->next flow edge is not deletable as an explicit route
+- PASS edges, including implicit PASS->next, are deletable; deleting PASS persists routes.pass: stop so runtime does not silently continue, and reconnecting to the original next Stage restores the compact implicit-next form
 
 Supported desktop viewport test set:
 - 1024x768
