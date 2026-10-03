@@ -1080,7 +1080,7 @@ def test_loop_detection_contract_preflight_accepts_known_qwen_signal():
 
 
 
-def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_completed_task(
+def test_custom_dynamic_producer_probe_uses_explicit_workflow_and_requires_completed_task(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -1108,7 +1108,7 @@ def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_complete
         return 0
 
     monkeypatch.setattr(live, "run_command", fake_run)
-    live.custom_task_producer_probe(settings(tmp_path), tmp_path)
+    live.custom_dynamic_producer_probe(settings(tmp_path), tmp_path)
 
     command = captured["command"]
     workflow = Path(command[command.index("--workflow") + 1])
