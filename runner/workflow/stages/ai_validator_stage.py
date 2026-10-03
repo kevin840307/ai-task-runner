@@ -16,7 +16,7 @@ class AIValidatorStageSpec(BaseStageSpec):
     ai_validator_yolo: bool | None = None
     structured_retries: int = 2
     structured_fresh_retries: int = 1
-    fresh_session_each_run: bool = True
+    session_policy: SessionPolicy = "fresh"
 
 
 class AIValidatorStage(BaseStage):
