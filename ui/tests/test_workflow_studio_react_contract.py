@@ -151,7 +151,7 @@ def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
     assert "未連線" in text
     assert "FAIL×{reviewMaxFailures} → 下次 Pass" in text
     assert "ERR×{errorRetries} → Skip" in text
-    assert ".wf-stage.type-review, .wf-stage.type-ai_validator" in styles
+    assert ".wf-stage.type-base.profile-review, .wf-stage.type-ai_validator" in styles
     assert ".wf-stage-meta span" in styles
 
 
