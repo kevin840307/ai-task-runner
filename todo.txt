@@ -238,6 +238,18 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed transient API recovery live false failure caused by bounded-log observation.
+    - Root cause: Recovering is a short-lived runner.status event, while log.txt is intentionally bounded.
+      api_recovery_probe waited until the whole run completed, then required the final bounded log to
+      still contain that earlier UI state. A valid same-session recovery could therefore pass all runtime
+      checks but fail the harness if the early event had already been trimmed.
+    - The probe now latches Recovering evidence while the outage/retry is actually active.
+      Final assertions still require same-session recovery, no RESET_SESSION verdict, successful completion,
+      and durable last_error cleared.
+    - The shared api_recovery_probe covers HTTP 429/502/503 and raw-disconnect variants, so the race fix
+      applies consistently across those live probes.
+    - Added deterministic harness contract coverage; runner retry semantics were not weakened.
+
 [x] Fixed Dynamic Handoff session_policy=main live false failure after successful completion.
     - Root cause: finish_run intentionally clears state.ai_session_id and the primary AI client session
       after Workflow PASS, but the older live assertion treated a cleared final ai_session_id as failure.
