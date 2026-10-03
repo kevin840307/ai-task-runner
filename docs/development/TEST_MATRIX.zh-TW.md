@@ -20,8 +20,8 @@
 | Resume/state | workflow position、durable expanded Workflow、dynamic task groups、transition_previous、role Sessions、損壞 state 拒絕 |
 | Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 dynamic producer、non-converging cutoff、非法 schema/route |
 | Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
-| Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
-| Studio React | PASS/FAIL/Handoff handle、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge、Workflows/Prompts 分離導覽、Prompts/Workflows 的 Project 點擊皆回 Tasks/Chat、Designer 實際拉 edge → 儲存 YAML → production loader + FlowEngine dry-run 走同一條 edge、Interface settings 不佔主導覽、Stage Form/YAML/Routing/Test ownership、常見桌面解析度 overflow 檢查 |
+| Studio backend | YAML graph save/validate、Save 前完整 flow/routes/targets/schema 驗證、Stage CRUD、asset root、prompt reference、Stage test sandbox |
+| Studio React | PASS/FAIL/Handoff handle 可自由連接/刪除/retarget、刪除 PASS 不會暗走 next、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge、Workflows/Prompts 分離導覽、Prompts/Workflows 的 Project 點擊皆回 Tasks/Chat、Designer 實際拉 edge → 儲存 YAML → production loader + FlowEngine dry-run 走同一條 edge、Interface settings 不佔主導覽、Stage Form/YAML/Routing/Test ownership、常見桌面解析度 overflow 檢查 |
 | Process/runtime | ownership/orphan/supervisor/control-file probes、同 checkpoint 重複 crash 持續 restart、capped process backoff |
 
 ## 負向 / 已移除契約
