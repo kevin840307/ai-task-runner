@@ -426,14 +426,14 @@ class WorkflowStudioMixin:
             raise ValueError("Stage source editor is available only for workflow YAML")
         data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
         stages = data.get("stages") if isinstance(data, dict) else None
-        if not isinstance(stages, dict) or stage_name not in stages:
-            raise ValueError(f"Stage not found: {stage_name}")
-        current = stages.get(stage_name)
+        saved = stages.get(stage_name) if isinstance(stages, dict) else None
+        draft = dict(fields) if isinstance(fields, dict) else None
+        current = saved if isinstance(saved, dict) else draft
         if not isinstance(current, dict):
-            raise ValueError(f"Stage must be a mapping: {stage_name}")
+            raise ValueError(f"Stage not found: {stage_name}")
 
         if mode == "format":
-            candidate = dict(fields) if isinstance(fields, dict) else dict(current)
+            candidate = dict(draft) if draft is not None else dict(current)
             candidate.pop("name", None)
             candidate.pop("routes", None)
             candidate.pop("targets", None)
@@ -467,7 +467,11 @@ class WorkflowStudioMixin:
             parsed["type"] = original_type
 
         self._validate_stage_editor_fields(parsed)
-        self._validate_node_editor_fields(parsed, data)
+        validation_data = dict(data) if isinstance(data, dict) else {}
+        validation_stages = dict(stages) if isinstance(stages, dict) else {}
+        validation_stages[stage_name] = {**current, **parsed}
+        validation_data["stages"] = validation_stages
+        self._validate_node_editor_fields(parsed, validation_data)
         return {"ok": True, "fields": parsed}
 
     def _stage_editor_fields(self) -> set[str]:
