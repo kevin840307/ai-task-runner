@@ -445,6 +445,37 @@ function nextStageKey(visual: Visual, type: string): string {
 type CanvasPosition = { x: number; y: number };
 type CanvasLayout = Record<string, CanvasPosition>;
 
+type WorkflowLocalDraft = {
+  hash: string;
+  visual: Visual;
+  yamlContent: string;
+  editorView: WorkflowEditorView;
+  savedAt: number;
+};
+
+function workflowDraftKey(id: string): string { return `workflow-studio-draft:v1:${id}`; }
+
+function readWorkflowDraft(id: string): WorkflowLocalDraft | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(workflowDraftKey(id)) || "null");
+    if (!value || typeof value !== "object") return null;
+    if (typeof value.hash !== "string" || typeof value.yamlContent !== "string") return null;
+    if (!value.visual || typeof value.visual !== "object" || value.visual.id !== id) return null;
+    if (value.editorView !== "designer" && value.editorView !== "yaml") return null;
+    return value as WorkflowLocalDraft;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkflowDraft(draft: WorkflowLocalDraft): void {
+  try { localStorage.setItem(workflowDraftKey(draft.visual.id), JSON.stringify(draft)); } catch { /* Draft recovery is best-effort only. */ }
+}
+
+function clearWorkflowDraft(id: string): void {
+  try { localStorage.removeItem(workflowDraftKey(id)); } catch { /* Ignore unavailable browser storage. */ }
+}
+
 function layoutKey(id: string): string { return `workflow-studio-layout:v2:${id}`; }
 
 function readLayout(id: string): CanvasLayout {
@@ -788,6 +819,7 @@ function App() {
   const [selected, setSelected] = useState<string>("");
   const [draft, setDraft] = useState<Stage | null>(null);
   const [dirtyGraph, setDirtyGraph] = useState(false);
+  const [recoveryDraft, setRecoveryDraft] = useState<WorkflowLocalDraft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [problems, setProblems] = useState<GraphProblem[]>([]);
@@ -872,9 +904,19 @@ function App() {
         api<{ prompts?: StudioFile[] }>(filesUrl),
         api<BackendCatalog>("/api/backends"),
       ]);
+      const canonicalYaml = String(file.content || "");
+      const localDraft = readWorkflowDraft(v.id);
+      if (localDraft && localDraft.hash !== v.hash) {
+        clearWorkflowDraft(v.id);
+        setRecoveryDraft(null);
+      } else {
+        const graphChanged = Boolean(localDraft) && JSON.stringify(graphDraft(localDraft!.visual)) !== JSON.stringify(graphDraft(v));
+        const yamlChanged = Boolean(localDraft) && localDraft!.yamlContent !== canonicalYaml;
+        setRecoveryDraft(localDraft && (graphChanged || yamlChanged) ? localDraft : null);
+      }
       setVisual(v);
-      setYamlContent(String(file.content || ""));
-      setYamlOriginal(String(file.content || ""));
+      setYamlContent(canonicalYaml);
+      setYamlOriginal(canonicalYaml);
       setYamlError("");
       setCatalog(c);
       setPrompts(files.prompts || []);
@@ -967,6 +1009,17 @@ function App() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [editorDirty]);
+
+  useEffect(() => {
+    if (!editorDirty || !visual) return;
+    writeWorkflowDraft({
+      hash: visual.hash,
+      visual: structuredClone(visual),
+      yamlContent,
+      editorView,
+      savedAt: Date.now(),
+    });
+  }, [editorDirty, visual, yamlContent, editorView]);
 
   useEffect(() => {
     if (!visual || !selected) { setDraft(null); return; }
@@ -1171,7 +1224,9 @@ function App() {
     }
     setBusy(true);
     try {
-      await persistGraph(nextVisual);
+      const savedVisual = await persistGraph(nextVisual);
+      clearWorkflowDraft(savedVisual.id);
+      setRecoveryDraft(null);
       setProblems(structural.filter((problem) => problem.severity === "warning"));
       setMessage("Workflow saved");
       return true;
@@ -1215,6 +1270,8 @@ function App() {
       setNodes(g.nodes);
       setEdges(g.edges);
       setDirtyGraph(false);
+      clearWorkflowDraft(refreshed.id);
+      setRecoveryDraft(null);
       setMessage("Workflow saved");
       return true;
     } catch (error) {
@@ -1580,7 +1637,10 @@ function App() {
   }
 
   function leaveStudio() {
-    const leave = () => { window.location.href = workflowStudioUrl(); };
+    const leave = () => {
+      if (visual && editorDirty) clearWorkflowDraft(visual.id);
+      window.location.href = workflowStudioUrl();
+    };
     if (!editorDirty) { leave(); return; }
     requestConfirm({
       title: tx("discard_title"),
@@ -1592,14 +1652,40 @@ function App() {
   }
 
   function reloadStudio() {
-    if (!editorDirty) { void load(); return; }
+    const reload = () => {
+      if (visual) clearWorkflowDraft(visual.id);
+      setRecoveryDraft(null);
+      void load();
+    };
+    if (!editorDirty) { reload(); return; }
     requestConfirm({
       title: tx("reload_title"),
       message: tx("reload_message"),
       confirmLabel: tx("reload_confirm"),
       danger: true,
-      action: () => { void load(); },
+      action: reload,
     });
+  }
+
+  function restoreWorkflowDraft() {
+    if (!visual || !recoveryDraft || recoveryDraft.hash !== visual.hash) return;
+    const canonical = visual;
+    const restored = structuredClone(recoveryDraft.visual);
+    setVisual(restored);
+    setYamlContent(recoveryDraft.yamlContent);
+    setEditorView(recoveryDraft.editorView);
+    setDirtyGraph(JSON.stringify(graphDraft(restored)) !== JSON.stringify(graphDraft(canonical)));
+    const g = graphFor(restored, catalog);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    setRecoveryDraft(null);
+    setMessage("Recovered local unsaved draft");
+  }
+
+  function discardWorkflowDraft() {
+    if (visual) clearWorkflowDraft(visual.id);
+    setRecoveryDraft(null);
+    setMessage("Local draft discarded");
   }
 
   function openStageEditor(name: string) {
@@ -1637,6 +1723,17 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           </button>
         </div>
       </header>
+
+      {recoveryDraft && <section className="workflow-draft-recovery" aria-label="Unsaved Workflow draft recovery">
+        <div>
+          <strong>Unsaved local draft found</strong>
+          <small>Saved {new Date(recoveryDraft.savedAt || Date.now()).toLocaleString()} · canonical Workflow is unchanged.</small>
+        </div>
+        <div className="workflow-draft-recovery-actions">
+          <button type="button" onClick={discardWorkflowDraft}>Discard Draft</button>
+          <button type="button" className="primary" onClick={restoreWorkflowDraft}>Restore Draft</button>
+        </div>
+      </section>}
 
       {problems.length > 0 && <section className="workflow-problems" aria-label="Workflow problems">
         <div className="workflow-problems-head">
