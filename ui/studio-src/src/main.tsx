@@ -789,6 +789,7 @@ function App() {
   const [dirtyGraph, setDirtyGraph] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [problems, setProblems] = useState<GraphProblem[]>([]);
   const [prompts, setPrompts] = useState<StudioFile[]>([]);
   const [pendingCreate, setPendingCreate] = useState<{ type: string; position?: { x: number; y: number } } | null>(null);
   const [createPrompt, setCreatePrompt] = useState("");
@@ -1137,13 +1138,25 @@ function App() {
 
   const saveGraph = useCallback(async (nextVisual = visual): Promise<boolean> => {
     if (!nextVisual) return false;
+    const structural = graphProblems(nextVisual);
+    setProblems(structural);
+    if (structural.some((problem) => problem.severity === "error")) {
+      setMessage("Fix Workflow problems before saving.");
+      return false;
+    }
     setBusy(true);
     try {
       await persistGraph(nextVisual);
+      setProblems(structural.filter((problem) => problem.severity === "warning"));
       setMessage("Workflow saved");
       return true;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      const detail = error instanceof Error ? error.message : String(error);
+      setProblems((current) => [
+        ...current.filter((problem) => problem.severity === "warning"),
+        { severity: "error", message: detail },
+      ]);
+      setMessage(detail);
       return false;
     } finally {
       setBusy(false);
@@ -1599,6 +1612,28 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           </button>
         </div>
       </header>
+
+      {problems.length > 0 && <section className="workflow-problems" aria-label="Workflow problems">
+        <div className="workflow-problems-head">
+          <strong>Problems · {problems.length}</strong>
+          <button type="button" onClick={() => setProblems([])} aria-label="Dismiss Workflow problems">×</button>
+        </div>
+        <div className="workflow-problems-list">
+          {problems.map((problem, index) => (
+            <button type="button" key={`${problem.severity}:${problem.stage || "workflow"}:${index}`}
+              className={`workflow-problem ${problem.severity}`}
+              onClick={() => {
+                if (!problem.stage) return;
+                setSelected(problem.stage);
+                setEditorOpen(false);
+              }}>
+              <span>{problem.severity === "error" ? "ERROR" : "WARN"}</span>
+              <strong>{problem.stage || "Workflow"}</strong>
+              <small>{problem.message}</small>
+            </button>
+          ))}
+        </div>
+      </section>}
 
       {editorView === "designer" ? <section className="studio-body">
         <aside className="palette">
