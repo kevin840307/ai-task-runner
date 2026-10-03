@@ -2987,9 +2987,17 @@ def api_recovery_probe(
         outage_until = 0.0
         successes_before_outage = 0
         recovered = False
+        recovering_seen = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
+                if not recovering_seen:
+                    recovering_seen = any(
+                        event.get("type") == "runner.status"
+                        and event.get("action") == "set"
+                        and event.get("status") == "Recovering"
+                        for event in runner_events(project)
+                    )
                 current_session = state.get("ai_session_id")
                 if not session_id and isinstance(current_session, str) and current_session:
                     session_id = current_session
@@ -3032,16 +3040,14 @@ def api_recovery_probe(
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
-        recovering = [
-            event for event in events
-            if event.get("type") == "runner.status"
-            and event.get("action") == "set"
-            and event.get("status") == "Recovering"
-        ]
-        if not recovering:
+        # Recovering is intentionally a transient UI/event status. log.txt is
+        # bounded, so a long successful run may trim that early event before this
+        # final assertion. Latch it while the run is active instead of requiring
+        # the final bounded log to retain historical UI state.
+        if not recovering_seen:
             raise RuntimeError(
                 "API outage reached Runner recovery path but no structured "
-                "Recovering status event was recorded"
+                "Recovering status event was observed while recovery was active"
             )
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
