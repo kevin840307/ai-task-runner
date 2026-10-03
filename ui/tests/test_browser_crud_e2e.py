@@ -308,7 +308,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             # Right-click visibility is owned by the Workflow Library and updates Chat immediately.
             workflow_row.click(button="right")
             assert page.locator("#workflowContextMenu").is_visible()
-            assert page.locator("#workflowContextVisibility").is_visible()
+            for control in (
+                "#workflowContextOpen", "#workflowContextVisibility", "#workflowContextRename",
+                "#workflowContextDuplicate", "#workflowContextExport", "#workflowContextDelete",
+            ):
+                assert page.locator(control).is_visible()
             page.click("#workflowContextVisibility")
             page.wait_for_timeout(80)
             assert workflow_row.locator("small.hidden-state").count() == 1
