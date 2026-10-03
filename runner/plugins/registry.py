@@ -83,6 +83,16 @@ def plugin_config_from_yaml(item: Mapping[str, Any]) -> dict[str, dict[str, Any]
     return _collect_plugin_config("config_from_yaml", item)
 
 
+def plugin_yaml_fields() -> frozenset[str]:
+    """Top-level YAML List convenience fields explicitly declared by plugins."""
+    discover_plugins()
+    fields: set[str] = set()
+    for module in plugin_modules():
+        declared = getattr(module, "YAML_FIELDS", ())
+        fields.update(str(name) for name in declared if str(name).strip())
+    return frozenset(fields)
+
+
 def _collect_plugin_config(method: str, source: Any) -> dict[str, dict[str, Any]]:
     discover_plugins()
     result: dict[str, dict[str, Any]] = {}
@@ -153,6 +163,7 @@ __all__ = [
     "plugin_config_from_namespace",
     "plugin_config_from_request",
     "plugin_config_from_yaml",
+    "plugin_yaml_fields",
     "plugin_modules",
     "register_plugins",
 ]
