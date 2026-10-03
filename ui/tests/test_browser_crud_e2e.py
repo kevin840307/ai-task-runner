@@ -71,7 +71,6 @@ def _install_main_ui_scripts(page, static_root: Path) -> None:
     page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
     page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
     page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
-    page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
     page.add_script_tag(url="http://local.test/app.js", type="module")
 
 
