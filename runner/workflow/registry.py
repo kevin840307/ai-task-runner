@@ -49,6 +49,8 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "title": str(getattr(stage_class, "ui_title", "") or name),
             "description": str(getattr(stage_class, "ui_description", "") or ""),
             "category": str(getattr(stage_class, "ui_category", "") or "extensions"),
+            "result_kind": str(getattr(stage_class, "result_kind", "generic") or "generic"),
+            "dynamic_output": str(getattr(stage_class, "result_kind", "generic") or "generic") in {"tasks", "stages"},
             "profiles": deepcopy(AI_STAGE_PROFILES) if name == "base" else {},
             "options": [
                 _field_info(item)
