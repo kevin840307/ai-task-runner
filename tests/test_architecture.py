@@ -59,7 +59,7 @@ def test_assets_are_one_package_with_separate_workflow_and_prompt_roots():
 
 def test_workflow_has_explicit_result_and_resource_owners():
     workflow = ROOT / "runner" / "workflow"
-    for name in ("flow_engine.py", "loader.py", "schema.py", "registry.py", "results.py"):
+    for name in ("contracts.py", "flow_engine.py", "loader.py", "schema.py", "registry.py", "results.py"):
         assert (workflow / name).is_file()
     for removed in (
         "lifecycle.py",
@@ -173,4 +173,4 @@ def test_stage_executor_does_not_depend_on_concrete_stage_types():
         "HandoffStage",
     ):
         assert concrete not in executor
-    assert "from ..stages.base_stage import" in executor
+    assert "from ..contracts import" in executor
