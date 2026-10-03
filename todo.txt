@@ -33,6 +33,66 @@ Prioritize by:
 3. reduction of user confusion / operator mistakes,
 4. implementation cost and regression risk.
 
+QUICK WINS - LOW COST / HIGH VALUE
+----------------------------------
+Do these before larger UI work when they can be implemented without widening runtime contracts.
+
+[ ] Make project/runtime status text consistent everywhere
+    - Use one small vocabulary: Idle / Running / Recovering / Stopped / Completed / Needs Attention.
+    - Avoid showing the same state with different wording/colors in sidebar, header and task view.
+
+[ ] Reduce filesystem-path visual weight
+    - Show Project name first.
+    - Move full path to secondary text / tooltip where possible.
+
+[ ] Improve action-button hierarchy
+    - One obvious primary action per surface.
+    - Keep destructive actions visually separated.
+    - Stop / Reset / Delete should not compete visually with Run / Save.
+
+[ ] Improve dirty / saved feedback
+    - Make UNSAVED / Saved / Saving states obvious.
+    - Keep Ctrl+S behavior consistent in Prompt and Workflow editing surfaces.
+
+[ ] Improve empty states
+    - Each empty state should explain what is missing and expose the next useful action.
+    - Project: Open Project.
+    - Workflow: Create / Generate.
+    - Prompt: Create Prompt.
+
+[ ] Improve no-result search states
+    - Workflow/Prompt search should show "No results" plus a clear reset/clear-search action.
+
+[ ] Keep Project click behavior consistent across Tasks / Workflows / Prompts
+    - Selecting a Project should always establish context and return to Tasks/Chat.
+    - Preserve unsaved-change protection before navigation.
+
+[ ] Improve hover/tooltips for icon-only controls
+    - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
+
+[ ] Clarify disabled controls
+    - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
+
+[ ] Normalize confirmation dialogs
+    - Use the same wording/order for destructive actions.
+    - Primary safe action first; destructive confirmation visually distinct.
+
+[ ] Preserve scroll/focus position on common navigation
+    - Project switch, Workflow/Prompt return, modal close and validation should not unexpectedly jump the page/canvas.
+
+[ ] Improve long-name handling
+    - Project / Workflow / Prompt / Stage names should truncate gracefully with tooltip/full-name access.
+    - No horizontal page overflow at supported desktop widths.
+
+[ ] Keep inline feedback close to the action
+    - Save/validate/import/generate failures should appear near the triggering control, not only as a distant global message.
+
+[ ] Use relative freshness text consistently
+    - Prefer concise "updated 12s ago / 3m ago" style for live status, with exact timestamp available on hover/details.
+
+[ ] Make keyboard affordances discoverable
+    - Show shortcuts only where useful (Ctrl+S, Ctrl+Z/Y, Delete, Ctrl+C/V), preferably in menus/tooltips rather than permanent clutter.
+
 P0 - UI / UX HIGH VALUE
 ------------------------
 [ ] Chat / Tasks runtime header
