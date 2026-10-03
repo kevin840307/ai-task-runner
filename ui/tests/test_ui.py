@@ -397,6 +397,31 @@ class UIStateTests(unittest.TestCase):
         self.assertEqual(info["last_transition"], {"stage": "execute", "status": "pass"})
 
 
+    def test_project_runtime_summary_distinguishes_recovering_and_attention(self) -> None:
+        runtime = self.project / ".ai-task-runner"
+        self.state.add_project(str(self.project))
+        self.write_json(runtime / "state.json", {
+            "run_id": "run-status",
+            "goal": "x",
+            "project_root": str(self.project),
+            "cycle": 1,
+            "current": 0,
+            "completed": False,
+            "stage": "execute",
+            "last_error": "HTTP 503",
+            "tasks": [],
+        })
+        self.write_json(runtime / "runner-process.json", {"supervisor_pid": 999999, "started_at": 1})
+
+        with patch.object(self.state, "_pid_alive", return_value=True):
+            summary = self.state._project_runtime_summary(self.project, {999999})
+            self.assertEqual(summary["status"], "recovering")
+
+        with patch.object(self.state, "_pid_alive", return_value=False):
+            summary = self.state._project_runtime_summary(self.project, set())
+            self.assertEqual(summary["status"], "needs_attention")
+
+
     def test_runtime_prefers_current_console_snapshot_status(self) -> None:
         runtime = self.project / ".ai-task-runner"
         tasks = [{"id": "t1", "title": "Plan TODO", "status": "pending", "attempts": 0}]
