@@ -639,3 +639,11 @@ def test_designer_confirm_keeps_cancel_before_danger_action():
     confirm = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
     assert cancel < confirm
     assert 'aria-modal="true" aria-labelledby="designer-confirm-title"' in text
+
+
+
+def test_handles_stay_interactive_after_existing_edges():
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "z-index: 4 !important" in styles
+    assert "pointer-events: auto !important" in styles
