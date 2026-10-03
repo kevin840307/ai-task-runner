@@ -349,7 +349,7 @@ Design rule:
 
 > Workflow defines Stage nodes and result edges. Stage performs one responsibility. StageExecutor makes one Stage reliable. FlowEngine moves through the graph. StateStore makes progress resumable.
 
-See `architecture.md`, `DevFollow.txt` and `future.txt` for the maintained design and remaining acceptance gates.
+See `docs/design/ARCHITECTURE.md` and `todo.txt` for the maintained design and remaining acceptance gates.
 
 ## License
 
