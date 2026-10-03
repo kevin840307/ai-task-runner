@@ -306,17 +306,89 @@ class MatrixCase:
     expected_completed: bool
 
 
-def _handoff_selector(
-    workflow: list[dict[str, Any]],
+def _append_scenario_value(mapping: dict[str, list[str]], key: str, value: str) -> None:
+    mapping.setdefault(key, []).append(value)
+
+
+def _reachable_scenario(
+    definitions: list[dict[str, Any]],
     target_name: str,
-) -> dict[str, str]:
-    for definition in workflow:
-        if (
-            definition.get("type") == "handoff"
-            and target_name in (definition.get("targets") or [])
-        ):
-            return {str(definition["name"]): target_name}
-    return {}
+) -> dict[str, Any] | None:
+    """Build the smallest semantic scenario that reaches one Stage.
+
+    Matrix cases must not assume every Stage lies on the all-PASS path. Explicit
+    PASS/FAIL edges and Handoff targets can create branch-only nodes. We search
+    the current (possibly dynamically expanded) graph and inject only the
+    decisions required to reach the requested Stage. Unreachable declarations
+    are ignored by the execution matrix instead of becoming false failures.
+    """
+    if not definitions:
+        return None
+    positions = {str(item["name"]): index for index, item in enumerate(definitions)}
+    if target_name not in positions:
+        return None
+
+    def resolve_next(index: int, raw_target: str) -> str | None:
+        if raw_target in {"stop", "done"}:
+            return None
+        if raw_target == "next":
+            return (
+                str(definitions[index + 1]["name"])
+                if index + 1 < len(definitions)
+                else None
+            )
+        return raw_target if raw_target in positions else None
+
+    start = str(definitions[0]["name"])
+    queue: list[tuple[str, dict[str, list[str]], dict[str, list[str]], frozenset[str]]] = [
+        (start, {}, {}, frozenset())
+    ]
+    while queue:
+        current, stages, handoffs, visited = queue.pop(0)
+        if current == target_name:
+            payload: dict[str, Any] = {}
+            if stages:
+                payload["stages"] = stages
+            if handoffs:
+                payload["handoffs"] = handoffs
+            return payload
+        if current in visited:
+            continue
+        index = positions[current]
+        definition = definitions[index]
+        next_visited = visited | {current}
+
+        if definition.get("type") == "handoff":
+            for selected in definition.get("targets") or []:
+                selected = str(selected)
+                next_name = resolve_next(index, selected)
+                if not next_name or next_name in next_visited:
+                    continue
+                next_handoffs = {key: list(values) for key, values in handoffs.items()}
+                _append_scenario_value(next_handoffs, current, selected)
+                queue.append((
+                    next_name,
+                    {key: list(values) for key, values in stages.items()},
+                    next_handoffs,
+                    next_visited,
+                ))
+            continue
+
+        for status in ("pass", "fail"):
+            raw_target = str(resolve_stage_target(definition, status))
+            next_name = resolve_next(index, raw_target)
+            if not next_name or next_name in next_visited:
+                continue
+            next_stages = {key: list(values) for key, values in stages.items()}
+            if status != "pass":
+                _append_scenario_value(next_stages, current, status)
+            queue.append((
+                next_name,
+                next_stages,
+                {key: list(values) for key, values in handoffs.items()},
+                next_visited,
+            ))
+    return None
 
 
 def _matrix_cases(
@@ -326,25 +398,30 @@ def _matrix_cases(
 ) -> list[MatrixCase]:
     cases = [MatrixCase("happy path", Scenario(), True)]
     static_names = {str(item["name"]) for item in workflow}
-    definitions = list(workflow)
-    if expanded:
-        definitions.extend(
-            item for item in expanded
-            if str(item.get("name", "")) not in static_names
-        )
+    definitions = list(expanded or workflow)
 
     for definition in definitions:
         name = str(definition["name"])
-        handoffs = _handoff_selector(definitions, name)
+        reach = _reachable_scenario(definitions, name)
+        if reach is None:
+            continue
         # Semantic matrix owns PASS/FAIL routing. Technical ERROR retry/recovery
         # is covered by StageExecutor tests and is meaningful only for static
         # entries whose local policy is known before dynamic expansion.
         statuses = ("fail", "error") if name in static_names else ("fail",)
         for status in statuses:
             target = str(resolve_stage_target(definition, status))
-            scenario_data: dict[str, Any] = {"stages": {name: status}}
-            if handoffs:
-                scenario_data["handoffs"] = handoffs
+            scenario_data: dict[str, Any] = {
+                "stages": {
+                    key: list(values)
+                    for key, values in (reach.get("stages") or {}).items()
+                },
+                "handoffs": {
+                    key: list(values)
+                    for key, values in (reach.get("handoffs") or {}).items()
+                },
+            }
+            _append_scenario_value(scenario_data["stages"], name, status)
             if target == "stop":
                 cases.append(
                     MatrixCase(
@@ -354,7 +431,7 @@ def _matrix_cases(
                     )
                 )
             else:
-                scenario_data["stages"][name] = [status, "pass"]
+                _append_scenario_value(scenario_data["stages"], name, "pass")
                 cases.append(
                     MatrixCase(
                         f"{name} {status.upper()} -> {target} -> closure",
