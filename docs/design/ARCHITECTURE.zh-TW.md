@@ -27,7 +27,7 @@ runner/workflow/
     stage_executor.py     共用 retry/session/recovery 執行邊界
 ```
 
-新增 plugin 或特殊 Stage 時，只依賴 `stages/contracts.py` 與自身行為；retry/session/recovery 不放進 Stage。非 AI Stage 不應依賴 `BaseStage`。
+新增 plugin 或特殊 Stage 時，只依賴 `workflow/contracts.py` 與自身行為；retry/session/recovery 不放進 Stage。非 AI Stage 不應依賴 `BaseStage`。
 
 ### StageExecutor
 只負責技術可靠性：
