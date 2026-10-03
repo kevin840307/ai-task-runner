@@ -45,7 +45,10 @@ def _launch_browser(playwright):
 
 def _write_fixture_repo(root: Path) -> UIState:
     (root / "ui" / "data").mkdir(parents=True)
-    (root / "ui" / "data" / "projects.json").write_text("[]", encoding="utf-8")
+    (root / "ui" / "data" / "projects.json").write_text(
+        json.dumps([{"name": "Fixture Project", "path": str(root)}]),
+        encoding="utf-8",
+    )
     for relative in (
         "runner/assets/workflows",
         "runner/assets/prompts/common",
@@ -55,10 +58,10 @@ def _write_fixture_repo(root: Path) -> UIState:
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 
-    (root / "runner" / "assets" / "prompts" / "common" / "execution.md").write_text(
-        "{{ goal }}\n",
-        encoding="utf-8",
-    )
+    prompts = root / "runner" / "assets" / "prompts" / "common"
+    (prompts / "generic.md").write_text("{{ goal }}\n{{ instructions }}\n", encoding="utf-8")
+    (prompts / "execution.md").write_text("{{ goal }}\n", encoding="utf-8")
+    (prompts / "review.md").write_text("{{ goal }}\n", encoding="utf-8")
     (root / "runner" / "agent" / "qwen.py").write_text(
         "class QwenBackend:\n    name='qwen'\n",
         encoding="utf-8",
@@ -88,17 +91,28 @@ def _bridge_for(state: UIState):
             parsed = urlparse(url)
             query = parse_qs(parsed.query)
             path = parsed.path
+            project_value = query.get("project", [""])[0]
+            project = Path(project_value) if project_value else None
             if method == "GET":
                 if path == "/api/projects":
                     data = {"projects": state.projects()}
+                elif path == "/api/project/messages":
+                    data = {"messages": []}
+                elif path == "/api/project/runtime":
+                    data = {
+                        "running": False, "completed": False, "resumable": False,
+                        "stage": "", "cli_status": "", "completed_count": 0, "total": 0,
+                    }
+                elif path == "/api/workflow/catalog":
+                    data = {"stage_types": {}, "node_options": {}}
                 elif path == "/api/backends":
                     data = state.backend_catalog()
                 elif path == "/api/studio/files":
-                    data = state.studio_files(None)
+                    data = state.studio_files(project)
                 elif path == "/api/studio/file":
-                    data = state.studio_read(query.get("id", [""])[0], None)
+                    data = state.studio_read(query.get("id", [""])[0], project)
                 elif path == "/api/studio/visual":
-                    data = state.studio_visual(query.get("id", [""])[0], None)
+                    data = state.studio_visual(query.get("id", [""])[0], project)
                 elif path == "/api/studio/guard":
                     data = state.edit_guard()
                 elif path == "/api/studio/prompt-tags":
@@ -112,13 +126,13 @@ def _bridge_for(state: UIState):
                     data = state.studio_prompt_create(
                         body.get("name", ""),
                         body.get("destination", "global"),
-                        None,
+                        Path(body["project"]) if body.get("project") else project,
                     )
                 elif path == "/api/studio/workflow/create":
                     data = state.studio_workflow_create(
                         body.get("name", ""),
                         body.get("destination", "global"),
-                        None,
+                        Path(body["project"]) if body.get("project") else project,
                     )
                 elif path == "/api/studio/prompt/check":
                     data = state.studio_prompt_check(
