@@ -27,6 +27,7 @@ Do not restore removed contracts:
 scope/task-level workflow, public type: task/review, repair Stage, routes.error,
 recover graph route, restart_at, repeat, max_attempts/on_exhausted,
 alternate TaskRunner/Pipeline runtimes, Discussion/Group Chat compatibility.
+No public scope / task_step / type: task / type: review compatibility contract remains.
 
 CURRENT PRIORITY
 ----------------
