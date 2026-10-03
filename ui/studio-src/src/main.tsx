@@ -766,6 +766,7 @@ function Field({
 function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const addStageTriggerRef = useRef<HTMLButtonElement | null>(null);
   const layoutRef = useRef<CanvasLayout>({});
   const undoStackRef = useRef<Visual[]>([]);
   const redoStackRef = useRef<Visual[]>([]);
@@ -1663,7 +1664,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         <aside className="palette">
           <div className="palette-head">
             <div className="palette-title-row"><span><span className="palette-eyebrow">{tx("palette")}</span><strong>{tx("add_stage")}</strong></span>
-              <button type="button" className="palette-command-add" title="Add Stage (/)" onClick={() => { setAddStageOpen(true); setAddStageQuery(""); }}>＋</button>
+              <button ref={addStageTriggerRef} type="button" className="palette-command-add" title="Add Stage (/)" onClick={() => { setAddStageOpen(true); setAddStageQuery(""); }}>＋</button>
             </div>
             <small>{tx("drag_hint")}</small>
           </div>
@@ -1791,9 +1792,9 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         </div>
 
         {addStageOpen && <div className="add-stage-command-backdrop" role="dialog" aria-modal="true" aria-label={tx("add_stage_dialog")}
-          onMouseDown={(event) => { if (event.target === event.currentTarget) setAddStageOpen(false); }}>
+          onMouseDown={(event) => { if (event.target === event.currentTarget) { setAddStageOpen(false); requestAnimationFrame(() => addStageTriggerRef.current?.focus()); } }}>
           <div className="add-stage-command">
-            <div className="add-stage-command-head"><strong>{tx("add_stage_dialog")}</strong><button type="button" onClick={() => setAddStageOpen(false)} aria-label={tx("close")} title={tx("close")}>×</button></div>
+            <div className="add-stage-command-head"><strong>{tx("add_stage_dialog")}</strong><button type="button" onClick={() => { setAddStageOpen(false); requestAnimationFrame(() => addStageTriggerRef.current?.focus()); }} aria-label={tx("close")} title={tx("close")}>×</button></div>
             <input autoFocus value={addStageQuery} onChange={(event) => setAddStageQuery(event.target.value)} placeholder={tx("search_stage")} />
             <div className="add-stage-command-list">
               {Object.keys(catalog?.stage_types || {}).filter((type) => {
