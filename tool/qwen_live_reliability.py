@@ -1037,6 +1037,19 @@ def assert_completed(
         raise RuntimeError(f"validator passed but {expected_file} is incorrect")
 
 
+def _latest_harness_log(project: Path) -> Path | None:
+    root = project.parent / "_harness-logs"
+    try:
+        matches = sorted(
+            root.glob(f"{project.name}-*.jsonl"),
+            key=lambda path: path.stat().st_mtime_ns,
+            reverse=True,
+        )
+    except OSError:
+        return None
+    return matches[0] if matches else None
+
+
 def assert_state_completed(
     project: Path,
     code: int,
@@ -1046,12 +1059,18 @@ def assert_state_completed(
     state = read_json(work / "state.json")
     if code != 0 or state.get("completed") is not True:
         validator_output = str(state.get("validator_output") or "").strip()
+        harness_log = _latest_harness_log(project)
+        diagnostic = (
+            probe_timeout_diagnostic(project, harness_log)
+            if harness_log is not None
+            else "console_tail=unavailable"
+        )
         raise RuntimeError(
             "run failed: "
             f"exit={code}, stage={state.get('stage')}, cycle={state.get('cycle')}, "
             f"current={state.get('current')}, workflow_position={state.get('workflow_position')}, "
             f"transition_previous={state.get('transition_previous')!r}, "
-            f"validator_output={validator_output[-1200:]!r}"
+            f"validator_output={validator_output[-1200:]!r}; {diagnostic}"
         )
     required = (
         work / "log.txt",
@@ -2044,6 +2063,18 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    # Fail before a real backend call if the live fixture drifts from the current
+    # production Workflow/Prompt contract.
+    from runner.workflow.loader import load_workflow
+    loaded = load_workflow(workflow)
+    by_name = {str(item.get("name", "")): item for item in loaded}
+    for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
+        prompt = Path(str(by_name.get(name, {}).get("prompt") or ""))
+        if not prompt.is_absolute() or not prompt.is_file():
+            raise RuntimeError(
+                f"Dynamic Handoff live fixture prompt did not resolve: {name} -> {prompt}"
+            )
 
     code = run_command(
         runner_command(settings, project, workflow=workflow),
