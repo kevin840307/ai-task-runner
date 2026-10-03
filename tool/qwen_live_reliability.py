@@ -1883,7 +1883,7 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
 
 
 def custom_task_producer_probe(settings: Settings, root: Path) -> None:
-    """Prove a non-Plan Python Stage can produce Task[] for a real Qwen task run."""
+    """Prove a non-Plan Python Stage can produce a durable dynamic child Workflow."""
     project = create_project(root, "custom-task-producer-probe")
     (project / "task_producer.py").write_text(CUSTOM_TASK_PRODUCER, encoding="utf-8")
     workflow = project / "workflow.yaml"
@@ -3531,7 +3531,7 @@ def main() -> int:
         dynamic_handoff_session_policy_probe(settings, run_root)
         print("PASS Dynamic Handoff main/role/fresh session-policy live probe", flush=True)
         custom_task_producer_probe(settings, run_root)
-        print("PASS custom Python Task Producer -> task-scope probe", flush=True)
+        print("PASS custom Python Task Producer -> dynamic child Workflow probe", flush=True)
         review_failure_routing_probe(settings, run_root)
         print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
         complete_closed_loop_probe(settings, run_root)
