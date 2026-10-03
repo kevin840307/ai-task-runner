@@ -21,7 +21,7 @@ Version: 1.2.66
 
 ## 主流程
 
-內建預設：`Plan -> [Task -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
+內建 Planning flow 為 `Plan -> dynamic child Workflow -> File Validator? -> AI Validator? -> PASS`；目前 PlanStage 會針對驗證後的 Tasks 產生交錯的 AI Execute -> AI Review children。
 
 - 沒有獨立 Understand Stage。
 - `PlanStage` 是內建 AI Task Producer，透過通用 `tasks` result effect 安裝 durable TODO。
@@ -30,14 +30,14 @@ Version: 1.2.66
 - Validator FAIL 只依顯式 `routes.fail` edge 回到 Planning、Execute 或其他指定 Stage。
 - Backward PASS/FAIL edge 是唯一 rollback/loop 機制；沒有 `restart_at`、Repair Stage 或 hidden recovery graph。
 - 內建 Workflow 只有 configured validation path PASS 才完成；明確指定的 generic Workflow 可以沒有 Validator，flow 成功走完即可完成。
-- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。Task Producer 以公開 Task contract 產生 durable TODO；連續的 `scope: task` Stage 定義逐 TODO SOP。Custom flow 可以使用 Plan、其他 Task Producer，或完全沒有 tasks；Runtime 不產生 `next_steps`、`expand` 或 hidden `foreach` topology。
+- 自訂 Workflow YAML 只包含命名 `stages` 與頂層 `flow`。Producer Stage 可回傳 `tasks` 或 `stages`，並由 Producer 自己提供 child Stage definitions；Runner 只負責驗證、插入、執行完 child Workflow 後回 parent。沒有 `scope`、`task_step`、`next_steps` 或第二套 task-level runtime。
 
 ## 責任
 
 - `assets/workflows/*.yaml` 與 `workflow/loader.py`：內建／自訂 topology 與唯一 normalization path。
 - `workflow/registry.py`：明確的 `type -> Stage class` Registry 與 UI/editor catalog metadata。
 - `workflow/results.py`：StageResult parsing/reduction 與 durable task/validation effect。
-- `workflow/stages/executor.py`：共用 retry/session recovery、hooks、progress reporting、project change tracking。
+- `workflow/execution/stage_executor.py`：共用 retry/session recovery、hooks、progress reporting、project change tracking。
 - `workflow/stages/*`：單次 attempt 的 Stage 行為。
 - `agent/`：Qwen/OpenCode transport、Session 與 structured-output adapter。
 - `workspace.py`：project files、policy、manifest/change detection 與 protection helper。
