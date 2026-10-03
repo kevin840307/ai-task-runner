@@ -1158,18 +1158,15 @@ function App() {
     const nextDefaults = profiles[profile]?.defaults || {};
     const cleaned: Stage = { ...stage, profile };
 
-    ["prompt", "status", "max_failures", "error_policy"].forEach((key) => {
+    Object.entries(previousDefaults).forEach(([key, previous]) => {
       const current = cleaned[key];
-      const previous = previousDefaults[key];
-      if (previous !== undefined && JSON.stringify(current) === JSON.stringify(previous)) {
+      if (JSON.stringify(current) === JSON.stringify(previous)) {
         delete cleaned[key];
       }
     });
 
-    if (profile !== "review") delete cleaned.max_failures;
-    ["prompt", "status", "max_failures", "error_policy"].forEach((key) => {
-      const value = nextDefaults[key];
-      if (value !== undefined && (cleaned[key] === undefined || cleaned[key] === "")) {
+    Object.entries(nextDefaults).forEach(([key, value]) => {
+      if (cleaned[key] === undefined || cleaned[key] === "") {
         cleaned[key] = structuredClone(value);
       }
     });
