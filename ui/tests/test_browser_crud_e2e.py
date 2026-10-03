@@ -32,7 +32,7 @@ def _chromium_executable() -> str | None:
 
 
 def _browser_unavailable() -> bool:
-    return sync_playwright is None or (not BROWSER_REQUIRED and _chromium_executable() is None)
+    return sync_playwright is None or not BROWSER_REQUIRED
 
 
 def _launch_browser(playwright):
