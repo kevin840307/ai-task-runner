@@ -10,6 +10,7 @@ from ..config.defaults import (
 from ..config.runtime import is_number
 
 PLUGIN_NAME = "context_compression"
+YAML_FIELDS = frozenset({"loop_context_compress", "loop_context_compress_threshold"})
 
 
 def add_arguments(parser) -> None:
