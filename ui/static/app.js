@@ -423,7 +423,7 @@ function renderProjects() {
 }
 function showAppError(message) { rememberErrorDetail(message, "Error"); if (state.view === "workflow") setStudioStatus(message, true); else $("errorText").textContent = errorSummary(message, "Error"); }
 function showEmpty() {
-  $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin.";
+  $("projectName").textContent = "Select a project"; $("projectPath").textContent = "Open a local project folder to begin."; if ($("runtimeHeadline")) $("runtimeHeadline").hidden = true;
   $("summary").hidden = true; $("messages").hidden = true; $("composePanel").hidden = true; $("emptyState").hidden = false;
 }
 async function selectProject(project) {
@@ -544,7 +544,7 @@ function renderLiveRuntimeHeader(runtime) {
 }
 function runtimeRenderSignature(runtime) {
   if (!runtime) return "";
-  return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
+  return JSON.stringify([runtime.running, runtime.stale, runtime.resumable, runtime.completed, runtime.run_id || "", runtime.cli_status || "", runtime.stage || "", runtime.cycle || 1, runtime.workflow_position || 0, runtime.last_transition || {}, runtime.completed_count || 0, runtime.total || 0, runtime.task || "", runtime.cli_detail || "", runtime.last_error || "", runtime.console_snapshot_exists || false, runtime.cli_lines || [], runtime.script_mode || false, runtime.script_index || 0, runtime.script_total || 0, runtime.script_status || "", runtime.input_prompt || ""]);
 }
 async function refreshRuntime({ projectPath = state.project?.path || "", force = false } = {}) {
   if (!projectPath) return;
@@ -628,6 +628,19 @@ function renderRuntime(runtime) {
   const runtimeProgress = runtimeProgressLabel(runtime);
   const badgeDetail = runtime.running && (runtimeStage || runtimeProgress) ? ` · ${runtimeStage || "Working"}${runtimeProgress ? ` · ${runtimeProgress}` : ""}` : "";
   setTextIfChanged(badge, `${label}${badgeDetail}`); setTextIfChanged($("currentStage"), runtimeStage || label); setTextIfChanged($("progressText"), runtimeProgress || "—"); setTextIfChanged($("currentTask"), runtime.task || runtime.cli_detail || (runtime.last_error || "Waiting"));
+  const headline = $("runtimeHeadline");
+  if (headline) {
+    const transition = runtime.last_transition && typeof runtime.last_transition === "object" ? runtime.last_transition : {};
+    const transitionText = transition.stage && transition.status ? `${transition.stage} ${String(transition.status).toUpperCase()}` : "";
+    const parts = [
+      runtimeStage || label,
+      Number(runtime.cycle || 0) > 1 ? `Cycle ${runtime.cycle}` : "",
+      runtimeProgress,
+      transitionText ? `Last · ${transitionText}` : "",
+    ].filter(Boolean);
+    headline.textContent = parts.join(" · ");
+    headline.hidden = parts.length === 0;
+  }
   renderRuntimeInput(runtime);
   $("clearHistoryButton").disabled = Boolean(runtime.running); $("clearHistoryButton").title = runtime.running ? "Stop the active task before clearing this chat history" : "Clear chat history";
   $("sendButton").hidden = runtime.running || runtime.resumable;
