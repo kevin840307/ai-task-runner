@@ -905,3 +905,23 @@ def test_yaml_script_project_name_overrides_outer_default(tmp_path):
 
 
 
+
+
+
+def test_cli_and_api_expose_current_cycle_limit_contract():
+    from ai_task_runner import parser
+    from runner.api import RunRequest
+
+    args = parser().parse_args([
+        "--goal", "x",
+        "--validator", "ai",
+        "--max-cycles", "9",
+        "--skip-on-max-cycles",
+    ])
+    request = RunRequest.from_namespace(args)
+    config = request.normalized_config()
+
+    assert request.max_cycles == 9
+    assert request.skip_on_max_cycles is True
+    assert config.max_cycles == 9
+    assert config.skip_on_max_cycles is True
