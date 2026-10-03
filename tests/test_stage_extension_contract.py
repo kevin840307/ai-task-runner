@@ -250,3 +250,11 @@ def test_ai_stage_catalog_exposes_profile_metadata_for_studio():
     assert profiles["review"]["defaults"]["prompt"] == "common/review.md"
     assert profiles["review"]["defaults"]["error_policy"] == {"retries": 2}
     assert profiles["review"]["defaults"]["max_failures"] == 3
+
+
+
+def test_catalog_exposes_dynamic_output_metadata_for_special_stages():
+    catalog = stage_catalog()
+    assert catalog["plan"]["result_kind"] == "tasks"
+    assert catalog["plan"]["dynamic_output"] is True
+    assert catalog["base"]["dynamic_output"] is False
