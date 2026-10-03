@@ -2151,3 +2151,17 @@ def test_dynamic_session_main_gate_forces_two_main_role_visits(tmp_path: Path):
     assert first.returncode == 1
     assert second.returncode == 0
     assert (tmp_path / "main-gate.count").read_text(encoding="utf-8") == "2"
+
+
+
+def test_dynamic_session_probe_accepts_completed_primary_session_cleanup():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert 'len(main_results) < 2 or len(set(main_results[-2:])) != 1' in source
+    assert 'completed Dynamic Handoff run unexpectedly retained the primary Runner session' in source
+    assert 'state.get("ai_session_id")' in source
+
+
+def test_finish_run_clears_primary_session_by_contract():
+    source = (Path(__file__).resolve().parents[1] / "runner" / "workflow" / "results.py").read_text(encoding="utf-8")
+    assert 'ctx.state.ai_session_id = ""' in source
+    assert 'ctx.ai_client.session_id = ""' in source
