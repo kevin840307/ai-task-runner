@@ -51,9 +51,10 @@ def test_registry_remains_plugin_extensible_without_plugin_specific_branches():
 
 
 
-def test_shared_stage_contracts_are_not_owned_by_ai_base_stage():
-    contracts = STAGES / "contracts.py"
+def test_shared_stage_contracts_are_workflow_owned_not_stage_implementation_owned():
+    contracts = ROOT / "runner" / "workflow" / "contracts.py"
     assert contracts.is_file()
+    assert not (STAGES / "contracts.py").exists()
 
     contract_source = contracts.read_text(encoding="utf-8")
     assert "class StageResult" in contract_source
@@ -62,9 +63,9 @@ def test_shared_stage_contracts_are_not_owned_by_ai_base_stage():
     assert "class Stage(Protocol)" in contract_source
 
     executor_source = (EXECUTION / "stage_executor.py").read_text(encoding="utf-8")
-    assert "from ..stages.contracts import" in executor_source
+    assert "from ..contracts import" in executor_source
     assert "stages.base_stage import" not in executor_source
 
     command_source = (STAGES / "command_stage.py").read_text(encoding="utf-8")
-    assert "from .contracts import" in command_source
+    assert "from ..contracts import" in command_source
     assert "BaseStage" not in command_source
