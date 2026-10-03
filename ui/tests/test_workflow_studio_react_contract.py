@@ -674,3 +674,21 @@ def test_add_stage_focus_and_reusable_handle_layer_contract():
     assert ".react-flow__edges { z-index: 1 !important; }" in styles
     assert ".react-flow__nodes { z-index: 2 !important; }" in styles
     assert "pointer-events: auto !important" in styles
+
+
+
+def test_workflow_draft_recovery_is_local_hash_gated_and_save_cleared():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "workflow-studio-draft:v1:" in text
+    assert "localDraft.hash !== v.hash" in text
+    assert "clearWorkflowDraft(v.id)" in text
+    assert "writeWorkflowDraft({" in text
+    assert "if (!editorDirty || !visual) return" in text
+    assert "canonical Workflow is unchanged" in text
+    assert ">Discard Draft<" in text
+    assert ">Restore Draft<" in text
+    assert "clearWorkflowDraft(savedVisual.id)" in text
+    assert "clearWorkflowDraft(refreshed.id)" in text
+    assert ".workflow-draft-recovery" in styles
