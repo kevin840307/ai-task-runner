@@ -107,7 +107,7 @@ DETERMINISTIC GATES
 
 WORKFLOW EDITOR FOLLOW-UP
 -------------------------
-[ ] Explicit edge retarget interaction may be polished further if browser/user testing proves current reconnect behavior unclear.
+[x] Explicit PASS/FAIL/HANDOFF edge target retarget uses native React Flow reconnect interaction and is browser-tested.
 [x] Legacy card-list / Flow Map Workflow editor removed after Workflow Library + single Workflow Editor replacement.
 [ ] Keep UX changes evidence-driven; do not add another Workflow editing surface.
 
