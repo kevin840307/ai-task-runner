@@ -822,12 +822,12 @@ function App() {
   const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen;
 
   useEffect(() => {
-    if (!anyModalOpen) return;
+    if (!anyModalOpen || addStageOpen) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return () => {
       if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
     };
-  }, [anyModalOpen]);
+  }, [anyModalOpen, addStageOpen]);
 
   useEffect(() => {
     if (!addStageOpen && !pendingCreate && !confirmDialog && !editorOpen) return;
