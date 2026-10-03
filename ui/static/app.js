@@ -1132,7 +1132,7 @@ function renderStudioVisibilityBadge() {
 }
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
 function applyStudioLoaded(data, _visual, item, cached = false) {
-  state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false;
+  state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; renderPromptUsage();
   state.studioGuard = data.guard || state.studioGuard;
   $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = data.name; $("studioFilePath").textContent = `${data.scope} · ${data.path}`; $("studioKindLabel").textContent = "Prompt"; $("validationOutput").hidden = true; state.validationDetail = ""; state.validationSummary = ""; renderStudioVisibilityBadge();
   $("studioPromptTextarea").value = data.content;
@@ -1150,7 +1150,7 @@ async function openStudioFile(item) {
     refreshPromptTags();
     return;
   }
-  state.studioFile = { ...item, content: "", hash: "" };
+  state.studioFile = { ...item, content: "", hash: "" }; renderPromptUsage();
   $("studioPromptTextarea").value = "";
   $("studioEmpty").hidden = true; $("studioEditor").hidden = false; $("studioFileName").textContent = item.name; $("studioFilePath").textContent = `${item.scope} · ${item.path}`; $("studioKindLabel").textContent = "Prompt"; renderStudioVisibilityBadge();
   renderStudioFiles(); renderStudioPanels(); setStudioStatus("Loading…");
@@ -1216,6 +1216,27 @@ async function refreshPromptTags() {
     state.promptTags = data.tags || []; renderPromptTags();
   } catch (_) { state.promptTags = []; renderPromptTags(); }
 }
+function renderPromptUsage() {
+  const root = $("studioPromptUsedBy");
+  if (!root) return;
+  root.innerHTML = "";
+  const usages = Array.isArray(state.studioFile?.used_by) ? state.studioFile.used_by : [];
+  if (!usages.length) {
+    const empty = document.createElement("span");
+    empty.className = "prompt-used-by-empty";
+    empty.textContent = "Not referenced by any Workflow Stage.";
+    root.appendChild(empty);
+    return;
+  }
+  usages.forEach((usage) => {
+    const chip = document.createElement("span");
+    chip.className = "prompt-used-by-chip";
+    chip.textContent = String(usage);
+    chip.title = String(usage);
+    root.appendChild(chip);
+  });
+}
+
 function renderPromptTags() {
   const root = $("studioPromptParamList"); if (!root) return; root.innerHTML = "";
   for (const tag of state.promptTags || []) {
