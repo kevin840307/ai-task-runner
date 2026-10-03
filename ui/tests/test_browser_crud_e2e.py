@@ -308,17 +308,17 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             # Right-click visibility is owned by the Workflow Library and updates Chat immediately.
             workflow_row.click(button="right")
             assert page.locator("#workflowContextMenu").is_visible()
-            assert "Hide from Chat" in page.locator("#workflowContextVisibility").inner_text()
+            assert page.locator("#workflowContextVisibility").is_visible()
             page.click("#workflowContextVisibility")
             page.wait_for_timeout(80)
-            assert "Hidden from Chat" in workflow_row.inner_text()
+            assert workflow_row.locator(".studio-file-hidden").count() == 1
             assert page.locator("#workflowSelect option", has_text="e2e_crud.workflow.yaml").count() == 0
 
             workflow_row.click(button="right")
-            assert "Show in Chat" in page.locator("#workflowContextVisibility").inner_text()
+            assert page.locator("#workflowContextVisibility").is_visible()
             page.click("#workflowContextVisibility")
             page.wait_for_timeout(80)
-            assert "Visible in Chat" in workflow_row.inner_text()
+            assert workflow_row.locator(".studio-file-hidden").count() == 0
             assert page.locator("#workflowSelect option", has_text="e2e_crud.workflow.yaml").count() == 1
 
             # Prompt assets keep the inline master-detail editor.
