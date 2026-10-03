@@ -342,7 +342,7 @@ tool\qwen_live_reliability_24h.bat
 
 > Workflow 定義 Stage nodes 與 result edges；Stage 做一件事；StageExecutor 讓 Stage 穩定；FlowEngine 決定下一步；StateStore 讓進度可以 Resume。
 
-維護中的架構與 TODO 請看 `architecture.md`、`DevFollow.txt`、`future.txt`。
+維護中的架構與剩餘 gate 請看 `docs/design/ARCHITECTURE.zh-TW.md` 與 `todo.txt`。
 
 ## License
 
