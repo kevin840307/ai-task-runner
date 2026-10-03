@@ -439,7 +439,7 @@ async function selectProject(project) {
     if (state.studioDirty && !(await confirmDiscardStudio())) return;
     clearStudioEditor();
   }
-  if (state.view === "workflow" && !(await switchView("chat"))) return;
+  if ((state.view === "workflow" || state.view === "prompt") && !(await switchView("chat"))) return;
   state.projectSwitching = true;
   setViewLoading("chatView", true, "Opening project…");
   if (changingProject) {
