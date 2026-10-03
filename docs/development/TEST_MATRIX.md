@@ -94,9 +94,10 @@ Deterministic CI, a short live gate and a 24H soak are separate confidence layer
 
 ## Dedicated browser CI
 
-The CI has a separate Ubuntu Playwright/Chromium job. In that job
-`AI_TASK_RUNNER_BROWSER_REQUIRED=1` forces browser tests to execute rather than
-skip when no system browser is present.
+The CI has a separate Ubuntu Playwright/Chromium job. It builds the current
+`ui/studio-src` before launching Chromium, so browser tests never run against a
+stale committed bundle. In that job `AI_TASK_RUNNER_BROWSER_REQUIRED=1` forces
+browser tests to execute rather than skip when no system browser is present.
 
 Browser coverage includes:
 - Workflow Settings manager + Prompt CRUD and Workflow visibility/navigation
