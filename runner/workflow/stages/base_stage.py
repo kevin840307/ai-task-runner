@@ -153,6 +153,7 @@ class BaseStage:
     """Perform one or more AI interactions and return only resulting facts."""
 
     result_kind = "generic"
+    protocol_kind = ""
     parser_name = ""
     backend_mode = "runtime"
     timeout_config_attr = "agent_timeout"
@@ -630,7 +631,7 @@ class BaseStage:
 
     def _with_immutable_protocol(self, prompt: str) -> str:
         """Append Runner-owned wire contract after editable Stage instructions."""
-        return append_stage_protocol(prompt, self.result_kind)
+        return append_stage_protocol(prompt, self.protocol_kind or self.result_kind)
 
 
 BaseStage.spec_class = BaseStageSpec
