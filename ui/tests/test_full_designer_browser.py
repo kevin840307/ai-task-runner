@@ -369,16 +369,16 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["pass"] == "worker"
 
-                # Handoff edges are Stage-owned targets. Add a second target and persist it.
+                # Handoff edges are Stage-owned targets. Add a second forward target and persist it.
                 _connect_nodes(
                     page,
                     '.react-flow__node[data-id="router"] .react-flow__handle.handoff',
-                    '.react-flow__node[data-id="review"] .react-flow__handle.stage-input',
+                    '.react-flow__node[data-id="after"] .react-flow__handle.stage-input',
                 )
-                page.locator('.react-flow__edge[data-id="router:handoff:review"]').wait_for(state="attached")
+                page.locator('.react-flow__edge[data-id="router:handoff:after"]').wait_for(state="attached")
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
-                assert saved["stages"]["router"]["targets"] == ["worker", "review"]
+                assert saved["stages"]["router"]["targets"] == ["worker", "after"]
 
                 page.reload()
                 page.locator('.react-flow__edge[data-id="router:handoff:worker"]').wait_for(state="attached")
@@ -391,7 +391,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 assert handoff_edge.count() == 0
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
-                assert saved["stages"]["router"]["targets"] == ["review"]
+                assert saved["stages"]["router"]["targets"] == ["after"]
 
                 # Remove PASS/FAIL references before deleting the target Stage.
                 pass_edge = page.locator('.react-flow__edge[data-id="review:pass:worker"]')
