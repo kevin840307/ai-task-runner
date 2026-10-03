@@ -531,6 +531,8 @@ def run_dryrun(
                 "workflow": str(path),
                 "executions": executor.calls,
                 "error": error or None,
+                "cycle": ctx.state.cycle,
+                "stage": ctx.state.stage,
                 "transitions": [
                     {
                         "number": number,
