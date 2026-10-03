@@ -179,6 +179,11 @@ class UIStateTests(unittest.TestCase):
             self.state.launch_message(second, "run second", workflow=str(self.workflow))
         command = popen.call_args.args[0]
         self.assertEqual(Path(command[command.index("--project-root") + 1]).resolve(), second.resolve())
+        self.assertNotIn("--execution-mode", command)
+        self.assertNotIn("--max-attempts", command)
+        self.assertNotIn("--review-retries", command)
+        self.assertNotIn("--retry-wait", command)
+        self.assertNotIn("--retry-max-wait", command)
 
     def test_running_project_cannot_be_removed(self) -> None:
         self.state.add_project(str(self.project))
