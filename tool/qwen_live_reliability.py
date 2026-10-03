@@ -2988,21 +2988,21 @@ def api_recovery_probe(
         successes_before_outage = 0
         recovered = False
         runner_recovery_seen = False
-        recovering_seen = False
+        recovery_event_seen = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
                 if str(state.get("last_error") or ""):
                     runner_recovery_seen = True
-                if not recovering_seen:
-                    # This live probe owns the --json-events console stream, so use
-                    # it as the primary evidence for transient status events. The
-                    # production log.txt is intentionally bounded and is only a
-                    # secondary source here.
-                    recovering_seen = any(
-                        event.get("type") == "runner.status"
-                        and event.get("action") == "set"
-                        and event.get("status") == "Recovering"
+                if not recovery_event_seen:
+                    # runner.status=Recovering is intentionally transient UI state.
+                    # runner.recovery/retry is the stable structured observability
+                    # contract for retry/backoff evidence.
+                    recovery_event_seen = any(
+                        event.get("type") == "runner.recovery"
+                        and event.get("action") == "retry"
+                        and int(event.get("retry") or 0) >= 1
+                        and str(event.get("retry_mode") or "") in {"retry", "recover"}
                         for event in (*jsonl_events(log), *runner_events(project))
                     )
                 current_session = state.get("ai_session_id")
@@ -3047,19 +3047,18 @@ def api_recovery_probe(
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
-        # Recovering is intentionally transient. The probe-owned --json-events
-        # console stream is unbounded for this one run, while production log.txt
-        # is bounded. Latch either source while the run is active.
+        # Durable last_error proves StageExecutor observed the technical failure;
+        # runner.recovery/retry proves retry/backoff was announced structurally.
         if not runner_recovery_seen:
             raise RuntimeError(
                 "API outage was injected and recovered, but no durable Runner last_error "
                 "was observed; the failure may have been absorbed below StageExecutor"
             )
-        if not recovering_seen:
+        if not recovery_event_seen:
             raise RuntimeError(
                 "API outage reached StageExecutor recovery (durable last_error observed) "
-                "but no structured Recovering status event was observed in console JSON events "
-                "or production log while recovery was active"
+                "but no structured runner.recovery/retry event was observed in console JSON "
+                "events or production log while recovery was active"
             )
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
