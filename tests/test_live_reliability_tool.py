@@ -1958,6 +1958,25 @@ def test_runner_command_explicit_workflow_only_injects_file_validator_when_requi
     with_file_validator = live.runner_command(config, project, workflow=file_workflow)
     assert with_file_validator[with_file_validator.index("--validator") + 1] == str(project / "validation.py")
 
+    ai_workflow = tmp_path / "ai.yaml"
+    ai_workflow.write_text(
+        "stages:\n"
+        "  validate_ai:\n"
+        "    type: ai_validator\n"
+        "    validator: ai\n"
+        "flow: [validate_ai]\n",
+        encoding="utf-8",
+    )
+    with_ai_validator = live.runner_command(
+        config,
+        project,
+        workflow=ai_workflow,
+        ai_only=True,
+        final_ai=True,
+    )
+    assert with_ai_validator[with_ai_validator.index("--validator") + 1] == "ai"
+    assert "--validator-prompt" in with_ai_validator
+
 
 
 def test_dynamic_session_live_fixture_matches_current_workflow_prompt_contract(tmp_path: Path):
