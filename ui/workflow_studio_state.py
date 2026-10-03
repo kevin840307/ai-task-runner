@@ -885,15 +885,21 @@ class WorkflowStudioMixin:
             except subprocess.TimeoutExpired as exc:
                 raise ValueError("Workflow validation timed out after 45 seconds") from exc
             output = (result.stdout or result.stderr or "").strip()
-            if result.returncode != 0:
-                raise ValueError("Workflow validation failed: " + output[-12000:])
             try:
                 payload = json.loads(result.stdout)
             except json.JSONDecodeError as exc:
-                raise ValueError("Workflow validation returned invalid JSON") from exc
-            if not payload.get("closed"):
-                raise ValueError("Workflow validation matrix did not reach closure")
-            return {"ok": True, "output": output, "payload": payload}
+                raise ValueError("Workflow validation failed: " + output[-12000:]) from exc
+            if payload.get("valid") is not True:
+                raise ValueError("Workflow validation failed: " + output[-12000:])
+            # Save validates the canonical graph/schema. A workflow may intentionally
+            # stop on PASS/FAIL, so matrix closure is diagnostic rather than a write
+            # requirement. Invalid loaders/routes still fail before this point.
+            return {
+                "ok": True,
+                "output": output,
+                "payload": payload,
+                "warning": "" if payload.get("closed") else "Workflow has non-closing paths.",
+            }
         finally:
             try:
                 temporary.unlink()
