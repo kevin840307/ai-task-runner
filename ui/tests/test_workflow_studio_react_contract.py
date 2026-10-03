@@ -121,7 +121,7 @@ def test_react_source_tracks_session_policy_ui_contract():
     text = SOURCE.read_text(encoding="utf-8")
     assert "session_policy" in text
     assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
-    assert "session_key" in text
+    assert "session_key" not in text
 
 
 def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy():
@@ -132,8 +132,6 @@ def test_react_studio_reuses_stage_nodes_for_dynamic_handoff_and_session_policy(
     assert '"dispatch"' not in text
     assert "session_policy" in text
     assert '"fresh_session_each_run", "fresh_session_on_start"' not in text
-    assert 'o.name === "session_key"' in text
-    assert 'session_key: _sessionKey' in text
     assert "leaveStudio()" in text
     assert "requestConfirm" in text
     assert "autoPositions" in text
