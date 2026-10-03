@@ -1272,11 +1272,20 @@ function scheduleSyntaxCheck() {
 }
 function updateDirtyState() {
   state.studioDirty = !!state.studioFile && currentEditorContent() !== state.studioOriginal;
-  $("dirtyBadge").hidden = !state.studioDirty;
+  const dirtyBadge = $("dirtyBadge");
+  if (dirtyBadge) {
+    dirtyBadge.hidden = !state.studioFile;
+    dirtyBadge.textContent = state.studioSaving ? "SAVING" : state.studioDirty ? "UNSAVED" : "SAVED";
+    dirtyBadge.classList.toggle("warning", state.studioDirty && !state.studioSaving);
+    dirtyBadge.classList.toggle("success", !state.studioDirty && !state.studioSaving);
+  }
   const locked = !state.studioGuard.editable || !!state.studioFile?.readonly;
   $("studioPromptTextarea").readOnly = locked;
   renderPromptTags();
   $("saveStudioButton").disabled = locked || !state.studioDirty;
+  $("saveStudioButton").title = locked
+    ? "Stop the active Runtime or open an editable asset before saving."
+    : !state.studioDirty ? "No unsaved changes." : "Save changes (Ctrl+S).";
   $("validateStudioButton").hidden = !state.studioFile;
   $("validateStudioButton").disabled = !state.studioFile;
   $("validateStudioButton").textContent = "Validate Prompt";
