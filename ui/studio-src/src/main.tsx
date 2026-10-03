@@ -165,15 +165,15 @@ const STAGE_TEST_PROMPTS: Record<string, Record<StageTestScenario, string>> = {
     fail: "Create a plan that intentionally leaves one acceptance criterion unresolved, so downstream review can identify a concrete missing item. Return valid structured output.",
     error: "Technical ERROR is injected by the Stage Test harness; the model is not asked to fail.",
   },
-  task: {
+  "base:execute": {
     pass: "Create a small file named stage_test.txt containing exactly STAGE_TEST_OK. Keep the change limited to this isolated Stage test.",
     fail: "Do not satisfy the isolated task acceptance criterion. Explain what remains incomplete without pretending it is finished.",
-    error: "Technical ERROR is injected by the Stage Test harness before the real Stage runs.",
+    error: "Technical ERROR is injected by the Stage Test harness before the real Execute-profile AI Stage runs.",
   },
-  review: {
+  "base:review": {
     pass: "Treat the isolated task evidence as complete and return the normal Review PASS contract with no missing items.",
     fail: "Treat one concrete acceptance criterion as unsatisfied and return the normal Review FAIL contract with one actionable missing item.",
-    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Review Stage.",
+    error: "Technical ERROR is injected by the Stage Test harness; retry then executes the real Review-profile AI Stage.",
   },
   ai_validator: {
     pass: "Validate the isolated evidence as complete and return the normal validator PASS contract.",
@@ -194,7 +194,10 @@ const STAGE_TEST_PROMPTS: Record<string, Record<StageTestScenario, string>> = {
 
 function stageTestPrompt(stage: Stage | null, scenario: StageTestScenario = "pass"): string {
   if (!stage) return "";
-  return STAGE_TEST_PROMPTS[stage.type]?.[scenario]
+  const key = stage.type === "base" && stage.profile
+    ? `base:${String(stage.profile)}`
+    : stage.type;
+  return STAGE_TEST_PROMPTS[key]?.[scenario]
     || STAGE_TEST_PROMPTS.base[scenario];
 }
 
