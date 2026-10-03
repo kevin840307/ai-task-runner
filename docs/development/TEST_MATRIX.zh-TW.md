@@ -18,7 +18,7 @@
 | Validator | File command validator、AI validator、多 validator 任意位置、多次 AI vote、validator FAIL rollback |
 | 動態 Producer | Plan producer-defined Execute/Review children、自訂/plugin `produces: tasks|stages`、nested dynamic expansion |
 | Resume/state | workflow position、durable expanded Workflow、dynamic task groups、transition_previous、role Sessions、損壞 state 拒絕 |
-| Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 Task producer、non-converging cutoff、非法 schema/route |
+| Dry Run | 正常 closure、FAIL loop、Dynamic Handoff、自訂 dynamic producer、non-converging cutoff、非法 schema/route |
 | Stage Probe | 隔離 Real Stage 真實 backend 呼叫、固定 Prompt Agent Ping、bounded test retry safety、回傳 result/next target 且不繼續 workflow |
 | Studio backend | YAML graph save/validate、Stage CRUD、asset root、prompt reference、Stage test sandbox |
 | Studio React | PASS/FAIL/Handoff handle、Palette 搜尋、安全 Duplicate、Review max_failures UI、Dynamic branch layout、session-policy UI 防呆、沒有 ERROR edge、Workflows/Prompts 分離導覽，Interface settings 不佔主導覽、Stage Form/YAML/Routing/Test ownership、常見桌面解析度 overflow 檢查 |
@@ -59,7 +59,7 @@ tool\qwen_live_reliability_0_5h.bat
 - expired Session -> Fresh Session；
 - process restart / detached UI resume；
 - YAML List resume；
-- custom Stage / custom Task producer；
+- custom Stage / custom dynamic producer；
 - protected-file policy；
 - timeout/recovery budget；
 - final AI voting。
