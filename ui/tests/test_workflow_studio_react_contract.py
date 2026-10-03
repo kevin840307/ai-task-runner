@@ -447,9 +447,10 @@ def test_designer_edge_delete_and_undo_keyboard_contract():
     assert "redoVisualDraft()" in text
     assert "redoStackRef" in text
     assert "rememberUndoSnapshot" in text
-    assert "onReconnect={reconnectExplicitEdge}" in text
-    assert 'reconnectable: "target"' in text
-    assert "reconnectRadius={24}" in text
+    assert "onReconnect={reconnectExplicitEdge}" not in text
+    assert 'reconnectable: "target"' not in text
+    assert "reconnectRadius={24}" not in text
+    assert "onConnect={connect}" in text
     assert "undoStackRef.current = []" in text
     assert "沒有可復原的 Workflow 修改。" in text
     assert "已復原上一個 Workflow 草稿修改。" in text
