@@ -515,6 +515,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
           sourceHandle: status,
           target,
           className: `result ${status}`,
+          interactionWidth: 28,
           markerEnd: { type: MarkerType.ArrowClosed },
           data: { status, explicit: true, terminal: target },
         });
@@ -531,6 +532,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       target: resolvedPass,
       className: passClass,
       deletable: Boolean(routes.pass),
+      interactionWidth: routes.pass ? 28 : 14,
       markerEnd: { type: MarkerType.ArrowClosed },
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
     });
@@ -543,6 +545,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         sourceHandle: "fail",
         target: resolved,
         className: "result fail",
+        interactionWidth: 28,
         markerEnd: { type: MarkerType.ArrowClosed },
         data: { status: "fail", explicit: true, terminal: failTarget },
       });
