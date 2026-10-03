@@ -222,6 +222,10 @@ RUNNER
 Do not do another runner architecture rewrite now.
 
 Public entry-point regression protection completed:
+[x] UI -> CLI launch parity is now locked by the production ai_task_runner parser.
+    - Removed stale UI execution_mode / --execution-mode contract.
+    - UI launch regression asserts removed retry/attempt flags stay absent and the generated command parses with the real CLI parser.
+
 [x] CLI -> RunRequest -> RuntimeConfig max_cycles / skip_on_max_cycles parity restored.
 [x] YAML List max_cycles / skip_on_max_cycles remains supported and deterministically tested.
 [x] YAML List now rejects unknown item fields instead of silently ignoring typos.
