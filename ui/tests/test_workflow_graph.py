@@ -12,8 +12,12 @@ def _edges(graph, kind):
 def test_graph_renders_stage_nodes_normal_flow_and_result_edges():
     graph = build_workflow_graph({
         "stages": {
-            "execute": {"type": "task"},
-            "review": {"type": "review", "routes": {"fail": "execute"}},
+            "execute": {"type": "base", "profile": "execute"},
+            "review": {
+                "type": "base",
+                "profile": "review",
+                "routes": {"fail": "execute"},
+            },
             "validate": {"type": "ai_validator", "routes": {"fail": "execute"}},
         },
         "flow": ["execute", "review", "validate"],
@@ -31,9 +35,10 @@ def test_graph_renders_stage_nodes_normal_flow_and_result_edges():
 def test_graph_uses_stage_definition_as_node_identity():
     graph = build_workflow_graph({
         "stages": {
-            "first": {"type": "task", "label": "First"},
+            "first": {"type": "base", "profile": "execute", "label": "First"},
             "second": {
-                "type": "review",
+                "type": "base",
+                "profile": "review",
                 "label": "Second",
                 "routes": {"fail": "first"},
             },
@@ -51,7 +56,8 @@ def test_graph_renders_done_and_stop_as_terminal_nodes():
     graph = build_workflow_graph({
         "stages": {
             "gate": {
-                "type": "review",
+                "type": "base",
+                "profile": "review",
                 "routes": {"pass": "done", "fail": "stop"},
             },
         },
@@ -64,25 +70,19 @@ def test_graph_renders_done_and_stop_as_terminal_nodes():
     assert ("gate", "__stop__:gate", "FAIL → stop") in _edges(graph, "result")
 
 
-def test_graph_does_not_inject_hidden_plan_nodes_or_retry_edges():
+def test_graph_renders_only_declared_static_stages_for_dynamic_plan():
     graph = build_workflow_graph({
         "stages": {
-            "planning": {"type": "plan", "produces": "tasks"},
-            "execute": {"type": "task", "scope": "task"},
-            "review": {
-                "type": "review",
-                "scope": "task",
-                "routes": {"fail": "execute"},
-            },
+            "planning": {"type": "plan"},
+            "validate": {"type": "ai_validator"},
         },
-        "flow": ["planning", "execute", "review"],
+        "flow": ["planning", "validate"],
     })
 
     ids = {node["id"] for node in graph["nodes"]}
-    assert ids == {"planning", "execute", "review"}
+    assert ids == {"planning", "validate"}
     assert all(edge["kind"] in {"normal", "result"} for edge in graph["edges"])
 
     by_id = {node["id"]: node for node in graph["nodes"]}
-    assert by_id["planning"]["produces"] == "tasks"
-    assert by_id["execute"]["scope"] == "task"
-    assert by_id["review"]["scope"] == "task"
+    assert by_id["planning"]["type"] == "plan"
+    assert "scope" not in by_id["planning"]
