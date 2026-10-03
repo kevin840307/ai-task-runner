@@ -1183,7 +1183,7 @@ function App() {
         const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
         nextFlow.splice(insertAt, 0, connection.target);
       } else {
-        // A FAIL branch must not change the source Stage's implicit PASS -> next.
+        // A FAIL branch must not rewrite the source Stage's PASS connection.
         nextFlow.push(connection.target);
       }
     }
