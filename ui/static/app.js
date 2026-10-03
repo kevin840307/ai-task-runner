@@ -1260,6 +1260,7 @@ async function saveStudio() {
   if (!state.studioFile || state.studioFile.kind !== "prompt" || !state.studioGuard.editable || state.studioSaving || !state.studioDirty) return;
   const button = $("saveStudioButton"), originalLabel = button?.textContent || "Save";
   state.studioSaving = true;
+  updateDirtyState();
   if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = "Saving…"; }
   try {
     const content = $("studioPromptTextarea").value;
