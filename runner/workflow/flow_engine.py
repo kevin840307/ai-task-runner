@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 from ..config.defaults import MAX_VALIDATOR_OUTPUT_CHARS
 from ..errors import ConfigurationError
+from ..runtime.run_state import MAX_TRANSITION_HISTORY
 from ..utils import bounded_text
 from .dynamic_expansion import activate_dynamic_task, dynamic_done_target, expand_stage_result
 from .results import finish_run, finish_task
@@ -110,6 +112,12 @@ class FlowEngine:
             continuation=target,
         )
         if expanded is not None:
+            trace_target = (
+                str(expanded[index + 1].get("name", "done"))
+                if index + 1 < len(expanded)
+                else "done"
+            )
+            self._remember_transition(result, trace_target)
             for name in replaced_dynamic_names:
                 if name:
                     self.context.scratch.pop(f"stage_session:{name}", None)
@@ -131,6 +139,14 @@ class FlowEngine:
             finish_task(self.context)
 
         target = self._dynamic_target(definition, target)
+        trace_target = target
+        if target == "next":
+            trace_target = (
+                str(self.workflow[index + 1].get("name", "done"))
+                if index + 1 < len(self.workflow)
+                else "done"
+            )
+        self._remember_transition(result, trace_target)
         if target == "stop":
             self.context.save_state()
             return result, True
@@ -247,6 +263,19 @@ class FlowEngine:
             str(item["name"]): index
             for index, item in enumerate(self.workflow)
         }
+
+    def _remember_transition(self, result: StageResult, target: str) -> None:
+        history = self.context.state.transition_history
+        history.append({
+            "stage": str(result.stage),
+            "status": str(result.status),
+            "target": str(target),
+            "cycle": int(self.context.state.cycle),
+            "kind": str(result.kind),
+            "timestamp": time.time(),
+        })
+        if len(history) > MAX_TRANSITION_HISTORY:
+            del history[:-MAX_TRANSITION_HISTORY]
 
     def _remember_previous(self, result: StageResult) -> None:
         raw = json.dumps(result.data, ensure_ascii=False, default=str)
