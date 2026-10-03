@@ -125,13 +125,19 @@ class StageExecutor:
                 failures_in_session = 0
                 retry_mode = "recover"
                 service_delay = float(ctx.config.retry_delay)
-                progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
+                progress.set_status(
+                    "Recovering",
+                    f"{retry_mode} · retry {retries_used} · wait {service_delay:g}s · {previous_error[:180]}",
+                )
                 self._sleep(ctx, service_delay)
                 continue
 
             if is_transient_error(error):
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
-                progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
+                progress.set_status(
+                    "Recovering",
+                    f"{retry_mode} · retry {retries_used} · wait {service_delay:g}s · {previous_error[:180]}",
+                )
                 self._sleep(ctx, service_delay)
                 if service_delay:
                     service_delay = min(
@@ -149,8 +155,12 @@ class StageExecutor:
             else:
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
 
-            progress.set_status("Recovering", f"{retry_mode} · {previous_error[:240]}")
-            self._sleep(ctx, float(ctx.config.retry_delay))
+            retry_delay = float(ctx.config.retry_delay)
+            progress.set_status(
+                "Recovering",
+                f"{retry_mode} · retry {retries_used} · wait {retry_delay:g}s · {previous_error[:180]}",
+            )
+            self._sleep(ctx, retry_delay)
 
         try:
             result = stage.finish(ctx, result)
