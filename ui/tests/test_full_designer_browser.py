@@ -425,8 +425,8 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert "worker" not in saved["stages"]
                 assert "worker" not in saved["flow"]
-                assert saved["stages"]["review"]["routes"]["fail"] != "worker"
-                assert saved["stages"]["router"]["targets"] == ["review"]
+                assert "routes" not in saved["stages"]["review"]
+                assert saved["stages"]["router"]["targets"] == ["after"]
                 assert page.locator('.react-flow__node[data-id="worker"]').count() == 0
 
                 # START handle reorders the canonical flow; save/reload must preserve it.
