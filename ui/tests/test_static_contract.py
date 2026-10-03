@@ -175,5 +175,23 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('live.title = exact ? "Last update: " + exact : ""', self.app_js)
 
 
+    def test_quick_win_control_hierarchy_scroll_and_long_name_contract(self):
+        self.assertIn('id="sendButton" class="primary send-button"', self.html)
+        self.assertIn('id="stopButton" class="action-button danger runtime-control-button"', self.html)
+        self.assertIn('id="resetButton" class="action-button runtime-control-button"', self.html)
+        self.assertIn('title="Save changes (Ctrl+S)"', self.html)
+        self.assertIn('title="Reload saved asset"', self.html)
+        self.assertIn('const previousScrollTop = root?.scrollTop || 0', self.app_js)
+        self.assertIn('root.scrollTop = previousScrollTop', self.app_js)
+        self.assertIn('name.title = item.name', self.app_js)
+        self.assertIn('button.title = item.name', self.app_js)
+        self.assertIn('"Continue or Reset the stopped task before starting another."', self.app_js)
+
+    def test_runtime_freshness_is_relative_with_exact_timestamp_tooltip(self):
+        self.assertIn('function formatFreshness(ts)', self.app_js)
+        self.assertIn('new Date(state.runtimeLastChangedAt).toLocaleString()', self.app_js)
+        self.assertIn('last.title = exact ? "Last update: " + exact : ""', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
