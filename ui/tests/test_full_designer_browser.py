@@ -165,6 +165,20 @@ flow:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["ai_stage"]["profile"] == "review"
 
+                # A structurally invalid Handoff must block Save before canonical YAML changes.
+                before_invalid_save = workflow.read_bytes()
+                handoff_palette = page.locator(".palette-item").filter(has_text="Handoff").first
+                handoff_palette.locator(".palette-quick-add").click()
+                create = page.locator(".create-stage-card")
+                create.wait_for(state="attached")
+                create.get_by_role("button", name="Create Stage").click()
+                page.locator('.react-flow__node[data-id="handoff"]').wait_for(state="attached")
+                page.locator(".modal-close-button").click()
+                page.locator(".studio-header button.primary").click()
+                page.locator(".workflow-problem.error", has_text="Handoff has no target").wait_for(state="attached")
+                assert workflow.read_bytes() == before_invalid_save
+                assert page.locator(".studio-header .unsaved-badge").count() == 1
+
                 assert not errors
                 browser.close()
         finally:
