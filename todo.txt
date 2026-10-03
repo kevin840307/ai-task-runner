@@ -99,10 +99,10 @@ DETERMINISTIC GATES
 [x] Chromium/Playwright browser CI job cannot silently skip.
 [x] Graph CRUD browser E2E covers START/END, Stage delete, reorder, PASS/FAIL/HANDOFF connect/delete/retarget, AI profile and save/reload.
 [x] Common desktop viewport coverage.
-[ ] Final generated Studio bundle synchronized with current source.
+[x] Final generated Studio bundle synchronized with current source.
 [x] Final Windows pytest PASS on current head.
 [x] Final Ubuntu pytest PASS on current head.
-[ ] Final Studio build + bundle verify PASS on current head.
+[x] Final Studio build + bundle verify PASS on current head.
 [x] Final browser-e2e PASS on current head.
 
 WORKFLOW EDITOR FOLLOW-UP
