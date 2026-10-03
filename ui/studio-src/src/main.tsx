@@ -518,6 +518,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
           interactionWidth: 28,
           markerEnd: { type: MarkerType.ArrowClosed },
           data: { status, explicit: true, terminal: target },
+          reconnectable: "target",
         });
       });
       return;
@@ -535,6 +536,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
       interactionWidth: routes.pass ? 28 : 14,
       markerEnd: { type: MarkerType.ArrowClosed },
       data: { status: "pass", explicit: Boolean(routes.pass), terminal: passTarget },
+      reconnectable: routes.pass ? "target" : false,
     });
     const failTarget = routes.fail;
     if (failTarget) {
@@ -548,6 +550,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         interactionWidth: 28,
         markerEnd: { type: MarkerType.ArrowClosed },
         data: { status: "fail", explicit: true, terminal: failTarget },
+        reconnectable: "target",
       });
     }
   });
@@ -644,6 +647,7 @@ function App() {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const layoutRef = useRef<CanvasLayout>({});
   const undoStackRef = useRef<Visual[]>([]);
+  const redoStackRef = useRef<Visual[]>([]);
   const graphFor = useCallback((v: Visual, c: Catalog | null) => {
     const graph = graphFromVisual(v, c, layoutRef.current);
     layoutRef.current = Object.fromEntries(graph.nodes.map((node) => [node.id, node.position]));
@@ -735,6 +739,7 @@ function App() {
       setEdges(g.edges);
       setDirtyGraph(false);
       undoStackRef.current = [];
+      redoStackRef.current = [];
       setEditorView("designer");
       setMessage("");
     } catch (error) {
@@ -774,7 +779,13 @@ function App() {
         return;
       }
       const ctrl = event.ctrlKey || event.metaKey;
-      if (ctrl && event.key.toLowerCase() === "z") {
+      const key = event.key.toLowerCase();
+      if (ctrl && (key === "y" || (key === "z" && event.shiftKey))) {
+        event.preventDefault();
+        redoVisualDraft();
+        return;
+      }
+      if (ctrl && key === "z") {
         event.preventDefault();
         undoVisualDraft();
         return;
@@ -896,6 +907,21 @@ function App() {
     const last = undoStackRef.current[undoStackRef.current.length - 1];
     if (last && JSON.stringify(last) === JSON.stringify(clone)) return;
     undoStackRef.current = [...undoStackRef.current.slice(-49), clone];
+    redoStackRef.current = [];
+  }
+
+  function applyHistorySnapshot(snapshot: Visual, message: string) {
+    setVisual(snapshot);
+    const graph = graphFor(snapshot, catalog);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setSelected("");
+    setDraft(null);
+    setEditorOpen(false);
+    setContextMenu(null);
+    setEdgeContextMenu(null);
+    setDirtyGraph(true);
+    setMessage(message);
   }
 
   function undoVisualDraft() {
@@ -905,17 +931,19 @@ function App() {
     }
     const previous = undoStackRef.current[undoStackRef.current.length - 1];
     undoStackRef.current = undoStackRef.current.slice(0, -1);
-    setVisual(previous);
-    const graph = graphFor(previous, catalog);
-    setNodes(graph.nodes);
-    setEdges(graph.edges);
-    setSelected("");
-    setDraft(null);
-    setEditorOpen(false);
-    setContextMenu(null);
-    setEdgeContextMenu(null);
-    setDirtyGraph(true);
-    setMessage("已復原上一個 Workflow 草稿修改。");
+    redoStackRef.current = [...redoStackRef.current.slice(-49), structuredClone(visual)];
+    applyHistorySnapshot(previous, "已復原上一個 Workflow 草稿修改。");
+  }
+
+  function redoVisualDraft() {
+    if (!visual || redoStackRef.current.length === 0) {
+      setMessage("沒有可重做的 Workflow 修改。");
+      return;
+    }
+    const next = redoStackRef.current[redoStackRef.current.length - 1];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    undoStackRef.current = [...undoStackRef.current.slice(-49), structuredClone(visual)];
+    applyHistorySnapshot(next, "已重做上一個 Workflow 草稿修改。");
   }
 
   function editDraft(next: Stage) {
@@ -981,6 +1009,7 @@ function App() {
     setEdges(g.edges);
     setDirtyGraph(false);
     undoStackRef.current = [];
+    redoStackRef.current = [];
     return result.visual;
   }, [catalog, graphFor]);
 
@@ -1125,6 +1154,44 @@ function App() {
     setNodes(g.nodes);
     setEdges(g.edges);
     setDirtyGraph(true);
+  }, [visual, catalog, graphFor]);
+
+  const reconnectExplicitEdge = useCallback((oldEdge: Edge, connection: Connection) => {
+    if (!visual || !oldEdge.data?.explicit || !connection.source || !connection.target) return;
+    if (connection.source !== oldEdge.source || connection.target === START) return;
+
+    const status = String(oldEdge.data?.status || "").toLowerCase();
+    if (!["pass", "fail", "handoff"].includes(status)) return;
+    if (status === "handoff" && connection.target === END) return;
+
+    rememberUndoSnapshot(visual);
+    const stages = visual.stages.map((stage) => {
+      if (stage.name !== oldEdge.source) return stage;
+
+      if (status === "handoff") {
+        const targets = (stage.targets || [])
+          .map((target) => target === oldEdge.target ? connection.target! : target);
+        return { ...stage, targets: Array.from(new Set(targets)) };
+      }
+
+      const routes = { ...(stage.routes || {}) };
+      const index = visual.flow.indexOf(stage.name);
+      const nextName = visual.flow[index + 1];
+      let target = connection.target!;
+      if (target === END) target = status === "pass" ? "done" : "stop";
+
+      if (status === "pass" && target === nextName) delete routes.pass;
+      else routes[status] = target;
+      return { ...stage, routes };
+    });
+
+    const next = { ...visual, stages };
+    setVisual(next);
+    const graph = graphFor(next, catalog);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setDirtyGraph(true);
+    setMessage("Connection retargeted.");
   }, [visual, catalog, graphFor]);
 
   const deleteEdges = useCallback((removed: Edge[]) => {
@@ -1512,7 +1579,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>;
             });
           })()}
-          <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ / = quick add · Enter = edit selected</small></div>
+          <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ / = quick add · Enter = edit · Ctrl+Z/Y = undo/redo</small></div>
         </aside>
         <div
           ref={canvasRef}
@@ -1527,6 +1594,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
             onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
+            onReconnect={reconnectExplicitEdge}
+            reconnectRadius={24}
             onEdgesDelete={deleteEdges}
             onEdgeClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
             onEdgeContextMenu={(event, edge) => {
