@@ -148,5 +148,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('create.textContent = state.studioSourceKind === "prompt" ? "Create Prompt" : "Create Workflow"', self.app_js)
 
 
+    def test_prompt_editor_exposes_saved_saving_unsaved_feedback(self):
+        self.assertIn('dirtyBadge.textContent = state.studioSaving ? "SAVING" : state.studioDirty ? "UNSAVED" : "SAVED"', self.app_js)
+        self.assertIn('"No unsaved changes."', self.app_js)
+        self.assertIn('"Save changes (Ctrl+S)."', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
