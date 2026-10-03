@@ -22,35 +22,31 @@ A Workflow is a list of Stages.
 - ERROR is technical failure only; StageExecutor retries/rebuilds the Session. Review with a finite local `error_policy.retries` is fail-soft and skips to the next Stage after exhaustion; other Stage types stop at the current Stage when a finite retry policy is exhausted.
 - There is no repair/recover/restart_at/repeat/max_attempts/on_exhausted graph model.
 
-## Plan and task scope
+## Plan and dynamic child Workflows
 
-`type: plan` produces Task[]. Per-task work is explicit YAML using one contiguous `scope: task` block:
+`type: plan` is a special Stage that returns validated Tasks plus the child Stage definitions needed to execute them. PlanStage currently produces alternating AI Execute -> AI Review children at runtime, so those generated children do not appear in the parent YAML:
 
 ```yaml
 stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
+  validate_ai:
+    type: ai_validator
+    validator: ai
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
-
-flow: [planning, execute, review]
+flow: [planning, validate_ai]
 ```
 
-A custom `command` or Python Stage can use `produces: tasks`, so PlanStage is not mandatory.
+Execution is `planning -> generated child Workflow -> validate_ai`. The child Workflow uses the same StageExecutor, routing, retry/recover, and durable Resume path as the parent.
+
+Other special/plugin Stages may also produce `tasks` or `stages`, but the producer must provide its own child Stage definitions. Runner never infers child Stage types. There is no task-level Workflow mode or `scope` field.
 
 ## Validation
 
 File validation is normally a `command` Stage with `result_kind: validation`. AI validation uses `type: ai_validator`, `validator: ai`.
 
-Validators are ordinary top-level Stages and can appear before or after other Stages. They cannot use `scope: task`.
+Validators are ordinary Stages and can appear before or after other static or dynamically produced work.
 
 Independent final AI validation should normally use:
 
