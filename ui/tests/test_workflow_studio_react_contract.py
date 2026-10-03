@@ -617,3 +617,16 @@ def test_designer_has_save_boundary_problems_panel():
     assert 'setMessage("Fix Workflow problems before saving.")' in text
     assert 'aria-label="Workflow problems"' in text
     assert ".workflow-problems" in styles
+
+
+
+def test_designer_modals_share_escape_and_close_accessibility_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert 'window.addEventListener("keydown", onKeyDown, true)' in text
+    assert 'if (event.key !== "Escape") return' in text
+    assert 'if (editorOpen) setEditorOpen(false)' in text
+    assert 'else if (confirmDialog) setConfirmDialog(null)' in text
+    assert 'else if (pendingCreate) setPendingCreate(null)' in text
+    assert 'else if (addStageOpen) setAddStageOpen(false)' in text
+    assert 'aria-label={tx("close")} title={tx("close")}' in text
