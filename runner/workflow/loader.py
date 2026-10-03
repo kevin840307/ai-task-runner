@@ -16,7 +16,6 @@ from .profiles import apply_ai_profile_defaults
 from .schema import (
     validate_routes,
     validate_stage,
-    workflow_has_task_producer,
     workflow_validators,
 )
 
@@ -193,6 +192,5 @@ __all__ = [
     "normalize_workflow",
     "save_workflow",
     "workflow_fingerprint",
-    "workflow_has_task_producer",
     "workflow_validators",
 ]
