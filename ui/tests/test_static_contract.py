@@ -247,5 +247,14 @@ class StaticContractTests(unittest.TestCase):
         self.assertNotIn("\n    def test_", source[main:])
 
 
+    def test_prompt_draft_recovery_is_hash_gated_and_local_only(self):
+        self.assertIn('PROMPT_DRAFT_PREFIX = "ai-task-runner:prompt-draft:v1:"', self.app_js)
+        self.assertIn("draft.hash !== data.hash", self.app_js)
+        self.assertIn('"Restore Draft"', self.app_js)
+        self.assertIn('"Discard Draft"', self.app_js)
+        self.assertIn("clearPromptDraft(data.id)", self.app_js)
+        self.assertIn("persistPromptDraft(); scheduleSyntaxCheck()", self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
