@@ -487,3 +487,14 @@ def test_prompt_deep_link_and_stage_yaml_fill_contract():
     assert "grid-template-rows: minmax(0,1fr)" in styles
     assert ".stage-yaml-panel {" in styles
     assert "box-sizing: border-box" in styles
+
+
+
+def test_ai_profile_switching_is_fully_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const previousDefaults = profiles[previousProfile]?.defaults || {}" in text
+    assert "const nextDefaults = profiles[profile]?.defaults || {}" in text
+    assert "Object.entries(previousDefaults)" in text
+    assert "Object.entries(nextDefaults)" in text
+    assert '["prompt", "status", "max_failures", "error_policy"]' not in text
