@@ -315,6 +315,42 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 )
                 page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
 
+                # Implicit PASS->next is a real Designer connection: deleting it must
+                # persist an explicit stop instead of silently continuing to the next Stage.
+                implicit_pass = page.locator('.react-flow__edge[data-id="execute:pass:review"]')
+                implicit_pass.dispatch_event("click")
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(100)
+                assert implicit_pass.count() == 0
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["execute"]["routes"]["pass"] == "stop"
+
+                stopped = subprocess.run(
+                    [sys.executable, str(ROOT / "tool" / "workflow_dryrun.py"), str(workflow), "--json"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                assert stopped.returncode == 1
+                stopped_payload = json.loads(stopped.stdout)
+                assert stopped_payload["completed"] is False
+                assert [item["stage"] for item in stopped_payload["transitions"]] == ["execute"]
+
+                # Reconnect PASS to the original next Stage. The stop marker disappears
+                # and canonical implicit PASS->next behavior is restored.
+                _connect_nodes(
+                    page,
+                    '.react-flow__node[data-id="execute"] .react-flow__handle.pass',
+                    '.react-flow__node[data-id="review"] .react-flow__handle.stage-input',
+                )
+                page.locator('.react-flow__edge[data-id="execute:pass:review"]').wait_for(state="attached")
+                _save_editor(page)
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert "routes" not in saved["stages"]["execute"]
+
                 # Existing explicit FAIL edge can be selected and removed with Delete.
                 fail_edge = page.locator('.react-flow__edge[data-id="review:fail:execute"]')
                 fail_edge.dispatch_event("click")
@@ -492,7 +528,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert "worker" not in saved["stages"]
                 assert "worker" not in saved["flow"]
-                assert "routes" not in saved["stages"]["review"]
+                assert saved["stages"]["review"]["routes"] == {"pass": "stop"}
                 assert saved["stages"]["router"]["targets"] == ["after"]
                 assert page.locator('.react-flow__node[data-id="worker"]').count() == 0
 
