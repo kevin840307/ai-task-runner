@@ -137,6 +137,8 @@ def test_yaml_runtime_overrides_match_current_run_request_contract(tmp_path):
   watchdog_interval: 2.5
   worker_hang_timeout: 601
   stage_retries: -1
+  max_cycles: 12
+  skip_on_max_cycles: true
   retry_delay: 7
   retry_max_delay: 90
   ai_validator_count: 3
@@ -166,6 +168,8 @@ def test_yaml_runtime_overrides_match_current_run_request_contract(tmp_path):
     assert child.watchdog_interval == 2.5
     assert child.worker_hang_timeout == 601
     assert child.stage_retries == -1
+    assert child.max_cycles == 12
+    assert child.skip_on_max_cycles is True
     assert child.retry_delay == 7
     assert child.retry_max_delay == 90
     assert child.final_ai_validations == 3
@@ -324,3 +328,30 @@ def test_yaml_inline_workflow_is_normalized(tmp_path):
 
     assert item["validator"] is None
     assert [node["name"] for node in item["workflow"]] == ["check"]
+
+
+
+def test_yaml_rejects_unknown_fields_instead_of_silently_ignoring_typos(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n  validator: ai\n  retry_delat: 30\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RunnerError, match=r"unknown options: retry_delat"):
+        load_yaml_script(script)
+
+
+def test_yaml_accepts_declared_plugin_convenience_fields(tmp_path):
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: build\n"
+        "  validator: ai\n"
+        "  loop_context_compress: true\n"
+        "  loop_context_compress_threshold: 55\n",
+        encoding="utf-8",
+    )
+
+    child = build_script_item_config(base_config(tmp_path), load_yaml_script(script)[0], 1)
+
+    assert child.plugins["context_compression"] == {"enabled": True, "threshold": 55.0}
