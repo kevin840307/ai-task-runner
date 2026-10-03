@@ -161,5 +161,13 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('Last ·', self.app_js)
 
 
+    def test_runtime_status_vocabulary_distinguishes_recovery_and_attention(self):
+        self.assertIn('return "Recovering"', self.app_js)
+        self.assertIn('return "Needs Attention"', self.app_js)
+        self.assertIn('recovering: "Recovering"', self.app_js)
+        self.assertIn('needs_attention: "Needs Attention"', self.app_js)
+        self.assertNotIn('return "Interrupted"', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
