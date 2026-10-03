@@ -11,7 +11,7 @@ from ...errors import ConfigurationError, RunnerError, is_transient_error
 from ...workspace import changed_project_files, project_manifest
 from ...runtime import events as progress
 from ...runtime.events import sleep_with_heartbeat
-from ..stages.contracts import (
+from ..contracts import (
     MODE_READONLY,
     MODE_WRITE,
     Stage,
