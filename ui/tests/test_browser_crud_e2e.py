@@ -257,6 +257,25 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
         state = _write_fixture_repo(Path(td))
         state.studio_workflow_create("e2e_crud", "global", None)
 
+        # Real Prompt impact fixture: a second Workflow references a Prompt so
+        # the browser verifies the same backend usage evidence shown by rename/delete safety.
+        prompt = state.studio_prompt_create("used_prompt", "global", None)
+        used_workflow = state.studio_workflow_create("uses_prompt", "global", None)
+        used_file = state.studio_read(used_workflow["item"]["id"], None)
+        state.studio_save(
+            used_workflow["item"]["id"],
+            (
+                "stages:\n"
+                "  review:\n"
+                "    type: base\n"
+                "    profile: review\n"
+                "    prompt: used_prompt.md\n"
+                "flow: [review]\n"
+            ),
+            used_file["hash"],
+            None,
+        )
+
         html = (static_root / "index.html").read_text(encoding="utf-8")
         html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
         html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
@@ -349,6 +368,14 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             assert page.locator(".studio-designer-body").evaluate(
                 "node => node.classList.contains('prompt-manager-mode')"
             )
+
+            used_prompt_row = page.locator("#studioFileList .studio-file-item").filter(
+                has_text="used_prompt.md"
+            )
+            assert used_prompt_row.count() == 1
+            used_prompt_row.click()
+            page.wait_for_function("document.querySelector('#studioFileName')?.textContent === 'used_prompt.md'")
+            assert page.locator("#studioPromptUsedBy .prompt-used-by-chip", has_text="uses_prompt.workflow.yaml · review").count() == 1
 
             # Project rows are a Tasks/Chat navigation affordance from both asset pages.
             # Regression: Prompts used to leave the UI on the Prompt manager because
