@@ -928,6 +928,9 @@ function openWorkflowContextMenu(item, x, y) {
   $("workflowContextVisibility").textContent = item.hidden
     ? t("assets.show_in_chat", "Show in Chat")
     : t("assets.hide_from_chat", "Hide from Chat");
+  $("workflowContextRename").disabled = !!item.readonly || !state.studioGuard.editable;
+  $("workflowContextDuplicate").disabled = !state.studioGuard.editable;
+  $("workflowContextDelete").disabled = !!item.readonly || item.deletable === false || !state.studioGuard.editable;
   menu.hidden = false;
   menu.style.left = "0px";
   menu.style.top = "0px";
@@ -936,6 +939,75 @@ function openWorkflowContextMenu(item, x, y) {
   const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+}
+
+async function renameWorkflowItem(item) {
+  if (!item || item.kind !== "workflow" || item.readonly || !state.studioGuard.editable) return;
+  closeWorkflowContextMenu();
+  const name = await inputDialog({
+    title: "Rename Workflow",
+    message: "Rename keeps the Workflow in the same Global / Project asset root.",
+    label: "Workflow name",
+    value: item.name,
+    confirmLabel: "Rename",
+  });
+  if (!name || name === item.name) return;
+  try {
+    await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: item.id, project: state.project?.path || "", name }) });
+    await refreshStudioFiles({ force: true });
+    showToast("Workflow renamed");
+  } catch (error) { showActionError(error.message, "Workflow rename failed"); }
+}
+
+async function duplicateWorkflowItem(item) {
+  if (!item || item.kind !== "workflow" || !state.studioGuard.editable) return;
+  closeWorkflowContextMenu();
+  const name = await inputDialog({
+    title: "Duplicate Workflow",
+    message: "Create an independent copy in the same asset root.",
+    label: "Workflow name",
+    value: window.StudioSupport.duplicateName(item.name),
+    confirmLabel: "Duplicate",
+  });
+  if (!name) return;
+  try {
+    await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: item.id, project: state.project?.path || "", name }) });
+    await refreshStudioFiles({ force: true });
+    showToast("Workflow duplicated");
+  } catch (error) { showActionError(error.message, "Workflow duplicate failed"); }
+}
+
+async function exportWorkflowItem(item) {
+  if (!item || item.kind !== "workflow") return;
+  closeWorkflowContextMenu();
+  try {
+    const data = await api(`/api/studio/export?id=${encodeURIComponent(item.id)}${projectQuery()}`);
+    const name = String(data.name || item.name || "workflow.yaml");
+    const blob = new Blob([String(data.content ?? "")], { type: "text/yaml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+    URL.revokeObjectURL(url);
+    showToast("Workflow exported");
+  } catch (error) { showActionError(error.message, "Workflow export failed"); }
+}
+
+async function deleteWorkflowItem(item) {
+  if (!item || item.kind !== "workflow" || item.readonly || item.deletable === false || !state.studioGuard.editable) return;
+  closeWorkflowContextMenu();
+  const ok = await confirmDialog({
+    title: "Delete Workflow?",
+    message: `Delete ${item.name}? This removes the Workflow asset but does not modify project source files.`,
+    confirmLabel: "Delete Workflow",
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await api("/api/studio/delete", { method: "POST", body: JSON.stringify({ id: item.id, project: state.project?.path || "" }) });
+    await refreshStudioFiles({ force: true });
+    renderWorkflowPicker();
+    showToast("Workflow deleted");
+  } catch (error) { showActionError(error.message, "Workflow deletion failed"); }
 }
 
 function renderStudioFiles() {
@@ -1560,6 +1632,10 @@ $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceK
 $("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
 $("workflowContextOpen").onclick = () => { const item = workflowContextItem(); closeWorkflowContextMenu(); if (item) openWorkflowEditorItem(item); };
 $("workflowContextVisibility").onclick = () => { const item = workflowContextItem(); if (item) void setWorkflowVisibility(item, !item.hidden); };
+$("workflowContextRename").onclick = () => { const item = workflowContextItem(); if (item) void renameWorkflowItem(item); };
+$("workflowContextDuplicate").onclick = () => { const item = workflowContextItem(); if (item) void duplicateWorkflowItem(item); };
+$("workflowContextExport").onclick = () => { const item = workflowContextItem(); if (item) void exportWorkflowItem(item); };
+$("workflowContextDelete").onclick = () => { const item = workflowContextItem(); if (item) void deleteWorkflowItem(item); };
 $("saveStudioButton").onclick = saveStudio; $("reloadStudioButton").onclick = reloadStudio; $("validateStudioButton").onclick = validateStudio; $("exportStudioButton").onclick = exportStudioAsset; $("deleteStudioButton").onclick = deleteStudioAsset; $("studioAssetMenuButton").onclick = (event) => { event.stopPropagation(); toggleStudioAssetMenu(); }; $("renameStudioButton").onclick = renameStudioAsset; $("duplicateStudioButton").onclick = duplicateStudioAsset; $("importAssetButton").onclick = openImportAssetModal; $("newWorkflowButton").onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
 $("newWorkflowClose").onclick = () => closeNewWorkflowModal(); $("newWorkflowCancel").onclick = () => closeNewWorkflowModal(); $("newWorkflowConfirm").onclick = confirmNewWorkflow; $("newWorkflowBackdrop").addEventListener("click", (e) => { if (e.target === $("newWorkflowBackdrop")) closeNewWorkflowModal(); }); $("newWorkflowBackdrop").addEventListener("input", () => { state.newWorkflowDirty = true; }); $("newWorkflowName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmNewWorkflow(); } });
 $("newPromptClose").onclick = () => closeNewPromptModal(); $("newPromptCancel").onclick = () => closeNewPromptModal(); $("newPromptConfirm").onclick = confirmNewPrompt; $("newPromptBackdrop").addEventListener("click", (e) => { if (e.target === $("newPromptBackdrop")) closeNewPromptModal(); }); $("newPromptBackdrop").addEventListener("input", () => { state.newPromptDirty = true; });
