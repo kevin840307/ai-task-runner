@@ -559,3 +559,33 @@ def test_workflow_asset_workspace_has_no_legacy_workflow_editor():
     assert "duplicateWorkflowItem" in app
     assert "exportWorkflowItem" in app
     assert "deleteWorkflowItem" in app
+
+
+
+def test_designer_visible_chrome_uses_shared_i18n():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    for key in (
+        "undo_none", "undo_done", "redo_none", "redo_done",
+        "switch_title", "switch_message", "remove_title",
+        "discard_title", "reload_title", "route_intro",
+        "review_policy_help", "error_policy_help", "test_help",
+        "dynamic_child_note", "stage_yaml_hint",
+    ):
+        assert f'{key}:' in text
+        assert f'tx("{key}")' in text
+
+    # User-facing editor chrome after the i18n table must not regress to the
+    # previously hard-coded Chinese dialog/help strings.
+    body = text.split("const AGENT_PING_PROMPT", 1)[1]
+    for removed in (
+        "沒有可復原的 Workflow 修改。",
+        "已復原上一個 Workflow 草稿修改。",
+        "沒有可重做的 Workflow 修改。",
+        "已重做上一個 Workflow 草稿修改。",
+        "儲存並切換視圖？",
+        "捨棄未儲存變更？",
+        "重新載入 Workflow？",
+        "從積木下方的大接點拉到目標積木。",
+    ):
+        assert removed not in body
