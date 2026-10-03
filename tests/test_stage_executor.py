@@ -153,3 +153,30 @@ def test_executor_uses_node_label_only_as_event_detail():
     )
     assert start["stage"] == "sample"
     assert start["label"] == "Project Documentation"
+
+
+def test_executor_preserves_explicit_dynamic_result_kind():
+    class Dynamic(Stage):
+        result_kind = "generic"
+
+        def run(self, ctx, previous=None):
+            return StageResult(
+                self.name,
+                "pass",
+                data={"stages": [{"name": "child", "type": "base", "profile": "generic"}]},
+                kind="stages",
+            )
+
+    result = StageExecutor(Hooks()).run(Dynamic(), context())
+    assert result.kind == "stages"
+
+
+def test_executor_fills_declared_kind_only_for_generic_result():
+    class ReviewLike(Stage):
+        result_kind = "review"
+
+        def run(self, ctx, previous=None):
+            return StageResult(self.name, "pass", data={"completed": True})
+
+    result = StageExecutor(Hooks()).run(ReviewLike(), context())
+    assert result.kind == "review"
