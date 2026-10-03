@@ -79,7 +79,7 @@ Do these before larger UI work when they can be implemented without widening run
     - Selecting a Project should always establish context and return to Tasks/Chat.
     - Preserve unsaved-change protection before navigation.
 
-[ ] Improve hover/tooltips for icon-only controls
+[x] Improve hover/tooltips for icon-only controls
     - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
 
 [ ] Keyboard focus / accessibility pass
@@ -90,7 +90,7 @@ Do these before larger UI work when they can be implemented without widening run
 [x] Clarify disabled controls
     - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
 
-[ ] Normalize confirmation dialogs
+[x] Normalize confirmation dialogs
     - Use the same wording/order for destructive actions.
     - Primary safe action first; destructive confirmation visually distinct.
 
