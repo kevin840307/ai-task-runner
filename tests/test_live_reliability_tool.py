@@ -2030,7 +2030,12 @@ def test_dynamic_session_live_fixture_matches_current_workflow_prompt_contract(t
     assert by_name["coordinator"]["session_policy"] == "role"
     assert by_name["main_role"]["session_policy"] == "main"
     assert by_name["stable_role"]["session_policy"] == "role"
+    assert by_name["stable_role"]["routes"] == {"pass": "stable_gate"}
+    assert by_name["stable_gate"]["routes"] == {"fail": "stable_role", "pass": "fresh_role"}
     assert by_name["fresh_role"]["session_policy"] == "fresh"
+    assert by_name["fresh_role"]["routes"] == {"pass": "final_gate"}
+    assert by_name["coordinator"]["targets"] == ["main_role"]
+    assert by_name["main_role"]["routes"] == {"pass": "stable_role"}
     for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
         prompt = Path(by_name[name]["prompt"])
         assert prompt.is_absolute()
@@ -2050,3 +2055,24 @@ def test_assert_state_completed_includes_console_tail_when_startup_failed(tmp_pa
     message = str(error.value)
     assert "state unavailable" in message
     assert "configuration exploded before state creation" in message
+
+
+def test_dynamic_session_gate_forces_two_stable_role_visits(tmp_path: Path):
+    gate = tmp_path / "stable_gate.py"
+    gate.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('stable-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+
+    first = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+    second = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+
+    assert first.returncode == 1
+    assert second.returncode == 0
+    assert (tmp_path / "stable-gate.count").read_text(encoding="utf-8") == "2"
