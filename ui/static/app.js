@@ -1225,6 +1225,59 @@ function renderStudioVisibilityBadge() {
   scopeBadge.className = `studio-scope-badge ${scope || "global"}`;
   scopeBadge.textContent = scope === "project" ? "PROJECT" : "GLOBAL";
 }
+const PROMPT_DRAFT_PREFIX = "ai-task-runner:prompt-draft:v1:";
+function promptDraftKey(id) { return PROMPT_DRAFT_PREFIX + String(id || ""); }
+function readPromptDraft(id) {
+  if (!id) return null;
+  try {
+    const value = JSON.parse(localStorage.getItem(promptDraftKey(id)) || "null");
+    return value && typeof value === "object" ? value : null;
+  } catch (_) { return null; }
+}
+function clearPromptDraft(id) {
+  if (!id) return;
+  try { localStorage.removeItem(promptDraftKey(id)); } catch (_) {}
+}
+function persistPromptDraft() {
+  if (!state.studioFile || state.studioFile.kind !== "prompt") return;
+  if (!state.studioDirty) return clearPromptDraft(state.studioFile.id);
+  try {
+    localStorage.setItem(promptDraftKey(state.studioFile.id), JSON.stringify({
+      hash: state.studioHash,
+      content: currentEditorContent(),
+      savedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+async function maybeRestorePromptDraft(data) {
+  const draft = readPromptDraft(data?.id);
+  if (!draft) return;
+  if (draft.hash !== data.hash) {
+    clearPromptDraft(data.id);
+    return;
+  }
+  const content = typeof draft.content === "string" ? draft.content : "";
+  if (!content || content === data.content) {
+    clearPromptDraft(data.id);
+    return;
+  }
+  const choice = await choiceDialog({
+    title: "Restore unsaved Prompt draft?",
+    message: "A local draft from this saved version was found.",
+    choices: [
+      { label: "Restore Draft", value: "restore", primary: true },
+      { label: "Discard Draft", value: "discard", danger: true },
+    ],
+  });
+  if (choice === "restore") {
+    $("studioPromptTextarea").value = content;
+    updateDirtyState();
+    scheduleSyntaxCheck();
+    setStudioStatus("Restored unsaved local draft.");
+  } else if (choice === "discard") {
+    clearPromptDraft(data.id);
+  }
+}
 function invalidateStudioFileCache(id = "") { if (id) state.studioFileCache.delete(id); else state.studioFileCache.clear(); }
 function applyStudioLoaded(data, _visual, item, cached = false) {
   state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; renderPromptUsage();
@@ -1242,6 +1295,7 @@ async function openStudioFile(item) {
   const cached = state.studioFileCache.get(item.id);
   if (cached && cached.version === studioCacheVersion(item) && (Date.now() - Number(cached.loadedAt || 0)) < 15000) {
     applyStudioLoaded(cached.data, null, item, true);
+    await maybeRestorePromptDraft(cached.data);
     refreshPromptTags();
     return;
   }
@@ -1255,6 +1309,7 @@ async function openStudioFile(item) {
     if (token !== state.studioOpenToken) return;
     state.studioFileCache.set(item.id, { version: studioCacheVersion(item), loadedAt: Date.now(), data });
     applyStudioLoaded(data, null, item);
+    await maybeRestorePromptDraft(data);
     await refreshPromptTags();
   } catch (error) { if (token === state.studioOpenToken) setStudioStatus(error.message, true); }
   finally { if (token === state.studioOpenToken) setStudioContentLoading(false); }
@@ -1434,7 +1489,7 @@ async function saveStudio() {
     promptDiagnostics(check);
     if (!check.ok) { setStudioStatus(check.summary, true); showActionError(check.summary, "Prompt save failed"); return; }
     const data = await api("/api/studio/save", { method: "POST", body: JSON.stringify({ id: state.studioFile.id, project: state.project?.path || "", content, hash: state.studioHash }) });
-    state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false;
+    state.studioFile = data; state.studioOriginal = data.content; state.studioHash = data.hash; state.studioDirty = false; clearPromptDraft(data.id);
     $("studioPromptTextarea").value = data.content;
     updateDirtyState(); scheduleSyntaxCheck(); setStudioStatus(""); showToast("Prompt saved");
   } catch (error) { setStudioStatus(error.message, true); showActionError(error.message, "Prompt save failed"); }
@@ -1482,7 +1537,10 @@ function setStudioStatus(text, error = false) {
 }
 async function confirmDiscardStudio() {
   if (!state.studioDirty) return true;
-  return confirmDialog({ title: "Discard unsaved Prompt changes?", message: "Leaving this Prompt will discard the unsaved Prompt draft.", confirmLabel: "Discard Changes", danger: true });
+  const id = state.studioFile?.id || "";
+  const discard = await confirmDialog({ title: "Discard unsaved Prompt changes?", message: "Leaving this Prompt will discard the unsaved Prompt draft.", confirmLabel: "Discard Changes", danger: true });
+  if (discard) clearPromptDraft(id);
+  return discard;
 }
 
 // ------------------------------ New Workflow / Prompt / Import / Export ------------------------------
@@ -1824,7 +1882,7 @@ $("chatNav").onclick = () => switchView("chat");
 $("workflowNav").onclick = () => switchView("workflow");
 $("promptNav").onclick = () => switchView("prompt");
 $("studioSearchInput").oninput = () => { state.studioFilters[state.studioSourceKind] = $("studioSearchInput").value; renderStudioFiles(); }; $("studioSearchClear").onclick = () => { state.studioFilters[state.studioSourceKind] = ""; renderStudioFiles(); $("studioSearchInput").focus(); };
-$("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
+$("studioPromptTextarea").addEventListener("input", () => { updateDirtyState(); persistPromptDraft(); scheduleSyntaxCheck(); }); $("studioPromptTextarea").addEventListener("keydown", handlePromptEditorKeydown);
 $("workflowContextOpen").onclick = () => { const item = workflowContextItem(); closeWorkflowContextMenu(); if (item) openWorkflowEditorItem(item); };
 $("workflowContextVisibility").onclick = () => { const item = workflowContextItem(); if (item) void setWorkflowVisibility(item, !item.hidden); };
 $("workflowContextRename").onclick = () => { const item = workflowContextItem(); if (item) void renameWorkflowItem(item); };
