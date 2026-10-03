@@ -127,3 +127,35 @@ def test_global_and_project_assets_are_structurally_symmetric(
     assert Path(project_prompt["item"]["path"]).parent == (
         project / ".ai-task-runner/assets/prompts/common"
     ).resolve()
+
+
+
+def test_stage_yaml_accepts_unsaved_designer_stage_draft(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    created = state.studio_workflow_create("draft_stage_yaml", "project", project)
+    file_id = created["item"]["id"]
+
+    formatted = state.studio_stage_source(
+        file_id,
+        "ai_stage",
+        "format",
+        project,
+        fields={"name": "ai_stage", "type": "base", "profile": "review"},
+    )
+
+    assert formatted["ok"] is True
+    assert "type: base" in formatted["source"]
+    assert "profile: review" in formatted["source"]
+
+    parsed = state.studio_stage_source(
+        file_id,
+        "ai_stage",
+        "parse",
+        project,
+        fields={"name": "ai_stage", "type": "base", "profile": "review"},
+        source="type: base\nprofile: review\n",
+    )
+
+    assert parsed["ok"] is True
+    assert parsed["fields"]["type"] == "base"
+    assert parsed["fields"]["profile"] == "review"
