@@ -2961,7 +2961,10 @@ def api_recovery_probe(
 ) -> bool:
     with (
         transient_proxy(settings.api_port) as proxy,
-        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=1),
+        # Disable Qwen CLI's own HTTP retry here so the injected outage reaches
+        # StageExecutor. This probe is specifically for Runner same-session
+        # retry/backoff/recovery, not the backend client's internal retry loop.
+        qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
     ):
         project = create_project(root, name)
         log = console_log(project, "console.jsonl")
@@ -3022,16 +3025,24 @@ def api_recovery_probe(
             stream.close()
         code = process.returncode or 0
         assert_completed(project, code)
-        evidence = (project / ".ai-task-runner" / "log.txt").read_text(
-            encoding="utf-8"
-        )
+        events = runner_events(project)
+        evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in events)
         if (
             not session_id or not recovered
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
-        if '"status": "Recovering"' not in evidence:
-            raise RuntimeError("API outage recovered without observable Recovering status evidence")
+        recovering = [
+            event for event in events
+            if event.get("type") == "runner.status"
+            and event.get("action") == "set"
+            and event.get("status") == "Recovering"
+        ]
+        if not recovering:
+            raise RuntimeError(
+                "API outage reached Runner recovery path but no structured "
+                "Recovering status event was recorded"
+            )
         final_state = read_state(project)
         if str(final_state.get("last_error") or ""):
             raise RuntimeError("successful API recovery left stale last_error in durable state")
