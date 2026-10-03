@@ -270,7 +270,7 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const reviewErrorSkip = reviewSemantic && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
   const reviewMaxFailures = reviewSemantic && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
   return (
-    <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type}`}>
+    <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type} ${s.type === "base" ? `profile-${String(s.profile || "generic")}` : ""}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
         <span className="stage-type">{s.type === "base" && s.profile ? `AI · ${String(s.profile)}` : (STAGE_META[s.type]?.title || String(s.type || "Stage"))}</span>
