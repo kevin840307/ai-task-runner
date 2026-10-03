@@ -256,19 +256,19 @@ Workflow Editor:
 - no task-level/scope UI;
 - AI Stage exposes profile Generic / Execute / Review;
 - Plan remains a special Stage;
-- explicit PASS / FAIL / HANDOFF edges;
+- PASS / FAIL / HANDOFF edges are the Designer routing surface;
 - ERROR is never a graph edge.
 
 Editor keyboard / mouse UX:
 - Node: Delete/Backspace through workflow-aware delete path
 - Node: Ctrl+C / Ctrl+V
-- Edge: click explicit edge then Delete/Backspace
+- Edge: click any PASS / FAIL / HANDOFF edge then Delete/Backspace
 - Edge: right-click -> Delete connection
 - Edge: reconnect same semantic output to retarget
 - Ctrl+Z = Workflow draft undo
 - Ctrl+Y / Ctrl+Shift+Z = redo
 - text inputs keep native text undo behavior
-- PASS edges, including implicit PASS->next, are deletable; deleting PASS persists routes.pass: stop so runtime does not silently continue, and reconnecting to the original next Stage restores the compact implicit-next form
+- PASS edges are deletable like FAIL/HANDOFF edges; deleting PASS persists routes.pass: stop so runtime does not silently continue. Reconnecting to the flow-next Stage may be serialized compactly through flow order.
 
 Supported desktop viewport test set:
 - 1024x768
