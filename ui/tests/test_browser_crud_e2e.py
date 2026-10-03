@@ -43,6 +43,16 @@ def _launch_browser(playwright):
     return playwright.chromium.launch(**kwargs)
 
 
+def _load_main_ui_document(page, html: str) -> None:
+    # Use a real HTTP origin so localStorage/history/relative fetch behave like
+    # production. <base href> alone does not change about:blank's opaque origin.
+    page.route(
+        "http://local.test/",
+        lambda route: route.fulfill(status=200, content_type="text/html", body=html),
+    )
+    page.goto("http://local.test/", wait_until="domcontentloaded")
+
+
 def _boot_main_ui(page) -> None:
     # app.js performs its production bootstrap immediately when injected. Do not
     # reach into private lexical functions such as loadProjects(); wait for the
@@ -241,7 +251,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
                 "http://local.test/workflow-studio-app/**",
                 lambda route: route.fulfill(status=200, content_type="text/html", body="<html><body>Workflow Editor</body></html>"),
             )
-            page.set_content(html, wait_until="domcontentloaded")
+            _load_main_ui_document(page, html)
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
                     const method = (options.method || 'GET').toUpperCase();
