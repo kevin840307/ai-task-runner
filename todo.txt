@@ -10,6 +10,10 @@ Keep the product small, understandable and reliable for 24H unattended runs.
 The architecture refactor is complete. Do not restart old architecture work unless
 a reproduced failure proves it is necessary.
 
+Current runtime capabilities:
+- Dynamic Handoff is supported and remains part of the current runtime.
+- Discussion / Group Chat remains intentionally removed.
+
 Core runtime ownership stays:
 - WorkflowRunner = composition / entry
 - FlowEngine = semantic PASS/FAIL/HANDOFF navigation + dynamic child Workflow
