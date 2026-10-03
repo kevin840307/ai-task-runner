@@ -1238,3 +1238,73 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
 .project-runtime-label.runtime-needs_attention::before { content: "!"; }
 .runtime-badge.recovering { color: #0369a1; background: #e0f2fe; border-color: #bae6fd; }
 .runtime-badge.needs-attention { color: #9a5b00; background: var(--warning-soft); border-color: color-mix(in srgb, #f59e0b 30%, var(--line)); }
+
+
+/* Lightweight Recent Runs: derived from existing chat/runtime evidence, no dashboard/store. */
+.run-history-panel {
+  margin: 0 18px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.run-history-panel[hidden] { display: none !important; }
+.run-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.run-history-head button {
+  min-width: 30px;
+  min-height: 30px;
+}
+.run-history-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(300px, 38vh);
+  overflow: auto;
+}
+.run-history-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+.run-history-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.run-history-copy strong,
+.run-history-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-history-copy small,
+.run-history-empty {
+  color: var(--muted);
+  font-size: 11px;
+}
+.run-history-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+}
+.run-history-row.status-needs_attention .run-history-status { color: var(--warn); }
+.run-history-row.status-recovering .run-history-status { color: var(--run); }
+.run-history-row.status-completed .run-history-status { color: var(--success); }
+.message.run-history-focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
