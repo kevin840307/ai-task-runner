@@ -904,7 +904,7 @@ function appendStudioItem(root, item) {
     action.textContent = `${t("studio.open_editor", "Open Editor")} →`;
     button.appendChild(action);
   }
-  button.onclick = () => item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item);
+  button.onclick = () => void openAssetItem(item);
   if (item.kind === "workflow") {
     button.oncontextmenu = (event) => {
       event.preventDefault();
@@ -1081,6 +1081,15 @@ function openFullDesigner() {
   openWorkflowEditorItem(state.studioFile);
 }
 
+async function openAssetItem(item) {
+  if (!item) return;
+  if (item.kind === "workflow") {
+    openWorkflowEditorItem(item);
+    return;
+  }
+  await openAssetItem(item);
+}
+
 async function restoreWorkflowStudioNavigation() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("view") !== "workflow") return;
@@ -1098,7 +1107,7 @@ async function restoreWorkflowStudioNavigation() {
   const studioId = params.get("studio") || "";
   if (studioId && source === "prompt") {
     const item = (state.studioFiles.prompts || []).find((row) => row.id === studioId);
-    if (item) await openStudioFile(item);
+    if (item) await openAssetItem(item);
   }
   window.history.replaceState({}, "", window.location.pathname);
 }
@@ -1817,7 +1826,7 @@ async function confirmNewPrompt() {
     state.studioSourceKind = "prompt";
     await refreshStudioFiles({ force: true });
     const item = (state.studioFiles.prompts || []).find((row) => row.id === result.item.id) || result.item;
-    if (item) await openStudioFile(item);
+    if (item) await openAssetItem(item);
     showToast(`Prompt ${result.file.name} created`);
   } catch (error) {
     $("newPromptHint").textContent = error.message;
@@ -1898,7 +1907,7 @@ async function confirmImportAsset() {
     await refreshStudioFiles({ force: true });
     const list = kind === "workflow" ? state.studioFiles.workflows : state.studioFiles.prompts;
     const item = (list || []).find((row) => row.id === result.item.id) || result.item;
-    if (item) await openStudioFile(item);
+    if (item) await openAssetItem(item);
     showToast(`${kind === "workflow" ? "Workflow" : "Prompt"} imported`);
   } catch (error) {
     $("importAssetHint").textContent = error.message;
@@ -1950,7 +1959,7 @@ function toggleStudioAssetMenu() { const menu = $("studioAssetMenu"), button = $
 async function renameStudioAsset() {
   closeStudioAssetMenu(); const current = state.studioFile; if (!current || current.readonly || !state.studioGuard.editable) return; if (!(await confirmDiscardStudio())) return;
   const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = await inputDialog({ title: `Rename ${label}`, message: current.kind === "prompt" ? "Referenced Prompts must be unlinked before rename." : "Rename keeps the file in the same Global / Project scope.", label: `${label} name`, value: current.name, confirmLabel: "Rename" }); if (!name || name === current.name) return;
-  try { const result = await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} renamed`); }
+  try { const result = await api("/api/studio/rename", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openAssetItem(item); showToast(`${label} renamed`); }
   catch (error) { setStudioStatus(error.message, true); showActionError(error.message, `${label} rename failed`); }
 }
 async function duplicateStudioAsset() {
@@ -1974,7 +1983,7 @@ function closeDuplicateAssetModal() { $("duplicateAssetBackdrop").hidden = true;
 async function confirmDuplicateAsset() {
   const current = state.studioFile; if (!current) return closeDuplicateAssetModal(); const label = current.kind === "prompt" ? "Prompt" : "Workflow"; const name = $("duplicateAssetName").value.trim(); if (!name) { $("duplicateAssetHint").textContent = `${label} name is required.`; $("duplicateAssetHint").classList.add("error"); return; }
   const button = $("duplicateAssetConfirm"); await withButtonBusy(button, "Duplicating…", async () => {
-    try { const result = await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); closeDuplicateAssetModal(); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openStudioFile(item); showToast(`${label} duplicated · ${result.item.display_name || result.item.name}`); }
+    try { const result = await api("/api/studio/duplicate", { method: "POST", body: JSON.stringify({ id: current.id, project: state.project?.path || "", name }) }); closeDuplicateAssetModal(); await refreshStudioFiles({ force: true }); const list = result.item.kind === "prompt" ? state.studioFiles.prompts : state.studioFiles.workflows; const item = list.find((row) => row.id === result.item.id) || result.item; await openAssetItem(item); showToast(`${label} duplicated · ${result.item.display_name || result.item.name}`); }
     catch (error) { $("duplicateAssetHint").textContent = error.message; $("duplicateAssetHint").classList.add("error"); showActionError(error.message, `${label} duplicate failed`); }
   });
 }
