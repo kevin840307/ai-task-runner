@@ -82,10 +82,11 @@ Do these before larger UI work when they can be implemented without widening run
 [x] Improve hover/tooltips for icon-only controls
     - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
 
-[ ] Keyboard focus / accessibility pass
-    - Completed: global focus-visible baseline; shared dialogs restore focus and close on Escape; icon-only controls already use accessible names in the main surfaces.
-    - Remaining: browser sweep for menu/dialog focus order and any control missing aria-expanded/selected/disabled semantics.
-    - High value because it also improves ordinary keyboard-heavy desktop use, not only screen-reader use.
+[x] Keyboard focus / accessibility pass
+    - Global focus-visible baseline is active; shared dialogs restore focus and close on Escape.
+    - Designer Add Stage/browser regression verifies Escape closes the modal and focus returns to the trigger.
+    - Context menus support Escape; icon-only controls use accessible names/tooltips on the main surfaces.
+    - aria-expanded/selected/disabled semantics are covered on the primary navigation/run-history/editor controls.
 
 [x] Clarify disabled controls
     - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
