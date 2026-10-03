@@ -426,13 +426,14 @@ def runner_command(
         "--json-events",
         "--no-ui-project-register",
     ]
-    command.extend(
-        ["--script", str(script)]
-        if script else [
-            "--goal-file", str(project / "prompt.md"),
-            "--validator", validator,
-        ]
-    )
+    if script:
+        command.extend(["--script", str(script)])
+    else:
+        command.extend(["--goal-file", str(project / "prompt.md")])
+        if workflow is None:
+            command.extend(["--validator", validator])
+        elif workflow_uses_stage(workflow, "validate_file"):
+            command.extend(["--validator", str(project / "validation.py")])
     if not timeout_probe:
         command.extend(["--agent-timeout", whole_seconds_arg(settings.agent_timeout)])
         command.extend(["--planning-timeout", whole_seconds_arg(settings.planning_timeout)])
