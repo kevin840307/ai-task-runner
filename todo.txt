@@ -155,9 +155,10 @@ P0 - UI / UX HIGH VALUE
     - Backend / validator / AI validator / environment checks stay under Options.
     - Avoid exposing rarely changed configuration in the normal run path.
 
-[ ] Prompt impact visibility
-    - [x] Show "Used by" Workflow / Stage references for each Prompt using the same backend scanner that guards rename/delete.
-    - [ ] Add precise navigation only after usage entries carry structured Workflow id/scope + Stage key; do not guess from duplicate filenames.
+[x] Prompt impact visibility
+    - Prompt Editor shows real Workflow / Stage "Used by" evidence from the same backend scanner that guards rename/delete.
+    - Backend regression and browser E2E cover a real Workflow referencing a Prompt.
+    - Precise click-through navigation is intentionally deferred until usage entries carry structured Workflow id/scope + Stage key; do not guess from duplicate filenames.
     - Goal: make Prompt edits safer and easier to understand.
 
 [x] Workflow Library layout
@@ -168,15 +169,17 @@ P0 - UI / UX HIGH VALUE
 
 P1 - UI / UX USEFUL AFTER P0
 -----------------------------
-[ ] Runtime Trace
-    - Stage, result, route, retry/recover, duration and session evidence.
-    - Optimize for debugging long unattended runs.
-    - Reuse durable runtime evidence; do not create a second tracing engine.
+[x] Runtime Trace
+    - FlowEngine stores a bounded semantic transition_history (max 40) with only stage/status/target/cycle/kind/timestamp.
+    - Tasks UI exposes only the most recent 20 transitions in a lightweight Trace panel.
+    - Trace and Runs are mutually exclusive and reuse the normal runtime refresh; no second API poller or append-only trace store exists.
+    - Core tests prove actual routing targets and hard boundedness during long loops; UI backend/static/browser coverage protects projection and rendering.
 
-[ ] Unsaved draft recovery
-    - [x] Prompt drafts are preserved in local browser storage, hash-gated against the saved asset, and offer Restore Draft / Discard Draft.
-    - [ ] Workflow Designer/YAML draft recovery still needs the same local-only crash/reload protection.
-    - Draft recovery is local/editor-only; it must NOT auto-write canonical YAML.
+[x] Unsaved draft recovery
+    - Prompt drafts are preserved in local browser storage, hash-gated against the saved asset, and offer Restore Draft / Discard Draft.
+    - Workflow Designer/YAML drafts are also local-only, hash-gated, and offer Restore Draft / Discard Draft after reload/crash.
+    - Workflow browser E2E and Prompt browser/static coverage verify restoration while canonical files remain unchanged before Save.
+    - Draft recovery never auto-writes canonical YAML or bypasses Save validation.
 
 [ ] Run from here / Test path
     - Dry-run/mock path first; do not introduce a second runtime.
