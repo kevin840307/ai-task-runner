@@ -120,7 +120,7 @@ flow:
                 assert page.get_by_text("執行範圍").count() == 0
                 page.get_by_role("tab", name="連線").click()
                 assert page.get_by_text("Semantic FAIL 上限").is_visible()
-                page.get_by_role("button", name="Close").click()
+                page.locator(".modal-close-button").click()
 
                 ai_palette = page.locator(".palette-item").filter(has_text="AI Stage").first
                 ai_palette.drag_to(page.locator(".canvas"), target_position={"x": 450, "y": 300})
@@ -213,7 +213,7 @@ flow:
                 assert stage_yaml_box["x"] + stage_yaml_box["width"] <= modal["x"] + modal["width"] + 1
                 assert stage_yaml_box["y"] + stage_yaml_box["height"] <= modal["y"] + modal["height"] + 1
                 assert stage_yaml_box["height"] >= yaml_content_box["height"] * 0.72
-                page.get_by_role("button", name="Close").click()
+                page.locator(".modal-close-button").click()
 
                 page.locator('.react-flow__node[data-id="review"]').dispatch_event(
                     "contextmenu",
