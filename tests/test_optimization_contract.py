@@ -129,7 +129,6 @@ def test_independent_validator_votes_each_start_fresh_session(tmp_path, monkeypa
     stage = AIValidatorStage(
         AIValidatorStageSpec(
             name="validate_ai",
-            session_key="validator",
             prompt=str(prompt),
             parser=parse_ok,
         )
@@ -163,10 +162,8 @@ def test_validator_vote_threshold_comes_only_from_runtime_config(tmp_path, monke
     stage = AIValidatorStage(
         AIValidatorStageSpec(
             name="validate_ai",
-            session_key="validator",
             prompt=str(prompt),
             parser=parse_vote,
-            fresh_session_each_run=True,
         )
     )
 
