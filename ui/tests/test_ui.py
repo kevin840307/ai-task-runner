@@ -74,6 +74,41 @@ class UIStateTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def test_stage_profile_validation_and_prompt_defaults_follow_runtime_catalog(self) -> None:
+        original = self.state.workflow_catalog
+        self.state.workflow_catalog = lambda: {
+            "stage_types": {
+                "base": {
+                    "profiles": {
+                        "generic": {"defaults": {"prompt": "common/generic.md"}},
+                        "future_profile": {"defaults": {"prompt": "common/future.md"}},
+                    },
+                    "options": [],
+                }
+            },
+            "node_options": {},
+        }
+        try:
+            self.state._validate_stage_editor_fields({
+                "type": "base",
+                "profile": "future_profile",
+            })
+            self.assertEqual(
+                self.state._effective_stage_prompt_reference({
+                    "type": "base",
+                    "profile": "future_profile",
+                }),
+                "common/future.md",
+            )
+            with self.assertRaisesRegex(ValueError, "future_profile"):
+                self.state._validate_stage_editor_fields({
+                    "type": "base",
+                    "profile": "missing_profile",
+                })
+        finally:
+            self.state.workflow_catalog = original
+
+
     def write_json(self, path: Path, value: dict) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value), encoding="utf-8")
