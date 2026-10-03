@@ -692,3 +692,15 @@ def test_workflow_draft_recovery_is_local_hash_gated_and_save_cleared():
     assert "clearWorkflowDraft(savedVisual.id)" in text
     assert "clearWorkflowDraft(refreshed.id)" in text
     assert ".workflow-draft-recovery" in styles
+
+
+
+def test_add_stage_escape_restores_focus_and_edges_stay_below_handles():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "const closeAddStageCommand = useCallback(() => {" in text
+    assert "requestAnimationFrame(() => addStageTriggerRef.current?.focus())" in text
+    assert "else if (addStageOpen) closeAddStageCommand()" in text
+    assert "if (addStageOpen) closeAddStageCommand()" in text
+    assert "zIndex: 0" in text
+    assert "zIndex: 2" in text
