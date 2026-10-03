@@ -208,7 +208,7 @@ def _snapshot_prompts(value: Any, resources: Path) -> None:
 
 def _validate_snapshot(workflow: Any) -> None:
     # Lazy import avoids registry -> Stage -> result/schema import cycles.
-    from .workflow.schema import validate_stage, validate_topology
+    from .workflow.schema import validate_stage
 
     if not isinstance(workflow, list) or not workflow:
         raise RunnerError("workflow snapshot must be a non-empty list")
@@ -221,7 +221,6 @@ def _validate_snapshot(workflow: Any) -> None:
             if key != "_workflow_index"
         }
         validate_stage(str(item.get("name", "")), values)
-    validate_topology(workflow)
 
 __all__ = [
     "RESOURCE_DIR",
