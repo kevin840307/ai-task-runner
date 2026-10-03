@@ -2013,6 +2013,13 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     instructions: Always return exactly MAIN_DONE.
     session_policy: main
     routes:
+      pass: main_gate
+
+  main_gate:
+    type: command
+    command: "{python} main_gate.py"
+    routes:
+      fail: main_role
       pass: stable_role
 
   stable_role:
@@ -2047,6 +2054,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
 flow:
   - coordinator
   - main_role
+  - main_gate
   - stable_role
   - stable_gate
   - fresh_role
@@ -2066,6 +2074,17 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     )
     (project / "dynamic_role.md").write_text(
         DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8"
+    )
+    (project / "main_gate.py").write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('main-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "print(f'MAIN_GATE_{value}')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
     )
     (project / "stable_gate.py").write_text(
         "from pathlib import Path\n"
@@ -2111,6 +2130,9 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     expected = [
         "coordinator",
         "main_role",
+        "main_gate",
+        "main_role",
+        "main_gate",
         "stable_role",
         "stable_gate",
         "stable_role",
@@ -2125,7 +2147,6 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
         )
 
     state = read_state(project)
-    main_session = str(state.get("ai_session_id") or "")
     stage_sessions = state.get("stage_sessions")
     if not isinstance(stage_sessions, dict):
         raise RuntimeError("Dynamic Handoff live state missing stage_sessions")
@@ -2133,9 +2154,14 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     main_results = stage_result_sessions(project, "main_role")
     stable_results = stage_result_sessions(project, "stable_role")
     fresh_results = stage_result_sessions(project, "fresh_role")
-    if not main_results or not main_session or main_results[-1] != main_session:
+    if len(main_results) < 2 or len(set(main_results[-2:])) != 1:
         raise RuntimeError(
-            "session_policy=main did not persist the primary Runner session"
+            "session_policy=main did not reuse the primary Runner session"
+        )
+    durable_main = str(state.get("ai_session_id") or "")
+    if durable_main and durable_main != main_results[-1]:
+        raise RuntimeError(
+            "session_policy=main durable state disagrees with the observed primary session"
         )
     stable_session = str(stage_sessions.get("stable_role") or "")
     if len(stable_results) < 2 or not stable_session:
