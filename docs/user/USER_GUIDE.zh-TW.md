@@ -22,35 +22,31 @@ Workflow 是 Stage 清單。
 - ERROR 只代表技術錯誤；StageExecutor 負責 retry / session rebuild，重試用盡就停在目前 Stage。
 - 沒有 repair/recover/restart_at/repeat/max_attempts/on_exhausted graph 模型。
 
-## Plan 與 Task Scope
+## Plan 與 Dynamic child Workflow
 
-`type: plan` 產生 Task[]。逐 Task 工作由 YAML 顯式定義一段連續 `scope: task`：
+`type: plan` 是特殊 Stage：它會回傳驗證後的 Tasks，以及執行這些 Tasks 所需的 child Stage definitions。現行 PlanStage 會在 runtime 產生交錯的 AI Execute -> AI Review children，因此 parent YAML 不需要預先列出這些 generated children：
 
 ```yaml
 stages:
   planning:
     type: plan
 
-  execute:
-    type: task
-    scope: task
+  validate_ai:
+    type: ai_validator
+    validator: ai
 
-  review:
-    type: review
-    scope: task
-    routes:
-      fail: execute
-
-flow: [planning, execute, review]
+flow: [planning, validate_ai]
 ```
 
-自訂 `command` / Python Stage 也能用 `produces: tasks`，所以不一定要 PlanStage。
+實際執行是 `planning -> generated child Workflow -> validate_ai`。Child Workflow 與 parent 共用相同 StageExecutor、routing、retry/recover 與 durable Resume。
+
+其他特殊 Stage / plugin 也能產生 `tasks` 或 `stages`，但 producer 必須自己提供 child Stage definitions；Runner 不推測 child Stage 類型。沒有 task-level Workflow mode，也沒有 `scope` 欄位。
 
 ## Validation
 
 File validation 通常是 `command` + `result_kind: validation`。AI validation 使用 `type: ai_validator`、`validator: ai`。
 
-Validator 是普通 top-level Stage，可以放在 flow 中間或最後，但不能設 `scope: task`。
+Validator 是普通 Stage，可以放在靜態或動態產生的工作之前或之後。
 
 獨立 Final AI Validation 建議：
 
