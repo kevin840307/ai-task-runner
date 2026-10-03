@@ -61,29 +61,6 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
     page.wait_for_timeout(120)
 
 
-def _reconnect_edge_target(page, edge_id: str, target_selector: str) -> None:
-    edge = page.locator(f'.react-flow__edge[data-id="{edge_id}"]')
-    edge.click(force=True)
-    updater = page.get_by_test_id(f"rf__edge-{edge_id}").locator(".react-flow__edgeupdater-target")
-    updater.wait_for(state="attached")
-    target = page.locator(target_selector)
-    updater_box = updater.bounding_box()
-    target_box = target.bounding_box()
-    assert updater_box and target_box
-    page.mouse.move(
-        updater_box["x"] + updater_box["width"] / 2,
-        updater_box["y"] + updater_box["height"] / 2,
-    )
-    page.mouse.down()
-    page.mouse.move(
-        target_box["x"] + target_box["width"] / 2,
-        target_box["y"] + target_box["height"] / 2,
-        steps=18,
-    )
-    page.mouse.up()
-    page.wait_for_timeout(220)
-
-
 def _save_editor(page) -> None:
     button = page.locator(".studio-header button.primary")
     assert button.is_enabled()
@@ -391,18 +368,20 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
                 assert saved["stages"]["execute"]["profile"] == "execute"
 
-                # Drag the existing explicit edge target to retarget it in place.
-                _reconnect_edge_target(
+                # Drawing the same semantic output to another target is the primary
+                # retarget UX. The existing explicit route is replaced atomically.
+                _connect_nodes(
                     page,
-                    "review:fail:worker",
+                    '.react-flow__node[data-id="review"] .react-flow__handle.fail',
                     '.react-flow__node[data-id="after"] .react-flow__handle.stage-input',
                 )
                 page.locator('.react-flow__edge[data-id="review:fail:after"]').wait_for(state="attached")
+                assert page.locator('.react-flow__edge[data-id="review:fail:worker"]').count() == 0
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "after"
 
-                # Normal reconnect from the FAIL output can still point it back to worker.
+                # The same operation can retarget it back to worker.
                 _connect_nodes(
                     page,
                     '.react-flow__node[data-id="review"] .react-flow__handle.fail',
