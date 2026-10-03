@@ -66,7 +66,7 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .palette-item:active { cursor: grabbing; }
 .palette-item[draggable="false"] { opacity: .5; cursor: default; }
 .palette-icon { flex: none; display: grid; place-items: center; width: 27px; height: 27px; color: #2563eb; background: #eaf2ff; border-radius: 8px; font-size: 14px; font-weight: 800; box-shadow: inset 0 0 0 1px rgba(37,99,235,.04); }
-.palette-icon.type-review, .palette-icon.type-ai_validator { color: #7c3aed; background: #f3e8ff; }
+.palette-icon.type-ai_validator { color: #7c3aed; background: #f3e8ff; }
 .palette-icon.type-command { color: #0f766e; background: #dcfce7; }
 .palette-copy { display: grid; min-width: 0; gap: 2px; flex: 1; }
 .palette-copy strong { color: #0f172a; font-size: 11px; }
@@ -197,15 +197,14 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
   border: 1px solid #d5deea; border-left: 4px solid #64748b; background: #fff; box-shadow: 0 5px 16px rgba(15,23,42,.07);
 }
 .wf-stage.type-plan, .wf-stage.type-base { border-left-color: #4775d1; }
-.wf-stage.type-task { border-left-color: #4f46e5; }
-.wf-stage.type-review, .wf-stage.type-ai_validator { border-left-color: #8b5cf6; }
+.wf-stage.type-base.profile-execute { border-left-color: #4f46e5; }
+.wf-stage.type-base.profile-review, .wf-stage.type-ai_validator { border-left-color: #8b5cf6; }
 .wf-stage.type-command { border-left-color: #0f766e; }
 .wf-stage.type-handoff { border-left-color: #d97706; }
 .wf-stage.selected { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.17), 0 9px 24px rgba(15,23,42,.10); }
 .react-flow__node.disconnected .wf-stage { border-style: dashed; background: #fffdfa; }
 .wf-stage-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
 .wf-stage-head .stage-type { color: #475569; font-size: 10px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }
-.wf-stage-head b.scope-chip { font-size: 9px; color: #6d28d9; background: #f5f3ff; border-radius: 999px; padding: 3px 6px; }
 .wf-stage > strong { display: block; font-size: 14px; line-height: 1.3; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wf-stage > small { display: block; margin-top: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #94a3b8; font-size: 10px; }
 .wf-stage-meta { min-height: 18px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
