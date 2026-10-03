@@ -405,6 +405,32 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
             assert page.locator(".studio-workflow-main").is_visible()
+
+            # Prompt crash/reload recovery stays local-only and hash-gated.
+            prompt_path = next(Path(td).rglob("e2e_prompt.md"))
+            canonical_before_draft = prompt_path.read_text(encoding="utf-8")
+            local_draft = "# Unsaved Prompt Draft\n\n{{ goal }}\n\nLOCAL_DRAFT_ONLY\n"
+            page.fill("#studioPromptTextarea", local_draft)
+            page.wait_for_function("!document.querySelector('#saveStudioButton')?.disabled")
+            assert prompt_path.read_text(encoding="utf-8") == canonical_before_draft
+            page.wait_for_function(
+                "() => Array.from({length: localStorage.length}, (_, i) => localStorage.key(i)).some(key => key?.startsWith('ai-task-runner:prompt-draft:v1:'))"
+            )
+            page.evaluate(
+                """() => {
+                    const saved = state.studioFile;
+                    document.querySelector('#studioPromptTextarea').value = saved.content;
+                    updateDirtyState();
+                    void maybeRestorePromptDraft(saved);
+                }"""
+            )
+            page.get_by_text("Restore unsaved Prompt draft?").wait_for(state="visible")
+            page.get_by_role("button", name="Restore Draft").click()
+            page.wait_for_function(
+                "() => document.querySelector('#studioPromptTextarea')?.value.includes('LOCAL_DRAFT_ONLY')"
+            )
+            assert prompt_path.read_text(encoding="utf-8") == canonical_before_draft
+
             page.fill("#studioPromptTextarea", "# Prompt\n\n{{ goal }}\n\nReturn concise evidence.\n")
             page.wait_for_function("!document.querySelector('#saveStudioButton')?.disabled")
             page.click("#saveStudioButton")
