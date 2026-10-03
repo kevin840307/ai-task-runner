@@ -213,6 +213,8 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .wf-stage-meta .disconnected-chip { background: #fff7ed; color: #b45309; }
 .wf-handles { display: grid; grid-template-columns: repeat(2,1fr); margin-top: 12px; color: #64748b; text-align: center; font-size: 9px; font-weight: 800; }
 .wf-handles.single { grid-template-columns: 1fr; }
+.react-flow__edges { z-index: 1 !important; }
+.react-flow__nodes { z-index: 2 !important; }
 .react-flow__handle { width: 22px; height: 22px; border: 4px solid #fff; box-shadow: 0 0 0 1px #94a3b8, 0 2px 5px rgba(15,23,42,.16); z-index: 4 !important; pointer-events: auto !important; }
 .react-flow__handle:hover { width: 26px; height: 26px; box-shadow: 0 0 0 4px rgba(37,99,235,.18); }
 .react-flow__handle.stage-input { background: #64748b; }
