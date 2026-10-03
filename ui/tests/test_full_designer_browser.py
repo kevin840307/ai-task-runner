@@ -64,8 +64,10 @@ def _connect_nodes(page, source_selector: str, target_selector: str) -> None:
 def _save_editor(page) -> None:
     button = page.locator(".studio-header button.primary")
     assert button.is_enabled()
+    assert page.locator(".unsaved-badge").count() == 1
     button.click()
-    page.get_by_text("Workflow saved").wait_for(timeout=5000)
+    page.locator(".unsaved-badge").wait_for(state="detached", timeout=8000)
+    assert button.is_enabled()
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
