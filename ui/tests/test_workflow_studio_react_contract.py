@@ -322,7 +322,7 @@ def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_edit
     assert 'id="assetPageTitle">Workflows</h1>' in index
     assert 'id="promptNav"' in index
     assert 'id="settingsNav"' not in index
-    assert 'id="studioEditorModeSwitch"' in index and "hidden" in index
+    assert 'id="studioEditorModeSwitch"' not in index
     assert "openWorkflowEditorItem" in app
     assert 'item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item)' in app
     assert 'assets.import_yaml' in (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
@@ -522,3 +522,35 @@ def test_designer_dynamic_producer_ui_is_catalog_driven():
     assert "Dynamic child Workflow" in text
     assert "dynamic-chip" in text
     assert ".dynamic-stage-note" in styles
+
+
+
+def test_workflow_asset_workspace_has_no_legacy_workflow_editor():
+    index = (ROOT / "ui" / "static" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    for legacy_id in (
+        "visualDesignerPanel", "yamlEditorPanel", "studioTextarea",
+        "addStageBackdrop", "flowMapBackdrop", "studioEditorModeSwitch",
+    ):
+        assert f'id="{legacy_id}"' not in index
+        assert legacy_id not in app
+    assert "workflow-flow-map.css" not in styles
+    assert "WorkflowFlowMap" not in app
+
+    # Prompt remains the only inline editor in the asset workspace.
+    assert 'id="promptEditorPanel"' in index
+    assert 'id="studioPromptTextarea"' in index
+    assert 'state.studioFile?.kind !== "prompt"' in app
+
+    # Workflow management is owned by the Library context menu.
+    for control in (
+        "workflowContextOpen", "workflowContextVisibility", "workflowContextRename",
+        "workflowContextDuplicate", "workflowContextExport", "workflowContextDelete",
+    ):
+        assert f'id="{control}"' in index
+    assert "renameWorkflowItem" in app
+    assert "duplicateWorkflowItem" in app
+    assert "exportWorkflowItem" in app
+    assert "deleteWorkflowItem" in app
