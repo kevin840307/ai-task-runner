@@ -73,9 +73,6 @@ class StageExecutor:
         label: str = "",
         retry_limit: int | None = None,
     ) -> StageResult:
-        if bool(getattr(stage, "fresh_session_on_start", False)) and self._has_session(stage, ctx):
-            self._fresh_session(stage, ctx)
-
         retry_limit = int(ctx.config.stage_retries if retry_limit is None else retry_limit)
         unlimited = retry_limit == -1
         retries_used = 0
