@@ -129,18 +129,16 @@ class StageExecutor:
                 failures_in_session = 0
                 retry_mode = "recover"
                 service_delay = base_retry_delay
-                progress.set_status(
-                    "Recovering",
-                    f"{retry_mode} · retry {retries_used} · wait {service_delay:g}s · {previous_error[:180]}",
+                self._announce_recovery(
+                    stage, retry_mode, retries_used, service_delay, previous_error
                 )
                 self._sleep(ctx, service_delay)
                 continue
 
             if is_transient_error(error):
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
-                progress.set_status(
-                    "Recovering",
-                    f"{retry_mode} · retry {retries_used} · wait {service_delay:g}s · {previous_error[:180]}",
+                self._announce_recovery(
+                    stage, retry_mode, retries_used, service_delay, previous_error
                 )
                 self._sleep(ctx, service_delay)
                 if service_delay:
@@ -160,9 +158,8 @@ class StageExecutor:
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
 
             retry_delay = base_retry_delay
-            progress.set_status(
-                "Recovering",
-                f"{retry_mode} · retry {retries_used} · wait {retry_delay:g}s · {previous_error[:180]}",
+            self._announce_recovery(
+                stage, retry_mode, retries_used, retry_delay, previous_error
             )
             self._sleep(ctx, retry_delay)
 
@@ -195,6 +192,31 @@ class StageExecutor:
         ctx.save_state()
         progress.stage_finished(StageAction(stage, ctx, label), result)
         return result
+
+    @staticmethod
+    def _announce_recovery(
+        stage: Stage,
+        retry_mode: str,
+        retry_number: int,
+        wait_seconds: float,
+        error: str,
+    ) -> None:
+        detail = (
+            f"{retry_mode} · retry {retry_number} · wait {wait_seconds:g}s · "
+            f"{error[:180]}"
+        )
+        # UI status is transient; runner.recovery is the stable structured
+        # observability contract used by logs/live reliability probes.
+        progress.set_status("Recovering", detail)
+        progress.publish(
+            "runner.recovery",
+            "retry",
+            stage=str(getattr(stage, "name", "") or ""),
+            retry_mode=retry_mode,
+            retry=retry_number,
+            wait_seconds=wait_seconds,
+            error=error,
+        )
 
     def _attempt(
         self,
