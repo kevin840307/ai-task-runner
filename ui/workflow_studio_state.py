@@ -662,8 +662,12 @@ class WorkflowStudioMixin:
         if profile is not None:
             if stage_type not in (None, "base"):
                 raise ValueError("Stage profile is valid only for AI Stage")
-            if profile not in {"generic", "execute", "review"}:
-                raise ValueError("Stage profile must be generic, execute, or review")
+            profiles = set(
+                (((self.workflow_catalog().get("stage_types") or {}).get("base") or {}).get("profiles") or {})
+            )
+            if profile not in profiles:
+                available = ", ".join(sorted(profiles)) or "<none>"
+                raise ValueError(f"Stage profile must be one of: {available}")
         mode = fields.get("mode")
         if mode not in (None, "", "readonly", "write"):
             raise ValueError("Stage mode must be readonly or write")
@@ -941,20 +945,19 @@ class WorkflowStudioMixin:
                 return resolved
         return None
 
-    @staticmethod
-    def _effective_stage_prompt_reference(config: dict) -> str:
+    def _effective_stage_prompt_reference(self, config: dict) -> str:
         prompt = str(config.get("prompt") or "").strip()
         if prompt:
             return prompt
-        if str(config.get("type") or "base") != "base":
-            return ""
-        profile = str(config.get("profile") or "generic")
-        if profile == "generic":
-            return "common/generic.md"
-        if profile == "execute":
-            return "common/execution.md"
-        if profile == "review":
-            return "common/review.md"
+        stage_type = str(config.get("type") or "base")
+        catalog = (self.workflow_catalog().get("stage_types") or {}).get(stage_type) or {}
+        if stage_type == "base":
+            profile = str(config.get("profile") or "generic")
+            defaults = ((catalog.get("profiles") or {}).get(profile) or {}).get("defaults") or {}
+            return str(defaults.get("prompt") or "").strip()
+        for option in catalog.get("options") or []:
+            if option.get("name") == "prompt":
+                return str(option.get("default") or "").strip()
         return ""
 
     def _workflow_prompt_refs(self, content: str) -> list[tuple[str, str]]:
