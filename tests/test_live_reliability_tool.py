@@ -1858,7 +1858,6 @@ def test_review_probe_timeout_reports_state_and_console_tail(tmp_path: Path, mon
                 "stage": "reviewing",
                 "cycle": 2,
                 "workflow_position": 2,
-                "task_step": 0,
                 "transition_previous": {
                     "stage": "execute",
                     "status": "pass",
