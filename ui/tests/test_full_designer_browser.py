@@ -67,14 +67,9 @@ def _reconnect_edge_target(page, edge_id: str, target_selector: str) -> None:
     updater = page.get_by_test_id(f"rf__edge-{edge_id}").locator(".react-flow__edgeupdater-target")
     updater.wait_for(state="attached")
     target = page.locator(target_selector)
-    start = updater.bounding_box()
-    end = target.bounding_box()
-    assert start and end
-    page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
-    page.mouse.down()
-    page.mouse.move(end["x"] + end["width"] / 2, end["y"] + end["height"] / 2, steps=12)
-    page.mouse.up()
-    page.wait_for_timeout(150)
+    assert updater.bounding_box() and target.bounding_box()
+    updater.drag_to(target, force=True)
+    page.wait_for_timeout(180)
 
 
 def _save_editor(page) -> None:
