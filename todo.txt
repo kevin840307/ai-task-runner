@@ -238,6 +238,15 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed Dynamic Handoff session_policy=main live false failure after successful completion.
+    - Root cause: finish_run intentionally clears state.ai_session_id and the primary AI client session
+      after Workflow PASS, but the older live assertion treated a cleared final ai_session_id as failure.
+    - The live probe now forces main_role through a deterministic gate twice and verifies both real
+      model.result session ids are identical during execution.
+    - After completion it requires the primary durable session to be cleared, matching finish_run.
+    - role/fresh policies remain independently checked through stage_sessions and real model session ids.
+    - Added deterministic contract coverage for primary-session cleanup.
+
 [x] Reworked Dynamic Handoff session_policy=main live proof to test direct reuse instead of final-state retention.
     - The previous probe ran main_role only once, then required final completed state.ai_session_id to equal
       that one model session. Primary-session durability across process restart is already owned by the
@@ -412,3 +421,5 @@ CURRENT IMPLEMENTATION NOTES
 - Workflow Problems panel already validates duplicate/missing flow targets, empty Handoff targets and unreachable Stages at Save boundary, blocks errors, keeps warnings visible, and focuses the affected Stage.
 - Composer already keeps Workflow + Run primary while Backend/validators/environment checks stay under Options.
 - Workflow Library is a full-width management surface with scope, Chat visibility, modified freshness and single Editor entry.
+
+- Designer output handles are now explicitly kept above existing edges with pointer hit priority so PASS/FAIL/HANDOFF can be re-used for additional connections after an edge already exists. Browser Handoff multi-target E2E remains the verification gate before this is considered closed.
