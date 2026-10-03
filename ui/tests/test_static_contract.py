@@ -216,3 +216,11 @@ class StaticContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+    def test_studio_action_feedback_is_inline_and_persistent(self):
+        self.assertIn('id="studioStatus"', self.html)
+        self.assertIn('row = $("studioStatus")', self.app_js)
+        self.assertIn('row.hidden = !detail', self.app_js)
+        self.assertIn('row.classList.toggle("error"', self.app_js)
