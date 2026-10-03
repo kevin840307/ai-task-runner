@@ -117,6 +117,22 @@
                 <div id="backendDropdownMenu" class="workflow-dropdown-menu backend-dropdown-menu" role="listbox" hidden></div>
               </div>
             </div>
+            <div id="validationPickers" class="composer-validation-row options-validation-row" hidden>
+              <div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>
+                <span class="resource-kind">Python 驗證</span>
+                <input id="validator" autocomplete="off" readonly title="" aria-label="Python validator path" />
+                <span id="validatorResourceName" class="resource-name">未選擇</span>
+                <button id="browseValidatorButton" class="resource-action" type="button">選擇</button>
+                <button id="clearValidatorButton" class="resource-clear" type="button" aria-label="清除 Python validator" title="清除" hidden>×</button>
+              </div>
+              <div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>
+                <span class="resource-kind">AI 驗證</span>
+                <input id="aiValidatorPrompt" autocomplete="off" readonly title="" aria-label="AI validator prompt path" />
+                <span id="aiValidatorPromptResourceName" class="resource-name">預設 Prompt</span>
+                <button id="browseAiValidatorPromptButton" class="resource-action" type="button">+ Prompt</button>
+                <button id="clearAiValidatorPromptButton" class="resource-clear" type="button" aria-label="清除 AI validator prompt" title="清除" hidden>×</button>
+              </div>
+            </div>
             <div id="runConfigLockNote" class="run-config-lock-note" hidden>Current task configuration is locked until Reset or completion.</div>
             <button id="rerunButton" class="action-button options-rerun" type="button" hidden>重新執行上次任務</button>
             <button id="environmentCheckButton" class="action-button options-environment-check" type="button" data-i18n="env.check">檢查環境</button>
@@ -135,22 +151,6 @@
                 <div id="workflowDropdownMenu" class="workflow-dropdown-menu" role="listbox" hidden></div>
               </div>
               <button id="optionsButton" class="options-button" type="button" aria-expanded="false" data-i18n="options.button">選項</button>
-              <div id="validationPickers" class="composer-validation-row" hidden>
-                <div id="validatorPicker" class="validator-picker composer-validator-picker composer-resource-picker" hidden>
-                  <span class="resource-kind">Python 驗證</span>
-                  <input id="validator" autocomplete="off" readonly title="" aria-label="Python validator path" />
-                  <span id="validatorResourceName" class="resource-name">未選擇</span>
-                  <button id="browseValidatorButton" class="resource-action" type="button">選擇</button>
-                  <button id="clearValidatorButton" class="resource-clear" type="button" aria-label="清除 Python validator" title="清除" hidden>×</button>
-                </div>
-                <div id="aiValidatorPromptPicker" class="validator-picker composer-validator-picker composer-ai-prompt-picker composer-resource-picker" hidden>
-                  <span class="resource-kind">AI 驗證</span>
-                  <input id="aiValidatorPrompt" autocomplete="off" readonly title="" aria-label="AI validator prompt path" />
-                  <span id="aiValidatorPromptResourceName" class="resource-name">預設 Prompt</span>
-                  <button id="browseAiValidatorPromptButton" class="resource-action" type="button">+ Prompt</button>
-                  <button id="clearAiValidatorPromptButton" class="resource-clear" type="button" aria-label="清除 AI validator prompt" title="清除" hidden>×</button>
-                </div>
-              </div>
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">
