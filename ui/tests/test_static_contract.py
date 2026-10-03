@@ -204,5 +204,15 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("Modified:", self.app_js)
 
 
+    def test_recent_runs_uses_existing_project_history_and_runtime_surface(self):
+        self.assertIn('id="runHistoryButton"', self.html)
+        self.assertIn('id="runHistoryPanel"', self.html)
+        self.assertIn('id="runHistoryList"', self.html)
+        self.assertIn("function refreshRunHistory(", self.app_js)
+        self.assertIn("/api/project/runs?project=", self.app_js)
+        self.assertIn("item.dataset.runId = String(message.run_id)", self.app_js)
+        self.assertIn("setRunHistoryOpen(false)", self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
