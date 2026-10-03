@@ -603,3 +603,16 @@ def test_workflow_editor_exposes_saved_unsaved_state_and_save_reason():
     assert 'editorDirty ? tx("unsaved") : tx("saved")' in text
     assert 'title={!editorDirty ? tx("saved")' in text
     assert ".studio-header .saved-badge" in styles
+
+
+def test_designer_has_save_boundary_problems_panel():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = STYLES.read_text(encoding="utf-8")
+
+    assert "function graphProblems(visual: Visual)" in text
+    assert 'message: "START has no connected Stage."' in text
+    assert 'message: "Stage is unreachable from START."' in text
+    assert 'message: "Handoff has no target."' in text
+    assert 'setMessage("Fix Workflow problems before saving.")' in text
+    assert 'aria-label="Workflow problems"' in text
+    assert ".workflow-problems" in styles
