@@ -12,6 +12,23 @@ CLI、API、YAML List、UI 全部使用同一套 runtime。
 ### Stage
 只負責語意工作並回傳 `StageResult`。
 
+### Stage 模組責任
+
+```text
+runner/workflow/
+  stages/
+    contracts.py          所有 Stage/plugin 共用的 protocol/context/result
+    base_stage.py         一般 AI Stage + profile 行為
+    plan_stage.py         Plan 特殊 Stage
+    ai_validator_stage.py AI Validator 特殊 Stage
+    command_stage.py      deterministic command Stage
+    handoff_stage.py      Dynamic Handoff 特殊 Stage
+  execution/
+    stage_executor.py     共用 retry/session/recovery 執行邊界
+```
+
+新增 plugin 或特殊 Stage 時，只依賴 `stages/contracts.py` 與自身行為；retry/session/recovery 不放進 Stage。非 AI Stage 不應依賴 `BaseStage`。
+
 ### StageExecutor
 只負責技術可靠性：
 - technical retry；
