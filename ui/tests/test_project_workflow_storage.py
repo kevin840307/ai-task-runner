@@ -159,3 +159,30 @@ def test_stage_yaml_accepts_unsaved_designer_stage_draft(tmp_path: Path) -> None
     assert parsed["ok"] is True
     assert parsed["fields"]["type"] == "base"
     assert parsed["fields"]["profile"] == "review"
+
+
+
+def test_prompt_read_exposes_workflow_stage_usages(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    prompt = state.studio_prompt_create("common/used_review", "project", project)
+    workflow = state.studio_workflow_create("uses_prompt", "project", project)
+
+    workflow_file = state.studio_read(workflow["item"]["id"], project)
+    content = (
+        "stages:\n"
+        "  review:\n"
+        "    type: base\n"
+        "    profile: review\n"
+        "    prompt: common/used_review.md\n"
+        "flow: [review]\n"
+    )
+    state.studio_save(
+        workflow["item"]["id"],
+        content,
+        workflow_file["hash"],
+        project,
+    )
+
+    loaded = state.studio_read(prompt["item"]["id"], project)
+
+    assert loaded["used_by"] == ["uses_prompt.workflow.yaml · review"]
