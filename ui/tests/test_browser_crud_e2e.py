@@ -53,13 +53,31 @@ def _load_main_ui_document(page, html: str) -> None:
     page.goto("http://local.test/", wait_until="domcontentloaded")
 
 
+def _install_main_ui_scripts(page, static_root: Path) -> None:
+    # app.js is a real ES module. Route the module graph through the same HTTP
+    # origin as the document instead of injecting app.js as a classic script.
+    for relative in ("app.js", "js/ui-lifecycle.js", "js/workflow-generator.js"):
+        source = static_root / relative
+        page.route(
+            f"http://local.test/{relative}",
+            lambda route, source=source: route.fulfill(
+                status=200,
+                content_type="text/javascript",
+                body=source.read_text(encoding="utf-8"),
+            ),
+        )
+    page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
+    page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
+    page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
+    page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
+    page.add_script_tag(url="http://local.test/app.js", type="module")
+
+
 def _boot_main_ui(page) -> None:
-    # app.js performs its production bootstrap immediately when injected. Do not
-    # reach into private lexical functions such as loadProjects(); wait for the
-    # same rendered state a real browser user observes.
+    # app.js performs its production bootstrap immediately as an ES module.
     page.wait_for_function(
         "document.querySelector('#projectName')?.textContent === 'Fixture Project'",
-        timeout=5000,
+        timeout=8000,
     )
 
 
@@ -265,11 +283,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             )
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
-            page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
-            page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
-            page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
-            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
-            page.add_script_tag(path=str(static_root / "app.js"))
+            _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.click("#workflowNav")
             page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
@@ -357,7 +371,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport=viewport)
             page.expose_function("__apiBridge", _bridge_for(state))
-            page.set_content(html, wait_until="domcontentloaded")
+            _load_main_ui_document(page, html)
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
                     const method = (options.method || 'GET').toUpperCase();
@@ -371,11 +385,7 @@ def test_workflow_settings_common_desktop_viewports_do_not_overflow(viewport) ->
             )
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
-            page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
-            page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
-            page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
-            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
-            page.add_script_tag(path=str(static_root / "app.js"))
+            _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.click("#workflowNav")
             page.wait_for_function("document.querySelector('#workflowNav')?.classList.contains('active')")
@@ -432,7 +442,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             browser = _launch_browser(playwright)
             page = browser.new_page(viewport={"width": 1366, "height": 768})
             page.expose_function("__apiBridge", _bridge_for(state))
-            page.set_content(html, wait_until="domcontentloaded")
+            _load_main_ui_document(page, html)
             page.evaluate(
                 """window.fetch = async (url, options = {}) => {
                     const method = (options.method || 'GET').toUpperCase();
@@ -442,11 +452,7 @@ def test_chat_defaults_to_ralphy_ai_validate_when_no_saved_choice() -> None:
             )
             for css in sorted((static_root / "css").glob("*.css")):
                 page.add_style_tag(path=str(css))
-            page.add_script_tag(path=str(static_root / "js" / "i18n.js"))
-            page.add_script_tag(path=str(static_root / "js" / "ui-dialogs.js"))
-            page.add_script_tag(path=str(static_root / "js" / "studio-support.js"))
-            page.add_script_tag(path=str(static_root / "js" / "workflow-flow-map.js"))
-            page.add_script_tag(path=str(static_root / "app.js"))
+            _install_main_ui_scripts(page, static_root)
             _boot_main_ui(page)
             page.wait_for_function("document.querySelector('#workflowSelectedLabel')?.textContent === 'ralphy_ai_validate.yaml'")
             assert page.locator("#workflowSelectedLabel").inner_text() == "ralphy_ai_validate.yaml"
