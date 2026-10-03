@@ -747,7 +747,6 @@ flow:
 def test_handoff_stage_defaults_to_durable_role_session():
     spec = HandoffStageSpec(name="router", targets=["worker"])
     assert spec.session_policy == "role"
-    assert spec.session_key == ""
 
 
 def test_builtin_dynamic_handoff_workflow_uses_one_router_with_formal_roles():
@@ -815,21 +814,20 @@ flow:
     assert workflow[1]["session_policy"] == policy
 
 
-def test_explicit_session_policy_rejects_session_key(tmp_path):
+def test_removed_session_key_is_rejected_as_unknown_option(tmp_path):
     path = write_workflow(
         tmp_path,
         """
 stages:
   worker:
     type: base
-    session_policy: role
     session_key: conflicting_key
 flow:
   - worker
 """,
     )
 
-    with pytest.raises(RunnerError, match="session_key is only valid"):
+    with pytest.raises(RunnerError, match="unknown options"):
         load_workflow(path)
 
 
