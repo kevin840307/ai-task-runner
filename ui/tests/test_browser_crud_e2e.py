@@ -317,7 +317,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.fill("#studioSearchInput", "definitely-no-match")
             page.wait_for_timeout(80)
             assert page.locator(".studio-list-empty", has_text="No matching workflows").count() == 1
-            page.get_by_role("button", name="Clear search").click()
+            page.locator(".studio-empty-action", has_text="Clear search").click()
             page.wait_for_timeout(80)
             assert page.locator("#studioSearchInput").input_value() == ""
             assert workflow_row.count() == 1
