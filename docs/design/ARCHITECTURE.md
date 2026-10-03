@@ -27,7 +27,7 @@ runner/workflow/
     stage_executor.py     shared retry/session/recovery execution boundary
 ```
 
-A plugin or new special Stage depends on `stages/contracts.py` and its own behavior. It must not own retry/session/recovery policy. Non-AI Stages do not depend on `BaseStage`.
+A plugin or new special Stage depends on `workflow/contracts.py` and its own behavior. It must not own retry/session/recovery policy. Non-AI Stages do not depend on `BaseStage`.
 
 ### StageExecutor
 Owns technical reliability only:
