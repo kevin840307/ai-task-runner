@@ -569,6 +569,7 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         })(),
       },
       deletable: false,
+      zIndex: 2,
       className: disconnected ? "disconnected" : "",
     });
   });
@@ -889,6 +890,7 @@ function App() {
       type: "smoothstep",
       className: `${edge.className || ""}${selected ? related ? " focused" : " muted" : ""}`,
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 20, height: 20 },
+      zIndex: 0,
     };
   }), [edges, selected]);
 
