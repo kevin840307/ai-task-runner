@@ -629,6 +629,22 @@ class ProjectRuntimeMixin:
                 if isinstance(state.get("transition_previous"), dict)
                 else {}
             ),
+            "recent_transitions": [
+                {
+                    "stage": str(item.get("stage") or ""),
+                    "status": str(item.get("status") or ""),
+                    "target": str(item.get("target") or ""),
+                    "cycle": int(item.get("cycle") or 0),
+                    "kind": str(item.get("kind") or ""),
+                    "timestamp": float(item.get("timestamp") or 0),
+                }
+                for item in (
+                    state.get("transition_history", [])[-20:]
+                    if isinstance(state.get("transition_history"), list)
+                    else []
+                )
+                if isinstance(item, dict)
+            ],
             "task": current_task,
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
