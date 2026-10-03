@@ -79,10 +79,13 @@ def parse_ok(text, ctx):
     return {"passed": True}
 
 
-def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tmp_path):
+def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tmp_path, monkeypatch):
     model = FakeAI(["bad1", "bad2", "bad3", "OK"])
     ctx = context(tmp_path, model)
-    ctx.scratch["validator"] = model
+    monkeypatch.setattr(
+        "runner.workflow.stages.base_stage.create_ai_client",
+        lambda *args, **kwargs: model,
+    )
     prompt = tmp_path / "validator.md"
     prompt.write_text(
         "Original specification:\n{{ goal }}\nFULL VALIDATOR CONTRACT",
@@ -91,7 +94,6 @@ def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tm
     stage = AIValidatorStage(
         AIValidatorStageSpec(
             name="validate_ai",
-            session_key="validator",
             prompt=str(prompt),
             parser=parse_ok,
             runs=1,
@@ -110,7 +112,7 @@ def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tm
     assert "FULL VALIDATOR CONTRACT" in model.calls[3][2]
 
 
-def test_independent_validator_votes_each_start_fresh_session(tmp_path):
+def test_independent_validator_votes_each_start_fresh_session(tmp_path, monkeypatch):
     model = FakeAI(["OK", "OK", "OK"])
     ctx = context(
         tmp_path,
@@ -118,7 +120,10 @@ def test_independent_validator_votes_each_start_fresh_session(tmp_path):
         final_ai_validations=3,
         final_ai_required_passes=2,
     )
-    ctx.scratch["validator"] = model
+    monkeypatch.setattr(
+        "runner.workflow.stages.base_stage.create_ai_client",
+        lambda *args, **kwargs: model,
+    )
     prompt = tmp_path / "validator.md"
     prompt.write_text("FULL", encoding="utf-8")
     stage = AIValidatorStage(
@@ -127,7 +132,6 @@ def test_independent_validator_votes_each_start_fresh_session(tmp_path):
             session_key="validator",
             prompt=str(prompt),
             parser=parse_ok,
-            fresh_session_each_run=True,
         )
     )
 
@@ -138,7 +142,7 @@ def test_independent_validator_votes_each_start_fresh_session(tmp_path):
     assert [after for _, after, _ in model.calls] == ["S1", "S2", "S3"]
 
 
-def test_validator_vote_threshold_comes_only_from_runtime_config(tmp_path):
+def test_validator_vote_threshold_comes_only_from_runtime_config(tmp_path, monkeypatch):
     model = FakeAI(["OK", "OK", "BAD"])
     ctx = context(
         tmp_path,
@@ -146,7 +150,10 @@ def test_validator_vote_threshold_comes_only_from_runtime_config(tmp_path):
         final_ai_validations=3,
         final_ai_required_passes=3,
     )
-    ctx.scratch["validator"] = model
+    monkeypatch.setattr(
+        "runner.workflow.stages.base_stage.create_ai_client",
+        lambda *args, **kwargs: model,
+    )
     prompt = tmp_path / "validator.md"
     prompt.write_text("FULL", encoding="utf-8")
 
