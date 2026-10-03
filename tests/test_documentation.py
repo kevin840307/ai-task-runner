@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = {
     "README": ROOT / "README.md",
     "README_ZH": ROOT / "README.zh-TW.md",
-    "ARCHITECTURE": ROOT / "architecture.md",
-    "FUTURE": ROOT / "future.txt",
-    "DEV": ROOT / "DevFollow.txt",
+    "ARCHITECTURE": ROOT / "docs" / "design" / "ARCHITECTURE.md",
+    "ARCHITECTURE_ZH": ROOT / "docs" / "design" / "ARCHITECTURE.zh-TW.md",
+    "TODO": ROOT / "todo.txt",
 }
 
 
@@ -110,16 +110,16 @@ def test_architecture_keeps_behavior_ownership_explicit():
     assert "StageExecutor" in value
     assert "technical reliability" in value
     assert "FlowEngine" in value
-    assert "semantic PASS/FAIL navigation" in value
+    assert "semantic navigation" in value
     assert "StateStore" in value
-    assert "Dynamic Handoff is the only multi-agent runtime primitive" in value
+    assert "## Dynamic Handoff" in value
 
 
-def test_future_todo_keeps_current_runtime_and_parallel_deferred():
-    value = text("FUTURE")
-    assert "Linear Workflow with Rollback / Loop" in value
-    assert "Dynamic Handoff" in value
-    assert "Dynamic Handoff is the only multi-agent runtime primitive" in value
-    assert "Future - do not implement yet" in value
-    assert "Parallel" in value
+def test_todo_keeps_only_current_runtime_and_remaining_acceptance_gates():
+    value = text("TODO")
+    assert "Dynamic Handoff is supported" in value
+    assert "No public scope / task_step / type: task / type: review compatibility contract" in value
+    assert "REAL BACKEND GATE" in value
+    assert "24H ACCEPTANCE" in value
     assert "high-density soak" in value
+    assert "future.txt" not in value
