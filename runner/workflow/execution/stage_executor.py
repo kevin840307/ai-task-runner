@@ -55,10 +55,10 @@ class StageAction:
 class StageExecutor:
     """Run a Stage until it returns a semantic result or an unrecoverable error.
 
-    The unattended default is unlimited technical recovery. One session stays
-    bounded: after a small same-session retry budget, the Stage receives a fresh
-    session and continues. Retry counters are attempt-local; durable resume only
-    needs to know which Workflow Stage is current.
+    The unattended default is unlimited technical recovery. One Same Session stays
+    bounded: after a small same-session retry budget, the Stage receives a Fresh Session
+    and continues. Retry counters are attempt-local; durable resume only needs to know
+    which Workflow Stage is current.
     """
 
     def __init__(self, hooks=None) -> None:
