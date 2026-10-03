@@ -1919,3 +1919,41 @@ def test_review_gate_fails_once_then_passes(tmp_path: Path):
     assert second.returncode == 0
     assert "REVIEW_GATE_PASSED" in second.stdout
 
+
+
+
+def test_runner_command_explicit_workflow_only_injects_file_validator_when_required(tmp_path: Path):
+    config = settings(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "prompt.md").write_text("goal", encoding="utf-8")
+    (project / "validation.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    handoff = tmp_path / "handoff.yaml"
+    handoff.write_text(
+        "stages:\n"
+        "  coordinator:\n"
+        "    type: handoff\n"
+        "    targets: [role]\n"
+        "  role:\n"
+        "    type: base\n"
+        "    profile: generic\n"
+        "flow: [coordinator, role]\n",
+        encoding="utf-8",
+    )
+    no_file_validator = live.runner_command(config, project, workflow=handoff)
+    assert "--workflow" in no_file_validator
+    assert "--validator" not in no_file_validator
+
+    file_workflow = tmp_path / "file.yaml"
+    file_workflow.write_text(
+        "stages:\n"
+        "  validate_file:\n"
+        "    type: command\n"
+        "    command: '{python} {validator}'\n"
+        "    result_kind: validation\n"
+        "flow: [validate_file]\n",
+        encoding="utf-8",
+    )
+    with_file_validator = live.runner_command(config, project, workflow=file_workflow)
+    assert with_file_validator[with_file_validator.index("--validator") + 1] == str(project / "validation.py")
