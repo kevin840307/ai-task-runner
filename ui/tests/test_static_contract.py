@@ -154,5 +154,12 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn('"Save changes (Ctrl+S)."', self.app_js)
 
 
+    def test_runtime_header_uses_durable_state_evidence(self):
+        self.assertIn('id="runtimeHeadline"', self.html)
+        self.assertIn('runtime.last_transition', self.app_js)
+        self.assertIn('runtime.cycle', self.app_js)
+        self.assertIn('Last ·', self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
