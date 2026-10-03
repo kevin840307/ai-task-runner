@@ -66,7 +66,11 @@ def _save_editor(page) -> None:
     assert button.is_enabled()
     assert page.locator(".unsaved-badge").count() == 1
     button.click()
-    page.locator(".unsaved-badge").wait_for(state="detached", timeout=8000)
+    try:
+        page.locator(".unsaved-badge").wait_for(state="detached", timeout=8000)
+    except Exception as error:
+        message = page.locator(".studio-header .message").inner_text()
+        raise AssertionError(f"Workflow save did not clear dirty state: {message}") from error
     assert button.is_disabled()
 
 
