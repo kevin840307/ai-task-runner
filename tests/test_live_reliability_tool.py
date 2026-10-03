@@ -1515,6 +1515,33 @@ def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, mon
     assert sample["active_process_markers"] == 1
 
 
+def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    history = work / "debug" / "history"
+    history.mkdir(parents=True)
+    state = {
+        "stage_sessions": {"role": "s1"},
+        "dynamic_groups": {"producer": "producer__g2"},
+        "dynamic_task_groups": {"producer": ["t1", "t2"]},
+        "review_failures": {"review::__run__": 2},
+        "expanded_workflow": [{"name": "a"}, {"name": "b"}, {"name": "c"}],
+    }
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    (history / "prompt.txt").write_bytes(b"x" * 17)
+
+    sample = live.project_state_metrics(project)
+
+    assert sample["project_state_json_bytes"] > 0
+    assert sample["project_stage_sessions"] == 1
+    assert sample["project_dynamic_groups"] == 1
+    assert sample["project_dynamic_task_groups"] == 1
+    assert sample["project_review_failures"] == 1
+    assert sample["project_expanded_workflow_stages"] == 3
+    assert sample["project_debug_history_bytes"] == 17
+
+
 def test_resource_maximum_preserves_peak_values():
     assert live._resource_maximum(
         {
