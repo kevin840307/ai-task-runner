@@ -511,3 +511,16 @@ def test_create_stage_prompt_setup_is_catalog_driven():
     assert 'catalogStageMeta(catalog, pendingCreate.type).description' in text
     assert 'pendingCreate.type === "base"' in text
     assert 'pendingCreate.type === "command"' in text
+
+
+
+def test_designer_dynamic_producer_ui_is_catalog_driven():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert "result_kind?: string" in text
+    assert "dynamic_output?: boolean" in text
+    assert 'catalog?.stage_types?.[s.type]?.result_kind' in text
+    assert "Dynamic child Workflow" in text
+    assert "dynamic-chip" in text
+    assert ".dynamic-stage-note" in styles
