@@ -80,7 +80,11 @@ class StageExecutor:
         attempt = 0
         retry_mode = "initial"
         previous_error = ""
-        service_delay = float(ctx.config.retry_delay)
+        base_retry_delay = base_retry_delay
+        if unlimited:
+            base_retry_delay = max(1.0, base_retry_delay)
+        retry_max_delay = max(base_retry_delay, retry_max_delay)
+        service_delay = base_retry_delay
 
         run_state = str(getattr(stage, "run_state", "") or "")
         if run_state:
@@ -124,7 +128,7 @@ class StageExecutor:
                 self._fresh_session(stage, ctx)
                 failures_in_session = 0
                 retry_mode = "recover"
-                service_delay = float(ctx.config.retry_delay)
+                service_delay = base_retry_delay
                 progress.set_status(
                     "Recovering",
                     f"{retry_mode} · retry {retries_used} · wait {service_delay:g}s · {previous_error[:180]}",
@@ -141,13 +145,13 @@ class StageExecutor:
                 self._sleep(ctx, service_delay)
                 if service_delay:
                     service_delay = min(
-                        float(ctx.config.retry_max_delay),
-                        max(float(ctx.config.retry_delay), service_delay * 2),
+                        retry_max_delay,
+                        max(base_retry_delay, service_delay * 2),
                     )
                 continue
 
             failures_in_session += 1
-            service_delay = float(ctx.config.retry_delay)
+            service_delay = base_retry_delay
             if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
                 self._fresh_session(stage, ctx)
                 failures_in_session = 0
@@ -155,7 +159,7 @@ class StageExecutor:
             else:
                 retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
 
-            retry_delay = float(ctx.config.retry_delay)
+            retry_delay = base_retry_delay
             progress.set_status(
                 "Recovering",
                 f"{retry_mode} · retry {retries_used} · wait {retry_delay:g}s · {previous_error[:180]}",
