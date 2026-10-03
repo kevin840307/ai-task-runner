@@ -185,6 +185,10 @@ class UIStateTests(unittest.TestCase):
         self.assertNotIn("--retry-wait", command)
         self.assertNotIn("--retry-max-wait", command)
 
+        from ai_task_runner import parser as runner_parser
+        parsed = runner_parser().parse_args(command[2:])
+        self.assertEqual(Path(parsed.project_root).resolve(), second.resolve())
+
     def test_running_project_cannot_be_removed(self) -> None:
         self.state.add_project(str(self.project))
         with patch.object(self.state, "read_runtime", return_value={"running": True}):
