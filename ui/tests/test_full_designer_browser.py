@@ -121,7 +121,7 @@ flow:
                     f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
                     f"?id={quote(file_id)}&project={project_q}"
                 )
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 assert page.locator(".react-flow__node-scope").count() == 0
 
                 page.locator('.react-flow__node[data-id="review"]').dblclick()
@@ -134,10 +134,10 @@ flow:
                 ai_palette = page.locator(".palette-item").filter(has_text="AI Stage").first
                 ai_palette.locator(".palette-quick-add").click()
                 create = page.locator(".create-stage-card")
-                create.wait_for()
+                create.wait_for(state="attached")
                 create.get_by_text("AI profile").locator("..").locator("select").select_option("review")
                 create.get_by_role("button", name="Create Stage").click()
-                page.locator('.react-flow__node[data-id="ai_stage"]').wait_for()
+                page.locator('.react-flow__node[data-id="ai_stage"]').wait_for(state="attached")
                 assert page.get_by_text("未儲存草稿").is_visible()
                 assert workflow.read_bytes() == original
                 assert not errors
@@ -201,7 +201,7 @@ flow:
                     f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
                     f"?id={quote(file_id)}&project={project_q}"
                 )
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
 
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 palette = page.locator(".palette").bounding_box()
@@ -218,7 +218,7 @@ flow:
 
                 stage_yaml_tab = page.get_by_role("tab", name="YAML").last
                 stage_yaml_tab.click()
-                page.locator(".stage-yaml-panel textarea").wait_for()
+                page.locator(".stage-yaml-panel textarea").wait_for(state="attached")
                 stage_yaml_box = page.locator(".stage-yaml-panel textarea").bounding_box()
                 yaml_content_box = page.locator(".stage-editor-content.yaml-mode").bounding_box()
                 assert stage_yaml_box and yaml_content_box
@@ -240,7 +240,7 @@ flow:
                 page.keyboard.press("Escape")
 
                 page.get_by_role("tab", name="YAML").click()
-                page.locator(".workflow-yaml-editor").wait_for()
+                page.locator(".workflow-yaml-editor").wait_for(state="attached")
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 yaml_box = page.locator(".workflow-yaml-editor").bounding_box()
                 assert yaml_box and yaml_box["x"] >= 0 and yaml_box["x"] + yaml_box["width"] <= viewport["width"] + 1
@@ -306,7 +306,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
                     f"?id={quote(file_id)}&project={project_q}"
                 )
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
 
                 # Existing explicit FAIL edge can be selected and removed with Delete.
                 fail_edge = page.locator('.react-flow__edge[data-id="review:fail:execute"]')
@@ -319,7 +319,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 assert "routes" not in saved["stages"]["review"]
 
                 page.reload()
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
 
                 # Connect FAIL to END: FAIL terminal semantics must persist as stop.
                 _connect_nodes(
@@ -327,7 +327,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     '.react-flow__node[data-id="review"] .react-flow__handle.fail',
                     '.react-flow__node[data-id="__end__"] .react-flow__handle',
                 )
-                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for()
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "stop"
@@ -339,12 +339,12 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 page.wait_for_timeout(100)
                 assert edge.count() == 0
                 page.keyboard.press("Control+z")
-                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for()
+                page.locator('.react-flow__edge[data-id="review:fail:__end__"]').wait_for(state="attached")
                 assert page.get_by_text("已復原上一個 Workflow 草稿修改。").is_visible()
                 _save_editor(page)
 
                 page.reload()
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
 
                 # Reconnecting FAIL retargets the semantic edge.
                 _connect_nodes(
@@ -352,7 +352,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     '.react-flow__node[data-id="review"] .react-flow__handle.fail',
                     '.react-flow__node[data-id="worker"] .react-flow__handle.stage-input',
                 )
-                page.locator('.react-flow__edge[data-id="review:fail:worker"]').wait_for()
+                page.locator('.react-flow__edge[data-id="review:fail:worker"]').wait_for(state="attached")
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["fail"] == "worker"
@@ -364,7 +364,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     '.react-flow__node[data-id="review"] .react-flow__handle.pass',
                     '.react-flow__node[data-id="worker"] .react-flow__handle.stage-input',
                 )
-                page.locator('.react-flow__edge[data-id="review:pass:worker"]').wait_for()
+                page.locator('.react-flow__edge[data-id="review:pass:worker"]').wait_for(state="attached")
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["review"]["routes"]["pass"] == "worker"
@@ -375,13 +375,13 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                     '.react-flow__node[data-id="router"] .react-flow__handle.handoff',
                     '.react-flow__node[data-id="review"] .react-flow__handle.stage-input',
                 )
-                page.locator('.react-flow__edge[data-id="router:handoff:review"]').wait_for()
+                page.locator('.react-flow__edge[data-id="router:handoff:review"]').wait_for(state="attached")
                 _save_editor(page)
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["stages"]["router"]["targets"] == ["worker", "review"]
 
                 page.reload()
-                page.locator('.react-flow__edge[data-id="router:handoff:worker"]').wait_for()
+                page.locator('.react-flow__edge[data-id="router:handoff:worker"]').wait_for(state="attached")
 
                 # Selected explicit HANDOFF edge follows the same Delete keyboard contract.
                 handoff_edge = page.locator('.react-flow__edge[data-id="router:handoff:worker"]')
@@ -411,13 +411,13 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 page.locator('.react-flow__node[data-id="worker"]').click()
                 page.keyboard.press("Delete")
                 dialog = page.locator(".designer-confirm-dialog")
-                dialog.wait_for()
+                dialog.wait_for(state="attached")
                 dialog.locator("button.danger-confirm").click()
                 page.locator('.react-flow__node[data-id="worker"]').wait_for(state="detached")
                 _save_editor(page)
 
                 page.reload()
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert "worker" not in saved["stages"]
                 assert "worker" not in saved["flow"]
@@ -433,7 +433,7 @@ def test_full_designer_graph_crud_roundtrip() -> None:
                 )
                 _save_editor(page)
                 page.reload()
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
                 assert saved["flow"][0] == "review"
                 assert saved["stages"]["execute"]["profile"] == "execute"
@@ -494,16 +494,16 @@ flow:
                     f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
                     f"?id={quote(workflow_id)}&project={project_q}"
                 )
-                page.locator('.react-flow__node[data-id="review"]').wait_for()
+                page.locator('.react-flow__node[data-id="review"]').wait_for(state="attached")
                 page.locator('.react-flow__node[data-id="review"]').dblclick()
                 edit_prompt = page.get_by_role("button", name="Edit Prompt")
-                edit_prompt.wait_for()
+                edit_prompt.wait_for(state="attached")
                 edit_prompt.click()
 
                 page.wait_for_url(
                     f"**/index.html?view=workflow&source=prompt&studio={quote(prompt['id'])}*"
                 )
-                page.locator("#studioPromptTextarea").wait_for()
+                page.locator("#studioPromptTextarea").wait_for(state="attached")
                 assert page.locator("#studioPromptTextarea").is_visible()
                 assert page.locator("#studioPromptTextarea").input_value().strip()
                 assert page.locator("#studioFileName").inner_text() == prompt["name"]
