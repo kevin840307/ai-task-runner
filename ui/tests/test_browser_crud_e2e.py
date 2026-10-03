@@ -335,7 +335,7 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_timeout(120)
             assert page.locator("#studioFileName").inner_text() == "e2e_prompt.md"
             assert page.locator(".studio-workflow-main").is_visible()
-            page.fill("#studioPromptTextarea", "# Prompt\n\n{{ goal }}\n")
+            page.fill("#studioPromptTextarea", "# Prompt\n\n{{ goal }}\n\nReturn concise evidence.\n")
             page.wait_for_function("!document.querySelector('#saveStudioButton')?.disabled")
             page.click("#saveStudioButton")
             page.wait_for_function("document.querySelector('#saveStudioButton')?.disabled")
