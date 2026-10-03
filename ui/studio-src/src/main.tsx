@@ -115,7 +115,7 @@ type DesignerLanguage = "zh-TW" | "en";
 const DESIGNER_LANGUAGE_KEY = "ai-task-runner.language";
 const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
   "zh-TW": {
-    back: "← Workflows", mode: "Workflow Editor", unsaved: "未儲存草稿", designer_view: "Designer", yaml_view: "YAML",
+    back: "← Workflows", mode: "Workflow Editor", unsaved: "未儲存草稿", saved: "已儲存", designer_view: "Designer", yaml_view: "YAML",
     reset: "重設排列", reload: "重新載入", save: "儲存", saving: "驗證與儲存中…",
     palette: "Stage Palette", add_stage: "新增積木", drag_hint: "拖曳積木到畫布才會新增",
     search_stage: "搜尋 Stage…", custom_stage: "自訂 Stage", draft_hint: "畫布上的修改會先保留為草稿，按「儲存」後才更新 YAML。",
@@ -156,7 +156,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     fail_soft_next_detail: "下一次進入 → 直接 PASS（不呼叫 Agent，counter 清 0）"
   },
   en: {
-    back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", designer_view: "Designer", yaml_view: "YAML",
+    back: "← Workflows", mode: "Workflow Editor", unsaved: "Unsaved draft", saved: "Saved", designer_view: "Designer", yaml_view: "YAML",
     reset: "Reset layout", reload: "Reload", save: "Save", saving: "Validating & saving…",
     palette: "Stage Palette", add_stage: "Add Stage", drag_hint: "Drag a Stage onto the canvas to add it",
     search_stage: "Search Stage…", custom_stage: "Custom Stage", draft_hint: "Canvas changes stay as a draft until you Save.",
@@ -1523,10 +1523,11 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
         </div>
         <div>
           {message && <span className="message">{message}</span>}
-          {editorDirty && <span className="unsaved-badge">{tx("unsaved")}</span>}
+          <span className={editorDirty ? "unsaved-badge" : "saved-badge"}>{editorDirty ? tx("unsaved") : tx("saved")}</span>
           {editorView === "designer" && <button onClick={resetLayout} disabled={busy} title={tx("reset_layout_title")}>{tx("reset")}</button>}
           <button onClick={reloadStudio} disabled={busy}>{tx("reload")}</button>
-          <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}>
+          <button className="primary" onClick={() => void saveCurrent()} disabled={busy || !editorDirty}
+            title={!editorDirty ? tx("saved") : busy ? tx("saving") : tx("save")}>
             {busy ? tx("saving") : tx("save")}
           </button>
         </div>
