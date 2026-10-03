@@ -52,7 +52,7 @@ Do these before larger UI work when they can be implemented without widening run
     - Show Project name first.
     - Move full path to secondary text / tooltip where possible.
 
-[ ] Improve action-button hierarchy
+[x] Improve action-button hierarchy
     - One obvious primary action per surface.
     - Keep destructive actions visually separated.
     - Stop / Reset / Delete should not compete visually with Run / Save.
@@ -82,27 +82,27 @@ Do these before larger UI work when they can be implemented without widening run
     - Remaining: browser sweep for menu/dialog focus order and any control missing aria-expanded/selected/disabled semantics.
     - High value because it also improves ordinary keyboard-heavy desktop use, not only screen-reader use.
 
-[ ] Clarify disabled controls
+[x] Clarify disabled controls
     - Disabled Save/Run/Resume actions should expose why they are disabled when the reason is not obvious.
 
 [ ] Normalize confirmation dialogs
     - Use the same wording/order for destructive actions.
     - Primary safe action first; destructive confirmation visually distinct.
 
-[ ] Preserve scroll/focus position on common navigation
+[x] Preserve scroll/focus position on common navigation
     - Project switch, Workflow/Prompt return, modal close and validation should not unexpectedly jump the page/canvas.
 
-[ ] Improve long-name handling
+[x] Improve long-name handling
     - Project / Workflow / Prompt / Stage names should truncate gracefully with tooltip/full-name access.
     - No horizontal page overflow at supported desktop widths.
 
 [ ] Keep inline feedback close to the action
     - Save/validate/import/generate failures should appear near the triggering control, not only as a distant global message.
 
-[ ] Use relative freshness text consistently
+[x] Use relative freshness text consistently
     - Prefer concise "updated 12s ago / 3m ago" style for live status, with exact timestamp available on hover/details.
 
-[ ] Make keyboard affordances discoverable
+[x] Make keyboard affordances discoverable
     - Show shortcuts only where useful (Ctrl+S, Ctrl+Z/Y, Delete, Ctrl+C/V), preferably in menus/tooltips rather than permanent clutter.
 
 P0 - UI / UX HIGH VALUE
