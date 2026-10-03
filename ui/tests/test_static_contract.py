@@ -199,5 +199,10 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("state.studioFile?.used_by", self.app_js)
 
 
+    def test_workflow_library_shows_modified_freshness(self):
+        self.assertIn("const modifiedAt = Number(item.mtime || 0) * 1000", self.app_js)
+        self.assertIn("Modified:", self.app_js)
+
+
 if __name__ == "__main__":
     unittest.main()
