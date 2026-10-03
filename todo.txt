@@ -78,10 +78,8 @@ Do these before larger UI work when they can be implemented without widening run
     - Theme, More, visibility, destructive actions and compact Studio controls should always have clear accessible names/tooltips.
 
 [ ] Keyboard focus / accessibility pass
-    - Every interactive control must be reachable by keyboard with a visible focus state.
-    - Icon-only buttons need accessible names.
-    - Menus/dialogs should return focus to the triggering control when closed.
-    - Prefer real button semantics and correct aria-expanded/selected/disabled states.
+    - Completed: global focus-visible baseline; shared dialogs restore focus and close on Escape; icon-only controls already use accessible names in the main surfaces.
+    - Remaining: browser sweep for menu/dialog focus order and any control missing aria-expanded/selected/disabled semantics.
     - High value because it also improves ordinary keyboard-heavy desktop use, not only screen-reader use.
 
 [ ] Clarify disabled controls
@@ -109,7 +107,7 @@ Do these before larger UI work when they can be implemented without widening run
 
 P0 - UI / UX HIGH VALUE
 ------------------------
-[ ] Chat / Tasks runtime header
+[x] Chat / Tasks runtime header
     - Make current runtime state obvious in one place:
       running/recovering/stopped/completed, current Stage, Task, cycle,
       progress, elapsed, last transition and retry state.
@@ -252,6 +250,7 @@ High-value runner work remaining:
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
+    - Current known blocker: Studio source builds successfully, but committed ui/static/workflow-studio-app is stale after Studio source changes. CI build artifact is valid; sync committed bundle during final Studio batch/release cleanup.
     - Ubuntu Python
     - Windows Python
     - Studio build + committed bundle verify
@@ -320,3 +319,6 @@ CURRENT IMPLEMENTATION NOTES
 - Project rows show runtime detail instead of repeating full filesystem paths; full path remains available via tooltip/title.
 - Saved/Saving/Unsaved feedback is explicit in Prompt and Workflow editors.
 - Current deterministic/live strategy: UI-only changes require static/browser regression; runtime contract changes require deterministic runtime/API/YAML tests; Qwen live probes are added only when behavior depends on the real backend/session/process boundary.
+
+- Chat runtime header now projects durable cycle / workflow position / last semantic transition from the same state.json used by CLI/YAML runs; no second monitoring state was introduced.
+- Shared confirmation/input/choice dialogs now restore focus to their trigger after close and support Escape consistently.
