@@ -1099,3 +1099,29 @@
   color: var(--accent-dark);
   font-weight: 800;
 }
+
+
+.prompt-used-by-head { margin-top: 10px; }
+.prompt-used-by-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.prompt-used-by-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+}
+.prompt-used-by-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
