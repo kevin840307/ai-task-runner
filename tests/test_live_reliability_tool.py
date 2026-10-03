@@ -2182,4 +2182,12 @@ def test_api_recovery_probe_latches_transient_recovering_evidence():
     assert "recovering_seen = False" in source
     assert "if not recovering_seen:" in source
     assert 'event.get("status") == "Recovering"' in source
-    assert "final bounded log to retain historical UI state" in source
+    assert "probe-owned --json-events" in source
+    assert "(*jsonl_events(log), *runner_events(project))" in source
+
+
+
+def test_api_recovery_probe_uses_probe_owned_json_event_stream():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "(*jsonl_events(log), *runner_events(project))" in source
+    assert "probe-owned --json-events" in source
