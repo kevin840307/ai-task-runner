@@ -236,6 +236,20 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed Dynamic Handoff live route false failure caused by LLM-controlled visit counting.
+    - Root cause: the probe required stable_role to emit STABLE_FIRST on its first call and
+      STABLE_REPEAT on its second call, then used those exact model outputs to decide whether
+      the coordinator should visit stable_role again. A valid real-Qwen run emitted the later
+      token on the first call and legally advanced to fresh_role, so the harness failed even
+      though Dynamic Handoff completed successfully.
+    - The probe now uses Dynamic Handoff only for the real model-selected main_role entry.
+      A deterministic Command Stage gate forces stable_role to execute exactly twice
+      (first exit=1 -> semantic FAIL -> stable_role, second exit=0 -> PASS -> fresh_role).
+    - role-session reuse is verified directly from the two real model session ids instead of
+      inferred from model wording; fresh/main isolation remains independently verified.
+    - Added deterministic fixture/gate coverage. No other invocation-count-controlled LLM
+      routing probe remains in qwen_live_reliability.py.
+
 
 [x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
 [x] API outage live probes require observable Recovering status and require durable last_error to clear after successful recovery.
