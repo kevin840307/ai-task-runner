@@ -303,7 +303,7 @@ function openProjectMenu(menu, anchor, row) {
   menu.hidden = false; menu.classList.add("project-action-menu-portal"); document.body.appendChild(menu);
   positionProjectMenu(menu, anchor);
 }
-const PROJECT_RUNTIME_LABELS = { running: "RUN", completed: "DONE", interrupted: "INT", stopped: "STOP", idle: "IDLE", missing: "MISS" };
+const PROJECT_RUNTIME_LABELS = { running: "Running", completed: "Completed", interrupted: "Needs Attention", stopped: "Stopped", idle: "Idle", missing: "Missing" };
 function projectRuntimeStatus(project) { return project.exists === false ? "missing" : (project.runtime_status || "idle"); }
 function projectRowSignature(project) {
   return JSON.stringify([
@@ -345,7 +345,8 @@ function createProjectRow(project) {
     path.className = "project-runtime-detail";
     path.title = project.path;
   } else {
-    path.textContent = project.exists === false ? `${t("project.missing", "Missing")} · ${project.path}` : project.path;
+    path.textContent = project.exists === false ? t("project.missing", "Missing") : "Ready";
+    path.title = project.path;
   }
   copy.append(nameLine, path); button.append(mark, copy); button.disabled = removing || state.projectSwitching; button.onclick = () => project.exists === false ? null : selectProject(project);
 
@@ -502,7 +503,7 @@ function renderCliRuntimeFrame() {
 }
 function runtimeStatusLabel(runtime) {
   if (runtime?.running) return "Running";
-  if (runtime?.stale && runtime?.resumable) return "Interrupted";
+  if (runtime?.stale && runtime?.resumable) return "Needs Attention";
   if (runtime?.resumable) return "Stopped";
   if (runtime?.completed) return "Completed";
   return "Idle";
@@ -1046,9 +1047,30 @@ function renderStudioFiles() {
     const empty = document.createElement("div");
     empty.className = "studio-list-empty";
     const noun = state.studioSourceKind === "prompt" ? "prompts" : "workflows";
-    empty.textContent = studioSearchQuery()
-      ? `No matching ${noun}`
-      : `No ${noun}`;
+    if (studioSearchQuery()) {
+      const text = document.createElement("span");
+      text.textContent = `No matching ${noun}`;
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "studio-empty-action";
+      clear.textContent = "Clear search";
+      clear.onclick = () => {
+        state.studioFilters[state.studioSourceKind] = "";
+        syncStudioSearch();
+        renderStudioFiles();
+        $("studioSearchInput")?.focus();
+      };
+      empty.append(text, clear);
+    } else {
+      const text = document.createElement("span");
+      text.textContent = `No ${noun} yet`;
+      const create = document.createElement("button");
+      create.type = "button";
+      create.className = "studio-empty-action";
+      create.textContent = state.studioSourceKind === "prompt" ? "Create Prompt" : "Create Workflow";
+      create.onclick = () => state.studioSourceKind === "prompt" ? openNewPromptModal() : openNewWorkflowModal();
+      empty.append(text, create);
+    }
     root.appendChild(empty);
   }
 }
@@ -1623,6 +1645,7 @@ async function confirmProjectModal() {
 
 // ------------------------------ handlers ------------------------------
 $("openProject").onclick = openProjectModal;
+$("emptyOpenProjectButton").onclick = openProjectModal;
 $("projectModalClose").onclick = closeProjectModal; $("projectModalCancel").onclick = closeProjectModal; $("projectModalConfirm").onclick = confirmProjectModal; $("browseProjectButton").onclick = browseProject; $("projectModalBackdrop").addEventListener("click", (e) => { if (e.target === $("projectModalBackdrop")) closeProjectModal(); });
 $("projectPathInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); confirmProjectModal(); } });
 $("chatNav").onclick = () => switchView("chat");
