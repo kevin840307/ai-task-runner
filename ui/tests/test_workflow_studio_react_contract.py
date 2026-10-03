@@ -324,9 +324,8 @@ def test_workflow_settings_is_manager_and_prompt_editor_not_second_workflow_edit
     assert 'id="settingsNav"' not in index
     assert 'id="studioEditorModeSwitch"' not in index
     assert "openWorkflowEditorItem" in app
-    assert 'item.kind === "workflow" ? openWorkflowEditorItem(item) : openStudioFile(item)' in app
+    assert 'if (item.kind !== "prompt") return openWorkflowEditorItem(item);' in app
     assert 'assets.import_yaml' in (ROOT / "ui" / "static" / "js" / "i18n.js").read_text(encoding="utf-8")
-    assert 'source: "prompt"' not in app  # URLSearchParams is built from literal source query instead.
     assert 'switchView("prompt")' in app
     assert 'state.studioSourceKind = kind' in app
 
@@ -399,7 +398,7 @@ def test_primary_navigation_separates_workflows_prompts_and_settings():
     assert 'id="workflowNav"' in index
     assert 'id="promptNav"' in index
     assert 'id="settingsNav"' not in index
-    assert 'id="studioSourceTabs"' in index and "hidden" in index.split('id="studioSourceTabs"', 1)[1].split(">", 1)[0]
+    assert 'id="studioSourceTabs"' not in index
     assert 'switchView("workflow")' in app
     assert 'switchView("prompt")' in app
     assert '"nav.prompts": "Prompts"' in i18n
