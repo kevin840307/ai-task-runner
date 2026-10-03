@@ -69,6 +69,11 @@ class UIStateTests(unittest.TestCase):
         (backends / "opencode.py").write_text("class OpenCodeBackend:\n    name = 'opencode'\n", encoding="utf-8")
         defaults = self.root / "runner" / "config"; defaults.mkdir(parents=True)
         (defaults / "defaults.py").write_text("DEFAULT_BACKEND = 'qwen'\n", encoding="utf-8")
+        tool = self.root / "tool"; tool.mkdir(parents=True, exist_ok=True)
+        (tool / "workflow_catalog.py").write_text(
+            "import json; print(json.dumps({'stage_types': {'base': {'profiles': {'generic': {'defaults': {'prompt': 'common/generic.md'}}, 'execute': {'defaults': {'prompt': 'common/execution.md'}}, 'review': {'defaults': {'prompt': 'common/review.md'}}}, 'options': []}}, 'node_options': {}}))\n",
+            encoding="utf-8",
+        )
         self.state = UIState(self.root)
 
     def tearDown(self) -> None:
