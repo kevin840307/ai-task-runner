@@ -105,5 +105,5 @@ Browser coverage includes:
 - Workflow Editor Stage dialogs, YAML view and context menus
 - graph CRUD round-trip for START/END, AI Stage profiles, PASS/FAIL/HANDOFF edges,
   edge retarget/delete, Stage delete, save/reload
-- selected explicit edge Delete/Backspace
-- Workflow draft Ctrl+Z undo
+- selected explicit edge Delete/Backspace and native target-endpoint retarget
+- Workflow draft Ctrl+Z undo plus Ctrl+Y / Ctrl+Shift+Z redo
