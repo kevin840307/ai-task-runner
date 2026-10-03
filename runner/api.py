@@ -66,6 +66,8 @@ class RunRequest:
     watchdog_interval: float = DEFAULT_WATCHDOG_INTERVAL
     worker_hang_timeout: float = DEFAULT_WORKER_HANG_TIMEOUT
     stage_retries: int = DEFAULT_STAGE_RETRIES
+    max_cycles: int = -1
+    skip_on_max_cycles: bool = False
     retry_delay: float = 5
     retry_max_delay: float = 300
 
@@ -108,6 +110,8 @@ class RunRequest:
             watchdog_interval=args.watchdog_interval,
             worker_hang_timeout=args.worker_hang_timeout,
             stage_retries=args.stage_retries,
+            max_cycles=getattr(args, "max_cycles", -1),
+            skip_on_max_cycles=getattr(args, "skip_on_max_cycles", False),
             retry_delay=args.retry_delay,
             retry_max_delay=args.retry_max_delay,
             final_ai_validations=args.final_ai_validations,
@@ -194,6 +198,8 @@ class RunRequest:
             watchdog_interval=self.watchdog_interval,
             worker_hang_timeout=self.worker_hang_timeout,
             stage_retries=self.stage_retries,
+            max_cycles=self.max_cycles,
+            skip_on_max_cycles=self.skip_on_max_cycles,
             retry_delay=self.retry_delay,
             retry_max_delay=self.retry_max_delay,
             final_ai_validations=self.final_ai_validations,
