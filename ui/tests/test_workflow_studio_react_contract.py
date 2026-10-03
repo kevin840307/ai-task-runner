@@ -148,7 +148,7 @@ def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
 
     assert 'className="wf-stage-meta"' in text
     assert "未連線" in text
-    assert "FAIL×{reviewMaxFailures} → 下次 Pass" in text
+    assert 'FAIL×{reviewMaxFailures} → {designerText("fail_soft_next")}' in text
     assert "ERR×{errorRetries} → Skip" in text
     assert ".wf-stage.type-base.profile-review, .wf-stage.type-ai_validator" in styles
     assert ".wf-stage-meta span" in styles
@@ -160,7 +160,8 @@ def test_react_studio_has_stage_specific_test_prompt_presets():
     assert "STAGE_TEST_PROMPTS" in text
     assert "填入簡易測試 Prompt" in text
     assert "stageTestPrompt(draft, testScenario)" in text
-    assert "只作用於本次 isolated Stage Test" in text
+    assert 'test_input_help:' in text
+    assert 'tx("test_input_help")' in text
     assert "Stage Test API not found. Restart the local UI server" in text
 
 
