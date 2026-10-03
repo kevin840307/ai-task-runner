@@ -2940,6 +2940,11 @@ def api_recovery_probe(
             or "verdict=RESET_SESSION" in evidence
         ):
             raise RuntimeError("API outage did not recover in the same session")
+        if '"status": "Recovering"' not in evidence:
+            raise RuntimeError("API outage recovered without observable Recovering status evidence")
+        final_state = read_state(project)
+        if str(final_state.get("last_error") or ""):
+            raise RuntimeError("successful API recovery left stale last_error in durable state")
         return True
 
 
