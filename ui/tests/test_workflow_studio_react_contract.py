@@ -75,7 +75,8 @@ def test_react_studio_exposes_common_stage_error_policy_controls():
     assert "draft.error_policy?.retries" in text
     assert 'error_policy: { retries }' in text
     assert 'profiles[profile]?.defaults || {}' in text
-    assert '["prompt", "status", "max_failures", "error_policy"]' in text
+    assert "Object.entries(previousDefaults)" in text
+    assert "Object.entries(nextDefaults)" in text
     assert "Semantic FAIL 上限（max_failures）" in text
     assert "FAIL×{Number(draft.max_failures)}" in text
     assert "下一次進入 Review 直接 PASS，不呼叫 Agent" in text
