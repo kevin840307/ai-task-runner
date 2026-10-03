@@ -48,3 +48,23 @@ def test_registry_remains_plugin_extensible_without_plugin_specific_branches():
     assert "stage_class.spec_class" in source
     assert "STAGE_REGISTRY[stage_type]" in source
     assert "plugin_name ==" not in source
+
+
+
+def test_shared_stage_contracts_are_not_owned_by_ai_base_stage():
+    contracts = STAGES / "contracts.py"
+    assert contracts.is_file()
+
+    contract_source = contracts.read_text(encoding="utf-8")
+    assert "class StageResult" in contract_source
+    assert "class StageContext" in contract_source
+    assert "class StageExecution" in contract_source
+    assert "class Stage(Protocol)" in contract_source
+
+    executor_source = (EXECUTION / "stage_executor.py").read_text(encoding="utf-8")
+    assert "from ..stages.contracts import" in executor_source
+    assert "stages.base_stage import" not in executor_source
+
+    command_source = (STAGES / "command_stage.py").read_text(encoding="utf-8")
+    assert "from .contracts import" in command_source
+    assert "BaseStage" not in command_source
