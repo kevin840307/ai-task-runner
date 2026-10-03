@@ -818,6 +818,15 @@ function App() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
+  const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen;
+
+  useEffect(() => {
+    if (!anyModalOpen) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
+    };
+  }, [anyModalOpen]);
 
   useEffect(() => {
     if (!addStageOpen && !pendingCreate && !confirmDialog && !editorOpen) return;
@@ -1631,7 +1640,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
       {problems.length > 0 && <section className="workflow-problems" aria-label="Workflow problems">
         <div className="workflow-problems-head">
           <strong>Problems · {problems.length}</strong>
-          <button type="button" onClick={() => setProblems([])} aria-label="Dismiss Workflow problems">×</button>
+          <button type="button" onClick={() => setProblems([])} aria-label="Dismiss Workflow problems" title="Dismiss Workflow problems">×</button>
         </div>
         <div className="workflow-problems-list">
           {problems.map((problem, index) => (
@@ -1911,7 +1920,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
           <aside className="inspector stage-editor-modal">
               <div className="inspector-head">
                 <div><small>STAGE</small><h2>{draft.name}</h2></div>
-                <div className="inspector-head-actions"><span>{draft.type}</span><button type="button" className="modal-close-button" onClick={() => setEditorOpen(false)} aria-label={tx("close")}>×</button></div>
+                <div className="inspector-head-actions"><span>{draft.type}</span><button type="button" className="modal-close-button" onClick={() => setEditorOpen(false)} aria-label={tx("close")} title={tx("close")}>×</button></div>
               </div>
               <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
                 {(["form", "yaml", "routing", "test"] as const).map((tab) => (
