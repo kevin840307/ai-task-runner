@@ -153,6 +153,18 @@ flow:
                 assert page.locator(".stage-yaml-error").count() == 0
 
                 assert workflow.read_bytes() == original
+
+                # Save-boundary Problems panel: the disconnected draft Stage is a warning,
+                # not a blocking schema error. Save still persists through the canonical backend.
+                page.locator(".modal-close-button").click()
+                page.locator(".studio-header button.primary").click()
+                page.locator(".workflow-problems").wait_for(state="attached")
+                assert page.locator(".workflow-problem.warning", has_text="ai_stage").count() == 1
+                assert page.locator(".workflow-problem.error").count() == 0
+                page.wait_for_function("document.querySelector('.studio-header .saved-badge') !== null")
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["ai_stage"]["profile"] == "review"
+
                 assert not errors
                 browser.close()
         finally:
