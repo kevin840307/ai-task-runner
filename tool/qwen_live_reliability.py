@@ -1976,13 +1976,7 @@ Goal:
 Previous Stage result:
 {{ previous }}
 
-Choose exactly one next Stage using the latest Stage output:
-- if there is no previous Stage result, choose main_role
-- after MAIN_DONE, choose stable_role
-- after STABLE_FIRST, choose stable_role again
-- after STABLE_REPEAT, choose fresh_role
-- after FRESH_DONE, choose final_gate
-
+Choose exactly one next Stage: main_role.
 Do not perform the selected Stage's work yourself.
 """
 
@@ -2004,7 +1998,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
   coordinator:
     type: handoff
     prompt: dynamic_router.md
-    targets: [main_role, stable_role, fresh_role, final_gate]
+    targets: [main_role]
     session_policy: role
     error_policy:
       retries: 2
@@ -2015,15 +2009,22 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     instructions: Always return exactly MAIN_DONE.
     session_policy: main
     routes:
-      pass: coordinator
+      pass: stable_role
 
   stable_role:
     type: base
     prompt: dynamic_role.md
-    instructions: On the first invocation in this Session return exactly STABLE_FIRST. On every later invocation in the same Session return exactly STABLE_REPEAT.
+    instructions: Always return exactly STABLE_DONE.
     session_policy: role
     routes:
-      pass: coordinator
+      pass: stable_gate
+
+  stable_gate:
+    type: command
+    command: "{python} stable_gate.py"
+    routes:
+      fail: stable_role
+      pass: fresh_role
 
   fresh_role:
     type: base
@@ -2031,7 +2032,7 @@ DYNAMIC_SESSION_WORKFLOW = """stages:
     instructions: Always return exactly FRESH_DONE.
     session_policy: fresh
     routes:
-      pass: coordinator
+      pass: final_gate
 
   final_gate:
     type: command
@@ -2043,6 +2044,7 @@ flow:
   - coordinator
   - main_role
   - stable_role
+  - stable_gate
   - fresh_role
   - final_gate
 """
@@ -2060,6 +2062,17 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     )
     (project / "dynamic_role.md").write_text(
         DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8"
+    )
+    (project / "stable_gate.py").write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('stable-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "print(f'STABLE_GATE_{value}')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
     )
     (project / "final_gate.py").write_text(
         "print('DYNAMIC_FINAL_GATE_PASS')\n", encoding="utf-8"
@@ -2094,13 +2107,11 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
     expected = [
         "coordinator",
         "main_role",
-        "coordinator",
         "stable_role",
-        "coordinator",
+        "stable_gate",
         "stable_role",
-        "coordinator",
+        "stable_gate",
         "fresh_role",
-        "coordinator",
         "final_gate",
     ]
     if starts != expected:
