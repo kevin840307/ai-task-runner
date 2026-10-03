@@ -6,7 +6,7 @@ from dataclasses import MISSING, fields
 from typing import Any
 
 from ..errors import RunnerError
-from .registry import STAGE_REGISTRY, stage_result_kind
+from .registry import STAGE_REGISTRY
 
 NODE_FIELDS = frozenset({"routes", "label", "error_policy"})
 META_FIELDS = frozenset({"name", "type", "validator", "max_failures", *NODE_FIELDS})
@@ -178,13 +178,9 @@ def workflow_validators(workflow: list[dict[str, Any]]) -> tuple[bool, bool]:
     return file_validation, ai_validation
 
 
-def workflow_has_task_producer(workflow: list[dict[str, Any]]) -> bool:
-    return any(stage_result_kind(item) == "tasks" for item in workflow)
-
 
 __all__ = [
     "validate_routes",
     "validate_stage",
-    "workflow_has_task_producer",
     "workflow_validators",
 ]
