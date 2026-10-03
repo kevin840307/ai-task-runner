@@ -26,7 +26,7 @@ RUNNER_INTERNAL_FIELDS = frozenset({
     "_dynamic_group", "_dynamic_path", "_dynamic_parent", "_dynamic_task_id",
     "_dynamic_task_complete", "_dynamic_continue", "_dynamic_group_continue",
 })
-CATALOG_HIDDEN_FIELDS = frozenset({"fresh_session_each_run", "fresh_session_on_start"})
+CATALOG_HIDDEN_FIELDS = frozenset()
 
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
