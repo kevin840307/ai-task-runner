@@ -364,11 +364,11 @@ function stageByName(visual: Visual, name: string) {
 }
 
 const STAGE_META: Record<string, { title: string; description: string }> = {
-  plan: { title: "Plan", description: "產生計畫並在執行時展開 child Workflow" },
-  ai_validator: { title: "AI Validator", description: "最終 AI 驗證 / 多次投票" },
-  handoff: { title: "Handoff", description: "動態選擇下一個 Stage" },
-  command: { title: "Command", description: "執行外部命令或驗證器" },
-  base: { title: "AI Stage", description: "通用 AI Stage" },
+  plan: { title: "Plan", description: "Plan work and expand a dynamic child Workflow at runtime" },
+  ai_validator: { title: "AI Validator", description: "Independent AI validation with optional voting" },
+  handoff: { title: "Handoff", description: "Dynamically choose the next allowed Stage" },
+  command: { title: "Command", description: "Run an external command or validator" },
+  base: { title: "AI Stage", description: "General AI Stage" },
 };
 
 const PALETTE_SECTIONS = [
