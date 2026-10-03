@@ -238,6 +238,20 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed API outage recovery observability false failures.
+    - Root cause: the live gate treated transient UI status (runner.status=Recovering)
+      and a 100ms polling observation of durable last_error as mandatory evidence.
+      Fast successful recovery can complete between polling iterations even when Runner
+      correctly retries and clears last_error.
+    - StageExecutor now publishes stable structured runner.recovery/retry events carrying
+      stage, retry_mode, retry number, wait_seconds and error, while still emitting the
+      transient Recovering UI status.
+    - 429/502/503/raw-disconnect probes use the structured recovery event as the
+      StageExecutor recovery contract and always perform a final JSON/log scan after process exit.
+    - Successful recovery must still finish in the same session and leave final last_error empty.
+    - Deterministic StageExecutor tests assert both UI Recovering status and structured recovery
+      payload; live harness tests lock the post-exit scan to prevent fast-recovery races.
+
 [x] Strengthened transient API recovery live proof to distinguish backend retry from Runner recovery.
     - The live probe now latches durable state.last_error while the outage is active, which proves the
       failure actually crossed the backend boundary and reached StageExecutor.
