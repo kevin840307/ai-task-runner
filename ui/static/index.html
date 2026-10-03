@@ -154,10 +154,10 @@
               <span id="errorText" class="error-text"></span><button id="errorDetailsButton" class="error-details-button" type="button" hidden>Details</button>
             </div>
             <div class="composer-right runtime-composer-actions">
-              <button id="sendButton" class="primary send-button" type="button" data-i18n="actions.run">執行</button>
-              <button id="stopButton" class="action-button danger runtime-control-button" type="button" hidden data-i18n="actions.stop">停止</button>
-              <button id="resumeButton" class="action-button primary runtime-control-button" type="button" hidden data-i18n="actions.continue">繼續</button>
-              <button id="resetButton" class="action-button runtime-control-button" type="button" hidden data-i18n="actions.reset">重設</button>
+              <button id="sendButton" class="primary send-button" type="button" title="Run task" data-i18n="actions.run">執行</button>
+              <button id="stopButton" class="action-button danger runtime-control-button" type="button" title="Stop active task" hidden data-i18n="actions.stop">停止</button>
+              <button id="resumeButton" class="action-button primary runtime-control-button" type="button" title="Continue stopped task" hidden data-i18n="actions.continue">繼續</button>
+              <button id="resetButton" class="action-button runtime-control-button" type="button" title="Reset stopped task" hidden data-i18n="actions.reset">重設</button>
             </div>
           </div>
         </div>
@@ -213,7 +213,7 @@
                     <p id="studioFilePath"></p>
                   </div>
                   <div class="designer-card-actions">
-                    <button id="reloadStudioButton" class="studio-secondary-action" type="button">Reload</button>
+                    <button id="reloadStudioButton" class="studio-secondary-action" type="button" title="Reload saved asset">Reload</button>
                     <div id="studioAssetMenuWrap" class="studio-asset-menu-wrap">
                       <button id="studioAssetMenuButton" class="studio-secondary-action" type="button" aria-haspopup="menu" aria-expanded="false">More</button>
                       <div id="studioAssetMenu" class="studio-asset-menu" role="menu" hidden>
@@ -224,7 +224,7 @@
                       </div>
                     </div>
                     <button id="validateStudioButton" class="studio-validate-action" type="button">Validate</button>
-                    <button id="saveStudioButton" class="primary studio-save-action" type="button">Save</button>
+                    <button id="saveStudioButton" class="primary studio-save-action" type="button" title="Save changes (Ctrl+S)">Save</button>
                   </div>
                 </article>
               </section>
