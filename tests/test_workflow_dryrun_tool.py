@@ -267,3 +267,46 @@ flow:
     assert payload["closed"] is True
     names = {case["name"] for case in payload["cases"]}
     assert not any(name.startswith("dead ") for name in names)
+
+
+
+def test_dryrun_exercises_max_cycle_exhaustion(tmp_path: Path):
+    workflow = tmp_path / "loop.yaml"
+    workflow.write_text(
+        """
+stages:
+  a:
+    type: base
+    profile: generic
+  b:
+    type: base
+    profile: generic
+    routes:
+      fail: a
+flow: [a, b]
+""",
+        encoding="utf-8",
+    )
+    scenario = tmp_path / "scenario.yaml"
+    scenario.write_text(
+        """
+stages:
+  a: pass
+  b: fail
+""",
+        encoding="utf-8",
+    )
+
+    result = run(
+        str(workflow),
+        "--scenario", str(scenario),
+        "--max-cycles", "2",
+        "--max-steps", "20",
+        "--json",
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["completed"] is False
+    assert payload["stage"] == "max_cycles_exhausted"
+    assert payload["cycle"] == 3
