@@ -256,5 +256,11 @@ class StaticContractTests(unittest.TestCase):
         self.assertIn("persistPromptDraft(); scheduleSyntaxCheck()", self.app_js)
 
 
+    def test_shared_dialog_icon_close_has_accessible_tooltip(self):
+        dialogs = (ROOT / "ui" / "static" / "js" / "ui-dialogs.js").read_text(encoding="utf-8")
+        self.assertIn('data-dialog-close aria-label="Close" title="Close"', dialogs)
+        self.assertIn('danger ? "designer-danger-button" : "primary"', dialogs)
+
+
 if __name__ == "__main__":
     unittest.main()
