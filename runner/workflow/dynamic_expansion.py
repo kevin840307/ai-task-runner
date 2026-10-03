@@ -141,6 +141,12 @@ def _drop_previous_expansion(
     _remove_task_groups(state, affected)
     for name in removed_names:
         state.dynamic_groups.pop(name, None)
+        state.stage_sessions.pop(name, None)
+    for key in [
+        key for key in state.review_failures
+        if any(key.startswith(f"{name}::") for name in removed_names if name)
+    ]:
+        state.review_failures.pop(key, None)
 
     return [
         item for item in workflow
