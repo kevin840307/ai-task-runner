@@ -224,3 +224,11 @@ if __name__ == "__main__":
         self.assertIn('row = $("studioStatus")', self.app_js)
         self.assertIn('row.hidden = !detail', self.app_js)
         self.assertIn('row.classList.toggle("error"', self.app_js)
+
+
+
+    def test_icon_only_controls_have_accessible_names_and_tooltips(self):
+        self.assertIn('id="newWorkflowButton" class="mini-button" type="button" title="New asset" aria-label="Create new asset"', self.html)
+        self.assertIn('id="optionsCloseButton" type="button" aria-label="Close options" title="Close options"', self.html)
+        self.assertIn('id="themeCloseButton" type="button" aria-label="關閉介面設定" title="Close"', self.html)
+        self.assertIn('id="validationDetailsClose" class="modal-close" type="button" aria-label="Close" title="Close"', self.html)
