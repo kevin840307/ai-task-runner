@@ -176,6 +176,16 @@ def test_executor_persists_recovery_error_and_clears_it_after_success():
         and "HTTP 503" in event["detail"]
         for event in records
     )
+    recovery = next(
+        event
+        for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    )
+    assert recovery["stage"] == "sample"
+    assert recovery["retry_mode"] in {"retry", "recover"}
+    assert recovery["retry"] == 1
+    assert recovery["wait_seconds"] == 0
+    assert "HTTP 503" in recovery["error"]
 
 
 def test_executor_keeps_final_technical_error_for_detached_ui():
