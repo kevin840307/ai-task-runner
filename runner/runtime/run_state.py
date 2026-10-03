@@ -19,6 +19,7 @@ from ..utils import append_bounded_log, bounded_text, io_path, same_path
 from .events import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
+MAX_TRANSITION_HISTORY = 40
 
 
 @dataclass
@@ -78,6 +79,7 @@ class RunState:
     expansion_counter: int = 0
     workflow_fingerprint: str = ""
     transition_previous: dict[str, Any] = field(default_factory=dict)
+    transition_history: list[dict[str, Any]] = field(default_factory=list)
     stage_sessions: dict[str, str] = field(default_factory=dict)
     review_failures: dict[str, int] = field(default_factory=dict)
 
@@ -108,6 +110,14 @@ class RunState:
                 raise ValueError(f"state.{name} must be a non-negative number")
         if not isinstance(self.transition_previous, dict):
             raise ValueError("state.transition_previous must be an object")
+        if not isinstance(self.transition_history, list) or any(
+            not isinstance(item, dict) for item in self.transition_history
+        ):
+            raise ValueError("state.transition_history must be an array of objects")
+        if len(self.transition_history) > MAX_TRANSITION_HISTORY:
+            raise ValueError(
+                f"state.transition_history exceeds {MAX_TRANSITION_HISTORY} entries"
+            )
         if not isinstance(self.expanded_workflow, list) or any(
             not isinstance(item, dict) for item in self.expanded_workflow
         ):
@@ -329,4 +339,4 @@ def normalize_state(state: RunState) -> bool:
     return changed
 
 
-__all__ = ["RunState", "StateStore", "Task", "normalize_state", "set_stage"]
+__all__ = ["MAX_TRANSITION_HISTORY", "RunState", "StateStore", "Task", "normalize_state", "set_stage"]
