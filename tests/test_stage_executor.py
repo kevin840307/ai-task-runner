@@ -50,6 +50,10 @@ class Stage:
 def context(tmp_path=Path(".")):
     state = RunState("run", "goal", str(tmp_path))
     model = SimpleNamespace(session_id="")
+    def set_stage(stage_name, detail=""):
+        state.stage = stage_name
+        state.last_error = detail
+
     return StageContext(
         config=RuntimeConfig(stage_retries=0, retry_delay=0, retry_max_delay=0),
         root=tmp_path,
@@ -60,7 +64,7 @@ def context(tmp_path=Path(".")):
         validator_path=None,
         validator_is_ai=False,
         save_state=lambda: None,
-        set_stage=lambda stage, detail="": setattr(state, "stage", stage),
+        set_stage=set_stage,
     )
 
 
@@ -139,6 +143,51 @@ def test_executor_preserves_one_lifecycle_for_internal_retries():
     ]
     assert stage.calls == 2
     assert lifecycle == [("start", "sample"), ("finish", "sample")]
+
+
+def test_executor_persists_recovery_error_and_clears_it_after_success():
+    class RetryOnce(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return StageResult.error_result(self.name, RunnerError("HTTP 503"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = 1
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+
+    result = StageExecutor(Hooks()).run(RetryOnce(), ctx)
+
+    assert result.status == "pass"
+    assert ctx.state.last_error == ""
+    assert any(
+        event["type"] == "runner.status"
+        and event["action"] == "set"
+        and event["status"] == "Recovering"
+        and "HTTP 503" in event["detail"]
+        for event in records
+    )
+
+
+def test_executor_keeps_final_technical_error_for_detached_ui():
+    class Broken(Stage):
+        def run(self, ctx, previous=None):
+            return StageResult.error_result(self.name, RunnerError("permanent transport error"))
+
+    ctx = context()
+    ctx.config.stage_retries = 0
+
+    result = StageExecutor(Hooks()).run(Broken(), ctx)
+
+    assert result.status == "error"
+    assert "permanent transport error" in ctx.state.last_error
 
 
 def test_executor_uses_node_label_only_as_event_detail():
