@@ -1841,19 +1841,19 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
     work = project / ".ai-task-runner"
     stop_request = work / "stop.request"
     marker = work / "runner-process.json"
-    session_id = ""
+    checkpoint: dict[str, object] = {}
     deadline = time.monotonic() + settings.run_timeout
     try:
         while process.poll() is None and time.monotonic() < deadline:
             state = read_state(project)
             current = state.get("ai_session_id")
             if marker.is_file() and isinstance(current, str) and current:
-                session_id = current
+                checkpoint = dict(state)
                 stop_request.write_text("stop\n", encoding="utf-8")
                 break
             time.sleep(0.1)
-        if not session_id:
-            raise RuntimeError("stop.request probe could not capture an active durable session")
+        if not checkpoint:
+            raise RuntimeError("stop.request probe could not capture a durable resumable checkpoint")
         code = process.wait(timeout=min(settings.run_timeout, 30))
     finally:
         if process.poll() is None:
@@ -1863,23 +1863,38 @@ def stop_request_resume_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError(f"stop.request did not stop Supervisor cleanly: exit={code}")
     if marker.exists() or stop_request.exists():
         raise RuntimeError("stop.request cleanup left stale runtime control files")
-    if read_state(project).get("completed") is True:
-        raise RuntimeError("stop.request incorrectly marked the run completed")
 
-    saw_resume = False
-    def observe_resume() -> None:
-        nonlocal saw_resume
-        saw_resume = saw_resume or observed_session(project, session_id, "resume")
+    stopped = read_state(project)
+    if stopped.get("completed") is True:
+        raise RuntimeError("stop.request incorrectly marked the run completed")
+    if checkpoint.get("run_id") and stopped.get("run_id") != checkpoint.get("run_id"):
+        raise RuntimeError(
+            "stop.request replaced durable run state: "
+            f"before={checkpoint.get('run_id')!r}, after={stopped.get('run_id')!r}"
+        )
+    for field in ("current", "cycle", "workflow_position"):
+        before = checkpoint.get(field)
+        after = stopped.get(field)
+        if isinstance(before, int) and isinstance(after, int) and after < before:
+            raise RuntimeError(
+                f"stop.request regressed durable {field}: before={before}, after={after}"
+            )
+    if checkpoint.get("ai_session_id") and not stopped.get("ai_session_id"):
+        raise RuntimeError("stop.request lost the durable AI session checkpoint")
 
     resumed = run_command(
         runner_command(settings, project, resume=True),
         console_log(project, "resume-console.jsonl"),
         settings.run_timeout,
-        observe_resume,
     )
     assert_completed(project, resumed)
-    if not saw_resume:
-        raise RuntimeError("stop.request resume completed without same-session evidence")
+
+    # Same-session model transport is intentionally validated by resume_probe(),
+    # which stops at a deterministic checkpoint that is guaranteed to require
+    # another AI call. This detached stop probe may stop after the current AI
+    # Stage has already checkpointed and while a command/validator is active;
+    # requiring a new model.prompt(session_mode=resume) here is a race-prone
+    # false failure even when durable stop/resume is correct.
 
 
 def custom_dynamic_producer_probe(settings: Settings, root: Path) -> None:
