@@ -475,3 +475,15 @@ def test_stage_palette_and_generic_field_use_catalog_metadata():
     assert "catalogMeta?.category" in text
     assert "option.description" in text
     assert 'category !== "extensions"' in text
+
+
+def test_prompt_deep_link_and_stage_yaml_fill_contract():
+    text = SOURCE.read_text(encoding="utf-8")
+    styles = (ROOT / "ui" / "studio-src" / "src" / "styles.css").read_text(encoding="utf-8")
+
+    assert 'view: "workflow", source: "prompt", studio: promptId' in text
+    assert 'inspectorTab === "yaml" ? "yaml-mode" : ""' in text
+    assert ".stage-editor-content.yaml-mode" in styles
+    assert "grid-template-rows: minmax(0,1fr)" in styles
+    assert ".stage-yaml-panel {" in styles
+    assert "box-sizing: border-box" in styles
