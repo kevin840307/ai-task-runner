@@ -185,3 +185,206 @@ def test_latest_transition_is_restored_on_resume(tmp_path):
     assert seen["previous"].stage == "first"
     assert seen["previous"].output == "durable feedback"
     assert seen["previous"].data == {"evidence": "saved"}
+
+
+
+def _task(task_id: str):
+    from runner.runtime.run_state import Task
+    return Task(
+        id=task_id,
+        title=task_id,
+        description=f"work {task_id}",
+        deliverable="artifact",
+        acceptance_criteria=["done"],
+    )
+
+
+def test_dynamic_children_execute_before_parent_continuation(tmp_path):
+    workflow = [
+        node("a"),
+        node("producer", produces="tasks"),
+        node("d"),
+    ]
+    ctx = context(tmp_path, workflow)
+
+    def callback(stage, _ctx, previous):
+        if stage.name == "producer":
+            return StageResult(
+                "producer",
+                "pass",
+                kind="tasks",
+                data={
+                    "tasks": [_task("t1")],
+                    "stages": [
+                        {
+                            "name": "execute",
+                            "type": "base",
+                            "profile": "execute",
+                            "task_id": "t1",
+                        },
+                        {
+                            "name": "review",
+                            "type": "base",
+                            "profile": "review",
+                            "task_id": "t1",
+                            "task_complete": True,
+                            "routes": {"fail": "execute"},
+                        },
+                    ],
+                },
+            )
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    assert FlowEngine(ctx).run(executor) == 0
+
+    assert executor.seen == [
+        "a",
+        "producer",
+        "producer__g1__execute",
+        "producer__g1__review",
+        "d",
+    ]
+    assert ctx.state.tasks and ctx.state.tasks[0].status == "completed"
+    assert ctx.state.completed is True
+    assert [item["name"] for item in ctx.state.expanded_workflow] == executor.seen
+
+
+def test_dynamic_review_fail_loops_inside_child_before_parent_continues(tmp_path):
+    workflow = [node("producer", produces="tasks"), node("after")]
+    ctx = context(tmp_path, workflow)
+    review_calls = 0
+
+    def callback(stage, _ctx, previous):
+        nonlocal review_calls
+        if stage.name == "producer":
+            return StageResult(
+                "producer",
+                "pass",
+                kind="tasks",
+                data={
+                    "tasks": [_task("work")],
+                    "stages": [
+                        {
+                            "name": "execute",
+                            "type": "base",
+                            "profile": "execute",
+                            "task_id": "work",
+                        },
+                        {
+                            "name": "review",
+                            "type": "base",
+                            "profile": "review",
+                            "task_id": "work",
+                            "task_complete": True,
+                            "routes": {"fail": "execute"},
+                        },
+                    ],
+                },
+            )
+        if stage.name.endswith("__review"):
+            review_calls += 1
+            if review_calls == 1:
+                return StageResult(
+                    stage.name,
+                    "fail",
+                    data={"completed": False, "missing_items": ["fix"]},
+                    kind="review",
+                )
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    assert FlowEngine(ctx).run(executor) == 0
+
+    assert executor.seen == [
+        "producer",
+        "producer__g1__execute",
+        "producer__g1__review",
+        "producer__g1__execute",
+        "producer__g1__review",
+        "after",
+    ]
+    assert ctx.state.tasks[0].status == "completed"
+
+
+def test_nested_dynamic_producer_returns_to_outer_child_then_parent(tmp_path):
+    workflow = [node("producer", produces="stages"), node("after")]
+    ctx = context(tmp_path, workflow)
+
+    def callback(stage, _ctx, previous):
+        if stage.name == "producer":
+            return StageResult(
+                "producer",
+                "pass",
+                kind="stages",
+                data={
+                    "stages": [
+                        {
+                            "name": "nested",
+                            "type": "base",
+                            "profile": "generic",
+                            "produces": "stages",
+                        },
+                        {"name": "outer_tail", "type": "base", "profile": "generic"},
+                    ]
+                },
+            )
+        if stage.name.endswith("__nested"):
+            return StageResult(
+                stage.name,
+                "pass",
+                kind="stages",
+                data={
+                    "stages": [
+                        {"name": "nested_child", "type": "base", "profile": "generic"}
+                    ]
+                },
+            )
+        return StageResult(stage.name, "pass")
+
+    executor = Executor(callback)
+    assert FlowEngine(ctx).run(executor) == 0
+
+    assert executor.seen == [
+        "producer",
+        "producer__g1__nested",
+        "producer__g1__nested__g2__nested_child",
+        "producer__g1__outer_tail",
+        "after",
+    ]
+
+
+def test_resume_uses_durable_expanded_workflow_without_rerunning_producer(tmp_path):
+    workflow = [node("producer", produces="stages"), node("after")]
+    ctx = context(tmp_path, workflow)
+    from runner.workflow.dynamic_expansion import expand_stage_result
+
+    expanded = expand_stage_result(
+        state=ctx.state,
+        workflow=workflow,
+        source_index=0,
+        source=workflow[0],
+        result=StageResult(
+            "producer",
+            "pass",
+            kind="stages",
+            data={"stages": [{"name": "child", "type": "base", "profile": "generic"}]},
+        ),
+        continuation="next",
+    )
+    assert expanded is not None
+    ctx.state.workflow_position = 1
+    ctx.state.transition_previous = {
+        "stage": "producer",
+        "status": "pass",
+        "output": "durable producer output",
+        "changed_files": [],
+        "data": None,
+        "kind": "stages",
+    }
+
+    executor = Executor(lambda stage, *_: StageResult(stage.name, "pass"))
+    assert FlowEngine(ctx).run(executor) == 0
+
+    assert executor.seen == ["producer__g1__child", "after"]
+    assert "producer" not in executor.seen
