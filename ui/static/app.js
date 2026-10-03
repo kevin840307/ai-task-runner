@@ -254,7 +254,11 @@ function applySelectedRuntimeToProjectList(projects) {
   const current = projects.find((p) => sameProjectPath(p.path, state.project.path));
   if (!current) return projects;
   const runtime = state.runtime;
-  current.runtime_status = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+  current.runtime_status = runtime.running
+    ? (runtime.last_error ? "recovering" : "running")
+    : runtime.completed ? "completed"
+      : runtime.resumable ? ((runtime.stale || runtime.last_error) ? "needs_attention" : "stopped")
+        : "idle";
   current.runtime_stage = String(runtime.cli_status || runtime.stage || "");
   current.runtime_completed_count = Number(runtime.completed_count || 0);
   current.runtime_total = Number(runtime.total || 0);
@@ -303,7 +307,7 @@ function openProjectMenu(menu, anchor, row) {
   menu.hidden = false; menu.classList.add("project-action-menu-portal"); document.body.appendChild(menu);
   positionProjectMenu(menu, anchor);
 }
-const PROJECT_RUNTIME_LABELS = { running: "Running", completed: "Completed", interrupted: "Needs Attention", stopped: "Stopped", idle: "Idle", missing: "Missing" };
+const PROJECT_RUNTIME_LABELS = { running: "Running", recovering: "Recovering", completed: "Completed", needs_attention: "Needs Attention", stopped: "Stopped", idle: "Idle", missing: "Missing" };
 function projectRuntimeStatus(project) { return project.exists === false ? "missing" : (project.runtime_status || "idle"); }
 function projectRowSignature(project) {
   return JSON.stringify([
@@ -502,8 +506,9 @@ function renderCliRuntimeFrame() {
   setTextIfChanged(output, cliRuntimeText(runtime));
 }
 function runtimeStatusLabel(runtime) {
+  if (runtime?.running && runtime?.last_error) return "Recovering";
   if (runtime?.running) return "Running";
-  if (runtime?.stale && runtime?.resumable) return "Needs Attention";
+  if (runtime?.resumable && (runtime?.stale || runtime?.last_error)) return "Needs Attention";
   if (runtime?.resumable) return "Stopped";
   if (runtime?.completed) return "Completed";
   return "Idle";
@@ -618,8 +623,9 @@ function renderRuntime(runtime) {
   }
   updateRuntimeFreshness();
   const badge = $("statusBadge"); badge.className = "runtime-badge"; const label = runtimeStatusLabel(runtime);
-  if (runtime.running) badge.classList.add("running");
-  else if (runtime.stale && runtime.resumable) badge.classList.add("interrupted");
+  if (runtime.running && runtime.last_error) badge.classList.add("recovering");
+  else if (runtime.running) badge.classList.add("running");
+  else if (runtime.resumable && (runtime.stale || runtime.last_error)) badge.classList.add("needs-attention");
   else if (runtime.resumable) badge.classList.add("failed");
   else if (runtime.completed) badge.classList.add("completed");
   const baseStage = String(runtime.cli_status || runtime.stage || "").trim();
@@ -662,7 +668,11 @@ function renderRuntime(runtime) {
   } else removeLiveCard();
   const current = state.projects.find((p) => sameProjectPath(p.path, state.project?.path));
   if (current) {
-    const nextStatus = runtime.running ? "running" : runtime.completed ? "completed" : runtime.resumable ? (runtime.stale ? "interrupted" : "stopped") : "idle";
+    const nextStatus = runtime.running
+      ? (runtime.last_error ? "recovering" : "running")
+      : runtime.completed ? "completed"
+        : runtime.resumable ? ((runtime.stale || runtime.last_error) ? "needs_attention" : "stopped")
+          : "idle";
     const nextStage = String(runtime.cli_status || runtime.stage || "");
     const nextCompleted = Number(runtime.completed_count || 0);
     const nextTotal = Number(runtime.total || 0);
