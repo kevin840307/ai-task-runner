@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .base_stage import MODE_READONLY, BaseStage, BaseStageSpec, StageContext
+from .base_stage import BaseStage, BaseStageSpec, SessionPolicy
+from .contracts import MODE_READONLY, StageContext
 
 
 @dataclass(frozen=True)
