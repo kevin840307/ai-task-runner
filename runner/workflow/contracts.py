@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from ...agent import AIClientProtocol
-from ...config.runtime import RuntimeConfig
-from ...errors import RunnerError
-from ...runtime.run_state import RunState, Task
+from ..agent import AIClientProtocol
+from ..config.runtime import RuntimeConfig
+from ..errors import RunnerError
+from ..runtime.run_state import RunState, Task
 
 StageStatus = Literal["pass", "fail", "error"]
 StageMode = Literal["readonly", "write"]
