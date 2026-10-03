@@ -4,7 +4,7 @@
   function shell({ title, message = "" }) {
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const box = document.createElement("div"); box.className = "designer-export-box designer-confirm-box";
-    box.innerHTML = `<div class="designer-export-card ui-dialog-card" role="dialog" aria-modal="true"><div class="designer-step-card-title"><div><h2 class="ui-dialog-title">${escapeHtml(title)}</h2><p class="designer-form-hint ui-dialog-message">${escapeHtml(message)}</p></div><button type="button" data-dialog-close aria-label="Close">×</button></div><div class="ui-dialog-body"></div><div class="designer-footer-actions ui-dialog-actions"></div></div>`;
+    box.innerHTML = `<div class="designer-export-card ui-dialog-card" role="dialog" aria-modal="true"><div class="designer-step-card-title"><div><h2 class="ui-dialog-title">${escapeHtml(title)}</h2><p class="designer-form-hint ui-dialog-message">${escapeHtml(message)}</p></div><button type="button" data-dialog-close aria-label="Close" title="Close">×</button></div><div class="ui-dialog-body"></div><div class="designer-footer-actions ui-dialog-actions"></div></div>`;
     box.__dialogTrigger = trigger;
     document.body.appendChild(box); return box;
   }
