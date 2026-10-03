@@ -1,20 +1,9 @@
-# Latest custom Workflow example.
-# No PlanStage is required because discover_tasks itself produces Task[].
+# Custom task producer with producer-defined dynamic child stages.
 stages:
   discover_tasks:
     type: command
     command: "{python} custom_task_producer.py"
     produces: tasks
-
-  execute:
-    type: task
-
-  review:
-    type: review
-    recover: [repair]
-
-  repair:
-    type: task
 
   done:
     type: command
@@ -22,8 +11,4 @@ stages:
 
 flow:
   - discover_tasks
-  - stage: execute
-    scope: task
-  - stage: review
-    scope: task
   - done

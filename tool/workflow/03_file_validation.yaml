@@ -1,7 +1,8 @@
-# Deterministic file/Python validation after autonomous task completion.
 stages:
   planning:
     type: plan
+
+
 
   validate_file:
     type: command
@@ -10,8 +11,9 @@ stages:
     actor: validator
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+    routes:
+      fail: planning
 
 flow:
   - planning
-  - stage: validate_file
-    restart_at: planning
+  - validate_file

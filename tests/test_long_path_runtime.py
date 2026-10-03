@@ -2,8 +2,8 @@ from pathlib import Path
 
 from runner.resources import read_text, write_text
 from runner.runtime.run_state import RunState, StateStore
-from runner.utils.files import copy_path, digest, remove_path
-from runner.workflow.snapshot import freeze_run_resource, load_run_resource
+from runner.utils import copy_path, digest, remove_path
+from runner.resources import freeze_run_resource, load_run_resource
 
 
 def _deep_root(tmp_path: Path) -> Path:

@@ -8,7 +8,7 @@ from runner.config.runtime import RuntimeConfig
 from runner.runtime.process_runner import ProcessResult
 from runner.runtime.run_state import RunState
 from runner.workflow.registry import create_stage
-from runner.workflow.stages.contracts import StageContext
+from runner.workflow.stages import StageContext
 
 
 def context(tmp_path: Path) -> StageContext:
@@ -21,7 +21,7 @@ def context(tmp_path: Path) -> StageContext:
 
 
 def test_command_supports_python_and_validator_placeholders(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     validator = tmp_path / "validator.py"
     validator.write_text("print('validator')", encoding="utf-8")
     ctx = context(tmp_path)
@@ -40,7 +40,7 @@ def test_command_supports_python_and_validator_placeholders(monkeypatch, tmp_pat
 
 
 def test_command_validation_cleans_work_paths(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     ctx = context(tmp_path)
     reports = ctx.work / "validator-reports"
     reports.mkdir()
@@ -52,7 +52,7 @@ def test_command_validation_cleans_work_paths(monkeypatch, tmp_path):
 
 
 def test_shared_process_runner_maps_nonzero_to_fail(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     ctx=context(tmp_path)
     monkeypatch.setattr(command_stage,"run_process",lambda *a,**k: ProcessResult("BROKEN",7))
     result=create_stage({"type":"command","name":"check","status":"Check","command":["fake"]}).run(ctx)
@@ -60,7 +60,7 @@ def test_shared_process_runner_maps_nonzero_to_fail(monkeypatch, tmp_path):
 
 
 def test_command_stage_supports_project_relative_cwd(monkeypatch,tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     sub=tmp_path/"sub"; sub.mkdir(); ctx=context(tmp_path); seen={}
     monkeypatch.setattr(command_stage,"run_process",lambda command,cwd,timeout,*a,**k:(seen.setdefault("cwd",cwd) or ProcessResult("OK",0)))
     # setdefault returns Path, so use explicit function
@@ -77,7 +77,7 @@ def test_command_stage_runs_real_child_process(tmp_path):
 
 
 def test_command_string_is_supported(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     ctx = context(tmp_path)
     seen = {}
     def fake(command, cwd, timeout, *a, **k):
@@ -90,7 +90,7 @@ def test_command_string_is_supported(monkeypatch, tmp_path):
 
 
 def test_validation_clean_work_can_be_disabled(monkeypatch, tmp_path):
-    from runner.workflow.stages import command as command_stage
+    import runner.workflow.stages.command_stage as command_stage
     ctx = context(tmp_path)
     reports = ctx.work / "validator-reports"
     reports.mkdir()

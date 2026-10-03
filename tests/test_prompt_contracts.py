@@ -3,9 +3,7 @@ from pathlib import Path
 import pytest
 
 from runner.errors import RunnerError
-from runner.prompts import PROMPT_ROOT
-from runner.prompts.context import PROMPT_CONTEXT_KEYS
-from runner.prompts.loader import prompt_variables, render_prompt
+from runner.prompting import PROMPT_CONTEXT_KEYS, PROMPT_ROOT, prompt_variables, render_prompt
 
 SYSTEM_ONLY_KEYS = {"plugin_rules"}
 ALLOWED_PROMPT_KEYS = PROMPT_CONTEXT_KEYS | SYSTEM_ONLY_KEYS
@@ -48,9 +46,9 @@ def test_strict_undefined_fails_fast(tmp_path):
 
 
 def test_review_prompt_and_protocol_split_role_from_shared_control():
-    from runner.prompts.protocols import REVIEW_PROTOCOL
+    from runner.prompting import REVIEW_PROTOCOL
 
-    review = (PROMPT_ROOT / "stages" / "review.md").read_text(encoding="utf-8")
+    review = (PROMPT_ROOT / "common" / "review.md").read_text(encoding="utf-8")
 
     assert "current TODO only" in review
     assert "adequate evidence" in review
@@ -64,7 +62,7 @@ def test_review_prompt_and_protocol_split_role_from_shared_control():
 
 
 def test_immutable_protocols_own_structured_contracts():
-    from runner.prompts.protocols import (
+    from runner.prompting import (
         PLAN_PROTOCOL, REVIEW_PROTOCOL, VALIDATION_PROTOCOL, STRUCTURED_RETRY_PROTOCOL,
     )
 
@@ -79,7 +77,7 @@ def test_immutable_protocols_own_structured_contracts():
     assert "never invent a missing item" in STRUCTURED_RETRY_PROTOCOL.lower()
 
 def test_ai_validator_prompt_mode_is_injected_by_stage():
-    prompt = (PROMPT_ROOT / "stages" / "ai_validator.md").read_text(encoding="utf-8")
+    prompt = (PROMPT_ROOT / "common" / "ai_validator.md").read_text(encoding="utf-8")
 
     assert "Final validation. This is a fresh independent session." in prompt
     assert "coverage evidence" in prompt
@@ -88,17 +86,17 @@ def test_ai_validator_prompt_mode_is_injected_by_stage():
 
 
 def test_planning_contract_is_code_owned_and_duplicate_task_rules_are_removed():
-    from runner.prompts.protocols import PLAN_PROTOCOL
+    from runner.prompting import PLAN_PROTOCOL
 
     assert "observable deliverable" in PLAN_PROTOCOL
     assert "acceptance criteria" in PLAN_PROTOCOL
     assert "Runner owns orchestration" in PLAN_PROTOCOL
-    assert not (PROMPT_ROOT / "stages" / "plan_task_rules.md").exists()
+    assert not (PROMPT_ROOT / "plan_task_rules.md").exists()
 
 
 def test_ai_validator_stage_always_injects_run_level_validation_resource():
     from types import SimpleNamespace
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai"))
     ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="CHECK_MAGIC_BUSINESS_RULE", ai_validator_yolo=False))
@@ -113,7 +111,7 @@ def test_ai_validator_stage_always_injects_run_level_validation_resource():
 
 def test_ai_validator_stage_injects_yolo_validation_mode():
     from types import SimpleNamespace
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     stage = AIValidatorStage(AIValidatorStageSpec(name="validate_ai", ai_validator_yolo=True))
     ctx = SimpleNamespace(config=SimpleNamespace(ai_validator_prompt="", ai_validator_yolo=False))
@@ -129,9 +127,9 @@ def test_ai_validator_stage_injects_yolo_validation_mode():
 def test_shared_stage_control_has_only_continue_retry_recover_modes():
     from types import SimpleNamespace
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageExecution
+    from runner.workflow.stages import StageExecution
 
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     task = SimpleNamespace(
         last_review={"completed": False, "reason": "missing check", "missing_items": ["x"]}
     )
@@ -141,7 +139,7 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
         execution=StageExecution(),
         task=task,
         state=state,
-        scratch={"prompt_contracts": {("stages/execution.md", "session-1")}},
+        scratch={"prompt_contracts": {"execute": ("common/execution.md", "session-1")}},
     )
 
     continued = stage._shared_control_prompt(ctx, None, client)
@@ -160,11 +158,45 @@ def test_shared_stage_control_has_only_continue_retry_recover_modes():
     assert "same_session: false" in recovered
 
 
+def test_prompt_contract_memory_is_bounded_per_static_prompt_identity():
+    from types import SimpleNamespace
+    from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+
+    scratch = {}
+    first = BaseStage(BaseStageSpec(name="worker_a", prompt="common/execution.md"))
+    second = BaseStage(BaseStageSpec(name="worker_b", prompt="common/execution.md"))
+    ctx = SimpleNamespace(scratch=scratch)
+
+    client = SimpleNamespace(session_id="")
+    for index in range(100):
+        client.session_id = f"session-{index}"
+        first._remember_prompt(ctx, client)
+
+    client.session_id = "other-session"
+    second._remember_prompt(ctx, client)
+
+    assert scratch["prompt_contracts"] == {
+        ("generic", "common/execution.md", ""): "other-session",
+    }
+
+
 def test_obsolete_alternate_stage_prompts_are_removed():
-    stages = PROMPT_ROOT / "stages"
-    for name in (
+    forbidden = {
         "execution_continue.md",
         "review_continue.md",
         "plan_finalize_same_session.md",
-    ):
-        assert not (stages / name).exists()
+        "planning_rules.md",
+    }
+    assert not any(path.name in forbidden for path in PROMPT_ROOT.rglob("*.md"))
+
+
+def test_plan_stage_uses_plan_wire_protocol_before_dynamic_expansion():
+    from runner.workflow.stages import PlanStage, PlanStageSpec
+
+    stage = PlanStage(PlanStageSpec(name="planning"))
+    prompt = stage._with_immutable_protocol("Plan work.")
+
+    assert "[RUNNER_IMMUTABLE_PLAN_PROTOCOL]" in prompt
+    assert "[RUNNER_IMMUTABLE_DYNAMIC_TASKS_PROTOCOL]" not in prompt
+    assert stage.result_kind == "tasks"
+    assert stage.protocol_kind == "plan_tasks"

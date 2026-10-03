@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import runner.backends.qwen as qwen
-from runner.ai.contracts import BackendMode
-from runner.backends.qwen import QwenBackend, bridge_sandbox_session
+import runner.agent.qwen as qwen
+from runner.agent import BackendMode
+from runner.agent.qwen import QwenBackend, bridge_sandbox_session
 from runner.runtime.process_runner import ProcessResult
 
 

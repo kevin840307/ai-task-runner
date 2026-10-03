@@ -3,22 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .ai.client import create_ai_client
+from .agent import create_ai_client
 from .config.runtime import RuntimeConfig
 from .errors import ConfigurationError, RunnerError
-from .project.files import cleanup_stale_artifacts
-from .runtime import progress
+from .workspace import cleanup_stale_artifacts, register_ui_project
+from .runtime import events as progress
 from .runtime.run_state import StateStore, normalize_state, set_stage
-from .ui_projects import register_ui_project
 from .workflow.flow_engine import build_flow_engine
 from .workflow.loader import workflow_fingerprint
-from .workflow.snapshot import (
-    freeze_run_resource,
-    freeze_workflow,
-    load_run_resource,
-    load_snapshot,
-)
-from .workflow.stages import StageContext, StageExecutor
+from .resources import freeze_run_resource, freeze_workflow, load_run_resource, load_snapshot
+from .workflow.execution import StageExecutor
+from .workflow.stages import StageContext
 
 
 class WorkflowRunner:
@@ -36,8 +31,6 @@ class WorkflowRunner:
         self.context = self._build_context()
         self.flow_engine = build_flow_engine(self.context)
 
-        # Compatibility attribute for older extensions/tests.
-        self.pipeline = self.flow_engine
         self.stage_executor = StageExecutor()
 
     def _validate_request(self) -> None:
@@ -85,7 +78,6 @@ class WorkflowRunner:
             self.config.goal,
             resume=self.config.resume,
             force_new=self.config.force_new,
-            execution_mode=self.config.execution_mode,
         )
         fingerprint = workflow_fingerprint(self.config.workflow)
         if self.state.workflow_fingerprint not in {"", fingerprint}:
@@ -154,16 +146,7 @@ class WorkflowRunner:
             setattr(self.config, content_attr, text)
 
     def run(self) -> int:
-        if self.config.plan_only and self.state.tasks:
-            progress.set_status(
-                "Plan ready",
-                "plan-only completed without execution",
-            )
-            return 0
-        return self.flow_engine.run(
-            self.stage_executor,
-            plan_only=self.config.plan_only,
-        )
+        return self.flow_engine.run(self.stage_executor)
 
     def _validate_paths(self) -> None:
         if not self.root.is_dir() or (

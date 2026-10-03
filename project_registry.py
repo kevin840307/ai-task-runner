@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import os
 import time
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
 LOCK_TIMEOUT_SECONDS = 5.0
 LOCK_POLL_SECONDS = 0.05
 STALE_LOCK_SECONDS = 60.0
+_IN_PROCESS_LOCK = threading.RLock()
 
 
 def path_key(path: str | Path) -> str:
@@ -36,27 +38,30 @@ def project_path_key(path: str | Path) -> str:
 
 @contextmanager
 def project_file_lock(projects_file: Path):
-    """Cross-process lock for read-modify-write project registry operations."""
-    lock = projects_file.with_suffix(projects_file.suffix + ".lock")
-    deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
-    handle: int | None = None
-    while handle is None:
+    """Thread-safe and cross-process lock for project registry read-modify-write."""
+    # Threads in one UI/CLI process should not contend through the filesystem.
+    # The file lock remains authoritative across separate UI/CLI processes.
+    with _IN_PROCESS_LOCK:
+        lock = projects_file.with_suffix(projects_file.suffix + ".lock")
+        deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
+        handle: int | None = None
+        while handle is None:
+            try:
+                handle = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                _remove_stale_lock(lock)
+                if time.monotonic() >= deadline:
+                    raise OSError(f"timed out waiting for UI project lock: {lock}")
+                time.sleep(LOCK_POLL_SECONDS)
         try:
-            handle = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            _remove_stale_lock(lock)
-            if time.monotonic() >= deadline:
-                raise OSError(f"timed out waiting for UI project lock: {lock}")
-            time.sleep(LOCK_POLL_SECONDS)
-    try:
-        os.write(handle, f"{os.getpid()}\n".encode("ascii"))
-        yield
-    finally:
-        os.close(handle)
-        try:
-            lock.unlink()
-        except FileNotFoundError:
-            pass
+            os.write(handle, f"{os.getpid()}\n".encode("ascii"))
+            yield
+        finally:
+            os.close(handle)
+            try:
+                lock.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _remove_stale_lock(lock: Path) -> None:

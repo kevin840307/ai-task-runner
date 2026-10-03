@@ -1,4 +1,4 @@
-from runner.utils.logs import append_bounded_log
+from runner.utils import append_bounded_log
 
 
 def test_bounded_log_keeps_only_current_and_previous_file(tmp_path):

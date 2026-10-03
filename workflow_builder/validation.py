@@ -85,6 +85,13 @@ def validate_draft(project_root: Path, draft_workflow: Path, draft_prompt_dir: P
         refs.append(ref)
         if not candidate.is_file():
             missing.append(ref)
+            continue
+        # Generated Draft prompts must live under draft/prompts so publish can
+        # deterministically map them into prompts/workflow/<workflow-name>/.
+        if not Path(ref).is_absolute() and not _inside(candidate, draft_prompt_dir):
+            raise ValueError(
+                f"generated Prompt must stay under Draft Prompt directory: {ref}"
+            )
     if missing:
         raise ValueError("missing Prompt file(s): " + ", ".join(sorted(set(missing))))
 

@@ -40,7 +40,24 @@ elif stage == "execute":
         (is_qwen and "--resume" in args and args[args.index("--resume") + 1] == "old-session")
         or (not is_qwen and "--session" in args and args[args.index("--session") + 1] == "old-session")
     )
-    if attempt == 1 and has_old_session:
+    if attempt == 1:
+        # First technical failure still exposes a durable session. StageExecutor
+        # must retry this same Stage by resuming old-session.
+        if is_qwen:
+            print(json.dumps({
+                "type": "system",
+                "subtype": "session_start",
+                "session_id": "old-session",
+            }))
+        else:
+            print(json.dumps({
+                "type": "step_start",
+                "sessionID": "old-session",
+                "part": {"type": "step-start"},
+            }))
+        print("HTTP 503 Service Unavailable", file=sys.stderr)
+        raise SystemExit(7)
+    if attempt == 2 and has_old_session:
         message = os.environ.get("SESSION_FAILURE_MESSAGE", "session not found")
         if is_qwen:
             print(json.dumps({
@@ -52,6 +69,9 @@ elif stage == "execute":
         else:
             print(message, file=sys.stderr)
         raise SystemExit(7)
+    if attempt < 3:
+        print("expected old-session resume before fresh recovery", file=sys.stderr)
+        raise SystemExit(8)
     session = "new-session"
     (root / "done.txt").write_text("done", encoding="utf-8")
     answer = "created done.txt"

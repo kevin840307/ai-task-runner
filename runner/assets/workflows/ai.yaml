@@ -1,0 +1,21 @@
+stages:
+  planning:
+    type: plan
+    status: AI 正在依任務複雜度建立可驗證 TODO
+    readonly_safety: observe
+
+  validate_ai:
+    type: ai_validator
+    status: AI 正在執行最終語意驗證
+    validator: ai
+    session_policy: fresh
+    runs: 3
+    required_passes: 2
+    ai_validator_yolo: true
+    readonly_safety: observe
+    routes:
+      fail: planning
+
+flow:
+  - planning
+  - validate_ai

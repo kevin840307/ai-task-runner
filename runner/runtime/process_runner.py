@@ -14,9 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_WATCHDOG_INTERVAL, MAX_PROCESS_OUTPUT_CHARS
-from ..utils.files import atomic_write_text, io_path
-from ..utils.text import bounded_text
-from .heartbeat import touch_heartbeat
+from ..utils import atomic_write_text, bounded_text, io_path
+from .events import touch_heartbeat
 
 
 TERMINATION_GRACE_SECONDS = 5

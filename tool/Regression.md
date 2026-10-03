@@ -171,7 +171,7 @@ Run
     ↓
 Verify
     ↓
-FAIL → Repair → Retry
+FAIL → Route Back To Execute → Re-validate
     ↓
 PASS
 ```
@@ -198,7 +198,7 @@ PASS
 
 給定一份人寫的PRR(只需提供一次), 只要能定義格式、必要內容與品質規則，就可以：
 
-**Generate → Validate → Repair**
+**Generate → Validate → Feedback Loop**
 
 ## Security Report
 

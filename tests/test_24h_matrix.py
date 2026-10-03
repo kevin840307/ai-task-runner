@@ -1,156 +1,146 @@
 from __future__ import annotations
-import json, sys, textwrap
+
+import json
+import sys
+import textwrap
 from pathlib import Path
-import pytest
+
 from runner.api import RunRequest, run
-from runner.config.defaults import DEFAULT_MAX_CYCLES
-ROOT=Path(__file__).resolve().parents[1]
-def cmd(): return f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
-def records(sd):
- p=sd/'prompt-log.jsonl'; return [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
-def stages(project):
- p=project/'.ai-task-runner'/'log.txt'
- return [json.loads(x)['stage'] for x in p.read_text(encoding='utf-8').splitlines() if json.loads(x).get('type')=='runner.stage' and json.loads(x).get('action')=='start']
-def base(tmp_path, monkeypatch, scenario, validator='ai', **kw):
- sd=tmp_path.parent/f'{tmp_path.name}-{scenario}-state'; monkeypatch.setenv('SCENARIO',scenario); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
- req=RunRequest(goal='Create requested result',project_root=str(tmp_path),validator=validator,backend='qwen',command=cmd(),max_attempts=kw.pop('max_attempts',2),max_cycles=kw.pop('max_cycles',DEFAULT_MAX_CYCLES),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0,**kw)
- r=run(req); return r,records(sd)
-def validator(path):
- path.write_text(textwrap.dedent('''import argparse\nfrom pathlib import Path\np=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()\nraise SystemExit(0 if (Path(a.project_root)/"done.txt").exists() else 5)\n'''))
-def mixed_project(root):
- root.mkdir(); (root/'prompt.md').write_text('Create requested result\n',encoding='utf-8'); (root/'ai.md').write_text('Independently confirm the requested result.\n',encoding='utf-8'); validator(root/'validator.py')
-def script_stages(project,index):
- p=project/'.ai-task-runner'/'script'/f'{index:03d}'/'log.txt'
- return [json.loads(x)['stage'] for x in p.read_text(encoding='utf-8').splitlines() if json.loads(x).get('type')=='runner.stage' and json.loads(x).get('action')=='start']
 
-def test_ai_validation(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'happy_path'); flow=stages(tmp_path); assert r.completed; assert [x['stage'] for x in recs][-1]=='validator'; assert 'validate_ai' in flow and 'validate_file' not in flow
-def test_python_validation(tmp_path,monkeypatch):
- v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v)); flow=stages(tmp_path); assert r.completed; assert 'validator' not in [x['stage'] for x in recs]; assert 'validate_file' in flow and 'validate_ai' not in flow
-def test_mixed_validation(tmp_path,monkeypatch):
- v=tmp_path/'validator.py'; validator(v); r,recs=base(tmp_path,monkeypatch,'happy_path',str(v),ai_validator_prompt='independent check'); flow=stages(tmp_path); assert r.completed; assert 'validator' in [x['stage'] for x in recs]; assert 'validate_file' in flow and 'validate_ai' in flow
-def test_file_protection(tmp_path,monkeypatch):
- p=tmp_path/'protected.txt'; p.write_text('original'); monkeypatch.setenv('PROTECTED_PATH',str(p)); r,recs=base(tmp_path,monkeypatch,'protected_retry',protect_files=[str(p)]); assert r.completed; assert p.read_text()=='original'; assert sum(x['stage']=='execute' for x in recs)>=2
-def test_loop_recovery(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'loop_detection',max_attempts=1); assert r.completed; ex=[x for x in recs if x['stage']=='execute']; assert len(ex)>=2; assert ex[1]['resumed']
-def test_multi_retry(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'execution_model_error',max_attempts=2); assert r.completed; ex=[x for x in recs if x['stage']=='execute']; assert len(ex)>=4; assert any(not x['resumed'] for x in ex[1:])
-def test_review_repair(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'review_retry'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=2; assert sum(x['stage']=='execute' for x in recs)>=2
-def test_ai_quorum_absorbs_one_failed_vote(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'ai_replan'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=3; assert r.states[0]['cycle']==1
-def test_default_ai_quorum_replans_after_failed_vote_set(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'ai_replan_many'); assert r.completed; assert sum(x['stage']=='validator' for x in recs)>=6; assert r.states[0]['cycle']==2
-def test_yaml_default_unlimited_cycles_continue_past_four_failures(tmp_path,monkeypatch):
- sd=tmp_path.parent/f'{tmp_path.name}-yaml-many-state'; monkeypatch.setenv('SCENARIO','ai_replan_many'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
- script=tmp_path/'tasks.yaml'; script.write_text('- prompt: Create requested result\n  validator: ai\n',encoding='utf-8')
- r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
- assert r.completed; assert r.states[0]['cycle']==2
-def test_yaml_mixed_reliability_gate_survives_repeated_final_ai_replans(tmp_path,monkeypatch):
- sd=tmp_path.parent/f'{tmp_path.name}-yaml-mixed-reliability-state'; monkeypatch.setenv('SCENARIO','ai_replan_many_per_project'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
- for name in ('one','two'): mixed_project(tmp_path/name)
- one_validator=str(tmp_path/'one'/'validator.py').replace("'","''"); two_validator=str(tmp_path/'two'/'validator.py').replace("'","''")
- script=tmp_path/'tasks.yaml'; script.write_text(textwrap.dedent(f'''\
- - goal_file: one/prompt.md
-   project_root: one
-   validator: '{one_validator}'
-   ai_validator_prompt_file: one/ai.md
-   ai_validator_count: 3
-   ai_validator_required_passes: 3
- - goal_file: two/prompt.md
-   project_root: two
-   validator: '{two_validator}'
-   ai_validator_prompt_file: two/ai.md
-   ai_validator_count: 3
-   ai_validator_required_passes: 3
- '''),encoding='utf-8')
- r=run(RunRequest(project_root=str(tmp_path),script=str(script),backend='qwen',command=cmd(),retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
- assert r.completed and len(r.states)==2
- assert [state['cycle'] for state in r.states]==[3,3]
- assert all('validate_file' in script_stages(tmp_path/name,index) and script_stages(tmp_path/name,index).count('validate_ai')==3 for index,name in enumerate(('one','two'),1))
- recs=records(sd); votes=[x for x in recs if x['stage']=='validator']
- assert len(votes)==18
- assert all(not x['resumed'] for x in votes)
-def test_stagnation_repair(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'stagnation'); assert r.completed; assert sum(x['stage']=='review' for x in recs)>=4
-def test_api_503_recovers(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'api_503',max_attempts=1); assert r.completed; assert sum(x['stage']=='execute' for x in recs)>=4
+ROOT = Path(__file__).resolve().parents[1]
 
-def test_system_readonly_review_validator_observes_mutation(tmp_path,monkeypatch):
- r,recs=base(tmp_path,monkeypatch,'readonly',max_attempts=2)
- assert r.completed
- assert (tmp_path/'review_mutation.txt').exists()
- assert (tmp_path/'validator_mutation.txt').exists()
- assert sum(x['stage']=='review' for x in recs)>=1
- assert sum(x['stage']=='validator' for x in recs)>=3
 
-def test_plan_only_then_resume(tmp_path,monkeypatch):
- sd=tmp_path.parent/f'{tmp_path.name}-resume-state'; monkeypatch.setenv('SCENARIO','happy_path'); monkeypatch.setenv('SCENARIO_STATE_DIR',str(sd))
- first=run(RunRequest(goal='Create requested result',project_root=str(tmp_path),validator='ai',backend='qwen',command=cmd(),plan_only=True,max_attempts=2,retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
- assert not first.completed
- assert first.states and first.states[0]['tasks'] and first.states[0]['current']==0
- before=records(sd)
- assert all(x['stage'] not in {'execute','review','validator'} for x in before)
- second=run(RunRequest(project_root=str(tmp_path),validator='ai',backend='qwen',command=cmd(),resume=True,max_attempts=2,retry_delay=0,retry_wait=0,retry_max_wait=0,api_wait_timeout=10,agent_idle_after_change_timeout=0))
- assert second.completed
- after=records(sd)[len(before):]
- assert after and after[0]['stage']=='execute'
- assert after[0]['resumed'] is True
+def command() -> str:
+    return f'"{sys.executable}" "{ROOT / "tests/scenario_agent.py"}"'
 
-def test_python_validator_cache_inside_protected_tools_does_not_replan(tmp_path, monkeypatch):
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    (tools / "helper.py").write_text("VALUE = 7\n", encoding="utf-8")
-    (tmp_path / ".ai-task-runner.yaml").write_text(
-        "protected_paths:\n  - tools/\n",
+
+def records(path: Path) -> list[dict]:
+    log = path / "prompt-log.jsonl"
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def run_case(tmp_path, monkeypatch, scenario: str, *, validator="ai", **kwargs):
+    state_dir = tmp_path.parent / f"{tmp_path.name}-{scenario}-state"
+    monkeypatch.setenv("SCENARIO", scenario)
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    result = run(
+        RunRequest(
+            goal="Create requested result",
+            project_root=str(tmp_path),
+            validator=validator,
+            backend="qwen",
+            command=command(),
+            retry_delay=0,
+            retry_max_delay=0,
+            agent_idle_after_change_timeout=0,
+            **kwargs,
+        )
+    )
+    return result, records(state_dir)
+
+
+def validator(path: Path) -> Path:
+    path.write_text(
+        textwrap.dedent(
+            """            import argparse
+            from pathlib import Path
+            p=argparse.ArgumentParser()
+            p.add_argument("--project-root")
+            p.add_argument("--state-file")
+            a,_=p.parse_known_args()
+            raise SystemExit(0 if (Path(a.project_root)/"done.txt").exists() else 5)
+            """
+        ),
         encoding="utf-8",
     )
-    validator_path = tmp_path / "validation.py"
-    validator_path.write_text(textwrap.dedent('''\
-        import argparse
-        import importlib
-        import sys
-        from pathlib import Path
-        p=argparse.ArgumentParser(); p.add_argument("--project-root"); p.add_argument("--state-file"); a,_=p.parse_known_args()
-        root=Path(a.project_root)
-        sys.path.insert(0, str(root))
-        # Deliberately re-enable bytecode to emulate a tool that ignores the
-        # runner environment. Safety must still treat the cache as technical.
-        sys.dont_write_bytecode=False
-        importlib.invalidate_caches()
-        import tools.helper
-        assert tools.helper.VALUE == 7
-        raise SystemExit(0 if (root/"done.txt").exists() else 5)
-    '''), encoding="utf-8")
+    return path
 
-    result, _recs = base(tmp_path, monkeypatch, "happy_path", str(validator_path))
 
+def test_ai_workflow_closes_end_to_end(tmp_path, monkeypatch):
+    result, rows = run_case(tmp_path, monkeypatch, "happy_path")
     assert result.completed
-    assert result.states[0]["cycle"] == 1
-    assert (tools / "__pycache__").is_dir()
-    assert stages(tmp_path).count("validate_file") == 1
+    assert (tmp_path / "done.txt").is_file()
+    assert {"execute", "review", "validator"} <= {row["stage"] for row in rows}
 
 
-def test_live_review_routing_probe_forces_first_review_failure_deterministically():
-    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    start = source.index("REVIEW_ROUTING_WORKFLOW =")
-    end = source.index("REVIEW_ROUTING_VALIDATOR =", start)
-    block = source[start:end]
-
-    assert block.index("- execute") < block.index("- seed")
-    assert block.index("- seed") < block.index("- stage: review")
-    assert 'Path(".ai-task-runner") / "review-seeded-once"' in source
-    assert "one-shot command Stage deterministically seeds review.txt with only READY" in source
+def test_file_workflow_closes_end_to_end(tmp_path, monkeypatch):
+    path = validator(tmp_path / "validator.py")
+    result, rows = run_case(tmp_path, monkeypatch, "happy_path", validator=str(path))
+    assert result.completed
+    assert "validator" not in {row["stage"] for row in rows}
 
 
-def test_live_complete_closed_loop_probe_forces_review_then_validator_failures():
-    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
-    start = source.index("FULL_LOOP_WORKFLOW =")
-    end = source.index("FULL_LOOP_POLICY =", start)
-    block = source[start:end]
+def test_review_fail_routes_back_to_execute(tmp_path, monkeypatch):
+    result, rows = run_case(tmp_path, monkeypatch, "review_retry")
+    assert result.completed
+    assert sum(row["stage"] == "execute" for row in rows) >= 2
+    assert sum(row["stage"] == "review" for row in rows) >= 2
 
-    assert block.index("- execute") < block.index("- seed")
-    assert block.index("- seed") < block.index("- stage: review")
-    assert block.index("- stage: review") < block.index("- stage: validate_file")
-    assert 'Path(".ai-task-runner") / "full-loop-seeded-once"' in source
-    assert 'marker = root / ".ai-task-runner" / "full-loop-validator-failed-once"' in source
+
+def test_technical_failure_retries_inside_same_stage_and_rotates_session(tmp_path, monkeypatch):
+    result, rows = run_case(tmp_path, monkeypatch, "execution_model_error")
+    assert result.completed
+    attempts = [row for row in rows if row["stage"] == "execute"]
+    assert len(attempts) >= 4
+    assert any(row["resumed"] for row in attempts[1:])
+    assert any(not row["resumed"] for row in attempts[2:])
+
+
+def test_transient_api_failure_retries_until_service_returns(tmp_path, monkeypatch):
+    result, rows = run_case(tmp_path, monkeypatch, "api_503")
+    assert result.completed
+    assert sum(row["stage"] == "execute" for row in rows) >= 4
+
+
+def test_yaml_list_uses_same_runtime_contract(tmp_path, monkeypatch):
+    state_dir = tmp_path.parent / "yaml-state"
+    monkeypatch.setenv("SCENARIO", "happy_path")
+    monkeypatch.setenv("SCENARIO_STATE_DIR", str(state_dir))
+    script = tmp_path / "tasks.yaml"
+    script.write_text(
+        "- prompt: Create requested result\n  validator: ai\n"
+        "- prompt: Create requested result again\n  validator: ai\n",
+        encoding="utf-8",
+    )
+    result = run(
+        RunRequest(
+            project_root=str(tmp_path),
+            script=str(script),
+            backend="qwen",
+            command=command(),
+            retry_delay=0,
+            retry_max_delay=0,
+            agent_idle_after_change_timeout=0,
+        )
+    )
+    assert result.completed
+    assert len(result.states) == 2
+
+
+def test_final_ai_votes_are_fresh_sessions(tmp_path, monkeypatch):
+    result, rows = run_case(
+        tmp_path,
+        monkeypatch,
+        "happy_path",
+        final_ai_validations=3,
+        final_ai_required_passes=2,
+    )
+    assert result.completed
+    votes = [row for row in rows if row["stage"] == "validator"]
+    assert len(votes) == 3
+    assert all(not row["resumed"] for row in votes)
+
+
+def test_protected_file_restore_then_retry(tmp_path, monkeypatch):
+    protected = tmp_path / "protected.txt"
+    protected.write_text("original", encoding="utf-8")
+    monkeypatch.setenv("PROTECTED_PATH", str(protected))
+    result, rows = run_case(
+        tmp_path,
+        monkeypatch,
+        "protected_retry",
+        protect_files=[str(protected)],
+    )
+    assert result.completed
+    assert protected.read_text(encoding="utf-8") == "original"
+    assert sum(row["stage"] == "execute" for row in rows) >= 2

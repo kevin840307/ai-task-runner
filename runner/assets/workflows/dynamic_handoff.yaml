@@ -1,0 +1,104 @@
+stages:
+  coordinator:
+    type: handoff
+    label: Dynamic Coordinator
+    status: AI 正在動態選擇下一個專業角色
+    targets:
+      - requirements_analyst
+      - solution_architect
+      - implementer
+      - debugger
+      - verifier
+      - risk_reviewer
+      - final_validate
+    session_policy: role
+
+  requirements_analyst:
+    type: base
+    label: Requirements Analyst
+    status: Requirements Analyst 正在釐清目標、限制與驗收條件
+    prompt: common/dynamic_worker.md
+    instructions: Identify goals, constraints, ambiguities, assumptions, and measurable acceptance criteria. Do not modify project files.
+    session_policy: role
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  solution_architect:
+    type: base
+    label: Solution Architect
+    status: Solution Architect 正在評估架構、邊界與方案
+    prompt: common/dynamic_worker.md
+    instructions: Evaluate architecture, interfaces, tradeoffs, maintainability, and the smallest viable design. Do not modify project files unless the Goal explicitly requires an architecture artifact.
+    session_policy: role
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  implementer:
+    type: base
+    label: Implementation Engineer
+    status: Implementation Engineer 正在進行實作
+    prompt: common/dynamic_worker.md
+    instructions: Implement the smallest correct project changes that advance the Goal. Preserve valid existing work and leave concrete evidence.
+    session_policy: role
+    mode: write
+    track_changes: true
+    routes:
+      pass: coordinator
+
+  debugger:
+    type: base
+    label: Debugging Engineer
+    status: Debugging Engineer 正在定位與修正問題
+    prompt: common/dynamic_worker.md
+    instructions: Diagnose concrete failures from current evidence, isolate the root cause, and make only the minimal corrective changes needed.
+    session_policy: role
+    mode: write
+    track_changes: true
+    routes:
+      pass: coordinator
+
+  verifier:
+    type: base
+    label: Verification Engineer
+    status: Verification Engineer 正在獨立檢查測試與證據
+    prompt: common/dynamic_worker.md
+    instructions: Independently verify behavior, tests, build evidence, and remaining defects. Do not modify production/source files.
+    session_policy: role
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  risk_reviewer:
+    type: base
+    label: Risk & Quality Reviewer
+    status: Risk Reviewer 正在檢查可靠性、品質與失敗模式
+    prompt: common/dynamic_worker.md
+    instructions: Review correctness, reliability, security, maintainability, hidden coupling, edge cases, and operational failure modes. Report only material risks.
+    session_policy: role
+    readonly_safety: observe
+    routes:
+      pass: coordinator
+
+  final_validate:
+    type: ai_validator
+    validator: ai
+    label: Independent Final Validator
+    status: Final Validation 正在獨立確認是否可以結束
+    instructions: Validate the overall Goal and concrete project evidence before completion.
+    session_policy: fresh
+    readonly_safety: observe
+    routes:
+      pass: done
+      fail: coordinator
+
+flow:
+  - coordinator
+  - requirements_analyst
+  - solution_architect
+  - implementer
+  - debugger
+  - verifier
+  - risk_reviewer
+  - final_validate

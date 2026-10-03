@@ -4,22 +4,23 @@ from pathlib import Path
 
 import pytest
 
-from runner.backends.registry import (
-    BACKENDS,
+from runner.agent import (
+    AIClient,
+    AIError,
+    BackendError,
+    BackendResult,
+    BaseBackend,
     backend_names,
     configure_backend_args,
     create_backend,
+    is_transient_service_error,
     sandbox_supported,
+    split_command,
 )
-from runner.ai.contracts import BackendResult
-from runner.backends.base import BaseBackend, split_command
-from runner.ai.client import AIClient
-from runner.ai.errors import AIError, BackendError
-from runner.ai.session import is_transient_service_error
-from runner.backends.opencode import OpenCodeBackend, ensure_opencode_rules
-from runner.backends.qwen import QwenBackend, ensure_qwen_rules
+from runner.agent.backend import BACKENDS
+from runner.agent.opencode import OpenCodeBackend, ensure_opencode_rules
+from runner.agent.qwen import QwenBackend, ensure_qwen_rules
 from runner.plugins.safety import runner_source_files
-
 
 def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert backend_names() == ("qwen", "opencode")
@@ -27,8 +28,8 @@ def test_backend_registry_uses_interface_and_separate_modules(tmp_path):
     assert BACKENDS["opencode"] is OpenCodeBackend
     assert issubclass(QwenBackend, BaseBackend)
     assert issubclass(OpenCodeBackend, BaseBackend)
-    assert QwenBackend.__module__ == "runner.backends.qwen"
-    assert OpenCodeBackend.__module__ == "runner.backends.opencode"
+    assert QwenBackend.__module__ == "runner.agent.qwen"
+    assert OpenCodeBackend.__module__ == "runner.agent.opencode"
 
     qwen = create_backend("qwen", sys.executable, tmp_path, [])
     opencode = create_backend("opencode", sys.executable, tmp_path, [])
@@ -75,13 +76,13 @@ def test_new_backend_can_supply_stage_arguments_through_the_interface(monkeypatc
 
 def test_core_has_no_backend_specific_command_logic():
     root = Path(__file__).resolve().parents[1]
-    source = (root / "runner" / "task_runner.py").read_text(encoding="utf-8")
+    source = (root / "runner" / "workflow_runner.py").read_text(encoding="utf-8")
     assert "[\"--resume\"," not in source
     assert "[\"--session\"," not in source
     assert "--output-format" not in source
     assert 'backend == "opencode"' not in source
     assert 'backend == "qwen"' not in source
-    assert 'runner.backends.qwen' not in source
+    assert 'runner.agent.qwen' not in source
 
 
 def test_sandbox_arguments_are_owned_by_the_backend_adapter():
@@ -608,7 +609,7 @@ def test_run_process_watchdog_sends_stdin_and_eof(tmp_path):
 
 def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
     captured = {}
@@ -636,7 +637,7 @@ def test_qwen_context_snapshot_uses_display_command_only(tmp_path, monkeypatch):
 
 def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, [])
     monkeypatch.setattr(
@@ -650,7 +651,7 @@ def test_qwen_context_snapshot_failure_is_text_only(tmp_path, monkeypatch):
 
 def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
     from runner.runtime.process_runner import ProcessResult
-    import runner.backends.qwen as qwen_module
+    import runner.agent.qwen as qwen_module
 
     backend = QwenBackend(sys.executable, tmp_path, ["--model", "local"])
     calls = []
@@ -670,7 +671,7 @@ def test_qwen_context_usage_percent_and_fast_compression(tmp_path, monkeypatch):
 
 
 def test_opencode_runtime_permission_environment_reaches_process_runner(tmp_path, monkeypatch):
-    import runner.backends.base as base_module
+    import runner.agent.backend as base_module
     from runner.runtime.process_runner import ProcessResult
 
     backend = OpenCodeBackend(sys.executable, tmp_path, [])

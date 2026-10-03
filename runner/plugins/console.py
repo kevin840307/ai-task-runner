@@ -11,7 +11,7 @@ import unicodedata
 from pathlib import Path
 
 from ..runtime.run_state import RunState, Task
-from ..utils.files import io_path
+from ..utils import io_path
 
 
 class LiveUI:

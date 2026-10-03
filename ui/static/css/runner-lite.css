@@ -1214,3 +1214,135 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
   color: var(--text);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+
+.runtime-headline {
+  margin: 4px 0 0;
+  max-width: min(760px, 62vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.runtime-headline[hidden] { display: none !important; }
+
+
+/* Unified runtime vocabulary. */
+.project-mark.runtime-recovering { background: #0ea5e9 !important; box-shadow: 0 0 0 3px rgba(14,165,233,.14); }
+.project-mark.runtime-needs_attention { background: #f59e0b !important; }
+.project-runtime-label.runtime-recovering { color: #0369a1; background: #e0f2fe; }
+.project-runtime-label.runtime-needs_attention { color: #9a5b00; background: var(--warning-soft); }
+.project-runtime-label.runtime-recovering::before { content: "↻"; }
+.project-runtime-label.runtime-needs_attention::before { content: "!"; }
+.runtime-badge.recovering { color: #0369a1; background: #e0f2fe; border-color: #bae6fd; }
+.runtime-badge.needs-attention { color: #9a5b00; background: var(--warning-soft); border-color: color-mix(in srgb, #f59e0b 30%, var(--line)); }
+
+
+/* Lightweight Recent Runs: derived from existing chat/runtime evidence, no dashboard/store. */
+.run-history-panel {
+  margin: 0 18px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.run-history-panel[hidden] { display: none !important; }
+.run-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.run-history-head button {
+  min-width: 30px;
+  min-height: 30px;
+}
+.run-history-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(300px, 38vh);
+  overflow: auto;
+}
+.run-history-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+.run-history-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.run-history-copy strong,
+.run-history-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.run-history-copy small,
+.run-history-empty {
+  color: var(--muted);
+  font-size: 11px;
+}
+.run-history-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+}
+.run-history-row.status-needs_attention .run-history-status { color: var(--warn); }
+.run-history-row.status-recovering .run-history-status { color: var(--run); }
+.run-history-row.status-completed .run-history-status { color: var(--success); }
+.message.run-history-focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+
+.runtime-trace-panel {
+  margin: 0 18px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+.runtime-trace-panel[hidden] { display: none !important; }
+.runtime-trace-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(320px, 42vh);
+  overflow: auto;
+}
+.runtime-trace-row {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+.runtime-trace-row strong,
+.runtime-trace-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runtime-trace-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.runtime-trace-row.status-fail strong { color: var(--warn); }
+.runtime-trace-row.status-error strong { color: var(--danger); }

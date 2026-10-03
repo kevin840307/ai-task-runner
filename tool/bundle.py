@@ -61,6 +61,10 @@ def pack(root: Path, output: Path, excludes: list[str]) -> None:
                 path = current / name
                 rel = path.relative_to(root).as_posix()
 
+                # The canonical bundle normally lives inside the repository
+                # root. Never ingest the file currently being written.
+                if path.resolve() == output:
+                    continue
                 if excluded(rel, excludes):
                     continue
 

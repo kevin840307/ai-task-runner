@@ -12,10 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-try:
-    from .server import UIServer
-except ImportError:
-    from server import UIServer
+from ui import server as ui_server
+
+UIServer = ui_server.UIServer
 
 
 def main() -> int:
@@ -29,6 +28,8 @@ def main() -> int:
     server = UIServer(Path(__file__).resolve().parents[1], args.host, args.port, allow_remote=args.allow_remote)
     url = f"http://{args.host}:{server.port}/"
     print(f"AI Task Runner UI: {url}")
+    print(f"UI backend: {Path(ui_server.__file__).resolve()}")
+    print("Stage Test API: /api/studio/stage/test")
     if args.allow_remote and args.host not in {"127.0.0.1", "::1", "localhost"}:
         print("WARNING: remote UI binding is enabled; expose it only on a trusted network.")
     if not args.no_browser:

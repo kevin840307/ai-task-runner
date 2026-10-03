@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import http.client
 import json
 import sys
@@ -34,6 +35,44 @@ def settings(tmp_path: Path) -> live.Settings:
     )
 
 
+def _fake_qwen_command(tmp_path: Path) -> str:
+    fake = tmp_path / "fake_qwen.py"
+    fake.write_text(
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "prompt = sys.stdin.buffer.read().decode('utf-8')\n"
+        "resume = args[args.index('--resume') + 1] if '--resume' in args else ''\n"
+        "session = resume or f'fake-session-{os.getpid()}'\n"
+        "if 'Reply with exactly AGENT_PING_OK' in prompt:\n"
+        "    answer = 'AGENT_PING_OK'\n"
+        "elif '[RUNNER_IMMUTABLE_PLAN_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'tasks':[{'title':'Create health probe','description':'Create health.txt exactly as required','deliverable':'health.txt','acceptance_criteria':['health.txt has exact requested text']}]})\n"
+        "elif '[RUNNER_IMMUTABLE_REVIEW_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'completed':True,'reason':'checked','missing_items':[]})\n"
+        "elif '[RUNNER_IMMUTABLE_VALIDATION_PROTOCOL]' in prompt:\n"
+        "    answer = json.dumps({'passed':True,'reason':'checked','missing_items':[],'checks_run':['fake deterministic check'],'suggested_checks':[]})\n"
+        "else:\n"
+        "    Path.cwd().joinpath('health.txt').write_text(" + repr(live.EXPECTED) + ", encoding='utf-8')\n"
+        "    answer = 'completed current task'\n"
+        "print(json.dumps([{'type':'system','subtype':'session_start','session_id':session},{'type':'result','subtype':'success','session_id':session,'result':answer}]))\n",
+        encoding="utf-8",
+    )
+    return f'"{sys.executable}" "{fake}"'
+
+
+def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(tmp_path: Path):
+    config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
+
+    result = live.stage_probe_live_preflight(config)
+
+    assert result == {
+        "agent_ping": True,
+        "real_stage_status": "pass",
+        "real_stage_next": "done",
+    }
+
+
 def test_script_command_uses_canonical_yaml_entry(tmp_path: Path):
     script = tmp_path / "tasks.yaml"
     command = live.runner_command(settings(tmp_path), tmp_path, script=script, resume=True)
@@ -49,7 +88,7 @@ def _option(command: list[str], name: str) -> str:
     return command[command.index(name) + 1]
 
 
-def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path):
+def test_runner_command_inputs_select_builtin_validation_workflows(tmp_path: Path):
     project = tmp_path / "project"
     config = replace(settings(tmp_path), agent_timeout=30.0, planning_timeout=40.0)
 
@@ -78,10 +117,26 @@ def test_runner_command_inputs_select_system_validation_workflows(tmp_path: Path
     assert _option(file_only, "--planning-timeout") == "40"
 
 
+def test_runner_command_uses_shared_retry_flags_only(tmp_path: Path):
+    command = live.runner_command(settings(tmp_path), tmp_path)
+    assert "--retry-delay" in command
+    assert "--retry-max-delay" in command
+    for removed in ("--execution-mode", "--retry-wait", "--retry-max-wait", "--max-attempts", "--max-cycles"):
+        assert removed not in command
+
+
 def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
     project = tmp_path / "project"
     script = tmp_path / "tasks.yaml"
     workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        "stages:\n"
+        "  work:\n"
+        "    type: base\n"
+        "    profile: generic\n"
+        "flow: [work]\n",
+        encoding="utf-8",
+    )
     config = replace(settings(tmp_path), sandbox=True)
 
     commands = [
@@ -98,28 +153,58 @@ def test_live_runner_commands_disable_ui_project_registration(tmp_path: Path):
     assert all("--no-ui-project-register" in command for command in commands)
 
 
-def test_live_system_final_ai_contract_matches_bundled_workflows():
-    assert live.system_final_ai_contract("ai") == (3, 2, True)
-    assert live.system_final_ai_contract("mixed") == (3, 2, True)
+def test_live_builtin_final_ai_contract_matches_bundled_workflows():
+    assert live.builtin_final_ai_contract("ai") == (3, 2, True)
+    assert live.builtin_final_ai_contract("mixed") == (3, 2, True)
 
 
-def test_live_system_readonly_safety_contract_matches_bundled_workflows():
-    assert live.system_readonly_safety_contract() == {
-        "file": {"planning": "observe", "__plan_review__": "observe"},
+def test_live_builtin_review_error_policy_contract_matches_bundled_workflows():
+    assert live.builtin_review_error_policy_contract() == {
+        "file": 2,
+        "ai": 2,
+        "mixed": 2,
+    }
+
+
+def test_live_builtin_review_max_failures_contract_matches_bundled_workflows():
+    assert live.builtin_review_max_failures_contract() == {
+        "file": 3,
+        "ai": 3,
+        "mixed": 3,
+    }
+
+
+def test_live_builtin_review_error_policy_contract_rejects_missing_policy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from runner.workflow.stages import PlanStage
+
+    monkeypatch.setattr(
+        PlanStage,
+        "_plan_child_stages",
+        staticmethod(lambda _tasks: [{"name": "review", "type": "base", "profile": "review"}]),
+    )
+    with pytest.raises(RuntimeError, match="dynamic Plan Review error_policy mismatch"):
+        live.builtin_review_error_policy_contract()
+
+
+def test_live_builtin_readonly_safety_contract_matches_bundled_workflows():
+    assert live.builtin_readonly_safety_contract() == {
+        "file": {"planning": "observe", "dynamic_review": "observe"},
         "ai": {
             "planning": "observe",
-            "__plan_review__": "observe",
             "validate_ai": "observe",
+            "dynamic_review": "observe",
         },
         "mixed": {
             "planning": "observe",
-            "__plan_review__": "observe",
             "validate_ai": "observe",
+            "dynamic_review": "observe",
         },
     }
 
 
-def test_live_system_readonly_safety_contract_rejects_missing_observe(
+def test_live_builtin_readonly_safety_contract_rejects_missing_observe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -134,21 +219,21 @@ flow: [planning]
 """,
         encoding="utf-8",
     )
-    workflows = dict(live.SYSTEM_WORKFLOWS)
+    workflows = dict(live.WORKFLOWS)
     workflows["file"] = bad
-    monkeypatch.setattr(live, "SYSTEM_WORKFLOWS", workflows)
+    monkeypatch.setattr(live, "WORKFLOWS", workflows)
 
-    with pytest.raises(RuntimeError, match="system/file planning readonly_safety mismatch"):
-        live.system_readonly_safety_contract()
+    with pytest.raises(RuntimeError, match="workflow/file planning readonly_safety mismatch"):
+        live.builtin_readonly_safety_contract()
 
 
-def test_system_workflow_probe_rejects_reused_final_ai_sessions(
+def test_builtin_workflow_probe_rejects_reused_final_ai_sessions(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
         project = Path(command[command.index("--project-root") + 1])
-        assert Path(command[command.index("--workflow") + 1]) == live.SYSTEM_WORKFLOWS["ai"]
+        assert Path(command[command.index("--workflow") + 1]) == live.WORKFLOWS["ai"]
         work = project / ".ai-task-runner"
         history = work / "debug" / "history"
         history.mkdir(parents=True)
@@ -157,7 +242,13 @@ def test_system_workflow_probe_rejects_reused_final_ai_sessions(
                 {
                     "completed": True,
                     "stage": "completed",
-                    "tasks": [{"title": "one", "status": "completed"}],
+                    "tasks": [{"id": "planning__g1__task-001", "title": "one", "status": "completed"}],
+                    "expanded_workflow": [
+                        {"name": "planning", "type": "plan"},
+                        {"name": "planning__g1__task_001_execute", "type": "base", "profile": "execute"},
+                        {"name": "planning__g1__task_001_review", "type": "base", "profile": "review"},
+                        {"name": "validate_ai", "type": "ai_validator"},
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -170,8 +261,8 @@ def test_system_workflow_probe_rejects_reused_final_ai_sessions(
                 "session": "planner",
                 "session_mode": "fresh",
             },
-            {"type": "runner.stage", "action": "start", "stage": "__plan_task__"},
-            {"type": "runner.stage", "action": "start", "stage": "__plan_review__"},
+            {"type": "runner.stage", "action": "start", "stage": "planning__g1__task_001_execute"},
+            {"type": "runner.stage", "action": "start", "stage": "planning__g1__task_001_review"},
             {"type": "runner.stage", "action": "start", "stage": "validate_ai"},
             {"type": "model.result", "session": "validator-a"},
             {"type": "model.result", "session": "validator-b"},
@@ -194,7 +285,7 @@ def test_system_workflow_probe_rejects_reused_final_ai_sessions(
     monkeypatch.setattr(live, "run_command", fake_run)
 
     with pytest.raises(RuntimeError, match="expected 3, got 2"):
-        live.system_workflow_probe(settings(tmp_path), tmp_path, "ai")
+        live.builtin_workflow_probe(settings(tmp_path), tmp_path, "ai")
 
 
 def test_runner_timeout_arguments_must_be_whole_seconds():
@@ -214,6 +305,15 @@ def test_example_smoke_project_is_opt_in(monkeypatch: pytest.MonkeyPatch):
         ["qwen_live_reliability.py", "--example-smoke-project"],
     )
     assert live.arguments().example_smoke_project == live.DEFAULT_EXAMPLE_SMOKE_PROJECT
+
+
+def test_live_soak_presets_use_current_workflow_asset_paths():
+    for name in ("qwen_live_reliability_0_5h.bat", "qwen_live_reliability_24h.bat"):
+        text = (live.ROOT / "tool" / name).read_text(encoding="utf-8")
+        assert "runner\\assets\\workflows\\file.yaml" in text
+        assert "runner\\assets\\workflows\\mixed.yaml" in text
+        assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
+        assert "runner\\workflows\\" not in text
 
 
 def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
@@ -523,7 +623,8 @@ def test_example_smoke_probe_uses_ai_validator_for_ai_only_workflow(
     workflow.write_text(
         "stages:\n"
         "  execute:\n"
-        "    type: task\n"
+        "    type: base\n"
+        "    profile: execute\n"
         "  validate_ai:\n"
         "    type: ai_validator\n"
         "    validator: ai\n"
@@ -600,9 +701,9 @@ def test_live_reliability_bat_files_run_matrix_smoke(name: str, hours: str, yaml
     assert "--high-density --require-transient" in text
     assert f"--single-process-yaml-items {yaml_items}" in text
     assert "--example-smoke-matrix-project" in text
-    assert "runner\\workflow\\system\\file.yaml" in text
-    assert "runner\\workflow\\system\\mixed.yaml" in text
-    assert "runner\\workflow\\custom\\common\\ralphy_ai_validate.yaml" in text
+    assert "runner\\assets\\workflows\\file.yaml" in text
+    assert "runner\\assets\\workflows\\mixed.yaml" in text
+    assert "runner\\assets\\workflows\\ralphy_ai_validate.yaml" in text
 
 
 def _write_prompt_audit_fixture(tmp_path: Path, events: list[dict], prompts: dict[str, str]) -> Path:
@@ -679,8 +780,10 @@ def test_prompt_contract_requires_stage_instructions_on_fresh_retry(tmp_path: Pa
         ("mixed", ["validate_file", "validate_ai"]),
     ],
 )
-def test_system_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
-    stages = ["planning", "__plan_task__", "__plan_review__", *validators]
+def test_builtin_topology_contract(tmp_path: Path, workflow: str, validators: list[str]):
+    execute = "planning__g1__task_001_execute"
+    review = "planning__g1__task_001_review"
+    stages = ["planning", execute, review, *validators]
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
@@ -697,24 +800,34 @@ def test_system_topology_contract(tmp_path: Path, workflow: str, validators: lis
         encoding="utf-8",
     )
     (work / "state.json").write_text(
-        json.dumps({"tasks": [{"title": "one", "status": "completed"}]}),
+        json.dumps({
+            "tasks": [{"title": "one", "status": "completed"}],
+            "expanded_workflow": [
+                {"name": "planning", "type": "plan"},
+                {"name": execute, "type": "base", "profile": "execute"},
+                {"name": review, "type": "base", "profile": "review"},
+                *[{"name": name, "type": "command"} for name in validators],
+            ],
+        }),
         encoding="utf-8",
     )
 
-    live.assert_system_topology(project, workflow)
+    live.assert_builtin_topology(project, workflow)
 
 
-def test_system_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
+def test_builtin_topology_contract_accepts_multiple_planned_todos(tmp_path: Path):
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
-    stages = [
-        "planning",
-        "__plan_task__", "__plan_review__",
-        "__plan_task__", "__plan_review__",
-        "__plan_task__", "__plan_review__",
-        "validate_file", "validate_ai",
+    dynamic = [
+        name
+        for index in range(1, 4)
+        for name in (
+            f"planning__g1__task_{index:03d}_execute",
+            f"planning__g1__task_{index:03d}_review",
+        )
     ]
+    stages = ["planning", *dynamic, "validate_file", "validate_ai"]
     events = [
         event
         for stage in stages
@@ -728,26 +841,33 @@ def test_system_topology_contract_accepts_multiple_planned_todos(tmp_path: Path)
         encoding="utf-8",
     )
     (work / "state.json").write_text(
-        json.dumps(
-            {
-                "tasks": [
-                    {"title": "one", "status": "completed"},
-                    {"title": "two", "status": "completed"},
-                    {"title": "three", "status": "completed"},
-                ]
-            }
-        ),
+        json.dumps({
+            "tasks": [
+                {"title": "one", "status": "completed"},
+                {"title": "two", "status": "completed"},
+                {"title": "three", "status": "completed"},
+            ],
+            "expanded_workflow": [
+                {"name": "planning", "type": "plan"},
+                *[
+                    {"name": name, "type": "base", "profile": "review" if name.endswith("_review") else "execute"}
+                    for name in dynamic
+                ],
+                {"name": "validate_file", "type": "command"},
+                {"name": "validate_ai", "type": "ai_validator"},
+            ],
+        }),
         encoding="utf-8",
     )
 
-    live.assert_system_topology(project, "mixed")
+    live.assert_builtin_topology(project, "mixed")
 
 
-def test_system_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
+def test_builtin_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path):
     project = tmp_path
     work = project / ".ai-task-runner"
     work.mkdir()
-    stages = ["planning", "__plan_task__", "__plan_review__", "validate_file", "validate_ai"]
+    stages = ["planning", "execute", "review", "validate_file", "validate_ai"]
     events = [
         event
         for stage in stages
@@ -773,7 +893,7 @@ def test_system_topology_contract_rejects_uncovered_durable_todos(tmp_path: Path
     )
 
     with pytest.raises(RuntimeError, match="durable_tasks=2"):
-        live.assert_system_topology(project, "mixed")
+        live.assert_builtin_topology(project, "mixed")
 
 @pytest.mark.parametrize("content", ["READY\nREVIEW_REQUIRED", "READY\nREVIEW_REQUIRED\n"])
 def test_review_failure_routing_validator_accepts_two_logical_lines_with_optional_final_newline(
@@ -881,16 +1001,15 @@ def test_review_failure_routing_probe_uses_deterministic_seed_stage():
     assert "do not inspect files, do not use" in live.REVIEW_ROUTING_EXECUTION_PROMPT
     assert 'type: command' in live.REVIEW_ROUTING_WORKFLOW
     assert 'command: "{python} seed_review.py"' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'skip_on_error: false' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'restart_at: execute' in live.REVIEW_ROUTING_WORKFLOW
-    assert 'continuation_prompt' not in live.REVIEW_ROUTING_WORKFLOW
+    assert 'routes:' in live.REVIEW_ROUTING_WORKFLOW
+    assert 'fail: execute' in live.REVIEW_ROUTING_WORKFLOW
+    for removed in ("skip_on_error", "restart_at", "max_attempts", "on_exhausted"):
+        assert removed not in live.REVIEW_ROUTING_WORKFLOW
     assert 'READY\\n' in live.REVIEW_ROUTING_SEED
     assert "REVIEW_REQUIRED is intentionally missing" in live.REVIEW_ROUTING_GATE
-    assert "Inspect review.txt only, at most once." in live.REVIEW_ROUTING_REVIEW_PROMPT
-    assert "intentionally write only READY" not in live.REVIEW_ROUTING_PROMPT
 
 
-def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_before_review(tmp_path: Path):
+def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
     workflow_path.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
@@ -898,47 +1017,71 @@ def test_review_failure_routing_probe_workflow_forces_seed_after_first_execute_b
     assert [node["name"] for node in workflow] == [
         "execute", "seed", "review", "review_verify", "validate_file"
     ]
-    assert workflow[0]["type"] == "task"
+    assert workflow[0]["type"] == "base"
+    assert workflow[0]["profile"] == "execute"
     assert workflow[1]["type"] == "command"
-    assert workflow[2]["restart_at"] == "execute"
-    assert workflow[2]["max_attempts"] == 3
-    assert workflow[2]["on_exhausted"] == "fail"
-    assert workflow[3]["type"] == "review"
-    assert workflow[4]["restart_at"] == "execute"
-    assert workflow[4]["max_attempts"] == 2
-    assert workflow[4]["on_exhausted"] == "fail"
-    assert all("scope" not in node for node in workflow)
+    assert workflow[2]["routes"] == {"fail": "execute"}
+    assert workflow[3]["type"] == "base"
+    assert workflow[3]["profile"] == "review"
+    assert all(
+        key not in node
+        for node in workflow
+        for key in ("restart_at", "max_attempts", "on_exhausted", "recover")
+    )
     assert "planning" not in {node["name"] for node in workflow}
-    assert 'Path(".ai-task-runner") / "review-seeded-once"' in live.REVIEW_ROUTING_SEED
-
     compile(live.REVIEW_ROUTING_SEED, "seed_review.py", "exec")
     compile(live.REVIEW_ROUTING_GATE, "review_gate.py", "exec")
 
 
-def test_workflow_dryrun_preflight_covers_systems_and_custom_task_producer():
+def test_live_main_keeps_dynamic_session_policy_probe_enabled():
+    source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "dynamic_handoff_session_policy_probe(settings, run_root)" in source
+    assert '"dynamic_handoff_session_policy_probe": True' in source
+
+
+def test_workflow_dryrun_preflight_covers_current_graph_contracts():
     results = live.workflow_dryrun_preflight()
-    assert len(results) == 9
     assert all(item["closed"] is True for item in results)
-    assert sum(int(item["paths_total"]) for item in results) >= 10
-    linear = next(item for item in results if str(item["workflow"]).endswith("ralphy_ai_validate.yaml"))
-    assert linear["features"]["task_producer"] is False
-    assert linear["features"]["task_scope"] is False
-    custom = next(item for item in results if str(item["workflow"]).endswith("custom_workflow_latest.yaml"))
+    assert sum(int(item["paths_total"]) for item in results) >= len(results)
+
+    workflow_names = {
+        Path(str(item["workflow"])).name
+        for item in results
+        if not str(item["workflow"]).startswith("synthetic://")
+    }
+    for expected in {
+        "dynamic_handoff.yaml",
+        "01_default_ai.yaml",
+        "02_ai_with_review_gate.yaml",
+        "03_file_validation.yaml",
+        "04_mixed_with_review_gate.yaml",
+        "05_review_vote_3_choose_2.yaml",
+        "06_custom_task_producer.yaml",
+        "11_multi_validators_anywhere.yaml",
+    }:
+        assert expected in workflow_names
+
+    ralphy = next(
+        item for item in results
+        if str(item["workflow"]).endswith("ralphy_ai_validate.yaml")
+    )
+    assert ralphy["features"]["task_producer"] is False
+    assert ralphy["features"]["dynamic_producer"] is False
+
+    custom = next(
+        item for item in results
+        if str(item["workflow"]).endswith("custom_workflow_latest.yaml")
+    )
     assert custom["features"]["task_producer"] is True
-    assert custom["features"]["task_scope"] is True
-    bounded = next(item for item in results if str(item["workflow"]).endswith("08_bounded_grill_continue.yaml"))
-    assert bounded["features"]["max_attempts"] == 1
-    reentry = next(item for item in results if str(item["workflow"]).endswith("10_bounded_gate_reentry_reset.yaml"))
-    assert reentry["features"]["max_attempts"] == 1
-    assert reentry["features"]["restart_at"] == 1
-    multi = next(item for item in results if str(item["workflow"]).endswith("11_multi_validators_anywhere.yaml"))
-    assert multi["features"]["file_validations"] == 2
-    assert multi["features"]["ai_validations"] == 2
-    assert multi["features"]["validation_not_last"] is True
-    twelve = next(item for item in results if item["workflow"] == "synthetic://12-stage-composability")
+    assert custom["features"]["dynamic_producer"] is True
+
+    twelve = next(
+        item for item in results
+        if item["workflow"] == "synthetic://12-stage-composability"
+    )
     assert twelve["features"]["stages"] == 12
-    assert twelve["features"]["repeat"] == 1
-    assert twelve["features"]["restart_at"] == 1
+    assert twelve["features"]["routes"] == 3
+
 
 
 def test_loop_detection_contract_preflight_accepts_known_qwen_signal():
@@ -946,7 +1089,7 @@ def test_loop_detection_contract_preflight_accepts_known_qwen_signal():
 
 
 
-def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_completed_task(
+def test_custom_dynamic_producer_probe_uses_explicit_workflow_and_requires_completed_task(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -974,7 +1117,7 @@ def test_custom_task_producer_probe_uses_explicit_workflow_and_requires_complete
         return 0
 
     monkeypatch.setattr(live, "run_command", fake_run)
-    live.custom_task_producer_probe(settings(tmp_path), tmp_path)
+    live.custom_dynamic_producer_probe(settings(tmp_path), tmp_path)
 
     command = captured["command"]
     workflow = Path(command[command.index("--workflow") + 1])
@@ -990,27 +1133,49 @@ def test_workflow_dryrun_negative_preflight_proves_invalid_and_loop_detection():
 def test_stop_request_resume_probe_exercises_detached_ui_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    original_runner_command = live.runner_command
-
     def fake_runner_command(config, project, **kwargs):
-        if kwargs.get("resume"):
-            return ["resume-placeholder", str(project)]
-        code = r'''
-import json, sys, time
-from pathlib import Path
-project = Path(sys.argv[1])
-work = project / ".ai-task-runner"
-work.mkdir(parents=True, exist_ok=True)
-(work / "state.json").write_text(json.dumps({"completed": False, "stage": "execute", "ai_session_id": "session-stop"}), encoding="utf-8")
-(work / "runner-process.json").write_text(json.dumps({"supervisor_pid": 1, "worker_pid": 2}), encoding="utf-8")
-deadline = time.time() + 10
-while time.time() < deadline and not (work / "stop.request").exists():
-    time.sleep(0.02)
-(work / "stop.request").unlink(missing_ok=True)
-(work / "runner-process.json").unlink(missing_ok=True)
-raise SystemExit(130)
-'''
-        return [sys.executable, "-c", code, str(project)]
+        return [
+            "resume-placeholder" if kwargs.get("resume") else "start-placeholder",
+            str(project),
+        ]
+
+    class FakeProcess:
+        pid = 12345
+
+        def __init__(self, command, **options):
+            self.project = Path(command[-1])
+            self.work = self.project / ".ai-task-runner"
+            self.work.mkdir(parents=True, exist_ok=True)
+            self.returncode = None
+            (self.work / "state.json").write_text(
+                json.dumps({
+                    "run_id": "stop-run",
+                    "completed": False,
+                    "stage": "execute",
+                    "current": 1,
+                    "cycle": 2,
+                    "workflow_position": 3,
+                    "ai_session_id": "session-stop",
+                }),
+                encoding="utf-8",
+            )
+            (self.work / "runner-process.json").write_text(
+                json.dumps({"supervisor_pid": self.pid, "worker_pid": 2}),
+                encoding="utf-8",
+            )
+
+        def poll(self):
+            stop = self.work / "stop.request"
+            if self.returncode is None and stop.exists():
+                stop.unlink(missing_ok=True)
+                (self.work / "runner-process.json").unlink(missing_ok=True)
+                self.returncode = 130
+            return self.returncode
+
+        def wait(self, timeout=None):
+            if self.poll() is None:
+                raise subprocess.TimeoutExpired(["fake-runner"], timeout)
+            return self.returncode
 
     def fake_run(command: list[str], log: Path, timeout: float, observe=None) -> int:
         project = Path(command[-1])
@@ -1018,15 +1183,32 @@ raise SystemExit(130)
         history = work / "debug" / "history"
         history.mkdir(parents=True, exist_ok=True)
         events = [
-            {"type": "runner.stage", "action": "start", "stage": "execute"},
-            {"type": "model.prompt", "call_id": "resume-1", "session": "session-stop", "session_mode": "resume"},
-            {"type": "runner.stage", "action": "finish", "stage": "execute", "result": "pass"},
+            {"type": "runner.stage", "action": "start", "stage": "validate_file"},
+            {
+                "type": "runner.stage",
+                "action": "finish",
+                "stage": "validate_file",
+                "result": "pass",
+            },
         ]
-        (work / "state.json").write_text(json.dumps({"completed": True, "stage": "completed", "ai_session_id": "session-stop"}), encoding="utf-8")
-        (work / "log.txt").write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
-        (work / "debug" / "last-prompt.txt").write_text("prompt", encoding="utf-8")
-        (work / "debug" / "last-result.txt").write_text("result", encoding="utf-8")
-        (history / "resume-1-prompt.txt").write_text("Continue normal task execution in this same session.\n", encoding="utf-8")
+        (work / "state.json").write_text(
+            json.dumps({
+                "completed": True,
+                "stage": "completed",
+                "ai_session_id": "session-stop",
+            }),
+            encoding="utf-8",
+        )
+        (work / "log.txt").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        (work / "debug" / "last-prompt.txt").write_text(
+            "prompt", encoding="utf-8"
+        )
+        (work / "debug" / "last-result.txt").write_text(
+            "result", encoding="utf-8"
+        )
         (project / "health.txt").write_text(live.EXPECTED, encoding="utf-8")
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("", encoding="utf-8")
@@ -1035,6 +1217,7 @@ raise SystemExit(130)
         return 0
 
     monkeypatch.setattr(live, "runner_command", fake_runner_command)
+    monkeypatch.setattr(live.subprocess, "Popen", FakeProcess)
     monkeypatch.setattr(live, "run_command", fake_run)
 
     live.stop_request_resume_probe(settings(tmp_path), tmp_path)
@@ -1227,7 +1410,7 @@ def test_task_array_recovery_preflight_covers_broken_planning_envelope():
     live.task_array_recovery_preflight()
 
 
-def test_loop_detection_contract_preflight_covers_planning_retry_policy():
+def test_loop_detection_contract_preflight_covers_shared_retry_policy():
     live.loop_detection_contract_preflight()
 
 
@@ -1262,7 +1445,7 @@ def test_deep_preflight_root_uses_extended_length_io_helper(monkeypatch, tmp_pat
     class ProbePath:
         def mkdir(self, *, parents, exist_ok):
             calls.append((parents, exist_ok))
-    monkeypatch.setattr("runner.utils.files.io_path", lambda path: ProbePath())
+    monkeypatch.setattr("runner.utils.io_path", lambda path: ProbePath())
     root = live._deep_preflight_root(tmp_path, len(str(tmp_path)) + 80)
     assert len(str(root)) > len(str(tmp_path)) + 80
     assert calls == [(True, True)]
@@ -1272,7 +1455,7 @@ def test_long_path_temp_root_uses_long_path_safe_cleanup(monkeypatch, tmp_path):
     base = tmp_path / "long-temp"
     removed = []
     monkeypatch.setattr(live.tempfile, "mkdtemp", lambda prefix: str(base))
-    monkeypatch.setattr("runner.utils.files.remove_path", lambda path: removed.append(Path(path)))
+    monkeypatch.setattr("runner.utils.remove_path", lambda path: removed.append(Path(path)))
     monkeypatch.setattr(live, "_deep_preflight_root", lambda root, minimum: root / "deep")
 
     with live._long_path_temp_root("ai-runner-long-path-", 300) as root:
@@ -1333,6 +1516,33 @@ def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, mon
     assert sample["active_process_markers"] == 1
 
 
+def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    history = work / "debug" / "history"
+    history.mkdir(parents=True)
+    state = {
+        "stage_sessions": {"role": "s1"},
+        "dynamic_groups": {"producer": "producer__g2"},
+        "dynamic_task_groups": {"producer": ["t1", "t2"]},
+        "review_failures": {"review::__run__": 2},
+        "expanded_workflow": [{"name": "a"}, {"name": "b"}, {"name": "c"}],
+    }
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    (history / "prompt.txt").write_bytes(b"x" * 17)
+
+    sample = live.project_state_metrics(project)
+
+    assert sample["project_state_json_bytes"] > 0
+    assert sample["project_stage_sessions"] == 1
+    assert sample["project_dynamic_groups"] == 1
+    assert sample["project_dynamic_task_groups"] == 1
+    assert sample["project_review_failures"] == 1
+    assert sample["project_expanded_workflow_stages"] == 3
+    assert sample["project_debug_history_bytes"] == 17
+
+
 def test_resource_maximum_preserves_peak_values():
     assert live._resource_maximum(
         {
@@ -1379,6 +1589,63 @@ def test_record_resource_snapshot_writes_jsonl(tmp_path):
     assert "timestamp" in record
 
 
+def test_live_resume_workflow_uses_current_string_flow_contract():
+    import yaml
+
+    data = yaml.safe_load(live.RESUME_PROBE_WORKFLOW)
+    assert data["flow"] == ["discover", "validate_file"]
+    assert all(isinstance(item, str) for item in data["flow"])
+    assert all("scope" not in stage for stage in data["stages"].values())
+    assert '"name": "execute_first"' in live.RESUME_TASK_PRODUCER
+    assert '"name": "pause"' in live.RESUME_TASK_PRODUCER
+    assert '"name": "execute_second"' in live.RESUME_TASK_PRODUCER
+    assert '"task_complete": True' in live.RESUME_TASK_PRODUCER
+
+
+def test_resume_probe_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
+    config = replace(
+        settings(tmp_path),
+        command=_fake_qwen_command(tmp_path),
+        run_timeout=45,
+        agent_timeout=15,
+        planning_timeout=15,
+    )
+
+    live.resume_probe(config, tmp_path)
+
+    project = tmp_path / "resume-probe"
+    state = live.read_state(project)
+    assert state["completed"] is True
+    assert (project / "health.txt").read_text(encoding="utf-8") == live.EXPECTED
+    assert any(
+        event.get("type") == "model.prompt"
+        and event.get("session_mode") == "resume"
+        for event in live.runner_events(project)
+    )
+
+
+def test_yaml_list_resume_runs_real_cli_process_with_fake_qwen(tmp_path: Path):
+    config = replace(
+        settings(tmp_path),
+        command=_fake_qwen_command(tmp_path),
+        run_timeout=60,
+        agent_timeout=15,
+        planning_timeout=15,
+    )
+
+    live.yaml_list_resume_probe(config, tmp_path, name="yaml-fast-resume")
+
+    batch = tmp_path / "yaml-fast-resume"
+    first = batch / "item-1"
+    second = batch / "item-2"
+    assert live.read_json(
+        first / ".ai-task-runner" / "script" / "001" / "state.json"
+    )["completed"] is True
+    assert live.read_json(
+        second / ".ai-task-runner" / "script" / "002" / "state.json"
+    )["completed"] is True
+
+
 def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1399,14 +1666,24 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
                     "project_root": str(project.resolve()),
                     "completed": False,
                     "stage": "executing",
-                    "task_step": 1,
+                    "workflow_position": 2,
                     "ai_session_id": "session-resume",
                     "tasks": [{
-                        "id": "t1",
+                        "id": "discover__g1__resume",
                         "title": "task",
                         "description": "task",
                         "status": "pending",
                     }],
+                    "expanded_workflow": [
+                        {"name": "discover", "type": "command", "produces": "tasks"},
+                        {"name": "discover__g1__execute_first", "type": "base", "profile": "execute"},
+                        {"name": "discover__g1__pause", "type": "command"},
+                        {"name": "discover__g1__execute_second", "type": "base", "profile": "execute"},
+                        {"name": "validate_file", "type": "command", "result_kind": "validation"},
+                    ],
+                    "dynamic_groups": {"discover": "discover__g1"},
+                    "dynamic_task_groups": {"discover": ["discover__g1__resume"]},
+                    "expansion_counter": 1,
                 }),
                 encoding="utf-8",
             )
@@ -1466,12 +1743,13 @@ def test_resume_probe_uses_deterministic_checkpoint_and_same_session_resume(
     text = first_workflow.read_text(encoding="utf-8")
     assert "type: plan" not in text
     assert "produces: tasks" in text
-    assert "execute_first" in text
-    assert "pause" in text
-    assert "execute_second" in text
     producer = first_workflow.parent / "task_producer.py"
     assert producer.is_file()
-    assert '"tasks"' in producer.read_text(encoding="utf-8")
+    producer_text = producer.read_text(encoding="utf-8")
+    assert '"tasks"' in producer_text
+    assert '"name": "execute_first"' in producer_text
+    assert '"name": "pause"' in producer_text
+    assert '"name": "execute_second"' in producer_text
     assert "--resume" in resumed
 
 
@@ -1548,7 +1826,7 @@ def test_full_loop_executor_applies_validator_feedback_from_durable_state(tmp_pa
     ]
 
 
-def test_full_loop_workflow_uses_deterministic_repair_and_qwen_verification(tmp_path: Path):
+def test_full_loop_workflow_uses_deterministic_rollback_and_qwen_verification(tmp_path: Path):
     workflow_path = tmp_path / "workflow.yaml"
     workflow_path.write_text(live.FULL_LOOP_WORKFLOW, encoding="utf-8")
     workflow = load_workflow(workflow_path)
@@ -1558,9 +1836,10 @@ def test_full_loop_workflow_uses_deterministic_repair_and_qwen_verification(tmp_
     ]
     assert workflow[0]["type"] == "command"
     assert workflow[2]["type"] == "command"
-    assert workflow[2]["restart_at"] == "execute"
-    assert workflow[3]["type"] == "review"
-    assert workflow[4]["restart_at"] == "execute"
+    assert workflow[2]["routes"] == {"fail": "execute"}
+    assert workflow[3]["type"] == "base"
+    assert workflow[3]["profile"] == "review"
+    assert workflow[4]["routes"] == {"fail": "execute"}
     compile(live.FULL_LOOP_EXECUTOR, "full_loop_execute.py", "exec")
     compile(live.FULL_LOOP_REVIEW_GATE, "full_loop_review_gate.py", "exec")
 
@@ -1609,7 +1888,6 @@ def test_review_probe_timeout_reports_state_and_console_tail(tmp_path: Path, mon
                 "stage": "reviewing",
                 "cycle": 2,
                 "workflow_position": 2,
-                "task_step": 0,
                 "transition_previous": {
                     "stage": "execute",
                     "status": "pass",
@@ -1677,3 +1955,256 @@ def test_review_gate_fails_once_then_passes(tmp_path: Path):
     assert second.returncode == 0
     assert "REVIEW_GATE_PASSED" in second.stdout
 
+
+
+
+def test_runner_command_explicit_workflow_only_injects_file_validator_when_required(tmp_path: Path):
+    config = settings(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "prompt.md").write_text("goal", encoding="utf-8")
+    (project / "validation.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    handoff = tmp_path / "handoff.yaml"
+    handoff.write_text(
+        "stages:\n"
+        "  coordinator:\n"
+        "    type: handoff\n"
+        "    targets: [role]\n"
+        "  role:\n"
+        "    type: base\n"
+        "    profile: generic\n"
+        "flow: [coordinator, role]\n",
+        encoding="utf-8",
+    )
+    no_file_validator = live.runner_command(config, project, workflow=handoff)
+    assert "--workflow" in no_file_validator
+    assert "--validator" not in no_file_validator
+
+    file_workflow = tmp_path / "file.yaml"
+    file_workflow.write_text(
+        "stages:\n"
+        "  validate_file:\n"
+        "    type: command\n"
+        "    command: '{python} {validator}'\n"
+        "    result_kind: validation\n"
+        "flow: [validate_file]\n",
+        encoding="utf-8",
+    )
+    with_file_validator = live.runner_command(config, project, workflow=file_workflow)
+    assert with_file_validator[with_file_validator.index("--validator") + 1] == str(project / "validation.py")
+
+    ai_workflow = tmp_path / "ai.yaml"
+    ai_workflow.write_text(
+        "stages:\n"
+        "  validate_ai:\n"
+        "    type: ai_validator\n"
+        "    validator: ai\n"
+        "flow: [validate_ai]\n",
+        encoding="utf-8",
+    )
+    with_ai_validator = live.runner_command(
+        config,
+        project,
+        workflow=ai_workflow,
+        ai_only=True,
+        final_ai=True,
+    )
+    assert with_ai_validator[with_ai_validator.index("--validator") + 1] == "ai"
+    assert "--validator-prompt" in with_ai_validator
+
+
+
+def test_dynamic_session_live_fixture_matches_current_workflow_prompt_contract(tmp_path: Path):
+    project = tmp_path / "dynamic"
+    project.mkdir()
+    (project / "dynamic_router.md").write_text(live.DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8")
+    (project / "dynamic_role.md").write_text(live.DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8")
+    workflow = project / "workflow.yaml"
+    workflow.write_text(live.DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+
+    loaded = load_workflow(workflow)
+    by_name = {item["name"]: item for item in loaded}
+
+    assert by_name["coordinator"]["session_policy"] == "role"
+    assert by_name["main_role"]["session_policy"] == "main"
+    assert by_name["stable_role"]["session_policy"] == "role"
+    assert by_name["stable_role"]["routes"] == {"pass": "stable_gate"}
+    assert by_name["stable_gate"]["routes"] == {"fail": "stable_role", "pass": "fresh_role"}
+    assert by_name["fresh_role"]["session_policy"] == "fresh"
+    assert by_name["fresh_role"]["routes"] == {"pass": "final_gate"}
+    assert by_name["coordinator"]["targets"] == ["main_role"]
+    assert by_name["main_role"]["routes"] == {"pass": "main_gate"}
+    assert by_name["main_gate"]["routes"] == {"fail": "main_role", "pass": "stable_role"}
+    for name in ("coordinator", "main_role", "stable_role", "fresh_role"):
+        prompt = Path(by_name[name]["prompt"])
+        assert prompt.is_absolute()
+        assert prompt.is_file()
+
+
+def test_assert_state_completed_includes_console_tail_when_startup_failed(tmp_path: Path):
+    project = tmp_path / "startup-failure"
+    project.mkdir()
+    log = live.console_log(project, "console.jsonl")
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("configuration exploded before state creation\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError) as error:
+        live.assert_state_completed(project, 1)
+
+    message = str(error.value)
+    assert "state unavailable" in message
+    assert "configuration exploded before state creation" in message
+
+
+def test_dynamic_session_gate_forces_two_stable_role_visits(tmp_path: Path):
+    gate = tmp_path / "stable_gate.py"
+    gate.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('stable-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+
+    first = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+    second = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+
+    assert first.returncode == 1
+    assert second.returncode == 0
+    assert (tmp_path / "stable-gate.count").read_text(encoding="utf-8") == "2"
+
+
+
+def test_dynamic_session_workflow_dryrun_forces_two_stable_visits(tmp_path: Path):
+    from runner.workflow.loader import load_workflow
+    from tool.workflow_dryrun import Scenario, _execute, _close
+
+    project = tmp_path / "dynamic-dryrun"
+    project.mkdir()
+    (project / "dynamic_router.md").write_text(live.DYNAMIC_SESSION_ROUTER_PROMPT, encoding="utf-8")
+    (project / "dynamic_role.md").write_text(live.DYNAMIC_SESSION_ROLE_PROMPT, encoding="utf-8")
+    workflow_file = project / "workflow.yaml"
+    workflow_file.write_text(live.DYNAMIC_SESSION_WORKFLOW, encoding="utf-8")
+
+    workflow = load_workflow(workflow_file)
+    scenario = Scenario({
+        "handoffs": {"coordinator": "main_role"},
+        "stages": {
+            "main_gate": ["fail", "pass"],
+            "stable_gate": ["fail", "pass"],
+        },
+    })
+    ctx, executor, error = _execute(workflow, scenario, 20)
+    try:
+        assert error == ""
+        starts = [stage for _number, stage, _label, _status in executor.trace]
+        assert starts == [
+            "coordinator",
+            "main_role",
+            "main_gate",
+            "main_role",
+            "main_gate",
+            "stable_role",
+            "stable_gate",
+            "stable_role",
+            "stable_gate",
+            "fresh_role",
+            "final_gate",
+        ]
+        assert ctx.state.completed is True
+    finally:
+        _close(ctx)
+
+
+
+def test_real_review_stage_probe_requires_pass_done_for_complete_evidence():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "REVIEW_STAGE_PROBE_OK is the complete deliverable and executor evidence." in source
+    assert 'stage.get("status") != "pass"' in source
+    assert 'stage.get("next") != "done"' in source
+    assert 'stage.get("route") != "next"' in source
+
+
+
+def test_dynamic_session_main_gate_forces_two_main_role_visits(tmp_path: Path):
+    gate = tmp_path / "main_gate.py"
+    gate.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "counter = Path('main-gate.count')\n"
+        "value = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0\n"
+        "value += 1\n"
+        "counter.write_text(str(value), encoding='utf-8')\n"
+        "raise SystemExit(1 if value == 1 else 0)\n",
+        encoding="utf-8",
+    )
+
+    first = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+    second = subprocess.run([sys.executable, str(gate)], cwd=tmp_path, check=False)
+
+    assert first.returncode == 1
+    assert second.returncode == 0
+    assert (tmp_path / "main-gate.count").read_text(encoding="utf-8") == "2"
+
+
+
+def test_dynamic_session_probe_accepts_completed_primary_session_cleanup():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert 'len(main_results) < 2 or len(set(main_results[-2:])) != 1' in source
+    assert 'completed Dynamic Handoff run unexpectedly retained the primary Runner session' in source
+    assert 'state.get("ai_session_id")' in source
+
+
+def test_finish_run_clears_primary_session_by_contract():
+    source = (Path(__file__).resolve().parents[1] / "runner" / "workflow" / "results.py").read_text(encoding="utf-8")
+    assert 'ctx.state.ai_session_id = ""' in source
+    assert 'ctx.ai_client.session_id = ""' in source
+
+
+
+def test_api_recovery_probe_disables_backend_internal_retry():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+
+    assert "qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0)" in source
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("action") == "retry"' in source
+
+
+
+def test_api_recovery_probe_latches_structured_recovery_evidence():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "recovery_event_seen = False" in source
+    assert "if not recovery_event_seen:" in source
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("retry_mode")' in source
+    assert "(*jsonl_events(log), *runner_events(project))" in source
+
+
+
+def test_api_recovery_probe_uses_probe_owned_json_event_stream():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "(*jsonl_events(log), *runner_events(project))" in source
+    assert "runner.recovery/retry" in source
+
+
+
+def test_api_recovery_probe_uses_stable_stageexecutor_recovery_evidence():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("action") == "retry"' in source
+    assert "final scan after process exit" in source
+    assert "last_error is deliberately transient" in source
+
+
+
+def test_api_recovery_probe_final_scan_prevents_fast_recovery_race():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "console_events = jsonl_events(log)" in source
+    assert "recovery_event_seen = recovery_event_seen or any(" in source
+    assert "for event in (*console_events, *events)" in source

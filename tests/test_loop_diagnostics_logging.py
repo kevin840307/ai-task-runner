@@ -1,7 +1,6 @@
 import pytest
 
-from runner.ai.errors import AIError, BackendError
-from runner.backends.base import BaseBackend
+from runner.agent import AIClient, AIError, BackendError, BaseBackend
 from runner.bootstrap import runtime_scope
 from runner.config.runtime import RuntimeConfig
 from runner.errors import diagnostic_detail
@@ -75,7 +74,6 @@ def test_extract_diagnostics_does_not_invent_context_usage():
 
 
 def test_agent_collects_context_snapshot_only_for_loop(tmp_path):
-    from runner.ai.client import AIClient
 
     class FakeBackend:
         name = "fake"
@@ -123,7 +121,7 @@ def _make_agent_with_loop_backend(
     percent,
     message="fake exit 1: Loop detection halted the run",
 ):
-    from runner.ai.client import AIClient
+    from runner.agent.client import AIClient
 
     class FakeBackend:
         name = "fake"

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from runner.utils.files import path_key, remove_path, same_path
+from runner.utils import path_key, remove_path, same_path
 
 
 def test_atomic_resource_temp_name_does_not_repeat_long_target_name(tmp_path, monkeypatch):
@@ -41,7 +41,7 @@ def test_remove_path_deletes_short_root_with_deep_descendants(tmp_path):
         deep = deep / (f"segment-{index}-" + "x" * 38)
         index += 1
 
-    from runner.utils.files import io_path
+    from runner.utils import io_path
 
     io_path(deep).mkdir(parents=True, exist_ok=True)
     io_path(deep / "payload.txt").write_text("x", encoding="utf-8")

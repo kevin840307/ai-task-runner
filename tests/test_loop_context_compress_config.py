@@ -4,7 +4,7 @@ import pytest
 
 from ai_task_runner import parser
 from runner.api import RunRequest
-from runner.script_loader import load_yaml_script
+from runner.script import load_yaml_script
 
 
 def test_loop_context_compression_cli_defaults_off():
@@ -32,7 +32,12 @@ def test_loop_context_compression_threshold_is_bounded():
         RunRequest(
             goal="x",
             validator="ai",
-            loop_context_compress_threshold=101,
+            plugins={
+                "context_compression": {
+                    "enabled": True,
+                    "threshold": 101,
+                }
+            },
         ).validate()
 
 

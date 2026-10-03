@@ -1,43 +1,71 @@
-"""Plugin discovery and access to composed plugin-provided capabilities."""
+"""Single plugin discovery/configuration boundary for the Runner."""
 from __future__ import annotations
 
 import importlib
-import pkgutil
 from collections.abc import Mapping
 from functools import lru_cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
+from ..errors import RunnerError
+
 PLUGIN_ENTRYPOINT_GROUP = "ai_task_runner.plugins"
+BUILTIN_PLUGINS = (
+    "runner.plugins.console",
+    "runner.plugins.context_compression",
+    "runner.plugins.runtime",
+    "runner.plugins.safety",
+)
 
 
-@lru_cache
-def _plugin_modules() -> tuple[Any, ...]:
-    package = importlib.import_module("runner.plugins")
-    internal = [
-        importlib.import_module(f"runner.plugins.{item.name}")
-        for item in sorted(pkgutil.iter_modules(package.__path__), key=lambda item: item.name)
-    ]
-    points = entry_points()
-    selected = (
-        points.select(group=PLUGIN_ENTRYPOINT_GROUP)
-        if hasattr(points, "select")
-        else points.get(PLUGIN_ENTRYPOINT_GROUP, ())
-    )
-    external = [point.load() for point in sorted(selected, key=lambda item: item.name)]
-    return tuple((*internal, *external))
+@lru_cache(maxsize=1)
+def plugin_modules() -> tuple[Any, ...]:
+    """Load explicit built-ins plus installed external plugins once."""
+    modules = [importlib.import_module(name) for name in BUILTIN_PLUGINS]
+    try:
+        points = entry_points()
+        selected = (
+            points.select(group=PLUGIN_ENTRYPOINT_GROUP)
+            if hasattr(points, "select")
+            else points.get(PLUGIN_ENTRYPOINT_GROUP, ())
+        )
+        modules.extend(
+            point.load() for point in sorted(selected, key=lambda item: item.name)
+        )
+    except Exception as error:
+        raise RunnerError(f"plugin discovery failed: {error}") from error
+    return tuple(modules)
+
+
+@lru_cache(maxsize=1)
+def discover_plugins() -> tuple[str, ...]:
+    """Run process-level Stage/backend registration once."""
+    loaded: list[str] = []
+    for module in plugin_modules():
+        setup = getattr(module, "setup", None)
+        if callable(setup):
+            setup()
+        loaded.append(
+            str(
+                getattr(module, "PLUGIN_NAME", "")
+                or getattr(module, "__name__", type(module).__name__)
+            )
+        )
+    return tuple(loaded)
 
 
 def register_plugins(runtime: Any) -> None:
-    for module in _plugin_modules():
+    discover_plugins()
+    for module in plugin_modules():
         register = getattr(module, "register", None)
         if callable(register):
             register(runtime)
 
 
 def add_plugin_arguments(parser: Any) -> None:
-    for module in _plugin_modules():
+    discover_plugins()
+    for module in plugin_modules():
         configure = getattr(module, "add_arguments", None)
         if callable(configure):
             configure(parser)
@@ -55,10 +83,21 @@ def plugin_config_from_yaml(item: Mapping[str, Any]) -> dict[str, dict[str, Any]
     return _collect_plugin_config("config_from_yaml", item)
 
 
+def plugin_yaml_fields() -> frozenset[str]:
+    """Top-level YAML List convenience fields explicitly declared by plugins."""
+    discover_plugins()
+    fields: set[str] = set()
+    for module in plugin_modules():
+        declared = getattr(module, "YAML_FIELDS", ())
+        fields.update(str(name) for name in declared if str(name).strip())
+    return frozenset(fields)
+
+
 def _collect_plugin_config(method: str, source: Any) -> dict[str, dict[str, Any]]:
+    discover_plugins()
     result: dict[str, dict[str, Any]] = {}
-    for module in _plugin_modules():
-        name = getattr(module, "PLUGIN_NAME", "")
+    for module in plugin_modules():
+        name = str(getattr(module, "PLUGIN_NAME", "") or "")
         loader = getattr(module, method, None)
         if name and callable(loader):
             values = loader(source)
@@ -72,9 +111,11 @@ def merge_plugin_config(
     overrides: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     if not isinstance(base, Mapping) or not isinstance(overrides, Mapping):
-        raise ValueError("plugins must be an object")  # noqa: TRY004
-    values = (*base.values(), *overrides.values())
-    if any(not isinstance(item, Mapping) for item in values):
+        raise ValueError("plugins must be an object")
+    if any(
+        not isinstance(item, Mapping)
+        for item in (*base.values(), *overrides.values())
+    ):
         raise ValueError("each plugin configuration must be an object")
     result = {name: dict(values) for name, values in base.items()}
     for name, values in overrides.items():
@@ -86,10 +127,11 @@ def normalize_plugin_config(
     config: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     if not isinstance(config, Mapping):
-        raise ValueError("plugins must be an object")  # noqa: TRY004
+        raise ValueError("plugins must be an object")
+    discover_plugins()
     modules = {
-        module.PLUGIN_NAME: module
-        for module in _plugin_modules()
+        str(module.PLUGIN_NAME): module
+        for module in plugin_modules()
         if getattr(module, "PLUGIN_NAME", "")
     }
     unknown = sorted(set(config) - set(modules))
@@ -115,10 +157,13 @@ __all__ = [
     "PLUGIN_ENTRYPOINT_GROUP",
     "add_plugin_arguments",
     "collect_plugin_instructions",
+    "discover_plugins",
     "merge_plugin_config",
     "normalize_plugin_config",
     "plugin_config_from_namespace",
     "plugin_config_from_request",
     "plugin_config_from_yaml",
+    "plugin_yaml_fields",
+    "plugin_modules",
     "register_plugins",
 ]

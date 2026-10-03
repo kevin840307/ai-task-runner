@@ -25,12 +25,13 @@
 | `--agent-timeout` | runtime AI call timeout | 7200；0=停用 |
 | `--planning-timeout` | Planning AI call timeout | 600；0=停用 |
 | `--agent-idle-after-change-timeout` | 變更/輸出停止後 idle timeout | 900；0=停用 |
-| `--max-attempts` | Same Session 恢復上限 | `-1` 持續恢復直到 PASS，`0` 停用 Same Session retry，正數表示達該次數後切換 Fresh Session。預設：`2`。 |
-| `--review-retries` | AI Review 恢復上限 | `-1` 重試直到 PASS，`0` 停用 retry，正數表示達該次數後 skip Review。預設：`1`；Final Validator 仍是最終權威。 |
-| `--max-cycles` | Workflow/replan cycle 上限 | `-1` 持續驗證與修復直到 PASS，`0` 停用 replan，正數是有限終止上限。預設：`-1`。 |
-| `--retry-delay` | 邏輯 task retry delay | 2 秒 |
-| `--retry-wait` | model-call 初始 retry wait | 5 秒 |
-| `--retry-max-wait` | model-call 最大 retry wait | 300 秒 |
+| `--watchdog-interval` | Worker watchdog heartbeat 間隔 | 必須 >0 |
+| `--worker-hang-timeout` | Worker 無活動判定 hang 的秒數 | 必須 >=0 |
+| `--stage-retries` | technical Stage ERROR retry 次數 | `-1` 無限恢復並在 bounded same-session 後切 Fresh Session |
+| `--max-cycles` | Workflow backward-cycle 上限 | `-1` 無限；非負整數為上限 |
+| `--skip-on-max-cycles` | YAML List item 達 max_cycles 時 skip 並繼續下一 item | 預設關閉；direct run 仍以 cycle exhaustion 結束 |
+| `--retry-delay` | technical failure retry delay | 5 秒 |
+| `--retry-max-delay` | transient service backoff 最大 delay | 300 秒 |
 | `--final-ai-validations`, `--ai-validator-count` | fresh session 的獨立 Final AI 投票數 | 1 |
 | `--final-ai-required-passes` | 必要 PASS 數 | 0 = 嚴格過半；否則不可超過總票數 |
 | `--ai-validator-yolo` | 允許 Final AI validation 執行 command/build/test/coverage 檢查與暫時驗證腳本 | run-level 預設關閉；bundled AI/mixed workflow 會在 stage 明確設定 |
@@ -41,7 +42,6 @@ Work directory 也包含顯示／診斷用途的檔案。`stream.log` 是給 det
 | `--json-events` | 輸出 JSON Lines progress | 預設關閉 |
 | `--resume` | Resume state | 預設關閉 |
 | `--force-new` | 強制新 run | 與 resume 衝突 |
-| `--plan-only` | 只規劃、保存、退出 | 預設關閉 |
 
 ## Validator command 組合
 若使用 `--validator validation.py --validator-arg --fab --validator-arg FAB23`，Runner 概念上執行：

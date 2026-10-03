@@ -1,145 +1,161 @@
 stages:
-  run_prompt:
-    type: task
-
-  review:
-    type: review
-    skip_on_error: false
-
-  grill_ai:
-    type: review
-    session_key: grill_client
-    skip_on_error: false
-
-  final_validate:
-    type: ai_validator
-    validator: ai
-    session_key: final_validation_client
-    fresh_session_each_run: true
-    runs: 5
-    required_passes: 3
-    structured_retries: 2
-    retry: -1
-    prompt: skills/final_validation.md
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
-
-
-flow:
-  # 1. Project Discovery
-  - stage: run_prompt
+  project_discovery:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: Project Discovery
     prompt: skills/project_discovery.md
 
-  - stage: review
+  review_project_discovery:
+    type: base
+    profile: review
     label: Review Project Discovery
     prompt: skills/review.md
     instructions: Review project discovery.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: project_discovery
 
-
-  # 2. Project Documentation
-  - stage: run_prompt
+  project_documentation:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: Project Documentation
     prompt: skills/project_documentation.md
 
-  - stage: grill_ai
-    label: Grill Project Documentation
-    prompt: skills/grill.md
-    repeat: 3
+  challenge_review_project_documentation:
+    type: base
+    profile: review
+    label: Challenge Review Project Documentation
+    prompt: skills/challenge_review.md
+    session_policy: fresh
     instructions: >-
-      Check only these required demo documentation items: how to run the sample, supported calculator operations, expected normal behavior, and important observable errors. PASS if these are materially correct and sufficient; do not request unrelated production or enterprise topics.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+      Check the required demo documentation items only. PASS when materially
+      correct and sufficient.
+    routes:
+      fail: project_documentation
 
-  - stage: review
+  review_project_documentation:
+    type: base
+    profile: review
     label: Review Project Documentation
     prompt: skills/review.md
     instructions: Review the project documentation.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: project_documentation
 
-
-  # 3. E2E SPEC Generation
-  - stage: run_prompt
+  e2e_spec_generation:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: E2E SPEC Generation
     prompt: skills/e2e_spec_generation.md
 
-  - stage: grill_ai
-    label: Grill E2E SPEC
-    prompt: skills/grill.md
-    repeat: 3
+  challenge_review_e2e_spec:
+    type: base
+    profile: review
+    label: Challenge Review E2E SPEC
+    prompt: skills/challenge_review.md
+    session_policy: fresh
     instructions: >-
-      Check only these required demo E2E items: concrete normal arithmetic cases plus important calculator boundary/error behavior visible in the project, including divide-by-zero and unsupported operation behavior when applicable. PASS if these are materially covered; do not expand scope.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+      Check concrete normal arithmetic cases plus important calculator
+      boundary/error behavior. PASS when materially covered.
+    routes:
+      fail: e2e_spec_generation
 
-  - stage: review
+  review_e2e_spec:
+    type: base
+    profile: review
     label: Review E2E SPEC
     prompt: skills/review.md
     instructions: Review the E2E specification.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: e2e_spec_generation
 
-
-  # 4. Verification Design
-  - stage: run_prompt
+  verification_design:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: Verification Design
     prompt: skills/verification_design.md
 
-  - stage: review
+  review_verification_design:
+    type: base
+    profile: review
     label: Review Verification Design
     prompt: skills/review.md
     instructions: Review the verification design.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: verification_design
 
-
-  # 5. Regression DSL Generation
-  - stage: run_prompt
+  regression_dsl_generation:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: Regression DSL Generation
     prompt: skills/regression_dsl_generation.md
 
-  - stage: review
+  review_regression_dsl:
+    type: base
+    profile: review
     label: Review Regression DSL
     prompt: skills/review.md
     instructions: Review the generated regression DSL.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: regression_dsl_generation
 
-
-  # 6. Regression Execution & Qualification
-  - stage: run_prompt
+  execution_qualification:
+    type: base
+    profile: execute
+    mode: write
+    actor: executor
+    track_changes: true
     label: Regression Execution & Qualification
     prompt: skills/execution_qualification.md
 
-  - stage: review
+  review_execution_qualification:
+    type: base
+    profile: review
     label: Review Execution & Qualification
     prompt: skills/review.md
     instructions: Review the regression execution and qualification result.
-    recover:
-      - stage: run_prompt
-        label: Fix Current Result
-        prompt: skills/fix.md
+    routes:
+      fail: execution_qualification
 
-
-  # Final 5-agent vote
-  - stage: final_validate
+  final_ai_validation:
+    type: ai_validator
     label: Final AI Validation
+    validator: ai
+    session_policy: fresh
+    runs: 5
+    required_passes: 3
+    structured_retries: 2
+    prompt: skills/final_validation.md
+    routes:
+      fail: execution_qualification
+
+flow:
+  - project_discovery
+  - review_project_discovery
+  - project_documentation
+  - challenge_review_project_documentation
+  - review_project_documentation
+  - e2e_spec_generation
+  - challenge_review_e2e_spec
+  - review_e2e_spec
+  - verification_design
+  - review_verification_design
+  - regression_dsl_generation
+  - review_regression_dsl
+  - execution_qualification
+  - review_execution_qualification
+  - final_ai_validation

@@ -810,84 +810,6 @@
 .stage-behavior-preview::before { content:"Behavior · "; color:var(--text); font-weight:800; }
 .stage-command-safety { grid-column:1 / -1; }
 
-/* Custom assets are grouped by their relative folder and can be collapsed independently. */
-.studio-folder-group {
-  display: grid;
-  gap: 6px;
-  margin: 2px 0 6px;
-}
-.studio-folder-header {
-  width: 100%;
-  min-height: 30px;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 7px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary, var(--muted));
-  text-align: left;
-  cursor: pointer;
-}
-.studio-folder-header:hover,
-.studio-folder-header:focus-visible {
-  background: var(--panel-2);
-  color: var(--text-primary, var(--text));
-}
-.studio-folder-caret {
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
-.studio-folder-caret::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-right: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  transform: rotate(45deg) translate(-1px, -1px);
-  transform-origin: center;
-  transition: transform 120ms ease;
-}
-.studio-folder-group.collapsed .studio-folder-caret::before {
-  transform: rotate(-45deg) translate(-1px, 1px);
-}
-.studio-folder-group.system-group .studio-folder-label {
-  text-transform: uppercase;
-  letter-spacing: .055em;
-}
-.studio-folder-label {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 11px;
-  font-weight: 850;
-  letter-spacing: .015em;
-}
-.studio-folder-count {
-  min-width: 22px;
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 800;
-  text-align: center;
-}
-.studio-folder-items {
-  display: grid;
-  gap: 7px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-}
-.studio-folder-items[hidden] { display: none; }
-
 /* Hidden Workflow state stays visible while editing, not only in the asset list. */
 .designer-card-main-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .studio-visibility-badge { font-size:11px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
@@ -951,14 +873,14 @@
   letter-spacing: .055em;
   white-space: nowrap;
 }
-.studio-scope-badge.custom,
-.studio-list-scope.custom {
+.studio-scope-badge.global,
+.studio-list-scope.global {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
   background: var(--accent-soft);
   color: var(--accent-dark);
 }
 
-.studio-list-scope.custom {
+.studio-list-scope.global {
   min-height: 18px;
   padding-inline: 6px;
   font-size: 8px;
@@ -968,12 +890,6 @@
   border-color: color-mix(in srgb, var(--blue) 20%, var(--line));
   background: color-mix(in srgb, #eaf1ff 74%, var(--panel));
   color: var(--blue);
-}
-.studio-scope-badge.system,
-.studio-scope-badge.readonly,
-.studio-list-scope.system {
-  background: var(--panel-2);
-  color: var(--muted);
 }
 .studio-visibility-badge {
   border: 1px solid color-mix(in srgb, #b7791f 28%, var(--line));
@@ -1026,9 +942,10 @@
 /* Runtime state stays compact but exposes stage/progress directly in the header badge. */
 .runtime-badge.running { max-width: min(420px, 46vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 980px) {
+@media (max-width: 1180px) {
   .studio-topbar p { display: none; }
   .studio-topbar .designer-topbar-actions { gap: 6px; }
+  .studio-topbar .designer-topbar-actions button { padding-inline: 9px; }
 }
 
 /* Compact Studio polish: reduce visual bulk without changing typography or behavior. */
@@ -1062,3 +979,149 @@
 .validation-details-content{margin:0;min-height:120px;max-height:440px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .validation-details-card>.modal-actions{margin:0;padding:11px 17px;border-top:1px solid var(--line);background:var(--panel)}
 @media(max-width:900px){.studio-designer-body{grid-template-columns:210px minmax(0,1fr)}}
+
+
+/* Workflow Settings ownership: Workflows are managed as a full-width asset list;
+   Prompts keep the master-detail layout because Prompt Editor lives on this page. */
+.studio-designer-body.workflow-manager-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+.workflow-manager-mode .studio-workflow-main {
+  display: none;
+}
+.workflow-manager-mode .studio-workflow-sidebar {
+  width: 100%;
+  max-width: none;
+  padding: 14px;
+}
+.workflow-manager-mode .studio-file-list {
+  display: grid;
+  gap: 6px;
+}
+.workflow-manager-mode .studio-file-group {
+  margin-top: 14px;
+  padding: 0 10px 4px;
+}
+.workflow-manager-mode .studio-file-item {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .34fr) auto;
+  align-items: center;
+  column-gap: 18px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.workflow-manager-mode .studio-file-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 3%, var(--panel));
+}
+.workflow-manager-mode .studio-file-item .studio-file-item-top {
+  min-width: 0;
+}
+.workflow-manager-mode .studio-file-item > small {
+  justify-self: start;
+  white-space: nowrap;
+}
+.studio-file-item-action {
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.prompt-manager-mode .studio-file-item-action { display: none; }
+
+@media (max-width: 1180px) {
+  .workflow-manager-mode .studio-file-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .workflow-manager-mode .studio-file-item > small {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .workflow-manager-mode .studio-file-item-action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
+
+.workflow-context-menu {
+  position: fixed;
+  z-index: 120;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+.workflow-context-menu[hidden] { display: none !important; }
+.workflow-context-menu button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflow-context-menu button:hover {
+  background: var(--panel-2);
+  color: var(--accent-dark);
+}
+
+
+/* Empty/search states expose one compact next action instead of dead-end text. */
+.studio-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.studio-empty-action {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: var(--panel);
+  color: var(--accent-dark);
+  font-weight: 800;
+}
+
+
+.prompt-used-by-head { margin-top: 10px; }
+.prompt-used-by-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.prompt-used-by-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+}
+.prompt-used-by-empty {
+  color: var(--muted);
+  font-size: 10px;
+}

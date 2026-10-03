@@ -38,7 +38,7 @@
 - goal_file: 10_skill_prompt_review_workflow/project/prompt.md
   project_root: 10_skill_prompt_review_workflow/project
   validator: ai
-  workflow_file: ../runner/workflow/custom/common/ralphy_ai_validate.yaml
+  workflow_file: ../runner/assets/workflows/ralphy_ai_validate.yaml
 - goal_file: 11_regression_workflow_demo/project/prompt.md
   project_root: 11_regression_workflow_demo/project
   validator: ai

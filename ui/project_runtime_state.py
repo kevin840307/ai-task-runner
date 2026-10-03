@@ -29,7 +29,6 @@ CHAT_STATE_FILE = "chat-state.json"
 LAUNCH_STATE_FILE = "launching.json"
 LAUNCH_RESERVATION_GRACE = 30.0
 RUNTIME_DIR = ".ai-task-runner"
-PROJECTS_PAYLOAD_CACHE_SECONDS = 1.5
 
 
 class ProjectRuntimeMixin:
@@ -141,7 +140,7 @@ class ProjectRuntimeMixin:
     def backend_catalog(self) -> dict:
         """Return backend names without importing Runner Core into the UI."""
         names: set[str] = set()
-        backends_root = self.repo_root / "runner" / "backends"
+        backends_root = self.repo_root / "runner" / "agent"
         for path in backends_root.glob("*.py") if backends_root.is_dir() else ():
             if path.name.startswith("_"):
                 continue
@@ -175,33 +174,17 @@ class ProjectRuntimeMixin:
             names.add(default)
         return {"default": default, "backends": sorted(names)}
 
-    def execution_mode_catalog(self) -> dict:
-        """Return the Runner-owned top-level orchestration catalog."""
-        tool = self.repo_root / "tool" / "execution_mode_catalog.py"
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(tool)],
-                cwd=str(self.repo_root),
-                capture_output=True,
-                text=True,
-                timeout=15,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise ValueError(f"Execution mode catalog unavailable: {exc}") from exc
-        if completed.returncode != 0:
-            detail = (completed.stderr or completed.stdout or "").strip()
-            raise ValueError("Execution mode catalog failed: " + detail[-2000:])
-        try:
-            payload = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            raise ValueError("Execution mode catalog returned invalid JSON") from exc
-        if not isinstance(payload, dict):
-            raise ValueError("Execution mode catalog must be an object")
-        return payload
-
     def workflow_catalog(self) -> dict:
-        """Return the Runner-owned Stage/editor contract without importing Core."""
+        """Return the Runner-owned Stage/editor contract without importing Runner modules.
+
+        The catalog is immutable for one UI server process. Cache the first valid
+        result so normal Stage edits do not spawn a Python subprocess repeatedly
+        and unrelated subprocess mocks/tests cannot accidentally intercept it.
+        """
+        cached = getattr(self, "_workflow_catalog_cache", None)
+        if isinstance(cached, dict):
+            return cached
+
         tool = self.repo_root / "tool" / "workflow_catalog.py"
         try:
             completed = subprocess.run(
@@ -223,6 +206,7 @@ class ProjectRuntimeMixin:
             raise ValueError("Workflow catalog returned invalid JSON") from exc
         if not isinstance(payload, dict) or not isinstance(payload.get("stage_types"), dict):
             raise ValueError("Workflow catalog is missing stage_types")
+        self._workflow_catalog_cache = payload
         return payload
 
     def add_project(self, path: str) -> dict:
@@ -287,7 +271,6 @@ class ProjectRuntimeMixin:
         tmp = self.projects_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self.projects_file)
-        self._projects_payload_cache = None
 
     def runtime_dir(self, project: Path) -> Path:
         return project / RUNTIME_DIR
@@ -450,17 +433,17 @@ class ProjectRuntimeMixin:
         status = "idle"
         if pid_value and self._pid_alive(pid_value, alive_pids):
             self._clear_launch_reservation(project)
-            status = "running"
+            status = "recovering" if state.get("last_error") else "running"
         elif self._active_launch_reservation(project, alive_pids):
-            status = "running"
+            status = "recovering" if state.get("last_error") else "running"
         else:
             completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
             if completed:
                 status = "completed"
             elif marker and state:
-                status = "interrupted"
+                status = "needs_attention"
             elif state:
-                status = "stopped"
+                status = "needs_attention" if state.get("last_error") else "stopped"
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
         completed_count = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "completed")
         stage = str(state.get("stage") or "")
@@ -636,6 +619,32 @@ class ProjectRuntimeMixin:
             "pid": pid,
             "worker_pid": marker.get("worker_pid"),
             "stage": state.get("stage") or "",
+            "cycle": int(state.get("cycle") or 1),
+            "workflow_position": int(state.get("workflow_position") or 0),
+            "last_transition": (
+                {
+                    "stage": str((state.get("transition_previous") or {}).get("stage") or ""),
+                    "status": str((state.get("transition_previous") or {}).get("status") or ""),
+                }
+                if isinstance(state.get("transition_previous"), dict)
+                else {}
+            ),
+            "recent_transitions": [
+                {
+                    "stage": str(item.get("stage") or ""),
+                    "status": str(item.get("status") or ""),
+                    "target": str(item.get("target") or ""),
+                    "cycle": int(item.get("cycle") or 0),
+                    "kind": str(item.get("kind") or ""),
+                    "timestamp": float(item.get("timestamp") or 0),
+                }
+                for item in (
+                    state.get("transition_history", [])[-20:]
+                    if isinstance(state.get("transition_history"), list)
+                    else []
+                )
+                if isinstance(item, dict)
+            ],
             "task": current_task,
             "current": current + 1 if tasks else 0,
             "total": len(tasks),
@@ -661,7 +670,6 @@ class ProjectRuntimeMixin:
             "backend": str(request.get("backend") or ""),
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),
-            "execution_mode": str(request.get("execution_mode") or "linear"),
             "validator": str(request.get("validator") or ""),
         }
 
@@ -705,6 +713,67 @@ class ProjectRuntimeMixin:
         except OSError:
             return []
         return rows[-200:]
+
+    def run_history(self, project: Path) -> list[dict]:
+        """Derive recent UI run history from existing chat/runtime evidence.
+
+        No second history store is created: completed runs come from assistant
+        messages carrying run_id, while the current active/stopped run comes
+        from the same durable runtime state used by the rest of the UI.
+        """
+        messages = self.messages(project)
+        rows: list[dict] = []
+        latest_user: dict | None = None
+        seen: set[str] = set()
+        for message in messages:
+            role = str(message.get("role") or "")
+            if role == "user":
+                latest_user = message
+                continue
+            run_id = str(message.get("run_id") or "").strip()
+            if role != "assistant" or not run_id or run_id in seen:
+                continue
+            started_at = float((latest_user or {}).get("time") or 0)
+            finished_at = float(message.get("time") or 0)
+            rows.append({
+                "run_id": run_id,
+                "status": "completed",
+                "prompt": str((latest_user or {}).get("content") or ""),
+                "started_at": started_at,
+                "updated_at": finished_at,
+                "duration": max(0.0, finished_at - started_at) if started_at and finished_at else 0.0,
+            })
+            seen.add(run_id)
+
+        runtime = self.read_runtime(project)
+        current_id = str(runtime.get("run_id") or "").strip()
+        if current_id and current_id not in seen and (
+            runtime.get("running") or runtime.get("resumable") or runtime.get("completed")
+        ):
+            if runtime.get("running") and runtime.get("last_error"):
+                status = "recovering"
+            elif runtime.get("running"):
+                status = "running"
+            elif runtime.get("completed"):
+                status = "completed"
+            elif runtime.get("resumable") and (runtime.get("stale") or runtime.get("last_error")):
+                status = "needs_attention"
+            elif runtime.get("resumable"):
+                status = "stopped"
+            else:
+                status = "idle"
+            started_at = float(runtime.get("started_at") or (latest_user or {}).get("time") or 0)
+            updated_at = float(runtime.get("updated_at") or time.time())
+            rows.append({
+                "run_id": current_id,
+                "status": status,
+                "prompt": str(runtime.get("input_prompt") or (latest_user or {}).get("content") or ""),
+                "started_at": started_at,
+                "updated_at": updated_at,
+                "duration": max(0.0, updated_at - started_at) if started_at else 0.0,
+            })
+        return list(reversed(rows[-20:]))
+
 
     def append_message(self, project: Path, role: str, content: str, *, run_id: str = "") -> None:
         with self._chat_lock:
@@ -816,7 +885,6 @@ class ProjectRuntimeMixin:
                     model=request["model"],
                     validator=request["validator"],
                     workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -847,7 +915,6 @@ class ProjectRuntimeMixin:
                 self.launch(
                     project, None, mode="run", backend=backend, model=request["model"],
                     validator=request["validator"], workflow=request["workflow"],
-                    execution_mode=request.get("execution_mode", "linear"),
                     goal_file=request["prompt_file"],
                     ai_validator_prompt_file=request.get("ai_validator_prompt_file", ""),
                     readonly_safety=request.get("readonly_safety", "restore"),
@@ -867,7 +934,6 @@ class ProjectRuntimeMixin:
         model: str = "",
         validator: str = "",
         workflow: str = "",
-        execution_mode: str = "linear",
         goal_file: str = "",
         ai_validator_prompt_file: str = "",
         readonly_safety: str = "restore",
@@ -888,7 +954,6 @@ class ProjectRuntimeMixin:
                     raise ValueError("Goal is required")
                 if mode == "rerun":
                     command.append("--force-new")
-            command += ["--execution-mode", str(execution_mode or "linear")]
             if backend:
                 command += ["--backend", backend]
             command += self._model_cli_args(model)
@@ -937,7 +1002,7 @@ class ProjectRuntimeMixin:
         if workflow_path is not None:
             allowed = {path_key(path) for path in self._known_workflow_paths(project)}
             if path_key(workflow_path) not in allowed:
-                raise ValueError("Selected Workflow is outside the allowed System / Custom / Project workflow roots")
+                raise ValueError("Selected Workflow is outside the allowed Global / Project Workflow asset roots")
             if not workflow_path.is_file():
                 raise ValueError(f"Workflow not found: {workflow_path}")
         requirements = self._workflow_requirements(workflow_path) if workflow_path else {"requires_python_validator": False, "has_ai_validator": False}
@@ -994,7 +1059,6 @@ class ProjectRuntimeMixin:
             "backend": backend or "",
             "model": model_value,
             "mode": request_mode,
-            "execution_mode": "linear",
             "workflow": str(workflow_path) if workflow_path else "",
             "prompt_file": str(prompt_file),
             "validator": validator_value,
@@ -1182,7 +1246,6 @@ __all__ = [
     "LAUNCH_RESERVATION_GRACE",
     "LAUNCH_STATE_FILE",
     "MESSAGES_FILE",
-    "PROJECTS_PAYLOAD_CACHE_SECONDS",
     "ProjectRuntimeMixin",
     "RUNTIME_DIR",
     "UI_STATE_DIR",

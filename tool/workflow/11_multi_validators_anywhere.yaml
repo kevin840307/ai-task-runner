@@ -1,31 +1,42 @@
-# Multiple File/AI validators can be placed anywhere in the top-level flow.
-# Every semantic FAIL routes directly back to the existing Planning Stage.
 stages:
   planning:
     type: plan
+
+
 
   preflight_file:
     type: command
     result_kind: validation
     command: ["{python}", -c, "print('PREFLIGHT_PASS')"]
+    routes:
+      fail: planning
 
-  grill:
-    type: review
-    prompt: ../../runner/prompts/stages/grill.md
-    fresh_session_on_start: true
+  challenge_review:
+    type: base
+    profile: review
+    prompt: common/review.md
+    session_policy: fresh
+    routes:
+      fail: planning
 
   ai_gate_1:
     type: ai_validator
     validator: ai
+    routes:
+      fail: planning
 
   post_file:
     type: command
     result_kind: validation
     command: ["{python}", -c, "print('POST_FILE_PASS')"]
+    routes:
+      fail: planning
 
   ai_gate_2:
     type: ai_validator
     validator: ai
+    routes:
+      fail: planning
 
   final_note:
     type: command
@@ -33,14 +44,9 @@ stages:
 
 flow:
   - planning
-  - stage: preflight_file
-    restart_at: planning
-  - stage: grill
-    restart_at: planning
-  - stage: ai_gate_1
-    restart_at: planning
-  - stage: post_file
-    restart_at: planning
-  - stage: ai_gate_2
-    restart_at: planning
+  - preflight_file
+  - challenge_review
+  - ai_gate_1
+  - post_file
+  - ai_gate_2
   - final_note

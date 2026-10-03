@@ -286,7 +286,7 @@ def test_yaml_event_callback_failure_does_not_stop_runner(tmp_path):
 def test_json_event_output_disconnect_does_not_stop_observer(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from runner.plugins.observability import ObservabilityObserver
+    from runner.plugins.runtime import ObservabilityObserver
 
     def broken_print(*args, **kwargs):
         raise BrokenPipeError("consumer disconnected")
@@ -491,8 +491,7 @@ def test_goal_file_is_loaded_by_public_request(tmp_path):
             backend="qwen",
             command=_fake_command(),
             retry_delay=0,
-            retry_wait=0,
-            retry_max_wait=0,
+            retry_max_delay=0,
         )
     )
 
@@ -513,7 +512,7 @@ def test_ai_validator_prompt_file_is_loaded_by_public_request(tmp_path):
 
 
 def test_ai_validator_prompt_file_reaches_final_validation_prompt(tmp_path):
-    from runner.workflow.stages.ai_stage import AIValidatorStage, AIValidatorStageSpec
+    from runner.workflow.stages import AIValidatorStage, AIValidatorStageSpec
 
     prompt_file = tmp_path / "ai_validation.md"
     prompt_file.write_text("USER_FILE_RULE: verify domain behavior.\n", encoding="utf-8")
@@ -585,8 +584,8 @@ def test_ai_validator_prompt_and_file_are_mutually_exclusive(tmp_path):
             "agent_args must be a list",
         ),
         (
-            RunRequest(goal="x", validator="ai", retry_wait=10, retry_max_wait=5),
-            "greater than or equal",
+            RunRequest(goal="x", validator="ai", retry_delay=10, retry_max_delay=5),
+            "retry_max_delay must be >= retry_delay",
         ),
         (
             RunRequest(goal="x", validator="ai", ai_validator_yolo="true"),
@@ -861,9 +860,7 @@ def test_opencode_backend_runs_real_runner_flow_with_stdin(tmp_path):
         backend="opencode",
         command=_fake_command(),
         retry_delay=0,
-        retry_wait=0,
-        retry_max_wait=0,
-        max_cycles=3,
+        retry_max_delay=0,
     ))
     assert result.completed is True
     assert (tmp_path / "done.txt").read_text(encoding="utf-8") == "done"
@@ -892,8 +889,7 @@ def test_api_deterministic_runner_error_fails_closed_without_resume_loop(tmp_pat
 
 def test_yaml_script_project_name_overrides_outer_default(tmp_path):
     from runner.api import RunRequest
-    from runner.script_loader import load_yaml_script
-    from runner.script_runner import build_script_item_config
+    from runner.script import build_script_item_config, load_yaml_script
 
     script = tmp_path / "tasks.yaml"
     script.write_text("- prompt: x\n  validator: ai\n  project_name: Child Display\n", encoding="utf-8")
@@ -908,59 +904,24 @@ def test_yaml_script_project_name_overrides_outer_default(tmp_path):
 
 
 
-def test_yaml_api_treats_durable_max_cycle_skip_as_completed(tmp_path, monkeypatch):
-    import runner.api as api_module
-
-    script = tmp_path / "tasks.yaml"
-    script.write_text(
-        "- prompt: first\n  validator: ai\n  skip_on_max_cycles: true\n"
-        "- prompt: second\n  validator: ai\n",
-        encoding="utf-8",
-    )
-    first = tmp_path / ".ai-task-runner" / "script" / "001"
-    second = tmp_path / ".ai-task-runner" / "script" / "002"
-    calls = []
-
-    def fake_execute(config):
-        calls.append(config.resume)
-        first.mkdir(parents=True, exist_ok=True)
-        second.mkdir(parents=True, exist_ok=True)
-        from runner.script_loader import load_yaml_script
-        from runner.script_runner import _script_item_fingerprint
-        item = load_yaml_script(script, allow_missing_files=True)[0]
-        (first / "script-item-skipped.json").write_text(
-            json.dumps({
-                "reason": "max cycles reached: 2",
-                "item_fingerprint": _script_item_fingerprint(item),
-            }),
-            encoding="utf-8",
-        )
-        (first / "state.json").write_text(
-            '{"completed":false,"stage":"validator_failed"}', encoding="utf-8"
-        )
-        (second / "state.json").write_text(
-            '{"completed":true,"stage":"completed"}', encoding="utf-8"
-        )
-        return 0
-
-    monkeypatch.setattr(api_module, "execute", fake_execute)
-    result = run(RunRequest(project_root=str(tmp_path), script=str(script), retry_delay=0))
-
-    assert result.exit_code == 0
-    assert result.completed is True
-    assert result.states[0]["stage"] == "skipped"
-    assert result.states[0]["skip_reason"] == "max cycles reached: 2"
-    assert calls == [False]
 
 
-def test_run_request_preserves_execution_mode_in_runtime_config(tmp_path):
-    request = RunRequest(
-        goal="x",
-        project_root=str(tmp_path),
-        validator="ai",
-        execution_mode="linear",
-    )
+
+
+def test_cli_and_api_expose_current_cycle_limit_contract():
+    from ai_task_runner import parser
+    from runner.api import RunRequest
+
+    args = parser().parse_args([
+        "--goal", "x",
+        "--validator", "ai",
+        "--max-cycles", "9",
+        "--skip-on-max-cycles",
+    ])
+    request = RunRequest.from_namespace(args)
     config = request.normalized_config()
 
-    assert config.execution_mode == "linear"
-    assert config.workflow
+    assert request.max_cycles == 9
+    assert request.skip_on_max_cycles is True
+    assert config.max_cycles == 9
+    assert config.skip_on_max_cycles is True

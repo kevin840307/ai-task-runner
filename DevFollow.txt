@@ -1,36 +1,47 @@
-設計原則（必須遵守）：
+設計原則（必須遵守）
 
-1. 最少 Code，禁止 Hardcode(Global通用的不算)。
-2. 不影響現有 24H 穩定執行，包含 YAML List 任務。(預設參數就是24H穩定運行到過, 不能中途停下)
-3. Log 精簡但足夠 Debug。
-4. 低耦合：Workflow 不感知 Extension/Event，擴充功能一律 Plugin 化。
-5. 正常流程優先 Same Session，只補新資訊，不重複 Context。
-6. AI 最終驗證使用 New Session，然後假如需要驗證三次，這三次都要是不同的Session。
-7. 驗證異常先 Same Session Recover，最多 Retry 2(default可更改) 次；仍失敗才 New Session。
-8. New Session 才提供完整且必要的 Context。
-9. Workflow 必須易於新增、移動、替換與擴充 Stage。
-10. 能瘦身就瘦身, 減少不必要的Code
-11. 程式碼需要容易懂，直觀，人好維護
-12. 移除舊程式碼、不必要的程式碼
-13. ai agent輸入prompt應該都要使用stdin, 防止cmd超出文字
-14. 檔案&function命名合理、易懂、folder分類合理、拆分合理
-15. plugins容易新增和擴充
-16. 文件要有中英版本, 要詳細一點並且跟現有功能有對齊
-17. retry -1則是測試到過為止, 但還是要遵守5. 6.
-18. workflow stage一樣要容易擴充和好維護, yaml也是, 一眼就能懂, 人類容易修改
-19. Recovery 的 failure identity 必須穩定且具語意；PID、timestamp、container/session 名稱等動態 log 只能用於 Debug，不可讓同一 failure 被誤判為不同 failure。
-20. 公開能力只保留一個明確 owner/import path；沒有 validation、lifecycle、isolation 等責任的純 re-export 暴露層應移除。
-21. KeyboardInterrupt/SystemExit 不可被 Stage retry/recovery 吞掉；中斷前可做必要 cleanup，但必須原樣往上傳遞。
-22. Worker hard crash 後的 orphan cleanup 必須依實際 durable state/work 路徑處理，Direct Run 與 YAML List child 都要涵蓋。
-23. Deterministic Resume／snapshot／configuration 錯誤不可進入無限 retry；只有可能隨時間恢復的 runtime/service failure 才能持續 recovery。
-24. Active／Resume Run 必須凍結所有會影響 AI 行為的 file-based input，至少包含 Workflow／Stage Prompt／Goal File／Final-AI Prompt；YAML List child 亦同。
-25. Stage recovery 只傳必要的新 evidence；structured Stage 結果透過 bounded `previous.data` 傳遞，Prompt Context 必須限制大小，不可因 recover 重送大量既有內容。
-26. Backend parity: complete AI task prompts must use stdin. Session, sandbox/permission, error parsing, and timeout identity belong to each Backend adapter; Workflow/Stage must not branch on Qwen/OpenCode.
-27. System 正常 Same Session 若已看過同一 Stage Prompt contract，只能透過 bounded continuation 補新 TODO／Review／Validator evidence；不得重送 Goal、Rules 或完整 Stage contract。對應 contract 必須由 deterministic test + qwen_live_reliability 鎖定。
-28. Example／Demo 執行不得污染 canonical fixture；單一 Example 只複製該 Example 到獨立 workspace，`--all` 才複製 examples 集合，不複製整個 Runner repo。每次 Run 都重新建立副本；預設放在 `.example_runs/`，可由環境變數覆寫並保留 work path 供 Debug。
-29. `max_results` 是 FlowNode 的 opt-in semantic-result 上限：未設定時既有 Workflow 行為完全不變；只有成功產生合法 PASS/FAIL StageResult 才計數，timeout／API／backend／parser／structured retry／session recovery 等技術異常不計數；計數必須 durable，Resume 不可重置。
-30. `status` 屬於可重用 Stage 的通用執行狀態；FlowNode 若需描述本次具體工作使用可選 `label`。`label` 只作 runtime/UI/log metadata，不可改變 Stage、Prompt、Retry、Session 或 routing 行為；未設定時保持既有行為。
-31. Semantic dead-loop recovery 必須 opt-in 且與技術 retry 分離：`fresh_after_same_failures` 只計合法且相同的 semantic FAIL；達門檻只 Fresh 該 Stage Session，其他正常 Session 不得被連帶重置；未設定時舊 Workflow 行為完全不變。
-32. Detached local UI 允許完全不 import Runner Core；runtime visibility metadata 唯讀 `state.json`、`runner-process.json`、`stream.log`、`log.txt` / `debug/`，runtime control 只允許建立 `stop.request`。UI 可在 `.ai-task-runner/ui/launching.json` 保存短生命週期、UI-owned 的 launch reservation，只負責關閉 `Popen()` 到 `runner-process.json` 出現前的 duplicate-launch 空窗；live Supervisor marker 出現後必須移除，且不得參與 PASS/FAIL、Retry、Session、routing 或 Resume。`runner-process.json` 由最上層 Supervisor 建立，保存 Supervisor/目前 Worker PID，Worker restart 時更新、正常結束時移除；現有 `active-process` 仍只供 Runner 內部 orphan child cleanup。`stream.log` 只保存最近 bounded subprocess output、每個 subprocess 重置；visibility/launch metadata 都不可成為 Workflow 語意判斷來源。
-核心：最少 Code、零 Hardcode、低耦合、可插拔、易擴充、可 Debug、24H 穩定。
-33. Safety 的 protected/readonly fingerprint 必須只追蹤真正 project source；`.git`、`.ai-task-runner`、IDE/build/test/cache artifact（含 `.vs`、`.vscode`、`bin`、`obj`、`TestResults`、`__pycache__`、`.pyc` 等）使用單一共用 ignore policy 排除。不可用「所有 dot-file 都忽略」；`.gitignore`、`.github/**`、`.editorconfig` 等正式 project file 仍需追蹤。真正 source restore 必須保留被忽略 artifact，且 technical artifact 變化不可增加 retry/same_failures 或觸發 replan。
+1. 最少 Code。沒有明確需求就不要新增抽象；舊概念無使用者就直接刪除，不保留相容層。
+2. 24H 無人值守優先。預設 `stage_retries=-1`，技術異常可持續重試；API/服務異常必須使用「秒」為單位的 delay/backoff。
+3. Workflow 只有 Stage nodes + PASS/FAIL semantic edges；ERROR 不是 graph edge，由 StageExecutor technical retry/recovery 處理。rollback/loop 就是 PASS/FAIL edge，不存在 recover/restart_at/repeat/repair runtime object。
+4. Stage 只做工作並回傳 StageResult。新增 Stage 不得實作 retry/recover/session rotation。
+5. StageExecutor 是 Stage 技術可靠度唯一 owner：Hook、安全、changed files、Same Session retry、Fresh Session rotation、retry delay。
+6. 正常 AI 流程優先 Same Session，只補新 evidence；Fresh Session 才重送完整但必要的 Stage context。
+7. 每個 Session 的失敗嘗試必須 bounded；目前預設 2 次後只 Fresh 該 Stage 的 session，再繼續同一 Stage。
+8. Final AI validation 每個 vote 必須使用不同 Fresh Session。
+9. Deterministic configuration/state/snapshot/programming error fail closed，不得進無限 retry。
+10. 已修改 maintained source 的 failed write attempt 不可盲目重做，交由 Review/Validator/result edge 判斷。
+11. KeyboardInterrupt/SystemExit 不可被 retry/recovery 吞掉；cleanup 後必須原樣往上傳遞。
+12. Process Supervisor 只負責 process-level crash/hang/resume/ownership/orphan cleanup，不複製 Stage retry policy。
+13. Worker hard crash 後 orphan cleanup 必須使用實際 durable work path，Direct 與 YAML List child 都要涵蓋。
+14. Active/Resume Run 必須凍結會影響 AI 行為的 Workflow、Prompt、Goal、Final-AI Prompt；YAML List child 同樣適用。
+15. Prompt 使用 bounded context。Same Session 不重送 Goal/Rules/完整 contract，只增加新 TODO/Review/Validator/error evidence。
+16. Backend parity：完整 Agent Prompt 走 stdin；session/sandbox/permission/error parsing/timeout identity 屬於 Backend adapter，Workflow/Stage 不 branch Qwen/OpenCode。
+17. Global 資產統一放 `runner/assets/workflows/*.yaml` 與 `runner/assets/prompts/<category>/*.md`；Project 使用 `<project>/.ai-task-runner/assets/workflows/` 與 `prompts/`，兩邊 shape 相同且可編輯。
+18. UI 是同一張 n8n-style graph 的編輯器；CLI/API/YAML List 都只是 RunRequest adapter，不可擁有第二套路由或 recovery。
+19. Dry Run 必須重用正式 Workflow Loader + FlowEngine，只 mock Stage result。
+20. Plugin 只有一個 discovery boundary：`runner/plugins/registry.py`；外部統一使用 `ai_task_runner.plugins`。
+21. Plugin 若要註冊 Stage/Backend 使用 `setup()`；runtime Hook 使用 `register(runtime)`。Workflow 不感知具體 Plugin。
+22. protected/readonly fingerprint 只追 maintained project source；`.git`、`.ai-task-runner`、IDE/build/test/cache artifacts 使用共用 ignore policy 排除，但 `.gitignore`、`.github/**`、`.editorconfig` 等正式檔案仍需追蹤。
+23. Log 精簡但足夠 Debug；所有長輸出必須 bounded。
+24. 名稱、folder、owner/import path 必須直觀；一個能力只保留一個 owner。
+25. Dynamic Handoff 是唯一 multi-agent runtime primitive；未來 Parallel 若真的需要，必須重用 Stage、StageExecutor、StateStore、Plugin boundary、Workflow asset 與 Graph Designer，不得先建立第二個 Orchestrator。
+26. 文件、範例、UI、CLI、YAML、Dry Run 與測試必須與正式 runtime contract 同步，不允許 legacy contract 留在測試裡。
+27. React Full Designer 唯一可維護 source 是 `ui/studio-src/**`。禁止直接修改 `ui/static/workflow-studio-app/**`；該目錄只能由 `cd ui/studio-src && npm run build` 產生。若 compiled output 需要提交，也只能提交 build 產物，不可手修 minified JS/CSS。
+28. Full Designer 的返回行為必須 deterministic 回到主 UI 的 Workflow Studio，並盡量重新開啟同一 Workflow；禁止依賴 `history.back()`。
+29. 只有實際通過 Windows + Ubuntu CI、real-Qwen reliability probes 與必要 soak 證據後，才可宣稱 24H 重構完成。
+
+核心：Stage 做事；StageExecutor 讓 Stage 穩定；FlowEngine 決定下一步；StateStore 讓進度可 Resume。
+
+
+Workflow UI ownership
+- Project Chat is the primary run surface.
+- Workflows and Prompts are separate primary navigation workspaces.
+- Workflows manages Workflow assets and opens the single Workflow Editor.
+- Prompts owns Prompt asset management and Prompt Editor.
+- Workflow Editor is the single Workflow editing surface with Designer/YAML views over canonical YAML.
+- Stage settings may expose Form/YAML/Routes/Test, but all views update one Stage draft and use backend YAML/schema validation.
+- Do not reintroduce a second Visual Workflow editor in the asset library.
+- ralphy_ai_validate.yaml is the Chat fallback default when no valid saved Workflow preference exists.
+- Workflow Library right-click owns Show in Chat / Hide from Chat; reuse persisted workflow visibility and never create another visibility store.
+- Stage Editor tabs are Form / YAML / Routing / Test. Form and YAML edit the same Stage draft; routing stays graph-owned.
+

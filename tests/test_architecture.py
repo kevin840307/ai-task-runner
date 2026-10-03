@@ -1,195 +1,176 @@
-import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def module_imports(filename: str) -> set[str]:
-    path = ROOT / filename
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    package_parts = path.relative_to(ROOT).parent.parts
-    modules: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            modules.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            if node.level:
-                base = package_parts[: max(0, len(package_parts) - node.level + 1)]
-                modules.add(".".join([*base, node.module]))
-            else:
-                modules.add(node.module)
-    return modules
+def test_runner_top_level_domains_are_small_and_obvious():
+    runner = ROOT / "runner"
+    directories = {
+        path.name
+        for path in runner.iterdir()
+        if path.is_dir() and not path.name.startswith("__")
+    }
+    assert directories == {"agent", "assets", "config", "plugins", "runtime", "workflow"}
 
 
-def test_core_ownership_is_obvious():
-    for package in ("flow", "model", "extensions", "agent", "engine"):
-        assert not (ROOT / "runner" / package).exists()
-    for package in ("workflow", "ai", "runtime", "backends", "plugins", "project", "utils", "prompts"):
-        assert (ROOT / "runner" / package).is_dir()
+def test_agent_owns_client_backend_and_provider_adapters():
+    agent = ROOT / "runner" / "agent"
+    assert {
+        "backend.py",
+        "client.py",
+        "qwen.py",
+        "opencode.py",
+        "structured.py",
+        "__init__.py",
+    } <= {path.name for path in agent.glob("*.py")}
+    assert not (ROOT / "runner" / "ai").exists()
+    assert not (ROOT / "runner" / "backends").exists()
 
 
-def test_workflow_runner_uses_shared_stage_executor_and_flow_engine():
-    source = (ROOT / "runner/workflow_runner.py").read_text(encoding="utf-8")
-    assert "StageExecutor" in source
-    assert "build_flow_engine" in source
-    for name in ("BaseStage", "PlanStage", "ReviewStage", "ValidateStage"):
-        assert name not in source
-
-    compat = (ROOT / "runner/task_runner.py").read_text(encoding="utf-8")
-    assert "from .workflow_runner import WorkflowRunner" in compat
-    assert "StageExecutor" not in compat
-    assert "build_pipeline" not in compat
+def test_workspace_and_script_are_single_owner_modules():
+    assert (ROOT / "runner" / "workspace.py").is_file()
+    assert (ROOT / "runner" / "script.py").is_file()
+    assert (ROOT / "runner" / "utils.py").is_file()
+    assert not (ROOT / "runner" / "project").exists()
+    assert not (ROOT / "runner" / "script_loader.py").exists()
+    assert not (ROOT / "runner" / "script_runner.py").exists()
+    assert not (ROOT / "runner" / "utils").exists()
 
 
-def test_stage_executor_is_only_hook_boundary():
-    executor = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
-    assert ".hooks.before(" in executor
-    assert ".hooks.after(" in executor
-    for path in (ROOT / "runner/workflow/stages").glob("*.py"):
-        if path.name in {"executor.py", "__init__.py"}:
-            continue
-        source = path.read_text(encoding="utf-8")
-        assert ".hooks.before(" not in source
-        assert ".hooks.after(" not in source
-        assert "current_runtime().hooks" not in source
+def test_assets_are_one_package_with_separate_workflow_and_prompt_roots():
+    assets = ROOT / "runner" / "assets"
+    workflows = assets / "workflows"
+    prompts = assets / "prompts"
+    assert {"ai.yaml", "file.yaml", "mixed.yaml", "dynamic_handoff.yaml", "ralphy_ai_validate.yaml"} <= {
+        path.name for path in workflows.glob("*.yaml")
+    }
+    assert {"common", "ralphy"} <= {
+        path.name for path in prompts.iterdir() if path.is_dir()
+    }
+    assert not (prompts / "workflow").exists()
+    assert not (workflows / "discussion.yaml").exists()
+    assert not (prompts / "common" / "discussion.md").exists()
+    assert not (prompts / "common" / "discussion_controller.md").exists()
+    assert not (prompts / "common" / "discussion_judge.md").exists()
+    assert not (prompts / "common" / "discussion_final_validator.md").exists()
+    assert not (ROOT / "runner" / "workflows").exists()
+    assert not (ROOT / "runner" / "prompts").exists()
 
 
-def test_stage_never_uses_graph_or_transition_objects():
-    for path in (ROOT / "runner/workflow/stages").glob("*.py"):
-        if path.name == "__init__.py":
-            continue
-        source = path.read_text(encoding="utf-8")
-        assert "flow.next(" not in source
-        assert "Transition(" not in source
-        assert "FlowDefinition" not in source
-
-
-def test_ai_package_contains_only_ai_concerns():
-    names = {path.name for path in (ROOT / "runner/ai").glob("*.py")}
-    assert {"client.py", "contracts.py", "session.py", "structured_output.py", "diagnostics.py", "errors.py", "__init__.py"} <= names
-    for forbidden in ("retry.py", "trace.py", "history.py"):
-        assert forbidden not in names
-
-
-def test_runtime_does_not_own_ai_calls_or_stage_hooks():
-    runtime_source = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "runner/runtime").glob("*.py"))
-    assert ".ask(" not in runtime_source
-    assert "hooks.before(" not in runtime_source
-    assert "hooks.after(" not in runtime_source
-
-
-def test_root_python_files_stay_minimal():
-    assert {path.name for path in ROOT.glob("*.py")} == {"ai_task_runner.py", "ai_task_runner_validator.py", "project_registry.py"}
-
-
-def test_recovery_is_centralized_in_stage_executor():
-    assert not (ROOT / "runner/utils/recovery.py").exists()
-    source = (ROOT / "runner/workflow/stages/executor.py").read_text(encoding="utf-8")
-    for token in ("same_failures", "fresh_session_round", "is_transient_error", "_fresh_session"):
-        assert token in source
-
-
-def test_ai_contracts_are_separate_from_backend_implementations():
-    contracts = (ROOT / "runner/ai/contracts.py").read_text(encoding="utf-8")
-    base = (ROOT / "runner/backends/base.py").read_text(encoding="utf-8")
-    assert "class AIBackend(Protocol)" in contracts
-    assert "class AIClientProtocol(Protocol)" in contracts
-    assert "class BaseBackend(ABC)" in base
-
-
-def test_project_and_utils_ownership_is_explicit():
-    project = {path.name for path in (ROOT / "runner/project").glob("*.py")}
-    assert {"files.py", "policy.py", "instructions.py", "__init__.py"} <= project
-    utils = {path.name for path in (ROOT / "runner/utils").glob("*.py")}
-    assert utils == {"files.py", "logs.py", "text.py", "__init__.py"}
-
-
-def test_registries_are_not_hidden_in_contract_or_package_init_files():
-    assert (ROOT / "runner/backends/registry.py").is_file()
-    assert (ROOT / "runner/plugins/registry.py").is_file()
-    backend_init = (ROOT / "runner/backends/__init__.py").read_text(encoding="utf-8")
-    plugin_contracts = (ROOT / "runner/plugins/contracts.py").read_text(encoding="utf-8")
-    assert "def create_backend(" not in backend_init
-    assert "current_runtime" not in plugin_contracts
-
-
-def test_workflow_uses_semantic_progress_not_raw_event_transport():
+def test_workflow_has_explicit_result_and_resource_owners():
     workflow = ROOT / "runner" / "workflow"
-    for path in workflow.rglob("*.py"):
-        source = path.read_text(encoding="utf-8")
-        assert "runtime import events" not in source, path
-        assert "runtime.events" not in source, path
-        assert "publish(\"runner." not in source, path
-
-
-def test_internal_config_has_no_namespace_compatibility_layer():
-    runtime = (ROOT / "runner/config/runtime.py").read_text(encoding="utf-8")
-    bootstrap = (ROOT / "runner/bootstrap.py").read_text(encoding="utf-8")
-    assert "argparse" not in runtime
-    assert "from_namespace" not in runtime
-    assert "to_namespace" not in runtime
-    assert "argparse.Namespace" not in bootstrap
-
-
-def test_loop_context_compression_is_a_plugin():
-    plugin = ROOT / "runner/plugins/context_compression.py"
-    client = (ROOT / "runner/ai/client.py").read_text(encoding="utf-8")
-    assert plugin.is_file()
-    assert "class ContextCompressionPlugin" in plugin.read_text(encoding="utf-8")
-    assert "loop_context_compress" not in client
-    for path in (ROOT / "runner/workflow").rglob("*.py"):
-        assert "context_compress" not in path.read_text(encoding="utf-8")
-
-    for relative in (
-        "ai_task_runner.py",
-        "runner/config/runtime.py",
-        "runner/script_loader.py",
-        "runner/script_runner.py",
+    for name in ("contracts.py", "flow_engine.py", "loader.py", "schema.py", "registry.py", "results.py"):
+        assert (workflow / name).is_file()
+    for removed in (
+        "lifecycle.py",
+        "reducers.py",
+        "linear_routing.py",
+        "semantic_routing.py",
+        "pipeline.py",
+        "routing.py",
+        "recovery.py",
+        "rules.py",
     ):
-        assert "loop_context_compress" not in (ROOT / relative).read_text(encoding="utf-8")
+        assert not (workflow / removed).exists()
+    assert (ROOT / "runner" / "resources.py").is_file()
 
 
-def test_console_and_script_runner_do_not_own_event_transport():
-    console = (ROOT / "runner/plugins/console.py").read_text(encoding="utf-8")
-    script = (ROOT / "runner/script_runner.py").read_text(encoding="utf-8")
-    for legacy in ("event_callback", "json_events", "log_path", "def _emit("):
-        assert legacy not in console
-    for transport in ("event_callback", "json_events", "human_output"):
-        assert transport not in script
+def test_stage_executor_is_the_only_stage_retry_owner():
+    executor = (ROOT / "runner/workflow/execution/stage_executor.py").read_text(encoding="utf-8")
+    for token in ("stage_retries", "retry_delay", "retry_max_delay", "_fresh_session"):
+        assert token in executor
+    for path in (ROOT / "runner/workflow/stages").glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        assert "stage_retries" not in text
+        assert "retry_max_delay" not in text
 
 
-def test_public_capabilities_use_owner_modules_without_reexport_only_facades():
-    assert not (ROOT / "runner/tooling.py").exists()
-    root_init = (ROOT / "runner/__init__.py").read_text(encoding="utf-8")
-    assert "__getattr__" not in root_init
-    assert "RunRequest" not in root_init
-    assert "RunResult" not in root_init
-    for relative in (
-        "runner/ai/__init__.py",
-        "runner/backends/__init__.py",
-        "runner/config/__init__.py",
-        "runner/utils/__init__.py",
-    ):
-        tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
-        assert not any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree)), relative
+def test_plugins_have_one_discovery_boundary():
+    registry = (ROOT / "runner/plugins/registry.py").read_text(encoding="utf-8")
+    assert 'PLUGIN_ENTRYPOINT_GROUP = "ai_task_runner.plugins"' in registry
+    assert "def discover_plugins" in registry
+    assert "def register_plugins" in registry
+    assert not (ROOT / "runner" / "extensions.py").exists()
 
 
-def test_linear_cursor_writes_are_owned_by_linear_routing_only():
-    roots = [ROOT / "runner" / "workflow", ROOT / "runner" / "runtime", ROOT / "runner"]
-    checked: set[Path] = set()
-    offenders: list[str] = []
-    patterns = ("state.workflow_position =", "state.task_step =", "self.context.state.task_step =")
+def test_workflow_runner_uses_shared_engine_executor_and_resources():
+    source = (ROOT / "runner/workflow_runner.py").read_text(encoding="utf-8")
+    assert "build_flow_engine" in source
+    assert "StageExecutor" in source
+    assert "freeze_workflow" in source
+    assert "load_snapshot" in source
+    assert not (ROOT / "runner/task_runner.py").exists()
 
-    for root in roots:
-        for path in root.rglob("*.py"):
-            if path in checked:
-                continue
-            checked.add(path)
-            if path.name == "linear_routing.py":
-                continue
-            text = path.read_text(encoding="utf-8")
-            for pattern in patterns:
-                if pattern in text:
-                    offenders.append(f"{path.relative_to(ROOT)}: {pattern}")
 
+def test_workflow_cursor_writes_are_owned_by_flow_engine():
+    allowed = ROOT / "runner" / "workflow" / "flow_engine.py"
+    patterns = (
+        "state.workflow_position =",
+        "self.context.state.workflow_position =",
+    )
+    offenders = []
+    for path in (ROOT / "runner").rglob("*.py"):
+        if path == allowed:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for pattern in patterns:
+            if pattern in text:
+                offenders.append(f"{path.relative_to(ROOT)}: {pattern}")
     assert offenders == []
+
+
+
+def test_removed_task_scope_runtime_fields_do_not_reappear():
+    offenders = []
+    forbidden = (
+        "task_step",
+        'get("scope")',
+        "get('scope')",
+        '["scope"]',
+        "['scope']",
+        "scope: task",
+    )
+    for path in (ROOT / "runner").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for token in forbidden:
+            if token in source:
+                offenders.append(f"{path.relative_to(ROOT)}: {token}")
+    assert offenders == []
+
+
+def test_stage_implementations_are_split_by_responsibility():
+    stages = ROOT / "runner" / "workflow" / "stages"
+    expected = {
+        "base_stage.py",
+        "plan_stage.py",
+        "ai_validator_stage.py",
+        "command_stage.py",
+        "handoff_stage.py",
+        "__init__.py",
+    }
+    assert expected <= {path.name for path in stages.glob("*.py")}
+    assert not (stages / "core.py").exists()
+    assert not (stages / "executor.py").exists()
+    assert (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").is_file()
+
+
+def test_stage_executor_is_workflow_orchestration_not_a_stage_type():
+    registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
+    executor = (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").read_text(encoding="utf-8")
+    assert '"executor"' not in registry
+    assert "class StageExecutor" in executor
+    assert "stage_retries" in executor
+    assert "_fresh_session" in executor
+
+
+
+def test_stage_executor_does_not_depend_on_concrete_stage_types():
+    executor = (ROOT / "runner" / "workflow" / "execution" / "stage_executor.py").read_text(encoding="utf-8")
+    for concrete in (
+        "PlanStage",
+        "AIValidatorStage",
+        "CommandStage",
+        "HandoffStage",
+    ):
+        assert concrete not in executor
+    assert "from ..contracts import" in executor

@@ -1,7 +1,0 @@
-# Smallest autonomous workflow: plan and complete all generated TODOs.
-stages:
-  planning:
-    type: plan
-
-flow:
-  - planning

@@ -1,79 +1,107 @@
 from __future__ import annotations
 
-from dataclasses import fields
 from pathlib import Path
 
-from runner.workflow.stages.base_stage import BaseStageSpec
-from runner.workflow.stages.command import CommandStageSpec
-from runner.workflow.stages.plan_stage import PlanStageSpec
+from runner.workflow.registry import workflow_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = (ROOT / "ui" / "static" / "app.js").read_text(encoding="utf-8")
+SOURCE = (ROOT / "ui" / "studio-src" / "src" / "main.tsx").read_text(encoding="utf-8")
 
 
-FIELD_CONTROLS = {
-    "status": "stageStatus",
-    "prompt": "stagePromptSelect",
-    "instructions": "stageInstructions",
-    "detail": "stageDetail",
-    "run_state": "stageRunState",
-    "mode": "stageMode",
-    "readonly_safety": "stageReadonlySafety",
-    "actor": "stageActor",
-    "allow_project_read": "stageAllowProjectRead",
-    "parser": "stageParser",
-    "structured_retries": "stageStructuredRetries",
-    "structured_fresh_retries": "stageStructuredFreshRetries",
-    "retry": "stageRetry",
-    "runs": "stageRuns",
-    "required_passes": "stageRequiredPasses",
-    "track_changes": "stageTrackChanges",
-    "tolerate_restored_changes": "stageTolerateRestored",
-    "timeout": "stageTimeout",
-    "session_key": "stageSessionKey",
-    "fresh_session_each_run": "stageFreshEachRun",
-    "fresh_session_on_start": "stageFreshOnStart",
-    "skip_on_error": "stageSkipOnError",
-    "produces": "stageProduces",
-    "command": "stageCommand",
-    "cwd": "stageCwd",
-    "result_kind": "stageResultKind",
-    "clean_work": "stageCleanWork",
-    "min_tasks": "stageMinTasks",
-    "repair_plan": "stageRepairPlan",
-}
+def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
+    catalog = workflow_catalog()
+    assert catalog["stage_types"]
 
-# `continuation_prompt` intentionally remains an advanced YAML-only override.
-INTENTIONAL_YAML_ONLY = {"name", "continuation_prompt"}
+    # The production React editor must source Stage types/options from the runtime catalog,
+    # then render ordinary options through the generic Field component.
+    assert 'catalog.stage_types[draft.type]?.options || []' in SOURCE
+    assert 'Object.keys(catalog?.stage_types || {})' in SOURCE
+    assert '<Field' in SOURCE and 'option={option}' in SOURCE
+    assert 'value={draft[option.name]}' in SOURCE
 
-
-def test_visual_ui_covers_all_common_stage_parameters_except_documented_yaml_override() -> None:
-    names = {field.name for field in fields(BaseStageSpec)} - INTENTIONAL_YAML_ONLY
-    missing = sorted(name for name in names if FIELD_CONTROLS.get(name, "") not in APP)
-    assert not missing, f"Visual UI is missing BaseStage fields: {missing}"
-
-
-def test_visual_ui_covers_command_and_plan_specific_parameters() -> None:
-    names = ({field.name for field in fields(CommandStageSpec)} | {field.name for field in fields(PlanStageSpec)}) - INTENTIONAL_YAML_ONLY
-    missing = sorted(name for name in names if name not in FIELD_CONTROLS or FIELD_CONTROLS[name] not in APP)
-    assert not missing, f"Visual UI is missing stage-specific fields: {missing}"
-
-
-def test_visual_ui_covers_current_flow_routing_parameters() -> None:
-    routing = {
-        "scope": "stageScope",
-        "label": "stageFlowLabel",
-        "routes.pass": "stageRoutePass",
-        "routes.fail": "stageRouteFail",
-        "routes.error": "stageRouteError",
-        "routes.replan": "stageRouteReplan",
-        "recover": "stageRecover",
-        "restart_at": "stageRestartAt",
-        "repeat": "stageRepeat",
-        "max_attempts": "stageMaxAttempts",
-        "on_exhausted": "stageOnExhausted",
-        "fresh_after_same_failures": "stageFreshAfterSameFailures",
+    special_catalog_fields = {"status", "targets", "max_failures"}
+    observed = {
+        option["name"]
+        for stage in catalog["stage_types"].values()
+        for option in stage["options"]
     }
-    missing = sorted(name for name, control in routing.items() if control not in APP)
-    assert not missing, f"Visual UI is missing Flow fields: {missing}"
+    unknown_special = special_catalog_fields - observed
+    # Some plugins/builds may omit one special field, but built-ins currently expose all three.
+    assert not unknown_special, f"Expected built-in catalog fields disappeared: {sorted(unknown_special)}"
+
+    # Fields filtered out of the generic parameter list must have an explicit UI owner.
+    assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"]' in SOURCE
+    assert 'value={String(draft.status || "")}' in SOURCE
+    assert 'draft.type === "handoff"' in SOURCE and 'stage.targets || []' in SOURCE
+    assert 'draft.max_failures' in SOURCE and 'max_failures' in SOURCE
+
+    # Prompt is catalog-driven but intentionally gets a richer selector instead of a plain input.
+    assert 'option.name === "prompt"' in SOURCE
+    assert 'effectivePrompt(catalog, draft)' in SOURCE
+
+
+def test_react_workflow_editor_covers_all_node_level_runtime_options():
+    node_options = workflow_catalog()["node_options"]
+    assert set(node_options) == {"label", "routes", "error_policy"}
+
+    assert 'value={String(draft.label || "")}' in SOURCE
+    assert 'value={String(draft.profile || "generic")}' in SOURCE
+    assert 'value={draft.scope || ""}' not in SOURCE
+    assert 'const routes = (s.routes || {}) as Record<string, string>' in SOURCE
+    assert 'stage.routes || {}' in SOURCE
+    assert 'draft.error_policy?.retries' in SOURCE
+
+    # Graph result routes are semantic PASS/FAIL only. Handoff targets are a Stage-owned
+    # dynamic edge list and technical ERROR remains StageExecutor policy, not a graph edge.
+    assert '!["pass", "fail", "handoff"].includes(status)' in SOURCE
+    assert 'delete routes[status]' in SOURCE
+    assert 'targets: (s.targets || []).filter' in SOURCE
+
+
+def test_generic_field_renderer_supports_every_catalog_scalar_shape():
+    catalog = workflow_catalog()
+    option_types = {
+        str(option.get("type", "")).lower()
+        for stage in catalog["stage_types"].values()
+        for option in stage["options"]
+        if option["name"] not in {"targets"}
+    }
+
+    # Object-valued runtime controls are owned explicitly at node/routing level. Ordinary
+    # catalog fields must remain representable by the generic enum/bool/number/list/text UI.
+    unsupported = {
+        value for value in option_types
+        if value and not (
+            value in {"string", "str", "bool", "boolean", "optional_boolean", "enum"}
+            or "int" in value
+            or "float" in value
+            or "list" in value
+            or "optional" in value
+            or "literal" in value
+            or "union" in value
+            or "callable" in value
+        )
+    }
+    assert not unsupported, f"React generic Field needs a renderer for catalog types: {sorted(unsupported)}"
+
+    assert 'type === "optional_boolean"' in SOURCE
+    assert 'type === "bool" || type === "boolean"' in SOURCE
+    assert 'type.includes("int")' in SOURCE
+    assert 'type.includes("float")' in SOURCE
+    assert 'type.includes("list")' in SOURCE
+    assert 'option.values?.length || type === "enum"' in SOURCE
+
+
+def test_ai_stage_profile_catalog_is_extensible():
+    catalog = workflow_catalog()
+    base = catalog["stage_types"]["base"]
+    profile = next(option for option in base["options"] if option["name"] == "profile")
+    assert profile["type"] == "enum"
+    assert profile["values"] == ["generic", "execute", "review"]
+    mode = next(option for option in base["options"] if option["name"] == "mode")
+    assert mode["type"] == "enum"
+    assert mode["values"] == ["readonly", "write"]
+    assert "scope" not in catalog["node_options"]
+    assert "task" not in catalog["stage_types"]
+    assert "review" not in catalog["stage_types"]

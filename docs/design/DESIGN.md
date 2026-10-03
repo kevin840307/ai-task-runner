@@ -21,39 +21,38 @@ Version: 1.2.66
 
 ## Main flow
 
-Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Validator? -> PASS`
+Bundled planning flows are `Plan -> dynamic child Workflow -> File Validator? -> AI Validator? -> PASS`; PlanStage currently emits alternating AI Execute -> AI Review children for its validated Tasks.
 
 - No independent Understand Stage.
 - `PlanStage` is the built-in AI Task producer and installs durable TODOs through the generic `tasks` result effect.
 - Review is a local semantic gate. With configured review retries it may fail-soft/skip; final validation remains authoritative.
 - The bundled CLI `mixed` workflow runs deterministic File validation before Final AI validation. Explicit/custom workflows may place multiple File/AI validation gates anywhere in top-level `flow`, including ordinary Stages after them.
-- Validator FAIL runs the configured recovery path, typically Repair Plan -> task-scoped SOP -> validators again.
-- A Stage may override FAIL/replan recovery with the shared 1-based `restart_at` YAML option; omitted values preserve the routes above.
-- Built-in Regression workflows complete only after their configured final validation path passes. Explicit generic workflows may omit validators and complete when their flow ends successfully.
-- A custom Workflow YAML contains only named `stages` and top-level `flow`. `PlanStage` automatically uses the built-in `Task -> Review -> Repair(on FAIL) -> Review` task lifecycle, so normal Plan-driven flow lists only Planning and later top-level gates. Other Stages may produce the public Task contract with `produces: tasks`; explicit `scope: task` remains available for advanced/custom per-TODO SOPs. A custom flow may use Plan, another Task producer, or no tasks at all. There is no generated `next_steps`, `expand`, or `foreach` topology.
+- Validator FAIL follows its explicit `routes.fail` edge, typically back to Planning or Execute.
+- Backward PASS/FAIL result edges are the only rollback/loop mechanism; there is no `restart_at`, Repair Stage, or hidden recovery graph.
+- Built-in workflows complete only after their configured validation path passes. Explicit generic workflows may omit validators and complete when their flow ends successfully.
+- A custom Workflow YAML contains only named `stages` and top-level `flow`. A producer Stage may return `tasks` or `stages` together with its own child Stage definitions; Runner validates/inserts/executes that child Workflow before continuing the parent. There is no `scope`, `task_step`, generated `next_steps`, or second task-level runtime.
 
 ## Ownership
 
-- `workflow/system/*.yaml`, `workflow/loader.py`: validator-selected bundled topology, custom topology, and one normalization path.
-- `workflow/registry.py`: the explicit `type -> Stage class` registry plus UI/editor catalog metadata; it does not own workflow topology or Stage instances.
-- `workflow/rules.py`: the small `StageResult.kind` reducers and durable-state transitions (`tasks`, `task`, `review`, `validation`, `generic`).
-- `workflow/stages/executor.py`: shared retry/session recovery, hooks, semantic progress reporting, and project change tracking.
+- `assets/workflows/*.yaml` and `workflow/loader.py`: bundled/custom topology and one normalization path.
+- `workflow/registry.py`: the explicit `type -> Stage class` registry plus UI/editor catalog metadata.
+- `workflow/results.py`: StageResult parsing/reduction and durable task/validation effects.
+- `workflow/execution/stage_executor.py`: shared retry/session recovery, hooks, progress reporting, and project change tracking.
 - `workflow/stages/*`: one-attempt Stage behavior.
-- `ai/`: AI interaction/session/structured output only.
-- `backends/`: Qwen/OpenCode transport implementations only.
-- `project/`: workspace files/policy/instruction files.
-- `runtime/`: run state/process/event infrastructure.
+- `agent/`: Qwen/OpenCode transport, session, and structured-output adapters.
+- `workspace.py`: project files, policy, manifests, and protection helpers.
+- `runtime/`: run state, process supervision, heartbeat, and event infrastructure.
 - `plugins/`: cross-cutting optional behavior.
 
 ## Retry and recovery
 
-- Transient API/network/rate-limit/service errors use bounded exponential backoff inside `AIClient.run_with_retry()` and preserve state/session.
-- A real Stage error retries the same usable session first with a short stage-aware delta prompt; it does not resend the full goal/task context.
-- After the configured same-session retry budget, StageExecutor clears cached sessions and retries fresh.
-- The same persistent failure after fresh recovery returns `replan`.
-- A different failure fingerprint resets the persistent-failure streak. Backend timeouts carry a stable semantic recovery key; volatile stderr details (for example sandbox/container identifiers) remain in diagnostics but do not change failure identity.
-- A write attempt that made meaningful project changes is treated as progress and is handed to Review/Validator rather than discarded.
-- Review skip does not complete the run; final validation still decides.
+- Classified transient API/network/rate-limit/service errors preserve the usable Session and use seconds-based capped exponential backoff.
+- Other technical Stage errors retry the same usable Session first; after the per-session attempt budget, StageExecutor rotates only that Stage to a Fresh Session and continues with the shared recovery envelope.
+- The unattended global default is `stage_retries=-1` (unlimited). A finite Stage-local `error_policy.retries` overrides it.
+- A write attempt that fails after making project changes preserves those changes, rotates the Stage Session, and recovers from current project evidence rather than blindly replaying the same conversation.
+- Review is intentionally fail-soft when it has a finite local `error_policy`: after technical ERROR retries are exhausted it skips to the next Stage. Final validation remains authoritative.
+- Review semantic FAIL uses the separate Review-only `max_failures` guard. `max_failures=3` records three real FAIL verdicts; on the fourth entry Runner bypasses reviewer execution, emits fail-soft PASS, clears the durable per-Review/per-Task counter, and continues through the PASS route. Any real PASS also clears the counter.
+- Non-Review Stages remain fail-closed after a finite retry budget is exhausted.
 
 ## Validation modes
 
@@ -65,13 +64,13 @@ Bundled default: `Plan -> [Task -> Review] x TODO -> File Validator? -> AI Valid
 
 ## Prompt contract
 
-All bundled prompts use Jinja + `StrictUndefined`. `prompts/context.py` is the only Stage template-data contract. Templates do not directly access `RunState`, `RuntimeConfig`, or arbitrary scratch objects.
+All bundled prompts use Jinja + `StrictUndefined`. `runner/prompting.py` owns the Stage template-data contract and rendering helpers. Templates do not directly access `RunState`, `RuntimeConfig`, or arbitrary scratch objects.
 
-Ordinary AI Stage configuration points to `prompts/stages/*.md` directly. Planning-specific computed context is owned directly by `PlanStage`; there is no prompt-builder registry. Shared prompt fragments use Jinja `{% include %}`.
+Bundled Stage prompts live under `runner/assets/prompts/<category>/*.md`. Each Stage behavior has one core prompt; Runner-owned retry/continue/recover context is appended by the shared control envelope instead of being maintained as parallel prompt files.
 
 ## Project safety
 
-`project/policy.py` loads `.ai-task-runner.yaml`. `project/files.py` owns project manifests/change detection/restore plus stale Safety snapshot cleanup. `project/instructions.py` owns the Runner-managed sections of QWEN.md/AGENTS.md. Safety/Git/readonly behavior is injected through plugins/hooks rather than Workflow imports.
+`runner/workspace.py` owns project manifests/change detection, protected-path policy, reusable snapshots, and project-level workspace helpers around `.ai-task-runner.yaml`. Safety/Git/readonly behavior is injected through plugins/hooks rather than Workflow imports.
 
 ## Durable state
 
@@ -90,4 +89,4 @@ Each `execute()` call owns a scoped runtime. Nested YAML-list items temporarily 
 
 ## OpenCode backend parity
 
-Qwen and OpenCode share `BaseBackend` stdin transport, timeout/idle-timeout handling, process-tree cleanup, and stable recovery identity. Backend adapters own only transport/capability differences: Qwen uses `--resume` plus its native `-s` sandbox; OpenCode uses `--session`, JSON events, `--auto`, and `OPENCODE_CONFIG_CONTENT.permission` for planning/no-tool/review policy and Runner `--sandbox` confinement. Workflow, StageExecutor, and Pipeline must never branch on backend names.
+Qwen and OpenCode share `BaseBackend` stdin transport, timeout/idle-timeout handling, process-tree cleanup, and stable recovery identity. Backend adapters own only transport/capability differences: Qwen uses `--resume` plus its native `-s` sandbox; OpenCode uses `--session`, JSON events, `--auto`, and `OPENCODE_CONFIG_CONTENT.permission` for planning/no-tool/review policy and Runner `--sandbox` confinement. Workflow, StageExecutor, and FlowEngine must never branch on backend names.

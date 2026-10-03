@@ -1,16 +1,43 @@
 """Transient progress state plus fail-open observer events."""
 from __future__ import annotations
 
+import os
 import time
 from contextlib import contextmanager
+from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
-from .run_state import RunState
-from .heartbeat import touch_heartbeat
 from ..version import __version__
 
 EventHandler = Callable[[dict[str, Any]], None]
+
+HEARTBEAT_ENV = "AI_TASK_RUNNER_HEARTBEAT"
+
+
+def touch_heartbeat() -> None:
+    value = os.environ.get(HEARTBEAT_ENV, "").strip()
+    if value:
+        touch_heartbeat_path(Path(value))
+
+
+def touch_heartbeat_path(path: Path) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(exist_ok=True)
+    except OSError:
+        pass
+
+
+def sleep_with_heartbeat(seconds: float, *, interval: float = 60.0) -> None:
+    remaining = max(0.0, float(seconds))
+    while remaining > 0:
+        touch_heartbeat()
+        step = min(interval, remaining)
+        time.sleep(step)
+        remaining -= step
+    touch_heartbeat()
+
 
 
 class EventBus:
@@ -52,7 +79,7 @@ class EventBus:
 
 
 _bus: EventBus | None = None
-_state: RunState | None = None
+_state: Any | None = None
 _context: dict[str, Any] = {}
 _status = "準備中"
 _detail = ""
@@ -76,7 +103,7 @@ def scope(bus: EventBus, context: dict[str, Any] | None = None):
         _bus, _state, _context, _status, _detail = previous
 
 
-def bind(state: RunState) -> None:
+def bind(state: Any) -> None:
     global _state
     _state = state
     publish("runner.progress", "bind")
@@ -103,7 +130,7 @@ def stop(status: str = "", detail: str = "") -> None:
         publish("runner.status", "stop")
 
 
-def show_todo(state: RunState | None = None) -> None:
+def show_todo(state: Any | None = None) -> None:
     if state is not None:
         bind(state)
     else:
@@ -178,7 +205,8 @@ def retry_event(message: str, **payload: Any) -> dict[str, Any]:
 
 
 __all__ = [
-    "EventBus", "EventHandler", "bind", "configure", "scope", "publish",
-    "retry_event", "service_wait_exhausted", "session_fresh", "set_status",
-    "show_todo", "stage_finished", "stage_started", "start", "stop",
+    "HEARTBEAT_ENV", "EventBus", "EventHandler", "bind", "configure", "scope",
+    "publish", "retry_event", "service_wait_exhausted", "session_fresh",
+    "set_status", "show_todo", "sleep_with_heartbeat", "stage_finished",
+    "stage_started", "start", "stop", "touch_heartbeat", "touch_heartbeat_path",
 ]

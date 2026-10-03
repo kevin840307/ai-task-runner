@@ -10,11 +10,11 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from ..utils.files import io_path
+from ..utils import io_path
 from typing import Any
 
 from .events import retry_event
-from .heartbeat import HEARTBEAT_ENV, touch_heartbeat_path
+from .events import HEARTBEAT_ENV, touch_heartbeat_path
 from .process_runner import ACTIVE_PROCESS_FILE
 
 WORKER_ENV = "AI_TASK_RUNNER_WORKER"
@@ -143,33 +143,37 @@ def _supervise_workers(
         progress_key = _state_progress_fingerprint(states)
         crash_repeats = crash_repeats + 1 if progress_key == crash_key else 1
         crash_key = progress_key
-        if crash_repeats >= 3:
-            if request.json_events:
-                print(json.dumps(retry_event(
-                    "worker repeatedly exited without durable progress",
-                    exit_code=code,
-                )), flush=True)
-            else:
-                print(
-                    "ERROR: worker repeatedly exited without durable progress",
-                    file=sys.stderr,
-                )
-            return code
+        retry_delay = _worker_retry_delay(request, crash_repeats)
+        repeated = (
+            f"; same durable checkpoint crash x{crash_repeats}"
+            if crash_repeats > 1
+            else ""
+        )
         _report_retry(
             request,
             (
-                f"worker made no progress for {float(getattr(request, 'worker_hang_timeout', 600.0)):g}s; resuming saved state"
+                f"worker made no progress for {float(getattr(request, 'worker_hang_timeout', 600.0)):g}s; "
+                f"resuming saved state after {retry_delay:g}s{repeated}"
                 if hung
-                else f"worker exited unexpectedly ({code}); resuming saved state"
+                else f"worker exited unexpectedly ({code}); "
+                f"resuming saved state after {retry_delay:g}s{repeated}"
             ),
         )
         worker_args = [
             arg for arg in worker_args if arg not in {"--resume", "--force-new"}
         ] + ["--resume"]
-        if _sleep_until_retry(max(1, request.retry_delay), stop_request):
+        if _sleep_until_retry(retry_delay, stop_request):
             _clear_stop_request(stop_request)
             return 130
 
+
+
+def _worker_retry_delay(request: Any, crash_repeats: int) -> float:
+    """Back off repeated process crashes without turning them into a stop condition."""
+    base = max(1.0, float(getattr(request, "retry_delay", 1.0)))
+    maximum = max(base, float(getattr(request, "retry_max_delay", 300.0)))
+    exponent = min(max(0, int(crash_repeats) - 1), 16)
+    return min(maximum, base * (2 ** exponent))
 
 
 class _StopRequested(Exception):
@@ -442,7 +446,6 @@ def _state_progress_fingerprint(states: Sequence[Path]) -> str:
             "current": state.get("current") if isinstance(state, dict) else None,
             "cycle": state.get("cycle") if isinstance(state, dict) else None,
             "workflow_position": state.get("workflow_position") if isinstance(state, dict) else None,
-            "task_step": state.get("task_step") if isinstance(state, dict) else None,
             "completed": state.get("completed") if isinstance(state, dict) else None,
             "tasks": [
                 {

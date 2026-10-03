@@ -1,8 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from runner.workflow.stages.contracts import StageContext
-from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
+from runner.workflow.stages import BaseStage, BaseStageSpec, StageContext
 from runner.runtime.run_state import RunState
 
 
@@ -15,7 +14,7 @@ def test_plain_base_stage_can_reference_bundled_prompt_path_directly(tmp_path):
         set_stage=lambda *_: None,
     )
     stage = BaseStage(BaseStageSpec(
-        name="security_review", status="checking", prompt="stages/ai_validator.md"
+        name="security_review", status="checking", prompt="common/ai_validator.md"
     ))
     rendered = stage._original_prompt(ctx, None)
     assert "Final validation" in rendered
@@ -30,8 +29,8 @@ def test_default_flow_has_no_prompt_path_resolver_hardcode():
 def test_previous_structured_data_is_available_and_bounded(tmp_path):
     import json
 
-    from runner.prompts.context import PREVIOUS_DATA_CHARS, build_stage_prompt_context
-    from runner.workflow.stages.contracts import StageResult
+    from runner.prompting import PREVIOUS_DATA_CHARS, build_stage_prompt_context
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
@@ -50,7 +49,7 @@ def test_previous_structured_data_is_available_and_bounded(tmp_path):
         },
     )
 
-    data = build_stage_prompt_context(ctx, "repair", previous)["previous"]["data"]
+    data = build_stage_prompt_context(ctx, "execute", previous)["previous"]["data"]
 
     assert data["completed"] is False
     assert data["reason"] == "Missing required evidence"
@@ -62,7 +61,7 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
     from types import SimpleNamespace
 
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageResult
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
@@ -77,7 +76,7 @@ def test_top_level_review_failure_feedback_uses_structured_data_when_output_empt
         save_state=lambda: None,
         set_stage=lambda *_: None,
     )
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     previous = StageResult(
         "review",
         "fail",
@@ -100,7 +99,7 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
     from types import SimpleNamespace
 
     from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec
-    from runner.workflow.stages.contracts import StageResult
+    from runner.workflow.stages import StageResult
 
     state = RunState(run_id="test", goal="check project", project_root=str(tmp_path))
     ctx = StageContext(
@@ -115,7 +114,7 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
         save_state=lambda: None,
         set_stage=lambda *_: None,
     )
-    stage = BaseStage(BaseStageSpec(name="execute", prompt="stages/execution.md"))
+    stage = BaseStage(BaseStageSpec(name="execute", prompt="common/execution.md"))
     previous = StageResult(
         "validate_ai",
         "fail",
@@ -132,3 +131,46 @@ def test_top_level_validator_failure_feedback_uses_structured_data_when_output_e
 
     assert "Validator: Validation evidence is incomplete" in feedback
     assert 'Validator missing_items: ["Run the required check"]' in feedback
+
+
+def test_handoff_protocol_is_appended_on_same_session_continuation(tmp_path):
+    from types import SimpleNamespace
+
+    from runner.config.runtime import RuntimeConfig
+    from runner.workflow.stages import HandoffStage, HandoffStageSpec, StageResult
+
+    state = RunState(run_id="test", goal="route work", project_root=str(tmp_path))
+    client = SimpleNamespace(session_id="router-session")
+    ctx = StageContext(
+        config=RuntimeConfig(goal="route work", project_root=str(tmp_path)),
+        root=tmp_path,
+        work=tmp_path / ".work",
+        state=state,
+        ai_client=client,
+        state_file=tmp_path / ".work" / "state.json",
+        validator_path=None,
+        validator_is_ai=False,
+        save_state=lambda: None,
+        set_stage=lambda *_: None,
+    )
+    stage = HandoffStage(HandoffStageSpec(
+        name="coordinator",
+        targets=["worker", "final_validate"],
+        session_policy="main",
+    ))
+
+    first = stage._prompt(ctx, None, client)
+    assert "[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]" in first
+    assert "Allowed targets: worker, final_validate" in first
+
+    stage._remember_prompt(ctx, client)
+    second = stage._prompt(
+        ctx,
+        StageResult("worker", "pass", output="worker complete"),
+        client,
+    )
+
+    assert second.startswith("RUNNER_SHARED_STAGE_CONTROL")
+    assert "[RUNNER_IMMUTABLE_HANDOFF_PROTOCOL]" in second
+    assert "Allowed targets: worker, final_validate" in second
+    assert '{"target":"stage_name","reason":"concise reason"}' in second

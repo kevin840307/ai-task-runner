@@ -1,84 +1,106 @@
+# Workflow Studio
 
-## 環境檢測
+Workflow Studio 是正式 YAML Workflow 的 UI editor，CLI/API/runtime 都使用同一份模型，不存在第二套 graph schema。
 
-Run options 內提供 **Check environment**。UI 直接呼叫同一份可從命令列使用的 `tool/environment_check.py`，檢查本機 Python 版本/套件、必要 Runner 檔案、UI data 寫入權限，以及 Qwen/OpenCode 執行檔是否可從 PATH 找到。Backend 未安裝只列為 warning，因為使用者可能只使用其中一種 Backend。
+## Assets
 
-Stage Editor 以行為分組呈現參數，不把 YAML 欄位全部平鋪。`max_attempts` / `on_exhausted` 放在 **Recovery gate**，並提供精簡 Behavior 預覽；一般 AI-backed 的 `base`、`task`、`review` 與 `ai_validator` 都能從 Visual UI 新增 `runs` / `required_passes`。`continuation_prompt` 刻意維持 YAML-only advanced override，讓 Visual UI 只保留一個 Prompt selector。
+Global：
 
-## Theme 與外觀
+```text
+runner/assets/workflows/*.yaml
+runner/assets/prompts/<category>/*.md
+```
 
-UI 內建三種配色，並將 Light/Dark 外觀獨立控制。
+Project：
 
-- 預設：`Teal + System`
-- Appearance：`System`、`Light`、`Dark`
-- Theme：`Teal`、`Deep Blue`、`Violet`、`Amber`、`Rose`
+```text
+<project>/.ai-task-runner/assets/workflows/*.yaml
+<project>/.ai-task-runner/assets/prompts/<category>/*.md
+```
 
-Theme 只改變背景、Surface、選取狀態、Border、文字與主 Accent。Runtime 語意色固定不隨 Theme 改變：Running/Info 為藍色、PASS/Success 為綠色、Warning 為琥珀色、Error/Danger 為紅色。
+`.ai-task-runner.yaml` 是 project policy/config，不是 Workflow。
 
-設定會保存在瀏覽器 localStorage，並在主樣式載入前套用，避免重開 UI 時出現明顯閃色。`System` 會跟隨 OS/瀏覽器 `prefers-color-scheme`，UI 開啟期間系統模式切換也會同步更新。
+## Full Designer
 
+React Flow 畫面會顯示：
 
-## Custom 子資料夾
+- START / END：只存在 UI 的 virtual node；
+- 每一個 YAML Stage = 一顆真實 node；
+- 一般 Stage 使用 PASS / FAIL handle；
+- `type: handoff` 使用一個 HANDOFF handle 連多個允許 target；
+- `scope: task` 顯示為 visual group；
+- ERROR retry 是 Stage 設定，不是 edge。
 
-Workflow / Prompt 的 `custom/**` 會遞迴掃描。新增 Workflow / Prompt 時可選既有子資料夾，或直接建立如 `e2e/regression` 的新資料夾；`../`、絕對路徑等跳出 Custom root 的路徑會被拒絕。
+Dynamic Handoff targets 預設橫向單排；畫布可平移、縮放、手動拖曳。手動位置只存在瀏覽器 UI state，不改變 YAML runtime 語意。
 
+## Stage 參數
 
-## 介面語言與側邊欄
+Inspector 由 `/api/workflow/catalog` 動態產生。
 
-- UI 預設使用繁體中文（`zh-TW`）；產品名、Page Title、Workflow/Stage 等技術名稱可維持原名。
-- `Theme / Appearance` 面板可切換 `繁體中文 / English`，設定會保存於瀏覽器。
-- 左側 Tasks / Workflows 使用圖示導覽並縮小高度；新增專案改由 `專案` 標題右側的 `+` 開啟原本的 Open Project dialog。
+主要分區為 Content、Execution、Result、Advanced，runtime catalog 已提供的預設值不在 UI 重複硬編碼。
 
-## 語言與離線 UI
+Session policy：
 
-UI 預設使用繁體中文說明，並可切換 English。`Appearance`、`Theme`、`Workflow`、`Stage`、`Settings`、`Control`、`Backend` 等常見系統/技術名稱維持英文；操作說明、help text、tooltip、Behavior Preview 等描述性文字依語言切換。
+- `role`：durable 可重用的 Stage-owned Session；
+- `main`：Runner 主 Session；
+- `fresh`：每次 invocation 新 Session；
+- `auto`：built-in/default 行為。
 
-UI 以完全離線、本機使用為前提。Runtime UI 不依賴 CDN、Google Fonts、遠端 JavaScript/CSS 或翻譯 API；所需靜態資源都必須隨專案一起提供。測試會拒絕 UI static assets 引入遠端 runtime resource URL。
+從 `auto` 切到明確 policy 時，Studio 會移除衝突的舊 session 欄位。`session_key` 只在 `auto` 顯示；內部 `fresh_session_each_run` / `fresh_session_on_start` 不再當成一般 UI 設定。
 
-Project / Runtime polling 採 non-overlapping：上一個 request 完成後才排下一輪。Windows 每次 Project list refresh 只取得一次 `tasklist` PID snapshot，再由所有已追蹤 Project 共用。Workflow Generator status polling 也採相同規則，避免瀏覽器或主機較慢時堆疊 request。
+## Routing
 
-## Runtime Contract 補充
+一般 graph routing 只有 PASS / FAIL：
 
-CLI YAML List / Multi-task 執行時，outer `.ai-task-runner/console-view.json` 只保存目前 child 的 `script_index`、`script_total`、`child_project_root`、`child_work_dir` pointer；UI 會跟隨 pointer 讀 child runtime 自己的 `state.json` / `console-view.json` / `stream.log`，不建立第二份 aggregate state。CLI / YAML item 的 `state.goal` 只讀顯示成 history 裡可收合的 **Input prompt** 卡片，不寫進 UI chat history，也不新增 Chat grid row，因此不改變既有 header / summary / history / composer 排版。
+```yaml
+routes:
+  pass: some_stage
+  fail: earlier_stage
+```
 
-CLI 啟動的 Project 會自動加入 `ui/data/projects.json`，讓本機 UI 側邊欄不用再手動 **Open Project**。一般 CLI run 會加入 `--project-root`；YAML List / Multi-task run 會加入每個 item 的 project root。soak/live/CI 不想出現在側邊欄時可加 `--no-ui-project-register`。程式化 API 預設不啟用這個行為，除非呼叫端明確 opt in。
+PASS 可到 `done`，FAIL 可到 `stop`；回到前面 Stage 就是 rollback/loop。
 
-## UI/UX polish
-- Runtime feedback 不再使用與 polling 無關的 spinner/pulse 假活動動畫；兩次真實 state fetch 之間畫面保持穩定，只讓 `Elapsed` / `Last update` 表達新鮮度，避免抓取較慢時看起來像 lag。
-- Runtime 顯示 Last update；超過約 30 秒未有新狀態時以 Warning 呈現。
-- Workflow Studio 保留 dirty-state 離開保護：切檔、切專案、切模式、Reload、離頁都不會靜默丟失修改。
-- 錯誤預設顯示摘要；Details 才開啟完整錯誤 Modal，避免 Background Runner 錯誤中斷操作。
-- Runtime / Project / YAML status 使用一致狀態 icon 語意。
-- Header、字級、圓角與 shadow 已收斂為較緊湊的 engineering-tool density；聊天與輸入字級同步縮小。
+Handoff routing 儲存在：
 
-- **Live Runtime 回饋** — 任務 Running 時，Runtime footer 會以瀏覽器本地 timer 每秒更新 `Elapsed HH:MM:SS`，不增加後端 polling；正在執行的 Project 列也會直接顯示目前 Stage 與 Progress，點擊即可回到該 Runtime。
+```yaml
+targets:
+  - implementer
+  - verifier
+  - final_validate
+```
 
-### 可攜式 Workflow Folder
+ERROR 只設定 `error_policy.retries` 或全域 retry。Review 若設定有限 local retry，Full Designer 會明確顯示 `retry -> Skip`；其他 Stage 的有限 retry 用盡仍 fail-closed。UI 不支援 ERROR edge、repair/recover/restart_at/repeat/max_attempts/on_exhausted。
 
-放在專屬 Custom 子資料夾的 Workflow，可以匯出成 `.workflow-folder.zip`。Folder package 有明確 ownership 邊界：
+## Stage Test
 
-- Workflow 的 Prompt 只允許引用「自己的 Custom folder」、`custom/common`、或 System/Stage Prompt。
-- Export 只把自己的 Prompt 打包；`custom/common` 與 System Prompt 只記錄成 dependency，不複製進 package。
-- Export 會把相同 ownership 的 **Workflow folder + Prompt folder 整個遞迴打包**，不再只挑 YAML / Markdown。`.py` validator、`.json` / schema、`.j2`、example、asset、binary support file、巢狀子資料夾都會原樣保留；只排除明確的 cache/runtime/temp 產物，並拒絕 symlink。
-- `custom/common` 與 System 只記為 dependency，不會被打包。Import 會先驗證 dependency，再只替換相同 logical folder 的 Custom Workflow folder 與 Custom Prompt folder，完整還原所有 owned files；`custom/common` 與 System 永遠不刪除、不覆蓋。舊版 v1 folder package 仍可匯入。
-- Import 或驗證途中失敗，兩個自己的 folder 都會完整 rollback。
+Test tab 只在隔離 temporary Project 執行目前選中的一顆 Stage，使用尚未 Save 的 graph draft，回傳：
 
-### Flow Map
+- status；
+- output / structured data；
+- changed files；
+- resolved next target。
 
-Workflow Studio 的 **+ Stage** 旁新增 **Flow Map**。這是唯讀流程圖，會顯示正常 Flow、FAIL/Recover 路徑與 `restart_at` 回跳；只存在於 recover 的 Stage 也會顯示。點 Stage 節點可看 Type、Prompt、Incoming 與 Outgoing routing。
+不會繼續跑後面的 Workflow，也不修改真實 project/YAML。
 
-### AI Workflow Builder target
+## Save
 
-Generate with AI 現在在 Generate 前直接指定 **Folder + Filename**；Ready 編輯頁會持續顯示 target path，Save 視窗也使用同一組 Folder/Filename 並提供目的路徑預覽。Custom 會發布到 `runner/workflow/custom/<folder>/<filename>`，owned generated files 放在 `runner/prompts/custom/<folder>`。
+YAML 是唯一 canonical model。Graph Save 會先用目前 Workflow schema 驗證整份 draft，再一次 atomic write；非法 target/options/session-policy 組合不會部分寫入。
 
-### Project Workflow packages
+React/Vite source 在 `ui/studio-src`；編譯後 static assets 在 `ui/static/workflow-studio-app`，由既有 Python UI server 提供，使用者端不需要 Node.js。
 
-Workflow Studio 只從 `<project>/.ai-task-runner/workflows/<folder>/workflow/` 偵測 Project Workflow；同一套 Workflow 自己的 Prompt 放在 `<folder>/prompts/`。`.ai-task-runner.yaml` 只是設定檔，不會再被當成 Workflow。Flow header 的 `Flow Map` / `+ Stage` 在窄解析度仍保持同一組排列；Runtime 活動指示另外有 JavaScript frame fallback，即使公司瀏覽器停用 CSS animation 仍可看到執行中的變化。
+## Runtime Status
 
-### Concurrency 與模組 ownership
+UI 只透過正式 runtime/state/control contract 判斷執行狀態，不應因 stale UI state 把 idle project 顯示成 running。Stop/resume 也沿用 Runner control contract。
 
-Project launch/runtime、Studio edit、Workflow Builder lifecycle、chat、project-list mutation 使用彼此獨立的 lock，因此慢速 validation/publish 不會阻塞無關的 UI 操作。Workflow Builder server state 放在 `workflow_builder_state.py`，共用 server primitive 放在 `server_support.py`，瀏覽器 Generator 行為放在 `static/js/workflow-generator.js`。非 loopback bind 必須明確使用 `--allow-remote`。
+## 測試
 
+主要 coverage：
 
-- Workflow / Prompt 的 **Duplicate** 會顯示精簡的目標表單，可直接輸入或從建議選擇 Custom 子資料夾；Project Workflow 也可輸入新 folder，Project Prompt 則維持掛在既有 Workflow-owned folder。System 資產仍只會複製到 Custom。Prompt Import 也改成明確選擇 Custom / Project folder，不再自動猜測。
-- 若 Tasks 選擇額外 AI 驗證 Prompt，UI 會把它快照到該 request 的 `resources/ai_validation.md`；Runner 會保證把這份 resource 注入 `ai_validator`，不再依賴自訂 Prompt 是否有寫 `{{ validation.instructions }}`。
+- graph save/round-trip/validation；
+- Stage CRUD 與 asset roots；
+- Handoff handles/targets/layout；
+- session-policy normalization；
+- Stage Test sandbox；
+- browser CRUD；
+- static source/bundle contract；
+- CI React Studio build。
