@@ -630,3 +630,12 @@ def test_designer_modals_share_escape_and_close_accessibility_contract():
     assert 'else if (pendingCreate) setPendingCreate(null)' in text
     assert 'else if (addStageOpen) setAddStageOpen(false)' in text
     assert 'aria-label={tx("close")} title={tx("close")}' in text
+
+
+
+def test_designer_confirm_keeps_cancel_before_danger_action():
+    text = SOURCE.read_text(encoding="utf-8")
+    cancel = text.index('<button type="button" onClick={() => setConfirmDialog(null)}>{tx("cancel")}</button>')
+    confirm = text.index('className={confirmDialog.danger ? "danger-confirm" : "primary"}')
+    assert cancel < confirm
+    assert 'aria-modal="true" aria-labelledby="designer-confirm-title"' in text
