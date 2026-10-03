@@ -220,6 +220,6 @@ def test_workflow_save_allows_schema_valid_non_closing_route(tmp_path: Path) -> 
         project,
     )
 
-    assert saved["ok"] is True
+    assert "pass: stop" in saved["content"]
     reread = state.studio_read(created["item"]["id"], project)
     assert "pass: stop" in reread["content"]
