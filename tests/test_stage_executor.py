@@ -344,3 +344,64 @@ def test_transient_errors_rotate_fresh_after_same_session_budget(monkeypatch):
         for event in records
     )
     assert sleeps == [1.0, 1.0]
+
+
+
+def test_long_transient_window_remains_bounded_and_recovers(monkeypatch):
+    class Transient(RunnerError):
+        transient = True
+
+    class LongOutage(Stage):
+        def __init__(self):
+            self.calls = 0
+            self.resets = 0
+
+        def has_session(self, ctx):
+            return True
+
+        def reset_session(self, ctx):
+            self.resets += 1
+            return f"session-{self.resets}"
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls <= 7:
+                return StageResult.error_result(self.name, Transient(f"outage-{self.calls}"))
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = -1
+    ctx.config.retry_delay = 0
+    ctx.config.retry_max_delay = 0
+    sleeps = []
+    records = []
+    bus = EventBus()
+    bus.subscribe(records.append)
+    events.configure(bus)
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = LongOutage()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 8
+    assert stage.resets == 3
+    assert sleeps == [1.0] * 7
+    assert ctx.state.last_error == ""
+
+    recoveries = [
+        event for event in records
+        if event["type"] == "runner.recovery" and event["action"] == "retry"
+    ]
+    assert [event["retry_mode"] for event in recoveries] == [
+        "retry", "recover", "retry", "recover", "retry", "recover", "retry"
+    ]
+    fresh = [
+        event for event in records
+        if event["type"] == "runner.session" and event["action"] == "fresh"
+    ]
+    assert len(fresh) == 3
