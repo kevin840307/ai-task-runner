@@ -267,6 +267,19 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Hardened all API outage probes with a deterministic arm/active handshake.
+    - Root cause found before another live failure: the prior 0.5s short outage could expire during the
+      fixed 2s arm delay before the execute AI Stage issued its request.
+    - All 429/502/503/raw-disconnect probes now share one Workflow fixture:
+      warmup(main session) -> arm command -> execute(main session) -> validate_file.
+    - arm writes api-outage-armed and waits for api-outage-active; the harness enables the proxy outage
+      first, then writes the active acknowledgement so the next AI Stage starts only after the outage is live.
+    - Short HTTP outages use one shared 5s constant and are not released until the proxy has observed at
+      least one real failed request. Long disconnect still uses the configured long outage duration.
+    - Runner retry/session semantics were intentionally unchanged.
+    - Mock regressions protect fixture topology, handshake markers, shared timeout constant and the
+      observed-failure-before-release requirement.
+
 [x] Fixed API raw-disconnect live outage-boundary race.
     - The disconnect probe now uses a deterministic explicit Workflow:
       warmup(main session) -> arm command -> execute(main session) -> validate_file.
