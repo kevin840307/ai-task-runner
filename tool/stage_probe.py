@@ -257,6 +257,12 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 previous,
                 retry_limit=retry_limit,
             )
+            effective_backend = runner.context.ai_client.backend
+            effective_model = runner.context.ai_client.model
+            if isinstance(stage, BaseStage):
+                effective_client = stage._client(runner.context)
+                effective_backend = effective_client.backend
+                effective_model = effective_client.model
             next_target, route = _draft_next(draft_workflow, args.stage, result) if draft_workflow is not None else (
                 _resolved_next(workflow, index, result), resolve_stage_target(definition, result.status)
             )
@@ -275,6 +281,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 "test_retry_policy": retry_policy,
                 "test_scenario": test_scenario,
                 "mock_error_injected": test_scenario == "error_mock",
+                "effective_backend": effective_backend,
+                "effective_model": effective_model,
             }
     finally:
         if not args.keep_work:
