@@ -63,5 +63,5 @@ child routes/hand-off targets 必須留在 child Workflow 內；若要結束 chi
 
 PlanStage 是目前第一個正式 producer：它解析 Tasks 後自行建立多組 `AI Stage(profile=execute) -> AI Stage(profile=review)`，全部完成後才回 parent 下一個 Stage。
 
-所有 child Stage 都使用相同的 `runner/workflow/stage_executor.py`，所以自訂 Stage 不需要實作 retry/recover/session logic。
+所有 child Stage 都使用相同的 `runner/workflow/execution/stage_executor.py`，所以自訂 Stage 不需要實作 retry/recover/session logic。
 
