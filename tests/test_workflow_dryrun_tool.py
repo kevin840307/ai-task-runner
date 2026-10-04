@@ -401,3 +401,40 @@ flow: [only]
 
     assert result.returncode == 2
     assert "unknown --from-stage: missing" in result.stderr
+
+
+def test_dryrun_plan_children_preserve_stage_backend_model_override(tmp_path: Path):
+    from runner.workflow.loader import load_workflow
+    from tool.workflow_dryrun import Scenario, _close, _execute
+
+    workflow_file = tmp_path / "plan-backend.yaml"
+    workflow_file.write_text(
+        """
+stages:
+  planning:
+    type: plan
+    backend: opencode
+    model: provider/model-x
+  final:
+    type: command
+    command: ["{python}", "-c", "print('done')"]
+flow:
+  - planning
+  - final
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    workflow = load_workflow(workflow_file)
+    ctx, _executor, error = _execute(workflow, Scenario(), 100)
+    try:
+        assert error == ""
+        children = [
+            item for item in ctx.state.expanded_workflow
+            if item.get("_dynamic_parent") == "planning"
+        ]
+        assert children
+        assert all(item.get("backend") == "opencode" for item in children)
+        assert all(item.get("model") == "provider/model-x" for item in children)
+    finally:
+        _close(ctx)
