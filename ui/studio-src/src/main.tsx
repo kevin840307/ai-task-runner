@@ -449,7 +449,54 @@ function nextStageKey(visual: Visual, type: string): string {
   return `${base}_${i}`;
 }
 
+function applyConnectionToVisual(visual: Visual, connection: Connection): Visual {
+  if (!connection.source || !connection.target) return visual;
+  const status = String(connection.sourceHandle || "pass").toLowerCase();
+  if (connection.source === START) {
+    if (connection.target === END) return visual;
+    return {
+      ...visual,
+      flow: [connection.target, ...visual.flow.filter((x) => x !== connection.target)],
+    };
+  }
+  if (
+    connection.source === END
+    || connection.target === START
+    || !["pass", "fail", "handoff"].includes(status)
+    || (status === "handoff" && connection.target === END)
+  ) return visual;
+
+  const nextFlow = [...visual.flow];
+  if (!nextFlow.includes(connection.source)) nextFlow.push(connection.source);
+  if (connection.target !== END && !nextFlow.includes(connection.target)) {
+    if (status === "pass" || status === "handoff") {
+      const sourceIndex = nextFlow.indexOf(connection.source);
+      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
+      nextFlow.splice(insertAt, 0, connection.target);
+    } else {
+      nextFlow.push(connection.target);
+    }
+  }
+
+  const stages = visual.stages.map((stage) => {
+    if (stage.name !== connection.source) return stage;
+    const routes = { ...(stage.routes || {}) };
+    const index = nextFlow.indexOf(stage.name);
+    const nextName = nextFlow[index + 1];
+    let target = connection.target!;
+    if (status === "handoff") {
+      return { ...stage, targets: Array.from(new Set([...(stage.targets || []), target])) };
+    }
+    if (target === END) target = status === "pass" ? "done" : "stop";
+    if (status === "pass" && target === nextName) delete routes.pass;
+    else routes[status] = target;
+    return { ...stage, routes };
+  });
+  return { ...visual, stages, flow: nextFlow };
+}
+
 type CanvasPosition = { x: number; y: number };
+type PendingEdgeCreate = { source: string; sourceHandle: string; position: CanvasPosition };
 type CanvasLayout = Record<string, CanvasPosition>;
 
 type WorkflowLocalDraft = {
@@ -806,6 +853,7 @@ function App() {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const addStageTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const connectionStartRef = useRef<{ source: string; sourceHandle: string } | null>(null);
   const layoutRef = useRef<CanvasLayout>({});
   const undoStackRef = useRef<Visual[]>([]);
   const redoStackRef = useRef<Visual[]>([]);
@@ -852,6 +900,7 @@ function App() {
   const [palettePrefs, setPalettePrefs] = useState<PalettePrefs>(readPalettePrefs());
   const [snapEnabled, setSnapEnabled] = useState(readSnapPreference());
   const [addStageOpen, setAddStageOpen] = useState(false);
+  const [pendingEdgeCreate, setPendingEdgeCreate] = useState<PendingEdgeCreate | null>(null);
   const [addStageQuery, setAddStageQuery] = useState("");
   const [copiedStage, setCopiedStage] = useState<Stage | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stage: string } | null>(null);
@@ -863,6 +912,7 @@ function App() {
   const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen;
   const closeAddStageCommand = useCallback(() => {
     setAddStageOpen(false);
+    setPendingEdgeCreate(null);
     requestAnimationFrame(() => addStageTriggerRef.current?.focus());
   }, []);
 
@@ -1335,51 +1385,9 @@ function App() {
 
   const connect = useCallback((connection: Connection) => {
     if (!visual || !connection.source || !connection.target) return;
+    const next = applyConnectionToVisual(visual, connection);
+    if (next === visual) return;
     rememberUndoSnapshot(visual);
-    const status = String(connection.sourceHandle || "pass").toLowerCase();
-    if (connection.source === START) {
-      if (connection.target === END) return;
-      const flow = [connection.target, ...visual.flow.filter((x) => x !== connection.target)];
-      const next = { ...visual, flow };
-      setVisual(next);
-      const g = graphFor(next, catalog);
-      setNodes(g.nodes);
-      setEdges(g.edges);
-      setDirtyGraph(true);
-      return;
-    }
-    if (connection.source === END || connection.target === START || !["pass", "fail", "handoff"].includes(status)) return;
-    if (status === "handoff" && connection.target === END) return;
-    let nextFlow = [...visual.flow];
-    if (!nextFlow.includes(connection.source)) {
-      nextFlow.push(connection.source);
-    }
-    if (connection.target !== END && !nextFlow.includes(connection.target)) {
-      if (status === "pass" || status === "handoff") {
-        const sourceIndex = nextFlow.indexOf(connection.source);
-        const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
-        nextFlow.splice(insertAt, 0, connection.target);
-      } else {
-        // A FAIL branch must not rewrite the source Stage's PASS connection.
-        nextFlow.push(connection.target);
-      }
-    }
-    const stages = visual.stages.map((stage) => {
-      if (stage.name !== connection.source) return stage;
-      const routes = { ...(stage.routes || {}) };
-      const index = nextFlow.indexOf(stage.name);
-      const nextName = nextFlow[index + 1];
-      let target = connection.target!;
-      if (status === "handoff") {
-        const targets = Array.from(new Set([...(stage.targets || []), target]));
-        return { ...stage, targets };
-      }
-      if (target === END) target = status === "pass" ? "done" : "stop";
-      if (status === "pass" && target === nextName) delete routes.pass;
-      else routes[status] = target;
-      return { ...stage, routes };
-    });
-    const next = { ...visual, stages, flow: nextFlow };
     setVisual(next);
     const g = graphFor(next, catalog);
     setNodes(g.nodes);
@@ -1452,7 +1460,15 @@ function App() {
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
-    const next = { ...visual, stages: [...visual.stages, stage] };
+    let next = { ...visual, stages: [...visual.stages, stage] };
+    if (pendingEdgeCreate) {
+      next = applyConnectionToVisual(next, {
+        source: pendingEdgeCreate.source,
+        sourceHandle: pendingEdgeCreate.sourceHandle,
+        target: name,
+        targetHandle: null,
+      });
+    }
     rememberUndoSnapshot(visual);
     setVisual(next);
     if (position) {
@@ -1465,6 +1481,7 @@ function App() {
     setSelected(name);
     setEditorOpen(true);
     setPendingCreate(null);
+    setPendingEdgeCreate(null);
     setCreatePrompt("");
     setCreateCommand("");
     setDirtyGraph(true);
@@ -1524,6 +1541,33 @@ function App() {
     }
     await createStage(pendingCreate.type, pendingCreate.position, createPrompt.trim(), createCommand.trim(), createAIProfile);
   }
+
+  const connectStart = useCallback((_event: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null; handleType: "source" | "target" | null }) => {
+    if (params.handleType !== "source" || !params.nodeId) {
+      connectionStartRef.current = null;
+      return;
+    }
+    connectionStartRef.current = {
+      source: params.nodeId,
+      sourceHandle: String(params.handleId || "pass"),
+    };
+  }, []);
+
+  const connectEnd = useCallback((event: MouseEvent | TouchEvent, state: { isValid: boolean }) => {
+    const start = connectionStartRef.current;
+    connectionStartRef.current = null;
+    if (!start || state.isValid || start.source === END) return;
+    const target = event.target as Element | null;
+    if (target?.closest(".react-flow__handle, .react-flow__node")) return;
+    const point = "changedTouches" in event
+      ? event.changedTouches.item(0)
+      : event;
+    if (!point) return;
+    const position = screenToFlowPosition({ x: point.clientX, y: point.clientY });
+    setPendingEdgeCreate({ ...start, position });
+    setAddStageQuery("");
+    setAddStageOpen(true);
+  }, [screenToFlowPosition]);
 
   function dragStage(event: React.DragEvent<HTMLDivElement>, stageType: string) {
     event.dataTransfer.setData("application/x-ai-stage", stageType);
@@ -1853,6 +1897,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
             onNodesChange={(changes) => setNodes((current) => applyNodeChanges(changes, current))}
             onEdgesChange={(changes) => setEdges((current) => applyEdgeChanges(changes, current))}
             onConnect={connect}
+            onConnectStart={connectStart}
+            onConnectEnd={connectEnd}
             onEdgesDelete={deleteEdges}
             onEdgeClick={() => { setSelected(""); setContextMenu(null); setEdgeContextMenu(null); }}
             onEdgeContextMenu={(event, edge) => {
@@ -1918,7 +1964,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 return !q || [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
               }).map((type) => {
                 const meta = catalogStageMeta(catalog, type);
-                return <button type="button" key={type} onClick={() => { setAddStageOpen(false); void addStage(type); }}>
+                return <button type="button" key={type} onClick={() => { setAddStageOpen(false); void addStage(type, pendingEdgeCreate?.position); }}>
                   <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.id === catalogStageMeta(catalog, type).category)?.icon || "◇"}</span>
                   <span><strong>{meta.title}</strong><small>{meta.description}</small></span><b>＋</b>
                 </button>;
@@ -2006,7 +2052,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 </label>
               )}
               <div className="create-stage-actions">
-                <button type="button" onClick={() => setPendingCreate(null)} disabled={busy}>Cancel</button>
+                <button type="button" onClick={() => { setPendingCreate(null); setPendingEdgeCreate(null); }} disabled={busy}>Cancel</button>
                 <button type="button" className="primary" onClick={() => void confirmPendingCreate()} disabled={busy}>Create Stage</button>
               </div>
             </div>
