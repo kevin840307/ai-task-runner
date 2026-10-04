@@ -12,14 +12,13 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_VALIDATOR_OUTPUT_CHARS
+from ..config.defaults import MAX_TASK_OUTPUT_CHARS, MAX_TRANSITION_HISTORY, MAX_VALIDATOR_OUTPUT_CHARS
 from ..config.runtime import is_integer, is_number
 from ..errors import ConfigurationError, RunnerError
 from ..utils import append_bounded_log, bounded_text, io_path, same_path
 from .events import touch_heartbeat
 
 VALID_TASK_STATUSES = frozenset({"pending", "completed"})
-MAX_TRANSITION_HISTORY = 40
 
 
 @dataclass
