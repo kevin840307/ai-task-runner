@@ -10,6 +10,8 @@ def test_workflow_catalog_exposes_stage_presentation_metadata():
     assert options["prompt"]["section"] == "content"
     assert options["backend"]["section"] == "execution"
     assert options["parser"]["section"] == "result"
+    assert options["prompt"]["visible"] is True
+    assert isinstance(options["prompt"]["order"], int)
     assert options["ai_validator_yolo"]["section"] == "advanced" if "ai_validator_yolo" in options else True
 
     assert base["profiles"]["execute"]["test_examples"]["pass"]
@@ -28,5 +30,9 @@ def test_unknown_plugin_fields_default_to_advanced_without_ui_branching():
         future_toggle: bool = False
 
     fields = Example.__dataclass_fields__
-    assert _field_info(fields["custom"])["section"] == "content"
-    assert _field_info(fields["future_toggle"])["section"] == "advanced"
+    custom = _field_info(fields["custom"], order=7)
+    future = _field_info(fields["future_toggle"], order=8)
+    assert custom["section"] == "content"
+    assert custom["order"] == 7
+    assert custom["visible"] is True
+    assert future["section"] == "advanced"
