@@ -246,6 +246,21 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed long raw-disconnect session recovery contract.
+    - Root cause: StageExecutor bounded same-session rotation existed for non-transient ERROR,
+      but transient transport errors (502/429/503/raw disconnect) bypassed the per-session
+      failure counter and could retry the same session indefinitely. That violated the current
+      design rule: Same Session is bounded, then Fresh Session recovery continues unattended.
+    - StageExecutor now applies DEFAULT_PER_SESSION_ATTEMPTS=2 to transient errors too:
+      first transient failure retries the current session, the next failure rotates only that
+      Stage to a Fresh Session, resets the per-session counter, and continues recovery.
+    - This remains technical reliability inside StageExecutor; FlowEngine semantic routing is unchanged.
+    - Short 429/502/503 live outages must still complete in the original session.
+    - The 3-minute raw-disconnect probe now accepts session replacement only when a controlled
+      runner.session/fresh event and runner.recovery retry_mode=recover evidence prove the Runner
+      performed the bounded rotation. An unexplained backend/session swap still fails.
+    - Added deterministic StageExecutor regression proving retry -> recover + Fresh Session rotation.
+
 [x] Fixed timeout/recovery-budget live probe before the next 24H run.
     - Root cause: timeout_probe configured stage_retries=1 while DEFAULT_PER_SESSION_ATTEMPTS=2,
       but still required runner.session fresh evidence. The second timeout exhausted the finite
@@ -355,6 +370,15 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
       deterministic checkpoint guaranteed to require another AI call.
     - Deterministic coverage proves Supervisor stop.request does not mutate state.json and
       the live harness accepts a valid detached Resume that needs no redundant model prompt.
+
+[x] Two-day Runner architecture review after live fixes.
+    - StageExecutor changes remain limited to retry/backoff/session rotation/recovery observability.
+    - FlowEngine still exclusively owns PASS/FAIL/HANDOFF semantic navigation and cycle accounting.
+    - No routes.error/recover edge/repair/task-scope/execution_mode compatibility was restored.
+    - New recovery evidence uses existing durable last_error/events and bounded state; no unbounded
+      retry history or second runtime store was introduced.
+    - Dynamic re-expansion cleanup still purges stale durable stage_sessions/review_failures and
+      process-local stage_session caches.
 
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
