@@ -64,7 +64,9 @@ class Handler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/projects":
                 return self._json(self.state.projects_payload())
             if parsed.path == "/api/backends":
-                return self._json(self.state.backend_catalog())
+                query = parse_qs(parsed.query)
+                project = self._optional_project(query.get("project", [""])[0])
+                return self._json(self.state.backend_catalog(project))
             if parsed.path == "/api/workflow/catalog":
                 return self._json(self.state.workflow_catalog())
             if parsed.path == "/api/environment/check":
