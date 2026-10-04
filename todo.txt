@@ -189,6 +189,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Override is Stage-local only: it does not change the run-level backend/model and is not inherited by Plan-generated or producer-defined child Stages.
     - Backend choices remain registry/catalog-driven; FlowEngine and Designer contain no Qwen/OpenCode provider branch.
     - Model is dropdown-only in Designer and is scoped to the selected Backend.
+    - An already-saved Stage model remains present as a dropdown option if live model discovery is temporarily unavailable; no free-text fallback is introduced and the saved value is not silently hidden.
     - Backend adapters own model discovery: Qwen reads configured modelProviders/model/env ids with Qwen's real settings precedence (System defaults < User < Project < System settings; highest modelProviders catalog replaces lower ones); OpenCode uses `opencode models`; future backends may implement available_models().
     - UI /api/backends now reuses one Runner-owned backend_catalog tool instead of maintaining a second AST-based backend registry in UI.
     - Model discovery is opt-in (models=1) and used only by Workflow Studio; normal Chat backend refresh stays cheap and does not run opencode models.
