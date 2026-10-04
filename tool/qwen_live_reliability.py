@@ -2112,12 +2112,20 @@ flow:
 '''
 
 
-def resume_probe(settings: Settings, root: Path) -> None:
-    project = create_project(root, "resume-probe")
+def _create_resume_probe_fixture(root: Path, name: str) -> tuple[Path, Path]:
+    project = create_project(root, name)
     (project / "task_producer.py").write_text(RESUME_TASK_PRODUCER, encoding="utf-8")
     (project / "resume_pause.py").write_text(RESUME_PROBE_PAUSE, encoding="utf-8")
     workflow = project / "resume-workflow.yaml"
     workflow.write_text(RESUME_PROBE_WORKFLOW, encoding="utf-8")
+    return project, workflow
+
+
+def _interrupt_resume_checkpoint(
+    settings: Settings,
+    project: Path,
+    workflow: Path,
+) -> str:
     first_log = console_log(project, "first-console.jsonl")
     first_log.parent.mkdir(parents=True, exist_ok=True)
     command = runner_command(settings, project, workflow=workflow)
@@ -2171,6 +2179,12 @@ def resume_probe(settings: Settings, root: Path) -> None:
             f"(stage={state.get('stage')}, workflow_position={state.get('workflow_position')}, "
             f"completed={state.get('completed')}, expanded={bool(state.get('expanded_workflow'))})"
         )
+    return interrupted_session
+
+
+def resume_probe(settings: Settings, root: Path) -> None:
+    project, workflow = _create_resume_probe_fixture(root, "resume-probe")
+    interrupted_session = _interrupt_resume_checkpoint(settings, project, workflow)
 
     saw_resume = False
 
@@ -2193,6 +2207,77 @@ def resume_probe(settings: Settings, root: Path) -> None:
     if "No saved session found" in evidence or "verdict=RESET_SESSION" in evidence:
         raise RuntimeError("resume fell back to a new session instead of continuing")
 
+
+def _assert_real_session_expiry_evidence(
+    project: Path,
+    injected_session: str,
+) -> None:
+    events = runner_events(project)
+    reset_indexes = [
+        index for index, event in enumerate(events)
+        if (
+            event.get("type") == "model.result"
+            and str(event.get("session") or "") == injected_session
+            and "session_recovery_action=reset_session"
+            in str(event.get("error") or "")
+        )
+    ]
+    if not reset_indexes:
+        raise RuntimeError(
+            "real Qwen invalid-session resume produced no reset_session evidence"
+        )
+
+    reset_index = reset_indexes[-1]
+    fresh_prompt_seen = any(
+        index > reset_index
+        and event.get("type") == "model.prompt"
+        and event.get("session_mode") == "new"
+        for index, event in enumerate(events)
+    )
+    fresh_result_sessions = [
+        str(event.get("session") or "")
+        for index, event in enumerate(events)
+        if (
+            index > reset_index
+            and event.get("type") == "model.result"
+            and str(event.get("session") or "")
+            and str(event.get("session") or "") != injected_session
+        )
+    ]
+    if not fresh_prompt_seen or not fresh_result_sessions:
+        raise RuntimeError(
+            "real Qwen invalid-session recovery did not continue in a Fresh Session"
+        )
+
+
+def real_session_expiry_probe(settings: Settings, root: Path) -> None:
+    """Inject a missing durable Qwen session and prove real resume self-recovers."""
+    project, workflow = _create_resume_probe_fixture(
+        root,
+        "real-session-expiry-probe",
+    )
+    original_session = _interrupt_resume_checkpoint(settings, project, workflow)
+
+    state_path = project / ".ai-task-runner" / "state.json"
+    state = read_json(state_path)
+    if str(state.get("ai_session_id") or "") != original_session:
+        raise RuntimeError("real session-expiry checkpoint lost its durable session")
+    injected_session = "00000000-0000-0000-0000-000000000000"
+    if original_session == injected_session:
+        raise RuntimeError("real session-expiry probe collided with injected session id")
+    state["ai_session_id"] = injected_session
+    _atomic_write(
+        state_path,
+        json.dumps(state, ensure_ascii=False, indent=2).encode("utf-8"),
+    )
+
+    code = run_command(
+        runner_command(settings, project, resume=True, workflow=workflow),
+        console_log(project, "expired-resume-console.jsonl"),
+        settings.run_timeout,
+    )
+    assert_completed(project, code)
+    _assert_real_session_expiry_evidence(project, injected_session)
 
 def stop_request_resume_probe(settings: Settings, root: Path) -> None:
     """Exercise the detached-UI stop.request contract and durable resume."""
