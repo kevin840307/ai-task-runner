@@ -508,7 +508,7 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
       created, so schema/CLI/config startup failures no longer appear only as stage=None/cycle=None.
 
 [x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
-[x] API outage live probes require a real outage, same-session completion and final durable last_error cleanup; Runner recovery events are mandatory in the production CLI recovery preflight instead of every Qwen transport outage.
+[x] API outage live probes require a real outage, bounded-session recovery and final durable last_error cleanup; controlled Fresh rotation requires durable Runner evidence, while Runner recovery events remain mandatory in the production CLI recovery preflight instead of every Qwen transport outage.
 [x] Fixed Dynamic Handoff live startup failure caused by stale harness validator injection.
     - Root cause: runner_command() unconditionally added --validator validation.py to every direct run.
       Explicit Dynamic Handoff workflows without validate_file are correctly valid, but RuntimeConfig
@@ -572,8 +572,15 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Architecture regression forbids structured repair from regaining Fresh Session ownership.
 
 High-value runner work remaining:
-[ ] Fix only reproduced live/backend failures.
-    reproduce -> deterministic regression test -> fix -> rerun gates.
+[x] Fix the currently reproduced live/backend failure before continuing.
+    - Reproduced short API outage false failure: a 5s outage can legitimately consume the shared
+      two-attempt per-session budget and rotate the Stage to Fresh Session.
+    - Live harness now validates bounded-session continuity from durable runner.session/fresh +
+      runner.recovery mode=recover evidence instead of assuming short outage == immutable session id.
+    - Polling-miss + durable Fresh evidence, same-session success, controlled Fresh, missing Fresh,
+      missing recover evidence and wrong previous_session all have deterministic regressions.
+    - Runner retry/session semantics were not loosened to satisfy the harness.
+    - Latest exact HEAD deterministic gates are green; reopen this item only for a newly reproduced failure.
 
 [ ] Verify state/log/history growth during soak.
     - Implemented: resource-observation.jsonl plus require_resource_bounds() safety rails.
@@ -628,14 +635,15 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 
 RELEASE GATES
 -------------
-[x] Same/current runtime+UI HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on runtime/UI HEAD b16b0f5efb8c8b924d99050fe00975d3fcbbb591.
-    - [x] Windows Python full suite green on the same runtime/UI HEAD.
-    - [x] Playwright/Chromium Browser E2E green on the same runtime/UI HEAD.
+[x] Same/current HEAD deterministic CI green:
+    - [x] Ubuntu Python full suite green on exact HEAD 7c06dcd2870c42dce1d9457b4e00b5bb961f2342.
+    - [x] Windows Python full suite green on the same exact HEAD.
+    - [x] Playwright/Chromium Browser E2E green on the same exact HEAD.
     - [x] Studio source build succeeds.
     - [x] Committed ui/static/workflow-studio-app bundle verify is green on the same runtime/UI HEAD.
     - [x] Generated bundle was produced by the same npm ci + Rollup-native dependency + npm run build path as CI; the one-time sync workflow was removed after use.
-    - Note: this todo-only evidence update follows the green runtime/UI HEAD and does not alter runtime/UI code.
+    - GitHub Actions run 37190959948 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
+    - This todo-only evidence update follows that green code HEAD and does not alter runtime/UI behavior.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
