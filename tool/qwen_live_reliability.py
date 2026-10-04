@@ -3605,13 +3605,45 @@ def _assert_controlled_api_session_rotation(
         raise RuntimeError(
             "API outage rotated Fresh Session without runner.recovery mode=recover evidence"
         )
-    if not any(
+    exact_match = any(
         str(event.get("previous_session") or "") == session_id
         for event in fresh_events
-    ):
-        raise RuntimeError(
-            "API outage Fresh Session evidence does not match the observed pre-outage session"
+    )
+    if exact_match:
+        return
+
+    # The 100ms state poll can lag a fast Qwen retry/rotation boundary. In that
+    # case, accept only a Fresh event whose previous_session is independently
+    # proven by model transport evidence to have been an actually resumed
+    # session in this run. This preserves the controlled-rotation gate without
+    # making a racy durable-state sample the sole session identity authority.
+    resumed_sessions = {
+        str(event.get("session") or "")
+        for event in events
+        if (
+            event.get("type") in {"model.prompt", "model.result"}
+            and str(event.get("session_mode") or "") == "resume"
+            and str(event.get("session") or "")
         )
+    }
+    proven_previous = {
+        str(event.get("previous_session") or "")
+        for event in fresh_events
+        if str(event.get("previous_session") or "") in resumed_sessions
+    }
+    if proven_previous:
+        return
+
+    observed_fresh_previous = sorted({
+        str(event.get("previous_session") or "")
+        for event in fresh_events
+        if str(event.get("previous_session") or "")
+    })
+    raise RuntimeError(
+        "API outage Fresh Session evidence does not match a proven pre-rotation session: "
+        f"polled_session={session_id!r}, fresh_previous={observed_fresh_previous!r}, "
+        f"resumed_sessions={sorted(resumed_sessions)!r}"
+    )
 
 
 def api_recovery_probe(
