@@ -284,7 +284,7 @@ function stageTestPrompt(stage: Stage | null, scenario: StageTestScenario = "pas
 
 const PARAMETER_SECTIONS: { id: ParameterSection; fields: string[] }[] = [
   { id: "content", fields: ["prompt", "instructions", "detail", "command", "cwd"] },
-  { id: "execution", fields: ["run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
+  { id: "execution", fields: ["backend", "model", "run_state", "mode", "actor", "session_policy", "allow_project_read", "timeout", "readonly_safety", "track_changes", "tolerate_restored_changes", "clean_work"] },
   { id: "result", fields: ["parser", "produces", "result_kind", "runs", "required_passes", "min_tasks", "structured_retries", "structured_fresh_retries"] },
   { id: "advanced", fields: ["ai_validator_yolo"] },
 ];
