@@ -747,9 +747,13 @@ class ProjectRuntimeMixin:
     def edit_guard(self) -> dict:
         active = self.active_projects()
         return {
-            "editable": not active,
+            "editable": True,
             "active_projects": active,
-            "reason": "" if not active else "Workflow and prompt editing is locked while any tracked project is running.",
+            "reason": (
+                ""
+                if not active
+                else "Active runs use frozen Workflow/Prompt snapshots; edits apply to the next run."
+            ),
         }
 
     def messages(self, project: Path) -> list[dict]:
