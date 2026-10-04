@@ -2244,3 +2244,73 @@ def test_api_recovery_probe_disables_qwen_persistent_retry():
     assert 'probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"' in source
     assert '"env": probe_env' in source
     assert "max_retries=0" in source
+
+
+
+def test_soak_resource_bounds_ignore_expected_run_root_growth():
+    live.require_resource_bounds(live.SoakResult(
+        completed=50,
+        resource_start={
+            "rss_bytes": 100 * 1024 * 1024,
+            "threads": 4,
+            "handles": 100,
+            "run_root_bytes": 0,
+            "active_process_markers": 0,
+        },
+        resource_max={
+            "run_root_bytes": 3 * 1024 * 1024 * 1024,
+            "project_state_json_bytes": 512 * 1024,
+            "project_stage_sessions": 20,
+            "project_dynamic_groups": 10,
+            "project_dynamic_task_groups": 10,
+            "project_review_failures": 5,
+            "project_expanded_workflow_stages": 200,
+            "project_debug_history_bytes": 4 * 1024 * 1024,
+        },
+        resource_end={
+            "rss_bytes": 120 * 1024 * 1024,
+            "threads": 5,
+            "handles": 110,
+            "run_root_bytes": 3 * 1024 * 1024 * 1024,
+            "active_process_markers": 0,
+        },
+    ))
+
+
+@pytest.mark.parametrize(
+    ("maximum", "end", "expected"),
+    [
+        ({}, {"active_process_markers": 1}, "active process markers remain"),
+        ({"project_state_json_bytes": 9 * 1024 * 1024}, {"active_process_markers": 0}, "project_state_json_bytes"),
+        ({"project_stage_sessions": 2049}, {"active_process_markers": 0}, "project_stage_sessions"),
+        ({"project_dynamic_groups": 2049}, {"active_process_markers": 0}, "project_dynamic_groups"),
+        ({"project_review_failures": 2049}, {"active_process_markers": 0}, "project_review_failures"),
+        ({"project_expanded_workflow_stages": 4097}, {"active_process_markers": 0}, "project_expanded_workflow_stages"),
+        ({"project_debug_history_bytes": 129 * 1024 * 1024}, {"active_process_markers": 0}, "project_debug_history_bytes"),
+    ],
+)
+def test_soak_resource_bounds_fail_on_unbounded_project_state(maximum, end, expected):
+    with pytest.raises(RuntimeError, match=expected):
+        live.require_resource_bounds(live.SoakResult(
+            resource_start={"threads": 4, "handles": 100, "rss_bytes": 100 * 1024 * 1024},
+            resource_max=maximum,
+            resource_end=end,
+        ))
+
+
+def test_soak_resource_bounds_fail_on_harness_thread_handle_or_rss_leak():
+    with pytest.raises(RuntimeError) as error:
+        live.require_resource_bounds(live.SoakResult(
+            resource_start={"threads": 4, "handles": 100, "rss_bytes": 100 * 1024 * 1024},
+            resource_max={},
+            resource_end={
+                "threads": 25,
+                "handles": 240,
+                "rss_bytes": 700 * 1024 * 1024,
+                "active_process_markers": 0,
+            },
+        ))
+    message = str(error.value)
+    assert "thread count grew" in message
+    assert "Windows handle count grew" in message
+    assert "harness RSS grew" in message
