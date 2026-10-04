@@ -678,13 +678,6 @@ CURRENT IMPLEMENTATION NOTES
 
 - Designer output handles are now explicitly kept above existing edges with pointer hit priority so PASS/FAIL/HANDOFF can be re-used for additional connections after an edge already exists. Browser Handoff multi-target E2E remains the verification gate before this is considered closed.
 
-CURRENT TODO IMPLEMENTATION IN PROGRESS
----------------------------------------
-- Edge -> empty canvas -> Add Stage: implemented with React Flow onConnectStart/onConnectEnd, reusing the same applyConnectionToVisual routing mutation. Source/Browser contracts added; awaiting same-HEAD CI before marking complete.
-- Run from here / Test path: workflow_dryrun.py now supports --from-stage and Studio exposes saved-Workflow path testing without mutating canonical YAML or production state. Backend/React/Browser regressions added; awaiting same-HEAD CI before marking complete.
-- Soak resource bounds: deterministic safety rails are implemented; real high-density/24H evidence remains required.
-
-
 P1 IMPLEMENTATION EVIDENCE
 --------------------------
 [x] Edge-to-empty Browser E2E:
