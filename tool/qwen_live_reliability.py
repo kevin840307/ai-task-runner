@@ -3663,20 +3663,32 @@ def api_recovery_probe(
         return True
 
 
+def _require_recovery_backoff_cap(project: Path) -> dict[str, object]:
+    observation = recovery_backoff_observation(project)
+    if not observation["count"] or observation["cap_reached"] is not True:
+        raise RuntimeError(
+            "long transient outage did not reach configured Runner backoff cap: "
+            f"{observation}"
+        )
+    return observation
+
+
 def long_http_recovery_probe(
     settings: Settings,
     root: Path,
     outage_seconds: float,
 ) -> tuple[int, ...]:
-    """Exercise all supported transient HTTP statuses through one recovery path."""
+    """Exercise every transient HTTP class and prove max-backoff behavior."""
     for status_code in API_RECOVERY_STATUS_CODES:
+        name = f"api-long-http-{status_code}-probe"
         api_recovery_probe(
             settings,
             root,
-            f"api-long-http-{status_code}-probe",
+            name,
             outage_seconds=outage_seconds,
             status_code=status_code,
         )
+        _require_recovery_backoff_cap(root / name)
     return API_RECOVERY_STATUS_CODES
 
 
