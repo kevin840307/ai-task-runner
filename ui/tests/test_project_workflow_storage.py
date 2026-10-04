@@ -15,9 +15,10 @@ def _state(tmp_path: Path) -> tuple[UIState, Path]:
         "tool",
     ):
         (tmp_path / rel).mkdir(parents=True, exist_ok=True)
-    (tmp_path / "runner/assets/prompts/common/execution.md").write_text(
-        "{{ goal }}\n", encoding="utf-8"
-    )
+    for prompt_name in ("generic.md", "execution.md", "review.md"):
+        (tmp_path / "runner/assets/prompts/common" / prompt_name).write_text(
+            "{{ goal }}\n", encoding="utf-8"
+        )
     (tmp_path / "runner/config/defaults.py").write_text(
         "DEFAULT_BACKEND='qwen'\n", encoding="utf-8"
     )
