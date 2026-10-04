@@ -25,6 +25,11 @@ class HandoffStage(BaseStage):
     ui_title = "Handoff"
     ui_description = "Dynamically select exactly one allowed next Stage."
     ui_category = "handoff"
+    ui_test_examples = {
+        "pass": "Choose one valid allowed target for this isolated test and return a valid handoff decision.",
+        "fail": "Return a valid handoff decision that explains why no preferred route is suitable, while still respecting the allowed-target contract.",
+        "error": "Technical ERROR is injected by the Stage Test harness; retry then executes the real Handoff Stage.",
+    }
     result_kind = "handoff"
     backend_mode = "review"
 
