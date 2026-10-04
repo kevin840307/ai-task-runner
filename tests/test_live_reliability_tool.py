@@ -62,6 +62,47 @@ def _fake_qwen_command(tmp_path: Path) -> str:
     return f'"{sys.executable}" "{fake}"'
 
 
+def test_live_review_stage_assertion_fails_closed_on_nonterminal_result():
+    with pytest.raises(RuntimeError, match="expected PASS -> done"):
+        live._assert_live_review_stage_result(
+            {
+                "status": "pass",
+                "kind": "review",
+                "next": "execute",
+                "route": "fail",
+            },
+            "test-backend",
+        )
+
+
+def test_live_stage_backend_model_event_assertion_fails_closed_on_mismatch(
+    tmp_path: Path,
+):
+    root = tmp_path / "project"
+    work = root / ".ai-task-runner" / "stage-tests" / "case"
+    work.mkdir(parents=True)
+    (work / "log.txt").write_text(
+        json.dumps(
+            {
+                "type": "model.prompt",
+                "backend": "wrong-backend",
+                "model": "wrong-model",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    stage = {"work_dir": str(work.resolve())}
+
+    with pytest.raises(RuntimeError, match="backend override mismatch"):
+        live._assert_live_stage_backend_model_events(
+            root,
+            stage,
+            "expected-backend",
+            "expected-model",
+        )
+
+
 def _install_fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     script = tmp_path / "fake_opencode.py"
     script.write_text(
