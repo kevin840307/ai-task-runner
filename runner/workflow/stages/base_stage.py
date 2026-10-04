@@ -32,7 +32,6 @@ class BaseStageSpec:
     allow_project_read: bool = False
     parser: ResultParser | None = None
     structured_retries: int = 1
-    structured_fresh_retries: int = 0
     runs: int | None = None
     required_passes: int | None = None
     readonly_safety: str = ""
@@ -224,8 +223,6 @@ class BaseStage:
                     lambda text: spec.parser(text, ctx),
                     lambda text: self._ask(ctx, client, text),
                     retries=spec.structured_retries,
-                    fresh_ask=lambda: self._structured_fresh_ask(ctx, client, previous),
-                    fresh_retries=spec.structured_fresh_retries,
                 )
                 return "", data
 
@@ -246,20 +243,6 @@ class BaseStage:
         if explicit is not None:
             return int(explicit)
         return int(getattr(ctx.config, field)) if field else int(default)
-
-    def _structured_fresh_ask(self, ctx: StageContext, client, previous: StageResult | None) -> str:
-        client.session_id = ""
-        original = self._original_prompt(ctx, previous)
-        original_mode = ctx.execution.retry_mode
-        try:
-            ctx.execution.retry_mode = "recover"
-            control = self._shared_control_prompt(ctx, previous, client)
-        finally:
-            ctx.execution.retry_mode = original_mode
-        prompt = "Stage instructions:\n" + original.rstrip()
-        if control:
-            prompt += "\n\n" + control
-        return self._ask(ctx, client, self._with_immutable_protocol(prompt))
 
     def _ask(self, ctx: StageContext, client, prompt: str) -> str:
         return client.ask(
