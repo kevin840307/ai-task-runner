@@ -95,6 +95,34 @@ stages:
 
 `profile: generic` is the neutral custom-AI behavior. `execute` applies writable execution defaults. `review` applies the structured read-only semantic PASS/FAIL contract. Dedicated Stage types are reserved for genuinely different runtime semantics such as Plan, AI Validator, Command and Handoff.
 
+### Stage backend and model override
+
+Every AI-backed Stage (`base`, `plan`, `handoff`, `ai_validator`) may select its own backend and model. `command` remains deterministic and has no AI backend fields.
+
+```yaml
+stages:
+  planning:
+    type: plan
+    backend: opencode
+    model: provider/model-x
+
+  final_review:
+    type: base
+    profile: review
+    backend: qwen
+```
+
+The fields are optional:
+
+- no Stage `backend` -> use the run-level backend
+- same backend + no Stage `model` -> keep the run-level backend/model configuration
+- different Stage backend + no Stage `model` -> use that target backend's own default model
+- explicit Stage `model` -> the selected backend adapter owns how that model argument is encoded
+
+A Stage backend/model override cannot use `session_policy: main`; with the default `auto` policy it gets its own durable Stage session so Resume does not mix provider/model session identities. Built-in Plan-generated Execute/Review children inherit the Plan Stage backend/model override while keeping their own session-policy defaults.
+
+Workflow Studio exposes these fields in the Stage **Execution** section. Real Stage Test reports the effective backend/model actually used, while its Backend selector is only the fallback when the Stage has no override.
+
 ### Dynamic child Workflows
 
 Any Stage may produce `tasks` or `stages`, but the producer Stage must supply the child Stage definitions. Runner never infers child Stage types. The produced child Workflow is inserted immediately after the producer, runs completely through the normal StageExecutor/FlowEngine reliability path, then the parent Workflow continues.
