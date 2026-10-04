@@ -223,7 +223,7 @@ P0.7 - HIGH-CP UX / 24H STABILITY WORK
 Do these only if they stay projections/adapters over the existing runtime. Do not add another
 state machine, recovery engine, history store, or canonical Workflow representation.
 
-[ ] Canonical Runtime View + allowed actions
+[x] Canonical Runtime View + allowed actions
     - Add one Runner-owned/UI-consumable runtime projection for status, attention reason,
       current Stage/Task/cycle/progress, recovery detail and allowed actions.
     - Main UI/sidebar must render the projection instead of independently re-deriving
@@ -233,7 +233,7 @@ state machine, recovery engine, history store, or canonical Workflow representat
     - This is a projection only; RunState/Supervisor remain authoritative and no second state machine is allowed.
     - Cover stale heartbeat, user stop, technical recovery, semantic fail-closed, completed and idle cases.
 
-[ ] Server-side action guard for stale/double UI actions
+[x] Server-side action guard for stale/double UI actions
     - Treat browser button disabling as UX only; backend must fail closed if a stale tab or double click
       attempts an invalid Run / Resume / Rerun / Reset transition.
     - Reuse existing process ownership + durable runtime state; do not add a second lock/ownership layer.
@@ -242,14 +242,14 @@ state machine, recovery engine, history store, or canonical Workflow representat
       rerun while active and reset while owned by a live worker.
     - Goal: UI polling lag must never be able to create two active workers or corrupt resumable state.
 
-[ ] Actionable Needs Attention / Recovery UX
+[x] Actionable Needs Attention / Recovery UX
     - Runtime projection should provide a concise reason + recommended actions, not only a status label.
     - Examples: semantic FAIL with no route -> Open Workflow / View Trace; stale worker -> Resume / Reset;
       user stop -> Continue / Reset; technical retry -> show mode/count/wait without marking fatal.
     - Reuse existing transition/recovery/ownership evidence; no new error/history store.
     - Keep the common Running/Completed path compact and show details only when useful.
 
-[ ] Active Run snapshot visibility
+[x] Active Run snapshot visibility
     - Show the configuration the current Run actually started with: Workflow snapshot/name,
       backend/model, readonly policy, run id/start time and current effective Stage backend/model where available.
     - Values must come from the frozen/durable Run request/resources, never from the editor's current selection.
@@ -257,7 +257,7 @@ state machine, recovery engine, history store, or canonical Workflow representat
       without inspecting files/logs.
     - Must not permit editing the active Run through this view; changes apply only to a future Run.
 
-[ ] Make Stage Studio presentation metadata catalog-driven
+[x] Make Stage Studio presentation metadata catalog-driven
     - Remove frontend-owned Stage/profile knowledge where the canonical Stage catalog can provide it:
       parameter section/order/visibility and isolated Stage-Test PASS/FAIL example metadata.
     - Plugin/custom Stages should appear correctly without adding provider/Stage-name branches to Studio.
@@ -265,7 +265,7 @@ state machine, recovery engine, history store, or canonical Workflow representat
     - Preserve YAML as canonical and keep backend/schema validation authoritative.
     - Do not build a generic form framework beyond the fields already needed by Stage options.
 
-[ ] Reduce long-running UI polling duplication
+[x] Reduce long-running UI polling duplication
     - Active Project runtime polling should also update that Project's sidebar status; project-status polling
       should focus on non-active Projects instead of re-fetching the same active state.
     - Poll Studio guard/catalog only while the relevant Workflows/Prompts/Studio surface is active where safe.
@@ -273,6 +273,24 @@ state machine, recovery engine, history store, or canonical Workflow representat
     - Add browser/backend regression proving project switches and hidden-tab wakeups do not apply stale responses
       to the newly selected Project.
     - Goal: lower 24H UI/server churn without weakening freshness or ownership detection.
+
+P0.7 completion evidence:
+    - Canonical runtime projection is a pure shared runtime_view.py adapter over existing durable/process evidence;
+      Main UI/sidebar consume status/actions/recovery/run_snapshot and no longer derive status from raw running/resumable/last_error flags.
+    - Run/Resume/Rerun/Reset/Stop guards reuse existing durable state, process ownership and launch reservation; no second lock/state machine was added.
+      Stop is idempotent for stale/duplicate actions, and runtime reads remain projection-only under action guards.
+    - Existing runner.recovery/model events are projected into bounded console-view evidence for retry mode/count/wait and effective Stage backend/model;
+      Needs Attention/Recovery now expose reason plus existing Open Workflow/View Trace/Resume/Reset actions without a new history store.
+    - Active Run details use the frozen durable Run request plus runtime evidence, not current editor dropdown values.
+    - Stage Studio sections/order/visibility/test examples are catalog-driven; old STAGE_TEST_PROMPTS and PARAMETER_SECTIONS frontend ownership is removed,
+      unknown/custom Stage options remain extensible and YAML/backend validation stays authoritative.
+    - Active Project sidebar polling reuses /api/project/runtime and excludes that Project from duplicate process probing;
+      hidden-tab/Studio polling is scoped, and Browser E2E covers a delayed Project-A response arriving after switching to Project B.
+    - Architecture cleanup discovered during review: UI remains independent from Runner package imports; the projection lives at the neutral shared boundary.
+    - Validation evidence before final exact-HEAD gate: Ubuntu full Python suite PASS; Windows full Test step PASS; Browser E2E PASS including stale-response race;
+      Studio TypeScript/Vite build PASS. Generated Studio bundle was rebuilt by npm run build and the one-shot sync workflow removed itself.
+    - Real-Qwen 0.5H/high-density/24H soak gates remain separate unchecked release evidence below; P0.7 does not claim those gates.
+
 
 P1 - UI / UX USEFUL AFTER P0
 -----------------------------
