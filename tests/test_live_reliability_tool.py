@@ -75,8 +75,18 @@ def test_live_review_stage_assertion_fails_closed_on_nonterminal_result():
         )
 
 
+@pytest.mark.parametrize(
+    ("backend", "model", "message"),
+    [
+        ("wrong-backend", "expected-model", "backend override mismatch"),
+        ("expected-backend", "wrong-model", "model override mismatch"),
+    ],
+)
 def test_live_stage_backend_model_event_assertion_fails_closed_on_mismatch(
     tmp_path: Path,
+    backend: str,
+    model: str,
+    message: str,
 ):
     root = tmp_path / "project"
     work = root / ".ai-task-runner" / "stage-tests" / "case"
@@ -85,8 +95,8 @@ def test_live_stage_backend_model_event_assertion_fails_closed_on_mismatch(
         json.dumps(
             {
                 "type": "model.prompt",
-                "backend": "wrong-backend",
-                "model": "wrong-model",
+                "backend": backend,
+                "model": model,
             }
         )
         + "\n",
@@ -94,7 +104,7 @@ def test_live_stage_backend_model_event_assertion_fails_closed_on_mismatch(
     )
     stage = {"work_dir": str(work.resolve())}
 
-    with pytest.raises(RuntimeError, match="backend override mismatch"):
+    with pytest.raises(RuntimeError, match=message):
         live._assert_live_stage_backend_model_events(
             root,
             stage,
