@@ -214,21 +214,29 @@ class BaseStage:
         try:
             prompt = self._prompt(ctx, previous, client)
 
+            def ask(text: str) -> str:
+                raw = self._ask(ctx, client, text)
+                # A successful model response proves this session already saw
+                # the Stage context even if structured parsing later rejects
+                # the response. Checkpoint transport state here so technical
+                # retry can send only the shared recovery delta.
+                self._remember_prompt(ctx, client)
+                self._persist_session(ctx, client)
+                return raw
+
             def call() -> tuple[str, Any]:
                 if spec.parser is None:
-                    raw = self._ask(ctx, client, prompt)
+                    raw = ask(prompt)
                     return raw, raw
                 data = structured_call(
                     prompt,
                     lambda text: spec.parser(text, ctx),
-                    lambda text: self._ask(ctx, client, text),
+                    ask,
                     retries=spec.structured_retries,
                 )
                 return "", data
 
             output, data = call()
-            self._remember_prompt(ctx, client)
-            self._persist_session(ctx, client)
             status = self.result_status(data)
         finally:
             if client is ctx.ai_client:
