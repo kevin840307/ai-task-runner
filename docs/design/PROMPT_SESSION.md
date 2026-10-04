@@ -60,7 +60,7 @@ Routing and Session lifetime are independent.
 - `session_policy: role` — durable reusable Session owned by the Stage name. Dynamic specialist default.
 - `session_policy: main` — reuse the Runner primary Session.
 - `session_policy: fresh` — clear/start a new Session on every invocation.
-- `session_policy: auto` — built-in/internal profile behavior; only this mode may use `session_key`.
+- `session_policy: auto` — built-in/default profile behavior.
 
 `RunState.stage_sessions` stores durable role Sessions. If a role repeatedly fails technically, StageExecutor may reset only that role Session and continue in a fresh Session. Other roles are not reset.
 
