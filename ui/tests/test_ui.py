@@ -132,9 +132,24 @@ class UIStateTests(unittest.TestCase):
         self.assertFalse(self.state.studio_files(self.project)["workflows"][0]["hidden"])
 
     def test_backend_catalog_is_read_without_importing_runner_core(self) -> None:
-        catalog = self.state.backend_catalog()
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps({
+                "default": "qwen",
+                "backends": ["qwen", "opencode"],
+                "models": {},
+            }),
+            stderr="",
+        )
+        with patch("ui.project_runtime_state.subprocess.run", return_value=completed) as run:
+            catalog = self.state.backend_catalog()
+
         self.assertEqual(catalog["default"], "qwen")
-        self.assertEqual(catalog["backends"], ["opencode", "qwen"])
+        self.assertEqual(catalog["backends"], ["qwen", "opencode"])
+        command = run.call_args.args[0]
+        self.assertIn("backend_catalog.py", " ".join(map(str, command)))
+        self.assertNotIn("--models", command)
 
     def test_environment_check_invokes_standalone_tool(self) -> None:
         tool = self.root / "tool" / "environment_check.py"
