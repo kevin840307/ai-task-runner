@@ -132,8 +132,22 @@ def append_bounded_log(
 ) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        limit = max(0, int(max_bytes))
+        if limit == 0:
+            return
+
+        payload = text.encode("utf-8")
+        if len(payload) > limit:
+            if path.exists():
+                os.replace(path, path.with_name(path.name + ".1"))
+            # Keep the newest diagnostic bytes; ignore only a possible partial
+            # UTF-8 codepoint at the truncation boundary.
+            text = payload[-limit:].decode("utf-8", errors="ignore")
+            path.write_text(text, encoding="utf-8")
+            return
+
         size = path.stat().st_size if path.exists() else 0
-        if size and size + len(text.encode("utf-8")) > max_bytes:
+        if size and size + len(payload) > limit:
             os.replace(path, path.with_name(path.name + ".1"))
         with path.open("a", encoding="utf-8") as handle:
             handle.write(text)
