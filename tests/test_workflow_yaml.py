@@ -1374,3 +1374,46 @@ def test_dynamic_review_child_uses_shared_profile_defaults():
     assert child["error_policy"] == {"retries": 2}
     assert child["max_failures"] == 3
     assert child["readonly_safety"] == "observe"
+
+
+
+def test_ai_stage_backend_and_model_overrides_load_from_yaml(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    profile: execute
+    backend: opencode
+    model: provider/model-a
+    session_policy: auto
+flow:
+  - worker
+""",
+    )
+
+    workflow = load_workflow(path)
+
+    assert workflow[0]["backend"] == "opencode"
+    assert workflow[0]["model"] == "provider/model-a"
+    assert workflow[0]["session_policy"] == "auto"
+
+
+def test_ai_stage_backend_override_rejects_main_session(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    backend: opencode
+    session_policy: main
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(ConfigurationError, match="session_policy=main"):
+        from runner.workflow.registry import create_stage
+        create_stage(load_workflow(path)[0])
