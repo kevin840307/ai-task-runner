@@ -89,11 +89,20 @@ def build_runtime_view(evidence: Mapping[str, Any]) -> dict[str, Any]:
         reason = recovery["error"] or "A technical error is being retried automatically."
         recommended = ["stop"]
     elif status == "needs_attention":
-        if stale:
-            reason = "The Runner process is no longer active before this run completed."
+        transition = evidence.get("last_transition")
+        transition_data = transition if isinstance(transition, Mapping) else {}
+        if _text(transition_data.get("status")).lower() == "fail":
+            stage = _text(transition_data.get("stage")) or "Stage"
+            reason = f"{stage} returned FAIL and the Workflow did not continue."
+            recommended = ["open_workflow", "view_trace"]
+            if actions["reset"]:
+                recommended.append("reset")
         else:
-            reason = last_error or "This run stopped before completion and needs a decision."
-        recommended = [name for name in ("resume", "reset") if actions[name]]
+            if stale:
+                reason = "The Runner process is no longer active before this run completed."
+            else:
+                reason = last_error or "This run stopped before completion and needs a decision."
+            recommended = [name for name in ("resume", "reset") if actions[name]]
         recovery = _recovery(evidence, active=False)
     elif status == "stopped":
         reason = "This run is stopped before completion."
