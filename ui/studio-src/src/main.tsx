@@ -1275,7 +1275,7 @@ function App() {
       && String(value || "").trim()
       && draft.session_policy === "main"
     ) {
-      next.session_policy = "auto";
+      delete next.session_policy;
       setMessage(tx("stage_session_auto"));
     }
     editDraft(next);
