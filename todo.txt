@@ -188,6 +188,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Latest contract: Stage override is an atomic Backend + Model pair. Setting only one is invalid and fails closed at Workflow load/save.
     - Override is Stage-local only: it does not change the run-level backend/model and is not inherited by Plan-generated or producer-defined child Stages.
     - Backend choices remain registry/catalog-driven; FlowEngine and Designer contain no Qwen/OpenCode provider branch.
+    - Backend model catalog now invokes the canonical discover_plugins() boundary before backend_names()/available_models(), so external plugin backends and their model catalogs appear without UI/Core changes; deterministic regression locks this order.
     - Model is dropdown-only in Designer and is scoped to the selected Backend.
     - An already-saved Stage model remains present as a dropdown option if live model discovery is temporarily unavailable; no free-text fallback is introduced and the saved value is not silently hidden.
     - Backend adapters own model discovery: Qwen reads configured modelProviders/model/env ids with Qwen's real settings precedence (System defaults < User < Project < System settings; highest modelProviders catalog replaces lower ones); OpenCode uses `opencode models`; future backends may implement available_models().
