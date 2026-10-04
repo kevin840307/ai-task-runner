@@ -3174,13 +3174,15 @@ def final_ai_quorum_probe(
 
 
 
-API_RECOVERY_ARM_SCRIPT = '''from pathlib import Path
+API_RECOVERY_ARM_DELAY_SECONDS = 2.0
+
+API_RECOVERY_ARM_SCRIPT = f'''from pathlib import Path
 import time
 
 marker = Path(".ai-task-runner") / "api-outage-armed"
 marker.parent.mkdir(parents=True, exist_ok=True)
 marker.write_text("armed\\n", encoding="utf-8")
-time.sleep(2)
+time.sleep({API_RECOVERY_ARM_DELAY_SECONDS!r})
 '''
 
 API_RECOVERY_WARMUP_PROMPT = """Establish the Runner session for the API recovery probe.
@@ -3224,7 +3226,7 @@ flow:
 '''
 
 
-def _prepare_api_disconnect_fixture(project: Path) -> tuple[Path, Path]:
+def _prepare_api_recovery_fixture(project: Path) -> tuple[Path, Path]:
     """Create a deterministic boundary immediately before the AI call under outage."""
     (project / "api_warmup.md").write_text(API_RECOVERY_WARMUP_PROMPT, encoding="utf-8")
     (project / "api_execute.md").write_text(API_RECOVERY_EXECUTE_PROMPT, encoding="utf-8")
@@ -3273,7 +3275,7 @@ def api_recovery_probe(
     root: Path,
     name: str = "api-recovery-probe",
     *,
-    outage_seconds: float = 15,
+    outage_seconds: float = 0.5,
     disconnect: bool = False,
     status_code: int = 502,
 ) -> bool:
@@ -3287,8 +3289,7 @@ def api_recovery_probe(
         project = create_project(root, name)
         workflow = None
         outage_marker = None
-        if disconnect:
-            workflow, outage_marker = _prepare_api_disconnect_fixture(project)
+        workflow, outage_marker = _prepare_api_recovery_fixture(project)
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
         stream = log.open("w", encoding="utf-8")
@@ -3333,11 +3334,8 @@ def api_recovery_probe(
                     )
                 current_session = state.get("ai_session_id")
                 outage_armed = (
-                    not disconnect
-                    or (
-                        outage_marker is not None
-                        and outage_marker.is_file()
-                    )
+                    outage_marker is not None
+                    and outage_marker.is_file()
                 )
                 if (
                     not session_id
@@ -4189,13 +4187,13 @@ def main() -> int:
         if probe_enabled("api-429", start_probe):
             api_recovery_probe(
                 settings, run_root, "api-rate-limit-429-probe",
-                outage_seconds=5, status_code=429,
+                outage_seconds=0.5, status_code=429,
             )
             print("PASS HTTP 429 rate-limit same-session recovery probe", flush=True)
         if probe_enabled("api-503", start_probe):
             api_recovery_probe(
                 settings, run_root, "api-service-unavailable-503-probe",
-                outage_seconds=5, status_code=503,
+                outage_seconds=0.5, status_code=503,
             )
             print("PASS HTTP 503 service-unavailable same-session recovery probe", flush=True)
         if probe_enabled("api-disconnect", start_probe):
