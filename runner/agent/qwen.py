@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -129,6 +130,33 @@ QWEN_PLANNING_EXCLUDED_TOOLS = (
     "agent",
     *QWEN_COMPUTER_USE_TOOLS,
 )
+def _qwen_settings_paths(root: Path) -> tuple[Path, ...]:
+    qwen_home = Path(os.environ.get("QWEN_HOME") or (Path.home() / ".qwen")).expanduser()
+    if os.name == "nt":
+        program_data = Path(os.environ.get("PROGRAMDATA") or r"C:\ProgramData")
+        system_defaults = program_data / "qwen-code" / "system-defaults.json"
+        system_settings = program_data / "qwen-code" / "settings.json"
+    elif sys.platform == "darwin":
+        base = Path("/Library/Application Support/QwenCode")
+        system_defaults = base / "system-defaults.json"
+        system_settings = base / "settings.json"
+    else:
+        system_defaults = Path("/etc/qwen-code/system-defaults.json")
+        system_settings = Path("/etc/qwen-code/settings.json")
+    system_defaults = Path(
+        os.environ.get("QWEN_CODE_SYSTEM_DEFAULTS_PATH") or system_defaults
+    ).expanduser()
+    system_settings = Path(
+        os.environ.get("QWEN_CODE_SYSTEM_SETTINGS_PATH") or system_settings
+    ).expanduser()
+    return (
+        system_defaults,
+        qwen_home / "settings.json",
+        root / ".qwen" / "settings.json",
+        system_settings,
+    )
+
+
 def _read_qwen_settings(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -289,20 +317,32 @@ class QwenBackend(BaseBackend):
     @classmethod
     def available_models(cls, root: Path) -> list[str]:
         values: set[str] = set()
-        qwen_home = Path(os.environ.get("QWEN_HOME") or (Path.home() / ".qwen")).expanduser()
-        for path in (qwen_home / "settings.json", root / ".qwen" / "settings.json"):
-            settings = _read_qwen_settings(path)
-            model = settings.get("model")
-            if isinstance(model, dict) and isinstance(model.get("name"), str):
-                values.add(model["name"].strip())
+        layers = [_read_qwen_settings(path) for path in _qwen_settings_paths(root)]
+
+        # Qwen applies settings by precedence. modelProviders is a replace-style
+        # catalog, so only the highest-precedence layer that defines it is effective.
+        effective_providers: dict[str, Any] = {}
+        for settings in layers:
             providers = settings.get("modelProviders")
             if isinstance(providers, dict):
-                for items in providers.values():
-                    if not isinstance(items, list):
-                        continue
-                    for item in items:
-                        if isinstance(item, dict) and isinstance(item.get("id"), str):
-                            values.add(item["id"].strip())
+                effective_providers = providers
+        for items in effective_providers.values():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if isinstance(item, dict) and isinstance(item.get("id"), str):
+                    values.add(item["id"].strip())
+
+        # model.name follows normal settings precedence; environment model ids
+        # override settings at runtime and remain valid raw --model selections.
+        selected_model = ""
+        for settings in layers:
+            model = settings.get("model")
+            if isinstance(model, dict) and isinstance(model.get("name"), str):
+                selected_model = model["name"].strip()
+        if selected_model:
+            values.add(selected_model)
+
         for key in ("QWEN_MODEL", "OPENAI_MODEL", "ANTHROPIC_MODEL", "GEMINI_MODEL", "GOOGLE_MODEL"):
             value = str(os.environ.get(key) or "").strip()
             if value:
