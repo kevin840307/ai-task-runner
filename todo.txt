@@ -195,7 +195,9 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Removed the main UI's hardcoded qwen/opencode fallback; catalog failure no longer invents provider choices outside the registry/adapter owner.
     - Qwen/OpenCode selected model values flow through configure_model_args() and command-level regression verifies the final CLI contains --model <selected>.
     - Designer exposes Backend/Model/Session in the first-class Execution section; choosing a Backend filters the Model dropdown and clearing Backend clears Model.
-    - Backend/model + session_policy=main remains invalid; UI restores the Stage default session policy and production schema independently fails closed.
+    - Backend/model + session_policy=main remains invalid; UI restores the Stage default session policy only after both Backend + Model are selected, because a Backend-only draft is not yet an active override.
+    - CI regressions were aligned to the atomic-pair contract: YAML/Studio main-session tests now provide both Backend + Model; Browser E2E verifies Backend-only keeps the current session policy and selecting Model activates the override/default-session reset.
+    - UI backend-catalog regression now mocks the Runner-owned backend_catalog tool instead of depending on the removed AST backend scanner; Studio URL contract tests assert model discovery semantics without binding exact string-concatenation syntax.
     - Real Stage Test reports effective_backend/effective_model from the executed Stage client so fallback UI cannot mislabel the actual adapter/model.
     - Chromium E2E is being updated to select models from backend-scoped dropdowns and verify Designer -> YAML -> Designer round-trip plus invalid YAML fail-closed behavior.
     - Dry Run verifies a Plan Stage backend/model pair stays on the Plan Stage and is absent from generated child Stages, reusing production PlanStage.finish() + FlowEngine.
