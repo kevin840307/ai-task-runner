@@ -1,9 +1,9 @@
 - goal_file: 01_basic_command_validator/project/prompt.md
   project_root: 01_basic_command_validator/project
   validator: 01_basic_command_validator/project/validation.py
-- goal_file: 02_repair_cycle/project/prompt.md
-  project_root: 02_repair_cycle/project
-  validator: 02_repair_cycle/project/validation.py
+- goal_file: 02_validator_reroute_cycle/project/prompt.md
+  project_root: 02_validator_reroute_cycle/project
+  validator: 02_validator_reroute_cycle/project/validation.py
 - goal_file: 03_ai_validator_voting/project/prompt.md
   project_root: 03_ai_validator_voting/project
   validator: ai
@@ -14,10 +14,10 @@
   validator: 04_mixed_validation/project/validation.py
   ai_validator_prompt_file: 04_mixed_validation/project/ai_validation.md
   ai_validator_count: 3
-- goal_file: 05_ai_quality_repair/project/prompt.md
-  project_root: 05_ai_quality_repair/project
-  validator: 05_ai_quality_repair/project/validation.py
-  ai_validator_prompt_file: 05_ai_quality_repair/project/ai_validation.md
+- goal_file: 05_ai_quality_gate/project/prompt.md
+  project_root: 05_ai_quality_gate/project
+  validator: 05_ai_quality_gate/project/validation.py
+  ai_validator_prompt_file: 05_ai_quality_gate/project/ai_validation.md
   ai_validator_count: 3
 - goal_file: 06_yaml_driven_tool/project/prompt.md
   project_root: 06_yaml_driven_tool/project
