@@ -72,6 +72,16 @@ def test_shared_stage_contracts_are_workflow_owned_not_stage_implementation_owne
 
 
 
+def test_removed_structured_fresh_retry_contract_stays_absent():
+    validator_source = (STAGES / "ai_validator_stage.py").read_text(encoding="utf-8")
+    studio_source = (
+        ROOT / "ui" / "studio-src" / "src" / "main.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "structured_fresh_retries" not in validator_source
+    assert "structured_fresh_retries" not in studio_source
+
+
 def test_flow_and_executor_responsibility_boundaries_stay_separate():
     flow_source = (ROOT / "runner" / "workflow" / "flow_engine.py").read_text(encoding="utf-8")
     executor_source = (EXECUTION / "stage_executor.py").read_text(encoding="utf-8")
