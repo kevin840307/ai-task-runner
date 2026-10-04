@@ -367,13 +367,7 @@ class WorkflowStudioMixin:
 
             if not isinstance(fields, dict):
                 raise ValueError("Stage fields must be an object")
-            allowed = self._stage_editor_fields()
-            clean = {}
-            for key, value in fields.items():
-                if key not in allowed:
-                    raise ValueError(f"Unsupported Stage field: {key}")
-                clean[key] = value
-
+            clean = {str(key): value for key, value in fields.items() if str(key) != "name"}
             updated = self._patch_stage_fields(content, stage_name, clean)
             validation = self._validate_workflow_before_write(path, updated)
             if validate_only:
@@ -440,9 +434,14 @@ class WorkflowStudioMixin:
         if original_type and "type" not in parsed:
             parsed["type"] = original_type
 
-        candidate = path.read_text(encoding="utf-8")
-        candidate = self._patch_stage_fields(candidate, stage_name, parsed)
-        self._validate_workflow_before_write(path, candidate)
+        # Stage YAML may represent a not-yet-saved Designer Stage. Validate the
+        # isolated Stage with the same Runner schema used by the production
+        # Workflow loader; the complete Workflow is validated again on Save.
+        try:
+            from runner.workflow.schema import validate_stage
+            validate_stage(stage_name, parsed)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
         return {"ok": True, "fields": parsed}
 
     def studio_path_test(
@@ -1343,7 +1342,6 @@ class WorkflowStudioMixin:
                 if not isinstance(draft_rows, list):
                     raise ValueError("Graph stages must be a list")
                 desired = {}
-                allowed = self._stage_editor_fields()
                 for row in draft_rows:
                     if not isinstance(row, dict):
                         raise ValueError("Each Graph Stage must be an object")
@@ -1353,10 +1351,6 @@ class WorkflowStudioMixin:
                     if name in desired:
                         raise ValueError(f"Duplicate Graph Stage: {name}")
                     config = {key: value for key, value in row.items() if key != "name"}
-                    original = stages.get(name)
-                    for key in config:
-                        if key not in allowed and (not isinstance(original, dict) or config[key] != original.get(key)):
-                            raise ValueError(f"Unsupported Stage field: {key}")
                     desired[name] = config
                 if not desired:
                     raise ValueError("Workflow must contain at least one Stage")
@@ -1405,12 +1399,12 @@ class WorkflowStudioMixin:
                 for name, config in desired.items():
                     original = stages.get(name)
                     if not isinstance(original, dict):
-                        clean = {key: value for key, value in config.items() if key in allowed and key != "routes" and value not in (None, "")}
+                        clean = {key: value for key, value in config.items() if key != "routes" and value not in (None, "")}
                         updated = self._insert_stage_block(updated, name, clean)
                         continue
                     changes = {}
                     for key, value in config.items():
-                        if key in {"name", "routes"} or key not in allowed:
+                        if key in {"name", "routes"}:
                             continue
                         previous = original.get(key, "" if key in {"status", "prompt"} else None)
                         if value != previous:
