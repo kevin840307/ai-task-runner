@@ -1042,7 +1042,7 @@ def test_review_failure_routing_probe_workflow_uses_explicit_fail_edge(tmp_path:
 def test_live_main_keeps_dynamic_session_policy_probe_enabled():
     source = (ROOT / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "dynamic_handoff_session_policy_probe(settings, run_root)" in source
-    assert '"dynamic_handoff_session_policy_probe": True' in source
+    assert '"dynamic_handoff_session_policy_probe": probe_enabled(' in source
 
 
 def test_workflow_dryrun_preflight_covers_current_graph_contracts():
@@ -2183,7 +2183,7 @@ def test_api_recovery_fixture_has_deterministic_outage_handshake(tmp_path: Path)
     project = live.create_project(tmp_path, "api-recovery-fixture")
     workflow, armed, active = live._prepare_api_recovery_fixture(project)
 
-    loaded = live.load_workflow(workflow)
+    loaded = load_workflow(workflow)
     assert [stage["name"] for stage in loaded] == [
         "warmup",
         "arm",
