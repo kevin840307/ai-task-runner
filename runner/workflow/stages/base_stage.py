@@ -71,11 +71,15 @@ class BaseStage:
     ) -> None:
         backend = str(backend or "").strip()
         model = str(model or "").strip()
+        if bool(backend) != bool(model):
+            raise ConfigurationError(
+                f"AI Stage {name} backend and model must be configured together"
+            )
         if backend and backend not in backend_names():
             raise ConfigurationError(f"AI Stage {name} backend is unsupported: {backend}")
         if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
             raise ConfigurationError(f"AI Stage {name} model is invalid")
-        if (backend or model) and session_policy == "main":
+        if backend and model and session_policy == "main":
             raise ConfigurationError(
                 f"AI Stage {name} cannot combine backend/model override with session_policy=main"
             )
