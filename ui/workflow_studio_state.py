@@ -581,7 +581,7 @@ class WorkflowStudioMixin:
         pid = int(getattr(process, "pid", 0) or 0)
         if os.name == "nt" and pid > 0:
             try:
-                subprocess.run(
+                result = subprocess.run(
                     ["taskkill", "/PID", str(pid), "/T", "/F"],
                     capture_output=True,
                     text=True,
@@ -589,6 +589,8 @@ class WorkflowStudioMixin:
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     check=False,
                 )
+                if result.returncode != 0:
+                    process.kill()
             except (OSError, subprocess.SubprocessError):
                 try:
                     process.kill()
