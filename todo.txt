@@ -200,7 +200,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - CI regressions were aligned to the atomic-pair contract: YAML/Studio main-session tests now provide both Backend + Model; Browser E2E verifies Backend-only keeps the current session policy and selecting Model activates the override/default-session reset.
     - UI backend-catalog regression now mocks the Runner-owned backend_catalog tool instead of depending on the removed AST backend scanner; Studio URL contract tests assert model discovery semantics without binding exact string-concatenation syntax.
     - Real Stage Test reports effective_backend/effective_model from the executed Stage client so fallback UI cannot mislabel the actual adapter/model.
-    - Chromium E2E is being updated to select models from backend-scoped dropdowns and verify Designer -> YAML -> Designer round-trip plus invalid YAML fail-closed behavior.
+    - Chromium E2E now covers backend-scoped model dropdowns, Backend-only Save fail-closed, activation only after Model selection, Designer -> YAML -> Designer round-trip, invalid YAML fail-closed, and preservation of an already-saved model when live discovery temporarily returns no candidates.
     - Dry Run verifies a Plan Stage backend/model pair stays on the Plan Stage and is absent from generated child Stages, reusing production PlanStage.finish() + FlowEngine.
     - Resume/session deterministic coverage remains Stage-local; model override does not mutate global client/session configuration.
     - Removed legacy Studio field structured_fresh_retries remains absent.
