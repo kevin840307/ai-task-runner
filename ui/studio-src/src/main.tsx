@@ -2140,7 +2140,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               </div>
               <div className="inspector-tabs" role="tablist" aria-label="Stage sections">
                 {(["form", "yaml", "routing", "test"] as const).map((tab) => (
-                  <button key={tab} type="button" role="tab" aria-selected={inspectorTab === tab}
+                  <button key={tab} type="button" role="tab" data-inspector-tab={tab} aria-selected={inspectorTab === tab}
                     className={inspectorTab === tab ? "active" : ""} onClick={() => {
                       setInspectorTab(tab);
                       if (tab === "yaml") void loadStageYaml();
