@@ -478,6 +478,9 @@ High-value runner work remaining:
     - Deterministic long-transient regression now covers 7 consecutive transient failures:
       bounded two-failure session budget, repeated Fresh Session rotation, 1s unlimited-retry safety floor,
       successful completion, structured recovery/session events and final last_error cleanup.
+    - Deterministic partial-write regression proves changed maintained source survives a technical ERROR,
+      StageExecutor immediately rotates only that Stage to Fresh Session, the next attempt sees the preserved
+      on-disk evidence and completes without blind same-session replay.
     - No busy loop.
     - Same Session remains bounded before Fresh Session rotation.
     - 429/502/503/raw disconnect/expired session continue unattended.
