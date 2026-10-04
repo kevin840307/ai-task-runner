@@ -2208,3 +2208,31 @@ def test_api_recovery_probe_final_scan_prevents_fast_recovery_race():
     assert "console_events = jsonl_events(log)" in source
     assert "recovery_event_seen = recovery_event_seen or any(" in source
     assert "for event in (*console_events, *events)" in source
+
+
+
+def test_structured_recovery_event_accepts_stage_and_api_layers():
+    assert live._structured_recovery_event({
+        "type": "runner.recovery",
+        "action": "retry",
+        "retry": 1,
+        "retry_mode": "retry",
+    })
+    assert live._structured_recovery_event({
+        "type": "runner.retry",
+        "action": "retry",
+        "layer": "runner_api",
+        "message": "service wait window exhausted",
+    })
+    assert not live._structured_recovery_event({
+        "type": "runner.status",
+        "action": "set",
+        "status": "Recovering",
+    })
+
+
+def test_api_recovery_probe_accepts_both_structured_recovery_layers():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert "def _structured_recovery_event" in source
+    assert 'kind == "runner.retry" and action == "retry"' in source
+    assert 'kind == "runner.recovery"' in source
