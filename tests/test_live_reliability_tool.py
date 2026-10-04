@@ -3344,22 +3344,28 @@ def test_relative_existing_path_rejects_unrelated_existing_path(tmp_path: Path):
 
 
 
-def test_live_probe_start_selector_accepts_index_and_name():
+def test_live_probe_start_selector_is_numeric_index_only():
     review_index = live.PROBE_ORDER.index("review-failure-routing")
 
     assert live.resolve_start_probe("") == 0
     assert live.resolve_start_probe(str(review_index + 1)) == review_index
-    assert live.resolve_start_probe("review-failure-routing") == review_index
-    assert live.resolve_start_probe("review_failure_routing") == review_index
     assert live.probe_enabled("technical-artifact-safety", review_index) is False
     assert live.probe_enabled("review-failure-routing", review_index) is True
     assert live.probe_enabled("api-502", review_index) is True
 
 
-@pytest.mark.parametrize("value", ["0", "999", "does-not-exist"])
+@pytest.mark.parametrize("value", ["0", "999", "does-not-exist", "review-failure-routing", "review_failure_routing"])
 def test_live_probe_start_selector_rejects_invalid_values(value: str):
     with pytest.raises(ValueError):
         live.resolve_start_probe(value)
+
+
+def test_probe_pass_output_includes_index_and_total(capsys):
+    live.print_probe_pass("api-502", "HTTP 502 recovery")
+    output = capsys.readouterr().out
+    index = live.PROBE_ORDER.index("api-502") + 1
+    total = len(live.PROBE_ORDER)
+    assert f"[{index:02d}/{total:02d}] PASS api-502 · HTTP 502 recovery" in output
 
 
 def test_list_probes_exits_before_qwen_command_validation(monkeypatch, capsys):
@@ -3384,7 +3390,7 @@ def test_fail_start_launcher_defaults_to_current_failed_probe_and_allows_overrid
     text = launcher.read_text(encoding="utf-8")
 
     assert launcher.is_file()
-    assert "--start-probe api-502" in text
+    assert "--start-probe 30" in text
     assert "%*" in text
     assert "run_qwen_live_reliability_from_api_disconnect" not in text
 
