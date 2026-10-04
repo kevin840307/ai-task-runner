@@ -36,6 +36,11 @@ class CommandStage:
     ui_title = "Command"
     ui_description = "Run an external command or deterministic validator."
     ui_category = "tools"
+    ui_test_examples = {
+        "pass": "Run the configured command and inspect its isolated PASS result.",
+        "fail": "Run the configured command and inspect its isolated FAIL result.",
+        "error": "Technical ERROR is injected by the Stage Test harness before the configured command runs.",
+    }
     """Run one configured child process and map its exit code to a Stage result."""
 
     spec_class = CommandStageSpec
