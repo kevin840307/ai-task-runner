@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from ...agent import configure_ai_client, create_ai_client, structured_call
+from ...agent import backend_names, configure_ai_client, create_ai_client, sandbox_supported, structured_call
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
 from ..profiles import profile_defaults, profile_names
@@ -38,6 +38,8 @@ class BaseStageSpec:
     track_changes: bool = False
     tolerate_restored_changes: bool = False
     timeout: float | None = None
+    backend: str = ""
+    model: str = ""
     session_policy: SessionPolicy = "auto"
     produces: str = ""
     max_failures: int | None = None
@@ -62,6 +64,16 @@ class BaseStage:
 
     def __init__(self, spec: BaseStageSpec) -> None:
         profile = str(spec.profile or "generic")
+        backend = str(spec.backend or "").strip()
+        model = str(spec.model or "").strip()
+        if backend and backend not in backend_names():
+            raise ConfigurationError(f"AI Stage {spec.name} backend is unsupported: {backend}")
+        if len(model) > 200 or any(ord(ch) < 32 for ch in model):
+            raise ConfigurationError(f"AI Stage {spec.name} model is invalid")
+        if (backend or model) and spec.session_policy == "main":
+            raise ConfigurationError(
+                f"AI Stage {spec.name} cannot combine backend/model override with session_policy=main"
+            )
         if profile not in profile_names():
             raise ConfigurationError(
                 f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
@@ -259,7 +271,7 @@ class BaseStage:
         client.session_id = ""
         if client is ctx.ai_client:
             ctx.state.ai_session_id = ""
-        elif self.spec.session_policy == "role":
+        elif self._uses_stage_session():
             ctx.state.stage_sessions.pop(self.name, None)
         contracts = ctx.scratch.get("prompt_contracts")
         if isinstance(contracts, dict) and previous:
@@ -277,24 +289,41 @@ class BaseStage:
     def _backend_mode(self, ctx: StageContext) -> str:
         return self.backend_mode
 
+    def _uses_stage_session(self) -> bool:
+        return self.spec.session_policy == "role" or (
+            self.spec.session_policy == "auto"
+            and bool(str(self.spec.backend or "").strip() or str(self.spec.model or "").strip())
+        )
+
     def _client(self, ctx: StageContext):
         policy = self.spec.session_policy
         if policy == "main":
             return ctx.ai_client
 
-        if policy in {"role", "fresh"}:
+        if policy in {"role", "fresh"} or self._uses_stage_session():
             key = f"stage_session:{self.name}"
             client = ctx.scratch.get(key)
             if client is None:
+                backend_override = str(self.spec.backend or "").strip()
+                if (
+                    backend_override
+                    and bool(getattr(ctx.config, "sandbox", False))
+                    and not sandbox_supported(backend_override)
+                ):
+                    raise ConfigurationError(
+                        f"AI Stage {self.name} backend does not support sandbox mode: {backend_override}"
+                    )
                 client = create_ai_client(
                     ctx.config,
                     ctx.root,
                     ctx.work / "debug",
                     mode=self._backend_mode(ctx),
                     timeout=self._timeout(ctx),
+                    backend_override=backend_override,
+                    model_override=str(self.spec.model or "").strip(),
                     session_id=(
                         ctx.state.stage_sessions.get(self.name, "")
-                        if policy == "role"
+                        if self._uses_stage_session()
                         else ""
                     ),
                 )
@@ -318,7 +347,7 @@ class BaseStage:
 
     def _persist_session(self, ctx: StageContext, client) -> None:
         session_id = str(getattr(client, "session_id", "") or "")
-        if self.spec.session_policy == "role":
+        if self._uses_stage_session():
             if session_id:
                 ctx.state.stage_sessions[self.name] = session_id
             else:
@@ -493,12 +522,14 @@ class BaseStage:
             ctx.scratch["prompt_contracts"] = contracts
         contracts[self._prompt_contract_identity()] = session
 
-    def _prompt_contract_identity(self) -> tuple[str, str, str]:
+    def _prompt_contract_identity(self) -> tuple[str, str, str, str, str]:
         """Static prompt identity reusable across dynamically generated sibling Stages."""
         return (
             str(self.spec.profile or "generic"),
             str(self.spec.prompt or ""),
             str(self.spec.instructions or ""),
+            str(self.spec.backend or ""),
+            str(self.spec.model or ""),
         )
 
     def _original_prompt(self, ctx: StageContext, previous: StageResult | None) -> str:
