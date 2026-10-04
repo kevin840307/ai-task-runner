@@ -1454,7 +1454,7 @@ class WorkflowStudioTests(unittest.TestCase):
             )
 
 
-    def test_graph_save_is_blocked_while_runtime_is_active(self) -> None:
+    def test_graph_save_remains_editable_while_active_run_uses_frozen_snapshot(self) -> None:
         item = self._workflow_item()
         visual = self.state.studio_visual(item["id"], self.project)
         draft = {
@@ -1466,16 +1466,29 @@ class WorkflowStudioTests(unittest.TestCase):
             self.state,
             "edit_guard",
             return_value={
-                "editable": False,
+                "editable": True,
                 "active_projects": [{"name": "Running Project"}],
+                "reason": "Active runs use frozen Workflow/Prompt snapshots; edits apply to the next run.",
             },
         ):
-            with self.assertRaisesRegex(
-                ValueError, "Cannot edit workflow/prompt while runtime is active"
-            ):
-                self.state.studio_graph_save(
-                    item["id"], draft, visual["hash"], self.project
-                )
+            saved = self.state.studio_graph_save(
+                item["id"], draft, visual["hash"], self.project
+            )
+
+        self.assertEqual(saved["visual"]["flow"], visual["flow"])
+
+
+    def test_edit_guard_projects_active_run_without_locking_next_run_edits(self) -> None:
+        with patch.object(
+            self.state,
+            "active_projects",
+            return_value=[{"name": "Running Project", "path": str(self.project), "pid": 123}],
+        ):
+            guard = self.state.edit_guard()
+
+        self.assertTrue(guard["editable"])
+        self.assertEqual(guard["active_projects"][0]["name"], "Running Project")
+        self.assertIn("frozen Workflow/Prompt snapshots", guard["reason"])
 
 
     def test_studio_session_policy_round_trip_and_conflict_rejection(self) -> None:
