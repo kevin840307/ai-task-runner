@@ -3092,6 +3092,63 @@ def test_api_rotation_contract_accepts_durable_fresh_when_polling_misses_rotatio
     )
 
 
+def test_api_rotation_contract_accepts_event_proven_session_when_state_poll_lags():
+    live._assert_controlled_api_session_rotation(
+        "stale-polled-session",
+        True,
+        [
+            {
+                "type": "model.prompt",
+                "session": "actual-resumed-session",
+                "session_mode": "resume",
+            },
+            {
+                "type": "model.result",
+                "session": "actual-resumed-session",
+                "session_mode": "resume",
+                "error": "HTTP 503",
+            },
+            {
+                "type": "runner.session",
+                "action": "fresh",
+                "previous_session": "actual-resumed-session",
+            },
+            {
+                "type": "runner.recovery",
+                "action": "retry",
+                "retry": 2,
+                "retry_mode": "recover",
+            },
+        ],
+    )
+
+
+def test_api_rotation_contract_rejects_unproven_fresh_previous_when_poll_lags():
+    with pytest.raises(RuntimeError, match="does not match a proven pre-rotation session"):
+        live._assert_controlled_api_session_rotation(
+            "stale-polled-session",
+            True,
+            [
+                {
+                    "type": "model.prompt",
+                    "session": "different-session",
+                    "session_mode": "resume",
+                },
+                {
+                    "type": "runner.session",
+                    "action": "fresh",
+                    "previous_session": "unproven-session",
+                },
+                {
+                    "type": "runner.recovery",
+                    "action": "retry",
+                    "retry": 2,
+                    "retry_mode": "recover",
+                },
+            ],
+        )
+
+
 def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
     live._assert_controlled_api_session_rotation(
         "session-A",
@@ -3128,7 +3185,7 @@ def test_api_rotation_contract_accepts_bounded_runner_owned_fresh_rotation():
                 {"type": "runner.recovery", "action": "retry", "retry": 2, "retry_mode": "recover"},
                 {"type": "runner.session", "action": "fresh", "previous_session": "other"},
             ],
-            "does not match the observed pre-outage session",
+            "does not match a proven pre-rotation session",
         ),
     ],
 )
