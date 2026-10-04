@@ -52,3 +52,15 @@ def test_catalog_exposes_only_current_stage_model():
     assert "scope" not in catalog["node_options"]
     assert set(catalog["stage_types"]["base"]["profiles"]) == {"generic", "execute", "review"}
     assert catalog["stage_types"]["plan"]["dynamic_output"] is True
+
+
+def test_structured_output_repair_cannot_rotate_sessions():
+    structured = (ROOT / "runner" / "agent" / "structured.py").read_text(encoding="utf-8")
+    base_stage = (STAGES / "base_stage.py").read_text(encoding="utf-8")
+
+    assert "fresh_ask" not in structured
+    assert "fresh_retries" not in structured
+    assert "structured_fresh_retries" not in base_stage
+    assert "_structured_fresh_ask" not in base_stage
+    assert "structured_retries" in base_stage
+    assert "StageExecutor" in structured
