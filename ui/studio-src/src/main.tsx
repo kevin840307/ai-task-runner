@@ -63,7 +63,6 @@ type CatalogOption = {
 };
 
 type CatalogProfile = {
-  semantics?: string;
   title?: string;
   description?: string;
   defaults?: Record<string, unknown>;
@@ -108,8 +107,6 @@ type StudioNodeData = {
   label: string;
   subtitle?: string;
   stage?: Stage;
-  stageTypeTitle?: string;
-  semantic?: string;
   dynamicOutput?: string;
 };
 
@@ -338,14 +335,14 @@ function StageNode({ data, selected }: NodeProps<Node<StudioNodeData>>) {
   const title = String(s.label || s.name);
   const dynamicRouter = s.type === "handoff";
   const errorRetries = s.error_policy?.retries;
-  const reviewSemantic = data.semantic === "review";
+  const reviewSemantic = s.type === "base" && s.profile === "review";
   const reviewErrorSkip = reviewSemantic && Number.isInteger(errorRetries) && Number(errorRetries) >= 0;
   const reviewMaxFailures = reviewSemantic && Number.isInteger(s.max_failures) ? Number(s.max_failures) : 0;
   return (
     <div className={`wf-stage ${selected ? "selected" : ""} type-${s.type} ${s.type === "base" ? `profile-${String(s.profile || "generic")}` : ""}`}>
       <Handle className="stage-input" type="target" position={Position.Top} />
       <div className="wf-stage-head">
-        <span className="stage-type">{data.stageTypeTitle || String(s.type || "Stage")}</span>
+        <span className="stage-type">{s.type === "base" && s.profile ? `AI · ${String(s.profile)}` : (STAGE_META[s.type]?.title || String(s.type || "Stage"))}</span>
       </div>
       <strong title={title}>{title}</strong>
       {title !== s.name && <small title={s.name}>{s.name}</small>}
@@ -379,18 +376,27 @@ function stageByName(visual: Visual, name: string) {
   return visual.stages.find((s) => s.name === name);
 }
 
+const STAGE_META: Record<string, { title: string; description: string }> = {
+  plan: { title: "Plan", description: "Plan work and expand a dynamic child Workflow at runtime" },
+  ai_validator: { title: "AI Validator", description: "Independent AI validation with optional voting" },
+  handoff: { title: "Handoff", description: "Dynamically choose the next allowed Stage" },
+  command: { title: "Command", description: "Run an external command or validator" },
+  base: { title: "AI Stage", description: "General AI Stage" },
+};
+
 const PALETTE_SECTIONS = [
-  { id: "build", icon: "✦" },
-  { id: "validate", icon: "✓" },
-  { id: "handoff", icon: "↔" },
-  { id: "tools", icon: "›" },
+  { id: "build", types: ["plan", "base"], icon: "✦" },
+  { id: "validate", types: ["ai_validator"], icon: "✓" },
+  { id: "handoff", types: ["handoff"], icon: "↔" },
+  { id: "tools", types: ["command"], icon: "›" },
 ];
 function catalogStageMeta(catalog: Catalog | null, type: string) {
   const catalogMeta = catalog?.stage_types?.[type];
+  const fallback = STAGE_META[type];
   return {
-    title: String(catalogMeta?.title || type),
-    description: String(catalogMeta?.description || ""),
-    category: String(catalogMeta?.category || "extensions"),
+    title: String(catalogMeta?.title || fallback?.title || type),
+    description: String(catalogMeta?.description || fallback?.description || ""),
+    category: String(catalogMeta?.category || (PALETTE_SECTIONS.find((section) => section.types.includes(type))?.id ?? "extensions")),
   };
 }
 
@@ -428,11 +434,11 @@ function defaultOption(catalog: Catalog | null, stageType: string, name: string)
 function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
   const explicit = String(stage.prompt || "").trim();
   if (explicit) return explicit;
-  const profile = String(stage.profile || "");
-  const profilePrompt = profile
-    ? catalog?.stage_types?.[stage.type]?.profiles?.[profile]?.defaults?.prompt
-    : undefined;
-  if (typeof profilePrompt === "string" && profilePrompt.trim()) return profilePrompt.trim();
+  if (stage.type === "base") {
+    const profile = String(stage.profile || "generic");
+    const profilePrompt = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
+    if (typeof profilePrompt === "string" && profilePrompt.trim()) return profilePrompt.trim();
+  }
   return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
 }
 
@@ -613,20 +619,6 @@ function graphFromVisual(visual: Visual, catalog: Catalog | null = null, layout:
         label: String(s.label || s.name),
         subtitle: disconnected ? "Not connected to flow" : String(s.status || ""),
         stage: s,
-        stageTypeTitle: (() => {
-          const typeMeta = catalog?.stage_types?.[s.type];
-          const profile = String(s.profile || "");
-          const profileMeta = profile ? typeMeta?.profiles?.[profile] : undefined;
-          return profileMeta?.title
-            ? `${String(typeMeta?.title || s.type)} · ${String(profileMeta.title)}`
-            : String(typeMeta?.title || s.type || "Stage");
-        })(),
-        semantic: (() => {
-          const profile = String(s.profile || "");
-          return profile
-            ? String(catalog?.stage_types?.[s.type]?.profiles?.[profile]?.semantics || "")
-            : "";
-        })(),
         dynamicOutput: (() => {
           const kind = String(s.produces || catalog?.stage_types?.[s.type]?.result_kind || "");
           return kind === "tasks" || kind === "stages" ? kind : "";
