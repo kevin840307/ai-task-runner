@@ -198,6 +198,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Do not mark this item complete until the committed bundle and real backend evidence both match current source.
     - Built-in Plan-generated Execute/Review child Stages now inherit the Plan Stage backend/model override while keeping their own default session policy; generic producer-defined children remain explicit and are not globally rewritten.
     - Cross-backend model leakage is removed: switching Stage backend with model unset uses the target backend default; same-backend runs keep their configured global model, and an explicit Stage model still overrides through the adapter.
+    - Workflow load/save now reuses BaseStage execution-target validation, so unsupported backend, invalid model and backend/model + session_policy=main fail closed before runtime; YAML cannot persist a configuration that the Stage constructor would later reject.
     - Dry Run now covers Plan backend/model propagation through the real PlanStage.finish() + FlowEngine dynamic expansion path; no second dry-run runtime was added.
     - Catalog combination coverage locks backend/model/session_policy onto every AI-backed Stage (base/plan/handoff/ai_validator) and keeps Command free of AI-only fields.
     - README documents YAML/UI behavior, target-backend default-model isolation, session-policy constraints, Plan child inheritance, and effective Stage Test evidence.
