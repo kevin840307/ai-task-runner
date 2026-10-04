@@ -16,8 +16,8 @@ CLI、API、YAML List、UI 全部使用同一套 runtime。
 
 ```text
 runner/workflow/
+  contracts.py           所有 Stage/plugin 共用的 protocol/context/result
   stages/
-    contracts.py          所有 Stage/plugin 共用的 protocol/context/result
     base_stage.py         一般 AI Stage + profile 行為
     plan_stage.py         Plan 特殊 Stage
     ai_validator_stage.py AI Validator 特殊 Stage
