@@ -203,6 +203,30 @@ class BaseBackend(ABC):
     ) -> list[str]:
         return list(extra_args)
 
+    @classmethod
+    def configure_model_args(
+        cls,
+        extra_args: Sequence[str],
+        model: str,
+    ) -> list[str]:
+        result: list[str] = []
+        values = list(extra_args)
+        index = 0
+        while index < len(values):
+            value = str(values[index])
+            if value == "--model":
+                index += 2
+                continue
+            if value.startswith("--model="):
+                index += 1
+                continue
+            result.append(value)
+            index += 1
+        model_name = str(model or "").strip()
+        if model_name:
+            result.extend(["--model", model_name])
+        return result
+
     def update_goal_reference(self, goal_file: str | None) -> None:
         pass
 
@@ -444,6 +468,7 @@ __all__ = [
     "BaseBackend",
     "backend_names",
     "configure_backend_args",
+    "configure_model_args",
     "configure_sandbox_args",
     "create_backend",
     "default_command",
