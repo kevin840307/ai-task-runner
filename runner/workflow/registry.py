@@ -29,6 +29,26 @@ RUNNER_INTERNAL_FIELDS = frozenset({
 })
 CATALOG_HIDDEN_FIELDS = frozenset()
 
+# Shared presentation hints for built-in/common Stage fields. External Stage
+# specs may override with dataclass field metadata {"ui_section": "..."}.
+OPTION_SECTION_BY_FIELD = {
+    "prompt": "content", "instructions": "content", "detail": "content",
+    "command": "content", "cwd": "content",
+    "backend": "execution", "model": "execution", "run_state": "execution",
+    "mode": "execution", "actor": "execution", "session_policy": "execution",
+    "allow_project_read": "execution", "timeout": "execution",
+    "readonly_safety": "execution", "track_changes": "execution",
+    "tolerate_restored_changes": "execution", "clean_work": "execution",
+    "parser": "result", "produces": "result", "result_kind": "result",
+    "runs": "result", "required_passes": "result", "min_tasks": "result",
+    "structured_retries": "result",
+}
+DEFAULT_TEST_EXAMPLES = {
+    "pass": "Run this isolated Stage successfully and return its normal PASS contract.",
+    "fail": "Return the Stage's normal FAIL contract with one concrete unmet condition.",
+    "error": "Technical ERROR is injected by the Stage Test harness before the real Stage runs.",
+}
+
 
 def register_stage(name: str, stage_class: type[Any]) -> None:
     if not isinstance(name, str) or not name.strip():
@@ -53,6 +73,9 @@ def stage_catalog() -> dict[str, dict[str, Any]]:
             "result_kind": str(getattr(stage_class, "result_kind", "generic") or "generic"),
             "dynamic_output": str(getattr(stage_class, "result_kind", "generic") or "generic") in {"tasks", "stages"},
             "profiles": deepcopy(AI_STAGE_PROFILES) if name == "base" else {},
+            "test_examples": deepcopy(
+                getattr(stage_class, "ui_test_examples", None) or DEFAULT_TEST_EXAMPLES
+            ),
             "options": [
                 _field_info(item)
                 for item in fields(stage_class.spec_class)
@@ -154,9 +177,14 @@ def _field_info(item: Any) -> dict[str, Any]:
     if item.name == "produces":
         result["type"] = "enum"
         result["values"] = ["", "tasks", "stages"]
-    description = str((getattr(item, "metadata", None) or {}).get("description", "") or "").strip()
+    metadata = getattr(item, "metadata", None) or {}
+    description = str(metadata.get("description", "") or "").strip()
     if description:
         result["description"] = description
+    section = str(metadata.get("ui_section", "") or OPTION_SECTION_BY_FIELD.get(item.name, "advanced"))
+    if section not in {"content", "execution", "result", "advanced"}:
+        section = "advanced"
+    result["section"] = section
     if item.name == "session_policy":
         result["type"] = "enum"
         result["values"] = ["auto", "main", "role", "fresh"]
