@@ -456,6 +456,58 @@ function nextStageKey(visual: Visual, type: string): string {
   return `${base}_${i}`;
 }
 
+type ResultEdgeRef = { source: string; target: string; status: string };
+
+function addStageToVisual(visual: Visual, stage: Stage, afterStage = ""): Visual {
+  const flow = [...visual.flow];
+  const index = afterStage ? flow.indexOf(afterStage) : -1;
+  if (index >= 0) flow.splice(index + 1, 0, stage.name);
+  return { ...visual, flow, stages: [...visual.stages, stage] };
+}
+
+function cloneStageWithoutConnections(source: Stage, name: string): Stage {
+  const copy = structuredClone({ ...source, name });
+  delete copy.routes;
+  if (copy.type === "handoff") copy.targets = [];
+  return copy;
+}
+
+function stageReferenceSources(visual: Visual, stageName: string): string[] {
+  return visual.stages
+    .filter((stage) => stage.name !== stageName && (
+      Object.values(stage.routes || {}).includes(stageName)
+      || (stage.targets || []).includes(stageName)
+    ))
+    .map((stage) => stage.name);
+}
+
+function removeStageFromVisual(visual: Visual, stageName: string): Visual {
+  return {
+    ...visual,
+    flow: visual.flow.filter((name) => name !== stageName),
+    stages: visual.stages.filter((stage) => stage.name !== stageName),
+  };
+}
+
+function disconnectResultEdges(visual: Visual, removed: ResultEdgeRef[]): Visual {
+  let stages = visual.stages;
+  for (const edge of removed) {
+    const status = String(edge.status || "").toLowerCase();
+    if (!status) continue;
+    stages = stages.map((stage) => {
+      if (stage.name !== edge.source) return stage;
+      if (status === "handoff") {
+        return { ...stage, targets: (stage.targets || []).filter((target) => target !== edge.target) };
+      }
+      const routes = { ...(stage.routes || {}) };
+      if (status === "pass") routes.pass = "stop";
+      else delete routes[status];
+      return { ...stage, routes };
+    });
+  }
+  return { ...visual, stages };
+}
+
 function applyConnectionToVisual(visual: Visual, connection: Connection): Visual {
   if (!connection.source || !connection.target) return visual;
   const status = String(connection.sourceHandle || "pass").toLowerCase();
@@ -1486,26 +1538,16 @@ function App() {
 
   const deleteEdges = useCallback((removed: Edge[]) => {
     if (!visual) return;
-    const semantic = removed.filter((edge) => edge.data?.status && edge.source !== START);
+    const semantic: ResultEdgeRef[] = removed
+      .filter((edge) => edge.data?.status && edge.source !== START)
+      .map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        status: String(edge.data?.status || ""),
+      }));
     if (!semantic.length) return;
     rememberUndoSnapshot(visual);
-    let stages = visual.stages;
-    removed = semantic;
-    for (const edge of removed) {
-      const status = String(edge.data?.status || "");
-      if (!status) continue;
-      stages = stages.map((s) => {
-        if (s.name !== edge.source) return s;
-        if (status === "handoff") {
-          return { ...s, targets: (s.targets || []).filter((target) => target !== edge.target) };
-        }
-        const routes = { ...(s.routes || {}) };
-        if (status === "pass") routes.pass = "stop";
-        else delete routes[status];
-        return { ...s, routes };
-      });
-    }
-    const next = { ...visual, stages };
+    const next = disconnectResultEdges(visual, semantic);
     setVisual(next);
     const g = graphFor(next, catalog);
     setNodes(g.nodes);
@@ -1549,7 +1591,7 @@ function App() {
     if (prompt) stage.prompt = prompt;
     if (command) stage.command = command;
     if (stageType === "ai_validator") stage.validator = "ai";
-    let next = { ...visual, stages: [...visual.stages, stage] };
+    let next = addStageToVisual(visual, stage);
     if (pendingEdgeCreate) {
       next = applyConnectionToVisual(next, {
         source: pendingEdgeCreate.source,
@@ -1644,23 +1686,15 @@ function App() {
     if (!visual) return;
     const source = stageByName(visual, name);
     if (!source) return;
-    const copy = structuredClone(source);
-    delete copy.routes;
-    if (copy.type === "handoff") copy.targets = [];
-    setCopiedStage(copy);
+    setCopiedStage(cloneStageWithoutConnections(source, source.name));
     setMessage(`${tx("stage_copied")} · ${name}`);
   }
 
   function pasteStage(position?: { x: number; y: number }) {
     if (!visual || !copiedStage) return;
     const name = nextStageKey(visual, copiedStage.type);
-    const copy: Stage = structuredClone({ ...copiedStage, name });
-    delete copy.routes;
-    if (copy.type === "handoff") copy.targets = [];
-    const sourceIndex = selected ? visual.flow.indexOf(selected) : -1;
-    const flow = [...visual.flow];
-    if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, name);
-    const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    const copy = cloneStageWithoutConnections(copiedStage, name);
+    const next = addStageToVisual(visual, copy, selected);
     rememberUndoSnapshot(visual);
     setVisual(next);
     const sourcePosition = selected ? layoutRef.current[selected] : undefined;
@@ -1682,15 +1716,9 @@ function App() {
     copyStageByName(name);
     const source = stageByName(visual, name);
     if (!source) return;
-    const stageCopy = structuredClone(source);
-    delete stageCopy.routes;
-    if (stageCopy.type === "handoff") stageCopy.targets = [];
-    const newName = nextStageKey(visual, stageCopy.type);
-    const copy: Stage = { ...stageCopy, name: newName };
-    const sourceIndex = visual.flow.indexOf(name);
-    const flow = [...visual.flow];
-    if (sourceIndex >= 0) flow.splice(sourceIndex + 1, 0, newName);
-    const next = { ...visual, flow, stages: [...visual.stages, copy] };
+    const newName = nextStageKey(visual, source.type);
+    const copy = cloneStageWithoutConnections(source, newName);
+    const next = addStageToVisual(visual, copy, name);
     rememberUndoSnapshot(visual);
     setVisual(next);
     const sourcePosition = layoutRef.current[name];
@@ -1716,9 +1744,7 @@ function App() {
 
   async function deleteStage(name = draft?.name || selected) {
     if (!visual || !name) return;
-    if (visual.stages.some((stage) => stage.name !== name && (
-      Object.values(stage.routes || {}).includes(name) || (stage.targets || []).includes(name)
-    ))) {
+    if (stageReferenceSources(visual, name).length) {
       setMessage(tx("remove_refs_first"));
       return;
     }
@@ -1729,7 +1755,7 @@ function App() {
       danger: true,
       action: () => {
         const current = visual;
-        const next = { ...current, flow: current.flow.filter((item) => item !== name), stages: current.stages.filter((stage) => stage.name !== name) };
+        const next = removeStageFromVisual(current, name);
         rememberUndoSnapshot(current);
         setVisual(next);
         const g = graphFor(next, catalog);
