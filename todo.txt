@@ -375,6 +375,11 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Kept the controlled backoff agent faithful to Same Session/Fresh Session identity.
+    - When Qwen-style --resume <session> is present, the fake agent now returns that same session id.
+    - Only a Fresh invocation without --resume creates a new synthetic session id.
+    - This prevents the backoff proof itself from accidentally resetting per-session failure identity on every attempt.
+
 [x] Strengthened the controlled long-failure backoff proof.
     - transient_backoff_agent keeps its default one-failure behavior for existing tests but accepts
       BACKOFF_TEST_FAILURES for the dedicated live preflight.
@@ -794,18 +799,13 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 
 RELEASE GATES
 -------------
-[x] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on exact code HEAD 2ed930807ab73ebcb18ac84e2ca2b7804d8120b1.
-    - [x] Windows Python full suite green on the same exact code HEAD.
-    - [x] Playwright/Chromium Browser E2E green on the same exact code HEAD.
-    - [x] Studio source build succeeds.
-    - [x] Committed ui/static/workflow-studio-app bundle verify is green on the same runtime/UI HEAD.
-    - [x] Generated bundle is verified by the same npm ci + build path as CI.
-    - GitHub Actions run 37193711193 proves Ubuntu/Windows/Browser/Studio all green on the exact code HEAD above.
-    - The only failure found during this hardening pass was a brittle source-string test that expected
-      the literal text ctx.state.ai_session_id = ""; production behavior was correct. It was replaced
-      with a behavioral finish_run contract test covering primary session + stale technical-map cleanup.
-    - This todo-only evidence update follows that green code HEAD and does not alter runtime/UI behavior.
+[ ] Current HEAD deterministic CI green:
+    - Historical baseline: exact code HEAD 2ed930807ab73ebcb18ac84e2ca2b7804d8120b1 passed
+      Ubuntu Python, Windows Python, Playwright/Chromium Browser E2E, Studio build and committed-bundle verify
+      in GitHub Actions run 37193711193.
+    - Current code HEAD is 685253c670243b748a1dff2b029a6f806f05dc75 after long-failure live-harness hardening.
+    - GitHub Actions run 37200002683 is pending; do not reuse the historical green result as current-HEAD evidence.
+    - Re-check all four jobs and replace this block with the exact green HEAD/run before marking complete.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
