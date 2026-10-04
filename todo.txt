@@ -204,7 +204,15 @@ P1 - UI / UX USEFUL AFTER P0
     - Prompt drafts are preserved in local browser storage, hash-gated against the saved asset, and offer Restore Draft / Discard Draft.
     - Workflow Designer/YAML drafts are also local-only, hash-gated, and offer Restore Draft / Discard Draft after reload/crash.
     - Workflow browser E2E and Prompt browser/static coverage verify restoration while canonical files remain unchanged before Save.
+    - Recovery chrome is compact and no longer consumes the Designer content row; Studio shell uses header + optional banners + flexing main content.
     - Draft recovery never auto-writes canonical YAML or bypasses Save validation.
+
+[x] Workflow YAML / Designer view synchronization
+    - Designer and YAML remain two views of one canonical Workflow; no second parser/runtime/store was added.
+    - Switching views now immediately validates+saves a dirty current view through the existing canonical backend, then reloads the target representation.
+    - YAML -> Designer therefore shows newly edited Stages/flow immediately instead of silently rendering the previous graph.
+    - Invalid YAML remains in YAML view with line/column feedback and the canonical file stays unchanged.
+    - Chromium E2E covers YAML Stage creation -> immediate Designer node refresh and invalid-YAML fail-closed behavior.
 
 [x] Run from here / Test path
     - Dry-run/mock path first; do not introduce a second runtime.
