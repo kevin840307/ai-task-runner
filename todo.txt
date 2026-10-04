@@ -490,3 +490,11 @@ P1 IMPLEMENTATION EVIDENCE
 [x] Test-path Browser E2E:
     start from selected Stage -> /api/studio/path/test -> saved canonical Workflow + workflow_dryrun/FlowEngine;
     prior Stages are not executed and no second runtime is introduced.
+
+
+BROWSER E2E CONTRACT NOTES
+--------------------------
+[x] Browser E2E selectors now follow stable product contracts:
+    - Prompts and Workflows share the same asset workspace (#workflowView); tests no longer wait for removed #promptView.
+    - Stage Editor tabs expose data-inspector-tab so browser tests are locale-independent and do not depend on English labels.
+    - This is test-contract hardening only; production navigation semantics were not changed.
