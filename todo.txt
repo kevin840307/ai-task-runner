@@ -1081,6 +1081,40 @@ Do not mark this pass complete until:
 - Ubuntu + Windows deterministic suites, Browser E2E and Studio build/bundle checks are green on the final exact HEAD.
 - Real-Qwen 0.5H/high-density/24H gates below still pass after this optimization work.
 
+FINAL CODE REVIEW (2026-10-04)
+------------------------------
+- Final implementation HEAD 69f32dea573e6993fbda6b8bd88a54ee1bc45de8 passed all deterministic gates in run 37213037113.
+  Current HEAD differs from that implementation HEAD only by todo.txt evidence maintenance.
+- Runner ownership review:
+  * StageExecutor owns Stage-local technical retry/session rotation/backoff/partial-write recovery.
+  * FlowEngine owns semantic PASS/FAIL/HANDOFF navigation and dynamic child expansion.
+  * RunState/StateStore owns durable state validation + atomic primary/backup persistence.
+  * Supervisor owns process crash/hang restart, run lock, heartbeat and orphan cleanup.
+  No duplicate recovery/state/lifecycle engine was found.
+- 24H-oriented review:
+  * deterministic/programming failures fail closed instead of entering infinite technical retry;
+  * declared RunnerError/OSError technical failures remain recoverable;
+  * state/history/output/log structures have explicit bounds/safety rails;
+  * resume validates durable Workflow position/snapshot/session references before continuing.
+- UI/UX review:
+  * Tasks/Chat remains the compact Run Console; no extra dashboard layer.
+  * Active Run frozen snapshot vs next-Run edits is explicit.
+  * Designer Nodes are topology-first and no longer configuration dumps.
+  * Palette is Search + Stages + Extensions; speculative Favorites/Recent/collapse state was removed.
+  * Stage Settings uses existing progressive disclosure rather than another settings framework.
+  * Stage Test modes are Real Stage / Agent Ping / Mock Technical Error; PASS/FAIL are input examples only.
+  * Backend/Model/Session UX consumes catalog constraints instead of owning runtime policy.
+  * Browser E2E passed after the simplification, including CRUD/save, graph operations, edge-drop, Stage Test and backend/model flows.
+- Maintainability/code-size review:
+  * No qwen/opencode provider branch remains in generic Workflow/Studio code.
+  * UI does not import Runner Core; validation crosses the existing workflow tool/production-loader boundary.
+  * Graph mutation semantics are centralized in workflow-draft.ts pure operations.
+  * main.tsx remains large but further splitting has no demonstrated responsibility/coupling benefit; do not split for LOC alone.
+  * Production-like code for this pass is net smaller (about -101 lines excluding tests/generated bundle).
+  * Removed-contract scan found no maintained scope/task_step/routes.error/restart_at/max_attempts/Discussion/old repair-example compatibility.
+- Review decision: no further proactive architecture/UI refactor is justified before the remaining real-Qwen soak/release gates.
+  Any new source change should be driven by reproduced reliability/UX evidence, not cleanup preference.
+
 OPTIMIZATION FREEZE
 -------------------
 [ ] Freeze proactive architecture/UI optimization after this pass
