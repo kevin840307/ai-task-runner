@@ -298,3 +298,18 @@ def test_main_ui_consumes_canonical_runtime_status_actions_and_dedupes_polling()
     assert 'query.get("exclude_runtime", [""])[0]' in server
     assert 'if (state.view === "workflow" || state.view === "prompt") work.push(refreshStudioGuard())' in app
     assert 'if (token !== state.runtimeRefreshToken || !sameProjectPath(state.project?.path, projectPath)) return;' in app
+
+
+def test_runtime_attention_and_frozen_run_details_are_actionable():
+    root = Path(__file__).resolve().parents[1]
+    index = (root / "static" / "index.html").read_text(encoding="utf-8")
+    app = (root / "static" / "app.js").read_text(encoding="utf-8")
+
+    for control in ("runtimeGuidance", "runtimeGuidanceWorkflow", "runtimeGuidanceTrace", "activeRunDetails", "activeRunStarted"):
+        assert f'id="{control}"' in index
+    assert 'recommended.includes("open_workflow")' in app
+    assert 'recommended.includes("view_trace")' in app
+    assert '$("workflowNav")?.click()' in app
+    assert '$("runtimeTraceButton")?.click()' in app
+    assert 'const snap = runtime?.run_snapshot' in app
+    assert 'new Date(started * 1000).toLocaleString()' in app
