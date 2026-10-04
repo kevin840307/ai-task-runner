@@ -3929,6 +3929,14 @@ def windows_orphan_cleanup_preflight(root: Path) -> None:
 
 def main() -> int:
     args = arguments()
+    if args.list_probes:
+        print_probe_list()
+        return 0
+    try:
+        start_probe = resolve_start_probe(args.start_probe)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
     if args.high_density:
         if args.pause == 30:
             args.pause = 5
@@ -3982,14 +3990,6 @@ def main() -> int:
         args.soak_yaml_every,
         args.soak_sandbox_every,
     )
-    try:
-        start_probe = resolve_start_probe(args.start_probe)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
-    if args.list_probes:
-        print_probe_list()
-        return 0
-
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
@@ -4169,37 +4169,46 @@ def main() -> int:
         "hours_requested": args.hours,
         "agent_timeout": settings.agent_timeout,
         "planning_timeout": settings.planning_timeout,
-        "protected_file_probe": True,
-        "runner_ownership_preflight": True,
-        "windows_orphan_cleanup_preflight": os.name == "nt",
-        "api_retry_classification_preflight": True,
-        "task_array_recovery_preflight": True,
-        "session_expiry_recovery_preflight": True,
-        "http_429_recovered": True,
-        "http_502_recovered": True,
-        "http_503_recovered": True,
+        "start_probe": {
+            "index": start_probe + 1,
+            "name": PROBE_ORDER[start_probe],
+        },
+        "protected_file_probe": probe_enabled("file-protection", start_probe),
+        "runner_ownership_preflight": probe_enabled("ownership-lock", start_probe),
+        "windows_orphan_cleanup_preflight": (
+            os.name == "nt" and probe_enabled("windows-orphan-cleanup", start_probe)
+        ),
+        "api_retry_classification_preflight": probe_enabled("api-retry-classification", start_probe),
+        "task_array_recovery_preflight": probe_enabled("task-array-recovery", start_probe),
+        "session_expiry_recovery_preflight": probe_enabled("session-expiry-recovery", start_probe),
+        "http_429_recovered": probe_enabled("api-429", start_probe),
+        "http_502_recovered": probe_enabled("api-502", start_probe),
+        "http_503_recovered": probe_enabled("api-503", start_probe),
         "single_process_yaml_items": args.single_process_yaml_items,
         "stage_probe_live_preflight": stage_probe_live,
-        "workflow_dryrun_preflight": True,
+        "workflow_dryrun_preflight": probe_enabled("workflow-dryrun", start_probe),
         "builtin_review_error_policy_contract": review_error_policy,
         "builtin_review_max_failures_contract": review_max_failures,
         "builtin_readonly_safety_contract": readonly_contract,
-        "workflow_dryrun_negative_preflight": True,
-        "stage_result_mapping_preflight": True,
-        "runtime_long_path_preflight": True,
-        "readonly_long_path_preflight": True,
-        "technical_artifact_safety_preflight": True,
-        "stop_request_resume_probe": True,
+        "workflow_dryrun_negative_preflight": probe_enabled("workflow-dryrun-negative", start_probe),
+        "stage_result_mapping_preflight": probe_enabled("stage-result-mapping", start_probe),
+        "runtime_long_path_preflight": probe_enabled("runtime-long-path", start_probe),
+        "readonly_long_path_preflight": probe_enabled("readonly-long-path", start_probe),
+        "technical_artifact_safety_preflight": probe_enabled("technical-artifact-safety", start_probe),
+        "stop_request_resume_probe": probe_enabled("stop-request-resume", start_probe),
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
-        "loop_detection_contract_preflight": True,
-        "builtin_workflow_contracts": ["file", "ai", "mixed"],
-        "dynamic_handoff_session_policy_probe": True,
-        "custom_dynamic_producer_probe": True,
-        "review_failure_routing_probe": True,
-        "validator_failure_routing_probe": True,
-        "yaml_list_resume_probe": True,
-        "yaml_list_item_runtime_options_probe": True,
-        "yaml_list_final_ai_quorum_probe": True,
+        "loop_detection_contract_preflight": probe_enabled("loop-detection", start_probe),
+        "builtin_workflow_contracts": [
+            workflow for workflow in ("file", "ai", "mixed")
+            if probe_enabled(f"workflow-{workflow}", start_probe)
+        ],
+        "dynamic_handoff_session_policy_probe": probe_enabled("dynamic-handoff-session-policy", start_probe),
+        "custom_dynamic_producer_probe": probe_enabled("custom-dynamic-producer", start_probe),
+        "review_failure_routing_probe": probe_enabled("review-failure-routing", start_probe),
+        "validator_failure_routing_probe": probe_enabled("validator-failure-routing", start_probe),
+        "yaml_list_resume_probe": probe_enabled("yaml-list-resume", start_probe),
+        "yaml_list_item_runtime_options_probe": probe_enabled("yaml-list-resume", start_probe),
+        "yaml_list_final_ai_quorum_probe": probe_enabled("yaml-list-resume", start_probe),
         "soak_runs_completed": soak_result.completed,
         "soak_elapsed_seconds": round(soak_result.elapsed_seconds, 3),
         "soak_final_ai_every": settings.soak_final_ai_every,
@@ -4219,7 +4228,7 @@ def main() -> int:
         },
         "transient_observed": transient_observed,
         "long_api_outage_seconds": args.long_api_outage_seconds,
-        "long_api_disconnect_recovered": True,
+        "long_api_disconnect_recovered": probe_enabled("api-disconnect", start_probe),
         "example_smoke": bool(example_results),
         "example_smoke_runs": len(example_results),
         "example_smoke_source": (
