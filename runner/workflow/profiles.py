@@ -7,6 +7,7 @@ from typing import Any
 
 AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
     "generic": {
+        "semantics": "generic",
         "title": "Generic",
         "description": "General-purpose AI Stage with no task/review semantics.",
         "defaults": {
@@ -19,6 +20,7 @@ AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
         },
     },
     "execute": {
+        "semantics": "execute",
         "title": "Execute",
         "description": "Writable task execution Stage using the shared execution prompt.",
         "defaults": {
@@ -37,6 +39,7 @@ AI_STAGE_PROFILES: dict[str, dict[str, Any]] = {
         },
     },
     "review": {
+        "semantics": "review",
         "title": "Review",
         "description": "Read-only semantic review gate with fail-soft technical retry policy.",
         "defaults": {
@@ -67,6 +70,18 @@ def profile_defaults(profile: str) -> dict[str, Any]:
     return deepcopy(item.get("defaults", {})) if item else {}
 
 
+
+def profile_semantics(profile: str) -> str:
+    item = AI_STAGE_PROFILES.get(str(profile or "generic"))
+    return str(item.get("semantics", "") or "") if item else ""
+
+
+def stage_profile_semantics(definition: dict[str, Any]) -> str:
+    if str(definition.get("type", "base")) != "base":
+        return ""
+    return profile_semantics(str(definition.get("profile", "generic") or "generic"))
+
+
 def apply_ai_profile_defaults(definition: dict[str, Any]) -> dict[str, Any]:
     """Apply only missing AI profile values; explicit YAML always wins."""
     if str(definition.get("type", "base")) != "base":
@@ -84,4 +99,6 @@ __all__ = [
     "apply_ai_profile_defaults",
     "profile_defaults",
     "profile_names",
+    "profile_semantics",
+    "stage_profile_semantics",
 ]
