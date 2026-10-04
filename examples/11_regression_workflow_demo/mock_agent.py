@@ -37,7 +37,7 @@ def kind(r):
             and "review missing_items:" in low
         )
     ):
-        return "fix"
+        return "feedback_revision"
     for key in ("project discovery","project documentation","e2e spec generation","verification design","regression dsl generation","execution & qualification"):
         if key in low: return key
     return "writer"
@@ -59,7 +59,7 @@ with log.open("a", encoding="utf-8") as f:
 
 low = prompt.lower()
 if r == "writer":
-    if kind(r) == "fix":
+    if kind(r) == "feedback_revision":
         if not has_feedback:
             print(json.dumps([{"type":"system","subtype":"session_start","session_id":session},{"type":"result","subtype":"error","session_id":session,"result":"missing previous.data"}]))
             raise SystemExit(3)
@@ -84,7 +84,7 @@ elif r in {"review", "challenge_review"}:
     if r == "challenge_review" and target_doc:
         p = root / "artifacts/project_documentation.md"
         fixed = p.exists() and "Reviewed gap fixed" in p.read_text(encoding="utf-8")
-        answer = json.dumps({"completed": fixed, "reason": "No remaining material gap in demo documentation." if fixed else "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": [] if fixed else ["Project documentation: apply the generic Fix using this structured feedback."]})
+        answer = json.dumps({"completed": fixed, "reason": "No remaining material gap in demo documentation." if fixed else "Documentation needs one explicit reviewed-gap marker for the demo recovery path.", "missing_items": [] if fixed else ["Project documentation: revise the current execution Stage using this structured feedback."]})
     else:
         answer = json.dumps({"completed": True, "reason": "Target artifact is present and consistent for the demo.", "missing_items": []})
 else:
