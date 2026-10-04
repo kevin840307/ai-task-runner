@@ -52,7 +52,7 @@ routes:
 
 target 也可使用 `done` 或 `stop`。
 
-技術 ERROR 不是 graph edge。Exception、backend failure、timeout、transient API failure、partial write、Same Session retry、Fresh Session recovery、backoff 都由 `runner/workflow/stage_executor.py` 負責。
+技術 ERROR 不是 graph edge。Exception、backend failure、timeout、transient API failure、partial write、Same Session retry、Fresh Session recovery、backoff 都由 `runner/workflow/execution/stage_executor.py` 負責。
 
 ```yaml
 error_policy:
