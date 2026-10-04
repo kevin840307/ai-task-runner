@@ -45,6 +45,7 @@ def test_react_studio_has_real_stage_and_agent_ping_modes_with_backend_selection
     assert "Agent Ping" in text
     assert 'api<BackendCatalog>(query().project' in text
     assert '"/api/backends?project=' in text
+    assert '"models=1"' in text
     assert "probe_mode: testMode" in text
     assert "backend: testBackend" in text
     assert "AGENT_PING_PROMPT" in text
