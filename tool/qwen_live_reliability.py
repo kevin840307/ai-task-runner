@@ -28,6 +28,7 @@ DEFAULT_WORKSPACE = ROOT / ".ai-task-runner-live"
 DEFAULT_EXAMPLE_SMOKE_PROJECT = ROOT / "examples" / "01_basic_command_validator" / "project"
 EXPECTED = "AI Task Runner live probe passed."
 
+from runner.config.defaults import MAX_TRANSITION_HISTORY
 from runner.workflow.loader import WORKFLOWS as RUNNER_WORKFLOWS
 
 WORKFLOWS = {
@@ -3378,6 +3379,7 @@ def resource_snapshot(
         "project_dynamic_groups": 0,
         "project_dynamic_task_groups": 0,
         "project_review_failures": 0,
+        "project_transition_history": 0,
         "project_expanded_workflow_stages": 0,
         "project_debug_history_bytes": 0,
     }
@@ -3405,6 +3407,11 @@ def project_state_metrics(project: Path) -> dict[str, int]:
         "project_dynamic_groups": count_mapping("dynamic_groups"),
         "project_dynamic_task_groups": count_mapping("dynamic_task_groups"),
         "project_review_failures": count_mapping("review_failures"),
+        "project_transition_history": (
+            len(state.get("transition_history"))
+            if isinstance(state.get("transition_history"), list)
+            else 0
+        ),
         "project_expanded_workflow_stages": len(expanded) if isinstance(expanded, list) else 0,
         "project_debug_history_bytes": _tree_bytes(work / "debug" / "history"),
     }
@@ -3550,6 +3557,7 @@ def require_resource_bounds(result: SoakResult) -> None:
         "project_dynamic_groups": 2048,
         "project_dynamic_task_groups": 2048,
         "project_review_failures": 2048,
+        "project_transition_history": MAX_TRANSITION_HISTORY,
         "project_expanded_workflow_stages": 4096,
         "project_debug_history_bytes": 128 * 1024 * 1024,
     }
