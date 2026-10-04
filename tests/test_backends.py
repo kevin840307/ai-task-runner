@@ -720,6 +720,39 @@ def test_backend_adapter_owns_model_override(monkeypatch):
     ]
 
 
+def test_opencode_model_override_uses_shared_backend_adapter_contract():
+    args = configure_model_args(
+        "opencode",
+        ["--auto", "--model", "old", "--model=older"],
+        "provider/new-model",
+    )
+
+    assert args == ["--auto", "--model", "provider/new-model"]
+
+
+def test_future_backend_can_own_model_override_without_core_or_ui_branch(monkeypatch):
+    class FutureBackend(BaseBackend):
+        name = "future-agent"
+        default_command = "future-agent"
+
+        @classmethod
+        def configure_model_args(cls, extra_args, model):
+            return [*extra_args, f"--engine={model}"]
+
+        def build_command(self, prompt, session_id):
+            return []
+
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, FutureBackend.name, FutureBackend)
+
+    assert configure_model_args("future-agent", ["--x"], "m-next") == [
+        "--x",
+        "--engine=m-next",
+    ]
+
+
 def test_ai_client_backend_override_uses_target_default_command_and_model(tmp_path):
     from runner.config.runtime import RuntimeConfig
 
