@@ -246,6 +246,16 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
+[x] Fixed timeout/recovery-budget live probe before the next 24H run.
+    - Root cause: timeout_probe configured stage_retries=1 while DEFAULT_PER_SESSION_ATTEMPTS=2,
+      but still required runner.session fresh evidence. The second timeout exhausted the finite
+      retry budget before StageExecutor could rotate to Fresh Session, so the probe contract was impossible.
+    - timeout_probe now uses stage_retries=2:
+      attempt 1 -> same-session retry, attempt 2 -> Fresh Session rotation, attempt 3 -> bounded exhaustion.
+    - Runner retry/session semantics were not changed.
+    - Added deterministic harness coverage locking timeout=1s, retry_delay=0, retries=2 and the
+      DEFAULT_PER_SESSION_ATTEMPTS=2 relationship.
+
 [x] Fixed Review failure-routing live fixture stopping at validate_file FAIL.
     - Root cause: Review FAIL and Qwen Review FAIL both had routes.fail -> execute, but the final
       validate_file Stage had no fail route. Under the current runtime contract FAIL correctly
