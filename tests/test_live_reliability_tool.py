@@ -1356,6 +1356,123 @@ def test_workflow_dryrun_negative_preflight_proves_invalid_and_loop_detection():
     live.workflow_dryrun_negative_preflight()
 
 
+def test_real_session_expiry_evidence_requires_reset_then_fresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    injected = "00000000-0000-0000-0000-000000000000"
+    events = [
+        {
+            "type": "model.result",
+            "session": injected,
+            "error": "session_recovery_action=reset_session",
+        },
+        {
+            "type": "model.prompt",
+            "session": "",
+            "session_mode": "new",
+        },
+        {
+            "type": "model.result",
+            "session": "fresh-session",
+        },
+    ]
+    monkeypatch.setattr(live, "runner_events", lambda project: events)
+
+    live._assert_real_session_expiry_evidence(tmp_path, injected)
+
+
+def test_real_session_expiry_evidence_rejects_missing_fresh_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    injected = "00000000-0000-0000-0000-000000000000"
+    monkeypatch.setattr(
+        live,
+        "runner_events",
+        lambda project: [
+            {
+                "type": "model.result",
+                "session": injected,
+                "error": "session_recovery_action=reset_session",
+            },
+            {
+                "type": "model.prompt",
+                "session": "",
+                "session_mode": "new",
+            },
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="did not continue in a Fresh Session"):
+        live._assert_real_session_expiry_evidence(tmp_path, injected)
+
+
+def test_real_session_expiry_probe_injects_only_primary_durable_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    project = tmp_path / "real-session-expiry-probe"
+    work = project / ".ai-task-runner"
+    work.mkdir(parents=True)
+    workflow = project / "resume-workflow.yaml"
+    workflow.write_text("flow: []\n", encoding="utf-8")
+    original_state = {
+        "run_id": "run",
+        "completed": False,
+        "ai_session_id": "real-session",
+        "stage_sessions": {"role": "role-session"},
+        "workflow_position": 2,
+    }
+    state_path = work / "state.json"
+    state_path.write_text(json.dumps(original_state), encoding="utf-8")
+    captured = {}
+
+    monkeypatch.setattr(
+        live,
+        "_create_resume_probe_fixture",
+        lambda root, name: (project, workflow),
+    )
+    monkeypatch.setattr(
+        live,
+        "_interrupt_resume_checkpoint",
+        lambda config, actual_project, actual_workflow: "real-session",
+    )
+    monkeypatch.setattr(
+        live,
+        "runner_command",
+        lambda config, actual_project, **kwargs: ["resume"],
+    )
+
+    def fake_run(command, log, timeout, observe=None):
+        injected_state = json.loads(state_path.read_text(encoding="utf-8"))
+        captured["state"] = injected_state
+        return 0
+
+    monkeypatch.setattr(live, "run_command", fake_run)
+    monkeypatch.setattr(live, "assert_completed", lambda project, code: None)
+    monkeypatch.setattr(
+        live,
+        "_assert_real_session_expiry_evidence",
+        lambda actual_project, injected: captured.update(
+            {"project": actual_project, "injected": injected}
+        ),
+    )
+
+    live.real_session_expiry_probe(settings(tmp_path), tmp_path)
+
+    assert captured["state"]["ai_session_id"] == "00000000-0000-0000-0000-000000000000"
+    assert captured["state"]["stage_sessions"] == {"role": "role-session"}
+    assert captured["project"] == project
+    assert captured["injected"] == "00000000-0000-0000-0000-000000000000"
+
+
+def test_real_session_expiry_probe_is_in_full_live_order():
+    assert "real-session-expiry" in live.PROBE_ORDER
+    assert live.PROBE_ORDER.index("resume") < live.PROBE_ORDER.index("real-session-expiry")
+    assert live.PROBE_ORDER.index("real-session-expiry") < live.PROBE_ORDER.index("stop-request-resume")
+
+
 def test_stop_request_resume_probe_exercises_detached_ui_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
