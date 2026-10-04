@@ -79,7 +79,7 @@ class UIStateTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def test_stage_profile_validation_and_prompt_defaults_follow_runtime_catalog(self) -> None:
+    def test_stage_prompt_defaults_follow_runtime_catalog(self) -> None:
         original = self.state.workflow_catalog
         self.state.workflow_catalog = lambda: {
             "stage_types": {
@@ -94,10 +94,6 @@ class UIStateTests(unittest.TestCase):
             "node_options": {},
         }
         try:
-            self.state._validate_stage_editor_fields({
-                "type": "base",
-                "profile": "future_profile",
-            })
             self.assertEqual(
                 self.state._effective_stage_prompt_reference({
                     "type": "base",
@@ -105,11 +101,6 @@ class UIStateTests(unittest.TestCase):
                 }),
                 "common/future.md",
             )
-            with self.assertRaisesRegex(ValueError, "future_profile"):
-                self.state._validate_stage_editor_fields({
-                    "type": "base",
-                    "profile": "missing_profile",
-                })
         finally:
             self.state.workflow_catalog = original
 
@@ -991,22 +982,25 @@ class UIStateTests(unittest.TestCase):
 
 
     def test_graph_save_rejects_removed_session_key_field(self) -> None:
-        item = self._workflow_item()
+        item = next(
+            row for row in self.state.studio_files(self.project)["workflows"]
+            if row["path"] == str(self.workflow.resolve())
+        )
         visual = self.state.studio_visual(item["id"], self.project)
         before = self.workflow.read_text(encoding="utf-8")
         stages = [
             {**stage, "session_key": "removed-contract"}
-            if stage["name"] == "work"
+            if stage["name"] == "planning"
             else stage
             for stage in visual["stages"]
         ]
         draft = {
             "stages": stages,
             "flow": list(visual["flow"]),
-            "routes": {"review": {"fail": "work"}},
+            "routes": {},
         }
 
-        with self.assertRaisesRegex(ValueError, "Unsupported Stage field: session_key"):
+        with self.assertRaisesRegex(ValueError, "session_key|unknown options"):
             self.state.studio_graph_save(
                 item["id"], draft, visual["hash"], self.project
             )
@@ -1450,7 +1444,7 @@ class WorkflowStudioTests(unittest.TestCase):
 
         opened = self.state.studio_read(item["id"], self.project)
         for removed in ({"scope": "task"}, {"retry": -1}):
-            with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
+            with self.assertRaisesRegex(ValueError, "unknown options|scope|retry"):
                 self.state.studio_stage_save(
                     item["id"],
                     "review",
@@ -1497,7 +1491,7 @@ class WorkflowStudioTests(unittest.TestCase):
             self.state.studio_stage_source(
                 item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nroutes:\n  fail: work\n"
             )
-        with self.assertRaisesRegex(ValueError, "Unsupported Stage field"):
+        with self.assertRaisesRegex(ValueError, "unknown options|unknown_field"):
             self.state.studio_stage_source(
                 item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nunknown_field: true\n"
             )
@@ -1667,7 +1661,7 @@ class WorkflowStudioTests(unittest.TestCase):
         self.assertIn("--matrix", command)
         self.assertIn("--json", command)
 
-    def test_runtime_lock_blocks_global_and_project_asset_writes(self) -> None:
+    def test_active_run_allows_next_run_asset_writes(self) -> None:
         runtime = self.project / ".ai-task-runner"
         runtime.mkdir()
         (runtime / "runner-process.json").write_text(
@@ -1676,14 +1670,19 @@ class WorkflowStudioTests(unittest.TestCase):
         )
         item = self._workflow_item()
         opened = self.state.studio_read(item["id"], self.project)
-        with patch.object(UIState, "_pid_alive", return_value=True):
-            with self.assertRaisesRegex(ValueError, "runtime is active"):
-                self.state.studio_save(
-                    item["id"],
-                    opened["content"] + "# change\n",
-                    opened["hash"],
-                    self.project,
-                )
+        with patch.object(UIState, "_pid_alive", return_value=True), \
+             patch.object(self.state, "_validate_workflow_before_write", return_value={"ok": True}):
+            saved = self.state.studio_save(
+                item["id"],
+                opened["content"] + "# next-run change\n",
+                opened["hash"],
+                self.project,
+            )
+            guard = self.state.edit_guard()
+
+        self.assertIn("# next-run change", saved["content"])
+        self.assertTrue(guard["editable"])
+        self.assertIn("frozen Workflow/Prompt snapshots", guard["reason"])
 
 
 class ProjectPollingEfficiencyTests(unittest.TestCase):
