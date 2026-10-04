@@ -115,6 +115,45 @@ def test_executor_does_not_retry_configuration_error():
         StageExecutor(Hooks()).run(Broken(), context())
 
 
+
+
+def test_executor_fails_closed_on_unexpected_programming_error():
+    class Broken(Stage):
+        def run(self, ctx, previous=None):
+            raise TypeError("programming bug")
+
+    with pytest.raises(ConfigurationError, match="unexpected TypeError"):
+        StageExecutor(Hooks()).run(Broken(), context())
+
+
+def test_executor_keeps_oserror_recoverable(monkeypatch):
+    class RetryOnce(Stage):
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, ctx, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise PermissionError("temporary file lock")
+            return StageResult(self.name, "pass")
+
+    ctx = context()
+    ctx.config.stage_retries = 1
+    sleeps = []
+    monkeypatch.setattr(
+        StageExecutor,
+        "_sleep",
+        staticmethod(lambda _ctx, seconds: sleeps.append(seconds)),
+    )
+
+    stage = RetryOnce()
+    result = StageExecutor(Hooks()).run(stage, ctx)
+
+    assert result.status == "pass"
+    assert stage.calls == 2
+    assert sleeps == [0.0]
+
+
 def test_executor_preserves_one_lifecycle_for_internal_retries():
     class RetryOnce(Stage):
         def __init__(self):
