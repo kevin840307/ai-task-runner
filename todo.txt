@@ -379,6 +379,22 @@ LIVE REGRESSION NOTES
     - Runner was intentionally not changed; validation FAIL remains semantic routing owned by FlowEngine,
       and no hidden/default validator rollback behavior was introduced.
 
+[x] Hardened raw API-disconnect live injection with a deterministic handshake.
+    - Previous session-only trigger could arm the outage after useful AI work had already completed,
+      producing failures>0 but no required post-outage upstream success (successes_before == successes_after).
+    - The fixture now runs warmup(main session) -> arm(command) -> execute(main session) -> validator.
+    - arm writes api-outage-armed and blocks until the harness writes api-outage-active, so Execute cannot
+      start until the proxy outage is actually active.
+    - The probe fails closed if no request reaches the outage; it does not release an unobserved outage.
+    - Runner retry/routing semantics were intentionally unchanged.
+
+[x] Removed stale structured-output Fresh Session test contracts.
+    - structured_call remains parser/schema correction only and stays in the current Stage session.
+    - Removed tests that still passed fresh_ask / structured_fresh_retries after those contracts were deleted.
+    - Recovery coverage now reflects current ownership: structured repair exhausts -> StageExecutor performs
+      bounded Same Session retry -> Fresh Session rotation after the shared per-session budget.
+    - Production structured.py was not widened to satisfy stale tests.
+
 RUNNER PRINCIPLE REVIEW (2026-10-04)
 ------------------------------------
 [x] StageExecutor changes remain technical only:
