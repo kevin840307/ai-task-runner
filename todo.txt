@@ -205,11 +205,12 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Dry Run verifies a Plan Stage backend/model pair stays on the Plan Stage and is absent from generated child Stages, reusing production PlanStage.finish() + FlowEngine.
     - Resume/session deterministic coverage remains Stage-local; model override does not mutate global client/session configuration.
     - Removed legacy Studio field structured_fresh_retries remains absent.
-    - Committed ui/static/workflow-studio-app bundle is still stale until the final generated bundle is rebuilt from the stabilized Studio source.
+    - Committed ui/static/workflow-studio-app bundle is synchronized from the CI-generated Studio build; final bundle verification is green.
     - Real-Qwen Stage Probe already discovers the active model and verifies production model events report the selected Stage backend/model.
     - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
-    - Exact source HEAD cb7a13322ce173f868b9010976529ba45a3cc6bf passed Ubuntu deterministic tests, Windows deterministic tests, and Chromium Browser E2E; Studio source build also succeeded and failed only the committed generated-bundle equality check.
-    - Keep this unchecked until generated Studio bundle + enabled real-backend evidence are green on the final exact HEAD.
+    - Exact runtime/UI HEAD b16b0f5efb8c8b924d99050fe00975d3fcbbb591 passed Ubuntu full Python, Windows full Python, Chromium Browser E2E and Studio committed-bundle verification.
+    - CI-generated bundle contains models=1 backend/model discovery plus effective_backend/effective_model Stage Test result rendering.
+    - Keep this unchecked only for the remaining enabled real-OpenCode Stage backend/model evidence on Windows; deterministic/UI/dry-run/bundle gates are green.
     - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
@@ -627,14 +628,14 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 
 RELEASE GATES
 -------------
-[ ] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on code HEAD 5bfc24e7ed448a6976771077f0f001ec2ac51427.
-    - [x] Windows Python full suite green on the same code HEAD.
-    - [x] Playwright/Chromium Browser E2E green on the same code HEAD.
+[x] Same/current runtime+UI HEAD deterministic CI green:
+    - [x] Ubuntu Python full suite green on runtime/UI HEAD b16b0f5efb8c8b924d99050fe00975d3fcbbb591.
+    - [x] Windows Python full suite green on the same runtime/UI HEAD.
+    - [x] Playwright/Chromium Browser E2E green on the same runtime/UI HEAD.
     - [x] Studio source build succeeds.
-    - [x] Live backoff evidence changes also passed Ubuntu, Windows and Browser E2E on the same source HEAD.
-    - [ ] Committed ui/static/workflow-studio-app bundle verify is still stale.
-          CI build artifact is valid; sync the committed bundle during final Studio batch/release cleanup.
+    - [x] Committed ui/static/workflow-studio-app bundle verify is green on the same runtime/UI HEAD.
+    - [x] Generated bundle was produced by the same npm ci + Rollup-native dependency + npm run build path as CI; the one-time sync workflow was removed after use.
+    - Note: this todo-only evidence update follows the green runtime/UI HEAD and does not alter runtime/UI code.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
