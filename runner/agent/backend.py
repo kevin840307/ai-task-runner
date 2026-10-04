@@ -215,6 +215,11 @@ class BaseBackend(ABC):
         return ""
 
     @classmethod
+    def available_models(cls, root: Path) -> list[str]:
+        """Return selectable model ids for this backend in the current project."""
+        return []
+
+    @classmethod
     def configure_model_args(
         cls,
         extra_args: Sequence[str],
@@ -452,6 +457,10 @@ def model_from_args(
     return _backend_type(name).model_from_args(extra_args)
 
 
+def available_models(name: str, root: Path) -> list[str]:
+    return _backend_type(name).available_models(root)
+
+
 def configure_sandbox_args(
     name: str,
     extra_args: Sequence[str],
@@ -492,6 +501,7 @@ __all__ = [
     "BackendMode",
     "BackendResult",
     "BaseBackend",
+    "available_models",
     "backend_names",
     "configure_backend_args",
     "configure_model_args",
