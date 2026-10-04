@@ -288,11 +288,9 @@ flow:
                 modal = page.locator(".stage-editor-modal")
                 modal.wait_for(state="visible")
 
-                # Execution parameters are catalog-driven. OpenCode must be available
-                # without a provider-specific Designer branch.
-                execution_tab = page.get_by_role("tab", name="執行")
-                if execution_tab.count():
-                    execution_tab.click()
+                # Execution target is a first-class Stage section. It must be visible
+                # immediately and remain catalog-driven, without provider-specific UI branches.
+                page.locator(".stage-execution-target").wait_for(state="visible")
                 backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
                 model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
                 backend_select = backend_field.locator("select")
@@ -337,9 +335,7 @@ flow:
                 )
                 page.locator('.react-flow__node[data-id="worker"]').dblclick()
                 modal = page.locator(".stage-editor-modal")
-                execution_tab = page.get_by_role("tab", name="執行")
-                if execution_tab.count():
-                    execution_tab.click()
+                page.locator(".stage-execution-target").wait_for(state="visible")
                 backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
                 model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
                 assert backend_field.locator("select").input_value() == "qwen"
@@ -1060,6 +1056,85 @@ flow:
             server.server_close()
             thread.join(timeout=5)
 
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_stage_test_displays_effective_backend_model_not_fallback() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-stage-effective-backend-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "effective-backend.yaml"
+        workflow.write_text(
+            """stages:
+  worker:
+    type: base
+    profile: generic
+    backend: opencode
+    model: provider/model-x
+flow:
+  - worker
+""",
+            encoding="utf-8",
+        )
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        state = server.RequestHandlerClass.state
+
+        def fake_stage_test(*args, **kwargs):
+            return {
+                "ok": True,
+                "stage": "worker",
+                "status": "pass",
+                "output": "ok",
+                "data": {},
+                "next": "done",
+                "route": "next",
+                "kind": "generic",
+                "changed_files": [],
+                "effective_backend": "opencode",
+                "effective_model": "provider/model-x",
+            }
+
+        state.studio_stage_test = fake_stage_test
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "effective-backend.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                modal = page.locator(".stage-editor-modal")
+                modal.wait_for(state="visible")
+                page.locator('[data-inspector-tab="test"]').click()
+
+                fallback = modal.locator("label").filter(has=page.get_by_text("Fallback Backend", exact=True)).locator("select")
+                fallback.select_option("qwen")
+                page.get_by_role("button", name="執行 Real Stage").click()
+                result = page.locator(".test-result")
+                result.wait_for(state="visible")
+                assert "Backend：opencode" in result.inner_text()
+                assert "Model：provider/model-x" in result.inner_text()
+                assert "Backend：qwen" not in result.inner_text()
+
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
