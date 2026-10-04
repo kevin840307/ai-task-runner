@@ -1,4 +1,4 @@
-from runner.runtime.view import build_runtime_view
+from runtime_view import build_runtime_view
 
 
 def test_runtime_view_status_and_actions_matrix():
