@@ -44,6 +44,10 @@ def test_plan_expands_multiple_execute_review_pairs_before_parent_continues() ->
         ]
         assert [task.status for task in ctx.state.tasks] == ["completed", "completed"]
         assert ctx.state.expanded_workflow
+        assert ctx.state.stage_sessions == {}
+        assert ctx.state.review_failures == {}
+        assert ctx.state.dynamic_groups == {}
+        assert ctx.state.dynamic_task_groups == {}
     finally:
         _close(ctx)
 
