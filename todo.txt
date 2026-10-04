@@ -218,6 +218,62 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
+P0.7 - HIGH-CP UX / 24H STABILITY WORK
+--------------------------------------
+Do these only if they stay projections/adapters over the existing runtime. Do not add another
+state machine, recovery engine, history store, or canonical Workflow representation.
+
+[ ] Canonical Runtime View + allowed actions
+    - Add one Runner-owned/UI-consumable runtime projection for status, attention reason,
+      current Stage/Task/cycle/progress, recovery detail and allowed actions.
+    - Main UI/sidebar must render the projection instead of independently re-deriving
+      Running / Recovering / Stopped / Completed / Needs Attention from raw flags.
+    - Run / Stop / Resume / Reset / Rerun availability must come from the same projection so
+      polling races cannot make different surfaces briefly disagree.
+    - This is a projection only; RunState/Supervisor remain authoritative and no second state machine is allowed.
+    - Cover stale heartbeat, user stop, technical recovery, semantic fail-closed, completed and idle cases.
+
+[ ] Server-side action guard for stale/double UI actions
+    - Treat browser button disabling as UX only; backend must fail closed if a stale tab or double click
+      attempts an invalid Run / Resume / Rerun / Reset transition.
+    - Reuse existing process ownership + durable runtime state; do not add a second lock/ownership layer.
+    - Stop should remain safe/idempotent where practical.
+    - Add deterministic concurrency/race regressions for duplicate launch, resume while already running,
+      rerun while active and reset while owned by a live worker.
+    - Goal: UI polling lag must never be able to create two active workers or corrupt resumable state.
+
+[ ] Actionable Needs Attention / Recovery UX
+    - Runtime projection should provide a concise reason + recommended actions, not only a status label.
+    - Examples: semantic FAIL with no route -> Open Workflow / View Trace; stale worker -> Resume / Reset;
+      user stop -> Continue / Reset; technical retry -> show mode/count/wait without marking fatal.
+    - Reuse existing transition/recovery/ownership evidence; no new error/history store.
+    - Keep the common Running/Completed path compact and show details only when useful.
+
+[ ] Active Run snapshot visibility
+    - Show the configuration the current Run actually started with: Workflow snapshot/name,
+      backend/model, readonly policy, run id/start time and current effective Stage backend/model where available.
+    - Values must come from the frozen/durable Run request/resources, never from the editor's current selection.
+    - Keep the summary compact with expandable details so users can answer "what is this 24H run actually using?"
+      without inspecting files/logs.
+    - Must not permit editing the active Run through this view; changes apply only to a future Run.
+
+[ ] Make Stage Studio presentation metadata catalog-driven
+    - Remove frontend-owned Stage/profile knowledge where the canonical Stage catalog can provide it:
+      parameter section/order/visibility and isolated Stage-Test PASS/FAIL example metadata.
+    - Plugin/custom Stages should appear correctly without adding provider/Stage-name branches to Studio.
+    - Keep layout/rendering decisions in Studio; catalog provides metadata/semantics only, not UI HTML.
+    - Preserve YAML as canonical and keep backend/schema validation authoritative.
+    - Do not build a generic form framework beyond the fields already needed by Stage options.
+
+[ ] Reduce long-running UI polling duplication
+    - Active Project runtime polling should also update that Project's sidebar status; project-status polling
+      should focus on non-active Projects instead of re-fetching the same active state.
+    - Poll Studio guard/catalog only while the relevant Workflows/Prompts/Studio surface is active where safe.
+    - Keep current non-overlapping polling and visibility throttling; do not introduce WebSocket/SSE solely for this.
+    - Add browser/backend regression proving project switches and hidden-tab wakeups do not apply stale responses
+      to the newly selected Project.
+    - Goal: lower 24H UI/server churn without weakening freshness or ownership detection.
+
 P1 - UI / UX USEFUL AFTER P0
 -----------------------------
 [x] Runtime Trace
