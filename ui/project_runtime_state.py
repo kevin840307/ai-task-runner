@@ -661,6 +661,8 @@ class ProjectRuntimeMixin:
                 {
                     "stage": str((state.get("transition_previous") or {}).get("stage") or ""),
                     "status": str((state.get("transition_previous") or {}).get("status") or ""),
+                    "target": str((state.get("transition_previous") or {}).get("target") or ""),
+                    "kind": str((state.get("transition_previous") or {}).get("kind") or ""),
                 }
                 if isinstance(state.get("transition_previous"), dict)
                 else {}
