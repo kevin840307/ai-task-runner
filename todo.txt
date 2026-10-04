@@ -789,6 +789,257 @@ High-value runner work remaining:
       stage_sessions/review_failures and process-local stage_session caches.
     - Do not merge FlowEngine and StageExecutor for code-count reduction.
 
+FINAL OPTIMIZATION PASS - FREEZE AFTER THIS
+==========================================
+This is the final proactive architecture/UI optimization pass before release acceptance.
+After these items are completed, do not continue refactoring merely because another abstraction,
+cleanup or UI idea is possible. Reopen architecture work only for a reproduced reliability bug,
+a clear user-facing usability failure, or a proven extension requirement.
+
+Priority order:
+1. 24H unattended completion/recovery correctness.
+2. UI/UX clarity, low operator error and easy understanding of current Run state.
+3. One canonical owner for domain behavior; lower coupling and fewer unnecessary hardcodes.
+4. Maintainability / production-code simplification where it does not weaken clarity or reliability.
+
+Production-code size notes below intentionally exclude test code. Tests are still mandatory and must
+follow the production contract rather than reimplementing it.
+
+Final-pass rules:
+- Prefer deleting duplicate state/policy before adding abstractions.
+- A new abstraction is justified only when it clearly lowers ownership count, coupling, failure risk,
+  or repeated production logic.
+- Domain capabilities/semantics have one canonical production owner. UI may project them, but must not
+  independently redefine Stage/Profile/Backend/Session behavior.
+- Presentation choices remain UI-owned; do not build a metadata-driven generic UI framework for colors,
+  layout, spacing, keyboard shortcuts or other purely visual decisions.
+- Do not add another state machine, recovery engine, Workflow representation, history store or generic DAG runtime.
+- Do not merge FlowEngine and StageExecutor merely to reduce LOC.
+- Do not split files/components merely to make files smaller; split only at a real responsibility boundary.
+- Keep YAML canonical, StageExecutor technical, FlowEngine semantic, StateStore durable, and Stage work-only.
+
+P0 - FINAL 24H RELIABILITY / RUNTIME SIMPLIFICATION
+---------------------------------------------------
+
+[ ] Simplify StageExecutor recovery branches without changing semantics
+    - Remove duplicate Same Session / Fresh Session decision code shared by transient and normal technical errors.
+    - Keep partial-write recovery explicit: preserve maintained-source changes and rotate only the affected Stage session.
+    - Keep outage-scoped exponential backoff for transient service failures; Fresh Session rotation must not reset outage backoff.
+    - Keep unlimited retry positive-delay safety floor and bounded per-session attempts.
+    - Prefer one small helper/pure calculation over RecoveryManager/Strategy/Factory class hierarchies.
+    - StageExecutor must remain readable as one obvious attempt -> classify -> recover -> wait loop.
+    - Production-code target: normally net reduction (~20-50 lines), but correctness/readability wins over the target.
+    - Regression/live contracts for 429/502/503/raw disconnect/partial write/session rotation must remain unchanged.
+
+[ ] Audit deterministic-vs-recoverable technical error boundary
+    - No unknown programming/config/state/snapshot corruption should silently enter infinite retry.
+    - Known service/backend/session/timeout failures that are actually recoverable remain unattended-retry capable.
+    - ConfigurationError and equivalent deterministic failures stay fail-closed.
+    - KeyboardInterrupt/SystemExit behavior must remain unchanged.
+    - Reuse the existing error boundary; do not create a large error taxonomy/framework.
+    - Add only the smallest production classification change needed for ambiguous current cases.
+
+[ ] Centralize active Run lifecycle cleanup ownership
+    - Audit every production mutation/cleanup of ai_session_id, stage_sessions, review_failures,
+      dynamic_groups, dynamic_task_groups, task bindings, active process/control ownership and completion flags.
+    - Prefer lifecycle owners such as start_run / finish_task / finish_run / reset over scattered cleanup.
+    - Supervisor remains process-level only and must not duplicate Stage/session policy.
+    - Completed state may retain bounded semantic/debug evidence but must not retain active-only technical state.
+    - Remove duplicate cleanup code when an existing lifecycle owner can own it.
+    - Goal: fewer stale-session/dynamic/ownership leaks across stop/crash/resume/complete.
+
+[ ] Add a small Resume integrity fail-closed check only where current state validation is insufficient
+    - Before continuing a durable Resume, verify only invariants required for safe continuation:
+      current Workflow position/Stage, frozen Workflow/resources, dynamic child references/task binding,
+      and live ownership consistency.
+    - Corrupt/deterministically inconsistent state becomes Needs Attention instead of retrying forever
+      or continuing from an ambiguous position.
+    - Reuse existing Workflow loader/state/process ownership evidence.
+    - Do not create a second StateStore schema, migration framework or generic invariant engine.
+    - This item may intentionally add production code (~30-70 lines) because preventing corrupt Resume
+      has direct 24H value.
+    - If current code already proves every listed invariant centrally, document the evidence and do not add code.
+
+[ ] Confirm dynamic child expansion has one generic production path
+    - Any Stage may return tasks/stages; Plan remains only one producer.
+    - Plan/custom/plugin/command producers must converge on the same StageResult -> expand_stage_result ->
+      FlowEngine execution path.
+    - Remove producer-type branches from Core if they duplicate generic expansion behavior.
+    - Child cleanup/resume must remain generic and bounded.
+    - Do not create Plan-specific Runner semantics merely for convenience.
+
+[ ] Reduce BaseStage/Profile double ownership
+    - Review Loader/profile normalization versus BaseStage.__init__ profile interpretation.
+    - Profile defaults/semantics should have one canonical owner; BaseStage should execute a normalized AI Stage
+      rather than redundantly re-derive Execute/Review defaults where practical.
+    - Do not restore separate ExecuteStage/ReviewStage public runtime types.
+    - Preserve genuine runtime-only differences where normalization cannot own them cleanly.
+    - Accept small production-code growth when it removes duplicated ownership; avoid abstraction layers with no caller benefit.
+
+P0.5 - FINAL UI/UX SIMPLIFICATION
+---------------------------------
+Goal: a new user should understand what is running, whether action is required, and how to edit/test a
+Workflow without understanding Runner internals.
+
+[ ] Make Tasks/Chat the single compact Run Console
+    - Keep one primary runtime summary instead of adding Dashboard/Monitoring pages.
+    - At a glance show human-readable state + current Stage/Task/progress/elapsed/recovery when relevant.
+    - Common examples:
+        Running · Execute · Task 3/8
+        Recovering · HTTP 503 · retry 3 · next attempt 8s · No action required
+        Needs Attention · Review FAIL has no route
+    - Detailed run id/session/backend/model/cycle/snapshot remains available behind compact details.
+    - Continue consuming the canonical Runtime View; do not re-derive runtime state in UI.
+
+[ ] Make active Run snapshot vs editor state unmistakable
+    - Clearly distinguish the frozen Workflow/config used by the active Run from current editor/draft changes.
+    - Edits during an active Run must visibly say they apply to the next Run.
+    - Reuse existing frozen/durable run snapshot evidence; no second snapshot store.
+    - This is primarily presentation/guard UX, not new runtime behavior.
+
+[ ] Simplify Workflow canvas Nodes to topology-first information
+    - Default Node should emphasize Stage type/name and PASS/FAIL/HANDOFF topology.
+    - Runtime status may appear while a Run is active.
+    - Move verbose retry/backend/model/session/dynamic configuration details to Stage Settings/details.
+    - Keep only high-value semantic badges such as Dynamic / Fail-soft / disconnected when they prevent confusion.
+    - Goal: users read the Workflow graph as a process, not as a configuration dump.
+    - Prefer deleting JSX/CSS/state over adding decorative UI.
+
+[ ] Make Stage Settings progressively disclose advanced options
+    - Common AI Stage path should fit into a simple Content + Execution experience.
+    - Review-specific semantic FAIL / technical ERROR policy appears only when relevant.
+    - Rare/internal fields stay under Advanced instead of competing with Prompt/Backend/Model/Session.
+    - Preserve Form/YAML/Routing/Test as views of the same Stage draft.
+    - Visibility/order should come from canonical catalog metadata where it is domain-specific;
+      presentation/layout remains Studio-owned.
+
+[ ] Simplify Stage Test mental model
+    - Present execution method and input scenario as separate concepts.
+    - Preferred model:
+        Mode: Real Stage / Agent Ping / Mock Technical Error
+        Input
+        PASS / FAIL examples as input-fill shortcuts
+        Run / Stop
+    - Do not make PASS/FAIL look like separate execution engines.
+    - Continue using the existing disposable Stage-test execution path; no second runtime.
+
+[ ] Re-evaluate Stage Palette complexity against current Stage count
+    - If Favorites/Recent/multiple built-in groups add more navigation than value for the current small Stage set,
+      simplify to Search + core Stages + Extensions.
+    - Keep category/favorites/recent only if they materially improve use with installed plugin Stage counts.
+    - Avoid maintaining localStorage/UI machinery for speculative future scale.
+    - This is a UX/code-reduction decision based on current usage, not a requirement to delete features blindly.
+
+[ ] Keep Workflow/Prompt libraries task-focused and visually light
+    - Workflow high-frequency actions: open, new, Show/Hide in Chat; secondary actions stay in context menus.
+    - Prompt high-frequency actions: edit, Used By impact, save; variable insertion/large usage detail should not dominate.
+    - Do not add Dashboard, analytics, tags/collections, activity feed or platform-scale navigation.
+    - Preserve current unsaved protection, search, keyboard accessibility and project context.
+
+P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
+----------------------------------------------------
+
+[ ] Make Stage Catalog the canonical Studio domain metadata source
+    - Remove frontend-owned STAGE_META / built-in Stage type/category fallback knowledge where the backend
+      Stage catalog already provides title/description/category/options/defaults/profile/test/dynamic metadata.
+    - Plugin/custom Stage should appear without editing Studio Stage-name/type branches.
+    - Studio owns rendering/layout only.
+    - Do not make the UI unusable when catalog loading fails: fail visibly/closed rather than inventing provider/Stage semantics.
+    - Production code should normally shrink because duplicate frontend metadata is removed.
+
+[ ] Canonicalize Profile/Stage semantic knowledge
+    - Remove repeated production definitions such as hardcoded generic/execute/review lists when profile_names()
+      or equivalent canonical metadata already exists.
+    - Centralize the minimum semantic identity needed for Review/Execute behavior instead of repeatedly testing
+      type=base + profile=review across unrelated modules.
+    - FlowEngine may still own Review fail-soft routing semantics; Stage/Profile metadata owns what a Review profile is.
+    - Do not introduce ReviewStrategy/Policy/Handler class stacks.
+
+[ ] Remove unnecessary generic-layer backend/provider hardcodes
+    - Generic Runner/UI/Studio code must not branch on qwen/opencode or hardcode model ids.
+    - Backend adapters/registry own command construction, model discovery and provider-specific behavior.
+    - Generic catalog/UI should consume registry capabilities.
+    - Keep adapter-local provider hardcodes where they are the correct owner.
+
+[ ] Project Backend/Model/Session constraints instead of reimplementing them in Studio
+    - Runtime/schema remains authoritative for backend+model atomic pair and session incompatibilities.
+    - If UI currently duplicates these rules, expose the smallest catalog constraint metadata necessary
+      for disable/help behavior.
+    - Do not invent a generic validation DSL.
+    - Small production-code growth is acceptable if it removes duplicate runtime policy from frontend.
+
+[ ] Audit React state ownership and remove duplicate derived state
+    - Classify Studio state as Server / Canonical draft / Ephemeral UI / Derived.
+    - A value derivable from the canonical Workflow draft should not also become an independently authoritative state.
+    - Focus especially on visual/nodes/edges/YAML/selected Stage/dirty/saved representations.
+    - Remove bidirectional synchronization paths that can create stale Designer/YAML/Undo/selection behavior.
+    - Async Project/Workflow responses must remain guarded against stale application after navigation.
+    - This is a correctness/UX cleanup, not merely a LOC exercise.
+
+[ ] Centralize Workflow graph mutations as pure model operations where currently scattered
+    - Add/remove/duplicate/paste/connect/disconnect/retarget/flow ordering/Handoff target changes should use
+      one small group of pure Workflow-draft transformations.
+    - React event handlers should not independently understand YAML routing semantics.
+    - Reuse canonical backend validation at Save; pure UI graph mutations do not replace schema validation.
+    - Accept small production-code growth if it materially reduces mutation entry points/coupling.
+
+[ ] Split Workflow Studio source only at real responsibility boundaries
+    - main.tsx may move pure responsibilities such as graphModel, draftStorage, studioApi/catalog helpers and i18n
+      into focused modules if that reduces unrelated-change coupling.
+    - Do not fragment tiny visual components merely to reduce file length.
+    - Do not create wrapper modules that only rename one function call.
+    - Success is fewer responsibilities in main.tsx, not a specific file count or LOC target.
+
+[ ] Repo-wide canonical-data / legacy / dead-code audit
+    - Search production source, UI, docs, examples, fixtures and maintained scripts for removed contracts and stale names:
+      scope/task_step/public task-review types/routes.error/recover/restart_at/repeat/max_attempts/
+      execution_mode/repair runtime/Discussion compatibility and obsolete structured-session contracts.
+    - Distinguish harmless historical/example wording from an active compatibility contract, but rename misleading
+      maintained examples when their names imply a removed runtime feature.
+    - Remove unused wrappers/helpers/flags/fallbacks with no active caller.
+    - Do not keep compatibility layers "just in case".
+
+P1.5 - FINAL PRODUCTION-CODE SIMPLIFICATION CHECK
+-------------------------------------------------
+[ ] Review production code for simple deletion opportunities after the ownership work
+    - Pass-through wrappers with no policy.
+    - Duplicate catalog/schema/profile defaults.
+    - Duplicate UI state/formatting paths.
+    - Dead API routes or server helpers with no maintained caller.
+    - Repeated lifecycle/session/recovery cleanup.
+    - Speculative UI machinery with no current use.
+    - Keep code when an explicit boundary improves testability, plugin isolation or 24H reliability.
+    - Production LOC is an observation, not the success metric; tests are excluded from this size assessment.
+
+FINAL OPTIMIZATION ACCEPTANCE
+-----------------------------
+Do not mark this pass complete until:
+- StageExecutor/FlowEngine/StateStore/Supervisor ownership remains unchanged in principle.
+- No second retry/recovery/state/workflow engine exists.
+- Resume cannot knowingly continue from a deterministically inconsistent durable state.
+- Dynamic child producers share the generic expansion path.
+- Active-only session/dynamic/process state is cleaned by clear lifecycle owners.
+- Studio does not redeclare canonical Stage/Profile/Backend domain capabilities that the catalog/registry owns.
+- Workflow editor has one clear canonical draft ownership model; derived graph state does not become a second source of truth.
+- Canvas and Stage Settings are simpler to read/use than before at supported desktop resolutions.
+- Stage Test semantics are obvious without understanding Runner internals.
+- No removed public contract/compatibility layer is restored.
+- Ubuntu + Windows deterministic suites, Browser E2E and Studio build/bundle checks are green on the final exact HEAD.
+- Real-Qwen 0.5H/high-density/24H gates below still pass after this optimization work.
+
+OPTIMIZATION FREEZE
+-------------------
+[ ] Freeze proactive architecture/UI optimization after this pass
+    - Once FINAL OPTIMIZATION ACCEPTANCE and the release gates are green, do not continue cleanup/refactor work
+      solely to reduce LOC, split files, generalize abstractions or copy features from n8n/Langflow/Flowise/Dify.
+    - Future changes require one of:
+        1. reproduced reliability/24H failure,
+        2. clear repeated user/operator UX failure,
+        3. concrete plugin/backend/Stage extension need,
+        4. measured performance/resource problem.
+    - Prefer shipping/stabilizing the current small product over perpetual architecture churn.
+
+
 REAL BACKEND GATE
 -----------------
 The release is not complete until real-Qwen gates below are green. Deterministic CI alone is insufficient.
