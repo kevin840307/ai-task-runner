@@ -1,0 +1,39 @@
+name: Studio Bundle Sync Once
+
+on:
+  push:
+    branches: [minimal-closed-loop-runtime]
+    paths:
+      - ".github/workflows/studio-sync-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: minimal-closed-loop-runtime
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/studio-src/package-lock.json
+      - name: Build Studio
+        working-directory: ui/studio-src
+        run: |
+          npm ci
+          ROLLUP_VERSION=$(node -p "require('./node_modules/rollup/package.json').version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@$ROLLUP_VERSION"
+          npm run build
+      - name: Commit generated bundle and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/studio-sync-once.yml
+          git add -A ui/static/workflow-studio-app
+          git commit -m "Rebuild Workflow Studio bundle"
+          git push origin HEAD:minimal-closed-loop-runtime
