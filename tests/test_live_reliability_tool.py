@@ -2504,3 +2504,27 @@ def test_run_command_observer_gets_final_scan_after_process_exit(tmp_path: Path)
     assert code == 0
     assert observed
     assert "done" in observed[-1]
+
+
+
+def test_relative_existing_path_accepts_filesystem_alias(tmp_path: Path):
+    real_root = tmp_path / "real-root"
+    work = real_root / ".ai-task-runner" / "stage-tests" / "abc"
+    work.mkdir(parents=True)
+    alias = tmp_path / "root-alias"
+    try:
+        alias.symlink_to(real_root, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("directory symlink unavailable")
+
+    assert live.relative_existing_path(work, alias) == ".ai-task-runner/stage-tests/abc"
+
+
+def test_relative_existing_path_rejects_unrelated_existing_path(tmp_path: Path):
+    root = tmp_path / "root"
+    other = tmp_path / "other"
+    root.mkdir()
+    other.mkdir()
+
+    with pytest.raises(ValueError):
+        live.relative_existing_path(other, root)
