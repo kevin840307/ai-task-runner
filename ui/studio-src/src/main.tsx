@@ -142,7 +142,7 @@ type PathTestResult = {
 
 type InspectorTab = "form" | "yaml" | "routing" | "test";
 type WorkflowEditorView = "designer" | "yaml";
-type StageTestMode = "stage" | "agent_ping";
+type StageTestMode = "stage" | "agent_ping" | "mock_error";
 type ParameterSection = "content" | "execution" | "result" | "advanced";
 
 type DesignerLanguage = "zh-TW" | "en";
@@ -157,12 +157,11 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     close: "關閉", duplicate: "複製積木", remove: "移除積木", draft_only: "修改先存為草稿",
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
-    fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
+    fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping", run_error: "執行 Mock ERROR",
     testing: "測試中…", stop_test: "停止測試", test_stopped: "測試已停止", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
-    favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
+    extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
     copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS 範例", test_fail: "FAIL 範例", test_error: "Mock ERROR",
-    group_build: "建立與執行", group_validate: "檢查與驗證", group_handoff: "協作", group_tools: "工具",
     disconnected: "未連線", fail_soft_next: "下次 Pass",
     undo_none: "沒有可復原的 Workflow 修改。", undo_done: "已復原上一個 Workflow 草稿修改。",
     redo_none: "沒有可重做的 Workflow 修改。", redo_done: "已重做上一個 Workflow 草稿修改。",
@@ -201,12 +200,11 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     close: "Close", duplicate: "Duplicate", remove: "Remove", draft_only: "Changes stay in draft",
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
-    fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
+    fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping", run_error: "Run Mock ERROR",
     testing: "Testing…", stop_test: "Stop Test", test_stopped: "Test stopped", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
-    favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
+    extensions: "Extensions", add_stage_dialog: "Add Stage",
     copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS example", test_fail: "FAIL example", test_error: "Mock ERROR",
-    group_build: "Build & Execute", group_validate: "Review & Validate", group_handoff: "Collaboration", group_tools: "Tools",
     disconnected: "Disconnected", fail_soft_next: "Next entry passes",
     undo_none: "No Workflow change to undo.", undo_done: "Undid the previous Workflow draft change.",
     redo_none: "No Workflow change to redo.", redo_done: "Redid the previous Workflow draft change.",
@@ -249,7 +247,7 @@ function designerText(key: string): string {
 
 const AGENT_PING_PROMPT = "Reply with exactly AGENT_PING_OK and nothing else. Do not use tools, do not modify files, and do not inspect the project.";
 
-type StageTestScenario = "pass" | "fail" | "error";
+type StageTestScenario = "pass" | "fail";
 type DesignerConfirmDialog = {
   title: string;
   message: string;
@@ -363,13 +361,6 @@ const nodeTypes = {
   terminal: TerminalNode,
   stage: StageNode,
 };
-
-const PALETTE_SECTIONS: { id: string; icon: string }[] = [
-  { id: "build", icon: "✦" },
-  { id: "validate", icon: "✓" },
-  { id: "handoff", icon: "↔" },
-  { id: "tools", icon: "›" },
-];
 
 function catalogStageMeta(catalog: Catalog | null, type: string) {
   const meta = catalog?.stage_types?.[type];
@@ -1247,7 +1238,7 @@ function App() {
         body: JSON.stringify({
           id: visual.id, project: query().project, stage: draft.name, input: testInput,
           backend: testBackend, probe_mode: testMode,
-          test_scenario: testMode === "stage" ? (testScenario === "error" ? "error_mock" : testScenario) : "pass",
+          test_scenario: testMode === "mock_error" ? "error_mock" : testMode === "stage" ? testScenario : "pass",
           graph: graphDraft(visual), test_id: testId,
         }),
       });
@@ -1815,26 +1806,17 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                   onClick={(event) => { event.stopPropagation(); void addStage(type); }}>＋</button>
               </div>;
             };
-            const groups: { id: string; title: string; icon: string; types: string[] }[] = [];
-            PALETTE_SECTIONS.forEach((section) => {
-              const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === section.id && matches(type));
-              if (types.length) groups.push({ id: section.id, title: tx(`group_${section.id}`), icon: section.icon, types });
-            });
-            const customCategories = Array.from(new Set(
-              allTypes.map((type) => catalogStageMeta(catalog, type).category)
-                .filter((category) => category && category !== "extensions" && !PALETTE_SECTIONS.some((section) => section.id === category))
-            ));
-            customCategories.forEach((category) => {
-              const types = allTypes.filter((type) => catalogStageMeta(catalog, type).category === category && matches(type));
-              if (types.length) groups.push({ id: `plugin:${category}`, title: category, icon: "◇", types });
-            });
+            const stageTypes = allTypes.filter((type) => catalogStageMeta(catalog, type).category !== "extensions" && matches(type));
             const extensionTypes = allTypes.filter((type) => catalogStageMeta(catalog, type).category === "extensions" && matches(type));
-            if (extensionTypes.length) groups.push({ id: "extensions", title: tx("extensions"), icon: "◇", types: extensionTypes });
+            const groups = [
+              ...(stageTypes.length ? [{ id: "stages", title: "Stages", types: stageTypes }] : []),
+              ...(extensionTypes.length ? [{ id: "extensions", title: tx("extensions"), types: extensionTypes }] : []),
+            ];
             return groups.map((group) => <div className="palette-section" key={group.id}>
               <div className="palette-section-head static">
                 <span>{group.title}</span><small>{group.types.length}</small>
               </div>
-              <div className="palette-list">{group.types.map((type) => item(type, group.icon))}</div>
+              <div className="palette-list">{group.types.map((type) => item(type, "◇"))}</div>
             </div>);
           })()}
           <div className="palette-note compact"><small>{tx("drag_hint")} · ＋ / = quick add · Enter = edit · Ctrl+Z/Y = undo/redo</small></div>
@@ -1920,7 +1902,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
               }).map((type) => {
                 const meta = catalogStageMeta(catalog, type);
                 return <button type="button" key={type} data-stage-type={type} onClick={() => { setAddStageOpen(false); void addStage(type, pendingEdgeCreate?.position); }}>
-                  <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.id === catalogStageMeta(catalog, type).category)?.icon || "◇"}</span>
+                  <span className={`palette-icon type-${type}`}>◇</span>
                   <span><strong>{meta.title}</strong><small>{meta.description}</small></span><b>＋</b>
                 </button>;
               })}
@@ -2261,6 +2243,8 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     onClick={() => { setTestMode("stage"); setTestResult(null); setTestError(""); }}>Real Stage</button>
                   <button type="button" role="tab" aria-selected={testMode === "agent_ping"} className={testMode === "agent_ping" ? "active" : ""}
                     onClick={() => { setTestMode("agent_ping"); setTestResult(null); setTestError(""); }}>Agent Ping</button>
+                  <button type="button" role="tab" aria-selected={testMode === "mock_error"} className={testMode === "mock_error" ? "active" : ""}
+                    onClick={() => { setTestMode("mock_error"); setTestResult(null); setTestError(""); }}>Mock Technical Error</button>
                 </div>
                 <label><span>{testMode === "stage" ? "Fallback Backend" : "Backend"}</span><select value={testBackend} onChange={(e) => setTestBackend(e.target.value)}>
                   {(backendCatalog.backends || []).map((name) => <option key={name} value={name}>{name}{name === backendCatalog.default ? "（default）" : ""}</option>)}
@@ -2268,10 +2252,10 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {testMode === "stage"
                   ? <label><span>{tx("stage_input")}</span>
                       <div className="test-scenario-tabs" role="group" aria-label="Stage test prompt scenario">
-                        {(["pass", "fail", "error"] as StageTestScenario[]).map((scenario) => <button type="button" key={scenario}
+                        {(["pass", "fail"] as StageTestScenario[]).map((scenario) => <button type="button" key={scenario}
                           className={testScenario === scenario ? `active scenario-${scenario}` : `scenario-${scenario}`}
                           onClick={() => { setTestScenario(scenario); setTestInput(stageTestPrompt(draft, catalog, scenario)); }}>
-                          {{ pass: tx("test_pass"), fail: tx("test_fail"), error: tx("test_error") }[scenario]}
+                          {{ pass: tx("test_pass"), fail: tx("test_fail") }[scenario]}
                         </button>)}
                       </div>
                       <div className="test-input-actions">
@@ -2282,10 +2266,12 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         placeholder={stageTestPrompt(draft, catalog, testScenario) || tx("test_input_placeholder")} />
                       <small>{tx("test_input_help")}</small>
                     </label>
-                  : <div className="ping-prompt"><strong>{tx("fixed_prompt")}</strong><code>{AGENT_PING_PROMPT}</code><small>{tx("ping_help")}</small></div>}
+                  : testMode === "agent_ping"
+                    ? <div className="ping-prompt"><strong>{tx("fixed_prompt")}</strong><code>{AGENT_PING_PROMPT}</code><small>{tx("ping_help")}</small></div>
+                    : <div className="ping-prompt"><strong>Mock Technical Error</strong><small>{tx("test_help")}</small></div>}
                 <div className="test-action-row">
                   <button type="button" className="primary" onClick={() => void testStage()}
-                    disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
+                    disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : testMode === "agent_ping" ? tx("run_ping") : tx("run_error")}</button>
                   {testing && <button type="button" className="danger" onClick={() => void stopStageTest()}>{tx("stop_test")}</button>}
                   <button type="button" onClick={() => void testPathFromStage()}
                     disabled={pathTesting || busy || dirtyGraph}
@@ -2296,7 +2282,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 {testError && <p className="test-error" role="alert">{testError}</p>}
                 {pathTestError && <p className="test-error" role="alert">{pathTestError}</p>}
                 {testResult && <div className="test-result" aria-live="polite">
-                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : "Agent Ping"}</strong></span><span>Backend：<strong>{String(testResult.effective_backend || (testResult.data as Record<string, unknown> | undefined)?.backend || testBackend)}</strong></span>{Boolean(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model) && <span>Model：<strong>{String(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model)}</strong></span>}
+                  <div className="test-result-summary"><span className={`result-status ${testResult.status}`}>{testResult.status.toUpperCase()}</span><span>{tx("mode_label")}：<strong>{testMode === "stage" ? "Real Stage" : testMode === "agent_ping" ? "Agent Ping" : "Mock Technical Error"}</strong></span><span>Backend：<strong>{String(testResult.effective_backend || (testResult.data as Record<string, unknown> | undefined)?.backend || testBackend)}</strong></span>{Boolean(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model) && <span>Model：<strong>{String(testResult.effective_model || (testResult.data as Record<string, unknown> | undefined)?.model)}</strong></span>}
                     {testMode === "stage" && <span>{tx("next_label")}：<strong>{testResult.next}</strong></span>}
                     {testMode === "stage" && testResult.test_retry_policy && <span>{tx("retry_label")}：<strong>{testResult.test_retry_policy}</strong></span>}
                     {testResult.status === "error" && testResult.route === "next" && <span className="skip-result">{tx("retry_exhausted_skip")}</span>}</div>
