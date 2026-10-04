@@ -29,6 +29,8 @@ MAX_VALIDATOR_OUTPUT_CHARS = 20_000
 # normal structured responses while preventing long-running noisy tools from
 # growing runner memory without bound.
 MAX_PROCESS_OUTPUT_CHARS = 200_000
+MAX_TRANSITION_HISTORY = 40
+MAX_MODEL_NAME_CHARS = 200
 
 DEFAULT_LOOP_CONTEXT_COMPRESS = False
 DEFAULT_LOOP_CONTEXT_COMPRESS_THRESHOLD = 50.0
