@@ -499,11 +499,46 @@ def builtin_final_ai_contract(workflow: str) -> tuple[int, int, bool]:
     return runs, required, yolo
 
 
+def _discover_openai_model(port: int) -> str:
+    connection = http.client.HTTPConnection("127.0.0.1", int(port), timeout=5)
+    try:
+        connection.request("GET", "/v1/models")
+        response = connection.getresponse()
+        body = response.read()
+        if response.status != 200:
+            raise RuntimeError(
+                f"model discovery failed: HTTP {response.status}: "
+                f"{body.decode('utf-8', errors='replace')[-500:]}"
+            )
+    finally:
+        connection.close()
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("model discovery returned invalid JSON") from error
+    items = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        raise RuntimeError("model discovery response has no data array")
+    for item in items:
+        if isinstance(item, dict):
+            model = str(item.get("id") or "").strip()
+            if model:
+                return model
+    raise RuntimeError("model discovery returned no usable model id")
+
+
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
     """Exercise isolated Agent Ping and AI Review profile against the real backend."""
     tool = ROOT / "tool" / "stage_probe.py"
 
-    def run_probe(root: Path, workflow: Path, mode: str, log: Path) -> dict[str, object]:
+    def run_probe(
+        root: Path,
+        workflow: Path,
+        mode: str,
+        log: Path,
+        *,
+        keep_work: bool = False,
+    ) -> dict[str, object]:
         command = [
             sys.executable,
             str(tool),
@@ -520,6 +555,8 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
                 "REVIEW_STAGE_PROBE_OK is the complete deliverable and executor evidence. "
                 "Verify that this exact non-empty deliverable is present and consistent, then decide immediately.",
             ]
+        if keep_work:
+            command.append("--keep-work")
         code = run_command(command, log, min(settings.run_timeout, max(180.0, settings.agent_timeout + 60)))
         raw = [line.strip() for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
         if not raw:
@@ -553,15 +590,60 @@ flow:
         ping = run_probe(root, workflow, "agent_ping", Path(directory) / "agent-ping.log")
         if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
             raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
-        stage = run_probe(root, workflow, "stage", Path(directory) / "real-stage.log")
+
+        ping_data = ping.get("data") if isinstance(ping.get("data"), dict) else {}
+        baseline_model = str(ping_data.get("model") or "").strip() or _discover_openai_model(settings.api_port)
+        workflow.write_text(
+            """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+    backend: qwen
+    model: """ + json.dumps(baseline_model) + """
+    error_policy:
+      retries: 2
+    max_failures: 3
+flow:
+  - review
+""",
+            encoding="utf-8",
+        )
+        stage = run_probe(
+            root,
+            workflow,
+            "stage",
+            Path(directory) / "real-stage.log",
+            keep_work=True,
+        )
         if stage.get("status") != "pass" or stage.get("kind") != "review":
             raise RuntimeError(f"real Review Stage Probe expected PASS for complete evidence: {stage!r}")
         if stage.get("next") != "done" or stage.get("route") != "next":
             raise RuntimeError(f"real Review Stage Probe PASS routing mismatch: {stage!r}")
+
+        work_dir = Path(str(stage.get("work_dir") or ""))
+        try:
+            relative_work = work_dir.relative_to(root).as_posix()
+        except ValueError as error:
+            raise RuntimeError(f"Stage Probe returned invalid work_dir: {work_dir}") from error
+        model_events = [
+            event for event in runner_events(root, relative_work)
+            if event.get("type") in {"model.prompt", "model.result"}
+        ]
+        if not model_events:
+            raise RuntimeError("real Stage backend/model override emitted no model events")
+        if any(str(event.get("backend") or "") != "qwen" for event in model_events):
+            raise RuntimeError(f"Stage backend override mismatch: {model_events!r}")
+        if any(str(event.get("model") or "") != baseline_model for event in model_events):
+            raise RuntimeError(
+                f"Stage model override mismatch: expected {baseline_model!r}, events={model_events!r}"
+            )
         return {
             "agent_ping": True,
             "real_stage_status": stage.get("status"),
             "real_stage_next": stage.get("next"),
+            "stage_backend": "qwen",
+            "stage_model": baseline_model,
         }
 
 
