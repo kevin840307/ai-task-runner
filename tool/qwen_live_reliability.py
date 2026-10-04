@@ -2289,6 +2289,8 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     result_kind: validation
     command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
     status: Validating deterministic Review routing probe
+    routes:
+      fail: execute
 
 flow:
   - execute
