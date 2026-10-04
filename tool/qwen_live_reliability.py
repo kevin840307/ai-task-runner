@@ -2230,7 +2230,6 @@ REVIEW_ROUTING_POLICY = """protected_paths:
   - seed_review.py
   - review_gate.py
   - review_execute.md
-  - review_check.md
   - workflow.yaml
 instructions:
   always: Work only inside this project root. Modify review.txt only for this probe.
@@ -2276,14 +2275,6 @@ REVIEW_ROUTING_WORKFLOW = '''stages:
     routes:
       fail: execute
 
-  review_verify:
-    type: base
-    profile: review
-    status: Reviewing repaired state with Qwen
-    prompt: review_check.md
-    routes:
-      fail: execute
-
   validate_file:
     type: command
     result_kind: validation
@@ -2296,7 +2287,6 @@ flow:
   - execute
   - seed
   - review
-  - review_verify
   - validate_file
 '''
 
@@ -2329,9 +2319,6 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     (project / "review_gate.py").write_text(REVIEW_ROUTING_GATE, encoding="utf-8")
     (project / "review_execute.md").write_text(
         REVIEW_ROUTING_EXECUTION_PROMPT, encoding="utf-8"
-    )
-    (project / "review_check.md").write_text(
-        REVIEW_ROUTING_REVIEW_PROMPT, encoding="utf-8"
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
@@ -2382,8 +2369,10 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
         raise RuntimeError("review failure-routing probe produced unexpected logical lines")
     if not observed_stage_result(project, "review", "fail"):
         raise RuntimeError("review routing probe did not exercise deterministic Review gate FAIL")
-    if not observed_stage_result(project, "review_verify", "pass"):
-        raise RuntimeError("review routing probe Qwen Review did not PASS repaired state")
+    if not observed_stage_result(project, "review", "pass"):
+        raise RuntimeError("deterministic Review gate did not PASS after Execute repaired state")
+    if not observed_stage_result(project, "validate_file", "pass"):
+        raise RuntimeError("review routing probe validator did not PASS repaired state")
     executes = stage_prompt_records(project, "execute")
     if not any(
         "RUNNER_SHARED_STAGE_CONTROL" in record.text
