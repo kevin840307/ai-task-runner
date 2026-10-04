@@ -426,6 +426,14 @@ def configure_backend_args(
     return configure_sandbox_args(name, result, sandbox=sandbox)
 
 
+def configure_model_args(
+    name: str,
+    extra_args: Sequence[str],
+    model: str,
+) -> list[str]:
+    return _backend_type(name).configure_model_args(extra_args, model)
+
+
 def configure_sandbox_args(
     name: str,
     extra_args: Sequence[str],
