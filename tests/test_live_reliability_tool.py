@@ -61,8 +61,12 @@ def _fake_qwen_command(tmp_path: Path) -> str:
     return f'"{sys.executable}" "{fake}"'
 
 
-def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(tmp_path: Path):
+def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
+    monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
 
     result = live.stage_probe_live_preflight(config)
 
@@ -70,6 +74,8 @@ def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(tm
         "agent_ping": True,
         "real_stage_status": "pass",
         "real_stage_next": "done",
+        "stage_backend": "qwen",
+        "stage_model": "model-probe",
     }
 
 
@@ -1512,8 +1518,11 @@ def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, mon
     assert sample["rss_bytes"] == 123456
     assert sample["threads"] >= 1
     assert sample["handles"] == 77
-    assert sample["run_root_bytes"] >= 13
+    assert "run_root_bytes" not in sample
     assert sample["active_process_markers"] == 1
+
+    final_sample = live.resource_snapshot(tmp_path, include_run_root_bytes=True)
+    assert final_sample["run_root_bytes"] >= 13
 
 
 def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
