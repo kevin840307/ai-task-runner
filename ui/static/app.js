@@ -254,11 +254,7 @@ function applySelectedRuntimeToProjectList(projects) {
   const current = projects.find((p) => sameProjectPath(p.path, state.project.path));
   if (!current) return projects;
   const runtime = state.runtime;
-  current.runtime_status = runtime.running
-    ? (runtime.last_error ? "recovering" : "running")
-    : runtime.completed ? "completed"
-      : runtime.resumable ? ((runtime.stale || runtime.last_error) ? "needs_attention" : "stopped")
-        : "idle";
+  current.runtime_status = String(runtime.status || "idle");
   current.runtime_stage = String(runtime.cli_status || runtime.stage || "");
   current.runtime_completed_count = Number(runtime.completed_count || 0);
   current.runtime_total = Number(runtime.total || 0);
@@ -625,7 +621,7 @@ function ensureLiveCard({ forceVisibleOnCreate = false } = {}) {
 }
 function removeLiveCard() { $("messages")?.querySelector(".live-activity")?.remove(); }
 function cliRuntimeText(runtime) {
-  const marker = runtime.running ? ">" : " ";
+  const marker = runtime?.actions?.stop ? ">" : " ";
   const lines = Array.isArray(runtime.cli_lines) && runtime.cli_lines.length
     ? runtime.cli_lines
     : [`AI Task Runner  Cycle 1  Progress ${runtime.completed_count || 0}/${runtime.total || 0}`, "", `  {spinner} ${runtime.cli_status || runtime.stage || "準備中"}`];
