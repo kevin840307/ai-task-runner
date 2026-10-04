@@ -502,6 +502,17 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Example for the current Review routing area:
       tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
 
+[x] Fixed structured parser-error retry resending full static Stage context.
+    - Root cause: BaseStage remembered prompt/session transport only after structured parsing succeeded.
+      A model could successfully receive/respond to the original prompt, exhaust structured correction,
+      then StageExecutor same-session retry would incorrectly resend the full static Stage prompt.
+    - BaseStage now checkpoints prompt/session immediately after every successful model response,
+      before parser/schema validation.
+    - Same-session technical retry therefore sends only Runner shared recovery control/new evidence;
+      Fresh Session recovery still receives the full original Stage contract.
+    - This also keeps role/main session checkpoints durable across structured parser errors without
+      moving session rotation ownership out of StageExecutor.
+
 [x] Reviewed structured-output repair ownership against DevFollow.
     - structured_call repairs only parser/schema-invalid model output after a successful model response.
     - Removed unused structured_fresh_retries / fresh_ask / fresh_retries dead contract.
@@ -567,11 +578,12 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
-    - Current known blocker: Studio source builds successfully, but committed ui/static/workflow-studio-app is stale after Studio source changes. CI build artifact is valid; sync committed bundle during final Studio batch/release cleanup.
-    - Ubuntu Python
-    - Windows Python
-    - Studio build + committed bundle verify
-    - Playwright/Chromium Browser E2E
+    - [x] Ubuntu Python full suite green on code HEAD 60a0301966d1915479572b1e9fbcaff35fdc517e.
+    - [x] Windows Python full suite green on the same code HEAD.
+    - [x] Playwright/Chromium Browser E2E green on the same code HEAD.
+    - [x] Studio source build succeeds.
+    - [ ] Committed ui/static/workflow-studio-app bundle verify is still stale.
+          CI build artifact is valid; sync the committed bundle during final Studio batch/release cleanup.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
