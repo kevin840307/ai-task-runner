@@ -313,3 +313,41 @@ def test_stage_test_pending_cancel_is_bounded(tmp_path: Path) -> None:
 
     _lock, _processes, cancelled = state._stage_test_runtime()
     assert len(cancelled) <= 64
+
+
+
+def test_stage_editor_accepts_backend_model_override(tmp_path: Path) -> None:
+    state, project = _state(tmp_path)
+    created = state.studio_workflow_create("backend_model", "project", project)
+    file_id = created["item"]["id"]
+
+    parsed = state.studio_stage_source(
+        file_id,
+        "execute",
+        "parse",
+        project,
+        fields={"name": "execute", "type": "base", "profile": "execute"},
+        source=(
+            "type: base\n"
+            "profile: execute\n"
+            "backend: qwen\n"
+            "model: stage-model\n"
+            "session_policy: auto\n"
+        ),
+    )
+
+    assert parsed["fields"]["backend"] == "qwen"
+    assert parsed["fields"]["model"] == "stage-model"
+
+
+def test_stage_editor_rejects_backend_override_with_main_session(tmp_path: Path) -> None:
+    state, _project = _state(tmp_path)
+
+    import pytest
+    with pytest.raises(ValueError, match="session_policy: main"):
+        state._validate_stage_editor_fields({
+            "type": "base",
+            "profile": "execute",
+            "backend": "qwen",
+            "session_policy": "main",
+        })
