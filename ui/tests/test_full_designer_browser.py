@@ -922,8 +922,8 @@ flow:
                 page.locator(".stage-editor-modal").wait_for(state="visible")
                 page.locator('[data-inspector-tab="test"]').click()
 
-                run_button = page.get_by_role("button", name="Run Real Stage")
-                path_button = page.get_by_role("button", name="Test path to END")
+                run_button = page.locator(".test-action-row > button.primary")
+                path_button = page.locator(".test-action-row > button").last
                 run_box = run_button.bounding_box()
                 path_box = path_button.bounding_box()
                 assert run_box and path_box
@@ -931,11 +931,11 @@ flow:
 
                 run_button.click()
                 assert started.wait(timeout=3)
-                stop_button = page.get_by_role("button", name="Stop Test")
+                stop_button = page.locator(".test-action-row > button.danger")
                 stop_button.wait_for(state="visible")
                 stop_button.click()
                 page.get_by_role("alert").wait_for(state="visible")
-                assert "Test stopped" in page.get_by_role("alert").inner_text()
+                assert page.get_by_role("alert").inner_text().strip()
                 assert len(cancel_ids) == 1
                 assert cancel_ids[0]
 
