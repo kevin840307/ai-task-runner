@@ -897,7 +897,7 @@ class WorkflowStudioMixin:
             retries = policy["retries"]
             if not isinstance(retries, int) or isinstance(retries, bool) or retries < -1:
                 raise ValueError("Stage error_policy.retries must be -1 or non-negative")
-        for key in ("structured_retries", "structured_fresh_retries", "runs", "required_passes", "min_tasks"):
+        for key in ("structured_retries", "runs", "required_passes", "min_tasks"):
             value = fields.get(key)
             if value is None:
                 continue
