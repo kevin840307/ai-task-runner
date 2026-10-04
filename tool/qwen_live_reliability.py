@@ -2506,29 +2506,22 @@ def dynamic_handoff_session_policy_probe(settings: Settings, root: Path) -> None
         raise RuntimeError(
             "session_policy=main did not reuse the primary Runner session"
         )
-    durable_main = str(state.get("ai_session_id") or "")
-    if durable_main:
+    if len(stable_results) < 2 or len(set(stable_results[-2:])) != 1:
         raise RuntimeError(
-            "completed Dynamic Handoff run unexpectedly retained the primary Runner session"
-        )
-    stable_session = str(stage_sessions.get("stable_role") or "")
-    if len(stable_results) < 2 or not stable_session:
-        raise RuntimeError(
-            "session_policy=role did not run the reusable role more than once"
-        )
-    if any(session != stable_session for session in stable_results[-2:]):
-        raise RuntimeError(
-            "session_policy=role did not reuse the same durable role-specific session"
-        )
-    if "fresh_role" in stage_sessions:
-        raise RuntimeError(
-            "session_policy=fresh unexpectedly persisted a durable role session"
+            "session_policy=role did not reuse the same role-specific session"
         )
     if not fresh_results:
         raise RuntimeError("session_policy=fresh produced no real model session evidence")
     if len({main_results[-1], stable_results[-1], fresh_results[-1]}) != 3:
         raise RuntimeError(
             "Dynamic Handoff session policies did not produce isolated session identities"
+        )
+
+    # Session identity is verified from durable model events above. Completed
+    # runs must not retain active-only session checkpoints in state.json.
+    if state.get("ai_session_id") or stage_sessions:
+        raise RuntimeError(
+            "completed Dynamic Handoff run retained active-only session state"
         )
 
 
