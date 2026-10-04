@@ -37,6 +37,8 @@ WORKFLOWS = {
 }
 BUILTIN_FINAL_AI_RUNS = 3
 BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
+LIVE_RETRY_DELAY_SECONDS = 2
+LIVE_RETRY_MAX_DELAY_SECONDS = 30
 
 PROBE_ORDER = (
     "ownership-lock",
@@ -536,8 +538,8 @@ def runner_command(
         "--backend", "qwen",
         "--command", settings.command,
         "--project-root", str(project),
-        "--retry-delay", "0" if timeout_probe else "2",
-        "--retry-max-delay", "30",
+        "--retry-delay", "0" if timeout_probe else str(LIVE_RETRY_DELAY_SECONDS),
+        "--retry-max-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
         "--json-events",
         "--no-ui-project-register",
     ]
@@ -3292,6 +3294,62 @@ def _structured_recovery_event(event: dict[str, object]) -> bool:
     )
 
 
+def recovery_backoff_observation(root: Path) -> dict[str, object]:
+    """Summarize durable StageExecutor retry waits without retaining retry history."""
+    waits: list[float] = []
+    for path in root.rglob("log.txt"):
+        if path.parent.name != ".ai-task-runner":
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if (
+                not isinstance(event, dict)
+                or event.get("type") != "runner.recovery"
+                or event.get("action") != "retry"
+            ):
+                continue
+            value = event.get("wait_seconds")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                waits.append(float(value))
+    return {
+        "count": len(waits),
+        "min_wait_seconds": min(waits) if waits else None,
+        "max_wait_seconds": max(waits) if waits else None,
+        "configured_max_seconds": LIVE_RETRY_MAX_DELAY_SECONDS,
+        "cap_reached": bool(waits and max(waits) >= LIVE_RETRY_MAX_DELAY_SECONDS),
+    }
+
+
+def _assert_recovery_wait_bounds(events: list[dict[str, object]]) -> None:
+    waits = [
+        float(event["wait_seconds"])
+        for event in events
+        if (
+            event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and isinstance(event.get("wait_seconds"), (int, float))
+            and not isinstance(event.get("wait_seconds"), bool)
+        )
+    ]
+    invalid = [
+        value
+        for value in waits
+        if value <= 0 or value > LIVE_RETRY_MAX_DELAY_SECONDS
+    ]
+    if invalid:
+        raise RuntimeError(
+            "Runner recovery wait escaped configured bounds: "
+            f"waits={waits!r}, max={LIVE_RETRY_MAX_DELAY_SECONDS}"
+        )
+
+
 def _proxy_recovery_observed(
     session_id: str,
     proxy,
@@ -3434,6 +3492,7 @@ def api_recovery_probe(
             for event in (*console_events, *events)
         )
         all_events = [*console_events, *events]
+        _assert_recovery_wait_bounds(all_events)
         evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in all_events)
         if not session_id or not recovered or "verdict=RESET_SESSION" in evidence:
             raise RuntimeError(
@@ -4359,6 +4418,7 @@ def main() -> int:
             "max": soak_result.resource_max,
             "end": soak_result.resource_end,
         },
+        "recovery_backoff_observation": recovery_backoff_observation(run_root),
         "transient_observed": transient_observed,
         "long_api_outage_seconds": args.long_api_outage_seconds,
         "long_api_disconnect_recovered": probe_enabled("api-disconnect", start_probe),
