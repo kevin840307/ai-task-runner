@@ -141,7 +141,6 @@ class StageExecutor:
                     self._fresh_session(stage, ctx)
                     failures_in_session = 0
                     retry_mode = "recover"
-                    service_delay = base_retry_delay
                 else:
                     retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
                 self._announce_recovery(
