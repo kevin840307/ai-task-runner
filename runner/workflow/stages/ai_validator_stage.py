@@ -23,6 +23,11 @@ class AIValidatorStage(BaseStage):
     ui_title = "AI Validator"
     ui_description = "Independent final AI validation with optional multi-run voting."
     ui_category = "validate"
+    ui_test_examples = {
+        "pass": "Validate the isolated evidence as complete and return the normal validator PASS contract.",
+        "fail": "Validate the isolated evidence as incomplete and return the normal validator FAIL contract with one concrete missing item.",
+        "error": "Technical ERROR is injected by the Stage Test harness; retry then executes the real validator.",
+    }
     result_kind = "validation"
     parser_name = "validation"
     backend_mode = "review"
