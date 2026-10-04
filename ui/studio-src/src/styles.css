@@ -517,20 +517,24 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin: 0 18px 10px;
-  padding: 10px 12px;
+  gap: 10px;
+  min-height: 34px;
+  margin: 0 12px 6px;
+  padding: 5px 8px 5px 10px;
   border: 1px solid #facc15;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fffbeb;
 }
 .workflow-draft-recovery > div:first-child {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
+.workflow-draft-recovery strong { font-size: 12px; white-space: nowrap; }
 .workflow-draft-recovery small {
   color: #785c12;
+  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -538,5 +542,6 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .workflow-draft-recovery-actions {
   flex: 0 0 auto;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
+.workflow-draft-recovery-actions button { padding: 4px 7px; font-size: 11px; }
