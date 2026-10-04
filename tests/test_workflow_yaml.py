@@ -199,6 +199,62 @@ flow:
         load_workflow(path)
 
 
+def test_invalid_ai_stage_backend_fails_during_workflow_load(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    backend: does-not-exist
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(ConfigurationError, match="backend is unsupported"):
+        load_workflow(path)
+
+
+def test_ai_stage_backend_model_override_rejects_main_session_during_load(tmp_path):
+    path = write_workflow(
+        tmp_path,
+        """
+stages:
+  worker:
+    type: base
+    backend: opencode
+    model: provider/model-x
+    session_policy: main
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(ConfigurationError, match="session_policy=main"):
+        load_workflow(path)
+
+
+def test_ai_stage_model_length_is_validated_during_workflow_load(tmp_path):
+    from runner.config.defaults import MAX_MODEL_NAME_CHARS
+
+    model = "m" * (MAX_MODEL_NAME_CHARS + 1)
+    path = write_workflow(
+        tmp_path,
+        f"""
+stages:
+  worker:
+    type: base
+    model: {model}
+flow:
+  - worker
+""",
+    )
+
+    with pytest.raises(ConfigurationError, match="model is invalid"):
+        load_workflow(path)
+
+
 def test_error_policy_is_common_to_every_stage_type(tmp_path):
     path = write_workflow(
         tmp_path,
