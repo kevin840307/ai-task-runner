@@ -475,10 +475,14 @@ High-value runner work remaining:
     - No repeated stale dynamic/session entries after completion/resume.
 
 [ ] Verify retry/backoff behavior under long failure windows.
+    - Deterministic long-transient regression now covers 7 consecutive transient failures:
+      bounded two-failure session budget, repeated Fresh Session rotation, 1s unlimited-retry safety floor,
+      successful completion, structured recovery/session events and final last_error cleanup.
     - No busy loop.
     - Same Session remains bounded before Fresh Session rotation.
     - 429/502/503/raw disconnect/expired session continue unattended.
     - Partial-write recovery preserves valid project state.
+    - Keep unchecked until real high-density / 0.5H / 24H evidence passes.
 
 [ ] Only optimize save/write frequency if soak evidence shows excessive I/O.
     Current save points are intentionally conservative for durable resume.
