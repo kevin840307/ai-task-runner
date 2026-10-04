@@ -175,6 +175,9 @@ button.ghost { border: 0; background: transparent; padding-left: 0; }
 .stage-test textarea, .stage-test select { width: 100%; min-height: 40px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 9px; color: #0f172a; background: #fff; }
 .stage-test textarea { min-height: 112px; resize: vertical; }
 .stage-test > button { justify-self: start; }
+.test-action-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.test-action-row > button { min-height: 34px; }
+.test-action-row > button + button { margin-left: 2px; }
 .test-notice { padding: 10px; border-radius: 9px; background: #fffbeb; color: #92400e; }
 .test-error { padding: 10px; border-radius: 9px; background: #fef2f2; color: #b91c1c; overflow-wrap: anywhere; }
 .test-result { display: grid; gap: 10px; padding: 13px; border: 1px solid #dbe3ef; border-radius: 11px; background: #f8fafc; }
