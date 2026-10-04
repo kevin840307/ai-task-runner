@@ -608,10 +608,11 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [ ] Same/current HEAD deterministic CI green:
-    - [x] Ubuntu Python full suite green on code HEAD cb7a13322ce173f868b9010976529ba45a3cc6bf.
+    - [x] Ubuntu Python full suite green on code HEAD 5bfc24e7ed448a6976771077f0f001ec2ac51427.
     - [x] Windows Python full suite green on the same code HEAD.
     - [x] Playwright/Chromium Browser E2E green on the same code HEAD.
     - [x] Studio source build succeeds.
+    - [x] Live backoff evidence changes also passed Ubuntu, Windows and Browser E2E on the same source HEAD.
     - [ ] Committed ui/static/workflow-studio-app bundle verify is still stale.
           CI build artifact is valid; sync the committed bundle during final Studio batch/release cleanup.
 
