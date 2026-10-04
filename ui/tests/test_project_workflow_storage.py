@@ -230,12 +230,16 @@ def test_studio_path_test_reuses_workflow_dryrun_from_stage(tmp_path: Path) -> N
     state, project = _state(tmp_path)
     (tmp_path / "tool/workflow_dryrun.py").write_text(
         "import json, sys\n"
-        "stage = sys.argv[sys.argv.index('--from-stage') + 1]\n"
-        "print(json.dumps({\n"
-        "  'valid': True, 'completed': True, 'from_stage': stage, 'cycle': 1, 'stage': 'completed',\n"
-        "  'transitions': [{'number': 1, 'stage': stage, 'label': None, 'status': 'pass'}],\n"
-        "  'error': None\n"
-        "}))\n",
+        "if '--from-stage' in sys.argv:\n"
+        "    stage = sys.argv[sys.argv.index('--from-stage') + 1]\n"
+        "    payload = {\n"
+        "      'valid': True, 'completed': True, 'from_stage': stage, 'cycle': 1, 'stage': 'completed',\n"
+        "      'transitions': [{'number': 1, 'stage': stage, 'label': None, 'status': 'pass'}],\n"
+        "      'error': None\n"
+        "    }\n"
+        "else:\n"
+        "    payload = {'valid': True, 'closed': True, 'paths_passed': 1, 'paths_total': 1}\n"
+        "print(json.dumps(payload))\n",
         encoding="utf-8",
     )
     created = state.studio_workflow_create("path_test", "project", project)
