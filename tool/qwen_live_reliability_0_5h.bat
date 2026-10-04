@@ -9,7 +9,7 @@ python "tool\qwen_live_reliability.py" --hours 0.5 --high-density --require-tran
   --example-smoke-matrix-project "examples\10_skill_prompt_review_workflow\project" ^
   --example-smoke-matrix-workflow "runner\assets\workflows\file.yaml" ^
   --example-smoke-matrix-workflow "runner\assets\workflows\mixed.yaml" ^
-  --example-smoke-matrix-workflow "runner\assets\workflows\ralphy_ai_validate.yaml"
+  --example-smoke-matrix-workflow "runner\assets\workflows\ralphy_ai_validate.yaml" %*
 
 set "RC=%ERRORLEVEL%"
 popd
