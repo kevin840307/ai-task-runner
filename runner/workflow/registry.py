@@ -144,7 +144,7 @@ def _field_info(item: Any) -> dict[str, Any]:
         result["values"] = ["readonly", "write"]
     elif item.name == "backend":
         result["type"] = "enum"
-        result["values"] = ["", *backend_names()]
+        result["values"] = list(backend_names())
     elif "bool" in raw_type and "none" in raw_type:
         result["type"] = "optional_boolean"
     if item.name == "parser":
