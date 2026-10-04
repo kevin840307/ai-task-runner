@@ -3446,19 +3446,10 @@ def api_recovery_probe(
         outage_until = 0.0
         successes_before_outage = 0
         recovered = False
-        recovery_event_seen = False
         session_rotated = False
         try:
             while process.poll() is None and time.monotonic() < deadline:
                 state = read_state(project)
-                if not recovery_event_seen:
-                    # runner.status=Recovering is intentionally transient UI state.
-                    # runner.recovery/retry is the stable structured observability
-                    # contract for retry/backoff evidence.
-                    recovery_event_seen = any(
-                        _structured_recovery_event(event)
-                        for event in (*jsonl_events(log), *runner_events(project))
-                    )
                 current_session = state.get("ai_session_id")
                 outage_armed = (
                     outage_marker is not None
@@ -3520,13 +3511,8 @@ def api_recovery_probe(
         )
         events = runner_events(project)
         console_events = jsonl_events(log)
-        # Always do one final scan after process exit. Recovery can complete
-        # between two 100ms polling iterations; the structured event remains
-        # durable in the probe-owned JSON stream / production log.
-        recovery_event_seen = recovery_event_seen or any(
-            _structured_recovery_event(event)
-            for event in (*console_events, *events)
-        )
+        # Recovery/session evidence is validated after process exit from the
+        # durable probe-owned JSON stream plus production event log.
         all_events = [*console_events, *events]
         _assert_recovery_wait_bounds(all_events)
         evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in all_events)
