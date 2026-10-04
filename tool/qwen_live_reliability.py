@@ -3811,12 +3811,64 @@ def _require_recovery_backoff_cap(project: Path) -> dict[str, object]:
     return observation
 
 
+def runner_backoff_cap_preflight(root: Path) -> dict[str, object]:
+    """Prove production StageExecutor reaches the configured retry cap.
+
+    Real Qwen may absorb transport retries internally, so this probe uses a
+    controlled local agent while still running through the production CLI,
+    StageExecutor, durable event log and real sleep path.
+    """
+    agent = ROOT / "tests" / "transient_backoff_agent.py"
+    if not agent.is_file():
+        raise RuntimeError(f"transient backoff probe agent is missing: {agent}")
+    project = create_project(root, "runner-backoff-cap-probe")
+    state_dir = root / "_runner-backoff-cap-state"
+    command = [
+        sys.executable, str(RUNNER),
+        "--backend", "qwen",
+        "--command", subprocess.list2cmdline([sys.executable, str(agent)]),
+        "--project-root", str(project),
+        "--goal", "Create done.txt and validate it.",
+        "--validator", "ai",
+        "--stage-retries", "-1",
+        "--retry-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
+        "--retry-max-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
+        "--agent-timeout", "60",
+        "--planning-timeout", "60",
+        "--force-new",
+        "--no-ui-project-register",
+        "--json-events",
+    ]
+    previous = os.environ.get("BACKOFF_TEST_STATE_DIR")
+    os.environ["BACKOFF_TEST_STATE_DIR"] = str(state_dir)
+    try:
+        code = run_command(
+            command,
+            console_log(project, "backoff-cap-console.jsonl"),
+            LIVE_RETRY_MAX_DELAY_SECONDS + 120,
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("BACKOFF_TEST_STATE_DIR", None)
+        else:
+            os.environ["BACKOFF_TEST_STATE_DIR"] = previous
+    assert_state_completed(project, code)
+    observation = _require_recovery_backoff_cap(project)
+    if observation["max_wait_seconds"] != LIVE_RETRY_MAX_DELAY_SECONDS:
+        raise RuntimeError(
+            "controlled Runner backoff did not hit the exact configured cap: "
+            f"{observation}"
+        )
+    return observation
+
+
 def long_http_recovery_probe(
     settings: Settings,
     root: Path,
     outage_seconds: float,
 ) -> tuple[int, ...]:
-    """Exercise every transient HTTP class and prove max-backoff behavior."""
+    """Prove Runner max-backoff plus real-Qwen long HTTP outage recovery."""
+    runner_backoff_cap_preflight(root)
     for status_code in API_RECOVERY_STATUS_CODES:
         name = f"api-long-http-{status_code}-probe"
         api_recovery_probe(
@@ -3826,7 +3878,6 @@ def long_http_recovery_probe(
             outage_seconds=outage_seconds,
             status_code=status_code,
         )
-        _require_recovery_backoff_cap(root / name)
     return API_RECOVERY_STATUS_CODES
 
 
