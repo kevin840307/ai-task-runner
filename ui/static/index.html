@@ -108,6 +108,20 @@
         <div class="runtime-freshness"><span>Last update</span><strong id="lastUpdateText">—</strong></div>
         <div class="runtime-elapsed"><span>Elapsed</span><strong id="elapsedTimeText">—</strong></div>
       </section>
+      <section id="runtimeGuidance" class="runtime-guidance" hidden>
+        <div><strong id="runtimeGuidanceTitle">Needs Attention</strong><span id="runtimeGuidanceReason"></span></div>
+        <small id="runtimeGuidanceActions"></small>
+      </section>
+      <details id="activeRunDetails" class="active-run-details" hidden>
+        <summary>Active Run details</summary>
+        <div class="active-run-grid">
+          <span>Workflow</span><strong id="activeRunWorkflow">—</strong>
+          <span>Backend / Model</span><strong id="activeRunBackendModel">—</strong>
+          <span>Stage backend / model</span><strong id="activeRunEffectiveModel">—</strong>
+          <span>Readonly</span><strong id="activeRunReadonly">—</strong>
+          <span>Run ID</span><strong id="activeRunId">—</strong>
+        </div>
+      </details>
       <section id="emptyState" class="empty-state">
         <div class="empty-state-mark">A</div>
         <h2 data-i18n="empty.open_project">開啟專案以開始</h2>
