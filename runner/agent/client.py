@@ -11,8 +11,10 @@ from .backend import (
     BackendError,
     BackendMode,
     configure_backend_args,
+    configure_model_args,
     configure_sandbox_args,
     create_backend,
+    model_from_args,
 )
 
 SESSION_INVALID_MARKERS = (
