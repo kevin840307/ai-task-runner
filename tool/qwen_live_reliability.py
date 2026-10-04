@@ -665,6 +665,53 @@ def relative_existing_path(child: Path, root: Path) -> str:
     raise ValueError(f"{child} is not under {root}")
 
 
+def _assert_live_review_stage_result(
+    stage: dict[str, object],
+    backend: str,
+) -> None:
+    if (
+        stage.get("status") != "pass"
+        or stage.get("kind") != "review"
+        or stage.get("next") != "done"
+        or stage.get("route") != "next"
+    ):
+        raise RuntimeError(
+            f"real {backend} Review Stage Probe expected PASS -> done: {stage!r}"
+        )
+
+
+def _assert_live_stage_backend_model_events(
+    root: Path,
+    stage: dict[str, object],
+    backend: str,
+    model: str,
+) -> None:
+    work_dir = Path(str(stage.get("work_dir") or ""))
+    try:
+        relative_work = relative_existing_path(work_dir, root)
+    except ValueError as error:
+        raise RuntimeError(
+            f"{backend} Stage Probe returned invalid work_dir: {work_dir}"
+        ) from error
+    model_events = [
+        event for event in runner_events(root, relative_work)
+        if event.get("type") in {"model.prompt", "model.result"}
+    ]
+    if not model_events:
+        raise RuntimeError(
+            f"real {backend} Stage backend/model override emitted no model events"
+        )
+    if any(str(event.get("backend") or "") != backend for event in model_events):
+        raise RuntimeError(
+            f"{backend} Stage backend override mismatch: {model_events!r}"
+        )
+    if any(str(event.get("model") or "") != model for event in model_events):
+        raise RuntimeError(
+            f"{backend} Stage model override mismatch: "
+            f"expected {model!r}, events={model_events!r}"
+        )
+
+
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
     """Exercise real Stage transport plus Stage-local backend/model overrides."""
     tool = ROOT / "tool" / "stage_probe.py"
@@ -754,28 +801,13 @@ flow:
             Path(directory) / "real-stage.log",
             keep_work=True,
         )
-        if stage.get("status") != "pass" or stage.get("kind") != "review":
-            raise RuntimeError(f"real Review Stage Probe expected PASS for complete evidence: {stage!r}")
-        if stage.get("next") != "done" or stage.get("route") != "next":
-            raise RuntimeError(f"real Review Stage Probe PASS routing mismatch: {stage!r}")
-
-        work_dir = Path(str(stage.get("work_dir") or ""))
-        try:
-            relative_work = relative_existing_path(work_dir, root)
-        except ValueError as error:
-            raise RuntimeError(f"Stage Probe returned invalid work_dir: {work_dir}") from error
-        model_events = [
-            event for event in runner_events(root, relative_work)
-            if event.get("type") in {"model.prompt", "model.result"}
-        ]
-        if not model_events:
-            raise RuntimeError("real Stage backend/model override emitted no model events")
-        if any(str(event.get("backend") or "") != "qwen" for event in model_events):
-            raise RuntimeError(f"Stage backend override mismatch: {model_events!r}")
-        if any(str(event.get("model") or "") != baseline_model for event in model_events):
-            raise RuntimeError(
-                f"Stage model override mismatch: expected {baseline_model!r}, events={model_events!r}"
-            )
+        _assert_live_review_stage_result(stage, "qwen")
+        _assert_live_stage_backend_model_events(
+            root,
+            stage,
+            "qwen",
+            baseline_model,
+        )
         result: dict[str, object] = {
             "agent_ping": True,
             "real_stage_status": stage.get("status"),
@@ -835,47 +867,13 @@ flow:
             Path(directory) / "opencode-stage.log",
             keep_work=True,
         )
-        if (
-            opencode_stage.get("status") != "pass"
-            or opencode_stage.get("kind") != "review"
-            or opencode_stage.get("next") != "done"
-            or opencode_stage.get("route") != "next"
-        ):
-            raise RuntimeError(
-                "real OpenCode Review Stage backend/model probe failed: "
-                f"{opencode_stage!r}"
-            )
-
-        opencode_work = Path(str(opencode_stage.get("work_dir") or ""))
-        try:
-            opencode_relative_work = relative_existing_path(opencode_work, root)
-        except ValueError as error:
-            raise RuntimeError(
-                f"OpenCode Stage Probe returned invalid work_dir: {opencode_work}"
-            ) from error
-        opencode_events = [
-            event for event in runner_events(root, opencode_relative_work)
-            if event.get("type") in {"model.prompt", "model.result"}
-        ]
-        if not opencode_events:
-            raise RuntimeError(
-                "real OpenCode Stage backend/model override emitted no model events"
-            )
-        if any(
-            str(event.get("backend") or "") != "opencode"
-            for event in opencode_events
-        ):
-            raise RuntimeError(
-                f"OpenCode Stage backend override mismatch: {opencode_events!r}"
-            )
-        if any(
-            str(event.get("model") or "") != opencode_model
-            for event in opencode_events
-        ):
-            raise RuntimeError(
-                "OpenCode Stage model override mismatch: "
-                f"expected {opencode_model!r}, events={opencode_events!r}"
-            )
+        _assert_live_review_stage_result(opencode_stage, "opencode")
+        _assert_live_stage_backend_model_events(
+            root,
+            opencode_stage,
+            "opencode",
+            opencode_model,
+        )
         result["opencode_stage"] = {
             "available": True,
             "tested": True,
