@@ -1144,7 +1144,10 @@ function App() {
   const backendOption = executionTargetOptions.find((o) => o.name === "backend");
   const sessionPolicyOption = executionTargetOptions.find((o) => o.name === "session_policy");
   const stageBackend = String(draft?.backend || "").trim();
-  const stageModels = stageBackend ? (backendCatalog.models?.[stageBackend] || []) : [];
+  const savedStageModel = String(draft?.model || "").trim();
+  const stageModels = stageBackend
+    ? Array.from(new Set([...(backendCatalog.models?.[stageBackend] || []), ...(savedStageModel ? [savedStageModel] : [])]))
+    : [];
   const parameterOptions = options.filter((o) => {
     if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
     return true;
