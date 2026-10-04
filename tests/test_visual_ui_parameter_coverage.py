@@ -31,8 +31,10 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
     assert not unknown_special, f"Expected built-in catalog fields disappeared: {sorted(unknown_special)}"
 
     # Fields filtered out of the generic parameter list must have an explicit UI owner.
-    assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"]' in SOURCE
-    assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in SOURCE
+    # Backend/model/session ownership is projected by catalog constraints rather than a frontend name list.
+    assert 'executionTargetNames.has(o.name)' in SOURCE
+    assert 'const executionTargetOptions = options.filter((o) => executionTargetNames.has(o.name))' in SOURCE
+    assert 'const executionPair = executionConstraint?.paired_fields || []' in SOURCE
     assert 'value={String(draft.status || "")}' in SOURCE
     assert 'draft.type === "handoff"' in SOURCE and 'stage.targets || []' in SOURCE
     assert 'draft.max_failures' in SOURCE and 'max_failures' in SOURCE
@@ -44,7 +46,7 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
 
 def test_react_workflow_editor_covers_all_node_level_runtime_options():
     node_options = workflow_catalog()["node_options"]
-    assert set(node_options) == {"label", "routes", "error_policy"}
+    assert set(node_options) == {"label", "validator", "routes", "error_policy"}
 
     assert 'value={String(draft.label || "")}' in SOURCE
     assert 'value={String(draft.profile || "generic")}' in SOURCE
@@ -55,9 +57,10 @@ def test_react_workflow_editor_covers_all_node_level_runtime_options():
 
     # Graph result routes are semantic PASS/FAIL only. Handoff targets are a Stage-owned
     # dynamic edge list and technical ERROR remains StageExecutor policy, not a graph edge.
-    assert '!["pass", "fail", "handoff"].includes(status)' in SOURCE
-    assert 'delete routes[status]' in SOURCE
-    assert 'targets: (s.targets || []).filter' in SOURCE
+    draft = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
+    assert '!["pass", "fail", "handoff"].includes(status)' in draft
+    assert 'delete routes[status]' in draft
+    assert 'targets: (stage.targets || []).filter' in draft
 
 
 def test_generic_field_renderer_supports_every_catalog_scalar_shape():
