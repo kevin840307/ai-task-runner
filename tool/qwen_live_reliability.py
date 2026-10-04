@@ -3356,7 +3356,11 @@ def api_recovery_probe(
                     proxy.fail = not disconnect
                     outage_until = time.monotonic() + outage_seconds
                     outage_active_marker.write_text("active\n", encoding="utf-8")
-                if (proxy.fail or proxy.disconnect) and time.monotonic() >= outage_until:
+                if (
+                    (proxy.fail or proxy.disconnect)
+                    and proxy.failures > 0
+                    and time.monotonic() >= outage_until
+                ):
                     proxy.fail = False
                     proxy.disconnect = False
                 recovered = recovered or _proxy_recovery_observed(
