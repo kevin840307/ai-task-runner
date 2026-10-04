@@ -189,8 +189,9 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Backend choices are registry/catalog-driven, not hardcoded to Qwen/OpenCode in Designer or FlowEngine.
     - Qwen and OpenCode both use the shared adapter-owned model override contract today.
     - Future backends can override configure_model_args()/model_from_args() and appear through backend_names() without Core/UI provider branches.
-    - Designer Form exposes backend (registry-driven enum) + model (free text) and persists both to canonical YAML.
+    - Designer Form exposes a first-class Execution section with backend (registry-driven enum), model (free text), and session policy; these are no longer buried in generic parameter tabs.
     - Manual YAML backend/model edits refresh back into Designer immediately through the same canonical Workflow view-switch path.
+    - Real Stage Test distinguishes fallback backend from Stage override and reports effective_backend/effective_model from the executed Stage client, so test evidence cannot mislabel Qwen/OpenCode.
     - UI prevents the invalid backend/model override + session_policy=main combination instead of deferring it to a runtime surprise.
     - Chromium E2E covers Designer -> YAML -> Designer round-trip using OpenCode and Qwen values.
     - Current source/browser build exposes the fields, but the committed ui/static/workflow-studio-app bundle is still stale; packaged/local UI may not show them until the generated bundle is rebuilt and committed.
