@@ -196,7 +196,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     "output": output,
                     "data": {
                         "prompt": AGENT_PING_PROMPT,
-                        "backend": config.backend,
+                        "backend": runner.context.ai_client.backend,
+                        "model": runner.context.ai_client.model,
                         "elapsed_seconds": round(elapsed, 3),
                     },
                     "changed_files": [],
