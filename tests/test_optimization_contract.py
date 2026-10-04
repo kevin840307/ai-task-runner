@@ -79,8 +79,8 @@ def parse_ok(text, ctx):
     return {"passed": True}
 
 
-def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tmp_path, monkeypatch):
-    model = FakeAI(["bad1", "bad2", "bad3", "OK"])
+def test_structured_retry_then_stage_executor_fresh_recovery_keeps_one_stage_contract(tmp_path, monkeypatch):
+    model = FakeAI(["bad1", "bad2", "bad3", "bad4", "bad5", "bad6", "OK"])
     ctx = context(tmp_path, model)
     monkeypatch.setattr(
         "runner.workflow.stages.base_stage.create_ai_client",
@@ -99,17 +99,21 @@ def test_structured_retry_then_fresh_parser_recovery_keeps_one_stage_contract(tm
             runs=1,
             required_passes=1,
             structured_retries=2,
-            structured_fresh_retries=1,
         )
     )
 
     result = StageExecutor(Hooks()).run(stage, ctx)
 
     assert result.status == "pass"
-    assert [before for before, _, _ in model.calls] == ["", "S1", "S1", ""]
+    assert [before for before, _, _ in model.calls] == [
+        "", "S1", "S1", "S1", "S1", "S1", ""
+    ]
     assert "FULL VALIDATOR CONTRACT" in model.calls[0][2]
-    assert all("FULL VALIDATOR CONTRACT" not in model.calls[i][2] for i in (1, 2))
-    assert "FULL VALIDATOR CONTRACT" in model.calls[3][2]
+    assert all(
+        "FULL VALIDATOR CONTRACT" not in model.calls[i][2]
+        for i in (1, 2, 3, 4, 5)
+    )
+    assert "FULL VALIDATOR CONTRACT" in model.calls[6][2]
 
 
 def test_independent_validator_votes_each_start_fresh_session(tmp_path, monkeypatch):
