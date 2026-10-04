@@ -479,9 +479,10 @@ def test_live_soak_presets_use_current_workflow_asset_paths():
         assert "runner\\workflows\\" not in text
 
 
-def test_live_reliability_defaults_to_three_minute_api_disconnect(monkeypatch):
+def test_live_reliability_defaults_cover_long_http_and_disconnect_windows(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py"])
     args = live.arguments()
+    assert args.long_http_outage_seconds == live.API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS
     assert args.long_api_outage_seconds == 180
     assert args.single_process_yaml_items == 0
 
@@ -2405,6 +2406,41 @@ def test_api_recovery_arm_gate_blocks_until_harness_acknowledges(tmp_path: Path)
         if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
+
+
+def test_long_http_recovery_probe_reuses_one_path_for_all_statuses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = []
+
+    def fake_probe(config, root, name, *, outage_seconds, disconnect=False, status_code=502):
+        calls.append((name, outage_seconds, disconnect, status_code))
+        return True
+
+    monkeypatch.setattr(live, "api_recovery_probe", fake_probe)
+
+    statuses = live.long_http_recovery_probe(settings(tmp_path), tmp_path, 45.0)
+
+    assert statuses == live.API_RECOVERY_STATUS_CODES
+    assert calls == [
+        ("api-long-http-429-probe", 45.0, False, 429),
+        ("api-long-http-502-probe", 45.0, False, 502),
+        ("api-long-http-503-probe", 45.0, False, 503),
+    ]
+
+
+def test_soak_transient_status_rotation_covers_all_http_classes():
+    assert [
+        live._soak_transient_status_code(run_number, 4)
+        for run_number in (4, 8, 12, 16, 20, 24)
+    ] == [429, 502, 503, 429, 502, 503]
+
+
+def test_long_http_probe_is_in_stable_probe_order():
+    assert "api-long-http" in live.PROBE_ORDER
+    assert live.PROBE_ORDER.index("api-503") < live.PROBE_ORDER.index("api-long-http")
+    assert live.PROBE_ORDER.index("api-long-http") < live.PROBE_ORDER.index("api-disconnect")
 
 
 def test_api_recovery_probe_acknowledges_active_outage_before_execute():
