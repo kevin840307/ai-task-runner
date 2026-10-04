@@ -2236,3 +2236,11 @@ def test_api_recovery_probe_accepts_both_structured_recovery_layers():
     assert "def _structured_recovery_event" in source
     assert 'kind == "runner.retry" and action == "retry"' in source
     assert 'kind == "runner.recovery"' in source
+
+
+
+def test_api_recovery_probe_disables_qwen_persistent_retry():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert 'probe_env["QWEN_CODE_UNATTENDED_RETRY"] = "0"' in source
+    assert '"env": probe_env' in source
+    assert "max_retries=0" in source
