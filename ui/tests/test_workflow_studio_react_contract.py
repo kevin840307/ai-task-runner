@@ -117,9 +117,9 @@ def test_react_studio_keeps_stage_type_immutable_after_creation():
 
 def test_react_studio_generic_inspector_keeps_unknown_catalog_options_editable():
     text = SOURCE.read_text(encoding="utf-8")
-    assert 'section.id === "advanced"' in text
-    assert "PARAMETER_SECTIONS.slice(0, -1)" in text
-    assert "group.fields.includes(option.name)" in text
+    assert 'option.section || "advanced"' in text
+    assert 'PARAMETER_SECTION_ORDER' in text
+    assert 'o.visible === false' in text
 
 
 def test_react_source_tracks_session_policy_ui_contract():
@@ -162,9 +162,11 @@ def test_react_studio_keeps_canvas_cards_compact_for_editor_mode():
 def test_react_studio_has_stage_specific_test_prompt_presets():
     text = SOURCE.read_text(encoding="utf-8")
 
-    assert "STAGE_TEST_PROMPTS" in text
+    assert "STAGE_TEST_PROMPTS" not in text
     assert "填入簡易測試 Prompt" in text
-    assert "stageTestPrompt(draft, testScenario)" in text
+    assert "stageTestPrompt(draft, catalog, testScenario)" in text
+    assert "profile?.test_examples?.[scenario]" in text
+    assert "stageType?.test_examples?.[scenario]" in text
     assert 'test_input_help:' in text
     assert 'tx("test_input_help")' in text
     assert "Stage Test API not found. Restart the local UI server" in text
@@ -251,9 +253,9 @@ def test_stage_test_has_pass_fail_error_retry_prompt_scenarios():
     assert 'type StageTestScenario = "pass" | "fail" | "error"' in text
     assert 'testScenario' in text
     assert 'test_error: "ERROR / Retry"' in text
-    assert 'stageTestPrompt(draft, scenario)' in text
+    assert 'stageTestPrompt(draft, catalog, scenario)' in text
     assert '"error_mock"' in text
-    assert "Technical ERROR is injected by the Stage Test harness" in text
+    assert "test_examples" in text
     assert 'className="test-scenario-tabs"' in text
     assert ".scenario-error.active" in styles
 
@@ -845,7 +847,8 @@ def test_stage_backend_model_fields_are_catalog_driven():
     text = SOURCE.read_text(encoding="utf-8")
     registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
 
-    assert 'fields: ["backend", "model", "run_state"' in text
-    assert 'item.name == "backend"' in registry
-    assert 'backend_names()' in registry
+    assert 'option.section || "advanced"' in text
+    assert '"backend": "execution"' in registry
+    assert '"model": "execution"' in registry
+    assert '"run_state": "execution"' in registry
     assert '"qwen", "opencode"' not in text
