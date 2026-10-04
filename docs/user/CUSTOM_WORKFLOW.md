@@ -52,7 +52,7 @@ routes:
 
 Targets may also be `done` or `stop`.
 
-Technical ERROR is never a graph edge. Exceptions, backend failures, timeouts, transient API failures, partial writes, Same Session retry, Fresh Session recovery, and backoff are owned by `runner/workflow/stage_executor.py`.
+Technical ERROR is never a graph edge. Exceptions, backend failures, timeouts, transient API failures, partial writes, Same Session retry, Fresh Session recovery, and backoff are owned by `runner/workflow/execution/stage_executor.py`.
 
 ```yaml
 error_policy:
