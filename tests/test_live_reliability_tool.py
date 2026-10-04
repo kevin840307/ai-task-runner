@@ -168,6 +168,46 @@ def _install_fake_opencode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     return executable
 
 
+def test_live_alternate_backend_selection_is_registry_driven(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import runner.agent
+    import runner.plugins.registry as plugin_registry
+
+    calls = []
+    monkeypatch.setattr(plugin_registry, "discover_plugins", lambda: calls.append("discover"))
+    monkeypatch.setattr(runner.agent, "backend_names", lambda: ("qwen", "custom-a", "custom-b"))
+    monkeypatch.setattr(
+        runner.agent,
+        "default_command",
+        lambda backend: "missing-custom-a" if backend == "custom-a" else sys.executable,
+    )
+    monkeypatch.setattr(
+        runner.agent,
+        "available_models",
+        lambda backend, root: ["custom-b/model-1"] if backend == "custom-b" else [],
+    )
+
+    assert live._select_live_alternate_backend(tmp_path, "qwen") == (
+        "custom-b",
+        "custom-b/model-1",
+    )
+    assert calls == ["discover"]
+
+
+def test_live_alternate_backend_selection_has_no_provider_specific_branch():
+    source = Path(live.__file__).read_text(encoding="utf-8")
+    helper = source[
+        source.index("def _select_live_alternate_backend("):
+        source.index("def stage_probe_live_preflight(")
+    ]
+    assert '"opencode"' not in helper
+    assert '"qwen"' not in helper
+    assert "backend_names()" in helper
+    assert "available_models(backend, root)" in helper
+
+
 def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -187,15 +227,15 @@ def test_stage_probe_live_preflight_runs_agent_ping_and_review_with_fake_qwen(
         "real_stage_next": "done",
         "stage_backend": "qwen",
         "stage_model": "model-probe",
-        "opencode_stage": {
+        "alternate_stage": {
             "available": False,
             "tested": False,
-            "reason": "command_not_found",
+            "reason": "no_runnable_backend",
         },
     }
 
 
-def test_stage_probe_live_preflight_reports_installed_opencode_without_models(
+def test_stage_probe_live_preflight_reports_no_runnable_alternate_without_models(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -209,14 +249,14 @@ def test_stage_probe_live_preflight_reports_installed_opencode_without_models(
 
     result = live.stage_probe_live_preflight(config)
 
-    assert result["opencode_stage"] == {
-        "available": True,
+    assert result["alternate_stage"] == {
+        "available": False,
         "tested": False,
-        "reason": "no_models",
+        "reason": "no_runnable_backend",
     }
 
 
-def test_stage_probe_live_preflight_executes_real_stage_override_with_fake_opencode(
+def test_stage_probe_live_preflight_executes_stage_override_with_registry_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -228,9 +268,10 @@ def test_stage_probe_live_preflight_executes_real_stage_override_with_fake_openc
 
     result = live.stage_probe_live_preflight(config)
 
-    assert result["opencode_stage"] == {
+    assert result["alternate_stage"] == {
         "available": True,
         "tested": True,
+        "backend": "opencode",
         "status": "pass",
         "model": "provider/model-oc",
     }
