@@ -31,7 +31,8 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
     assert not unknown_special, f"Expected built-in catalog fields disappeared: {sorted(unknown_special)}"
 
     # Fields filtered out of the generic parameter list must have an explicit UI owner.
-    assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile"]' in SOURCE
+    assert '["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"]' in SOURCE
+    assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in SOURCE
     assert 'value={String(draft.status || "")}' in SOURCE
     assert 'draft.type === "handoff"' in SOURCE and 'stage.targets || []' in SOURCE
     assert 'draft.max_failures' in SOURCE and 'max_failures' in SOURCE
