@@ -305,6 +305,7 @@ def test_stage_backend_model_override_rejects_main_session():
             name="worker",
             prompt="unused",
             backend="opencode",
+            model="provider/model-a",
             session_policy="main",
         ))
 
@@ -315,6 +316,7 @@ def test_stage_backend_override_rejects_unknown_backend():
             name="worker",
             prompt="unused",
             backend="does-not-exist",
+            model="provider/model-a",
         ))
 
 
