@@ -2448,10 +2448,33 @@ def test_dynamic_session_probe_accepts_completed_primary_session_cleanup():
     assert 'state.get("ai_session_id")' in source
 
 
-def test_finish_run_clears_primary_session_by_contract():
-    source = (Path(__file__).resolve().parents[1] / "runner" / "workflow" / "results.py").read_text(encoding="utf-8")
-    assert 'ctx.state.ai_session_id = ""' in source
-    assert 'ctx.ai_client.session_id = ""' in source
+def test_finish_run_clears_primary_session_by_contract(tmp_path: Path):
+    from types import SimpleNamespace
+    from runner.runtime.run_state import RunState
+    from runner.workflow.results import finish_run
+
+    state = RunState("run", "goal", str(tmp_path))
+    state.ai_session_id = "primary-session"
+    state.stage_sessions = {"role": "role-session"}
+    state.review_failures = {"review::__run__": 1}
+    state.dynamic_groups = {"producer": "producer__g1"}
+    state.dynamic_task_groups = {"producer": ["producer__g1__task"]}
+    client = SimpleNamespace(session_id="primary-session")
+    context = SimpleNamespace(
+        state=state,
+        ai_client=client,
+        set_stage=lambda stage, detail="": setattr(state, "stage", stage),
+    )
+
+    finish_run(context)
+
+    assert state.ai_session_id == ""
+    assert client.session_id == ""
+    assert state.stage_sessions == {}
+    assert state.review_failures == {}
+    assert state.dynamic_groups == {}
+    assert state.dynamic_task_groups == {}
+    assert state.completed is True
 
 
 
