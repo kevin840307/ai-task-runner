@@ -499,6 +499,70 @@ class WorkflowStudioMixin:
                     allowed.add(name)
         return allowed
 
+    def studio_path_test(
+        self,
+        file_id: str,
+        stage_name: str,
+        project: Path | None = None,
+    ) -> dict:
+        """Dry-run the saved canonical Workflow from one Stage to closure.
+
+        This never mutates the Workflow file or production run state. It reuses
+        tool/workflow_dryrun.py, which in turn uses the production loader and
+        FlowEngine with mock Stage results.
+        """
+        path, kind, _scope_name = self._resolve_studio_file(file_id, project)
+        if kind != "workflow":
+            raise ValueError("Path test is available only for workflow YAML")
+        data = self._load_workflow_yaml(path.read_text(encoding="utf-8"))
+        stages = data.get("stages")
+        if not isinstance(stages, dict) or stage_name not in stages:
+            raise ValueError(f"Stage not found: {stage_name}")
+
+        command = [
+            sys.executable,
+            str(self.repo_root / "tool" / "workflow_dryrun.py"),
+            str(path),
+            "--from-stage",
+            str(stage_name),
+            "--max-steps",
+            "500",
+            "--json",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(self.repo_root),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ValueError(f"Path test failed: {exc}") from exc
+
+        raw = (completed.stdout or "").strip()
+        payload: dict = {}
+        if raw:
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                payload = {}
+        if completed.returncode == 2 or not payload:
+            detail = (completed.stderr or completed.stdout or "dry-run returned no JSON").strip()
+            raise ValueError(f"Path test failed: {detail[-4000:]}")
+        return {
+            "ok": completed.returncode == 0 and bool(payload.get("completed")),
+            "exit_code": completed.returncode,
+            "from_stage": str(stage_name),
+            "completed": bool(payload.get("completed")),
+            "error": payload.get("error"),
+            "cycle": payload.get("cycle"),
+            "stage": payload.get("stage"),
+            "transitions": list(payload.get("transitions") or []),
+        }
+
+
     def studio_stage_test(
         self,
         file_id: str,
