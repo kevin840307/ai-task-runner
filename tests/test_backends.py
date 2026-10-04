@@ -750,3 +750,31 @@ def test_ai_client_backend_override_uses_target_default_command_and_model(tmp_pa
     assert captured["extra_args"].count("--model") == 1
     assert captured["extra_args"][captured["extra_args"].index("--model") + 1] == "stage-model"
     assert "--auto" in captured["extra_args"]
+
+
+
+def test_ai_client_reports_effective_model_from_backend_adapter(tmp_path, monkeypatch):
+    class FakeBackend:
+        name = "qwen"
+        base_command = "qwen"
+        root = tmp_path
+        extra_args = ["--model", "stage-model"]
+
+        def configure_runtime(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "runner.agent.client.create_backend",
+        lambda *args, **kwargs: FakeBackend(),
+    )
+
+    client = AIClient(
+        backend="qwen",
+        command=None,
+        root=tmp_path,
+        extra_args=["--model", "stage-model"],
+    )
+
+    assert client.model == "stage-model"
+    client.set_extra_args(["--model", "next-model"])
+    assert client.model == "next-model"
