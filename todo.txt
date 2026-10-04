@@ -451,12 +451,12 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Example for the current Review routing area:
       tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
 
-[ ] Review structured-output repair ownership against DevFollow.
-    - structured_call retries only parser/schema-invalid model output; backend/API errors still escape to StageExecutor.
-    - BaseStage currently owns the bounded structured retry/fresh structured ask plumbing.
-    - Do not refactor this merely for abstraction purity. Move ownership only if deterministic/live evidence shows
-      it duplicates technical recovery/session rotation or violates 24H/session semantics.
-    - Any change must remain one shared implementation, not per-Stage retry code.
+[x] Reviewed structured-output repair ownership against DevFollow.
+    - structured_call repairs only parser/schema-invalid model output after a successful model response.
+    - ask()/retry ask/fresh ask errors escape immediately to StageExecutor; this layer does not own backend/API retry.
+    - The bounded fresh structured ask is protocol repair for malformed structured output, not a second technical recovery loop.
+    - Dedicated regression tests lock parser-repair vs transport-error ownership.
+    - Keep the shared implementation; do not duplicate structured repair in individual Stage types.
 
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
