@@ -18,13 +18,18 @@ from runner.config.defaults import DEFAULT_BACKEND
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-root", default="")
+    parser.add_argument("--models", action="store_true")
     args = parser.parse_args(argv)
     project = Path(args.project_root).expanduser().resolve() if args.project_root else ROOT
     names = list(backend_names())
     payload = {
         "default": DEFAULT_BACKEND,
         "backends": names,
-        "models": {name: available_models(name, project) for name in names},
+        "models": (
+            {name: available_models(name, project) for name in names}
+            if args.models
+            else {}
+        ),
     }
     print(json.dumps(payload, ensure_ascii=True))
     return 0
