@@ -312,9 +312,29 @@ flow:
                 # Selecting an override from main drops the explicit session override
                 # and inherits the default auto policy rather than writing redundant YAML.
                 session_select.select_option("main")
+                before_partial_override = workflow.read_text(encoding="utf-8")
                 backend_select.select_option("opencode")
                 assert session_select.input_value() == "main"
                 assert model_select.is_enabled()
+                assert model_select.input_value() == ""
+                model_options = model_select.locator("option").all_text_contents()
+                assert "provider/model-x" in model_options
+                assert "local-model-y" not in model_options
+
+                # Backend-only is a draft, not an active Stage override. Save must
+                # fail closed until a model from that backend is selected.
+                page.locator(".modal-close-button").click()
+                page.locator(".studio-header button.primary").click()
+                page.get_by_text("backend and model must be configured together", exact=False).wait_for(state="visible")
+                assert workflow.read_text(encoding="utf-8") == before_partial_override
+
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                modal = page.locator(".stage-editor-modal")
+                model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
+                model_select = model_field.locator("select")
+                session_field = modal.locator("label").filter(has=page.locator("span", has_text="session_policy")).first
+                session_select = session_field.locator("select")
+                assert session_select.input_value() == "main"
                 model_select.select_option("provider/model-x")
                 assert session_select.input_value() == ""
                 page.locator(".modal-close-button").click()
