@@ -627,7 +627,7 @@ def test_designer_modals_share_escape_and_close_accessibility_contract():
     assert 'if (event.key !== "Escape") return' in text
     assert 'if (editorOpen) setEditorOpen(false)' in text
     assert 'else if (confirmDialog) setConfirmDialog(null)' in text
-    assert 'else if (pendingCreate) setPendingCreate(null)' in text
+    assert 'else if (pendingCreate) { setPendingCreate(null); setPendingEdgeCreate(null); }' in text
     assert 'else if (addStageOpen) setAddStageOpen(false)' in text
     assert 'aria-label={tx("close")} title={tx("close")}' in text
 
@@ -716,3 +716,22 @@ def test_designer_optional_snap_is_local_only_and_nonsemantic():
     assert 'snapToGrid={snapEnabled}' in text
     assert 'snapGrid={[20, 20]}' in text
     assert 'writeSnapPreference(next)' in text
+
+
+
+def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert "function applyConnectionToVisual(visual: Visual, connection: Connection): Visual" in text
+    assert "const connectionStartRef = useRef" in text
+    assert "const [pendingEdgeCreate, setPendingEdgeCreate]" in text
+    assert "const connectStart = useCallback" in text
+    assert "const connectEnd = useCallback" in text
+    assert "if (!start || state.isValid || start.source === END) return" in text
+    assert 'target?.closest(".react-flow__handle, .react-flow__node")' in text
+    assert "setPendingEdgeCreate({ ...start, position })" in text
+    assert "onConnectStart={connectStart}" in text
+    assert "onConnectEnd={connectEnd}" in text
+    assert "next = applyConnectionToVisual(next" in text
+    assert "data-stage-type={type}" in text
+    assert "setPendingEdgeCreate(null)" in text
