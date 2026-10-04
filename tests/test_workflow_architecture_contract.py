@@ -135,8 +135,10 @@ def test_studio_backend_reuses_catalog_and_production_loader_schema():
     assert "_validate_stage_editor_fields" not in studio
     assert "_validate_node_editor_fields" not in studio
     assert "_stage_editor_fields" not in studio
-    assert "from runner.workflow.schema import validate_stage" in studio
+    assert "from runner.workflow.schema import validate_stage" not in studio
+    assert "from runner" not in studio
     assert "_validate_workflow_before_write(path, updated)" in studio
+    assert "_validate_workflow_before_write(path, candidate)" in studio
 
 
 def test_studio_source_split_stops_at_real_responsibility_boundary():
