@@ -346,14 +346,23 @@ def test_stage_editor_accepts_backend_model_override(tmp_path: Path) -> None:
 
 
 def test_stage_editor_rejects_backend_override_with_main_session(tmp_path: Path) -> None:
-    state, _project = _state(tmp_path)
+    state, project = _state(tmp_path)
+    created = state.studio_workflow_create("backend_model_main", "project", project)
+    file_id = created["item"]["id"]
 
     import pytest
-    with pytest.raises(ValueError, match="session_policy: main"):
-        state._validate_stage_editor_fields({
-            "type": "base",
-            "profile": "execute",
-            "backend": "qwen",
-            "model": "stage-model",
-            "session_policy": "main",
-        })
+    with pytest.raises(ValueError, match="session_policy=main"):
+        state.studio_stage_source(
+            file_id,
+            "execute",
+            "parse",
+            project,
+            fields={"name": "execute", "type": "base", "profile": "execute"},
+            source=(
+                "type: base\n"
+                "profile: execute\n"
+                "backend: qwen\n"
+                "model: stage-model\n"
+                "session_policy: main\n"
+            ),
+        )
