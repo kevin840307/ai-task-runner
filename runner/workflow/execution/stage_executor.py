@@ -135,39 +135,21 @@ class StageExecutor:
                 self._sleep(ctx, service_delay)
                 continue
 
-            if is_transient_error(error):
-                failures_in_session += 1
-                if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
-                    self._fresh_session(stage, ctx)
-                    failures_in_session = 0
-                    retry_mode = "recover"
-                else:
-                    retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
-                self._announce_recovery(
-                    stage, retry_mode, retries_used, service_delay, previous_error
-                )
-                self._sleep(ctx, service_delay)
-                if service_delay:
-                    service_delay = min(
-                        retry_max_delay,
-                        max(base_retry_delay, service_delay * 2),
-                    )
-                continue
-
-            failures_in_session += 1
-            service_delay = base_retry_delay
-            if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
-                self._fresh_session(stage, ctx)
-                failures_in_session = 0
-                retry_mode = "recover"
-            else:
-                retry_mode = "retry" if self._has_session(stage, ctx) else "recover"
-
-            retry_delay = base_retry_delay
+            failures_in_session, retry_mode = self._next_session_retry(
+                stage, ctx, failures_in_session
+            )
+            retry_delay = service_delay if is_transient_error(error) else base_retry_delay
             self._announce_recovery(
                 stage, retry_mode, retries_used, retry_delay, previous_error
             )
             self._sleep(ctx, retry_delay)
+            if is_transient_error(error) and service_delay:
+                service_delay = min(
+                    retry_max_delay,
+                    max(base_retry_delay, service_delay * 2),
+                )
+            else:
+                service_delay = base_retry_delay
 
         try:
             result = stage.finish(ctx, result)
@@ -283,6 +265,21 @@ class StageExecutor:
                 RunnerError("; ".join(item.message for item in violations)),
             )
         return result
+
+    def _next_session_retry(
+        self,
+        stage: Stage,
+        ctx: StageContext,
+        failures_in_session: int,
+    ) -> tuple[int, str]:
+        failures_in_session += 1
+        if failures_in_session >= DEFAULT_PER_SESSION_ATTEMPTS:
+            self._fresh_session(stage, ctx)
+            return 0, "recover"
+        return (
+            failures_in_session,
+            "retry" if self._has_session(stage, ctx) else "recover",
+        )
 
     def _fresh_session(self, stage: Stage, ctx: StageContext) -> None:
         reset = getattr(stage, "reset_session", None)
