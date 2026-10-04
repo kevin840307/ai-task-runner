@@ -437,14 +437,11 @@ def test_browser_workflow_settings_manager_and_prompt_crud() -> None:
             page.wait_for_function(
                 "() => Array.from({length: localStorage.length}, (_, i) => localStorage.key(i)).some(key => key?.startsWith('ai-task-runner:prompt-draft:v1:'))"
             )
-            page.evaluate(
-                """() => {
-                    const saved = state.studioFile;
-                    document.querySelector('#studioPromptTextarea').value = saved.content;
-                    updateDirtyState();
-                    void maybeRestorePromptDraft(saved);
-                }"""
-            )
+            page.reload(wait_until="domcontentloaded")
+            _boot_main_ui(page)
+            page.click("#promptNav")
+            page.wait_for_function("document.querySelector('#promptView') && !document.querySelector('#promptView').hidden")
+            page.get_by_text("e2e_prompt.md").click()
             page.get_by_text("Restore unsaved Prompt draft?").wait_for(state="visible")
             page.get_by_role("button", name="Restore Draft").click()
             page.wait_for_function(
