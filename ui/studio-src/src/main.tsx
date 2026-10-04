@@ -102,6 +102,9 @@ type StudioNodeData = {
 };
 
 type StageTestResult = {
+  ok?: boolean;
+  cancelled?: boolean;
+  test_id?: string;
   stage: string;
   status: string;
   output: string;
@@ -143,7 +146,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "類型（建立後固定；要更換請刪除後重新拖入）", display_name: "顯示名稱", run_status: "執行狀態文字",
     result_edges: "結果連線", incoming: "連到這個積木", stage_input: "Stage Input",
     fill_test: "填入簡易測試 Prompt", clear: "清除", run_stage: "執行 Real Stage", run_ping: "執行 Agent Ping",
-    testing: "測試中…", no_incoming: "目前沒有連入線。",
+    testing: "測試中…", stop_test: "停止測試", test_stopped: "測試已停止", no_incoming: "目前沒有連入線。",
     section_content: "內容", section_execution: "執行", section_result: "結果", section_advanced: "進階",
     favorites: "收藏", recent: "最近使用", extensions: "擴充 Stage", add_stage_dialog: "新增 Stage",
     copy: "複製", paste: "貼上", delete: "刪除", delete_connection: "刪除連線", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
@@ -184,7 +187,7 @@ const DESIGNER_I18N: Record<DesignerLanguage, Record<string, string>> = {
     type_fixed: "Type (fixed after creation; delete and recreate to change it)", display_name: "Display name", run_status: "Runtime status text",
     result_edges: "Result edges", incoming: "Incoming", stage_input: "Stage Input",
     fill_test: "Use sample prompt", clear: "Clear", run_stage: "Run Real Stage", run_ping: "Run Agent Ping",
-    testing: "Testing…", no_incoming: "No incoming edges.",
+    testing: "Testing…", stop_test: "Stop Test", test_stopped: "Test stopped", no_incoming: "No incoming edges.",
     section_content: "Content", section_execution: "Execution", section_result: "Result", section_advanced: "Advanced",
     favorites: "Favorites", recent: "Recent", extensions: "Extensions", add_stage_dialog: "Add Stage",
     copy: "Copy", paste: "Paste", delete: "Delete", delete_connection: "Delete connection", test_pass: "PASS", test_fail: "FAIL", test_error: "ERROR / Retry",
@@ -909,6 +912,7 @@ function App() {
   const [testResult, setTestResult] = useState<StageTestResult | null>(null);
   const [testError, setTestError] = useState("");
   const [testing, setTesting] = useState(false);
+  const stageTestIdRef = useRef("");
   const [pathTestResult, setPathTestResult] = useState<PathTestResult | null>(null);
   const [pathTestError, setPathTestError] = useState("");
   const [pathTesting, setPathTesting] = useState(false);
@@ -1251,6 +1255,8 @@ function App() {
 
   async function testStage() {
     if (!visual || !draft || testing || busy) return;
+    const testId = globalThis.crypto?.randomUUID?.() || `stage-test-${Date.now()}`;
+    stageTestIdRef.current = testId;
     setTesting(true);
     setTestResult(null);
     setTestError("");
@@ -1261,14 +1267,30 @@ function App() {
           id: visual.id, project: query().project, stage: draft.name, input: testInput,
           backend: testBackend, probe_mode: testMode,
           test_scenario: testMode === "stage" ? (testScenario === "error" ? "error_mock" : testScenario) : "pass",
-          graph: graphDraft(visual),
+          graph: graphDraft(visual), test_id: testId,
         }),
       });
-      setTestResult(result);
+      if (result.cancelled) setTestError(tx("test_stopped"));
+      else setTestResult(result);
     } catch (error) {
       setTestError(error instanceof Error ? error.message : String(error));
     } finally {
+      if (stageTestIdRef.current === testId) stageTestIdRef.current = "";
       setTesting(false);
+    }
+  }
+
+  async function stopStageTest() {
+    const testId = stageTestIdRef.current;
+    if (!testId || !testing) return;
+    try {
+      await api("/api/studio/stage/test/cancel", {
+        method: "POST",
+        body: JSON.stringify({ test_id: testId }),
+      });
+      setTestError(tx("test_stopped"));
+    } catch (error) {
+      setTestError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -2325,6 +2347,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 <div className="test-action-row">
                   <button type="button" className="primary" onClick={() => void testStage()}
                     disabled={testing || busy || !testBackend}>{testing ? tx("testing") : testMode === "stage" ? tx("run_stage") : tx("run_ping")}</button>
+                  {testing && <button type="button" className="danger" onClick={() => void stopStageTest()}>{tx("stop_test")}</button>}
                   <button type="button" onClick={() => void testPathFromStage()}
                     disabled={pathTesting || busy || dirtyGraph}
                     title={dirtyGraph ? "Save Workflow before testing path" : "Dry-run saved Workflow from this Stage to END"}>
