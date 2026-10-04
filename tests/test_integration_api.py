@@ -950,3 +950,53 @@ def test_api_level_retry_event_is_persisted_to_bounded_log(tmp_path):
     assert events[-1]["action"] == "retry"
     assert events[-1]["layer"] == "runner_api"
     assert events[-1]["message"] == "temporary outage"
+
+
+
+def test_production_runner_validation_fail_route_loops_back_and_completes(tmp_path):
+    execute = tmp_path / "execute.py"
+    execute.write_text(
+        "from pathlib import Path\n"
+        "p=Path('execute.count'); n=int(p.read_text())+1 if p.exists() else 1; p.write_text(str(n)); print(f'EXECUTE_{n}')\n",
+        encoding="utf-8",
+    )
+    validator = tmp_path / "validator_gate.py"
+    validator.write_text(
+        "from pathlib import Path\n"
+        "p=Path('validator.count'); n=int(p.read_text())+1 if p.exists() else 1; p.write_text(str(n)); print(f'VALIDATE_{n}'); raise SystemExit(1 if n == 1 else 0)\n",
+        encoding="utf-8",
+    )
+    workflow = tmp_path / "workflow.yaml"
+    workflow.write_text(
+        "stages:\n"
+        "  execute:\n"
+        "    type: command\n"
+        "    command: ['{python}', 'execute.py']\n"
+        "  validate_file:\n"
+        "    type: command\n"
+        "    result_kind: validation\n"
+        "    command: ['{python}', 'validator_gate.py']\n"
+        "    routes:\n"
+        "      fail: execute\n"
+        "flow: [execute, validate_file]\n",
+        encoding="utf-8",
+    )
+
+    result = run(RunRequest(
+        goal="exercise production semantic routing",
+        project_root=str(tmp_path),
+        workflow_file=str(workflow),
+        backend="opencode",
+        command=_fake_command(),
+        retry_delay=0,
+        retry_max_delay=0,
+    ))
+
+    assert result.completed is True
+    assert (tmp_path / "execute.count").read_text(encoding="utf-8") == "2"
+    assert (tmp_path / "validator.count").read_text(encoding="utf-8") == "2"
+    state = json.loads((tmp_path / ".ai-task-runner" / "state.json").read_text(encoding="utf-8"))
+    assert state["completed"] is True
+    assert state["cycle"] == 2
+    assert state["transition_previous"]["stage"] == "validate_file"
+    assert state["transition_previous"]["status"] == "pass"
