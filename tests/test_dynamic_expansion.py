@@ -156,3 +156,55 @@ def test_rerunning_same_producer_replaces_old_children_and_tasks(tmp_path, monke
     assert state.dynamic_groups == {"producer": "producer__g2"}
     assert old_child not in state.stage_sessions
     assert not any(key.startswith(f"{old_child}::") for key in state.review_failures)
+
+
+
+def test_dynamic_child_preserves_backend_model_override_across_resume(tmp_path, monkeypatch):
+    monkeypatch.setattr(expansion.progress, "show_todo", lambda _state: None)
+    state = _state(tmp_path)
+    source = {
+        "name": "producer",
+        "type": "command",
+        "command": ["echo", "p"],
+        "produces": "stages",
+    }
+    workflow = [source, {"name": "after", "type": "base", "profile": "generic"}]
+    result = StageResult(
+        "producer",
+        "pass",
+        kind="stages",
+        data={
+            "stages": [{
+                "name": "worker",
+                "type": "base",
+                "profile": "generic",
+                "backend": "opencode",
+                "model": "provider/model-a",
+                "session_policy": "auto",
+            }],
+        },
+    )
+
+    expanded = expansion.expand_stage_result(
+        state=state,
+        workflow=workflow,
+        source_index=0,
+        source=source,
+        result=result,
+        continuation="next",
+    )
+
+    assert expanded is not None
+    child = next(item for item in expanded if item["name"] == "producer__g1__worker")
+    assert child["backend"] == "opencode"
+    assert child["model"] == "provider/model-a"
+    assert child["session_policy"] == "auto"
+
+    resumed = RunState.load(state.dump())
+    resumed_child = next(
+        item for item in resumed.expanded_workflow
+        if item["name"] == "producer__g1__worker"
+    )
+    assert resumed_child["backend"] == "opencode"
+    assert resumed_child["model"] == "provider/model-a"
+    assert resumed_child["session_policy"] == "auto"
