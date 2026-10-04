@@ -2434,3 +2434,29 @@ def test_proxy_recovery_evidence_survives_final_poll_gap():
     control.successes = 4
     control.disconnect = True
     assert live._proxy_recovery_observed("session-A", control, 3) is False
+
+
+
+def test_model_discovery_uses_openai_models_endpoint():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            assert self.path == "/v1/models"
+            body = json.dumps({"data": [{"id": "model-probe"}]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        assert live._discover_openai_model(server.server_port) == "model-probe"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
