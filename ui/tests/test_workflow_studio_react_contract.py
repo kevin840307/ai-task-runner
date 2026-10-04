@@ -311,9 +311,9 @@ def test_workflow_editor_converges_designer_and_yaml_on_one_canonical_file():
     assert 'workflow-yaml-editor' in text
     assert '"/api/studio/save"' in text
     assert '"/api/studio/graph/save"' in text
-    assert "async function switchEditorView(next: WorkflowEditorView)" in text
-    assert "await saveYaml()" in text
-    assert "await saveGraph()" in text
+    assert "function switchEditorView(next: WorkflowEditorView)" in text
+    assert "const saved = await saveCurrent()" in text
+    assert 'return editorView === "yaml" ? saveYaml() : saveGraph()' in text
     assert "editorDirty" in text
     assert ".workflow-yaml-view" in styles
     assert ".workflow-editor-view-switch" in styles
