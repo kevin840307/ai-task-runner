@@ -3364,6 +3364,41 @@ def _proxy_recovery_observed(
     )
 
 
+def _assert_controlled_api_session_rotation(
+    session_id: str,
+    session_rotated: bool,
+    events: list[dict[str, object]],
+) -> None:
+    """Allow bounded Fresh Session rotation only when Runner evidence proves ownership."""
+    fresh_events = [
+        event for event in events
+        if event.get("type") == "runner.session" and event.get("action") == "fresh"
+    ]
+    if not session_rotated and not fresh_events:
+        return
+
+    recovery_modes = [
+        str(event.get("retry_mode") or "")
+        for event in events
+        if _structured_recovery_event(event)
+    ]
+    if not fresh_events:
+        raise RuntimeError(
+            "API outage replaced the session without controlled Runner fresh-session evidence"
+        )
+    if "recover" not in recovery_modes:
+        raise RuntimeError(
+            "API outage rotated Fresh Session without runner.recovery mode=recover evidence"
+        )
+    if session_rotated and not any(
+        str(event.get("previous_session") or "") == session_id
+        for event in fresh_events
+    ):
+        raise RuntimeError(
+            "API outage rotated the observed session without matching previous_session evidence"
+        )
+
+
 def api_recovery_probe(
     settings: Settings,
     root: Path,
@@ -3503,35 +3538,15 @@ def api_recovery_probe(
                 f"armed={bool(outage_marker and outage_marker.is_file())}"
             )
 
-        fresh_events = [
-            event for event in all_events
-            if event.get("type") == "runner.session" and event.get("action") == "fresh"
-        ]
-        recovery_modes = [
-            str(event.get("retry_mode") or "")
-            for event in all_events
-            if _structured_recovery_event(event)
-        ]
-        if session_rotated or fresh_events:
-            # StageExecutor intentionally bounds failures per session. A 5s
-            # injected outage can span the 2s retry and legitimately consume
-            # that budget, so even a "short" outage may rotate. What matters is
-            # that rotation is Runner-owned and observable, never silent.
-            if not fresh_events:
-                raise RuntimeError(
-                    "API outage replaced the session without controlled Runner fresh-session evidence"
-                )
-            if "recover" not in recovery_modes:
-                raise RuntimeError(
-                    "API outage rotated Fresh Session without runner.recovery mode=recover evidence"
-                )
-            if session_rotated and not any(
-                str(event.get("previous_session") or "") == session_id
-                for event in fresh_events
-            ):
-                raise RuntimeError(
-                    "API outage rotated the observed session without matching previous_session evidence"
-                )
+        # StageExecutor intentionally bounds failures per session. A 5s
+        # injected outage can span the 2s retry and legitimately consume that
+        # budget, so short and long outages share the same controlled-rotation
+        # contract instead of encoding timing as a semantic guarantee.
+        _assert_controlled_api_session_rotation(
+            session_id,
+            session_rotated,
+            all_events,
+        )
         # Real Qwen may absorb/retry transport failures below StageExecutor even
         # with SDK retry knobs minimized. This probe owns end-to-end outage
         # resilience and bounded-session continuity, not the exact recovery layer.
