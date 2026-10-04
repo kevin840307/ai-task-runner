@@ -321,7 +321,11 @@ flow:
   - worker
 """
                 )
-                page.get_by_role("tab", name="Designer").click()
+                designer_tab = page.get_by_role("tab", name="Designer")
+                designer_tab.click()
+                page.wait_for_function(
+                    "() => document.querySelector('[role=tab][aria-selected=true]')?.textContent?.includes('Designer')"
+                )
                 page.locator('.react-flow__node[data-id="worker"]').dblclick()
                 modal = page.locator(".stage-editor-modal")
                 execution_tab = page.get_by_role("tab", name="執行")
