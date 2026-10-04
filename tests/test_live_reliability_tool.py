@@ -1745,6 +1745,43 @@ def test_resource_snapshot_is_stdlib_only_and_reports_core_metrics(tmp_path, mon
     assert final_sample["run_root_bytes"] >= 13
 
 
+def test_completed_project_state_cleanup_accepts_empty_active_maps(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    work.mkdir(parents=True)
+    (work / "state.json").write_text(
+        json.dumps({
+            "completed": True,
+            "stage_sessions": {},
+            "review_failures": {},
+            "dynamic_groups": {},
+            "dynamic_task_groups": {},
+        }),
+        encoding="utf-8",
+    )
+
+    live.assert_completed_project_state_clean(project)
+
+
+def test_completed_project_state_cleanup_rejects_stale_active_maps(tmp_path):
+    project = tmp_path / "project"
+    work = project / ".ai-task-runner"
+    work.mkdir(parents=True)
+    (work / "state.json").write_text(
+        json.dumps({
+            "completed": True,
+            "stage_sessions": {"role": "session-1"},
+            "review_failures": {"review::__run__": 1},
+            "dynamic_groups": {"producer": "producer__g1"},
+            "dynamic_task_groups": {"producer": ["task-1"]},
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="stale technical state"):
+        live.assert_completed_project_state_clean(project)
+
+
 def test_project_state_metrics_reports_bounded_state_structures(tmp_path):
     project = tmp_path / "project"
     work = project / ".ai-task-runner"
