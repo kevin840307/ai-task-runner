@@ -666,7 +666,7 @@ def relative_existing_path(child: Path, root: Path) -> str:
 
 
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
-    """Exercise isolated Agent Ping and AI Review profile against the real backend."""
+    """Exercise real Stage transport plus Stage-local backend/model overrides."""
     tool = ROOT / "tool" / "stage_probe.py"
 
     def run_probe(
@@ -776,13 +776,113 @@ flow:
             raise RuntimeError(
                 f"Stage model override mismatch: expected {baseline_model!r}, events={model_events!r}"
             )
-        return {
+        result: dict[str, object] = {
             "agent_ping": True,
             "real_stage_status": stage.get("status"),
             "real_stage_next": stage.get("next"),
             "stage_backend": "qwen",
             "stage_model": baseline_model,
+            "opencode_stage": {
+                "available": False,
+                "tested": False,
+                "reason": "command_not_found",
+            },
         }
+
+        # Optional cross-backend proof. The primary live harness stays on Qwen;
+        # this Stage alone overrides to OpenCode, exercising the exact
+        # run-level -> Stage-level isolation contract without a second runtime.
+        from runner.agent import available_models, default_command
+
+        opencode_command = default_command("opencode")
+        opencode_executable = (
+            Path(opencode_command).is_file()
+            or shutil.which(opencode_command) is not None
+        )
+        if not opencode_executable:
+            return result
+
+        opencode_models = available_models("opencode", root)
+        if not opencode_models:
+            result["opencode_stage"] = {
+                "available": True,
+                "tested": False,
+                "reason": "no_models",
+            }
+            return result
+
+        opencode_model = opencode_models[0]
+        workflow.write_text(
+            """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+    backend: opencode
+    model: """ + json.dumps(opencode_model) + """
+    error_policy:
+      retries: 2
+    max_failures: 3
+flow:
+  - review
+""",
+            encoding="utf-8",
+        )
+        opencode_stage = run_probe(
+            root,
+            workflow,
+            "stage",
+            Path(directory) / "opencode-stage.log",
+            keep_work=True,
+        )
+        if (
+            opencode_stage.get("status") != "pass"
+            or opencode_stage.get("kind") != "review"
+            or opencode_stage.get("next") != "done"
+            or opencode_stage.get("route") != "next"
+        ):
+            raise RuntimeError(
+                "real OpenCode Review Stage backend/model probe failed: "
+                f"{opencode_stage!r}"
+            )
+
+        opencode_work = Path(str(opencode_stage.get("work_dir") or ""))
+        try:
+            opencode_relative_work = relative_existing_path(opencode_work, root)
+        except ValueError as error:
+            raise RuntimeError(
+                f"OpenCode Stage Probe returned invalid work_dir: {opencode_work}"
+            ) from error
+        opencode_events = [
+            event for event in runner_events(root, opencode_relative_work)
+            if event.get("type") in {"model.prompt", "model.result"}
+        ]
+        if not opencode_events:
+            raise RuntimeError(
+                "real OpenCode Stage backend/model override emitted no model events"
+            )
+        if any(
+            str(event.get("backend") or "") != "opencode"
+            for event in opencode_events
+        ):
+            raise RuntimeError(
+                f"OpenCode Stage backend override mismatch: {opencode_events!r}"
+            )
+        if any(
+            str(event.get("model") or "") != opencode_model
+            for event in opencode_events
+        ):
+            raise RuntimeError(
+                "OpenCode Stage model override mismatch: "
+                f"expected {opencode_model!r}, events={opencode_events!r}"
+            )
+        result["opencode_stage"] = {
+            "available": True,
+            "tested": True,
+            "status": opencode_stage.get("status"),
+            "model": opencode_model,
+        }
+        return result
 
 
 def _plan_review_template() -> dict[str, object]:
@@ -4231,7 +4331,17 @@ def main() -> int:
         print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
     if probe_enabled("stage-probe-live", start_probe):
         stage_probe_live = stage_probe_live_preflight(settings)
-        print("PASS real-Qwen isolated Agent Ping + Review Stage Probe preflight", flush=True)
+        opencode_stage = stage_probe_live.get("opencode_stage")
+        opencode_tested = (
+            isinstance(opencode_stage, dict)
+            and opencode_stage.get("tested") is True
+        )
+        suffix = " + OpenCode Stage backend/model" if opencode_tested else ""
+        print(
+            "PASS real-Qwen isolated Agent Ping + Review Stage Probe"
+            f"{suffix} preflight",
+            flush=True,
+        )
     if probe_enabled("workflow-dryrun", start_probe):
         dryrun_results = workflow_dryrun_preflight()
         print(
