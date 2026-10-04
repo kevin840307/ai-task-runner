@@ -1497,10 +1497,16 @@ class WorkflowStudioTests(unittest.TestCase):
             self.state.studio_stage_source(
                 item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nroutes:\n  fail: work\n"
             )
-        with self.assertRaisesRegex(ValueError, "unknown options|unknown_field"):
-            self.state.studio_stage_source(
-                item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nunknown_field: true\n"
-            )
+        with patch.object(
+            self.state,
+            "_validate_workflow_before_write",
+            side_effect=ValueError("production schema rejected unknown_field"),
+        ) as validate:
+            with self.assertRaisesRegex(ValueError, "unknown_field"):
+                self.state.studio_stage_source(
+                    item["id"], "review", "parse", self.project, source="type: base\nprofile: review\nunknown_field: true\n"
+                )
+            validate.assert_called_once()
 
 
     def test_stage_editor_propagates_canonical_validation_for_invalid_profile_fields(self) -> None:
