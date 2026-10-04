@@ -867,9 +867,11 @@ class WorkflowStudioMixin:
             if backend not in known_backends:
                 raise ValueError(f"Stage backend is unsupported: {backend}")
         model = str(fields.get("model") or "").strip()
+        if bool(backend) != bool(model):
+            raise ValueError("Stage backend and model must be configured together")
         if len(model) > 200 or any(ord(ch) < 32 for ch in model):
             raise ValueError("Stage model is invalid")
-        if (backend or model) and fields.get("session_policy") == "main":
+        if backend and model and fields.get("session_policy") == "main":
             raise ValueError("Stage backend/model override cannot use session_policy: main")
 
         session_policy = fields.get("session_policy", "auto")
