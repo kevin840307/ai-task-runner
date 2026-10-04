@@ -258,3 +258,30 @@ def test_catalog_exposes_dynamic_output_metadata_for_special_stages():
     assert catalog["plan"]["result_kind"] == "tasks"
     assert catalog["plan"]["dynamic_output"] is True
     assert catalog["base"]["dynamic_output"] is False
+
+
+
+def test_stage_catalog_backend_and_model_are_registry_driven(monkeypatch):
+    from runner.agent.backend import BACKENDS, BaseBackend, BackendResult
+    from runner.workflow.registry import workflow_catalog
+
+    class PluginBackend(BaseBackend):
+        name = "plugin-backend"
+        default_command = "plugin-backend"
+        def build_command(self, prompt, session_id):
+            return []
+        def decode(self, raw):
+            return BackendResult(raw)
+
+    monkeypatch.setitem(BACKENDS, PluginBackend.name, PluginBackend)
+    catalog = workflow_catalog()
+    options = {
+        item["name"]: item
+        for item in catalog["stage_types"]["base"]["options"]
+    }
+
+    assert options["backend"]["type"] == "enum"
+    assert "qwen" in options["backend"]["values"]
+    assert "opencode" in options["backend"]["values"]
+    assert "plugin-backend" in options["backend"]["values"]
+    assert options["model"]["type"] == "str"
