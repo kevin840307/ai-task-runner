@@ -15,6 +15,14 @@ stage = prompt_stage(prompt)
 session = "backoff-session"
 
 
+def resumed_session() -> str:
+    try:
+        index = args.index("--resume")
+        return str(args[index + 1])
+    except (ValueError, IndexError):
+        return ""
+
+
 def count(name: str) -> int:
     path = state_dir / f"{name}.count"
     value = int(path.read_text() or "0") if path.exists() else 0
@@ -36,7 +44,7 @@ elif stage == "plan_judge":
 elif stage == "execute":
     attempt = count("execute")
     failure_limit = max(1, int(os.environ.get("BACKOFF_TEST_FAILURES", "1")))
-    session = f"backoff-session-{attempt}"
+    session = resumed_session() or f"backoff-session-{attempt}"
     if attempt <= failure_limit:
         if is_qwen:
             print(json.dumps({
