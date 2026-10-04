@@ -2249,10 +2249,6 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                         next.backend = backend;
                         if (!(backendCatalog.models?.[backend] || []).includes(String(next.model || ""))) delete next.model;
                       }
-                      if (next.session_policy === "main" && backend) {
-                        delete next.session_policy;
-                        setMessage(tx("stage_session_default"));
-                      }
                       editDraft(next);
                     }}>
                       <option value="">Use global backend/model</option>
@@ -2265,7 +2261,15 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                     <select
                       value={String(draft.model || "")}
                       disabled={!stageBackend || stageModels.length === 0}
-                      onChange={(event) => editDraft({ ...draft, model: event.target.value })}
+                      onChange={(event) => {
+                        const model = event.target.value;
+                        const next = { ...draft, model };
+                        if (model && next.session_policy === "main") {
+                          delete next.session_policy;
+                          setMessage(tx("stage_session_default"));
+                        }
+                        editDraft(next);
+                      }}
                     >
                       <option value="">{stageBackend ? (stageModels.length ? "Select model" : "No models available") : "Select backend first"}</option>
                       {stageModels.map((value) => <option key={value} value={value}>{value}</option>)}
