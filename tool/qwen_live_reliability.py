@@ -37,6 +37,49 @@ WORKFLOWS = {
 }
 BUILTIN_FINAL_AI_RUNS = 3
 BUILTIN_FINAL_AI_REQUIRED_PASSES = 2
+
+PROBE_ORDER = (
+    "ownership-lock",
+    "windows-orphan-cleanup",
+    "qwen-sandbox",
+    "api-retry-classification",
+    "task-array-recovery",
+    "session-expiry-recovery",
+    "stage-probe-live",
+    "workflow-dryrun",
+    "review-error-policy",
+    "review-max-failures",
+    "readonly-safety",
+    "workflow-dryrun-negative",
+    "stage-result-mapping",
+    "loop-detection",
+    "runtime-long-path",
+    "readonly-long-path",
+    "technical-artifact-safety",
+    "resume",
+    "stop-request-resume",
+    "workflow-file",
+    "workflow-ai",
+    "workflow-mixed",
+    "dynamic-handoff-session-policy",
+    "custom-dynamic-producer",
+    "review-failure-routing",
+    "complete-closed-loop",
+    "validator-failure-routing",
+    "file-protection",
+    "api-502",
+    "api-429",
+    "api-503",
+    "api-disconnect",
+    "multi-todo-resume",
+    "yaml-list-resume",
+    "yaml-list-endurance",
+    "final-ai-quorum",
+    "timeout-recovery-budget",
+    "soak",
+    "example-smoke",
+)
+
 QWEN_SANDBOX_ERROR_MARKERS = (
     "failed to connect to the docker api",
     "dockerdesktoplinuxengine",
@@ -379,7 +422,50 @@ def arguments() -> argparse.Namespace:
         action="store_true",
         help="fail unless a real transient API recovery appears in logs",
     )
+    parser.add_argument(
+        "--start-probe",
+        default="",
+        metavar="INDEX_OR_NAME",
+        help=(
+            "skip earlier reliability probes and start at this 1-based probe index "
+            "or stable probe name; use --list-probes to show choices"
+        ),
+    )
+    parser.add_argument(
+        "--list-probes",
+        action="store_true",
+        help="print ordered reliability probe indices/names and exit",
+    )
     return parser.parse_args()
+
+
+def print_probe_list() -> None:
+    for index, name in enumerate(PROBE_ORDER, start=1):
+        print(f"{index:02d}  {name}")
+
+
+def resolve_start_probe(value: str) -> int:
+    token = str(value or "").strip()
+    if not token:
+        return 0
+    if token.isdigit():
+        index = int(token)
+        if not 1 <= index <= len(PROBE_ORDER):
+            raise ValueError(
+                f"--start-probe index must be between 1 and {len(PROBE_ORDER)}"
+            )
+        return index - 1
+    normalized = token.lower().replace("_", "-")
+    try:
+        return PROBE_ORDER.index(normalized)
+    except ValueError as error:
+        raise ValueError(
+            f"unknown --start-probe {token!r}; use --list-probes"
+        ) from error
+
+
+def probe_enabled(name: str, start_index: int) -> bool:
+    return PROBE_ORDER.index(name) >= start_index
 
 
 def case_prompt(prompt: str, case_id: str) -> str:
@@ -3896,127 +3982,186 @@ def main() -> int:
         args.soak_yaml_every,
         args.soak_sandbox_every,
     )
+    try:
+        start_probe = resolve_start_probe(args.start_probe)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    if args.list_probes:
+        print_probe_list()
+        return 0
+
     run_root = settings.workspace / time.strftime("%Y%m%d-%H%M%S")
     run_root.mkdir(parents=True)
     print(f"LIVE_RUN_ROOT={run_root}", flush=True)
-    runner_ownership_preflight(run_root)
-    print("PASS cross-process Runner ownership lock preflight", flush=True)
-    windows_orphan_cleanup_preflight(run_root)
-    if os.name == "nt":
-        print("PASS bounded Windows orphan taskkill preflight", flush=True)
-    qwen_sandbox_preflight(settings, args.hours)
-    if qwen_sandbox_required(settings, args.hours):
-        print("PASS Qwen sandbox Docker preflight", flush=True)
-    api_retry_classification_preflight()
-    print("PASS API transient/deterministic retry classification preflight", flush=True)
-    task_array_recovery_preflight()
-    print("PASS malformed Task envelope -> complete TaskArray recovery preflight", flush=True)
-    session_expiry_recovery_preflight()
-    print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
-
-    stage_probe_live = stage_probe_live_preflight(settings)
-    print("PASS real-Qwen isolated Agent Ping + Review Stage Probe preflight", flush=True)
-
-    dryrun_results = workflow_dryrun_preflight()
-    print(
-        f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
-        flush=True,
-    )
-    review_error_policy = builtin_review_error_policy_contract()
-    print("PASS built-in Review retries=2 -> fail-soft Skip contract preflight", flush=True)
-    review_max_failures = builtin_review_max_failures_contract()
-    print("PASS built-in Review max_failures=3 semantic FAIL cap preflight", flush=True)
-    readonly_contract = builtin_readonly_safety_contract()
-    print("PASS built-in Workflow readonly_safety observe contract preflight", flush=True)
-    workflow_dryrun_negative_preflight()
-    print("PASS workflow dry-run negative/error preflight", flush=True)
-    stage_result_mapping_preflight()
-    print("PASS Review/Validator boolean verdict mapping preflight", flush=True)
-    loop_detection_contract_preflight()
-    print("PASS Qwen loop-detection + bounded Planning retry preflight", flush=True)
-    runtime_long_path_preflight()
-    print("PASS >MAX_PATH runtime resource/state/copy preflight", flush=True)
-    readonly_long_path_preflight()
-    print("PASS >MAX_PATH reusable read-only snapshot preflight", flush=True)
-    technical_artifact_safety_preflight()
-    print("PASS protected-path technical-artifact ignore preflight", flush=True)
-    with qwen_test_endpoint(settings.sandbox, settings.api_port):
-        resume_probe(settings, run_root)
-        print("PASS resume/process-restart probe", flush=True)
-        stop_request_resume_probe(settings, run_root)
-        print("PASS detached-UI stop.request/resume probe", flush=True)
-        for workflow in ("file", "ai", "mixed"):
-            builtin_workflow_probe(settings, run_root, workflow)
-            print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
-        dynamic_handoff_session_policy_probe(settings, run_root)
-        print("PASS Dynamic Handoff main/role/fresh session-policy live probe", flush=True)
-        custom_dynamic_producer_probe(settings, run_root)
-        print("PASS custom Python Dynamic Producer -> dynamic child Workflow probe", flush=True)
-        review_failure_routing_probe(settings, run_root)
-        print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
-        complete_closed_loop_probe(settings, run_root)
-        print("PASS complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure probe", flush=True)
-        validator_failure_routing_probe(settings, run_root)
-        print("PASS validator FAIL -> Planning shared-feedback routing probe", flush=True)
-        file_protection_probe(settings, run_root)
-        print("PASS protected-file policy probe", flush=True)
-        transient_observed = api_recovery_probe(settings, run_root)
-        print("PASS HTTP 502 transient API/same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings, run_root, "api-rate-limit-429-probe",
-            outage_seconds=5, status_code=429,
-        )
-        print("PASS HTTP 429 rate-limit same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings, run_root, "api-service-unavailable-503-probe",
-            outage_seconds=5, status_code=503,
-        )
-        print("PASS HTTP 503 service-unavailable same-session recovery probe", flush=True)
-        api_recovery_probe(
-            settings,
-            run_root,
-            "api-disconnect-3m-probe",
-            outage_seconds=args.long_api_outage_seconds,
-            disconnect=True,
-        )
+    if start_probe:
         print(
-            f"PASS API disconnect/{args.long_api_outage_seconds:g}s bounded-session recovery probe",
+            f"START_PROBE={start_probe + 1:02d} {PROBE_ORDER[start_probe]}",
             flush=True,
         )
-        multi_todo_resume_probe(settings, run_root)
-        print("PASS multi-TODO/checkpoint resume probe", flush=True)
-        yaml_list_resume_probe(settings, run_root)
-        print("PASS YAML List/resume + validator_args + per-item Final AI 3/2 probe", flush=True)
-        yaml_list_endurance_probe(settings, run_root, args.single_process_yaml_items)
-        if args.single_process_yaml_items:
-            print(
-                f"PASS single-process YAML endurance ({args.single_process_yaml_items} items)",
-                flush=True,
+
+    stage_probe_live: dict[str, object] = {}
+    dryrun_results: list[dict[str, object]] = []
+    review_error_policy: dict[str, object] = {}
+    review_max_failures: dict[str, object] = {}
+    readonly_contract: dict[str, object] = {}
+    transient_observed = False
+    soak_result = SoakResult()
+    example_results: list[tuple[ExampleSmokeCase, Path]] = []
+
+    if probe_enabled("ownership-lock", start_probe):
+        runner_ownership_preflight(run_root)
+        print("PASS cross-process Runner ownership lock preflight", flush=True)
+    if probe_enabled("windows-orphan-cleanup", start_probe):
+        windows_orphan_cleanup_preflight(run_root)
+        if os.name == "nt":
+            print("PASS bounded Windows orphan taskkill preflight", flush=True)
+    if probe_enabled("qwen-sandbox", start_probe):
+        qwen_sandbox_preflight(settings, args.hours)
+        if qwen_sandbox_required(settings, args.hours):
+            print("PASS Qwen sandbox Docker preflight", flush=True)
+    if probe_enabled("api-retry-classification", start_probe):
+        api_retry_classification_preflight()
+        print("PASS API transient/deterministic retry classification preflight", flush=True)
+    if probe_enabled("task-array-recovery", start_probe):
+        task_array_recovery_preflight()
+        print("PASS malformed Task envelope -> complete TaskArray recovery preflight", flush=True)
+    if probe_enabled("session-expiry-recovery", start_probe):
+        session_expiry_recovery_preflight()
+        print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
+    if probe_enabled("stage-probe-live", start_probe):
+        stage_probe_live = stage_probe_live_preflight(settings)
+        print("PASS real-Qwen isolated Agent Ping + Review Stage Probe preflight", flush=True)
+    if probe_enabled("workflow-dryrun", start_probe):
+        dryrun_results = workflow_dryrun_preflight()
+        print(
+            f"PASS workflow dry-run preflight ({sum(int(item.get('paths_total', 0)) for item in dryrun_results)} deterministic paths)",
+            flush=True,
+        )
+    if probe_enabled("review-error-policy", start_probe):
+        review_error_policy = builtin_review_error_policy_contract()
+        print("PASS built-in Review retries=2 -> fail-soft Skip contract preflight", flush=True)
+    if probe_enabled("review-max-failures", start_probe):
+        review_max_failures = builtin_review_max_failures_contract()
+        print("PASS built-in Review max_failures=3 semantic FAIL cap preflight", flush=True)
+    if probe_enabled("readonly-safety", start_probe):
+        readonly_contract = builtin_readonly_safety_contract()
+        print("PASS built-in Workflow readonly_safety observe contract preflight", flush=True)
+    if probe_enabled("workflow-dryrun-negative", start_probe):
+        workflow_dryrun_negative_preflight()
+        print("PASS workflow dry-run negative/error preflight", flush=True)
+    if probe_enabled("stage-result-mapping", start_probe):
+        stage_result_mapping_preflight()
+        print("PASS Review/Validator boolean verdict mapping preflight", flush=True)
+    if probe_enabled("loop-detection", start_probe):
+        loop_detection_contract_preflight()
+        print("PASS Qwen loop-detection + bounded Planning retry preflight", flush=True)
+    if probe_enabled("runtime-long-path", start_probe):
+        runtime_long_path_preflight()
+        print("PASS >MAX_PATH runtime resource/state/copy preflight", flush=True)
+    if probe_enabled("readonly-long-path", start_probe):
+        readonly_long_path_preflight()
+        print("PASS >MAX_PATH reusable read-only snapshot preflight", flush=True)
+    if probe_enabled("technical-artifact-safety", start_probe):
+        technical_artifact_safety_preflight()
+        print("PASS protected-path technical-artifact ignore preflight", flush=True)
+
+    with qwen_test_endpoint(settings.sandbox, settings.api_port):
+        if probe_enabled("resume", start_probe):
+            resume_probe(settings, run_root)
+            print("PASS resume/process-restart probe", flush=True)
+        if probe_enabled("stop-request-resume", start_probe):
+            stop_request_resume_probe(settings, run_root)
+            print("PASS detached-UI stop.request/resume probe", flush=True)
+        for workflow in ("file", "ai", "mixed"):
+            probe_name = f"workflow-{workflow}"
+            if probe_enabled(probe_name, start_probe):
+                builtin_workflow_probe(settings, run_root, workflow)
+                print(f"PASS workflow/{workflow} topology + prompt contract probe", flush=True)
+        if probe_enabled("dynamic-handoff-session-policy", start_probe):
+            dynamic_handoff_session_policy_probe(settings, run_root)
+            print("PASS Dynamic Handoff main/role/fresh session-policy live probe", flush=True)
+        if probe_enabled("custom-dynamic-producer", start_probe):
+            custom_dynamic_producer_probe(settings, run_root)
+            print("PASS custom Python Dynamic Producer -> dynamic child Workflow probe", flush=True)
+        if probe_enabled("review-failure-routing", start_probe):
+            review_failure_routing_probe(settings, run_root)
+            print("PASS Review FAIL -> Execute shared-feedback routing probe", flush=True)
+        if probe_enabled("complete-closed-loop", start_probe):
+            complete_closed_loop_probe(settings, run_root)
+            print("PASS complete Review FAIL -> Execute -> Validator FAIL -> Execute -> closure probe", flush=True)
+        if probe_enabled("validator-failure-routing", start_probe):
+            validator_failure_routing_probe(settings, run_root)
+            print("PASS validator FAIL -> Planning shared-feedback routing probe", flush=True)
+        if probe_enabled("file-protection", start_probe):
+            file_protection_probe(settings, run_root)
+            print("PASS protected-file policy probe", flush=True)
+        if probe_enabled("api-502", start_probe):
+            transient_observed = api_recovery_probe(settings, run_root)
+            print("PASS HTTP 502 transient API/same-session recovery probe", flush=True)
+        if probe_enabled("api-429", start_probe):
+            api_recovery_probe(
+                settings, run_root, "api-rate-limit-429-probe",
+                outage_seconds=5, status_code=429,
             )
-        final_ai_quorum_probe(settings, run_root, mixed=False)
-        print("PASS Final AI 3/2 quorum probe", flush=True)
-        timeout_probe(settings, run_root)
-        print("PASS timeout/recovery-budget probe", flush=True)
-        soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
-        if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
-            raise RuntimeError("soak ended before the requested wall-clock duration")
-        if args.hours:
-            require_resource_bounds(soak_result)
-        if args.high_density and args.hours:
-            require_dense_coverage(soak_result)
-        if args.require_transient and not transient_observed:
-            raise RuntimeError("no real transient API recovery was observed")
-        example_results = []
-        for case in example_cases:
-            project = example_smoke_probe(
+            print("PASS HTTP 429 rate-limit same-session recovery probe", flush=True)
+        if probe_enabled("api-503", start_probe):
+            api_recovery_probe(
+                settings, run_root, "api-service-unavailable-503-probe",
+                outage_seconds=5, status_code=503,
+            )
+            print("PASS HTTP 503 service-unavailable same-session recovery probe", flush=True)
+        if probe_enabled("api-disconnect", start_probe):
+            api_recovery_probe(
                 settings,
                 run_root,
-                case.source,
-                case.workflow,
-                case.name,
+                "api-disconnect-3m-probe",
+                outage_seconds=args.long_api_outage_seconds,
+                disconnect=True,
             )
-            example_results.append((case, project))
-            print(f"PASS copied-example real-agent smoke {case.name}", flush=True)
+            print(
+                f"PASS API disconnect/{args.long_api_outage_seconds:g}s bounded-session recovery probe",
+                flush=True,
+            )
+        if probe_enabled("multi-todo-resume", start_probe):
+            multi_todo_resume_probe(settings, run_root)
+            print("PASS multi-TODO/checkpoint resume probe", flush=True)
+        if probe_enabled("yaml-list-resume", start_probe):
+            yaml_list_resume_probe(settings, run_root)
+            print("PASS YAML List/resume + validator_args + per-item Final AI 3/2 probe", flush=True)
+        if probe_enabled("yaml-list-endurance", start_probe):
+            yaml_list_endurance_probe(settings, run_root, args.single_process_yaml_items)
+            if args.single_process_yaml_items:
+                print(
+                    f"PASS single-process YAML endurance ({args.single_process_yaml_items} items)",
+                    flush=True,
+                )
+        if probe_enabled("final-ai-quorum", start_probe):
+            final_ai_quorum_probe(settings, run_root, mixed=False)
+            print("PASS Final AI 3/2 quorum probe", flush=True)
+        if probe_enabled("timeout-recovery-budget", start_probe):
+            timeout_probe(settings, run_root)
+            print("PASS timeout/recovery-budget probe", flush=True)
+        if probe_enabled("soak", start_probe):
+            soak_result = soak(settings, run_root, args.hours) if args.hours else SoakResult()
+            if args.hours and soak_result.elapsed_seconds < args.hours * 3600:
+                raise RuntimeError("soak ended before the requested wall-clock duration")
+            if args.hours:
+                require_resource_bounds(soak_result)
+            if args.high_density and args.hours:
+                require_dense_coverage(soak_result)
+        if args.require_transient and probe_enabled("api-502", start_probe) and not transient_observed:
+            raise RuntimeError("no real transient API recovery was observed")
+        if probe_enabled("example-smoke", start_probe):
+            for case in example_cases:
+                project = example_smoke_probe(
+                    settings,
+                    run_root,
+                    case.source,
+                    case.workflow,
+                    case.name,
+                )
+                example_results.append((case, project))
+                print(f"PASS copied-example real-agent smoke {case.name}", flush=True)
     summary = {
         "passed": True,
         "sandbox": settings.sandbox,
