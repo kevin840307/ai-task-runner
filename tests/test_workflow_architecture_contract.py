@@ -134,10 +134,9 @@ def test_studio_backend_reuses_catalog_and_production_loader_schema():
     studio = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
     assert "_validate_stage_editor_fields" not in studio
     assert "_validate_node_editor_fields" not in studio
-    assert 'allowed = {"type"}' in studio
-    assert 'catalog.get("node_options")' in studio
+    assert "_stage_editor_fields" not in studio
+    assert "from runner.workflow.schema import validate_stage" in studio
     assert "_validate_workflow_before_write(path, updated)" in studio
-    assert "_validate_workflow_before_write(path, candidate)" in studio
 
 
 def test_studio_source_split_stops_at_real_responsibility_boundary():
