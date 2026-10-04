@@ -2335,6 +2335,16 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
     )
     workflow = project / "workflow.yaml"
     workflow.write_text(REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+    loaded = load_workflow(workflow)
+    loaded_by_name = {str(item.get("name", "")): item for item in loaded}
+    if loaded_by_name.get("validate_file", {}).get("routes") != {"fail": "execute"}:
+        raise RuntimeError(
+            "review failure-routing live fixture lost validate_file.fail -> execute before launch: "
+            f"{loaded_by_name.get('validate_file')!r}"
+        )
+
     log = console_log(project, "console.jsonl")
     try:
         code = run_command(
@@ -2349,6 +2359,24 @@ def review_failure_routing_probe(settings: Settings, root: Path) -> None:
             "review failure-routing probe exceeded bounded semantic timeout; "
             + probe_timeout_diagnostic(project, log)
         ) from exc
+    if code != 0:
+        snapshot = project / ".ai-task-runner" / "workflow.snapshot.json"
+        frozen_route = None
+        try:
+            frozen = json.loads(snapshot.read_text(encoding="utf-8"))
+            frozen_by_name = {
+                str(item.get("name", "")): item
+                for item in frozen
+                if isinstance(item, dict)
+            }
+            frozen_route = frozen_by_name.get("validate_file", {}).get("routes")
+        except Exception as error:
+            frozen_route = f"<snapshot unavailable: {error}>"
+        raise RuntimeError(
+            "review failure-routing run exited before completion; "
+            f"frozen validate_file.routes={frozen_route!r}; "
+            + probe_timeout_diagnostic(project, log)
+        )
     assert_state_completed(project, code)
     if (project / "review.txt").read_text(encoding="utf-8").splitlines() != ["READY", "REVIEW_REQUIRED"]:
         raise RuntimeError("review failure-routing probe produced unexpected logical lines")
