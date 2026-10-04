@@ -2217,6 +2217,17 @@ def test_api_recovery_probe_acknowledges_active_outage_before_execute():
     assert "API_RECOVERY_SHORT_OUTAGE_SECONDS = 5.0" in source
 
 
+def test_api_recovery_probe_never_releases_unobserved_outage():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "tool"
+        / "qwen_live_reliability.py"
+    ).read_text(encoding="utf-8")
+
+    assert "and proxy.failures > 0" in source
+    assert "and time.monotonic() >= outage_until" in source
+
+
 def test_api_recovery_probe_disables_backend_internal_retry():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
 
