@@ -2460,3 +2460,17 @@ def test_model_discovery_uses_openai_models_endpoint():
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+
+def test_resource_snapshot_skips_full_tree_scan_by_default(tmp_path: Path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(live, "_tree_bytes", lambda root: calls.append(Path(root)) or 123)
+
+    sample = live.resource_snapshot(tmp_path)
+    assert "run_root_bytes" not in sample
+    assert calls == []
+
+    sample = live.resource_snapshot(tmp_path, include_run_root_bytes=True)
+    assert sample["run_root_bytes"] == 123
+    assert calls == [tmp_path]
