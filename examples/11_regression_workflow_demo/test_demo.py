@@ -37,8 +37,8 @@ def main() -> int:
         assert len(challenges) == 3 and all(not x["resumed"] for x in challenges)
         assert all(x["session"] == "challenge-review-session" for x in challenges)
         assert all(x["full_challenge_contract"] for x in challenges)
-        fixes = [x for x in writers if x["kind"] == "fix"]
-        assert fixes and all(x["has_feedback"] for x in fixes)
+        revisions = [x for x in writers if x["kind"] == "feedback_revision"]
+        assert revisions and all(x["has_feedback"] for x in revisions)
         assert len(finals) == 5 and all(not x["resumed"] for x in finals) and len({x["session"] for x in finals}) == 5
         assert json.loads((project / ".ai-task-runner/state.json").read_text(encoding="utf-8"))["completed"] is True
         for rel in ("artifacts/project_discovery.md","artifacts/project_documentation.md","artifacts/e2e_spec.md","artifacts/verification_design.md","regression/cases.yaml","artifacts/qualification.md"):
