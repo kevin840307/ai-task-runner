@@ -978,6 +978,12 @@ function App() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [language, setLanguage] = useState<DesignerLanguage>(initialDesignerLanguage());
   const tx = useCallback((key: string) => DESIGNER_I18N[language]?.[key] || DESIGNER_I18N["zh-TW"][key] || key, [language]);
+  const syncGraphProjection = useCallback((next: Visual, nextCatalog: Catalog | null = catalog) => {
+    const graph = graphFor(next, nextCatalog);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    return graph;
+  }, [catalog, graphFor]);
   const anyModalOpen = addStageOpen || Boolean(pendingCreate) || Boolean(confirmDialog) || editorOpen;
   const closeAddStageCommand = useCallback(() => {
     setAddStageOpen(false);
@@ -1058,9 +1064,7 @@ function App() {
       setBackendCatalog(backends);
       setTestBackend((current) => current || backends.default || backends.backends?.[0] || "");
       layoutRef.current = readLayout(v.id);
-      const g = graphFor(v, c);
-      setNodes(g.nodes);
-      setEdges(g.edges);
+      syncGraphProjection(v, c);
       setDirtyGraph(false);
       undoStackRef.current = [];
       redoStackRef.current = [];
@@ -1413,9 +1417,7 @@ function App() {
       setYamlContent(String(result.file.content));
       setYamlOriginal(String(result.file.content));
     }
-    const g = graphFor(result.visual, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(result.visual, catalog);
     setDirtyGraph(false);
     undoStackRef.current = [];
     redoStackRef.current = [];
@@ -1474,9 +1476,7 @@ function App() {
       setYamlContent(String(saved.content || yamlContent));
       setYamlOriginal(String(saved.content || yamlContent));
       setVisual(refreshed);
-      const g = graphFor(refreshed, catalog);
-      setNodes(g.nodes);
-      setEdges(g.edges);
+      syncGraphProjection(refreshed, catalog);
       setDirtyGraph(false);
       clearWorkflowDraft(refreshed.id);
       setRecoveryDraft(null);
@@ -1510,9 +1510,7 @@ function App() {
       if (next === "designer" && visual) {
         const refreshed = await api<Visual>(endpoint("/api/studio/visual"));
         setVisual(refreshed);
-        const g = graphFor(refreshed, catalog);
-        setNodes(g.nodes);
-        setEdges(g.edges);
+        syncGraphProjection(refreshed, catalog);
       } else if (next === "yaml" && visual) {
         const file = await api<StudioFile>(endpoint("/api/studio/file"));
         setYamlContent(String(file.content || ""));
@@ -1530,9 +1528,7 @@ function App() {
     if (next === visual) return;
     rememberUndoSnapshot(visual);
     setVisual(next);
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(next, catalog);
     setDirtyGraph(true);
   }, [visual, catalog, graphFor]);
 
@@ -1549,9 +1545,7 @@ function App() {
     rememberUndoSnapshot(visual);
     const next = disconnectResultEdges(visual, semantic);
     setVisual(next);
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(next, catalog);
     setDirtyGraph(true);
   }, [visual, catalog, graphFor]);
 
@@ -1606,9 +1600,7 @@ function App() {
       layoutRef.current = { ...layoutRef.current, [name]: position };
       writeLayout(visual.id, layoutRef.current);
     }
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(next, catalog);
     setSelected(name);
     setEditorOpen(true);
     setPendingCreate(null);
@@ -1703,9 +1695,7 @@ function App() {
       layoutRef.current = { ...layoutRef.current, [name]: targetPosition };
       writeLayout(visual.id, layoutRef.current);
     }
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(next, catalog);
     setSelected(name);
     setDirtyGraph(true);
     setMessage(`${tx("stage_pasted")} · ${name}`);
@@ -1729,9 +1719,7 @@ function App() {
       };
       writeLayout(visual.id, layoutRef.current);
     }
-    const g = graphFor(next, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(next, catalog);
     setSelected(newName);
     setDirtyGraph(true);
     setMessage(`${tx("stage_duplicated")} · ${name} → ${newName}`);
@@ -1758,9 +1746,7 @@ function App() {
         const next = removeStageFromVisual(current, name);
         rememberUndoSnapshot(current);
         setVisual(next);
-        const g = graphFor(next, catalog);
-        setNodes(g.nodes);
-        setEdges(g.edges);
+        syncGraphProjection(next, catalog);
         setSelected("");
         setEditorOpen(false);
         setContextMenu(null);
@@ -1817,9 +1803,7 @@ function App() {
     setYamlContent(recoveryDraft.yamlContent);
     setEditorView(recoveryDraft.editorView);
     setDirtyGraph(JSON.stringify(graphDraft(restored)) !== JSON.stringify(graphDraft(canonical)));
-    const g = graphFor(restored, catalog);
-    setNodes(g.nodes);
-    setEdges(g.edges);
+    syncGraphProjection(restored, catalog);
     setRecoveryDraft(null);
     setMessage("Recovered local unsaved draft");
   }
