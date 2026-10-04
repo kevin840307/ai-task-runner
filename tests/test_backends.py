@@ -16,6 +16,7 @@ from runner.agent import (
     configure_model_args,
     create_ai_client,
     create_backend,
+    is_session_invalid_error,
     is_transient_service_error,
     sandbox_supported,
     split_command,
@@ -98,6 +99,11 @@ def test_sandbox_arguments_are_owned_by_the_backend_adapter():
         ["--sandbox"],
         sandbox=True,
     ).count("-s") == 0
+
+
+def test_session_invalid_classifier_accepts_qwen_missing_saved_session_message():
+    assert is_session_invalid_error("No saved session found")
+    assert is_session_invalid_error("Error: No saved session found for abc-123")
 
 
 def test_transient_service_classifier_excludes_qwen_sandbox_docker_failures():
