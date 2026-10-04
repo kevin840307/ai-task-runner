@@ -2355,6 +2355,60 @@ def test_api_recovery_probe_disables_qwen_persistent_retry():
 
 
 
+def test_recovery_backoff_observation_is_bounded_and_reports_cap(tmp_path: Path):
+    first = tmp_path / "a" / ".ai-task-runner"
+    second = tmp_path / "b" / ".ai-task-runner"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    (first / "log.txt").write_text(
+        "\n".join([
+            json.dumps({"type": "runner.recovery", "action": "retry", "wait_seconds": 2}),
+            json.dumps({"type": "runner.recovery", "action": "retry", "wait_seconds": 4}),
+            json.dumps({"type": "runner.status", "action": "set", "wait_seconds": 999}),
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    (second / "log.txt").write_text(
+        json.dumps({
+            "type": "runner.recovery",
+            "action": "retry",
+            "wait_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+    assert live.recovery_backoff_observation(tmp_path) == {
+        "count": 3,
+        "min_wait_seconds": 2.0,
+        "max_wait_seconds": float(live.LIVE_RETRY_MAX_DELAY_SECONDS),
+        "configured_max_seconds": live.LIVE_RETRY_MAX_DELAY_SECONDS,
+        "cap_reached": True,
+    }
+
+
+@pytest.mark.parametrize("wait", [0, -1, live.LIVE_RETRY_MAX_DELAY_SECONDS + 1])
+def test_recovery_wait_bounds_fail_closed(wait):
+    with pytest.raises(RuntimeError, match="escaped configured bounds"):
+        live._assert_recovery_wait_bounds([
+            {
+                "type": "runner.recovery",
+                "action": "retry",
+                "wait_seconds": wait,
+            }
+        ])
+
+
+def test_live_runner_command_uses_central_retry_timing_constants(tmp_path: Path):
+    command = live.runner_command(settings(tmp_path), tmp_path)
+
+    assert command[command.index("--retry-delay") + 1] == str(
+        live.LIVE_RETRY_DELAY_SECONDS
+    )
+    assert command[command.index("--retry-max-delay") + 1] == str(
+        live.LIVE_RETRY_MAX_DELAY_SECONDS
+    )
+
+
 def test_soak_resource_bounds_ignore_expected_run_root_growth():
     live.require_resource_bounds(live.SoakResult(
         completed=50,
