@@ -52,7 +52,7 @@ def test_react_workflow_editor_covers_all_node_level_runtime_options():
     assert 'value={String(draft.profile || "generic")}' in SOURCE
     assert 'value={draft.scope || ""}' not in SOURCE
     draft_model = (ROOT / "ui" / "studio-src" / "src" / "workflow-draft.ts").read_text(encoding="utf-8")
-    assert 'const routes = (stage.routes || {}) as Record<string, string>' in draft_model
+    assert 'const routes = { ...(stage.routes || {}) };' in draft_model
     assert 'stage.routes || {}' in draft_model
     assert 'draft.error_policy?.retries' in SOURCE
 
