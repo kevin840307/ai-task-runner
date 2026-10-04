@@ -2194,12 +2194,12 @@ def test_api_recovery_probe_uses_probe_owned_json_event_stream():
 
 
 
-def test_api_recovery_probe_uses_stable_stageexecutor_recovery_evidence():
+def test_api_recovery_probe_records_optional_structured_recovery_evidence():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert 'event.get("type") == "runner.recovery"' in source
     assert 'event.get("action") == "retry"' in source
     assert "final scan after process exit" in source
-    assert "last_error is deliberately transient" in source
+    assert "Real Qwen may absorb/retry transport failures below StageExecutor" in source
 
 
 
@@ -2231,7 +2231,7 @@ def test_structured_recovery_event_accepts_stage_and_api_layers():
     })
 
 
-def test_api_recovery_probe_accepts_both_structured_recovery_layers():
+def test_api_recovery_probe_accepts_both_structured_recovery_layers_when_observed():
     source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
     assert "def _structured_recovery_event" in source
     assert 'kind == "runner.retry" and action == "retry"' in source
@@ -2314,3 +2314,11 @@ def test_soak_resource_bounds_fail_on_harness_thread_handle_or_rss_leak():
     assert "thread count grew" in message
     assert "Windows handle count grew" in message
     assert "harness RSS grew" in message
+
+
+def test_session_expiry_preflight_requires_stageexecutor_recovery_event():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "qwen_live_reliability.py").read_text(encoding="utf-8")
+    assert 'event.get("type") == "runner.recovery"' in source
+    assert 'event.get("action") == "retry"' in source
+    assert '"HTTP 503" in str(event.get("error") or "")' in source
+    assert "production CLI transient Stage failure emitted no runner.recovery/retry evidence" in source
