@@ -2474,3 +2474,20 @@ def test_resource_snapshot_skips_full_tree_scan_by_default(tmp_path: Path, monke
     sample = live.resource_snapshot(tmp_path, include_run_root_bytes=True)
     assert sample["run_root_bytes"] == 123
     assert calls == [tmp_path]
+
+
+
+def test_run_command_observer_gets_final_scan_after_process_exit(tmp_path: Path):
+    log = tmp_path / "run.log"
+    observed = []
+
+    code = live.run_command(
+        [sys.executable, "-c", "print('done')"],
+        log,
+        10,
+        lambda: observed.append(log.read_text(encoding="utf-8", errors="replace")),
+    )
+
+    assert code == 0
+    assert observed
+    assert "done" in observed[-1]
