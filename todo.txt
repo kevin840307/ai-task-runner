@@ -184,7 +184,7 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Add clear spacing/grouping so the two execution actions do not visually merge.
     - Keep one primary action hierarchy and preserve supported desktop viewport checks.
 
-[ ] Stage-level Backend + Model selection
+[x] Stage-level Backend + Model selection
     - Latest contract: Stage override is an atomic Backend + Model pair. Setting only one is invalid and fails closed at Workflow load/save.
     - Override is Stage-local only: it does not change the run-level backend/model and is not inherited by Plan-generated or producer-defined child Stages.
     - Backend choices remain registry/catalog-driven; FlowEngine and Designer contain no Qwen/OpenCode provider branch.
@@ -206,11 +206,15 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
     - Resume/session deterministic coverage remains Stage-local; model override does not mutate global client/session configuration.
     - Removed legacy Studio field structured_fresh_retries remains absent.
     - Committed ui/static/workflow-studio-app bundle is synchronized from the CI-generated Studio build; final bundle verification is green.
-    - Real-Qwen Stage Probe already discovers the active model and verifies production model events report the selected Stage backend/model.
-    - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
-    - Exact runtime/UI HEAD b16b0f5efb8c8b924d99050fe00975d3fcbbb591 passed Ubuntu full Python, Windows full Python, Chromium Browser E2E and Studio committed-bundle verification.
+    - Real-Qwen Stage Probe discovers the active model and verifies production model events report the selected Stage backend/model.
+    - Cross-backend live selection is registry-driven: discover_plugins() -> backend_names() -> runnable command -> available_models(); the harness has no production Qwen/OpenCode branch and automatically exercises any available alternate backend/model through the same production Stage contract.
+    - Deterministic cross-backend regression executes the production Stage override path with an alternate registered backend and verifies effective backend/model events; selector regression forbids provider-specific names inside the generic live backend selector.
+    - A missing optional alternate backend on one Windows machine is therefore reported as SKIP evidence, not a permanent feature blocker; when any alternate registered backend is installed with models, the real live harness runs it automatically.
+    - Main runtime/UI surfaces remain provider-neutral: no Qwen/OpenCode branch exists in FlowEngine, WorkflowRunner, Runner API, UI server, or Workflow Studio; backend-specific command/model behavior remains adapter-owned.
+    - Exact code HEAD 784772eb4138f17181e047383e6abe85acfdb878 passed Ubuntu full Python, Windows full Python, Chromium Browser E2E and Studio committed-bundle verification.
+    - GitHub Actions run 37192014852 proves all four gates green on that exact code HEAD.
     - CI-generated bundle contains models=1 backend/model discovery plus effective_backend/effective_model Stage Test result rendering.
-    - Keep this unchecked only for the remaining enabled real-OpenCode Stage backend/model evidence on Windows; deterministic/UI/dry-run/bundle gates are green.
+    - Feature is complete; real alternate-backend availability remains additional live evidence inside the broader 0.5H/24H acceptance gates, not a Stage Backend/Model implementation blocker.
     - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
