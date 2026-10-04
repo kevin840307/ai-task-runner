@@ -691,6 +691,16 @@ function renderRuntimeGuidance(runtime) {
     ? [recovery.mode || "retry", "#" + recovery.retry, recovery.wait_seconds ? recovery.wait_seconds + "s" : ""].filter(Boolean).join(" · ")
     : "";
   setTextIfChanged($("runtimeGuidanceActions"), retry || (recommended.length ? "Recommended: " + recommended.join(" / ") : ""));
+  const workflowButton = $("runtimeGuidanceWorkflow");
+  const traceButton = $("runtimeGuidanceTrace");
+  if (workflowButton) {
+    workflowButton.hidden = !recommended.includes("open_workflow");
+    workflowButton.onclick = () => $("workflowNav")?.click();
+  }
+  if (traceButton) {
+    traceButton.hidden = !recommended.includes("view_trace");
+    traceButton.onclick = () => $("runtimeTraceButton")?.click();
+  }
 }
 function renderActiveRunDetails(runtime) {
   const root = $("activeRunDetails");
@@ -708,6 +718,8 @@ function renderActiveRunDetails(runtime) {
   setTextIfChanged($("activeRunBackendModel"), [snap.backend, snap.model].filter(Boolean).join(" / ") || "—");
   setTextIfChanged($("activeRunEffectiveModel"), [snap.effective_backend, snap.effective_model].filter(Boolean).join(" / ") || "—");
   setTextIfChanged($("activeRunReadonly"), String(snap.readonly_safety || "—"));
+  const started = Number(snap.started_at || 0);
+  setTextIfChanged($("activeRunStarted"), started ? new Date(started * 1000).toLocaleString() : "—");
   setTextIfChanged($("activeRunId"), String(snap.run_id || "—"));
 }
 function runtimeRenderSignature(runtime) {
