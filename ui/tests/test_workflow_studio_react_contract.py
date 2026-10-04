@@ -801,12 +801,15 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
 
     assert '"backend", "model"' in text
-    assert 'option.name === "backend" ? tx("stage_backend_help")' in text
-    assert 'option.name === "model" ? tx("stage_model_help")' in text
     assert 'stage_backend_help:' in text
     assert 'stage_model_help:' in text
+    assert 'models: Record<string, string[]>;' in text
     assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in text
+    assert 'const stageModels = stageBackend ? (backendCatalog.models?.[stageBackend] || []) : []' in text
     assert 'className="stage-form-section stage-execution-target"' in text
+    assert 'disabled={!stageBackend || stageModels.length === 0}' in text
+    assert 'stageModels.map((value) => <option' in text
+    assert 'model_field.locator("input")' not in text
     assert 'effective_backend?: string;' in text
     assert 'effective_model?: string;' in text
     assert 'testMode === "stage" ? "Fallback Backend" : "Backend"' in text
@@ -814,7 +817,8 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'testResult.effective_model' in text
     assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
     assert 'option.name === "session_policy"' in text
-    assert 'option.name === "backend" || option.name === "model"' in text
+    assert 'next.backend = backend' in text
+    assert 'delete next.model' in text
     assert "structured_fresh_retries" not in state
 
 
