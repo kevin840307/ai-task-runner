@@ -804,6 +804,9 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'option.name === "model" ? tx("stage_model_help")' in text
     assert 'stage_backend_help:' in text
     assert 'stage_model_help:' in text
+    assert "function editDraftOption(option: CatalogOption, value: unknown)" in text
+    assert 'option.name === "session_policy"' in text
+    assert 'option.name === "backend" || option.name === "model"' in text
     assert "structured_fresh_retries" not in state
 
 
