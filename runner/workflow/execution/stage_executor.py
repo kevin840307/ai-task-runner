@@ -170,7 +170,7 @@ class StageExecutor:
         except ConfigurationError:
             raise
         except Exception as error:
-            result = StageResult.error_result(stage.name, error)
+            result = self._recoverable_error_result(stage.name, error)
 
         final_error = ""
         if result.status == "error":
@@ -247,7 +247,7 @@ class StageExecutor:
         except Exception as error:
             violations = []
             if result.status != "error":
-                result = StageResult.error_result(stage.name, error)
+                result = self._recoverable_error_result(stage.name, error)
 
         if violations:
             tolerate = bool(getattr(stage, "tolerate_restored_changes", False))
@@ -280,6 +280,15 @@ class StageExecutor:
             failures_in_session,
             "retry" if self._has_session(stage, ctx) else "recover",
         )
+
+    @staticmethod
+    def _recoverable_error_result(stage_name: str, error: Exception) -> StageResult:
+        """Retry declared Runner failures and transient filesystem/transport OS errors only."""
+        if isinstance(error, (RunnerError, OSError)):
+            return StageResult.error_result(stage_name, error)
+        raise ConfigurationError(
+            f"stage {stage_name} raised unexpected {type(error).__name__}: {error}"
+        ) from error
 
     def _fresh_session(self, stage: Stage, ctx: StageContext) -> None:
         reset = getattr(stage, "reset_session", None)
