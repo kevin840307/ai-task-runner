@@ -244,105 +244,55 @@ Public entry-point regression protection completed:
 
 LIVE REGRESSION NOTES
 ---------------------
-[x] Fixed API recovery live false failure caused by ignoring the outer Runner retry layer.
-    - There are two valid structured recovery layers:
-      StageExecutor emits runner.recovery/retry for Stage-local retry/backoff,
-      while runner.api emits runner.retry/retry when a transient failure escapes the Stage run
-      and the whole Runner resumes from durable state.
-    - The live API recovery probe previously mentioned "runner.recovery/retry" in its error
-      but only accepted runner.recovery, so successful Runner-level recovery was misclassified.
-    - The probe now accepts both structured contracts through one helper.
-    - API-level runner.retry events are also appended to the bounded production log with
-      layer=runner_api, so detached UI/debug/live evidence is durable instead of stdout-only.
-    - Added deterministic coverage for both structured event layers and bounded log persistence.
-    - 429/502/503/raw-disconnect probes all reuse this shared structured recovery contract.
+[x] Recovery observability is split by layer instead of forcing one mechanism.
+    - StageExecutor owns technical Stage retry/backoff/session recovery and emits
+      runner.recovery/retry with stage, retry_mode, retry number, wait_seconds and error.
+    - runner.api owns process-level resume after a transient failure escapes the Stage run
+      and emits runner.retry/retry with layer=runner_api.
+    - Both structured event types are persisted to bounded production logs / JSON events.
 
-[x] Fixed API outage recovery observability false failures.
-    - Root cause: the live gate treated transient UI status (runner.status=Recovering)
-      and a 100ms polling observation of durable last_error as mandatory evidence.
-      Fast successful recovery can complete between polling iterations even when Runner
-      correctly retries and clears last_error.
-    - StageExecutor now publishes stable structured runner.recovery/retry events carrying
-      stage, retry_mode, retry number, wait_seconds and error, while still emitting the
-      transient Recovering UI status.
-    - 429/502/503/raw-disconnect probes use the structured recovery event as the
-      StageExecutor recovery contract and always perform a final JSON/log scan after process exit.
-    - Successful recovery must still finish in the same session and leave final last_error empty.
-    - Deterministic StageExecutor tests assert both UI Recovering status and structured recovery
-      payload; live harness tests lock the post-exit scan to prevent fast-recovery races.
+[x] Production CLI recovery proof is deterministic and must cross the Runner boundary.
+    - session_expiry_recovery_preflight first injects a real HTTP 503-style technical failure
+      through the production CLI/fake-Qwen backend.
+    - It now fails unless runner.recovery/retry is observed before the later expired-session
+      Fresh Session recovery.
+    - This protects the StageExecutor event path independently from real Qwen transport behavior.
 
-[x] Strengthened transient API recovery live proof to distinguish backend retry from Runner recovery.
-    - The live probe now latches durable state.last_error while the outage is active, which proves the
-      failure actually crossed the backend boundary and reached StageExecutor.
-    - Recovering structured status is observed from the probe-owned --json-events console stream first,
-      with bounded production log.txt as secondary evidence.
-    - Failure diagnostics now distinguish: outage absorbed below StageExecutor vs StageExecutor recovery
-      without structured Recovering observability.
-    - Successful completion still requires same-session recovery, no RESET_SESSION verdict and final
-      durable last_error cleared.
-    - The same shared probe covers HTTP 429/502/503 and raw disconnect variants.
+[x] Real-Qwen 429/502/503/raw-disconnect probes own end-to-end outage resilience.
+    - They require the proxy outage to actually occur, the run to recover, the healthy session
+      identity to remain stable, no RESET_SESSION verdict, final completion and final last_error cleanup.
+    - A structured Runner recovery event is useful extra evidence when the failure escapes Qwen,
+      but it is not mandatory because Qwen CLI / transport may absorb and retry below StageExecutor.
+    - This prevents false failures where the outage genuinely recovers before Runner retry is needed.
 
-[x] Fixed transient API recovery live false failure caused by bounded-log observation.
-    - Root cause: Recovering is a short-lived runner.status event, while log.txt is intentionally bounded.
-      api_recovery_probe waited until the whole run completed, then required the final bounded log to
-      still contain that earlier UI state. A valid same-session recovery could therefore pass all runtime
-      checks but fail the harness if the early event had already been trimmed.
-    - The probe now latches Recovering evidence while the outage/retry is actually active.
-      Final assertions still require same-session recovery, no RESET_SESSION verdict, successful completion,
-      and durable last_error cleared.
-    - The shared api_recovery_probe covers HTTP 429/502/503 and raw-disconnect variants, so the race fix
-      applies consistently across those live probes.
-    - Added deterministic harness contract coverage; runner retry semantics were not weakened.
+[x] Fixed Dynamic Handoff session-policy live probes.
+    - Explicit Dynamic Handoff workflows no longer receive a stale file-validator CLI option.
+    - main/role/fresh reuse/isolation is verified from real model session ids, not from final-state
+      retention or LLM wording.
+    - Deterministic command gates force repeated main/role visits; Dynamic Handoff itself still
+      performs a real model-selected target decision.
+    - Completed runs must clear the primary session per finish_run; role-session durability and
+      fresh-session non-persistence remain independently verified.
 
-[x] Fixed Dynamic Handoff session_policy=main live false failure after successful completion.
-    - Root cause: finish_run intentionally clears state.ai_session_id and the primary AI client session
-      after Workflow PASS, but the older live assertion treated a cleared final ai_session_id as failure.
-    - The live probe now forces main_role through a deterministic gate twice and verifies both real
-      model.result session ids are identical during execution.
-    - After completion it requires the primary durable session to be cleared, matching finish_run.
-    - role/fresh policies remain independently checked through stage_sessions and real model session ids.
-    - Added deterministic contract coverage for primary-session cleanup.
+[x] Fixed real Review Stage Probe false failure.
+    - Isolated Review tests now receive concrete deliverable + executor evidence instead of an
+      empty Task.
+    - The real-Qwen PASS preflight therefore tests Review semantics rather than asking the model
+      to approve unverifiable input.
+    - FAIL->stop remains the correct default Review routing when evidence is incomplete.
 
-[x] Reworked Dynamic Handoff session_policy=main live proof to test direct reuse instead of final-state retention.
-    - The previous probe ran main_role only once, then required final completed state.ai_session_id to equal
-      that one model session. Primary-session durability across process restart is already owned by the
-      dedicated resume/process-restart probe.
-    - Dynamic Handoff now deterministically visits main_role twice through main_gate and verifies the two
-      real model.result session ids are identical. stable_role is still visited twice to prove role reuse;
-      fresh_role remains isolated and non-durable.
-    - If final state.ai_session_id is present it must agree with the observed main session, but the probe no
-      longer falsely fails solely because a completed run does not retain it.
-    - Deterministic fixture/dry-run/gate coverage was updated to include the two main_role visits.
+[x] Fixed detached-UI stop.request/resume live false failure.
+    - The detached stop probe verifies clean Supervisor exit=130, control-file cleanup, durable
+      checkpoint preservation, non-regressing cursor/cycle position, and successful --resume.
+    - Same-session model transport remains owned by the dedicated deterministic-checkpoint
+      resume/process-restart probe, avoiding a race-prone duplicate assertion.
 
-[x] Fixed real Review Stage Probe false failure caused by incomplete isolated review evidence.
-    - Root cause: the live Stage Probe created a Review Task with an empty deliverable/last_output,
-      while the harness still expected PASS->done. Real Qwen correctly returned semantic FAIL->stop
-      because there was nothing concrete to verify.
-    - Isolated Review Stage tests now populate the supplied input as deliverable and executor evidence
-      with a concrete acceptance criterion. Production Review semantics are unchanged.
-    - The real-Qwen preflight now supplies a deterministic completed-evidence token and requires
-      PASS + route=next + next=done. FAIL->stop remains the correct default routing contract when
-      Review evidence is actually incomplete.
-    - Added deterministic Stage Probe/source contract coverage and live harness contract coverage.
-    - Other real Stage Probe assertions were audited; no additional model-result-forcing scenario remains.
-
-[x] Fixed Dynamic Handoff live route false failure caused by LLM-controlled visit counting.
-    - Root cause: the probe required stable_role to emit STABLE_FIRST on its first call and
-      STABLE_REPEAT on its second call, then used those exact model outputs to decide whether
-      the coordinator should visit stable_role again. A valid real-Qwen run emitted the later
-      token on the first call and legally advanced to fresh_role, so the harness failed even
-      though Dynamic Handoff completed successfully.
-    - The probe now uses Dynamic Handoff only for the real model-selected main_role entry.
-      A deterministic Command Stage gate forces stable_role to execute exactly twice
-      (first exit=1 -> semantic FAIL -> stable_role, second exit=0 -> PASS -> fresh_role).
-    - role-session reuse is verified directly from the two real model session ids instead of
-      inferred from model wording; fresh/main isolation remains independently verified.
-    - Added deterministic fixture/gate coverage. No other invocation-count-controlled LLM
-      routing probe remains in qwen_live_reliability.py.
-
+[x] Live startup failures now include useful diagnostics.
+    - assert_state_completed includes the newest harness console tail when state.json was never
+      created, so schema/CLI/config startup failures no longer appear only as stage=None/cycle=None.
 
 [x] Dry-run now accepts --max-cycles and has a regression that proves a backward loop reaches max_cycles_exhausted at the same cycle boundary as production FlowEngine.
-[x] API outage live probes require structured runner.recovery/retry evidence, same-session recovery, and final durable last_error cleanup after success.
+[x] API outage live probes require a real outage, same-session completion and final durable last_error cleanup; Runner recovery events are mandatory in the production CLI recovery preflight instead of every Qwen transport outage.
 [x] Fixed Dynamic Handoff live startup failure caused by stale harness validator injection.
     - Root cause: runner_command() unconditionally added --validator validation.py to every direct run.
       Explicit Dynamic Handoff workflows without validate_file are correctly valid, but RuntimeConfig
@@ -393,8 +343,16 @@ High-value runner work remaining:
     Current save points are intentionally conservative for durable resume.
     Do not trade resume correctness for micro-optimization without measurements.
 
-[ ] Keep FlowEngine semantic and StageExecutor technical.
-    Do not merge them for code-count reduction.
+[x] Keep FlowEngine semantic and StageExecutor technical.
+    - Reviewed current two-day Runner changes: no semantic routing moved into StageExecutor and no
+      retry/backoff/session-reset logic moved into FlowEngine.
+    - Architecture regression now forbids retry/sleep/session tokens in FlowEngine and
+      route/workflow-position/max-cycle ownership in StageExecutor.
+    - Removed public contracts remain absent repo-wide: scope/task_step/type: task/type: review,
+      routes.error, restart_at, max_attempts, execution_mode, Discussion/Group Chat.
+    - transition_history is bounded to 40 entries; dynamic re-expansion cleans stale durable
+      stage_sessions/review_failures and process-local stage_session caches.
+    - Do not merge FlowEngine and StageExecutor for code-count reduction.
 
 REAL BACKEND GATE
 -----------------
