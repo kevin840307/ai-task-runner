@@ -354,5 +354,6 @@ def test_stage_editor_rejects_backend_override_with_main_session(tmp_path: Path)
             "type": "base",
             "profile": "execute",
             "backend": "qwen",
+            "model": "stage-model",
             "session_policy": "main",
         })
