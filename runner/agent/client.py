@@ -392,24 +392,36 @@ def create_ai_client(
     timeout=None,
     allow_project_read=False,
     extra_args=None,
+    backend_override="",
+    model_override="",
     constructor=AIClient,
 ):
-    args = (
-        configure_sandbox_args(
-            config.backend,
+    backend_name = str(backend_override or config.backend)
+    if extra_args is not None:
+        args = configure_sandbox_args(
+            backend_name,
             extra_args,
             sandbox=getattr(config, "sandbox", False),
         )
-        if extra_args is not None
-        else build_backend_args(
+    elif backend_name == config.backend:
+        args = build_backend_args(
             config,
             mode,
             allow_project_read=allow_project_read,
         )
-    )
+    else:
+        args = configure_backend_args(
+            backend_name,
+            mode,
+            config.agent_args,
+            allow_project_read=allow_project_read,
+            sandbox=getattr(config, "sandbox", False),
+        )
+    if str(model_override or "").strip():
+        args = configure_model_args(backend_name, args, str(model_override).strip())
     client = constructor(
-        backend=config.backend,
-        command=config.command,
+        backend=backend_name,
+        command=config.command if backend_name == config.backend else None,
         root=root,
         extra_args=args,
         session_id=session_id,
