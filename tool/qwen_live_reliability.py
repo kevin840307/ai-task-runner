@@ -3831,7 +3831,7 @@ def runner_backoff_cap_preflight(root: Path) -> dict[str, object]:
         "--goal", "Create done.txt and validate it.",
         "--validator", "ai",
         "--stage-retries", "-1",
-        "--retry-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
+        "--retry-delay", str(LIVE_RETRY_DELAY_SECONDS),
         "--retry-max-delay", str(LIVE_RETRY_MAX_DELAY_SECONDS),
         "--agent-timeout", "60",
         "--planning-timeout", "60",
@@ -3840,7 +3840,9 @@ def runner_backoff_cap_preflight(root: Path) -> dict[str, object]:
         "--json-events",
     ]
     previous = os.environ.get("BACKOFF_TEST_STATE_DIR")
+    previous_failures = os.environ.get("BACKOFF_TEST_FAILURES")
     os.environ["BACKOFF_TEST_STATE_DIR"] = str(state_dir)
+    os.environ["BACKOFF_TEST_FAILURES"] = "5"
     try:
         code = run_command(
             command,
@@ -3852,8 +3854,28 @@ def runner_backoff_cap_preflight(root: Path) -> dict[str, object]:
             os.environ.pop("BACKOFF_TEST_STATE_DIR", None)
         else:
             os.environ["BACKOFF_TEST_STATE_DIR"] = previous
+        if previous_failures is None:
+            os.environ.pop("BACKOFF_TEST_FAILURES", None)
+        else:
+            os.environ["BACKOFF_TEST_FAILURES"] = previous_failures
     assert_state_completed(project, code)
     observation = _require_recovery_backoff_cap(project)
+    waits = [
+        float(event["wait_seconds"])
+        for event in runner_events(project)
+        if (
+            event.get("type") == "runner.recovery"
+            and event.get("action") == "retry"
+            and isinstance(event.get("wait_seconds"), (int, float))
+            and not isinstance(event.get("wait_seconds"), bool)
+        )
+    ]
+    expected_waits = [2.0, 4.0, 8.0, 16.0, float(LIVE_RETRY_MAX_DELAY_SECONDS)]
+    if waits[: len(expected_waits)] != expected_waits:
+        raise RuntimeError(
+            "controlled Runner backoff sequence did not reach the cap monotonically: "
+            f"waits={waits!r}, expected_prefix={expected_waits!r}"
+        )
     if observation["max_wait_seconds"] != LIVE_RETRY_MAX_DELAY_SECONDS:
         raise RuntimeError(
             "controlled Runner backoff did not hit the exact configured cap: "
