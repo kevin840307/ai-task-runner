@@ -123,3 +123,13 @@ def test_studio_graph_mutations_are_pure_draft_operations():
     assert "syncGraphProjection" in editor
     assert "setNodes(g.nodes);" not in editor
     assert "setEdges(g.edges);" not in editor
+
+
+def test_studio_backend_reuses_catalog_and_production_loader_schema():
+    studio = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+    assert "_validate_stage_editor_fields" not in studio
+    assert "_validate_node_editor_fields" not in studio
+    assert 'allowed = {"type"}' in studio
+    assert 'catalog.get("node_options")' in studio
+    assert "_validate_workflow_before_write(path, updated)" in studio
+    assert "_validate_workflow_before_write(path, candidate)" in studio
