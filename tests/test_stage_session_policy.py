@@ -1,9 +1,10 @@
+import pytest
 from pathlib import Path
 from types import SimpleNamespace
 
 from runner.config.runtime import RuntimeConfig
 from runner.runtime.run_state import RunState, StateStore
-from runner.errors import RunnerError
+from runner.errors import ConfigurationError, RunnerError
 from runner.workflow.stages.base_stage import BaseStage, BaseStageSpec, StageContext, StageResult
 from runner.workflow.execution import StageExecutor
 
@@ -264,3 +265,54 @@ def test_fresh_policy_retries_same_invocation_before_rotating_session(tmp_path, 
         "fresh-session-2",
     ]
     assert ctx.state.stage_sessions == {}
+
+
+
+def test_stage_backend_model_override_auto_uses_durable_stage_session(tmp_path, monkeypatch):
+    ctx = context(tmp_path)
+    ctx.state.stage_sessions["worker"] = "override-resume"
+    captured = []
+
+    def fake_create(*args, session_id="", backend_override="", model_override="", **kwargs):
+        client = SimpleNamespace(session_id=session_id, backend=backend_override, model=model_override)
+        captured.append((backend_override, model_override, session_id, client))
+        return client
+
+    monkeypatch.setattr("runner.workflow.stages.base_stage.create_ai_client", fake_create)
+    stage = BaseStage(BaseStageSpec(
+        name="worker",
+        prompt="unused",
+        backend="opencode",
+        model="provider/model-a",
+        session_policy="auto",
+    ))
+
+    client = stage._client(ctx)
+    assert captured[0][:3] == ("opencode", "provider/model-a", "override-resume")
+    assert client is stage._client(ctx)
+
+    client.session_id = "override-updated"
+    stage._persist_session(ctx, client)
+    assert ctx.state.stage_sessions["worker"] == "override-updated"
+
+    assert stage.reset_session(ctx) == "override-updated"
+    assert "worker" not in ctx.state.stage_sessions
+
+
+def test_stage_backend_model_override_rejects_main_session():
+    with pytest.raises(ConfigurationError, match="session_policy=main"):
+        BaseStage(BaseStageSpec(
+            name="worker",
+            prompt="unused",
+            backend="opencode",
+            session_policy="main",
+        ))
+
+
+def test_stage_backend_override_rejects_unknown_backend():
+    with pytest.raises(ConfigurationError, match="unsupported"):
+        BaseStage(BaseStageSpec(
+            name="worker",
+            prompt="unused",
+            backend="does-not-exist",
+        ))
