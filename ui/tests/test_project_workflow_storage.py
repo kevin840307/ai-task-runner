@@ -85,14 +85,14 @@ def test_project_workflow_and_categorized_prompt_use_split_asset_roots(
 
 def test_bare_prompt_name_defaults_to_common_category(tmp_path: Path) -> None:
     state, project = _state(tmp_path)
-    created = state.studio_prompt_create("review", "global", project)
+    created = state.studio_prompt_create("bare_prompt_probe", "global", project)
 
     path = Path(created["item"]["path"])
     assert path.relative_to(tmp_path).as_posix() == (
-        "runner/assets/prompts/common/review.md"
+        "runner/assets/prompts/common/bare_prompt_probe.md"
     )
-    assert created["item"]["reference"] == "common/review.md"
-    assert created["item"]["display_name"] == "common/review.md"
+    assert created["item"]["reference"] == "common/bare_prompt_probe.md"
+    assert created["item"]["display_name"] == "common/bare_prompt_probe.md"
 
 
 def test_generator_project_workflow_output_returns_asset_package_root(
