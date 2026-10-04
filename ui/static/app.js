@@ -864,7 +864,7 @@ async function sendMessage() {
 
 async function refreshBackends() {
   try { const data = await api("/api/backends", { timeoutMs: 15000 }); state.backends = Array.isArray(data.backends) ? data.backends : []; state.defaultBackend = String(data.default || ""); renderBackendPicker(); }
-  catch (_) { state.backends = ["qwen", "opencode"]; state.defaultBackend = "qwen"; renderBackendPicker(); }
+  catch (_) { state.backends = []; state.defaultBackend = ""; renderBackendPicker(); }
 }
 async function refreshWorkflowCatalog() {
   try {
