@@ -1420,10 +1420,13 @@ function App() {
   }
 
   function switchEditorView(next: WorkflowEditorView) {
-    if (next === editorView) return;
-    const currentDirty = editorView === "yaml" ? yamlDirty : dirtyGraph;
+    if (next === editorView || busy) return;
     const apply = async () => {
+      const currentDirty = editorView === "yaml" ? yamlDirty : dirtyGraph;
       if (currentDirty) {
+        // Designer and YAML are two views of one canonical Workflow. Persist the
+        // current draft through the normal validation/save path before reading
+        // the other representation; never show a stale graph after editing YAML.
         const saved = await saveCurrent();
         if (!saved) return;
       }
@@ -1441,13 +1444,7 @@ function App() {
       setEditorView(next);
       setYamlError("");
     };
-    if (!currentDirty) { void apply(); return; }
-    requestConfirm({
-      title: tx("switch_title"),
-      message: tx("switch_message"),
-      confirmLabel: tx("switch_confirm"),
-      action: apply,
-    });
+    void apply();
   }
 
   const connect = useCallback((connection: Connection) => {
