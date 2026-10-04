@@ -2528,3 +2528,45 @@ def test_relative_existing_path_rejects_unrelated_existing_path(tmp_path: Path):
 
     with pytest.raises(ValueError):
         live.relative_existing_path(other, root)
+
+
+
+def test_live_probe_start_selector_accepts_index_and_name():
+    review_index = live.PROBE_ORDER.index("review-failure-routing")
+
+    assert live.resolve_start_probe("") == 0
+    assert live.resolve_start_probe(str(review_index + 1)) == review_index
+    assert live.resolve_start_probe("review-failure-routing") == review_index
+    assert live.resolve_start_probe("review_failure_routing") == review_index
+    assert live.probe_enabled("technical-artifact-safety", review_index) is False
+    assert live.probe_enabled("review-failure-routing", review_index) is True
+    assert live.probe_enabled("api-502", review_index) is True
+
+
+@pytest.mark.parametrize("value", ["0", "999", "does-not-exist"])
+def test_live_probe_start_selector_rejects_invalid_values(value: str):
+    with pytest.raises(ValueError):
+        live.resolve_start_probe(value)
+
+
+def test_list_probes_exits_before_qwen_command_validation(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["qwen_live_reliability.py", "--list-probes"])
+    monkeypatch.setattr(
+        live.shutil,
+        "which",
+        lambda _command: (_ for _ in ()).throw(AssertionError("Qwen lookup should not run")),
+    )
+
+    assert live.main() == 0
+
+    output = capsys.readouterr().out
+    assert "01  ownership-lock" in output
+    review_index = live.PROBE_ORDER.index("review-failure-routing") + 1
+    assert f"{review_index:02d}  review-failure-routing" in output
+
+
+def test_batch_gates_forward_live_probe_selector_arguments():
+    root = Path(__file__).resolve().parents[1]
+    for name in ("qwen_live_reliability_24h.bat", "qwen_live_reliability_0_5h.bat"):
+        text = (root / "tool" / name).read_text(encoding="utf-8")
+        assert "%*" in text
