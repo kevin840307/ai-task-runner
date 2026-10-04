@@ -14,6 +14,8 @@ def test_workflow_catalog_exposes_stage_presentation_metadata():
     assert isinstance(options["prompt"]["order"], int)
     assert options["ai_validator_yolo"]["section"] == "advanced" if "ai_validator_yolo" in options else True
 
+    assert base["profiles"]["execute"]["semantics"] == "execute"
+    assert base["profiles"]["review"]["semantics"] == "review"
     assert base["profiles"]["execute"]["test_examples"]["pass"]
     assert base["profiles"]["review"]["test_examples"]["fail"]
     assert stage_types["plan"]["test_examples"]["pass"]
