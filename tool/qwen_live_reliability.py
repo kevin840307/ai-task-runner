@@ -3173,6 +3173,74 @@ def final_ai_quorum_probe(
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
 
+
+API_RECOVERY_ARM_SCRIPT = '''from pathlib import Path
+import time
+
+marker = Path(".ai-task-runner") / "api-outage-armed"
+marker.parent.mkdir(parents=True, exist_ok=True)
+marker.write_text("armed\\n", encoding="utf-8")
+time.sleep(2)
+'''
+
+API_RECOVERY_WARMUP_PROMPT = """Establish the Runner session for the API recovery probe.
+Do not modify files. Return exactly WARMUP_READY.
+"""
+
+API_RECOVERY_EXECUTE_PROMPT = f"""The API outage gate has already been armed.
+Create a UTF-8 file named health.txt containing exactly this text, with no trailing newline:
+{EXPECTED}
+
+Modify health.txt only and return immediately after the file is correct.
+"""
+
+API_RECOVERY_WORKFLOW = '''stages:
+  warmup:
+    type: base
+    profile: generic
+    prompt: api_warmup.md
+    session_policy: main
+
+  arm:
+    type: command
+    command: "{python} api_outage_arm.py"
+
+  execute:
+    type: base
+    profile: execute
+    prompt: api_execute.md
+    session_policy: main
+
+  validate_file:
+    type: command
+    result_kind: validation
+    command: "{python} {validator} --project-root {project_root} --state-file {state_file} {validator_args}"
+
+flow:
+  - warmup
+  - arm
+  - execute
+  - validate_file
+'''
+
+
+def _prepare_api_disconnect_fixture(project: Path) -> tuple[Path, Path]:
+    """Create a deterministic boundary immediately before the AI call under outage."""
+    (project / "api_warmup.md").write_text(API_RECOVERY_WARMUP_PROMPT, encoding="utf-8")
+    (project / "api_execute.md").write_text(API_RECOVERY_EXECUTE_PROMPT, encoding="utf-8")
+    (project / "api_outage_arm.py").write_text(API_RECOVERY_ARM_SCRIPT, encoding="utf-8")
+    workflow = project / "api-recovery-workflow.yaml"
+    workflow.write_text(API_RECOVERY_WORKFLOW, encoding="utf-8")
+
+    from runner.workflow.loader import load_workflow
+
+    loaded = load_workflow(workflow)
+    names = [str(item.get("name") or "") for item in loaded]
+    if names != ["warmup", "arm", "execute", "validate_file"]:
+        raise RuntimeError(f"API disconnect fixture topology drifted: {names!r}")
+    return workflow, project / ".ai-task-runner" / "api-outage-armed"
+
+
 def _structured_recovery_event(event: dict[str, object]) -> bool:
     kind = str(event.get("type") or "")
     action = str(event.get("action") or "")
@@ -3217,6 +3285,10 @@ def api_recovery_probe(
         qwen_test_endpoint(settings.sandbox, proxy.port, max_retries=0),
     ):
         project = create_project(root, name)
+        workflow = None
+        outage_marker = None
+        if disconnect:
+            workflow, outage_marker = _prepare_api_disconnect_fixture(project)
         log = console_log(project, "console.jsonl")
         log.parent.mkdir(parents=True, exist_ok=True)
         stream = log.open("w", encoding="utf-8")
@@ -3237,7 +3309,10 @@ def api_recovery_probe(
             options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         else:
             options["start_new_session"] = True
-        process = subprocess.Popen(runner_command(settings, project), **options)
+        process = subprocess.Popen(
+            runner_command(settings, project, workflow=workflow),
+            **options,
+        )
         deadline = time.monotonic() + settings.run_timeout
         session_id = ""
         outage_until = 0.0
@@ -3257,7 +3332,19 @@ def api_recovery_probe(
                         for event in (*jsonl_events(log), *runner_events(project))
                     )
                 current_session = state.get("ai_session_id")
-                if not session_id and isinstance(current_session, str) and current_session:
+                outage_armed = (
+                    not disconnect
+                    or (
+                        outage_marker is not None
+                        and outage_marker.is_file()
+                    )
+                )
+                if (
+                    not session_id
+                    and outage_armed
+                    and isinstance(current_session, str)
+                    and current_session
+                ):
                     session_id = current_session
                     successes_before_outage = proxy.successes
                     proxy.disconnect = disconnect
@@ -3316,7 +3403,8 @@ def api_recovery_probe(
                 "API outage did not recover cleanly: "
                 f"session={bool(session_id)}, recovered={recovered}, "
                 f"failures={proxy.failures}, successes_before={successes_before_outage}, "
-                f"successes_after={proxy.successes}, disconnect={disconnect}"
+                f"successes_after={proxy.successes}, disconnect={disconnect}, "
+                f"armed={bool(outage_marker and outage_marker.is_file())}"
             )
 
         fresh_events = [
