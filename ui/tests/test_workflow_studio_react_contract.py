@@ -311,8 +311,9 @@ def test_workflow_editor_converges_designer_and_yaml_on_one_canonical_file():
     assert 'workflow-yaml-editor' in text
     assert '"/api/studio/save"' in text
     assert '"/api/studio/graph/save"' in text
-    assert "儲存並切換視圖？" in text
-    assert "Workflow Editor 只維護一份 canonical YAML" in text
+    assert "async function switchEditorView(next: WorkflowEditorView)" in text
+    assert "await saveYaml()" in text
+    assert "await saveGraph()" in text
     assert "editorDirty" in text
     assert ".workflow-yaml-view" in styles
     assert ".workflow-editor-view-switch" in styles
@@ -708,9 +709,9 @@ def test_workflow_draft_recovery_is_local_hash_gated_and_save_cleared():
     assert "clearWorkflowDraft(v.id)" in text
     assert "writeWorkflowDraft({" in text
     assert "if (!editorDirty || !visual) return" in text
-    assert "canonical Workflow is unchanged" in text
-    assert ">Discard Draft<" in text
-    assert ">Restore Draft<" in text
+    assert 'draft_recovery_unchanged: "尚未寫入 Workflow"' in text
+    assert 'tx("discard_draft")' in text
+    assert 'tx("restore_draft")' in text
     assert "clearWorkflowDraft(savedVisual.id)" in text
     assert "clearWorkflowDraft(refreshed.id)" in text
     assert ".workflow-draft-recovery" in styles
