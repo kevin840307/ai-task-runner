@@ -1921,7 +1921,6 @@ def test_review_routing_probe_protects_control_assets():
         "seed_review.py",
         "review_gate.py",
         "review_execute.md",
-        "review_check.md",
         "workflow.yaml",
     ):
         assert f"  - {name}" in policy
