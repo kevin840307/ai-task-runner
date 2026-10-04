@@ -19,6 +19,7 @@ from .backend import (
 
 SESSION_INVALID_MARKERS = (
     "session not found",
+    "no saved session found",
     "session expired",
     "invalid session",
     "cannot resume session",
