@@ -152,21 +152,9 @@ class Handler(SimpleHTTPRequestHandler):
                     reset_stopped=bool(body.get("reset_stopped")),
                 ))
             if parsed.path == "/api/project/stop":
-                self.state.stop(self._project(body))
-                return self._json({"ok": True})
+                return self._json(self.state.stop(self._project(body)))
             if parsed.path == "/api/project/resume":
-                project = self._project(body)
-                request = self.state._latest_run_request(project)
-                self.state.launch(
-                    project,
-                    None,
-                    mode="resume",
-                    backend=str(request.get("backend") or ""),
-                    model=str(request.get("model") or ""),
-                    validator=str(request.get("validator") or ""),
-                    workflow=str(request.get("workflow") or ""),
-                    readonly_safety=str(request.get("readonly_safety") or "restore"),
-                )
+                self.state.resume(self._project(body))
                 return self._json({"ok": True})
             if parsed.path == "/api/project/reset":
                 return self._json(self.state.reset_runtime(self._project(body)))
