@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 
 from project_registry import path_key, project_file_lock
+from runner.runtime.view import build_runtime_view
 
 try:
     from .server_support import background_process_kwargs as _background_process_kwargs
@@ -433,20 +434,29 @@ class ProjectRuntimeMixin:
         runtime, _, script_view, state = self._runtime_display(project)
         marker = self._read_json(runtime / "runner-process.json") or {}
         pid_value = self._marker_pid(marker.get("supervisor_pid"))
-        status = "idle"
-        if pid_value and self._pid_alive(pid_value, alive_pids):
+        supervisor_running = bool(pid_value and self._pid_alive(pid_value, alive_pids))
+        if supervisor_running:
             self._clear_launch_reservation(project)
-            status = "recovering" if state.get("last_error") else "running"
-        elif self._active_launch_reservation(project, alive_pids):
-            status = "recovering" if state.get("last_error") else "running"
-        else:
-            completed = self._script_completed(script_view) if script_view.get("mode") == "script" else bool(state.get("completed"))
-            if completed:
-                status = "completed"
-            elif marker and state:
-                status = "needs_attention"
-            elif state:
-                status = "needs_attention" if state.get("last_error") else "stopped"
+        launching = bool(
+            not supervisor_running
+            and self._active_launch_reservation(project, alive_pids)
+        )
+        running = supervisor_running or launching
+        completed = (
+            self._script_completed(script_view)
+            if script_view.get("mode") == "script"
+            else bool(state.get("completed"))
+        )
+        resumable = bool(state and not completed)
+        stale = bool(marker and not supervisor_running and not launching)
+        view = build_runtime_view({
+            "project_exists": True,
+            "running": running,
+            "completed": completed,
+            "resumable": resumable,
+            "stale": stale,
+            "last_error": state.get("last_error") or "",
+        })
         tasks = state.get("tasks") if isinstance(state.get("tasks"), list) else []
         completed_count = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "completed")
         stage = str(state.get("stage") or "")
@@ -456,7 +466,7 @@ class ProjectRuntimeMixin:
             prefix = f"Script {index}/{total}" if index and total else "Script"
             stage = f"{prefix} · {stage}" if stage else prefix
         return {
-            "status": status,
+            "status": view["status"],
             "stage": stage,
             "completed_count": completed_count,
             "total": len(tasks),
@@ -555,6 +565,23 @@ class ProjectRuntimeMixin:
         model = cls._normalize_model(value)
         return [] if not model else ["--agent-arg=--model", f"--agent-arg={model}"]
 
+    def _has_user_message_record(self, project: Path) -> bool:
+        path = project / UI_STATE_DIR / MESSAGES_FILE
+        if not path.is_file():
+            return False
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(item, dict) and item.get("role") == "user":
+                        return True
+        except OSError:
+            return False
+        return False
+
     def _latest_run_request(self, project: Path) -> dict:
         requests = project / UI_STATE_DIR / "requests"
         if not requests.is_dir():
@@ -614,7 +641,7 @@ class ProjectRuntimeMixin:
         resumable = bool(state and not completed)
         if not running and completed and not script_mode:
             self.sync_completion(project)
-        return {
+        payload = {
             "running": running,
             "launching": launching,
             "run_id": state.get("run_id") or "",
@@ -674,7 +701,29 @@ class ProjectRuntimeMixin:
             "model": str(request.get("model") or ""),
             "workflow": str(request.get("workflow") or ""),
             "validator": str(request.get("validator") or ""),
+            "readonly_safety": str(request.get("readonly_safety") or ""),
+            "effective_backend": str(console.get("effective_backend") or ""),
+            "effective_model": str(console.get("effective_model") or ""),
+            "recovery": (
+                console.get("recovery")
+                if isinstance(console.get("recovery"), dict)
+                else {}
+            ),
         }
+        view = build_runtime_view({
+            **payload,
+            "project_exists": project.is_dir(),
+            "request": request,
+            "can_rerun": self._has_user_message_record(project),
+        })
+        payload["view"] = view
+        payload["status"] = view["status"]
+        payload["actions"] = view["actions"]
+        payload["attention_reason"] = view["reason"]
+        payload["recommended_actions"] = view["recommended_actions"]
+        payload["recovery"] = view["recovery"]
+        payload["run_snapshot"] = view["run"]
+        return payload
 
     def active_projects(self) -> list[dict]:
         active: list[dict] = []
@@ -898,9 +947,9 @@ class ProjectRuntimeMixin:
             if not str(workflow or "").strip():
                 raise ValueError("Select a Workflow before Run")
             runtime = self.read_runtime(project)
-            if runtime.get("running"):
-                raise ValueError("This project already has an active runtime")
-            if runtime.get("resumable"):
+            if not runtime.get("actions", {}).get("run"):
+                if runtime.get("running"):
+                    raise ValueError("This project already has an active runtime")
                 raise ValueError("Previous task is stopped or interrupted. Continue it or Reset before starting a new task.")
             if runtime.get("completed") or runtime.get("stale"):
                 self._reset_runtime_locked(project)
@@ -935,12 +984,32 @@ class ProjectRuntimeMixin:
                 raise
             self.append_message(project, "user", message)
 
+    def resume(self, project: Path) -> None:
+        """Resume only a durable stopped run; launch() remains the process owner."""
+        with self._runtime_lock:
+            runtime = self.read_runtime(project)
+            if not runtime.get("actions", {}).get("resume"):
+                raise ValueError("This project does not have a stopped run to Continue")
+            request = self._latest_run_request(project)
+            self.launch(
+                project,
+                None,
+                mode="resume",
+                backend=str(request.get("backend") or ""),
+                model=str(request.get("model") or ""),
+                validator=str(request.get("validator") or ""),
+                workflow=str(request.get("workflow") or ""),
+                readonly_safety=str(request.get("readonly_safety") or "restore"),
+            )
+
     def rerun_last(self, project: Path, *, backend: str = "", model: str = "", validator: str = "", workflow: str = "", ai_validator_prompt_file: str = "", readonly_safety: str = "restore") -> None:
         """Atomically reset and relaunch the last user task within this UI process."""
         with self._chat_lock, self._runtime_lock:
             runtime = self.read_runtime(project)
-            if runtime.get("running"):
-                raise ValueError("This project already has an active runtime")
+            if not runtime.get("actions", {}).get("rerun"):
+                if runtime.get("running"):
+                    raise ValueError("This project already has an active runtime")
+                raise ValueError("No completed task is available to rerun")
             last = next((m["content"] for m in reversed(self.messages(project)) if m.get("role") == "user"), "")
             if not last:
                 raise ValueError("No previous task to rerun")
@@ -1111,16 +1180,24 @@ class ProjectRuntimeMixin:
         os.replace(tmp, request_dir / "request.json")
         return {**manifest, "request_dir": str(request_dir)}
 
-    def stop(self, project: Path) -> None:
-        runtime = self.runtime_dir(project)
-        runtime.mkdir(parents=True, exist_ok=True)
-        (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
+    def stop(self, project: Path) -> dict:
+        """Request stop only for an active owner; repeated/stale Stop is harmless."""
+        with self._runtime_lock:
+            if not self.read_runtime(project).get("actions", {}).get("stop"):
+                return {"ok": True, "requested": False}
+            runtime = self.runtime_dir(project)
+            runtime.mkdir(parents=True, exist_ok=True)
+            (runtime / "stop.request").write_text("stop\n", encoding="utf-8")
+            return {"ok": True, "requested": True}
 
     def reset_runtime(self, project: Path) -> dict:
         """Clear Runner-owned state for a new task while preserving UI history."""
         with self._runtime_lock:
-            if self.read_runtime(project).get("running"):
-                raise ValueError("Stop the active runtime before Reset")
+            runtime = self.read_runtime(project)
+            if not runtime.get("actions", {}).get("reset"):
+                if runtime.get("running"):
+                    raise ValueError("Stop the active runtime before Reset")
+                raise ValueError("There is no stopped runtime to Reset")
             removed = self._reset_runtime_locked(project)
             return {"ok": True, "removed": removed}
 
