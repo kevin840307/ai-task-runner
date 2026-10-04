@@ -919,13 +919,13 @@ Workflow without understanding Runner internals.
     - Detailed run id/session/backend/model/cycle/snapshot remains available behind compact details.
     - Continue consuming the canonical Runtime View; do not re-derive runtime state in UI.
 
-[ ] Make active Run snapshot vs editor state unmistakable
+[x] Make active Run snapshot vs editor state unmistakable
     - Clearly distinguish the frozen Workflow/config used by the active Run from current editor/draft changes.
     - Edits during an active Run must visibly say they apply to the next Run.
     - Reuse existing frozen/durable run snapshot evidence; no second snapshot store.
     - This is primarily presentation/guard UX, not new runtime behavior.
 
-[ ] Simplify Workflow canvas Nodes to topology-first information
+[x] Simplify Workflow canvas Nodes to topology-first information
     - Default Node should emphasize Stage type/name and PASS/FAIL/HANDOFF topology.
     - Runtime status may appear while a Run is active.
     - Move verbose retry/backend/model/session/dynamic configuration details to Stage Settings/details.
@@ -933,7 +933,7 @@ Workflow without understanding Runner internals.
     - Goal: users read the Workflow graph as a process, not as a configuration dump.
     - Prefer deleting JSX/CSS/state over adding decorative UI.
 
-[ ] Make Stage Settings progressively disclose advanced options
+[x] Make Stage Settings progressively disclose advanced options
     - Common AI Stage path should fit into a simple Content + Execution experience.
     - Review-specific semantic FAIL / technical ERROR policy appears only when relevant.
     - Rare/internal fields stay under Advanced instead of competing with Prompt/Backend/Model/Session.
@@ -941,7 +941,7 @@ Workflow without understanding Runner internals.
     - Visibility/order should come from canonical catalog metadata where it is domain-specific;
       presentation/layout remains Studio-owned.
 
-[ ] Simplify Stage Test mental model
+[x] Simplify Stage Test mental model
     - Present execution method and input scenario as separate concepts.
     - Preferred model:
         Mode: Real Stage / Agent Ping / Mock Technical Error
@@ -951,7 +951,7 @@ Workflow without understanding Runner internals.
     - Do not make PASS/FAIL look like separate execution engines.
     - Continue using the existing disposable Stage-test execution path; no second runtime.
 
-[ ] Re-evaluate Stage Palette complexity against current Stage count
+[x] Re-evaluate Stage Palette complexity against current Stage count
     - If Favorites/Recent/multiple built-in groups add more navigation than value for the current small Stage set,
       simplify to Search + core Stages + Extensions.
     - Keep category/favorites/recent only if they materially improve use with installed plugin Stage counts.
@@ -967,7 +967,7 @@ Workflow without understanding Runner internals.
 P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
 ----------------------------------------------------
 
-[ ] Make Stage Catalog the canonical Studio domain metadata source
+[x] Make Stage Catalog the canonical Studio domain metadata source
     - Remove frontend-owned STAGE_META / built-in Stage type/category fallback knowledge where the backend
       Stage catalog already provides title/description/category/options/defaults/profile/test/dynamic metadata.
     - Plugin/custom Stage should appear without editing Studio Stage-name/type branches.
@@ -989,14 +989,14 @@ P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
     - Generic catalog/UI should consume registry capabilities.
     - Keep adapter-local provider hardcodes where they are the correct owner.
 
-[ ] Project Backend/Model/Session constraints instead of reimplementing them in Studio
+[x] Project Backend/Model/Session constraints instead of reimplementing them in Studio
     - Runtime/schema remains authoritative for backend+model atomic pair and session incompatibilities.
     - If UI currently duplicates these rules, expose the smallest catalog constraint metadata necessary
       for disable/help behavior.
     - Do not invent a generic validation DSL.
     - Small production-code growth is acceptable if it removes duplicate runtime policy from frontend.
 
-[ ] Audit React state ownership and remove duplicate derived state
+[x] Audit React state ownership and remove duplicate derived state
     - Classify Studio state as Server / Canonical draft / Ephemeral UI / Derived.
     - A value derivable from the canonical Workflow draft should not also become an independently authoritative state.
     - Focus especially on visual/nodes/edges/YAML/selected Stage/dirty/saved representations.
@@ -1004,21 +1004,21 @@ P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
     - Async Project/Workflow responses must remain guarded against stale application after navigation.
     - This is a correctness/UX cleanup, not merely a LOC exercise.
 
-[ ] Centralize Workflow graph mutations as pure model operations where currently scattered
+[x] Centralize Workflow graph mutations as pure model operations where currently scattered
     - Add/remove/duplicate/paste/connect/disconnect/retarget/flow ordering/Handoff target changes should use
       one small group of pure Workflow-draft transformations.
     - React event handlers should not independently understand YAML routing semantics.
     - Reuse canonical backend validation at Save; pure UI graph mutations do not replace schema validation.
     - Accept small production-code growth if it materially reduces mutation entry points/coupling.
 
-[ ] Split Workflow Studio source only at real responsibility boundaries
+[x] Split Workflow Studio source only at real responsibility boundaries
     - main.tsx may move pure responsibilities such as graphModel, draftStorage, studioApi/catalog helpers and i18n
       into focused modules if that reduces unrelated-change coupling.
     - Do not fragment tiny visual components merely to reduce file length.
     - Do not create wrapper modules that only rename one function call.
     - Success is fewer responsibilities in main.tsx, not a specific file count or LOC target.
 
-[ ] Repo-wide canonical-data / legacy / dead-code audit
+[x] Repo-wide canonical-data / legacy / dead-code audit
     - Search production source, UI, docs, examples, fixtures and maintained scripts for removed contracts and stale names:
       scope/task_step/public task-review types/routes.error/recover/restart_at/repeat/max_attempts/
       execution_mode/repair runtime/Discussion compatibility and obsolete structured-session contracts.
@@ -1029,7 +1029,7 @@ P1 - FINAL OWNERSHIP / HARD-CODE / COUPLING CLEANUP
 
 P1.5 - FINAL PRODUCTION-CODE SIMPLIFICATION CHECK
 -------------------------------------------------
-[ ] Review production code for simple deletion opportunities after the ownership work
+[x] Review production code for simple deletion opportunities after the ownership work
     - Pass-through wrappers with no policy.
     - Duplicate catalog/schema/profile defaults.
     - Duplicate UI state/formatting paths.
@@ -1038,6 +1038,32 @@ P1.5 - FINAL PRODUCTION-CODE SIMPLIFICATION CHECK
     - Speculative UI machinery with no current use.
     - Keep code when an explicit boundary improves testability, plugin isolation or 24H reliability.
     - Production LOC is an observation, not the success metric; tests are excluded from this size assessment.
+
+FINAL OPTIMIZATION UI / ARCHITECTURE EVIDENCE (2026-10-04)
+---------------------------------------------------------
+- Exact clean HEAD 69f32dea573e6993fbda6b8bd88a54ee1bc45de8 passed GitHub Actions run 37213037113:
+  Windows Python PASS, Ubuntu Python PASS, Chromium Browser E2E PASS, Studio build + committed-bundle verification PASS.
+- Active-run editor UX now explicitly distinguishes frozen active snapshots from current drafts; edits stay allowed and are labeled for the next Run.
+- Canvas Nodes are topology-first. Retry/failure-policy detail was removed from default cards; disconnected/dynamic information remains where it prevents ambiguity.
+- Stage Settings already used progressive disclosure; review/error-only controls remain contextual and high-volume parameter sets use section tabs.
+  No additional settings framework was added.
+- Stage Test now separates execution mode from input examples:
+  Real Stage / Agent Ping / Mock Technical Error are modes; PASS/FAIL are only Real Stage input-fill shortcuts.
+- Palette was reduced to Search + Stages + Extensions; Favorites/Recent/collapsed localStorage machinery and related dead CSS/i18n were removed.
+- Studio Stage metadata is catalog-driven; frontend STAGE_META/built-in type ownership was removed.
+- Backend/model/session UI behavior consumes catalog execution-target constraints while runtime/schema remains authoritative.
+  No generic frontend validation DSL was introduced.
+- React state audit confirmed the semantic Workflow draft remains canonical; ReactFlow nodes/edges are derived interaction/layout state.
+  Graph routing mutations live in pure ui/studio-src/src/workflow-draft.ts helpers, keeping YAML routing semantics out of event handlers.
+- main.tsx was split only at the real pure-draft responsibility boundary. No tiny wrapper/component fragmentation was introduced.
+- UI validation continues through the existing Workflow tool/production-loader boundary; UI does not import Runner Core.
+- Repo-wide removed-contract scan found no maintained source references for scope/task_step/routes.error/restart_at/max_attempts/Discussion,
+  or old 02_repair_cycle / 05_ai_quality_repair names. Misleading examples were renamed and their run_example.bat targets corrected.
+- Final production-code simplification observation, excluding tests/generated Studio bundle:
+  approximately +553 / -654 lines versus the start of this pass (net -101 lines).
+  Notable reductions: main.tsx +188/-331, workflow_studio_state.py +13/-206; workflow-draft.ts adds a focused 165-line pure-model boundary.
+- No second retry/recovery/state/workflow engine, LifecycleManager, generic validation DSL, Dashboard, or provider branch was added.
+- Real-Qwen 0.5H/high-density/24H release gates remain intentionally open and are not substituted by deterministic CI.
 
 FINAL OPTIMIZATION ACCEPTANCE
 -----------------------------
@@ -1079,14 +1105,15 @@ The 24H soak below is the final unattended-runtime acceptance gate.
 RELEASE GATES
 -------------
 [x] Current deterministic CI green:
-    - Exact implementation HEAD 965c4ab40b0a5a794cc12299e9ab25a6733bf073 passed all required deterministic gates
-      in GitHub Actions PR run 37203987530.
+    - Exact clean HEAD 69f32dea573e6993fbda6b8bd88a54ee1bc45de8 passed all deterministic gates
+      in GitHub Actions run 37213037113.
     - Ubuntu Python: PASS.
     - Windows Python: PASS.
     - Playwright/Chromium Browser E2E: PASS.
     - Studio build + committed-bundle verification: PASS.
-    - The suite caught one incomplete programming-error boundary edit on the prior HEAD; it was fixed before this evidence was accepted.
-    - If any runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
+    - The final Studio bundle was generated by the same Ubuntu Node/Rollup build environment and synchronized by a one-time CI workflow,
+      which was removed before this clean-HEAD evidence run.
+    - If runtime/UI/test source changes after this evidence, reopen this gate and require a new exact-HEAD CI pass.
 
 [ ] Real-Qwen 0.5H gate green:
     tool\qwen_live_reliability_0_5h.bat
