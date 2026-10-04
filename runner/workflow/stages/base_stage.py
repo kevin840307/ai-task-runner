@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from ...agent import backend_names, configure_ai_client, create_ai_client, sandbox_supported, structured_call
+from ...config.defaults import MAX_MODEL_NAME_CHARS
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
 from ..profiles import profile_defaults, profile_names
@@ -68,7 +69,7 @@ class BaseStage:
         model = str(spec.model or "").strip()
         if backend and backend not in backend_names():
             raise ConfigurationError(f"AI Stage {spec.name} backend is unsupported: {backend}")
-        if len(model) > 200 or any(ord(ch) < 32 for ch in model):
+        if len(model) > MAX_MODEL_NAME_CHARS or any(ord(ch) < 32 for ch in model):
             raise ConfigurationError(f"AI Stage {spec.name} model is invalid")
         if (backend or model) and spec.session_policy == "main":
             raise ConfigurationError(
