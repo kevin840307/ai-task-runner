@@ -7,6 +7,7 @@ from typing import Any
 
 from ..errors import RunnerError
 from .registry import STAGE_REGISTRY
+from .stages.base_stage import BaseStage
 
 NODE_FIELDS = frozenset({"routes", "label", "error_policy"})
 META_FIELDS = frozenset({"name", "type", "validator", "max_failures", *NODE_FIELDS})
@@ -45,6 +46,20 @@ def validate_stage(name: str, values: dict[str, Any]) -> None:
         raise RunnerError(
             f"workflow stage {name} profile must be generic, execute, or review"
         )
+
+    stage_class = STAGE_REGISTRY[stage_type]
+    if issubclass(stage_class, BaseStage):
+        try:
+            BaseStage.validate_execution_target(
+                name,
+                str(values.get("backend") or ""),
+                str(values.get("model") or ""),
+                str(values.get("session_policy") or "auto"),
+            )
+        except Exception as error:
+            if isinstance(error, RunnerError):
+                raise
+            raise RunnerError(str(error)) from error
 
     if values.get("validator") not in {None, "ai"}:
         raise RunnerError(f"workflow stage {name} validator must be ai")
