@@ -300,6 +300,7 @@ def test_workflow_catalog_tool_is_json_process_boundary():
         "label",
         "routes",
         "error_policy",
+        "validator",
     }
 
 
