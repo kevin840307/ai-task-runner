@@ -2412,3 +2412,40 @@ def test_long_disconnect_probe_allows_only_controlled_fresh_rotation():
     assert "mode=recover evidence" in source
     assert "short API outage unexpectedly rotated the healthy session" in source
     assert "bounded-session recovery probe" in source
+
+
+
+def test_review_failure_routing_fixture_is_contract_focused(tmp_path: Path):
+    from runner.workflow.loader import load_workflow
+    from tool.workflow_dryrun import Scenario, _execute, _close
+
+    project = tmp_path / "review-routing"
+    project.mkdir()
+    workflow_file = project / "workflow.yaml"
+    workflow_file.write_text(live.REVIEW_ROUTING_WORKFLOW, encoding="utf-8")
+
+    loaded = load_workflow(workflow_file)
+    names = [stage["name"] for stage in loaded]
+    assert names == ["execute", "seed", "review", "validate_file"]
+    assert all(stage["name"] != "review_verify" for stage in loaded)
+
+    scenario = Scenario({
+        "stages": {
+            "execute": ["pass", "pass"],
+            "seed": ["pass", "pass"],
+            "review": ["fail", "pass"],
+            "validate_file": "pass",
+        },
+    })
+    ctx, executor, error = _execute(loaded, scenario, 20)
+    try:
+        assert error == ""
+        starts = [stage for _number, stage, _label, _status in executor.trace]
+        assert starts == [
+            "execute", "seed", "review",
+            "execute", "seed", "review",
+            "validate_file",
+        ]
+        assert ctx.state.completed is True
+    finally:
+        _close(ctx)
