@@ -2950,6 +2950,19 @@ def final_ai_quorum_probe(
         raise RuntimeError("Final AI 3/2 quorum evidence is incomplete")
 
 
+def _structured_recovery_event(event: dict[str, object]) -> bool:
+    kind = str(event.get("type") or "")
+    action = str(event.get("action") or "")
+    if kind == "runner.retry" and action == "retry":
+        return True
+    return (
+        kind == "runner.recovery"
+        and action == "retry"
+        and int(event.get("retry") or 0) >= 1
+        and str(event.get("retry_mode") or "") in {"retry", "recover"}
+    )
+
+
 def api_recovery_probe(
     settings: Settings,
     root: Path,
@@ -2996,10 +3009,7 @@ def api_recovery_probe(
                     # runner.recovery/retry is the stable structured observability
                     # contract for retry/backoff evidence.
                     recovery_event_seen = any(
-                        event.get("type") == "runner.recovery"
-                        and event.get("action") == "retry"
-                        and int(event.get("retry") or 0) >= 1
-                        and str(event.get("retry_mode") or "") in {"retry", "recover"}
+                        _structured_recovery_event(event)
                         for event in (*jsonl_events(log), *runner_events(project))
                     )
                 current_session = state.get("ai_session_id")
@@ -3043,10 +3053,7 @@ def api_recovery_probe(
         # between two 100ms polling iterations; the structured event remains
         # durable in the probe-owned JSON stream / production log.
         recovery_event_seen = recovery_event_seen or any(
-            event.get("type") == "runner.recovery"
-            and event.get("action") == "retry"
-            and int(event.get("retry") or 0) >= 1
-            and str(event.get("retry_mode") or "") in {"retry", "recover"}
+            _structured_recovery_event(event)
             for event in (*console_events, *events)
         )
         evidence = "\n".join(json.dumps(event, ensure_ascii=False) for event in events)
