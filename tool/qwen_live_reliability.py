@@ -59,6 +59,7 @@ PROBE_ORDER = (
     "readonly-long-path",
     "technical-artifact-safety",
     "resume",
+    "real-session-expiry",
     "stop-request-resume",
     "workflow-file",
     "workflow-ai",
@@ -4575,6 +4576,9 @@ def main() -> int:
         if probe_enabled("resume", start_probe):
             resume_probe(settings, run_root)
             print("PASS resume/process-restart probe", flush=True)
+        if probe_enabled("real-session-expiry", start_probe):
+            real_session_expiry_probe(settings, run_root)
+            print("PASS real-Qwen expired Session -> Fresh Session resume probe", flush=True)
         if probe_enabled("stop-request-resume", start_probe):
             stop_request_resume_probe(settings, run_root)
             print("PASS detached-UI stop.request/resume probe", flush=True)
@@ -4715,6 +4719,7 @@ def main() -> int:
         "runtime_long_path_preflight": probe_enabled("runtime-long-path", start_probe),
         "readonly_long_path_preflight": probe_enabled("readonly-long-path", start_probe),
         "technical_artifact_safety_preflight": probe_enabled("technical-artifact-safety", start_probe),
+        "real_session_expiry_probe": probe_enabled("real-session-expiry", start_probe),
         "stop_request_resume_probe": probe_enabled("stop-request-resume", start_probe),
         "workflow_dryrun_paths": sum(int(item.get("paths_total", 0)) for item in dryrun_results),
         "loop_detection_contract_preflight": probe_enabled("loop-detection", start_probe),
