@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from runner.agent import available_models, backend_names
 from runner.config.defaults import DEFAULT_BACKEND
+from runner.plugins.registry import discover_plugins
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", action="store_true")
     args = parser.parse_args(argv)
     project = Path(args.project_root).expanduser().resolve() if args.project_root else ROOT
+    discover_plugins()
     names = list(backend_names())
     payload = {
         "default": DEFAULT_BACKEND,
