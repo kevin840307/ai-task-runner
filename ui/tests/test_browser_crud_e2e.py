@@ -134,26 +134,27 @@ def _bridge_for(state: UIState):
             project = Path(project_value) if project_value else None
             if method == "GET":
                 if path == "/api/projects":
-                    data = {"projects": state.projects()}
+                    data = {
+                        "projects": state.projects(
+                            exclude_runtime_path=query.get("exclude_runtime", [""])[0]
+                        )
+                    }
                 elif path == "/api/project/messages":
                     data = {"messages": []}
                 elif path == "/api/project/runs":
                     data = {"runs": state.run_history(project) if project is not None else []}
                 elif path == "/api/project/runtime":
-                    data = {
-                        "running": False, "completed": False, "resumable": False,
-                        "stage": "", "cli_status": "", "completed_count": 0, "total": 0,
-                        "recent_transitions": [
-                            {
-                                "stage": "execute", "status": "pass", "target": "review",
-                                "cycle": 1, "kind": "task", "timestamp": 1.0,
-                            },
-                            {
-                                "stage": "review", "status": "fail", "target": "execute",
-                                "cycle": 1, "kind": "review", "timestamp": 2.0,
-                            },
-                        ],
-                    }
+                    data = state.read_runtime(project)
+                    data["recent_transitions"] = [
+                        {
+                            "stage": "execute", "status": "pass", "target": "review",
+                            "cycle": 1, "kind": "task", "timestamp": 1.0,
+                        },
+                        {
+                            "stage": "review", "status": "fail", "target": "execute",
+                            "cycle": 1, "kind": "review", "timestamp": 2.0,
+                        },
+                    ]
                 elif path == "/api/workflow/catalog":
                     data = {"stage_types": {}, "node_options": {}}
                 elif path == "/api/backends":
@@ -255,6 +256,100 @@ def _bridge_for(state: UIState):
             return {"status": 400, "data": {"error": str(exc)}}
 
     return bridge
+
+
+@pytest.mark.skipif(
+    _browser_unavailable(),
+    reason="Playwright/Chromium unavailable outside browser CI",
+)
+def test_runtime_poll_race_does_not_apply_stale_project_response() -> None:
+    static_root = Path(__file__).resolve().parents[1] / "static"
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        state = _write_fixture_repo(root)
+        second = root / "second-project"
+        second.mkdir()
+        state._write_projects([
+            {"name": "Fixture Project", "path": str(root)},
+            {"name": "Second Project", "path": str(second)},
+        ])
+
+        html = (static_root / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<head>", '<head><base href="http://local.test/">', 1)
+        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.S)
+        html = re.sub(r'<link[^>]+rel="stylesheet"[^>]*>', "", html)
+
+        with sync_playwright() as playwright:
+            browser = _launch_browser(playwright)
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("__apiBridge", _bridge_for(state))
+            _load_main_ui_document(page, html)
+            page.evaluate(
+                """window.fetch = async (url, options = {}) => {
+                    const method = (options.method || 'GET').toUpperCase();
+                    const response = await window.__apiBridge(method, String(url), options.body || '{}');
+                    return {
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        json: async () => response.data
+                    };
+                };"""
+            )
+            for css in sorted((static_root / "css").glob("*.css")):
+                page.add_style_tag(path=str(css))
+            _install_main_ui_scripts(page, static_root)
+            _boot_main_ui(page)
+
+            first_path = str(root)
+            page.evaluate(
+                """([firstPath]) => {
+                    const baseFetch = window.fetch;
+                    window.__staleRuntimeStarted = false;
+                    window.fetch = async (url, options = {}) => {
+                        const text = String(url);
+                        if (
+                            !window.__staleRuntimeStarted
+                            && text.includes('/api/project/runtime')
+                            && text.includes(encodeURIComponent(firstPath))
+                        ) {
+                            window.__staleRuntimeStarted = true;
+                            await new Promise((resolve) => setTimeout(resolve, 600));
+                            return {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    status: 'needs_attention',
+                                    view: {label: 'Needs Attention'},
+                                    actions: {run:false, stop:false, resume:true, reset:true, rerun:false},
+                                    attention_reason: 'STALE_A_RESPONSE',
+                                    recommended_actions: ['resume','reset'],
+                                    running:false, completed:false, resumable:true, stale:true,
+                                    stage:'execute', cli_status:'', completed_count:0, total:1,
+                                    recent_transitions: []
+                                })
+                            };
+                        }
+                        return baseFetch(url, options);
+                    };
+                }""",
+                [first_path],
+            )
+
+            page.wait_for_function("window.__staleRuntimeStarted === true", timeout=5000)
+            page.locator("#projectList .project-root").filter(has_text="Second Project").click()
+            page.wait_for_function(
+                "document.querySelector('#projectName')?.textContent === 'Second Project'"
+            )
+            page.wait_for_timeout(850)
+
+            assert page.locator("#projectName").inner_text() == "Second Project"
+            assert "STALE_A_RESPONSE" not in page.locator("#currentTask").inner_text()
+            assert "Needs Attention" not in page.locator("#statusBadge").inner_text()
+            assert not errors
+            browser.close()
 
 
 @pytest.mark.skipif(
