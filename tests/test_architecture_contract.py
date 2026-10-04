@@ -69,3 +69,25 @@ def test_shared_stage_contracts_are_workflow_owned_not_stage_implementation_owne
     command_source = (STAGES / "command_stage.py").read_text(encoding="utf-8")
     assert "from ..contracts import" in command_source
     assert "BaseStage" not in command_source
+
+
+
+def test_flow_and_executor_responsibility_boundaries_stay_separate():
+    flow_source = (ROOT / "runner" / "workflow" / "flow_engine.py").read_text(encoding="utf-8")
+    executor_source = (EXECUTION / "stage_executor.py").read_text(encoding="utf-8")
+
+    for token in (
+        "sleep_with_heartbeat",
+        "is_transient_error",
+        "reset_session(",
+        "retry_mode",
+    ):
+        assert token not in flow_source
+
+    for token in (
+        "resolve_stage_target",
+        "resolve_handoff_target",
+        "workflow_position",
+        "max_cycles",
+    ):
+        assert token not in executor_source
