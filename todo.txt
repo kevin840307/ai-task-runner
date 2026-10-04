@@ -186,9 +186,13 @@ P0.5 - CURRENT STUDIO USABILITY / STAGE EXECUTION
 
 [ ] Stage-level Backend + Model selection
     - Implementation complete across Stage contract/catalog/schema/runtime/Designer/Stage Test/Resume/dynamic children.
-    - Deterministic coverage verifies adapter-owned model override, session ownership, YAML/catalog/UI parity and Resume/dynamic-child behavior.
-    - Real-Qwen Stage Probe coverage is now wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
-    - Keep this unchecked until the new real-Qwen live preflight passes on Windows.
+    - Backend choices are registry/catalog-driven, not hardcoded to Qwen/OpenCode in Designer or FlowEngine.
+    - Qwen and OpenCode both use the shared adapter-owned model override contract today.
+    - Future backends can override configure_model_args()/model_from_args() and appear through backend_names() without Core/UI provider branches.
+    - Deterministic coverage verifies OpenCode model override, plugin/future-backend custom model syntax, YAML/catalog/UI parity, session ownership and Resume/dynamic-child behavior.
+    - Real-Qwen Stage Probe coverage is wired without hardcoding a model name: it discovers the active model, applies backend=qwen + model=<active>, then verifies production model events report the same effective backend/model.
+    - Add equivalent real-OpenCode Stage backend/model evidence when OpenCode is available in the Windows live environment.
+    - Keep this unchecked until real backend evidence covers the enabled production adapters; deterministic coverage alone is insufficient.
     - StageExecutor remains technical-only; FlowEngine has no provider/model branch.
 
 
