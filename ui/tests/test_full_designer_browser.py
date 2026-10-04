@@ -246,6 +246,104 @@ flow:
 
 
 @pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
+def test_stage_backend_model_roundtrip_between_designer_and_yaml() -> None:
+    with tempfile.TemporaryDirectory(prefix="ai-runner-backend-model-e2e-") as td:
+        project = Path(td)
+        workflow_dir = project / ".ai-task-runner" / "assets" / "workflows"
+        workflow_dir.mkdir(parents=True)
+        workflow = workflow_dir / "backend-model.yaml"
+        workflow.write_text(
+            """stages:
+  worker:
+    type: base
+    profile: generic
+flow:
+  - worker
+""",
+            encoding="utf-8",
+        )
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = UIServer(ROOT, "127.0.0.1", port)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with sync_playwright() as playwright:
+                browser = _launch_browser(playwright)
+                page = browser.new_page(viewport={"width": 1440, "height": 900})
+                page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+                errors: list[str] = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                project_q = quote(str(project))
+                files = page.request.get(
+                    f"http://127.0.0.1:{port}/api/studio/files?project={project_q}"
+                ).json()
+                item = next(row for row in files["workflows"] if row["name"] == "backend-model.yaml")
+                page.goto(
+                    f"http://127.0.0.1:{port}/workflow-studio-app/index.html"
+                    f"?id={quote(item['id'])}&project={project_q}"
+                )
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                modal = page.locator(".stage-editor-modal")
+                modal.wait_for(state="visible")
+
+                # Execution parameters are catalog-driven. OpenCode must be available
+                # without a provider-specific Designer branch.
+                execution_tab = page.get_by_role("tab", name="執行")
+                if execution_tab.count():
+                    execution_tab.click()
+                backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
+                model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
+                backend_select = backend_field.locator("select")
+                model_input = model_field.locator("input")
+                assert "opencode" in backend_select.locator("option").all_text_contents()
+                backend_select.select_option("opencode")
+                model_input.fill("provider/model-x")
+                page.locator(".modal-close-button").click()
+                _save_editor(page)
+
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["worker"]["backend"] == "opencode"
+                assert saved["stages"]["worker"]["model"] == "provider/model-x"
+
+                # Manual YAML edits must immediately flow back into Designer Form.
+                page.get_by_role("tab", name="YAML").click()
+                yaml_editor = page.locator(".workflow-yaml-editor")
+                yaml_editor.fill(
+                    """stages:
+  worker:
+    type: base
+    profile: generic
+    backend: qwen
+    model: local-model-y
+flow:
+  - worker
+"""
+                )
+                page.get_by_role("tab", name="Designer").click()
+                page.locator('.react-flow__node[data-id="worker"]').dblclick()
+                modal = page.locator(".stage-editor-modal")
+                execution_tab = page.get_by_role("tab", name="執行")
+                if execution_tab.count():
+                    execution_tab.click()
+                backend_field = modal.locator("label").filter(has=page.locator("span", has_text="backend")).first
+                model_field = modal.locator("label").filter(has=page.locator("span", has_text="model")).first
+                assert backend_field.locator("select").input_value() == "qwen"
+                assert model_field.locator("input").input_value() == "local-model-y"
+                saved = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+                assert saved["stages"]["worker"]["backend"] == "qwen"
+                assert saved["stages"]["worker"]["model"] == "local-model-y"
+
+                assert not errors
+                browser.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+
+@pytest.mark.skipif(_browser_unavailable(), reason="Playwright/Chromium unavailable outside browser CI")
 def test_workflow_yaml_switch_immediately_refreshes_designer_and_rejects_invalid_yaml() -> None:
     with tempfile.TemporaryDirectory(prefix="ai-runner-yaml-switch-e2e-") as td:
         project = Path(td)
