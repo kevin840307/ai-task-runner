@@ -62,6 +62,26 @@ def _fake_qwen_command(tmp_path: Path) -> str:
     return f'"{sys.executable}" "{fake}"'
 
 
+def test_live_review_probe_fixture_enforces_atomic_backend_model_pair(
+    tmp_path: Path,
+):
+    workflow = tmp_path / "workflow.yaml"
+    with pytest.raises(ValueError, match="atomic pair"):
+        live._write_live_review_probe_workflow(
+            workflow,
+            backend="opencode",
+        )
+
+    live._write_live_review_probe_workflow(
+        workflow,
+        backend="opencode",
+        model="provider/model",
+    )
+    loaded = load_workflow(workflow)
+    assert loaded[0]["backend"] == "opencode"
+    assert loaded[0]["model"] == "provider/model"
+
+
 def test_live_review_stage_assertion_fails_closed_on_nonterminal_result():
     with pytest.raises(RuntimeError, match="expected PASS -> done"):
         live._assert_live_review_stage_result(
