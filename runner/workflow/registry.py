@@ -101,6 +101,10 @@ def workflow_catalog() -> dict[str, Any]:
         "stage_types": stage_catalog(),
         "node_options": {
             "label": {"type": "string"},
+            "validator": {
+                "type": "string",
+                "description": "validator selector for validation Stage nodes",
+            },
             "routes": {
                 "type": "object",
                 "description": "pass/fail -> next, done, stop, or another Stage",
