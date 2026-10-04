@@ -932,7 +932,7 @@ function App() {
       event.stopPropagation();
       if (editorOpen) setEditorOpen(false);
       else if (confirmDialog) setConfirmDialog(null);
-      else if (pendingCreate) setPendingCreate(null);
+      else if (pendingCreate) { setPendingCreate(null); setPendingEdgeCreate(null); }
       else if (addStageOpen) closeAddStageCommand();
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -1964,7 +1964,7 @@ if (!visual) return <main className="loading">{message || "Loading Workflow Stud
                 return !q || [type, meta?.title, meta?.description].some((value) => String(value || "").toLowerCase().includes(q));
               }).map((type) => {
                 const meta = catalogStageMeta(catalog, type);
-                return <button type="button" key={type} onClick={() => { setAddStageOpen(false); void addStage(type, pendingEdgeCreate?.position); }}>
+                return <button type="button" key={type} data-stage-type={type} onClick={() => { setAddStageOpen(false); void addStage(type, pendingEdgeCreate?.position); }}>
                   <span className={`palette-icon type-${type}`}>{PALETTE_SECTIONS.find((section) => section.id === catalogStageMeta(catalog, type).category)?.icon || "◇"}</span>
                   <span><strong>{meta.title}</strong><small>{meta.description}</small></span><b>＋</b>
                 </button>;
