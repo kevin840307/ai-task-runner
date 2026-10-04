@@ -839,14 +839,29 @@ def test_backend_model_catalog_and_commands_are_adapter_owned(tmp_path, monkeypa
         '{"modelProviders":{"openai":[{"id":"qwen-project"}]}}',
         encoding="utf-8",
     )
+    system_defaults = tmp_path / "system-defaults.json"
+    system_settings = tmp_path / "system-settings.json"
     monkeypatch.setenv("QWEN_HOME", str(qwen_home))
+    monkeypatch.setenv("QWEN_CODE_SYSTEM_DEFAULTS_PATH", str(system_defaults))
+    monkeypatch.setenv("QWEN_CODE_SYSTEM_SETTINGS_PATH", str(system_settings))
     monkeypatch.setenv("QWEN_MODEL", "qwen-env")
+
+    # Project modelProviders replaces the lower-precedence user catalog.
     assert available_models("qwen", project) == [
-        "qwen-a",
-        "qwen-b",
         "qwen-env",
         "qwen-project",
         "qwen-user",
+    ]
+
+    # System settings have the highest settings-file precedence.
+    system_settings.write_text(
+        '{"model":{"name":"qwen-system-current"},"modelProviders":{"openai":[{"id":"qwen-system"}]}}',
+        encoding="utf-8",
+    )
+    assert available_models("qwen", project) == [
+        "qwen-env",
+        "qwen-system",
+        "qwen-system-current",
     ]
 
     monkeypatch.setattr(
