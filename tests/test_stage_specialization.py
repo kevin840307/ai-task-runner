@@ -64,3 +64,22 @@ def test_review_and_validation_result_flags_map_true_to_pass_false_to_fail():
     assert review.result_status({"completed": False}) == "fail"
     assert validator.result_status({"passed": True}) == "pass"
     assert validator.result_status({"passed": False}) == "fail"
+
+
+def test_create_stage_applies_execute_profile_defaults_before_runtime_construction():
+    stage = create_stage({"name": "execute", "type": "base", "profile": "execute"})
+    assert stage.spec.mode == "write"
+    assert stage.spec.actor == "executor"
+    assert stage.spec.allow_project_read is True
+    assert stage.spec.track_changes is True
+    assert stage.result_kind == "task"
+
+
+def test_create_stage_applies_review_profile_defaults_before_runtime_construction():
+    stage = create_stage({"name": "review", "type": "base", "profile": "review"})
+    assert stage.spec.mode == "readonly"
+    assert stage.spec.allow_project_read is True
+    assert stage.spec.readonly_safety == "observe"
+    assert stage.spec.parser is not None
+    assert stage.result_kind == "review"
+    assert stage.backend_mode == "review"
