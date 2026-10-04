@@ -573,7 +573,7 @@ def test_designer_visible_chrome_uses_shared_i18n():
 
     for key in (
         "undo_none", "undo_done", "redo_none", "redo_done",
-        "switch_title", "switch_message", "remove_title",
+        "remove_title",
         "discard_title", "reload_title", "route_intro",
         "review_policy_help", "error_policy_help", "test_help",
         "dynamic_child_note", "stage_yaml_hint",
@@ -595,6 +595,27 @@ def test_designer_visible_chrome_uses_shared_i18n():
         "從積木下方的大接點拉到目標積木。",
     ):
         assert removed not in body
+
+
+def test_workflow_view_switch_saves_and_refreshes_without_confirmation():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    switch = text.split("function switchEditorView", 1)[1].split("const connect =", 1)[0]
+    assert "const saved = await saveCurrent()" in switch
+    assert 'api<Visual>(endpoint("/api/studio/visual"))' in switch
+    assert 'api<StudioFile>(endpoint("/api/studio/file"))' in switch
+    assert "requestConfirm({" not in switch
+    assert "if (!saved) return" in switch
+    assert "if (next === editorView || busy) return" in switch
+
+
+def test_workflow_draft_recovery_notice_is_compact():
+    styles = STYLES.read_text(encoding="utf-8")
+
+    recovery = styles.split(".workflow-draft-recovery {", 1)[1].split("}", 1)[0]
+    assert "min-height: 34px" in recovery
+    assert "padding: 5px 8px 5px 10px" in recovery
+    assert ".workflow-draft-recovery-actions button { padding: 4px 7px; font-size: 11px; }" in styles
 
 
 def test_workflow_editor_exposes_saved_unsaved_state_and_save_reason():
