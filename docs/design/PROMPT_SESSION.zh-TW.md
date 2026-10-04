@@ -60,7 +60,7 @@ Routing 與 Session lifetime 完全解耦。
 - `session_policy: role`：Stage name 擁有 durable 可重用 Session；Dynamic specialist 預設。
 - `session_policy: main`：使用 Runner 主 Session。
 - `session_policy: fresh`：每次 invocation 都清空/建立新 Session。
-- `session_policy: auto`：built-in/internal profile 行為；只有這個模式可以搭配 `session_key`。
+- `session_policy: auto`：built-in/default profile 行為。
 
 `RunState.stage_sessions` 保存 durable role Session。某個 role 技術錯誤反覆失敗時，StageExecutor 可以只 reset 該角色 Session，再用 fresh Session 繼續；其他 role 不受影響。
 
