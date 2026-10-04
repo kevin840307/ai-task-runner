@@ -1915,6 +1915,28 @@ class ProjectPollingEfficiencyTests(unittest.TestCase):
         snapshot.assert_not_called()
         self.assertEqual(rows[0]["runtime_status"], "idle")
 
+    def test_project_list_can_skip_active_runtime_probe_owned_by_runtime_poll(self) -> None:
+        active = self.projects[0]
+        with patch.object(self.state, "_process_snapshot", return_value={222, 333}) as snapshot, \
+             patch.object(self.state, "_project_runtime_summary", wraps=self.state._project_runtime_summary) as summary:
+            rows = self.state.projects(exclude_runtime_path=str(active))
+
+        snapshot.assert_called_once_with()
+        called_paths = [Path(call.args[0]).resolve() for call in summary.call_args_list]
+        self.assertNotIn(active.resolve(), called_paths)
+        self.assertEqual(len(called_paths), 2)
+        self.assertEqual(rows[0]["runtime_status"], "idle")
+
+    def test_projects_payload_exclusion_keeps_identity_for_client_overlay(self) -> None:
+        active = self.projects[0]
+        with patch.object(self.state, "_project_runtime_summary") as summary:
+            payload = self.state.projects_payload(exclude_runtime_path=str(active))
+
+        active_row = next(row for row in payload["projects"] if Path(row["path"]).resolve() == active.resolve())
+        self.assertEqual(active_row["name"], active.name)
+        self.assertEqual(active_row["runtime_status"], "idle")
+        self.assertTrue(any(Path(call.args[0]).resolve() != active.resolve() for call in summary.call_args_list))
+
     def test_projects_payload_does_not_cache_live_runtime_status(self) -> None:
         with patch.object(self.state, "_process_snapshot", return_value={111, 222}) as snapshot:
             first = self.state.projects_payload()
