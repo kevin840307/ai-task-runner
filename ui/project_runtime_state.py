@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 
 from project_registry import path_key, project_file_lock
-from runner.runtime.view import build_runtime_view
+from runtime_view import build_runtime_view
 
 try:
     from .server_support import background_process_kwargs as _background_process_kwargs
