@@ -21,6 +21,8 @@ def test_workflow_catalog_exposes_stage_presentation_metadata():
     assert stage_types["plan"]["test_examples"]["pass"]
     assert stage_types["handoff"]["test_examples"]["error"]
 
+    assert catalog["node_options"]["validator"]["type"] == "string"
+
     execution = base["constraints"]["execution_target"]
     assert execution["paired_fields"] == ["backend", "model"]
     assert execution["session_policy_field"] == "session_policy"
