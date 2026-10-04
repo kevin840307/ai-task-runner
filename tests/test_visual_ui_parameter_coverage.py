@@ -17,9 +17,9 @@ def test_react_workflow_editor_uses_runtime_catalog_for_stage_options():
     # then render ordinary options through the generic Field component.
     assert 'catalog.stage_types[draft.type]?.options || []' in SOURCE
     assert 'Object.keys(catalog?.stage_types || {})' in SOURCE
-    assert '<Field' in SOURCE and 'option={option}' in SOURCE
+    assert '<Field' in SOURCE
+    assert 'key={option.name}' in SOURCE
     assert 'value={draft[option.name]}' in SOURCE
-
     special_catalog_fields = {"status", "targets", "max_failures"}
     observed = {
         option["name"]
