@@ -735,3 +735,16 @@ def test_edge_drop_to_empty_canvas_reuses_connection_semantics():
     assert "next = applyConnectionToVisual(next" in text
     assert "data-stage-type={type}" in text
     assert "setPendingEdgeCreate(null)" in text
+
+
+
+def test_stage_test_tab_supports_saved_path_dryrun_without_second_runtime():
+    text = SOURCE.read_text(encoding="utf-8")
+
+    assert '"/api/studio/path/test"' in text
+    assert "async function testPathFromStage" in text
+    assert 'if (dirtyGraph)' in text
+    assert '"Save the Workflow before testing a path."' in text
+    assert "disabled={pathTesting || busy || dirtyGraph}" in text
+    assert "Test path to END" in text
+    assert "pathTestResult.transitions.map" in text
