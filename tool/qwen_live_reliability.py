@@ -757,6 +757,30 @@ def _assert_live_stage_backend_model_events(
         )
 
 
+def _select_live_alternate_backend(
+    root: Path,
+    primary_backend: str,
+) -> tuple[str, str] | None:
+    """Pick the first runnable registered backend with at least one selectable model."""
+    from runner.agent import available_models, backend_names, default_command
+    from runner.plugins.registry import discover_plugins
+
+    discover_plugins()
+    for backend in backend_names():
+        if backend == primary_backend:
+            continue
+        command = default_command(backend)
+        if not (Path(command).is_file() or shutil.which(command) is not None):
+            continue
+        try:
+            models = available_models(backend, root)
+        except Exception:
+            continue
+        if models:
+            return backend, models[0]
+    return None
+
+
 def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
     """Exercise real Stage transport plus Stage-local backend/model overrides."""
     tool = ROOT / "tool" / "stage_probe.py"
@@ -835,60 +859,42 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
             "real_stage_next": stage.get("next"),
             "stage_backend": "qwen",
             "stage_model": baseline_model,
-            "opencode_stage": {
+            "alternate_stage": {
                 "available": False,
                 "tested": False,
-                "reason": "command_not_found",
+                "reason": "no_runnable_backend",
             },
         }
 
-        # Optional cross-backend proof. The primary live harness stays on Qwen;
-        # this Stage alone overrides to OpenCode, exercising the exact
-        # run-level -> Stage-level isolation contract without a second runtime.
-        from runner.agent import available_models, default_command
-
-        opencode_command = default_command("opencode")
-        opencode_executable = (
-            Path(opencode_command).is_file()
-            or shutil.which(opencode_command) is not None
-        )
-        if not opencode_executable:
+        alternate = _select_live_alternate_backend(root, "qwen")
+        if alternate is None:
             return result
-
-        opencode_models = available_models("opencode", root)
-        if not opencode_models:
-            result["opencode_stage"] = {
-                "available": True,
-                "tested": False,
-                "reason": "no_models",
-            }
-            return result
-
-        opencode_model = opencode_models[0]
+        alternate_backend, alternate_model = alternate
         _write_live_review_probe_workflow(
             workflow,
-            backend="opencode",
-            model=opencode_model,
+            backend=alternate_backend,
+            model=alternate_model,
         )
-        opencode_stage = run_probe(
+        alternate_stage = run_probe(
             root,
             workflow,
             "stage",
-            Path(directory) / "opencode-stage.log",
+            Path(directory) / f"{alternate_backend}-stage.log",
             keep_work=True,
         )
-        _assert_live_review_stage_result(opencode_stage, "opencode")
+        _assert_live_review_stage_result(alternate_stage, alternate_backend)
         _assert_live_stage_backend_model_events(
             root,
-            opencode_stage,
-            "opencode",
-            opencode_model,
+            alternate_stage,
+            alternate_backend,
+            alternate_model,
         )
-        result["opencode_stage"] = {
+        result["alternate_stage"] = {
             "available": True,
             "tested": True,
-            "status": opencode_stage.get("status"),
-            "model": opencode_model,
+            "backend": alternate_backend,
+            "status": alternate_stage.get("status"),
+            "model": alternate_model,
         }
         return result
 
@@ -4378,21 +4384,21 @@ def main() -> int:
         print("PASS expired-session -> Fresh Session durable recovery preflight", flush=True)
     if probe_enabled("stage-probe-live", start_probe):
         stage_probe_live = stage_probe_live_preflight(settings)
-        opencode_stage = stage_probe_live.get("opencode_stage")
-        opencode_tested = (
-            isinstance(opencode_stage, dict)
-            and opencode_stage.get("tested") is True
+        alternate_stage = stage_probe_live.get("alternate_stage")
+        alternate_tested = (
+            isinstance(alternate_stage, dict)
+            and alternate_stage.get("tested") is True
         )
-        suffix = " + OpenCode Stage backend/model" if opencode_tested else ""
+        suffix = " + alternate Stage backend/model" if alternate_tested else ""
         print(
             "PASS real-Qwen isolated Agent Ping + Review Stage Probe"
             f"{suffix} preflight",
             flush=True,
         )
-        if not opencode_tested and isinstance(opencode_stage, dict):
+        if not alternate_tested and isinstance(alternate_stage, dict):
             print(
-                "SKIP OpenCode Stage backend/model probe: "
-                f"{opencode_stage.get('reason') or 'unavailable'}",
+                "SKIP alternate Stage backend/model probe: "
+                f"{alternate_stage.get('reason') or 'unavailable'}",
                 flush=True,
             )
     if probe_enabled("workflow-dryrun", start_probe):
