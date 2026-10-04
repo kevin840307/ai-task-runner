@@ -665,6 +665,40 @@ def relative_existing_path(child: Path, root: Path) -> str:
     raise ValueError(f"{child} is not under {root}")
 
 
+def _write_live_review_probe_workflow(
+    path: Path,
+    *,
+    backend: str = "",
+    model: str = "",
+) -> None:
+    backend_name = str(backend or "").strip()
+    model_name = str(model or "").strip()
+    if bool(backend_name) != bool(model_name):
+        raise ValueError("live Stage backend/model override must be an atomic pair")
+    override = (
+        f"    backend: {backend_name}\n"
+        f"    model: {json.dumps(model_name)}\n"
+        if backend_name
+        else ""
+    )
+    path.write_text(
+        """stages:
+  review:
+    type: base
+    profile: review
+    prompt: common/review.md
+"""
+        + override
+        + """    error_policy:
+      retries: 2
+    max_failures: 3
+flow:
+  - review
+""",
+        encoding="utf-8",
+    )
+
+
 def _assert_live_review_stage_result(
     stage: dict[str, object],
     backend: str,
@@ -758,41 +792,17 @@ def stage_probe_live_preflight(settings: Settings) -> dict[str, object]:
         root = Path(directory) / "project"
         root.mkdir()
         workflow = Path(directory) / "stage-probe.yaml"
-        workflow.write_text(
-            """stages:
-  review:
-    type: base
-    profile: review
-    prompt: common/review.md
-    error_policy:
-      retries: 2
-    max_failures: 3
-flow:
-  - review
-""",
-            encoding="utf-8",
-        )
+        _write_live_review_probe_workflow(workflow)
         ping = run_probe(root, workflow, "agent_ping", Path(directory) / "agent-ping.log")
         if str(ping.get("output", "")).strip() != "AGENT_PING_OK":
             raise RuntimeError(f"real Agent Ping contract mismatch: {ping!r}")
 
         ping_data = ping.get("data") if isinstance(ping.get("data"), dict) else {}
         baseline_model = str(ping_data.get("model") or "").strip() or _discover_openai_model(settings.api_port)
-        workflow.write_text(
-            """stages:
-  review:
-    type: base
-    profile: review
-    prompt: common/review.md
-    backend: qwen
-    model: """ + json.dumps(baseline_model) + """
-    error_policy:
-      retries: 2
-    max_failures: 3
-flow:
-  - review
-""",
-            encoding="utf-8",
+        _write_live_review_probe_workflow(
+            workflow,
+            backend="qwen",
+            model=baseline_model,
         )
         stage = run_probe(
             root,
@@ -844,21 +854,10 @@ flow:
             return result
 
         opencode_model = opencode_models[0]
-        workflow.write_text(
-            """stages:
-  review:
-    type: base
-    profile: review
-    prompt: common/review.md
-    backend: opencode
-    model: """ + json.dumps(opencode_model) + """
-    error_policy:
-      retries: 2
-    max_failures: 3
-flow:
-  - review
-""",
-            encoding="utf-8",
+        _write_live_review_probe_workflow(
+            workflow,
+            backend="opencode",
+            model=opencode_model,
         )
         opencode_stage = run_probe(
             root,
