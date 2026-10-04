@@ -64,6 +64,17 @@ tool\qwen_live_reliability_0_5h.bat
 - timeout/recovery budget；
 - final AI voting。
 
+為了在修正單一 live failure 後快速重測，可先列出穩定的 probe 序號/名稱，再從指定步驟開始，不必每次重跑前面全部 probe：
+
+```powershell
+tool\qwen_live_reliability_24h.bat --list-probes
+tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
+# 也支援 1-based 序號，例如：
+tool\qwen_live_reliability_24h.bat --start-probe 25
+```
+
+`--start-probe` 只略過指定步驟之前的 probes；後續 probes 與原本要求的 soak 仍會繼續。partial-run summary 會記錄起始 probe，且不會把被 skip 的 probes 誤標為 PASS。
+
 「script 有 probe」不代表「probe 已 PASS」。要宣稱 live reliability 必須保留該次 run directory / summary。
 
 ## 24H 驗收
