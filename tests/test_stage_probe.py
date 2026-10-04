@@ -148,6 +148,8 @@ def test_real_stage_probe_calls_real_fake_agent_once_and_stops_at_stage(tmp_path
     assert result["kind"] == "review"
     assert result["test_retry_limit"] == 2
     assert result["test_retry_policy"] == "local:2"
+    assert result["effective_backend"] == "qwen"
+    assert "effective_model" in result
     assert not Path(result["work_dir"]).exists()
 
 
@@ -296,3 +298,11 @@ def test_agent_ping_payload_exposes_effective_backend_model():
     source = (Path(__file__).resolve().parents[1] / "tool" / "stage_probe.py").read_text(encoding="utf-8")
     assert '"backend": runner.context.ai_client.backend' in source
     assert '"model": runner.context.ai_client.model' in source
+
+
+def test_real_stage_probe_reports_effective_backend_model():
+    source = (Path(__file__).resolve().parents[1] / "tool" / "stage_probe.py").read_text(encoding="utf-8")
+    assert 'effective_backend = runner.context.ai_client.backend' in source
+    assert 'effective_client = stage._client(runner.context)' in source
+    assert '"effective_backend": effective_backend' in source
+    assert '"effective_model": effective_model' in source
