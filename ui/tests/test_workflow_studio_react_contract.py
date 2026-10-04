@@ -748,3 +748,13 @@ def test_stage_test_tab_supports_saved_path_dryrun_without_second_runtime():
     assert "disabled={pathTesting || busy || dirtyGraph}" in text
     assert "Test path to END" in text
     assert "pathTestResult.transitions.map" in text
+
+
+
+def test_stage_test_actions_are_visually_separated():
+    styles = STYLES.read_text(encoding="utf-8")
+    source = SOURCE.read_text(encoding="utf-8")
+
+    assert 'className="test-action-row"' in source
+    assert ".test-action-row { display: flex;" in styles
+    assert "gap: 10px" in styles
