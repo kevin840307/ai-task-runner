@@ -176,7 +176,7 @@ def test_prompt_contract_memory_is_bounded_per_static_prompt_identity():
     second._remember_prompt(ctx, client)
 
     assert scratch["prompt_contracts"] == {
-        ("generic", "common/execution.md", ""): "other-session",
+        ("generic", "common/execution.md", "", "", ""): "other-session",
     }
 
 
