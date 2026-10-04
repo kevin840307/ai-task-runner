@@ -795,6 +795,18 @@ def test_stage_test_has_real_stop_control():
 
 
 
+def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
+    text = SOURCE.read_text(encoding="utf-8")
+    state = (ROOT / "ui" / "workflow_studio_state.py").read_text(encoding="utf-8")
+
+    assert '"backend", "model"' in text
+    assert 'option.name === "backend" ? tx("stage_backend_help")' in text
+    assert 'option.name === "model" ? tx("stage_model_help")' in text
+    assert 'stage_backend_help:' in text
+    assert 'stage_model_help:' in text
+    assert "structured_fresh_retries" not in state
+
+
 def test_stage_backend_model_fields_are_catalog_driven():
     text = SOURCE.read_text(encoding="utf-8")
     registry = (ROOT / "runner" / "workflow" / "registry.py").read_text(encoding="utf-8")
