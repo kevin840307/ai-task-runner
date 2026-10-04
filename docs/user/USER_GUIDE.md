@@ -81,7 +81,7 @@ Built-in Dynamic specialists default to `session_policy: role`; final validation
 - `role`: one durable reusable Session per Stage name; survives process resume.
 - `main`: use the primary Runner Session.
 - `fresh`: clear/start a Session every invocation.
-- `auto`: built-in/internal default behavior; only `auto` can use `session_key`.
+- `auto`: built-in/default Stage behavior.
 
 If a role Session repeatedly fails technically, StageExecutor may rotate only that role to a new Session. Other role Sessions remain untouched.
 
@@ -142,7 +142,7 @@ Useful diagnostics include:
 
 Studio edits the same YAML. Full Designer supports PASS/FAIL/Handoff edges, Stage parameters, Dynamic target layout and single-Stage Test.
 
-ERROR is not an edge. Session policy is edited as `auto/main/role/fresh`; Studio prevents conflicting `session_key` combinations.
+ERROR is not an edge. Session policy is edited as `auto/main/role/fresh`; backend/model/session constraints come from the Stage Catalog and are validated again by the runtime.
 
 ## Deterministic and live testing
 
