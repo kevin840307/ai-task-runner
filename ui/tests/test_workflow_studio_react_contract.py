@@ -808,7 +808,8 @@ def test_stage_backend_model_editor_is_yaml_roundtrip_ready():
     assert 'stage_model_help:' in text
     assert 'models: Record<string, string[]>;' in text
     assert 'const executionTargetOptions = options.filter((o) => ["backend", "model", "session_policy"].includes(o.name))' in text
-    assert 'const stageModels = stageBackend ? (backendCatalog.models?.[stageBackend] || []) : []' in text
+    assert 'const savedStageModel = String(draft?.model || "").trim()' in text
+    assert 'Array.from(new Set([...(backendCatalog.models?.[stageBackend] || []), ...(savedStageModel ? [savedStageModel] : [])]))' in text
     assert 'className="stage-form-section stage-execution-target"' in text
     assert 'disabled={!stageBackend || stageModels.length === 0}' in text
     assert 'stageModels.map((value) => <option' in text
