@@ -111,6 +111,10 @@
       <section id="runtimeGuidance" class="runtime-guidance" hidden>
         <div><strong id="runtimeGuidanceTitle">Needs Attention</strong><span id="runtimeGuidanceReason"></span></div>
         <small id="runtimeGuidanceActions"></small>
+        <div class="runtime-guidance-buttons">
+          <button id="runtimeGuidanceWorkflow" class="action-button" type="button" hidden>Open Workflow</button>
+          <button id="runtimeGuidanceTrace" class="action-button" type="button" hidden>View Trace</button>
+        </div>
       </section>
       <details id="activeRunDetails" class="active-run-details" hidden>
         <summary>Active Run details</summary>
@@ -119,6 +123,7 @@
           <span>Backend / Model</span><strong id="activeRunBackendModel">—</strong>
           <span>Stage backend / model</span><strong id="activeRunEffectiveModel">—</strong>
           <span>Readonly</span><strong id="activeRunReadonly">—</strong>
+          <span>Started</span><strong id="activeRunStarted">—</strong>
           <span>Run ID</span><strong id="activeRunId">—</strong>
         </div>
       </details>
