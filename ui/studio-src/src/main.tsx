@@ -58,6 +58,8 @@ type CatalogOption = {
   values?: string[];
   description?: string;
   section?: ParameterSection;
+  order?: number;
+  visible?: boolean;
 };
 
 type CatalogProfile = {
@@ -1121,9 +1123,10 @@ function App() {
     ? Array.from(new Set([...(backendCatalog.models?.[stageBackend] || []), ...(savedStageModel ? [savedStageModel] : [])]))
     : [];
   const parameterOptions = options.filter((o) => {
+    if (o.visible === false) return false;
     if (["name", "type", "status", "label", "routes", "targets", "max_failures", "profile", "backend", "model", "session_policy"].includes(o.name)) return false;
     return true;
-  });
+  }).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   const parameterGroups = PARAMETER_SECTION_ORDER.map((id) => ({
     id,
     options: parameterOptions.filter((option) => (option.section || "advanced") === id),
