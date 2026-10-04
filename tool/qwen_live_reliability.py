@@ -72,6 +72,7 @@ PROBE_ORDER = (
     "api-502",
     "api-429",
     "api-503",
+    "api-long-http",
     "api-disconnect",
     "multi-todo-resume",
     "yaml-list-resume",
@@ -403,6 +404,15 @@ def arguments() -> argparse.Namespace:
         "--high-density",
         action="store_true",
         help="use dense 0.5H/1H soak defaults for mixed AI, API, timeout, YAML, sandbox",
+    )
+    parser.add_argument(
+        "--long-http-outage-seconds",
+        type=float,
+        default=API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS,
+        help=(
+            "hold each 429/502/503 outage for this many seconds in the long "
+            "HTTP recovery probe"
+        ),
     )
     parser.add_argument(
         "--long-api-outage-seconds",
@@ -3302,6 +3312,8 @@ def final_ai_quorum_probe(
 
 
 API_RECOVERY_SHORT_OUTAGE_SECONDS = 5.0
+API_RECOVERY_LONG_HTTP_OUTAGE_SECONDS = 45.0
+API_RECOVERY_STATUS_CODES = (429, 502, 503)
 API_RECOVERY_ARM_TIMEOUT_SECONDS = 30.0
 
 API_RECOVERY_ARM_SCRIPT = f'''from pathlib import Path
@@ -3644,6 +3656,30 @@ def api_recovery_probe(
         return True
 
 
+def long_http_recovery_probe(
+    settings: Settings,
+    root: Path,
+    outage_seconds: float,
+) -> tuple[int, ...]:
+    """Exercise all supported transient HTTP statuses through one recovery path."""
+    for status_code in API_RECOVERY_STATUS_CODES:
+        api_recovery_probe(
+            settings,
+            root,
+            f"api-long-http-{status_code}-probe",
+            outage_seconds=outage_seconds,
+            status_code=status_code,
+        )
+    return API_RECOVERY_STATUS_CODES
+
+
+def _soak_transient_status_code(run_number: int, every: int) -> int:
+    if every <= 0:
+        return API_RECOVERY_STATUS_CODES[0]
+    occurrence = max(0, run_number // every - 1)
+    return API_RECOVERY_STATUS_CODES[occurrence % len(API_RECOVERY_STATUS_CODES)]
+
+
 def timeout_probe(
     settings: Settings,
     root: Path,
@@ -3859,7 +3895,16 @@ def soak(settings: Settings, root: Path, hours: float) -> SoakResult:
             result = replace(result, timeout_probes=result.timeout_probes + 1)
 
         if every_nth(settings.soak_transient_api_every, run_number):
-            api_recovery_probe(run_settings, root, f"soak-api-{run_number:04d}")
+            status_code = _soak_transient_status_code(
+                run_number,
+                settings.soak_transient_api_every,
+            )
+            api_recovery_probe(
+                run_settings,
+                root,
+                f"soak-api-{status_code}-{run_number:04d}",
+                status_code=status_code,
+            )
             result = replace(
                 result,
                 transient_recoveries=result.transient_recoveries + 1,
@@ -4256,13 +4301,14 @@ def main() -> int:
         or args.soak_timeout_every < 0
         or args.soak_yaml_every < 0
         or args.soak_sandbox_every < 0
+        or args.long_http_outage_seconds <= 0
         or args.long_api_outage_seconds <= 0
         or args.single_process_yaml_items < 0
         or not 1 <= args.api_port <= 65535
     ):
         raise SystemExit(
             "hours/pause/soak-* frequency values must be non-negative; "
-            "run-timeout, agent-timeout, planning-timeout, long API outage, "
+            "run-timeout, agent-timeout, planning-timeout, long HTTP/API outage, "
             "single-process YAML items, and api-port must be valid"
         )
     if args.example_smoke_matrix_workflow and not args.example_smoke_matrix_project:
@@ -4424,6 +4470,18 @@ def main() -> int:
                 outage_seconds=API_RECOVERY_SHORT_OUTAGE_SECONDS, status_code=503,
             )
             print("PASS HTTP 503 service-unavailable bounded-session recovery probe", flush=True)
+        if probe_enabled("api-long-http", start_probe):
+            statuses = long_http_recovery_probe(
+                settings,
+                run_root,
+                args.long_http_outage_seconds,
+            )
+            print(
+                "PASS long HTTP "
+                + "/".join(str(code) for code in statuses)
+                + f"/{args.long_http_outage_seconds:g}s bounded-session recovery probe",
+                flush=True,
+            )
         if probe_enabled("api-disconnect", start_probe):
             api_recovery_probe(
                 settings,
@@ -4544,6 +4602,9 @@ def main() -> int:
         },
         "recovery_backoff_observation": recovery_backoff_observation(run_root),
         "transient_observed": transient_observed,
+        "long_http_outage_seconds": args.long_http_outage_seconds,
+        "long_http_status_codes": list(API_RECOVERY_STATUS_CODES),
+        "long_http_recovered": probe_enabled("api-long-http", start_probe),
         "long_api_outage_seconds": args.long_api_outage_seconds,
         "long_api_disconnect_recovered": probe_enabled("api-disconnect", start_probe),
         "example_smoke": bool(example_results),
