@@ -10,7 +10,7 @@ from ...agent import backend_names, configure_ai_client, create_ai_client, sandb
 from ...config.defaults import MAX_MODEL_NAME_CHARS
 from ...errors import ConfigurationError, RunnerError
 from ...prompting import append_stage_protocol, build_stage_prompt_context, render_prompt
-from ..profiles import profile_names
+from ..profiles import profile_names, profile_semantics
 from ..contracts import MODE_READONLY, StageContext, StageMode, StageResult
 
 AIStageProfile = Literal["generic", "execute", "review"]
@@ -96,9 +96,10 @@ class BaseStage:
             raise ConfigurationError(
                 f"AI Stage {spec.name} profile must be one of: {', '.join(profile_names())}"
             )
-        if profile == "execute":
+        semantics = profile_semantics(profile)
+        if semantics == "execute":
             self.result_kind = "task"
-        elif profile == "review":
+        elif semantics == "review":
             from ..results import PARSERS
             if spec.parser is None:
                 spec = replace(spec, parser=PARSERS["review"])
