@@ -380,7 +380,7 @@ def arguments() -> argparse.Namespace:
         "--soak-transient-api-every",
         type=int,
         default=0,
-        help="run a same-session transient API recovery probe every N soak runs",
+        help="run a bounded-session transient API recovery probe every N soak runs",
     )
     parser.add_argument(
         "--soak-timeout-every",
