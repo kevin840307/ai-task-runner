@@ -1346,3 +1346,28 @@ html[data-motion="reduced"] #chatView.view-loading::before { animation: none !im
 }
 .runtime-trace-row.status-fail strong { color: var(--warn); }
 .runtime-trace-row.status-error strong { color: var(--danger); }
+
+.runtime-guidance,
+.active-run-details {
+  margin: 0 16px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+.runtime-guidance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 11px;
+}
+.runtime-guidance > div { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.runtime-guidance strong { white-space: nowrap; font-size: 11px; }
+.runtime-guidance span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+.runtime-guidance small { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+.runtime-guidance.recovering { border-color: #f4c56a; background: var(--warning-soft); }
+.runtime-guidance.needs-attention { border-color: #f5a99e; background: #fff6f4; }
+.active-run-details { padding: 0 11px; color: var(--muted); font-size: 10px; }
+.active-run-details summary { min-height: 30px; display: flex; align-items: center; cursor: pointer; font-weight: 800; color: var(--text); }
+.active-run-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; padding: 0 0 10px; }
+.active-run-grid strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 700; }
