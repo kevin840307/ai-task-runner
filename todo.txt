@@ -442,6 +442,22 @@ RUNNER PRINCIPLE REVIEW (2026-10-04)
     - Dynamic re-expansion cleanup still purges stale durable stage_sessions/review_failures and
       process-local stage_session caches.
 
+[x] Live reliability can resume from a selected probe.
+    - --list-probes prints stable 1-based probe indices and names without requiring Qwen.
+    - --start-probe accepts either the numeric index or stable probe name and skips only earlier probes.
+    - Partial-run summaries record the selected starting probe and do not claim skipped probes passed.
+    - qwen_live_reliability_24h.bat and qwen_live_reliability_0_5h.bat forward extra arguments through %*.
+    - Deterministic coverage protects numeric/name parsing, skip ordering, list-only behavior and batch passthrough.
+    - Example for the current Review routing area:
+      tool\qwen_live_reliability_24h.bat --start-probe review-failure-routing
+
+[ ] Review structured-output repair ownership against DevFollow.
+    - structured_call retries only parser/schema-invalid model output; backend/API errors still escape to StageExecutor.
+    - BaseStage currently owns the bounded structured retry/fresh structured ask plumbing.
+    - Do not refactor this merely for abstraction purity. Move ownership only if deterministic/live evidence shows
+      it duplicates technical recovery/session rotation or violates 24H/session semantics.
+    - Any change must remain one shared implementation, not per-Stage retry code.
+
 High-value runner work remaining:
 [ ] Fix only reproduced live/backend failures.
     reproduce -> deterministic regression test -> fix -> rerun gates.
