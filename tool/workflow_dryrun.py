@@ -288,16 +288,17 @@ def _execute(
     ctx = DryRunContext(Path(temporary.name), workflow, max_cycles=max_cycles)
     ctx.scratch["_temporary"] = temporary
     executor = MockStageExecutor(scenario, max_steps)
+    if from_stage:
+        positions = {
+            str(item.get("name", "")): index
+            for index, item in enumerate(workflow)
+        }
+        if from_stage not in positions:
+            raise ValueError(f"unknown --from-stage: {from_stage}")
+        ctx.state.workflow_position = positions[from_stage]
+
     error = ""
     try:
-        if from_stage:
-            positions = {
-                str(item.get("name", "")): index
-                for index, item in enumerate(workflow)
-            }
-            if from_stage not in positions:
-                raise ValueError(f"unknown --from-stage: {from_stage}")
-            ctx.state.workflow_position = positions[from_stage]
         FlowEngine(ctx).run(executor)
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
