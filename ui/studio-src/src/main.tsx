@@ -21,28 +21,21 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./styles.css";
-
-type Stage = Record<string, unknown> & {
-  name: string;
-  type: string;
-  status?: string;
-  label?: string;
-  routes?: Record<string, string>;
-  error_policy?: { retries: number };
-  max_failures?: number;
-  targets?: string[];
-  backend?: string;
-  model?: string;
-  session_policy?: string;
-};
-
-type Visual = {
-  id: string;
-  name: string;
-  hash: string;
-  stages: Stage[];
-  flow: string[];
-};
+import {
+  START,
+  END,
+  addStageToVisual,
+  applyConnectionToVisual,
+  cloneStageWithoutConnections,
+  disconnectResultEdges,
+  nextStageKey,
+  removeStageFromVisual,
+  stageByName,
+  stageReferenceSources,
+  type ResultEdgeRef,
+  type Stage,
+  type Visual,
+} from "./workflow-draft";
 
 type GraphProblem = {
   severity: "error" | "warning";
@@ -283,9 +276,6 @@ function stageTestPrompt(
 
 const PARAMETER_SECTION_ORDER: ParameterSection[] = ["content", "execution", "result", "advanced"];
 
-const START = "__start__";
-const END = "__end__";
-
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -373,186 +363,6 @@ const nodeTypes = {
   terminal: TerminalNode,
   stage: StageNode,
 };
-
-function stageByName(visual: Visual, name: string) {
-  return visual.stages.find((s) => s.name === name);
-}
-
-const PALETTE_SECTIONS = [
-  { id: "build", icon: "✦" },
-  { id: "validate", icon: "✓" },
-  { id: "handoff", icon: "↔" },
-  { id: "tools", icon: "›" },
-];
-function catalogStageMeta(catalog: Catalog | null, type: string) {
-  const catalogMeta = catalog?.stage_types?.[type];
-  return {
-    title: String(catalogMeta?.title || type),
-    description: String(catalogMeta?.description || ""),
-    category: String(catalogMeta?.category || "extensions"),
-  };
-}
-
-const SNAP_PREF_KEY = "workflow-designer.snap:v1";
-function readSnapPreference(): boolean {
-  try { return localStorage.getItem(SNAP_PREF_KEY) === "1"; } catch { return false; }
-}
-function writeSnapPreference(enabled: boolean): void {
-  try { localStorage.setItem(SNAP_PREF_KEY, enabled ? "1" : "0"); } catch { /* local-only convenience */ }
-}
-
-function defaultOption(catalog: Catalog | null, stageType: string, name: string): unknown {
-  return catalog?.stage_types?.[stageType]?.options?.find((item) => item.name === name)?.default;
-}
-
-function effectivePrompt(catalog: Catalog | null, stage: Stage): string {
-  const explicit = String(stage.prompt || "").trim();
-  if (explicit) return explicit;
-  if (stage.type === "base") {
-    const profile = String(stage.profile || "generic");
-    const profilePrompt = catalog?.stage_types?.base?.profiles?.[profile]?.defaults?.prompt;
-    if (typeof profilePrompt === "string" && profilePrompt.trim()) return profilePrompt.trim();
-  }
-  return String(defaultOption(catalog, stage.type, "prompt") || "").trim();
-}
-
-function executionTargetConstraint(catalog: Catalog | null, stage: Stage | null): CatalogExecutionTargetConstraint | null {
-  if (!stage) return null;
-  return catalog?.stage_types?.[stage.type]?.constraints?.execution_target || null;
-}
-
-function executionTargetOverrideActive(stage: Stage, constraint: CatalogExecutionTargetConstraint | null): boolean {
-  return (constraint?.paired_fields || []).some((field) => String(stage[field] || "").trim());
-}
-
-function applyExecutionTargetConstraint(
-  stage: Stage,
-  constraint: CatalogExecutionTargetConstraint | null,
-  field: string,
-  value: unknown,
-): { stage: Stage; blocked: boolean; sessionReset: boolean } {
-  if (!constraint) return { stage: { ...stage, [field]: value }, blocked: false, sessionReset: false };
-  const pair = constraint.paired_fields || [];
-  const sessionField = String(constraint.session_policy_field || "");
-  const incompatible = new Set((constraint.incompatible_session_policies || []).map(String));
-  const currentSession = sessionField ? String(stage[sessionField] || "") : "";
-  if (field === sessionField && incompatible.has(String(value)) && executionTargetOverrideActive(stage, constraint)) {
-    return { stage, blocked: true, sessionReset: false };
-  }
-  const next = { ...stage, [field]: value };
-  if (pair.includes(field) && String(value || "").trim() && sessionField && incompatible.has(currentSession)) {
-    delete next[sessionField];
-    return { stage: next, blocked: false, sessionReset: true };
-  }
-  return { stage: next, blocked: false, sessionReset: false };
-}
-
-function nextStageKey(visual: Visual, type: string): string {
-  const base = type === "base" ? "ai_stage" : type === "ai_validator" ? "validate_ai" : type;
-  const used = new Set(visual.stages.map((s) => s.name));
-  if (!used.has(base)) return base;
-  let i = 2;
-  while (used.has(`${base}_${i}`)) i += 1;
-  return `${base}_${i}`;
-}
-
-type ResultEdgeRef = { source: string; target: string; status: string };
-
-function addStageToVisual(visual: Visual, stage: Stage, afterStage = ""): Visual {
-  const flow = [...visual.flow];
-  const index = afterStage ? flow.indexOf(afterStage) : -1;
-  if (index >= 0) flow.splice(index + 1, 0, stage.name);
-  return { ...visual, flow, stages: [...visual.stages, stage] };
-}
-
-function cloneStageWithoutConnections(source: Stage, name: string): Stage {
-  const copy = structuredClone({ ...source, name });
-  delete copy.routes;
-  if (copy.type === "handoff") copy.targets = [];
-  return copy;
-}
-
-function stageReferenceSources(visual: Visual, stageName: string): string[] {
-  return visual.stages
-    .filter((stage) => stage.name !== stageName && (
-      Object.values(stage.routes || {}).includes(stageName)
-      || (stage.targets || []).includes(stageName)
-    ))
-    .map((stage) => stage.name);
-}
-
-function removeStageFromVisual(visual: Visual, stageName: string): Visual {
-  return {
-    ...visual,
-    flow: visual.flow.filter((name) => name !== stageName),
-    stages: visual.stages.filter((stage) => stage.name !== stageName),
-  };
-}
-
-function disconnectResultEdges(visual: Visual, removed: ResultEdgeRef[]): Visual {
-  let stages = visual.stages;
-  for (const edge of removed) {
-    const status = String(edge.status || "").toLowerCase();
-    if (!status) continue;
-    stages = stages.map((stage) => {
-      if (stage.name !== edge.source) return stage;
-      if (status === "handoff") {
-        return { ...stage, targets: (stage.targets || []).filter((target) => target !== edge.target) };
-      }
-      const routes = { ...(stage.routes || {}) };
-      if (status === "pass") routes.pass = "stop";
-      else delete routes[status];
-      return { ...stage, routes };
-    });
-  }
-  return { ...visual, stages };
-}
-
-function applyConnectionToVisual(visual: Visual, connection: Connection): Visual {
-  if (!connection.source || !connection.target) return visual;
-  const status = String(connection.sourceHandle || "pass").toLowerCase();
-  if (connection.source === START) {
-    if (connection.target === END) return visual;
-    return {
-      ...visual,
-      flow: [connection.target, ...visual.flow.filter((x) => x !== connection.target)],
-    };
-  }
-  if (
-    connection.source === END
-    || connection.target === START
-    || !["pass", "fail", "handoff"].includes(status)
-    || (status === "handoff" && connection.target === END)
-  ) return visual;
-
-  const nextFlow = [...visual.flow];
-  if (!nextFlow.includes(connection.source)) nextFlow.push(connection.source);
-  if (connection.target !== END && !nextFlow.includes(connection.target)) {
-    if (status === "pass" || status === "handoff") {
-      const sourceIndex = nextFlow.indexOf(connection.source);
-      const insertAt = sourceIndex >= 0 ? sourceIndex + 1 : nextFlow.length;
-      nextFlow.splice(insertAt, 0, connection.target);
-    } else {
-      nextFlow.push(connection.target);
-    }
-  }
-
-  const stages = visual.stages.map((stage) => {
-    if (stage.name !== connection.source) return stage;
-    const routes = { ...(stage.routes || {}) };
-    const index = nextFlow.indexOf(stage.name);
-    const nextName = nextFlow[index + 1];
-    let target = connection.target!;
-    if (status === "handoff") {
-      return { ...stage, targets: Array.from(new Set([...(stage.targets || []), target])) };
-    }
-    if (target === END) target = status === "pass" ? "done" : "stop";
-    if (status === "pass" && target === nextName) delete routes.pass;
-    else routes[status] = target;
-    return { ...stage, routes };
-  });
-  return { ...visual, stages, flow: nextFlow };
-}
 
 type CanvasPosition = { x: number; y: number };
 type PendingEdgeCreate = { source: string; sourceHandle: string; position: CanvasPosition };
