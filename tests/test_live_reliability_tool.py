@@ -154,11 +154,6 @@ def test_stage_probe_live_preflight_executes_real_stage_override_with_fake_openc
     _install_fake_opencode(tmp_path, monkeypatch)
     config = replace(settings(tmp_path), command=_fake_qwen_command(tmp_path))
     monkeypatch.setattr(live, "_discover_openai_model", lambda _port: "model-probe")
-    monkeypatch.setattr(
-        runner.agent,
-        "available_models",
-        lambda backend, root: ["provider/model-oc"],
-    )
 
     result = live.stage_probe_live_preflight(config)
 
