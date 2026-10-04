@@ -622,6 +622,8 @@ class WorkflowStudioMixin:
             raise ValueError("Stage test id is required")
         lock, processes, cancelled = self._stage_test_runtime()
         with lock:
+            if len(cancelled) >= 64:
+                cancelled.clear()
             cancelled.add(key)
             process = processes.get(key)
             if process is None:
